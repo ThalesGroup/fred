@@ -99,6 +99,7 @@ from control_plane_backend.product.schemas import (
     ExecutionPreparation,
     FrontendBootstrap,
     FrontendConfig,
+    FrontendUiThemes,
     FrontendUserAuthConfig,
     InactiveSessionItem,
     InactiveSessionsResponse,
@@ -157,6 +158,9 @@ from control_plane_backend.teams.service import list_teams as list_teams_from_se
 from control_plane_backend.users.schemas import PlatformRoleRelation, UserSummary
 
 logger = logging.getLogger(__name__)
+
+# Non-empty while the platform UI settings store is failing (see build_frontend_config).
+_ui_settings_failure_logged: set[bool] = set()
 
 # Chat-controls cache (#1976, RFC §3.7): computed chat controls are NEVER
 # persisted. Control-plane may cache the pod's per-capability evaluation
@@ -390,7 +394,7 @@ async def build_frontend_bootstrap(
     Example:
     - `payload = await build_frontend_bootstrap(user, deps)`
     """
-    active_team, available_teams, permissions = await asyncio.gather(
+    active_team, available_teams, permissions, current_user = await asyncio.gather(
         get_team_by_id_from_service(
             user,
             personal_team_id(user.uid),
@@ -398,9 +402,12 @@ async def build_frontend_bootstrap(
         ),
         list_teams_from_service(user, deps.team_dependencies),
         _build_permission_summary(user, deps.team_dependencies.rebac),
+        deps.team_dependencies.attach_avatar_urls(
+            {user.uid: UserSummary.from_keycloak_user(user)}
+        ),
     )
     return FrontendBootstrap(
-        current_user=UserSummary.from_keycloak_user(user),
+        current_user=current_user[user.uid],
         active_team=active_team,
         available_teams=available_teams,
         gcu_version=deps.configuration.app.gcu_version,
@@ -450,15 +457,44 @@ async def build_frontend_config(deps: ProductServiceDependencies) -> FrontendCon
             enabled=True,
             realm_url=str(user_security.realm_url),
             client_id=user_security.client_id,
+            provider=user_security.provider,
+            scope=user_security.scope,
+            user_directory=deps.configuration.security.user_directory,
+            uid_claim=user_security.claims.uid,
+            roles_claim=user_security.roles_claim,
         )
         if user_security.enabled
         else FrontendUserAuthConfig(enabled=False)
+    )
+    try:
+        ui_settings = await deps.get_platform_ui_settings_store().get()
+        _ui_settings_failure_logged.clear()
+    except Exception as exc:
+        # A cosmetic setting must never block login: an unmigrated database
+        # degrades to "no platform theme settings" instead of a failing config.
+        # Logged once per outage: this public endpoint runs on every page load.
+        if not _ui_settings_failure_logged:
+            _ui_settings_failure_logged.add(True)
+            logger.warning(
+                "[frontend-config] platform UI settings unavailable: %s: %s",
+                type(exc).__name__,
+                exc,
+            )
+        ui_settings = None
+    ui_themes = (
+        FrontendUiThemes(
+            default_theme=ui_settings.default_theme,
+            hidden_themes=ui_settings.hidden_themes,
+        )
+        if ui_settings is not None
+        else None
     )
     return FrontendConfig(
         user_auth=user_auth,
         gcu_version=gcu_version,
         root_bootstrap_completed=root_bootstrap_completed,
         root_bootstrap_required=root_bootstrap_required,
+        ui_themes=ui_themes,
     )
 
 
@@ -2735,23 +2771,34 @@ async def enroll_agent_instance(
 
     store = deps.get_agent_instance_store()
     created = await store.create(record)
+    emit_agent_created_kpi(created, user=user, deps=deps)
+    return _record_to_summary(created)
+
+
+def emit_agent_created_kpi(
+    record: AgentInstanceRecord,
+    *,
+    user: KeycloakUser,
+    deps: ProductServiceDependencies,
+) -> None:
+    """Count one created agent instance; a KPI failure never fails the save."""
+
     try:
-        system_prompt = tuning.values.get("prompts.system")
+        system_prompt = record.tuning.values.get("prompts.system")
         system_prompt_chars = len(str(system_prompt)) if system_prompt else 0
         deps.get_kpi_writer().count(
             "agent.created_total",
             dims={
-                "team_id": str(team_id),
-                "template_id": request.template_id,
-                "source_runtime_id": source_runtime_id,
-                "agent_instance_id": agent_instance_id,
+                "team_id": str(record.team_id),
+                "template_id": record.template_id,
+                "source_runtime_id": record.source_runtime_id,
+                "agent_instance_id": record.agent_instance_id,
                 "system_prompt_chars": str(system_prompt_chars),
             },
             actor=to_kpi_actor(user),
         )
     except Exception:
         logger.exception("[control-plane][kpi] Failed to emit agent.created_total")
-    return _record_to_summary(created)
 
 
 async def update_agent_instance(
@@ -3412,6 +3459,15 @@ async def prepare_execution(
     )
     if reasoning_control is not None:
         chat_controls = [*chat_controls, reasoning_control]
+    if not isinstance(user, AssertedUser):
+        chat_controls = [
+            *chat_controls,
+            ChatControlDescriptor(
+                capability_id=PLATFORM_CHAT_CONTROL_OWNER,
+                widget="ask_user_toggle",
+                params={"default": True},
+            ),
+        ]
 
     return ExecutionPreparation(
         agent_instance_id=agent_instance_id,
@@ -3651,6 +3707,7 @@ async def list_prompts(
     team_id: TeamId,
     deps: ProductServiceDependencies,
     *,
+    user_id: str | None = None,
     limit: int = 100,
 ) -> list[PromptSummary]:
     """
@@ -3672,8 +3729,18 @@ async def list_prompts(
 
     store = deps.get_prompt_store()
     records = await store.list_by_team(team_id, limit=limit)
+    favorites = (
+        await store.favorite_ids(user_id, [r.prompt_id for r in records])
+        if user_id
+        else set()
+    )
     return sorted(
-        (_prompt_record_to_summary(r) for r in records),
+        (
+            _prompt_record_to_summary(r).model_copy(
+                update={"is_favorite": r.prompt_id in favorites}
+            )
+            for r in records
+        ),
         key=lambda p: -p.session_count,
     )
 
@@ -3840,6 +3907,7 @@ async def list_context_prompts(
 
     store = deps.get_prompt_store()
     records = await store.list_context_prompts(personal_team_id(user.uid), team_id)
+    favorites = await store.favorite_ids(user.uid, [r.prompt_id for r in records])
     return [
         ContextPromptSummary(
             id=r.prompt_id,
@@ -3850,9 +3918,31 @@ async def list_context_prompts(
             version=r.version,
             session_count=r.session_count,
             score=r.score,
+            is_favorite=r.prompt_id in favorites,
         )
         for r in records
     ]
+
+
+async def set_prompt_favorite(
+    user: KeycloakUser,
+    team_id: TeamId,
+    prompt_id: str,
+    favorite: bool,
+    deps: ProductServiceDependencies,
+) -> None:
+    """Mark or unmark one of the team's prompts as a favorite of the caller.
+
+    The caller's read access to the team is checked by the route; a prompt
+    that is not the team's is a 404, so an id from elsewhere cannot be starred.
+    """
+
+    store = deps.get_prompt_store()
+    if await store.get_for_team(prompt_id, team_id) is None:
+        raise PromptRequestError(
+            f"Prompt {prompt_id!r} not found for team {team_id!r}.", http_status=404
+        )
+    await store.set_favorite(user.uid, prompt_id, favorite)
 
 
 async def promote_prompt(

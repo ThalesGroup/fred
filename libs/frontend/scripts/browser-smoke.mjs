@@ -766,18 +766,18 @@ async function verifyTokens(browser, origin) {
       }, theme);
     }
     assert.deepEqual(themes.light, {
-      backgroundColor: "rgb(251, 248, 255)",
+      backgroundColor: "rgb(252, 253, 255)",
       borderRadius: "8px",
-      color: "rgb(25, 27, 33)",
+      color: "rgb(27, 28, 30)",
       fontFamily: "Geist, sans-serif",
       fontSize: "14px",
       fontWeight: "400",
       padding: "16px",
     });
     assert.deepEqual(themes.dark, {
-      backgroundColor: "rgb(17, 19, 24)",
+      backgroundColor: "rgb(18, 19, 21)",
       borderRadius: "8px",
-      color: "rgb(240, 239, 250)",
+      color: "rgb(240, 241, 244)",
       fontFamily: "Geist, sans-serif",
       fontSize: "14px",
       fontWeight: "400",
@@ -876,6 +876,146 @@ async function verifyFonts(browser, origin) {
   }
 }
 
+async function verifyHostedComponents(page) {
+  const hosted = page.locator("[data-hosted]");
+  const notes = hosted.getByRole("textbox", { name: "Evaluation notes" });
+  await notes.fill("Package-only notes");
+  assert.equal(await notes.inputValue(), "Package-only notes");
+  const toggle = hosted.getByRole("checkbox", { name: "Enable evaluation" });
+  await toggle.focus();
+  await page.keyboard.press("Space");
+  assert.equal(await toggle.isChecked(), true);
+  assert.equal(
+    await hosted
+      .getByRole("checkbox", { name: "Disabled switch" })
+      .isDisabled(),
+    true,
+  );
+  assert.equal(
+    await hosted.getByRole("img", { name: "Evaluation active" }).count(),
+    1,
+  );
+  const disclosure = hosted.getByRole("button", { name: "Case details" });
+  await disclosure.click();
+  assert.equal(await disclosure.getAttribute("aria-expanded"), "true");
+  await hosted.getByText("Expanded case content").waitFor({ state: "visible" });
+  await disclosure.click();
+  assert.equal(await disclosure.getAttribute("aria-expanded"), "false");
+  const card = hosted.getByRole("button", {
+    name: "Choose suite A reusable suite",
+  });
+  await card.click();
+  assert.equal(await card.getAttribute("aria-pressed"), "true");
+  await hosted.getByRole("button", { name: "Home", exact: true }).click();
+  assert.equal(await card.getAttribute("aria-pressed"), "false");
+  await hosted.locator('input[type="file"]').setInputFiles({
+    name: "suite.json",
+    mimeType: "application/json",
+    buffer: Buffer.from("{}"),
+  });
+  assert.equal(
+    await hosted.locator("[data-upload]").textContent(),
+    "suite.json",
+  );
+  await hosted.getByRole("button", { name: "Create evaluation" }).click();
+  assert.equal(await card.getAttribute("aria-pressed"), "true");
+  for (const text of [
+    "Service unavailable",
+    "No evaluations",
+    "Fetching runs",
+    "Could not fetch runs",
+    "No run data",
+  ]) {
+    await hosted.getByText(text, { exact: true }).waitFor({ state: "visible" });
+  }
+  const table = hosted.locator(".hosted-table");
+  await table.getByText("Row 2", { exact: true }).click();
+  assert.equal(await hosted.locator("[data-activated]").textContent(), "Row 2");
+  await table.getByRole("button", { name: "Next records" }).click();
+  assert.equal(await table.locator('[class*="datatable-row"]').count(), 5);
+  await table.getByRole("button", { name: "Record", exact: true }).click();
+  await table.getByRole("button", { name: "Record", exact: true }).click();
+  await table.getByRole("button", { name: "Start records" }).click();
+  assert.equal(
+    await table
+      .locator('[class*="datatable-row"] [class*="cell-text"]')
+      .first()
+      .textContent(),
+    "Row 25",
+  );
+
+  await hosted.getByRole("button", { name: "Open overlay drawer" }).click();
+  const overlay = hosted.getByRole("complementary", { name: "Hosted overlay" });
+  await overlay.waitFor({ state: "visible" });
+  await page.keyboard.press("Escape");
+  await overlay.waitFor({ state: "hidden" });
+
+  await hosted.getByRole("button", { name: "Show hosted errors" }).click();
+  assert.equal(
+    await hosted.getByRole("navigation", { name: "Fil d'Ariane" }).count(),
+    1,
+  );
+  const progress = hosted.getByRole("progressbar", { name: "Run progress" });
+  assert.equal(await progress.getAttribute("aria-valuenow"), "100");
+  await hosted
+    .getByRole("button", { name: "Dismiss notification" })
+    .first()
+    .click();
+  await hosted
+    .getByText("Hosted error", { exact: true })
+    .waitFor({ state: "detached" });
+  await hosted
+    .getByText("Second error", { exact: true })
+    .waitFor({ state: "visible" });
+  await hosted.getByRole("button", { name: "Dismiss notification" }).click();
+  await hosted.getByRole("button", { name: "Show timed toast" }).click();
+  await hosted
+    .getByText("Timed notification", { exact: true })
+    .waitFor({ state: "visible" });
+  await hosted
+    .getByText("Timed notification", { exact: true })
+    .waitFor({ state: "detached" });
+  const colors = await hosted.evaluate((root) => {
+    const selectors = {
+      TextArea: "textarea",
+      Switch: '[class*="switch-container"]',
+      ProgressBar: '[class*="fill"]',
+      IndicatorDot: '[data-status="active"]',
+      Disclosure: '[class*="summary"]',
+      Breadcrumb: "nav",
+      PageHeader: "h1",
+      SelectableCard: "[data-selected]",
+      FileDropzone: '[class*="zone"]',
+      ServiceNotice: '[class*="serviceNotice"]',
+      PageEmptyState: '[class*="pageEmptyState"]',
+      KpiStatCard: '[class*="valueRow"]',
+      DataTable: '[class*="datatable-cell"]',
+      TablePagination: '[class*="footer-label"]',
+    };
+    return Object.fromEntries(
+      Object.entries(selectors).map(([name, selector]) => {
+        const element = root.querySelector(selector);
+        if (!element) throw new Error(`missing hosted component ${name}`);
+        const style = getComputedStyle(element);
+        return [
+          name,
+          { color: style.color, background: style.backgroundColor },
+        ];
+      }),
+    );
+  });
+  const badges = await hosted
+    .locator("[data-badge] span")
+    .evaluateAll((elements) =>
+      elements.map((element) => ({
+        label: element.textContent,
+        color: getComputedStyle(element).color,
+      })),
+    );
+  assert.equal(badges.length, 5);
+  return { colors, badges };
+}
+
 async function verifyUiTheme(browser, origin, theme) {
   const observation = await createObservedPage(browser, origin);
   try {
@@ -911,8 +1051,8 @@ async function verifyUiTheme(browser, origin, theme) {
     assert.deepEqual(
       styles.shell,
       theme === "light"
-        ? { backgroundColor: "rgb(251, 248, 255)", color: "rgb(25, 27, 33)" }
-        : { backgroundColor: "rgb(17, 19, 24)", color: "rgb(240, 239, 250)" },
+        ? { backgroundColor: "rgb(252, 253, 255)", color: "rgb(27, 28, 30)" }
+        : { backgroundColor: "rgb(18, 19, 21)", color: "rgb(240, 241, 244)" },
     );
     for (const component of [
       "Button",
@@ -1277,6 +1417,8 @@ async function verifyUiTheme(browser, origin, theme) {
       tonalStates[name] = { resting, hover, pressed };
     }
 
+    const hosted = await verifyHostedComponents(observation.page);
+
     const materialLoaded = await observation.page.evaluate(async () => {
       await document.fonts.load('24px "Material Symbols Outlined"', "search");
       return document.fonts.check('24px "Material Symbols Outlined"', "search");
@@ -1307,6 +1449,7 @@ async function verifyUiTheme(browser, origin, theme) {
       extended: {
         dialogTheme,
         tooltipLayer,
+        hosted,
       },
       tonalStates,
       materialLoaded,
@@ -1350,6 +1493,17 @@ async function verifyUi(browser, origin) {
     light.extended.tooltipLayer.background,
     dark.extended.tooltipLayer.background,
     "Tooltip did not inherit alternate theme in a fresh context",
+  );
+  for (const name of Object.keys(light.extended.hosted.colors)) {
+    assert.notDeepEqual(
+      light.extended.hosted.colors[name],
+      dark.extended.hosted.colors[name],
+      `${name} did not inherit the theme`,
+    );
+  }
+  assert.notDeepEqual(
+    light.extended.hosted.badges,
+    dark.extended.hosted.badges,
   );
   assert.deepEqual(light.shellOwnership, dark.shellOwnership);
   return {

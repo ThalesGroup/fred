@@ -16,7 +16,33 @@
 import {
   controlPlaneApi as api,
   UploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostApiArg,
+  UploadMyAvatarControlPlaneV1UsersMeAvatarPostApiArg,
 } from "./controlPlaneOpenApi";
+
+type FavoriteArg = { teamId: string; promptId: string };
+type FavoriteLifecycle = {
+  dispatch: (action: unknown) => unknown;
+  queryFulfilled: Promise<unknown>;
+};
+
+/** Flips the star in both prompt listings at once, and back if the call fails. */
+async function patchFavorite({ teamId, promptId }: FavoriteArg, favorite: boolean, lifecycle: FavoriteLifecycle) {
+  const flip = (draft: { id: string; is_favorite?: boolean }[]) => {
+    const prompt = draft.find((p) => p.id === promptId);
+    if (prompt) prompt.is_favorite = favorite;
+  };
+  const patches = [
+    lifecycle.dispatch(api.util.updateQueryData("getTeamPromptsControlPlaneV1TeamsTeamIdPromptsGet", { teamId }, flip)),
+    lifecycle.dispatch(
+      api.util.updateQueryData("getContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGet", { teamId }, flip),
+    ),
+  ] as { undo: () => void }[];
+  try {
+    await lifecycle.queryFulfilled;
+  } catch {
+    patches.forEach((patch) => patch.undo());
+  }
+}
 
 export const enhancedControlPlaneApi = api.enhanceEndpoints({
   addTagTypes: [
@@ -31,6 +57,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     "ControlPlaneAgentInstance",
     "ControlPlanePlatformModelBinding",
     "ControlPlanePlatformPrompt",
+    "ControlPlanePlatformUiSettings",
     "ControlPlanePlatformDefaultTeams",
     "ControlPlanePlatformRole",
     "ControlPlaneTeamWiki",
@@ -159,6 +186,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
               })),
               { type: "ControlPlaneTeam" as const, id: result.active_team.id },
               { type: "ControlPlaneTeam" as const, id: "LIST" },
+              { type: "ControlPlaneUser" as const, id: "ME" },
             ]
           : [{ type: "ControlPlaneTeam" as const, id: "LIST" }],
     },
@@ -182,17 +210,32 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     getTeamApplicationsControlPlaneV1TeamsTeamIdApplicationsGet: {
       providesTags: [{ type: "ControlPlaneCapability" as const, id: "LIST" }],
     },
+    // Enablement changes suspend or revive agents server-side, so the agent
+    // lists must be read again: one team's list, or every list for the
+    // platform-wide switches.
     putTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPut: {
-      invalidatesTags: [{ type: "ControlPlaneCapability", id: "LIST" }],
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneCapability", id: "LIST" },
+        { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
+      ],
     },
     deleteTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdDelete: {
-      invalidatesTags: [{ type: "ControlPlaneCapability", id: "LIST" }],
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneCapability", id: "LIST" },
+        { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
+      ],
     },
     putCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPut: {
-      invalidatesTags: [{ type: "ControlPlaneCapability", id: "LIST" }],
+      invalidatesTags: [
+        { type: "ControlPlaneCapability", id: "LIST" },
+        { type: "ControlPlaneAgentInstance", id: "ALL" },
+      ],
     },
     putCapabilityPersonalScopeControlPlaneV1AdminCapabilitiesCapabilityIdPersonalScopePut: {
-      invalidatesTags: [{ type: "ControlPlaneCapability", id: "LIST" }],
+      invalidatesTags: [
+        { type: "ControlPlaneCapability", id: "LIST" },
+        { type: "ControlPlaneAgentInstance", id: "ALL" },
+      ],
     },
     patchCapabilityReasoningControlPlaneV1AdminCapabilitiesCapabilityIdReasoningPatch: {
       invalidatesTags: [{ type: "ControlPlaneCapability", id: "LIST" }],
@@ -249,6 +292,27 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     },
     listUsersControlPlaneV1UsersGet: {
       providesTags: [{ type: "ControlPlaneUser", id: "LIST" }],
+    },
+    getUsersByIdsControlPlaneV1UsersByIdsGet: {
+      providesTags: (result) => (result ?? []).map((user) => ({ type: "ControlPlaneUser" as const, id: user.id })),
+    },
+    // The caller's id is not in the mutation args, so every user entry is read
+    // again; team lists carry admin pictures too.
+    uploadMyAvatarControlPlaneV1UsersMeAvatarPost: {
+      query: (queryArg: UploadMyAvatarControlPlaneV1UsersMeAvatarPostApiArg) => {
+        const formData = new FormData();
+        formData.append("file", queryArg.bodyUploadMyAvatarControlPlaneV1UsersMeAvatarPost.file);
+
+        return {
+          url: `/control-plane/v1/users/me/avatar`,
+          method: "POST",
+          body: formData,
+        };
+      },
+      invalidatesTags: ["ControlPlaneUser", { type: "ControlPlaneTeam", id: "LIST" }],
+    },
+    deleteMyAvatarControlPlaneV1UsersMeAvatarDelete: {
+      invalidatesTags: ["ControlPlaneUser", { type: "ControlPlaneTeam", id: "LIST" }],
     },
     // Platform-role management (PLATFORM-ADMIN-DELEGATION-RFC.md, #2405). The
     // holders table is one aggregate, so a single LIST tag: every grant/revoke
@@ -395,8 +459,12 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
                 id: instance.agent_instance_id,
               })),
               { type: "ControlPlaneAgentInstance" as const, id: `LIST-${arg.teamId}` },
+              { type: "ControlPlaneAgentInstance" as const, id: "ALL" },
             ]
-          : [{ type: "ControlPlaneAgentInstance" as const, id: `LIST-${arg.teamId}` }],
+          : [
+              { type: "ControlPlaneAgentInstance" as const, id: `LIST-${arg.teamId}` },
+              { type: "ControlPlaneAgentInstance" as const, id: "ALL" },
+            ],
     },
     postTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesPost: {
       invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` }],
@@ -421,6 +489,13 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
         { type: "ControlPlaneAgentInstance", id: arg.agentInstanceId },
         { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
       ],
+    },
+    // A copy lands in every target team: refresh each team's list it reached.
+    postAgentInstanceCopyControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyPost: {
+      invalidatesTags: (result) =>
+        (result?.results ?? [])
+          .filter((r) => r.agent)
+          .map((r) => ({ type: "ControlPlaneAgentInstance" as const, id: `LIST-${r.team_id}` })),
     },
     // A team's Knowledge Bases. Deletion is addressed by instance id alone — the
     // route needs no team — so it invalidates the whole type rather than one
@@ -492,6 +567,14 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
         // A deleted prompt (published or not) must also leave the community list.
         { type: "ControlPlanePrompt", id: "MARKETPLACE" },
       ],
+    },
+    // Patched in place rather than invalidated: a refetch of every listing per
+    // star click would flicker when several are clicked in a row.
+    addTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoritePut: {
+      onQueryStarted: (arg, lifecycle) => patchFavorite(arg, true, lifecycle),
+    },
+    removeTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoriteDelete: {
+      onQueryStarted: (arg, lifecycle) => patchFavorite(arg, false, lifecycle),
     },
     // Prompts marketplace (PROMPT-06). The community listing is a live view of
     // published team rows, so it shares the ControlPlanePrompt tag family: the
@@ -571,6 +654,13 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     putPlatformPromptControlPlaneV1AdminPlatformPromptPut: {
       invalidatesTags: [{ type: "ControlPlanePlatformPrompt", id: "LIST" }],
     },
+    // Platform UI theme settings: a single row, one LIST tag.
+    getPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGet: {
+      providesTags: [{ type: "ControlPlanePlatformUiSettings" as const, id: "LIST" }],
+    },
+    putPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPut: {
+      invalidatesTags: [{ type: "ControlPlanePlatformUiSettings", id: "LIST" }],
+    },
     // Read-only and shipped with the platform: it can only change on deploy, so
     // it carries no cache tag — nothing in this app can invalidate it.
     getPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGet: {},
@@ -578,6 +668,9 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
 });
 
 export const {
+  useAddTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoritePutMutation: useAddPromptFavoriteMutation,
+  useRemoveTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoriteDeleteMutation:
+    useRemovePromptFavoriteMutation,
   // A team's Knowledge Bases: what fills a library, and how often.
   useListKnowledgeBaseInstancesControlPlaneV1KnowledgeBasesInstancesGetQuery: useKnowledgeBasesQuery,
   useGetKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdGetQuery: useKnowledgeBaseQuery,
@@ -603,6 +696,8 @@ export const {
   useUpdateTeamControlPlaneV1TeamsTeamIdPatchMutation: useUpdateTeamMutation,
   useJoinTeamControlPlaneV1TeamsTeamIdJoinPostMutation: useJoinTeamMutation,
   useUploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostMutation: useUploadTeamAvatarMutation,
+  useUploadMyAvatarControlPlaneV1UsersMeAvatarPostMutation: useUploadUserAvatarMutation,
+  useDeleteMyAvatarControlPlaneV1UsersMeAvatarDeleteMutation: useDeleteUserAvatarMutation,
   useListTeamMembersControlPlaneV1TeamsTeamIdMembersGetQuery: useListTeamMembersQuery,
   useAddTeamMemberControlPlaneV1TeamsTeamIdMembersPostMutation: useAddTeamMemberMutation,
   useSearchCandidateTeamAdminsControlPlaneV1TeamsCandidateAdminsGetQuery: useSearchCandidateTeamAdminsQuery,
@@ -709,6 +804,9 @@ export const {
   // Platform-wide platform prompt — the first block of every agent's system prompt.
   useGetPlatformPromptControlPlaneV1AdminPlatformPromptGetQuery: usePlatformPromptQuery,
   usePutPlatformPromptControlPlaneV1AdminPlatformPromptPutMutation: useSetPlatformPromptMutation,
+  // Platform UI theme settings (default theme, hidden themes).
+  useGetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetQuery: usePlatformUiSettingsQuery,
+  usePutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutMutation: useSetPlatformUiSettingsMutation,
   // Read-only platform operating instructions, shown under the editable prompt.
   useGetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetQuery: usePlatformInstructionsQuery,
   // Team wiki (WIKI-01/02), and whether the team has one at all (WIKI-03).

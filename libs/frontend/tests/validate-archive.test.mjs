@@ -44,7 +44,13 @@ const { archivePath } = await packDesignTokens();
 
 test("accepts the actual packed design-token archive", async () => {
   const result = await validateArchive(archivePath);
-  assert.equal(result.package, "@fred-oss/design-tokens@0.1.0-alpha.1");
+  const manifest = JSON.parse(
+    await readFile(
+      new URL("../design-tokens/package.json", import.meta.url),
+      "utf8",
+    ),
+  );
+  assert.equal(result.package, `${manifest.name}@${manifest.version}`);
   assert.equal(result.files.length, 9);
   assert.deepEqual(result.cssAssets["dist/tokens.css"], []);
 });

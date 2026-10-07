@@ -13,6 +13,8 @@
 // limitations under the License.
 
 // FredUi.tsx
+import { writeRichClipboard } from "@rework/utils/clipboardUtils";
+
 import React, { useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { RouterProvider } from "react-router-dom";
@@ -113,7 +115,11 @@ function FredUiContent() {
                 <AnnouncementStack />
                 <div className={styles.routedContent}>
                   <ConfirmationDialogProvider>
-                    <ToastProvider>
+                    <ToastProvider
+                      onCopy={async (text) => {
+                        await writeRichClipboard("", text);
+                      }}
+                    >
                       <RouterProvider router={router} />
                     </ToastProvider>
                   </ConfirmationDialogProvider>
@@ -128,12 +134,13 @@ function FredUiContent() {
 }
 
 function AppWithTheme() {
-  const { darkMode } = useContext(ApplicationContext);
+  const { darkMode, uiTheme } = useContext(ApplicationContext);
   const { i18n } = useTranslation();
 
   // Effects run after render, which is too late for the first paint to pick
   // up the right palette — set it synchronously during render instead.
   document.documentElement.setAttribute("data-theme", darkMode ? "dark" : "light");
+  document.documentElement.setAttribute("data-ui-theme", uiTheme);
 
   useEffect(() => {
     // Chrome derives 12h/24h for datetime-local from <html lang>.

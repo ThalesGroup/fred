@@ -1,8 +1,16 @@
 # AUTHZ — Full RBAC → ReBAC migration backlog
 
 Track: `AUTHZ-01` (umbrella) · Design authority: [platform/REBAC.md](../platform/REBAC.md)
-Owner: Simon · Status registry: [id-legend.yaml](../data/id-legend.yaml)
+Owner: Simon · Tracking: GitHub issues/PRs (the former ID registry was removed)
 Execution: GitHub issue #1875
+
+> **Scope/status:** this file retains migration history and unresolved acceptance
+> obligations, notably AUTHZ-07 Step 6. Old unchecked lists are not a reliable
+> description of current implementation; disposition their remaining obligations
+> against code and GitHub before retiring the file. Shipped authorization is
+> described in [REBAC.md](../platform/REBAC.md). The proposed
+> [team/project corpus target](../../../openspec/changes/simplify-corpus-authorization/proposal.md)
+> is separate and does not close those obligations.
 
 Goal: a single authorization model — **ReBAC only**. Remove all RBAC
 (`@authorize`, `authorize_or_raise`, `is_authorized`, `require_admin`); cover every endpoint with ReBAC,
@@ -81,7 +89,7 @@ NOT enforcement). Removed: `security/rbac.py`, `security/authorization_decorator
 
 ---
 
-## AUTHZ-05 — Fred-owned target authorization model + compatibility bridge  🚧 IN PROGRESS — PR #1957 open, awaiting review
+## AUTHZ-05 — Fred-owned authorization model + compatibility bridge — historical delivery record
 
 Execution: [PR #1957](https://github.com/ThalesGroup/fred/pull/1957) (closes issue #1912),
 branch `1912-authz-05-fred-owned-authorization-model-keycloak-sso-only-fredopenfga-authorization`.

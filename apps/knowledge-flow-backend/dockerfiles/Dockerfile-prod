@@ -1,7 +1,7 @@
 # -----------------------------------------------------------------------------
 # BUILD STAGE
 # -----------------------------------------------------------------------------
-FROM mirror.gcr.io/python:3.12.8-slim AS builder
+FROM mirror.gcr.io/python:3.12.13-slim AS builder
 ARG USER_NAME=fred-user
 ARG USER_ID=1000
 ARG GROUP_ID=1000
@@ -34,8 +34,7 @@ COPY libs/fred-pod /workspace/libs/fred-pod
 COPY libs/fred-core /workspace/libs/fred-core
 
 # Install dependencies using make
-RUN make dev VENV=/app/venv TARGET=/app/target
-RUN python /workspace/scripts/patch_docling_rapidocr_openvino.py
+RUN make prod VENV=/app/venv TARGET=/app/target
 
 # Prepare local encodings directory
 RUN mkdir -p $TIKTOKEN_CACHE_DIR
@@ -46,7 +45,7 @@ RUN python /workspace/scripts/download_encodings.py https://openaipublic.blob.co
 # -----------------------------------------------------------------------------
 # FINAL STAGE: PROD IMAGE
 # -----------------------------------------------------------------------------
-FROM mirror.gcr.io/python:3.12.8-slim
+FROM mirror.gcr.io/python:3.12.13-slim
 ARG USER_NAME=fred-user
 ARG USER_ID=1000
 ARG GROUP_ID=1000
@@ -55,6 +54,7 @@ ARG PRODUCTION_FASTAPI_DOCS_ENABLED=false
 
 # System deps (minimal)
 RUN apt-get update && \
+    apt-get upgrade -y --no-install-recommends && \
     apt-get install -y \
     curl \
     pandoc \
@@ -126,7 +126,7 @@ ENV HF_HUB_DISABLE_TELEMETRY=1
 # Set working directory
 WORKDIR /app
 
-# `make dev` installs local projects in editable mode, so the runtime image
+# `make prod` installs local projects in editable mode, so the runtime image
 # must keep the same source roots available under /workspace/...
 COPY --chown=${USER_ID}:${GROUP_ID} apps/knowledge-flow-backend/pyproject.toml /workspace/apps/knowledge-flow-backend/pyproject.toml
 COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-pod /workspace/libs/fred-pod

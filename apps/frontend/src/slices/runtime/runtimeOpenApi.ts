@@ -25,6 +25,16 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.chatControlsRequest,
       }),
     }),
+    copyCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdCopyConfigPost: build.mutation<
+      CopyCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdCopyConfigPostApiResponse,
+      CopyCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdCopyConfigPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/capabilities/${queryArg.capabilityId}/copy-config`,
+        method: "POST",
+        body: queryArg.capabilityConfigCopyRequest,
+      }),
+    }),
     validateCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdValidateConfigPost: build.mutation<
       ValidateCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdValidateConfigPostApiResponse,
       ValidateCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdValidateConfigPostApiArg
@@ -184,6 +194,12 @@ export type EvaluateChatControlsPodV1AgentsCapabilitiesChatControlsPostApiRespon
 export type EvaluateChatControlsPodV1AgentsCapabilitiesChatControlsPostApiArg = {
   chatControlsRequest: ChatControlsRequest;
 };
+export type CopyCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdCopyConfigPostApiResponse =
+  /** status 200 Successful Response */ CapabilityConfigCopyResult;
+export type CopyCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdCopyConfigPostApiArg = {
+  capabilityId: string;
+  capabilityConfigCopyRequest: CapabilityConfigCopyRequest;
+};
 export type ValidateCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdValidateConfigPostApiResponse =
   /** status 200 Successful Response */ StoredCapabilityConfig;
 export type ValidateCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdValidateConfigPostApiArg = {
@@ -227,6 +243,9 @@ export type ExecuteAgentApiResponse = /** status 200 Successful Response */
       | ({
           kind: "execution_error";
         } & RuntimeErrorEvent)
+      | ({
+          kind: "execution_interrupted";
+        } & ExecutionInterruptedRuntimeEvent)
       | ({
           kind: "final";
         } & FinalRuntimeEvent)
@@ -352,6 +371,20 @@ export type ChatControlsRequestItem = {
 export type ChatControlsRequest = {
   items?: ChatControlsRequestItem[];
 };
+export type CapabilityConfigCopyResult = {
+  config?: {
+    [key: string]: any;
+  };
+  notices?: string[];
+  schema_version: string;
+};
+export type CapabilityConfigCopyRequest = {
+  config: StoredCapabilityConfig;
+  source_agent_instance_id: string;
+  source_team_id: string;
+  target_agent_instance_id: string;
+  target_team_id: string;
+};
 export type CheckpointThreadSummary = {
   blob_bytes_total: number;
   blob_count: number;
@@ -435,6 +468,8 @@ export type RuntimeContext = {
   agent_profile_overrides?: {
     [key: string]: string;
   } | null;
+  /** Whether this interactive conversation offers the agent's ask_user tool. True mounts it, False disables it for new turns, and None means no interactive control was offered. */
+  ask_user?: boolean | null;
   attachments_markdown?: string | null;
   /** Team-chosen default chat model profile id, resolved by control-plane from the team's TeamRoutingPolicy at prepare-execution and forwarded unchanged for the rest of the session — same channel as context_prompt_text, not re-fetched per turn. Applied by RoutedChatModelFactory only when no static models_catalog.yaml agent_profile_overrides entry matches — the static YAML override remains an ops-level override this can never beat. */
   chat_default_profile_id?: string | null;
@@ -494,6 +529,10 @@ export type RuntimeExecuteRequest =
       input?: string;
       /** LangGraph's own Interrupt.id for the HITL occurrence being resumed (ReAct and Graph agents). Echoed back verbatim from the AwaitingHumanRuntimeEvent.request.interrupt_id the frontend received, and validated against the currently pending interrupt. */
       interrupt_id?: string | null;
+      /** Answer to an ExecutionInterruptedRuntimeEvent: 'continue' resumes the unfinished Graph execution at its pending step (input must be empty); 'restart' runs this input as a new turn. */
+      interrupted_action?: ("continue" | "restart") | null;
+      /** Echoed from ExecutionInterruptedRuntimeEvent.interruption_id; required with interrupted_action='continue' and valid only there. */
+      interruption_id?: string | null;
       /** Prior conversation turns forwarded by the calling agent. Used to seed memory in sub-agents invoked via context.invoke_agent(). Graph sub-agents receive history through build_turn_state; ReAct sub-agents receive it as a leading SystemMessage. */
       invocation_turns?: ConversationTurn[];
       /** Identifier of one HITL pause within a LangGraph interrupt. Echoed back from HumanInputRequest.occurrence_id when present and valid only on a resume request. */
@@ -532,6 +571,10 @@ export type RuntimeExecuteRequest =
       input?: string;
       /** LangGraph's own Interrupt.id for the HITL occurrence being resumed (ReAct and Graph agents). Echoed back verbatim from the AwaitingHumanRuntimeEvent.request.interrupt_id the frontend received, and validated against the currently pending interrupt. */
       interrupt_id?: string | null;
+      /** Answer to an ExecutionInterruptedRuntimeEvent: 'continue' resumes the unfinished Graph execution at its pending step (input must be empty); 'restart' runs this input as a new turn. */
+      interrupted_action?: ("continue" | "restart") | null;
+      /** Echoed from ExecutionInterruptedRuntimeEvent.interruption_id; required with interrupted_action='continue' and valid only there. */
+      interruption_id?: string | null;
       /** Prior conversation turns forwarded by the calling agent. Used to seed memory in sub-agents invoked via context.invoke_agent(). Graph sub-agents receive history through build_turn_state; ReAct sub-agents receive it as a leading SystemMessage. */
       invocation_turns?: ConversationTurn[];
       /** Identifier of one HITL pause within a LangGraph interrupt. Echoed back from HumanInputRequest.occurrence_id when present and valid only on a resume request. */
@@ -578,19 +621,6 @@ export type HumanInputRequest = {
   stage?: string | null;
   title?: string | null;
 };
-export type AwaitingHumanRuntimeEvent = {
-  kind?: "awaiting_human";
-  request: HumanInputRequest;
-  sequence?: number;
-};
-export type RuntimeStopReason = "authority_lost" | "cancelled" | "delegation_unavailable";
-export type RuntimeErrorEvent = {
-  kind?: "execution_error";
-  message: string;
-  reason?: RuntimeStopReason | null;
-  sequence?: number;
-};
-export type FinishReason = "stop" | "length" | "content_filter" | "tool_calls" | "error" | "other";
 export type VectorSearchHit = {
   author?: string | null;
   /** Position of the chunk inside its source document, used to restore document order */
@@ -658,6 +688,39 @@ export type LinkPart = {
   title?: string | null;
   type?: "link";
 };
+export type AwaitingHumanRuntimeEvent = {
+  context_tokens?: number | null;
+  kind?: "awaiting_human";
+  model_name?: string | null;
+  request: HumanInputRequest;
+  sequence?: number;
+  sources?: VectorSearchHit[];
+  token_usage?: {
+    [key: string]: number;
+  } | null;
+  ui_parts?: (
+    | ({
+        type: "geo";
+      } & GeoPart)
+    | ({
+        type: "link";
+      } & LinkPart)
+  )[];
+};
+export type RuntimeStopReason = "authority_lost" | "cancelled" | "delegation_unavailable";
+export type RuntimeErrorEvent = {
+  kind?: "execution_error";
+  message: string;
+  reason?: RuntimeStopReason | null;
+  sequence?: number;
+};
+export type ExecutionInterruptedRuntimeEvent = {
+  interruption_id: string;
+  kind?: "execution_interrupted";
+  request: HumanInputRequest;
+  sequence?: number;
+};
+export type FinishReason = "stop" | "length" | "content_filter" | "tool_calls" | "error" | "other";
 export type FinalRuntimeEvent = {
   content?: string;
   context_tokens?: number | null;
@@ -866,6 +929,7 @@ export type HitlResponsePart = {
   choice_id?: string | null;
   label?: string | null;
   occurrence_id?: string | null;
+  skipped?: boolean;
   text?: string | null;
   type?: "hitl_response";
 };
@@ -987,6 +1051,7 @@ export type FieldSpec = {
   min?: number | null;
   pattern?: string | null;
   required?: boolean;
+  scope_private?: boolean | null;
   title: string;
   type:
     | "string"
@@ -1054,14 +1119,12 @@ export type McpServerConfiguration = {
   name: string;
   /** Short, plain-English phrase completing 'Tools for {title}:' in the ReAct system prompt's grouped tool list (e.g. 'tabular action', 'document search'). Unlike `name`/`description`, this is NOT an i18n key — it is rendered directly into the model-facing system prompt, never through the frontend. Falls back to the raw catalog `id` when unset. */
   prompt_group_title?: string | null;
-  /** Local provider key when transport=inprocess. */
-  provider?: string | null;
   /** How long (in seconds) the client will wait for a new event before disconnecting */
   sse_read_timeout?: number | null;
   /** Team scoping of the capability this server becomes (#1988): admin_gated (default) requires a platform admin to enable the server per team; default_on makes it usable by every team. */
   team_scope?: TeamScopePolicy;
-  /** MCP server transport. Can be sse, stdio, websocket, streamable_http, or inprocess (local toolkit provider exposed in the MCP catalog). */
-  transport?: string | null;
+  /** MCP server transport: sse, stdio, websocket or streamable_http. */
+  transport?: ("sse" | "stdio" | "websocket" | "streamable_http") | null;
   /** URL and endpoint of the MCP server */
   url?: string | null;
 };
@@ -1119,6 +1182,7 @@ export const {
   useGetAuditEventsPodV1AgentsAuditEventsGetQuery,
   useLazyGetAuditEventsPodV1AgentsAuditEventsGetQuery,
   useEvaluateChatControlsPodV1AgentsCapabilitiesChatControlsPostMutation,
+  useCopyCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdCopyConfigPostMutation,
   useValidateCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdValidateConfigPostMutation,
   useListCheckpointThreadsPodV1AgentsCheckpointsGetQuery,
   useLazyListCheckpointThreadsPodV1AgentsCheckpointsGetQuery,

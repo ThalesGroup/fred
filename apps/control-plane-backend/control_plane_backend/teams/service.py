@@ -20,7 +20,6 @@ import logging
 import time
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
-from pathlib import Path
 from threading import Lock
 from uuid import uuid4
 
@@ -51,8 +50,10 @@ from fred_core.logs.audit_log import emit_audit_log
 from fred_core.scheduler import SchedulerBackend
 from fred_core.store import ContentStore
 from fred_core.teams.metadata_store import TeamMetadata, TeamMetadataPatch
+from fred_core.users.store.postgres_user_store import get_user_store
 from sqlalchemy.exc import IntegrityError
 
+from control_plane_backend.common.avatar_image import read_avatar_upload
 from control_plane_backend.product.prompt_starter_kit import (
     STARTER_CATEGORY_NAMES,
     STARTER_PROMPTS,
@@ -74,7 +75,6 @@ from control_plane_backend.scheduler.temporal.structures import LifecycleManager
 from control_plane_backend.teams.dependencies import TeamServiceDependencies
 from control_plane_backend.teams.schemas import (
     AddTeamMemberRequest,
-    AvatarUploadError,
     CreateTeamRequest,
     DefaultTeamForNewUsers,
     GrantTeamMemberRoleRequest,
@@ -106,14 +106,6 @@ from control_plane_backend.teams.system import (
 from control_plane_backend.users.schemas import UserSummary
 
 logger = logging.getLogger(__name__)
-
-_MAX_AVATAR_FILE_SIZE_BYTES = 5 * 1024 * 1024
-_ALLOWED_AVATAR_MIME_TYPES = {"image/jpeg", "image/png", "image/webp"}
-_AVATAR_EXTENSION_BY_MIME = {
-    "image/jpeg": ".jpg",
-    "image/png": ".png",
-    "image/webp": ".webp",
-}
 
 
 def _utcnow() -> datetime:
@@ -511,13 +503,29 @@ async def accept_team_admin_charter(
     if not isinstance(pending_teams, RebacDisabledResult):
         await asyncio.gather(
             *(
-                _swap_team_admin_relation(
-                    deps.rebac, TeamId(team.id), user.uid, promote=True
+                _promote_pending_team_admin_after_acceptance(
+                    deps, TeamId(team.id), user.uid
                 )
                 for team in pending_teams
             )
         )
     return TeamAdminCharterAcceptance(accepted_at=accepted_at)
+
+
+async def _promote_pending_team_admin_after_acceptance(
+    deps: TeamServiceDependencies, team_id: TeamId, user_id: str
+) -> None:
+    async with deps.get_team_metadata_store().advisory_lock(
+        _team_member_role_lock_key(team_id)
+    ):
+        roles = await _get_user_roles_in_team(
+            deps.rebac,
+            team_id,
+            user_id,
+            consistency_token=RebacEngine.HIGHER_CONSISTENCY,
+        )
+        if UserTeamRelation.PENDING_TEAM_ADMIN in roles:
+            await _swap_team_admin_relation(deps.rebac, team_id, user_id, promote=True)
 
 
 _TEAM_ADMIN_CHARTER_RECONCILE_LOCK_KEY = "team_admin_charter_reconcile"
@@ -548,20 +556,37 @@ async def reconcile_team_admin_charter_roles(deps: TeamServiceDependencies) -> i
         moved = 0
         for metadata in await metadata_store.list_all():
             relations = await deps.rebac.list_direct_relations(
-                RebacReference(Resource.TEAM, metadata.id)
+                RebacReference(Resource.TEAM, metadata.id),
+                consistency_token=RebacEngine.HIGHER_CONSISTENCY,
             )
-            for user_id, held in _fold_team_role_relations(relations).items():
-                active = version is None or user_id in accepted
-                if UserTeamRelation.PENDING_TEAM_ADMIN in held and active:
-                    await _swap_team_admin_relation(
-                        deps.rebac, metadata.id, user_id, promote=True
+            for user_id, snapshot_roles in _fold_team_role_relations(relations).items():
+                if snapshot_roles.isdisjoint(
+                    {
+                        UserTeamRelation.TEAM_ADMIN,
+                        UserTeamRelation.PENDING_TEAM_ADMIN,
+                    }
+                ):
+                    continue
+                async with metadata_store.advisory_lock(
+                    _team_member_role_lock_key(metadata.id)
+                ):
+                    held = await _get_user_roles_in_team(
+                        deps.rebac,
+                        metadata.id,
+                        user_id,
+                        consistency_token=RebacEngine.HIGHER_CONSISTENCY,
                     )
-                    moved += 1
-                elif UserTeamRelation.TEAM_ADMIN in held and not active:
-                    await _swap_team_admin_relation(
-                        deps.rebac, metadata.id, user_id, promote=False
-                    )
-                    moved += 1
+                    active = version is None or user_id in accepted
+                    if UserTeamRelation.PENDING_TEAM_ADMIN in held and active:
+                        await _swap_team_admin_relation(
+                            deps.rebac, metadata.id, user_id, promote=True
+                        )
+                        moved += 1
+                    elif UserTeamRelation.TEAM_ADMIN in held and not active:
+                        await _swap_team_admin_relation(
+                            deps.rebac, metadata.id, user_id, promote=False
+                        )
+                        moved += 1
         await charter_store.set_applied_version(version or "")
     return moved
 
@@ -1143,39 +1168,12 @@ async def upload_team_avatar(
     )
 
     try:
-        payload = await file.read(_MAX_AVATAR_FILE_SIZE_BYTES + 1)
-        if len(payload) > _MAX_AVATAR_FILE_SIZE_BYTES:
-            raise AvatarUploadError(
-                f"File too large: {len(payload)} bytes (max: {_MAX_AVATAR_FILE_SIZE_BYTES})"
-            )
-        if not payload:
-            raise AvatarUploadError("Empty file upload is not allowed")
-
-        declared_content_type = (
-            file.content_type or "application/octet-stream"
-        ).lower()
-        if declared_content_type not in _ALLOWED_AVATAR_MIME_TYPES:
-            raise AvatarUploadError(f"Invalid content type: {declared_content_type}")
-
-        detected_content_type = _detect_image_content_type(payload)
-        if detected_content_type not in _ALLOWED_AVATAR_MIME_TYPES:
-            raise AvatarUploadError(
-                f"File content doesn't match allowed image formats: {detected_content_type or 'unknown'}"
-            )
-        if detected_content_type != declared_content_type:
-            raise AvatarUploadError(
-                f"File content doesn't match declared content type: {detected_content_type}"
-            )
-
-        file_ext = Path(file.filename or "").suffix.lower()
-        if not file_ext:
-            file_ext = _AVATAR_EXTENSION_BY_MIME[detected_content_type]
-
+        payload, content_type, file_ext = await read_avatar_upload(file)
         object_storage_key = f"teams/{team_id}/avatar-{uuid4().hex}{file_ext}"
         deps.get_content_store().put_object(
             object_storage_key,
             BytesIO(payload),
-            content_type=detected_content_type,
+            content_type=content_type,
         )
 
         await deps.get_team_metadata_store().upsert(
@@ -1440,6 +1438,10 @@ async def search_candidate_team_members(
     ]
 
 
+def _team_member_role_lock_key(team_id: TeamId) -> str:
+    return f"team_member_roles:{team_id}"
+
+
 async def remove_team_member(
     user: KeycloakUser,
     team_id: TeamId,
@@ -1463,35 +1465,47 @@ async def remove_team_member(
     """
     rebac = deps.rebac
 
+    metadata = await deps.get_team_metadata_store().get_by_team_id(team_id)
+    if metadata is None:
+        raise TeamNotFoundError(team_id)
+
     # AUTHZ-06 (RFC Part 7 §35): a member may hold several roles at once — a
     # full removal must be checked against every one of them, not just a
     # single "primary" role, and the last-admin guard applies whenever
     # team_admin is among them.
-    target_roles = await _get_user_roles_in_team(rebac, team_id, user_id)
-    if UserTeamRelation.TEAM_ADMIN in target_roles:
-        await _ensure_team_keeps_at_least_one_admin(
-            rebac=rebac,
-            team_id=team_id,
-            user_id=user_id,
-            revoked_role=UserTeamRelation.TEAM_ADMIN,
+    async with deps.get_team_metadata_store().advisory_lock(
+        _team_member_role_lock_key(team_id)
+    ):
+        target_roles = await _get_user_roles_in_team(
+            rebac, team_id, user_id, consistency_token=RebacEngine.HIGHER_CONSISTENCY
         )
-    permissions_to_check = [
-        _get_administer_permission_for_team_role_relation(role)
-        for role in (target_roles or {UserTeamRelation.TEAM_MEMBER})
-    ]
+        if UserTeamRelation.TEAM_ADMIN in target_roles:
+            await _ensure_team_keeps_at_least_one_admin(
+                rebac=rebac,
+                team_id=team_id,
+                user_id=user_id,
+                revoked_role=UserTeamRelation.TEAM_ADMIN,
+            )
+        permissions_to_check = [
+            _get_administer_permission_for_team_role_relation(role)
+            for role in (target_roles or {UserTeamRelation.TEAM_MEMBER})
+        ]
 
-    # AUTHZ-09 (RFC Part 9 §43-44): a caller removing themselves ("leave
-    # team") needs no administer permission — the last-admin invariant above
-    # already covers the one case that must still be blocked.
-    await _validate_team_and_check_permission(
-        user,
-        team_id,
-        rebac,
-        permissions_to_check,
-        deps,
-        skip_permission_check=user.uid == user_id,
-    )
-    await _remove_all_team_member_relations(rebac, team_id, user_id)
+        # AUTHZ-09 (RFC Part 9 §43-44): a caller removing themselves ("leave
+        # team") needs no administer permission — the last-admin invariant above
+        # already covers the one case that must still be blocked.
+        await _validate_team_and_check_permission(
+            user,
+            team_id,
+            rebac,
+            permissions_to_check,
+            deps,
+            skip_permission_check=user.uid == user_id,
+            metadata=metadata,
+        )
+        await _remove_all_team_member_relations(rebac, team_id, user_id)
+        # Favorites are personal data about this team's prompts: they go with the access.
+        await deps.get_prompt_store().delete_favorites_for_team(user_id, team_id)
 
     policy = evaluate_policy_for_request(
         PolicyResolutionRequest(
@@ -1612,10 +1626,9 @@ async def revoke_team_member_role(
     hold untouched (AUTHZ-06, RFC Part 7 §34-35).
 
     Why this function exists:
-    - the inverse of `grant_team_member_role`; revoking a member's only
-      remaining role is refused (`TeamMemberLastRoleError`) — that is a
-      removal, not a role change, and must go through `remove_team_member` so
-      the two stay distinct, explicit, auditable actions
+    - revoking a sole elevated role retains membership through a direct
+      `team_member` relation; revoking a sole `team_member` is refused so
+      full removal still goes through `remove_team_member`
 
     How to use it:
     - call from the team-membership role-revoke route
@@ -1626,28 +1639,53 @@ async def revoke_team_member_role(
     """
     rebac = deps.rebac
 
-    current_roles = await _get_user_roles_in_team(rebac, team_id, user_id)
-    if relation not in current_roles:
-        raise TeamMemberRoleNotHeldError(team_id, user_id, relation)
-    if current_roles == {relation}:
-        raise TeamMemberLastRoleError(team_id, user_id, relation)
+    metadata = await deps.get_team_metadata_store().get_by_team_id(team_id)
+    if metadata is None:
+        raise TeamNotFoundError(team_id)
 
-    if relation == UserTeamRelation.TEAM_ADMIN:
-        await _ensure_team_keeps_at_least_one_admin(
-            rebac=rebac,
-            team_id=team_id,
-            user_id=user_id,
-            revoked_role=relation,
+    async with deps.get_team_metadata_store().advisory_lock(
+        _team_member_role_lock_key(team_id)
+    ):
+        current_roles = await _get_user_roles_in_team(
+            rebac, team_id, user_id, consistency_token=RebacEngine.HIGHER_CONSISTENCY
         )
-    permission_to_check = _get_administer_permission_for_team_role_relation(relation)
-    await _validate_team_and_check_permission(
-        user,
-        team_id,
-        rebac,
-        [permission_to_check],
-        deps,
-    )
-    await _remove_team_member_relation(rebac, team_id, user_id, relation)
+        if relation not in current_roles:
+            raise TeamMemberRoleNotHeldError(team_id, user_id, relation)
+        sole_elevated_role = (
+            current_roles == {relation} and relation != UserTeamRelation.TEAM_MEMBER
+        )
+        if current_roles == {UserTeamRelation.TEAM_MEMBER}:
+            raise TeamMemberLastRoleError(team_id, user_id, relation)
+
+        if relation == UserTeamRelation.TEAM_ADMIN:
+            await _ensure_team_keeps_at_least_one_admin(
+                rebac=rebac,
+                team_id=team_id,
+                user_id=user_id,
+                revoked_role=relation,
+            )
+        permission_to_check = _get_administer_permission_for_team_role_relation(
+            relation
+        )
+        permissions_to_check = [permission_to_check]
+        if (
+            sole_elevated_role
+            and permission_to_check != TeamPermission.CAN_ADMINISTER_MEMBERS
+        ):
+            permissions_to_check.append(TeamPermission.CAN_ADMINISTER_MEMBERS)
+        await _validate_team_and_check_permission(
+            user,
+            team_id,
+            rebac,
+            permissions_to_check,
+            deps,
+            metadata=metadata,
+        )
+        if sole_elevated_role:
+            await _add_team_member_relation(
+                rebac, team_id, user_id, UserTeamRelation.TEAM_MEMBER
+            )
+        await _remove_team_member_relation(rebac, team_id, user_id, relation)
 
     logger.info(
         "Revoked role %s from user %s on team %s",
@@ -1796,10 +1834,13 @@ async def _bulk_team_membership(
     my_relations_map: dict[TeamId, set[UserTeamRelation]] = {}
     for team_id, relations in zip(team_ids, per_team_relations):
         roles_by_user = _fold_team_role_relations(relations)
+        # Listing avatars identify contacts, including nominees awaiting the charter.
+        # The per-team projection keeps accepted admins only for the charter gate.
         admin_ids_map[team_id] = {
             uid
             for uid, roles in roles_by_user.items()
-            if UserTeamRelation.TEAM_ADMIN in roles
+            if roles
+            & {UserTeamRelation.TEAM_ADMIN, UserTeamRelation.PENDING_TEAM_ADMIN}
         }
         member_ids_map[team_id] = set(roles_by_user.keys())
         my_relations_map[team_id] = roles_by_user.get(user_id, set())
@@ -1833,7 +1874,9 @@ async def _enrich_teams_with_membership(
     all_admin_ids: set[str] = (
         set().union(*team_admin_ids_map.values()) if team_admin_ids_map else set()
     )
-    user_summaries = await deps.get_users_by_ids(all_admin_ids)
+    user_summaries = await deps.attach_avatar_urls(
+        await deps.get_users_by_ids(all_admin_ids)
+    )
     default_max_storage = deps.configuration.app.default_team_max_resources_storage_size
 
     return [
@@ -2042,7 +2085,9 @@ async def _build_team_with_permissions(
         if UserTeamRelation.TEAM_ADMIN in roles
     }
     member_ids = set(roles_by_user.keys())
-    admin_summaries = await deps.get_users_by_ids(admin_ids)
+    admin_summaries = await deps.attach_avatar_urls(
+        await deps.get_users_by_ids(admin_ids)
+    )
 
     team = _build_team_dto(
         metadata,
@@ -2067,11 +2112,14 @@ async def _get_team_users_by_relation(
     rebac: RebacEngine,
     team_id: TeamId,
     relation: RelationType,
+    *,
+    consistency_token: str | None = None,
 ) -> set[str]:
     subjects = await rebac.lookup_subjects(
         RebacReference(type=Resource.TEAM, id=team_id),
         relation,
         Resource.USER,
+        consistency_token=consistency_token,
     )
     if isinstance(subjects, RebacDisabledResult):
         return set()
@@ -2111,21 +2159,17 @@ async def count_all_personal_spaces(deps: TeamServiceDependencies) -> int:
     "unknown" rather than "no personal spaces".
     """
 
-    admin = create_keycloak_admin(deps.configuration.security.m2m)
+    if deps.configuration.security.user_directory == "local":
+        return await get_user_store().count_identities()
+
+    admin = create_keycloak_admin(
+        deps.configuration.security.m2m,
+        user_directory=deps.configuration.security.user_directory,
+    )
     if isinstance(admin, KeycloackDisabled):
         logger.info("Keycloak admin client not configured; user count unavailable.")
         return 0
     return int(await admin.a_users_count())
-
-
-def _detect_image_content_type(payload: bytes) -> str | None:
-    if payload.startswith(b"\xff\xd8\xff"):
-        return "image/jpeg"
-    if payload.startswith(b"\x89PNG\r\n\x1a\n"):
-        return "image/png"
-    if len(payload) >= 12 and payload[0:4] == b"RIFF" and payload[8:12] == b"WEBP":
-        return "image/webp"
-    return None
 
 
 def _is_absolute_url(value: str) -> bool:
@@ -2170,6 +2214,7 @@ async def _validate_team_and_check_permission(
     deps: TeamServiceDependencies,
     *,
     skip_permission_check: bool = False,
+    metadata: TeamMetadata | None = None,
 ) -> tuple[TeamMetadata, str | None]:
     """
     Load one team's metadata and verify the caller has the requested permissions.
@@ -2182,6 +2227,7 @@ async def _validate_team_and_check_permission(
     - pass the current user, target team id, required permissions, and the
       explicit team-service dependency bundle
     - expect `TeamNotFoundError` on an unknown team id
+    - pass preloaded metadata when a caller holds a database advisory lock
     - pass `skip_permission_check=True` for a same-identity action that needs
       no "administer" permission (AUTHZ-09, RFC Part 9 §43-44 — a
       self-removal from a team): team existence is still verified, only the
@@ -2190,7 +2236,8 @@ async def _validate_team_and_check_permission(
     Example:
     - `metadata, token = await _validate_team_and_check_permission(user, team_id, rebac, permissions, deps)`
     """
-    metadata = await deps.get_team_metadata_store().get_by_team_id(team_id)
+    if metadata is None:
+        metadata = await deps.get_team_metadata_store().get_by_team_id(team_id)
     if metadata is None:
         raise TeamNotFoundError(team_id)
 
@@ -2304,6 +2351,8 @@ async def _get_user_roles_in_team(
     rebac: RebacEngine,
     team_id: TeamId,
     user_id: str,
+    *,
+    consistency_token: str | None = None,
 ) -> set[UserTeamRelation]:
     """AUTHZ-06 (RFC Part 7 §35): the full set of roles `user_id` currently
     holds on `team_id` — a member may hold several simultaneously (e.g.
@@ -2326,6 +2375,7 @@ async def _get_user_roles_in_team(
     relations = await rebac.list_direct_relations(
         RebacReference(Resource.TEAM, team_id),
         subject=RebacReference(Resource.USER, user_id),
+        consistency_token=consistency_token,
     )
     return _fold_team_role_relations(relations).get(user_id, set())
 
@@ -2404,7 +2454,10 @@ async def _ensure_team_keeps_at_least_one_admin(
         return
 
     admin_ids = await _get_team_users_by_relation(
-        rebac, team_id, RelationType.TEAM_ADMIN
+        rebac,
+        team_id,
+        RelationType.TEAM_ADMIN,
+        consistency_token=RebacEngine.HIGHER_CONSISTENCY,
     )
     if user_id in admin_ids and len(admin_ids) <= 1:
         raise TeamAdminConstraintError(

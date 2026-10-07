@@ -18,12 +18,15 @@ import json
 import logging
 import os
 import time
+from collections import OrderedDict
+from collections.abc import Mapping, Sequence
 from typing import Any, Dict, Tuple
-from uuid import UUID
+from uuid import NAMESPACE_URL, UUID, uuid5
 
 import jwt
 from fastapi import Depends, HTTPException, Request, Security
 from fastapi.security import OAuth2PasswordBearer
+from fred_pod.security.oidc_endpoints import resolve_endpoints
 from jwt import PyJWKClient
 
 from fred_core.common import ThreadSafeLRUCache, get_config, read_env_bool
@@ -42,6 +45,7 @@ from fred_core.security.structure import (
     KeycloakUser,
     PrincipalContext,
     SecurityConfiguration,
+    UserClaims,
     UserSecurity,
     is_service_agent,
 )
@@ -77,10 +81,18 @@ KEYCLOAK_ENABLED = False
 KEYCLOAK_URL = ""
 KEYCLOAK_JWKS_URL = ""
 KEYCLOAK_CLIENT_ID = ""
+USER_AUDIENCE = ""
+USER_ISSUER = ""
+USER_TOKEN_ENDPOINT: str | None = None
+USER_SECURITY_CONFIG: UserSecurity | None = None
 # Every address the realm is configured under: tokens minted at the machine-to-
 # machine address carry that issuer. Set by apply_security_profile.
 _REALM_ISSUERS: frozenset[str] = frozenset()
 _JWKS_CLIENT: PyJWKClient | None = None  # cached for perf
+# Per-process write throttle; entries hold only IDs and monotonic deadlines.
+_IDENTITY_SNAPSHOT_DEADLINES: OrderedDict[UUID, float] = OrderedDict()
+_IDENTITY_SNAPSHOT_INTERVAL_SECONDS = 600.0
+_IDENTITY_SNAPSHOT_MAX_ENTRIES = 2048
 _JWT_CACHE: ThreadSafeLRUCache[str, tuple[float, KeycloakUser]] = ThreadSafeLRUCache(
     JWT_CACHE_MAX_SIZE
 )
@@ -114,6 +126,14 @@ def get_keycloak_url() -> str:
     return KEYCLOAK_URL
 
 
+def get_token_endpoint() -> str:
+    """Return the user provider's resolved token endpoint after startup."""
+    if not USER_TOKEN_ENDPOINT:
+        logger.warning("[AUTH] Token endpoint requested but not initialized.")
+        return ""
+    return USER_TOKEN_ENDPOINT
+
+
 def get_keycloak_client_id() -> str:
     """
     Returns the globally initialized Keycloak Client ID.
@@ -125,36 +145,80 @@ def get_keycloak_client_id() -> str:
     return KEYCLOAK_CLIENT_ID
 
 
-def initialize_user_security(config: UserSecurity):
-    """
-    Initialize the Keycloak authentication settings from the given configuration.
-    """
+def initialize_user_security(config: UserSecurity) -> None:
+    """Initialize user authentication from a Keycloak realm or OIDC issuer."""
     global \
         KEYCLOAK_ENABLED, \
         KEYCLOAK_URL, \
         KEYCLOAK_JWKS_URL, \
         KEYCLOAK_CLIENT_ID, \
+        USER_AUDIENCE, \
+        USER_ISSUER, \
+        USER_TOKEN_ENDPOINT, \
+        USER_SECURITY_CONFIG, \
         _JWKS_CLIENT
 
+    realm_url = str(config.realm_url).rstrip("/")
+    endpoints = resolve_endpoints(
+        provider=config.provider,
+        realm_url=realm_url,
+        jwks_url=str(config.jwks_url) if config.jwks_url else None,
+        token_url=str(config.token_url) if config.token_url else None,
+    )
     KEYCLOAK_ENABLED = config.enabled
-    KEYCLOAK_URL = str(config.realm_url).rstrip("/")
+    KEYCLOAK_URL = realm_url
     KEYCLOAK_CLIENT_ID = config.client_id
-    KEYCLOAK_JWKS_URL = f"{KEYCLOAK_URL}/protocol/openid-connect/certs"
+    USER_AUDIENCE = config.audience or config.client_id
+    KEYCLOAK_JWKS_URL = endpoints.jwks_uri
+    USER_ISSUER = endpoints.issuer
+    USER_TOKEN_ENDPOINT = endpoints.token_endpoint
+    USER_SECURITY_CONFIG = config
     _JWKS_CLIENT = None  # reset; will lazy-create on first decode
 
-    # derive base + realm for log clarity
-    base, realm = split_realm_url(KEYCLOAK_URL)
-    logger.info(
-        "[AUTH] Keycloak initialized: enabled=%s base=%s realm=%s client_id=%s jwks=%s strict_issuer=%s strict_audience=%s skew=%ss",
-        KEYCLOAK_ENABLED,
-        base,
-        realm,
-        KEYCLOAK_CLIENT_ID,
-        KEYCLOAK_JWKS_URL,
-        STRICT_ISSUER,
-        STRICT_AUDIENCE,
-        CLOCK_SKEW_SECONDS,
-    )
+    if config.provider == "keycloak":
+        base, realm = split_realm_url(KEYCLOAK_URL)
+        logger.info(
+            "[AUTH] Keycloak initialized: enabled=%s base=%s realm=%s client_id=%s jwks=%s strict_issuer=%s strict_audience=%s skew=%ss",
+            KEYCLOAK_ENABLED,
+            base,
+            realm,
+            KEYCLOAK_CLIENT_ID,
+            KEYCLOAK_JWKS_URL,
+            STRICT_ISSUER,
+            STRICT_AUDIENCE,
+            CLOCK_SKEW_SECONDS,
+        )
+    else:
+        logger.info(
+            "[AUTH] OIDC initialized: enabled=%s issuer=%s client_id=%s jwks=%s strict_issuer=%s strict_audience=%s skew=%ss",
+            KEYCLOAK_ENABLED,
+            USER_ISSUER,
+            KEYCLOAK_CLIENT_ID,
+            KEYCLOAK_JWKS_URL,
+            STRICT_ISSUER,
+            STRICT_AUDIENCE,
+            CLOCK_SKEW_SECONDS,
+        )
+
+
+def validate_provider_configuration(config: SecurityConfiguration) -> None:
+    """Refuse OIDC settings that require Keycloak-specific token or directory data."""
+    if config.user.provider != "oidc":
+        return
+    if config.delegation.service_accounts_only:
+        raise ValueError(
+            "security.delegation.service_accounts_only requires Keycloak; "
+            "set it to false for security.user.provider=oidc"
+        )
+    if config.delegation.in_use and not config.delegation.caller_roles_claim:
+        raise ValueError(
+            "security.delegation.caller_roles_claim is required when delegation "
+            "is in use with security.user.provider=oidc"
+        )
+    if config.user_directory == "keycloak":
+        raise ValueError(
+            "security.user_directory must be local when security.user.provider=oidc"
+        )
 
 
 def apply_security_profile(config: SecurityConfiguration) -> None:
@@ -177,6 +241,8 @@ def apply_security_profile(config: SecurityConfiguration) -> None:
     (dev behavior unchanged).
     """
     global STRICT_ISSUER, STRICT_AUDIENCE, _REALM_ISSUERS
+
+    validate_provider_configuration(config)
 
     from fred_pod.security.backend_to_backend_auth import set_token_observer
 
@@ -336,6 +402,14 @@ def _token_audiences(value: object) -> frozenset[str]:
     return frozenset()
 
 
+def _claim_path(payload: Mapping[str, Any], path: Sequence[str]) -> object | None:
+    """Read a verified JWT claim by its configured sequence of keys."""
+    value: object = payload
+    for key in path:
+        value = value.get(key) if isinstance(value, Mapping) else None
+    return value
+
+
 def decode_jwt(token: str) -> KeycloakUser:
     """Decodes a JWT token using PyJWT and retrieves user information with rich diagnostics."""
     if not KEYCLOAK_ENABLED:
@@ -371,10 +445,14 @@ def decode_jwt(token: str) -> KeycloakUser:
     aud = payload_peek.get("aud")
     if iss and KEYCLOAK_URL and str(iss) != KEYCLOAK_URL:
         logger.warning("[AUTH] JWT issuer mismatch (soft)")
-    if KEYCLOAK_CLIENT_ID:
+    user_audience = USER_AUDIENCE or KEYCLOAK_CLIENT_ID
+    if user_audience:
         aud_list = aud if isinstance(aud, list) else [aud] if aud else []
-        if KEYCLOAK_CLIENT_ID not in aud_list:
-            logger.debug("[AUTH] JWT audience does not include the configured client")
+        if user_audience not in aud_list:
+            logger.debug(
+                "[AUTH] JWT audience does not include the configured %s",
+                "client" if user_audience == KEYCLOAK_CLIENT_ID else "audience",
+            )
 
     # JWKS fetch + decode
     try:
@@ -393,16 +471,16 @@ def decode_jwt(token: str) -> KeycloakUser:
         )
 
     # Under the C3 profile, STRICT_AUDIENCE/STRICT_ISSUER are set: PyJWT then
-    # enforces exact audience (== client_id) and exact issuer (a realm address) on the
-    # verified payload, and rejects a confused `alg` (algorithms pinned to RS256).
+    # enforces the configured audience and exact issuer on the verified payload,
+    # and rejects a confused `alg` (algorithms pinned to RS256).
     # In dev (soft) we keep verification of signature + expiry only.
-    verify_aud = bool(STRICT_AUDIENCE and KEYCLOAK_CLIENT_ID)
+    verify_aud = bool(STRICT_AUDIENCE and user_audience)
     delegation = get_delegation_config()
     expected_audience: list[str] | None = None
     if verify_aud:
         # A delegating workload is addressed to the delegation audience, not to
         # this service's login client; the caller role is required for it below.
-        expected_audience = [KEYCLOAK_CLIENT_ID]
+        expected_audience = [user_audience]
         if delegation.accept_delegated_calls:
             expected_audience.append(delegation.audience)
     expected_issuer: list[str] | None = (
@@ -473,17 +551,25 @@ def decode_jwt(token: str) -> KeycloakUser:
             )
 
     # Extract client roles
-    client_roles = []
-    if "resource_access" in payload:
-        client_data = payload["resource_access"].get(KEYCLOAK_CLIENT_ID, {})
-        client_roles = client_data.get("roles", [])
+    claims = USER_SECURITY_CONFIG.claims if USER_SECURITY_CONFIG else UserClaims()
+    roles_path = (
+        USER_SECURITY_CONFIG.roles_claim
+        if USER_SECURITY_CONFIG and USER_SECURITY_CONFIG.roles_claim
+        else ("resource_access", KEYCLOAK_CLIENT_ID, "roles")
+    )
+    roles_value = _claim_path(payload, roles_path)
+    client_roles = (
+        [role for role in roles_value if isinstance(role, str)]
+        if isinstance(roles_value, list)
+        else []
+    )
     caller_roles = read_caller_roles(payload)
     # Keycloak names the client in azp; RFC 9068 access tokens in client_id.
     client_id = payload.get("azp") or payload.get("client_id")
     service_account = bears_service_account_markers(payload, client_id)
 
     audiences = _token_audiences(payload.get("aud"))
-    if verify_aud and KEYCLOAK_CLIENT_ID not in audiences:
+    if verify_aud and user_audience not in audiences:
         # Admitted on the delegation audience alone: only a delegating workload may be.
         if (
             delegation.caller_role not in caller_roles
@@ -500,20 +586,38 @@ def decode_jwt(token: str) -> KeycloakUser:
     logger.debug("[AUTH] JWT token decoded")
 
     # Build user
-    sub = payload.get("sub")
-    if not isinstance(sub, str):
-        logger.warning("[AUTH] JWT token missing or invalid subject claim")
+    identity = _claim_path(payload, (claims.uid,))
+    if not isinstance(identity, str) or (
+        USER_SECURITY_CONFIG
+        and USER_SECURITY_CONFIG.provider == "oidc"
+        and not identity.strip()
+    ):
+        logger.warning("[AUTH] JWT token missing or invalid identity claim")
         raise HTTPException(
             status_code=401,
             detail="Invalid token claims",
             headers={"WWW-Authenticate": "Bearer error='invalid_token'"},
         )
 
+    uid = identity
+    if USER_SECURITY_CONFIG and USER_SECURITY_CONFIG.provider == "oidc":
+        try:
+            UUID(identity)
+        except ValueError:
+            issuer = USER_ISSUER or str(USER_SECURITY_CONFIG.realm_url).rstrip("/")
+            uid = str(uuid5(NAMESPACE_URL, f"{issuer}#{identity}"))
+
+    username_value = _claim_path(payload, (claims.username,))
+    email_value = _claim_path(payload, (claims.email,))
+    given_name_value = _claim_path(payload, (claims.given_name,))
+    family_name_value = _claim_path(payload, (claims.family_name,))
     user = KeycloakUser(
-        uid=sub,
-        username=payload.get("preferred_username", ""),
+        uid=uid,
+        username=username_value if isinstance(username_value, str) else "",
         roles=client_roles,
-        email=payload.get("email"),
+        email=email_value if isinstance(email_value, str) else None,
+        first_name=given_name_value if isinstance(given_name_value, str) else None,
+        last_name=family_name_value if isinstance(family_name_value, str) else None,
         client_id=client_id,
         token_issuer=payload.get("iss"),
         token_audiences=audiences,
@@ -541,17 +645,50 @@ async def _enforce_gcu(
         )
         raise HTTPException(status_code=403, detail="user_not_accept_gcu")
 
-    user_details = await user_store.find_user_by_id(user_uuid)
-
-    accepted_gcu_version = (
-        user_details.gcuVersionAccepted.value
-        if user_details is not None and user_details.gcuVersionAccepted is not None
-        else None
-    )
-
-    if accepted_gcu_version != configuration.app.gcu_version:
+    stored_user = await user_store.find_user_by_id(user_uuid)
+    if (
+        stored_user is None
+        or stored_user.gcuVersionAccepted != configuration.app.gcu_version
+    ):
         raise HTTPException(status_code=403, detail="user_not_accept_gcu")
     return user
+
+
+async def _snapshot_local_identity(
+    user: KeycloakUser, user_store: BaseUserStore, configuration: Any
+) -> None:
+    directory = getattr(
+        getattr(configuration, "security", None), "user_directory", "keycloak"
+    )
+    if not KEYCLOAK_ENABLED or directory != "local":
+        return
+    delegation = get_delegation_config()
+    if (
+        not user.username
+        or is_service_agent(user)
+        or delegation.caller_role in user.caller_roles
+        or user.service_account
+    ):
+        return
+    try:
+        user_id = UUID(user.uid)
+    except ValueError:
+        return
+    now = time.monotonic()
+    deadline = _IDENTITY_SNAPSHOT_DEADLINES.get(user_id, 0.0)
+    if now < deadline:
+        return
+    _IDENTITY_SNAPSHOT_DEADLINES[user_id] = now + _IDENTITY_SNAPSHOT_INTERVAL_SECONDS
+    _IDENTITY_SNAPSHOT_DEADLINES.move_to_end(user_id)
+    if len(_IDENTITY_SNAPSHOT_DEADLINES) > _IDENTITY_SNAPSHOT_MAX_ENTRIES:
+        _IDENTITY_SNAPSHOT_DEADLINES.popitem(last=False)
+    try:
+        await user_store.upsert_identity(
+            user_id, user.username, user.email, user.first_name, user.last_name
+        )
+    except Exception:
+        _IDENTITY_SNAPSHOT_DEADLINES.pop(user_id, None)
+        logger.warning("[AUTH] Local identity snapshot failed")
 
 
 async def get_current_user(
@@ -581,6 +718,7 @@ async def get_current_user(
         # The person's acceptance was gated by their own token when the run was
         # admitted; the workload speaking for them has no acceptance row of its own.
         return user
+    await _snapshot_local_identity(user, user_store, configuration)
     return await _enforce_gcu(user, user_store, configuration)
 
 
@@ -598,7 +736,21 @@ async def get_current_user_or_service(
         return user
     if is_service_agent(user):
         return user
+    await _snapshot_local_identity(user, user_store, configuration)
     return await _enforce_gcu(user, user_store, configuration)
+
+
+async def get_current_user_before_gcu(
+    request: Request,
+    token: str = Security(oauth2_scheme),
+    user_store: BaseUserStore = Depends(get_user_store),
+    configuration=Depends(get_config),
+) -> KeycloakUser | AssertedUser:
+    """Record a human profile before terms acceptance without granting access."""
+    user = await get_current_user_without_gcu(request, token)
+    if not isinstance(user, AssertedUser):
+        await _snapshot_local_identity(user, user_store, configuration)
+    return user
 
 
 async def get_current_user_without_gcu(

@@ -1,3 +1,93 @@
+**v3.2.0** - 2026-10-06
+
+- **Summary**
+
+  Copy agents between teams, keep favorite prompts close at hand and personalize Fred with new themes and a profile picture. Interrupted Graph conversations can now continue where they stopped.
+  Also added profile picture support for users.
+
+- **Features**
+
+  - Copy an agent to another team or your personal space (#2949)
+  - Star prompts and find them with the Favorites filter (#2901)
+  - Set, replace or remove your profile picture (#2977)
+  - Choose Cobalt or Cloud themes, with a platform default set by your administrator (#2915, #2933)
+  - Continue unfinished Graph conversations or choose to restart them (#2892)
+  - Query all sheets of an Excel file attached to a conversation (#2837)
+  - Sign in through your organization's configured identity provider (#2862)
+  - Publish updated terms using a configurable version identifier (#2972)
+
+- **Improvements**
+
+  - Navigate with a compact sidebar and denser agent, prompt and resource pages (#2915)
+  - Keep your chosen agent sort when returning to the page (#2959)
+  - Follow large document imports without leaving progress stuck (#2940)
+
+- **Security**
+
+  - Updated dependencies reduce reported vulnerabilities in Fred images and the interface (#2934, #2956)
+
+- **Bug Fixes**
+
+  - A custom answer takes precedence over a selected choice in agent questions (#2924)
+  - Documents containing literal comparisons open correctly in the rich-text editor (#2979)
+  - Agent lists update after an administrator enables or disables a capability (#2950)
+  - Revoking a person's sole elevated team role keeps them as a member (#2925)
+  - Marketplace cards show nominated team administrators before charter acceptance (#2968)
+
+- **Deployment note**
+
+  Follow the operator guide for a coordinated database upgrade and configuration cleanup. Built-in evaluations move to the external application; verify its permissions before rollout. No document re-ingestion is required.
+
+**v3.1.1** - 2026-10-02
+
+- **Summary**
+
+  You can answer several agent questions together and see your tool approval decisions in the conversation. Paused exchanges resume more reliably.
+
+- **Bug Fixes**
+
+  - Answer several agent questions together, including a custom answer, without losing progress (#2899)
+  - Tool approval decisions appear immediately in chat and remain visible after reload (#2916)
+
+**v3.1.0** - 2026-10-01
+
+- **Summary**
+
+  Imports now ask before replacing documents and stay visible until each file is ready. Agents can ask questions in chat, and former hidden document versions appear under distinct names.
+
+- **Features**
+
+  - Choose whether to replace a same-named document during import (#2876)
+  - Track each import through completion in a side panel, including failures and interruptions (#2876)
+  - Answer questions an agent asks during a conversation (#2840)
+  - Approve a tool for the rest of a conversation (#2840)
+  - Start a new chat with the same agent from the current conversation (#2875)
+
+- **Improvements**
+
+  - Former hidden document versions appear as individually named files (#2881)
+  - Team avatars load faster and reuse the browser cache (#2842)
+  - Other requests stay responsive while large uploads are stored (#2846)
+  - Pagination takes less space in tables (#2898)
+
+- **Security**
+
+  - Tabular queries can no longer read external files or runtime settings (#2872)
+  - Agent conversations reject unsafe runtime addresses (#2872)
+  - Updated dependencies resolve reported security alerts (#2856)
+
+- **Bug Fixes**
+
+  - Empty or unreadable uploads explain what went wrong (#2841)
+  - Marketplace prompt imports list only teams where you can add them (#2827)
+  - Mistral agents run tool calls returned alongside text instead of exposing their syntax (#2848)
+  - Deep agents show their task lists again (#2864)
+  - Dropping a file on a folder no longer leaves the page overlay visible (#2888)
+
+- **Deployment note**
+
+  Check custom migration Job inputs and runtime paths before upgrading. The database upgrade gives former hidden document versions distinct names; this rename cannot be undone. No document re-ingestion is required.
+
 **v3.0.1** — 2026-09-29
 
 - **Summary**

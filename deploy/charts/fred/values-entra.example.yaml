@@ -1,0 +1,83 @@
+# Example overlay only. Copy and adapt in the customer's deployment repository.
+# Supply credentials via the deployment secret store; do not put them here.
+# Replace tenant and application IDs, host names, and scope URI before use.
+# The frontend OIDC adapter must be validated before deploying this overlay.
+
+applications:
+  fred-agents:
+    configuration:
+      security:
+        user_directory: local
+        user:
+          provider: oidc
+          realm_url: https://login.microsoftonline.com/TENANT_ID/v2.0
+          client_id: FRED_UI_CLIENT_ID
+          audience: FRED_API_CLIENT_ID_GUID
+          scope: api://fred-api/access_as_user
+          roles_claim: [roles]
+          claims:
+            uid: oid
+        m2m:
+          provider: oidc
+          realm_url: https://login.microsoftonline.com/TENANT_ID/v2.0
+          client_id: FRED_RUNTIME_CLIENT_ID
+          scope: api://fred-api/.default
+        delegation:
+          act_for_people: true
+          caller_roles_claim: [roles]
+          audience: FRED_API_CLIENT_ID_GUID
+          service_accounts_only: false
+    dotenv:
+      FRED_JWT_MAX_LIFETIME_SECONDS: "6000"
+
+  knowledge-flow-backend:
+    configuration:
+      security:
+        user_directory: local
+        user:
+          provider: oidc
+          realm_url: https://login.microsoftonline.com/TENANT_ID/v2.0
+          client_id: FRED_UI_CLIENT_ID
+          audience: FRED_API_CLIENT_ID_GUID
+          scope: api://fred-api/access_as_user
+          roles_claim: [roles]
+          claims:
+            uid: oid
+        m2m:
+          provider: oidc
+          realm_url: https://login.microsoftonline.com/TENANT_ID/v2.0
+          client_id: FRED_KNOWLEDGE_FLOW_CLIENT_ID
+          scope: api://fred-api/.default
+        delegation:
+          accept_delegated_calls: true
+          caller_roles_claim: [roles]
+          audience: FRED_API_CLIENT_ID_GUID
+          service_accounts_only: false
+    dotenv:
+      FRED_JWT_MAX_LIFETIME_SECONDS: "6000"
+
+  control-plane-backend:
+    configuration:
+      security:
+        user_directory: local
+        user:
+          provider: oidc
+          realm_url: https://login.microsoftonline.com/TENANT_ID/v2.0
+          client_id: FRED_UI_CLIENT_ID
+          audience: FRED_API_CLIENT_ID_GUID
+          scope: api://fred-api/access_as_user
+          roles_claim: [roles]
+          claims:
+            uid: oid
+        m2m:
+          provider: oidc
+          realm_url: https://login.microsoftonline.com/TENANT_ID/v2.0
+          client_id: FRED_CONTROL_PLANE_CLIENT_ID
+          scope: api://fred-api/.default
+        delegation:
+          accept_delegated_calls: true
+          caller_roles_claim: [roles]
+          audience: FRED_API_CLIENT_ID_GUID
+          service_accounts_only: false
+    dotenv:
+      FRED_JWT_MAX_LIFETIME_SECONDS: "6000"

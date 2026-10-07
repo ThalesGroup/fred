@@ -296,8 +296,8 @@ the URL is unset or an empty literal, the frontend is disabled, or either key is
 which is a hard failure for what is only branding. With it the fetch degrades to
 anonymous and the baked assets are served.
 
-`deploy/local/k3d/values-local.yaml` carries this shape against the k3d
-seaweedfs, reusing the stack chart's own `fred-secrets`.
+The k3d values (`deploy/k3d/values.yaml`) carry this shape
+against the k3d seaweedfs, reusing the stack chart's own `fred-secrets`.
 `make theme-bundle` packages `theme/` into `theme.zip`, ready to upload. That
 directory is a complete working example - round logo and its dark variant, an
 agent icon silhouette, a team avatar, and the four legal files - so the target

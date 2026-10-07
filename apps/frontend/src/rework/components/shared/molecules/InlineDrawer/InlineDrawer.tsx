@@ -13,11 +13,11 @@
 // limitations under the License.
 
 import { PropsWithChildren, ReactNode, useCallback, useEffect, useId, useRef } from "react";
-import IconButton from "@shared/atoms/IconButton/IconButton";
-import { usePaneResize } from "@rework/core/hooks/usePaneResize";
+import IconButton from "../../atoms/IconButton/IconButton.tsx";
+import { usePaneResize } from "../../../../core/hooks/usePaneResize.ts";
 import styles from "./InlineDrawer.module.css";
 
-interface InlineDrawerResizeSpec {
+export interface InlineDrawerResizeSpec {
   /** localStorage identity for the persisted width — one key per drawer family. */
   persistKey: string;
   /** Drag bounds (px). Default 320–900, the legacy chat pane's bounds. */
@@ -28,17 +28,18 @@ interface InlineDrawerResizeSpec {
   maxViewportFraction?: number;
 }
 
-interface InlineDrawerProps {
+export interface InlineDrawerProps {
   open: boolean;
   onClose: () => void;
   title: string;
+  closeLabel?: string;
   /** Optional content rendered immediately after the visible title. */
   titleAccessory?: ReactNode;
   /** Optional action(s) rendered in the header, immediately left of the close button. */
   headerActions?: ReactNode;
   /** Width in CSS units. Defaults to "480px". */
   width?: string;
-  /** Drawer shell background (CSS color/token). Defaults to `--surface-container`. */
+  /** Drawer shell background (CSS color/token). Defaults to `--surface-floating`, or `--surface-container-low` for a flush push panel. */
   background?: string;
   /**
    * Open/close duration for the push layout (any CSS time, ideally a
@@ -71,7 +72,7 @@ interface InlineDrawerProps {
   flushBody?: boolean;
   /**
    * Render the panel as a detached floating card (push layout): inset from every
-   * edge, a single `outline-retreat` border, `--radius-l` corners and a subtle
+   * edge, a single `outline-muted` border, `--radius-l` corners and a subtle
    * shadow, dropping the drawer's flush edge border and the header divider.
    * Opt-in — default panels stay flush.
    */
@@ -90,6 +91,7 @@ export function InlineDrawer({
   open,
   onClose,
   title,
+  closeLabel = "Close panel",
   titleAccessory,
   headerActions,
   width = "480px",
@@ -199,10 +201,11 @@ export function InlineDrawer({
               <div className={styles.headerActions}>
                 {headerActions}
                 <IconButton
+                  type="button"
                   variant="icon"
                   size="small"
                   icon={{ category: "outlined", type: "close" }}
-                  aria-label="Close panel"
+                  aria-label={closeLabel}
                   onClick={handleClose}
                 />
               </div>

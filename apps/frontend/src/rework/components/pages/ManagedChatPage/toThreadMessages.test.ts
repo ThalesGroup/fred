@@ -19,7 +19,7 @@
 import { describe, expect, it } from "vitest";
 import type { ChatMessage } from "../../../../slices/runtime/runtimeOpenApi";
 import { groupTraceEntries, isCancelledByUser, traceSummary } from "../../../utils/traceUtils";
-import { hitlResponseKey, reconstructPendingHitl, toThreadMessages } from "./toThreadMessages";
+import { hitlResponseKey, reconstructPendingHitl, reconstructPendingHitls, toThreadMessages } from "./toThreadMessages";
 
 function msg(overrides: Partial<ChatMessage>): ChatMessage {
   return {
@@ -181,6 +181,19 @@ describe("reconstructPendingHitl", () => {
     expect(reconstructPendingHitl(messages)).toBeNull();
   });
 
+  it("reconstructs unanswered sibling questions in request order", () => {
+    const messages = [
+      hitlRequestMsg("e1", { stage: "agent_question", occurrence_id: "call-a", question: "Destination?" }, 1),
+      hitlRequestMsg("e1", { stage: "agent_question", occurrence_id: "call-b", question: "Budget?" }, 2),
+      hitlResponseMsg("e1", { occurrence_id: "call-a" }, 3),
+    ];
+    expect(reconstructPendingHitls(messages).map((event) => event.payload.occurrence_id)).toEqual(["call-b"]);
+    expect(reconstructPendingHitls(messages.slice(0, 2)).map((event) => event.payload.occurrence_id)).toEqual([
+      "call-a",
+      "call-b",
+    ]);
+  });
+
   it("reconstructs a full, resumable event for a still-open trailing gate", () => {
     const messages = [
       msg({ exchange_id: "e0", channel: "final", parts: [{ type: "text", text: "earlier turn" } as never] }),
@@ -204,11 +217,115 @@ describe("reconstructPendingHitl", () => {
   });
 });
 
+describe("toThreadMessages pause metadata", () => {
+  it("retains pre-pause sources, UI parts, and usage after the answer resumes", () => {
+    const source = { uid: "source-1", title: "Guide", content: "Evidence", score: 1 } as never;
+    const toolCall = msg({
+      rank: 1,
+      channel: "tool_call",
+      parts: [{ type: "tool_call", call_id: "call-1", name: "search", args: {} } as never],
+    });
+    const pauseMetadata = msg({
+      rank: 2,
+      role: "system",
+      channel: "system_note",
+      parts: [],
+      metadata: {
+        extras: { pause_metadata: true },
+        sources: [source],
+        ui_parts: [LINK],
+        model: "test-model",
+        token_usage: { input_tokens: 230, output_tokens: 30, total_tokens: 260 },
+        context_tokens: 130,
+      },
+    });
+    const request = hitlRequestMsg("e1", { occurrence_id: "call-1" }, 3);
+
+    const open = toThreadMessages([toolCall, pauseMetadata, request], false).find((row) => row.role === "assistant");
+    expect(open?.sources).toEqual([source]);
+    expect(open?.uiParts).toEqual([LINK]);
+    expect(open?.tokenUsage?.total_tokens).toBe(260);
+
+    const final = msg({
+      rank: 5,
+      parts: [{ type: "text", text: "Done" } as never],
+      metadata: {
+        token_usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+        context_tokens: 140,
+      },
+    });
+    const resumed = toThreadMessages(
+      [toolCall, pauseMetadata, request, hitlResponseMsg("e1", { occurrence_id: "call-1" }, 4), final],
+      false,
+    ).find((row) => row.role === "assistant");
+    expect(resumed?.text).toBe("Done");
+    expect(resumed?.sources).toEqual([source]);
+    expect(resumed?.uiParts).toEqual([LINK]);
+    expect(resumed?.tokenUsage).toEqual({ input_tokens: 240, output_tokens: 35, total_tokens: 275 });
+    expect(resumed?.contextTokens).toBe(140);
+  });
+
+  it("reads metadata from a previously persisted HITL request row", () => {
+    const source = { uid: "legacy-source", title: "Guide", content: "Evidence", score: 1 } as never;
+    const request = {
+      ...hitlRequestMsg("e1", { occurrence_id: "legacy-question" }, 1),
+      metadata: {
+        sources: [source],
+        ui_parts: [LINK],
+        token_usage: { input_tokens: 100, output_tokens: 20, total_tokens: 120 },
+        context_tokens: 100,
+      },
+    } as ChatMessage;
+    const final = msg({
+      rank: 2,
+      parts: [{ type: "text", text: "Done" } as never],
+      metadata: { token_usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 }, context_tokens: 110 },
+    });
+
+    const assistant = toThreadMessages([request, final], false).find((row) => row.role === "assistant");
+    expect(assistant?.text).toBe("Done");
+    expect(assistant?.sources).toEqual([source]);
+    expect(assistant?.uiParts).toEqual([LINK]);
+    expect(assistant?.tokenUsage?.total_tokens).toBe(135);
+  });
+
+  it("adds metadata from a resumed stream even when no new question row is written", () => {
+    const request = hitlRequestMsg("e1", { occurrence_id: "sibling" }, 2);
+    const firstPause = msg({
+      rank: 1,
+      role: "system",
+      channel: "system_note",
+      metadata: { extras: { pause_metadata: true }, token_usage: { total_tokens: 100 } },
+    });
+    const resumedPause = msg({
+      rank: 3,
+      role: "system",
+      channel: "system_note",
+      metadata: { extras: { pause_metadata: true }, token_usage: { total_tokens: 25 } },
+    });
+    const rows = toThreadMessages([firstPause, request, resumedPause], false);
+    const assistant = rows.find((row) => row.role === "assistant");
+    expect(rows.filter((row) => row.role === "hitl_request")).toHaveLength(0);
+    expect(assistant?.traceMessages).toHaveLength(0);
+    expect(assistant?.tokenUsage?.total_tokens).toBe(125);
+  });
+});
+
 describe("toThreadMessages — open HITL gate rendering", () => {
   it("still renders a readonly card for a PAST answered exchange", () => {
     const messages = [hitlRequestMsg("e1"), hitlResponseMsg("e1"), hitlRequestMsg("e2"), hitlResponseMsg("e2")];
     const rows = toThreadMessages(messages, false);
     expect(rows.filter((r) => r.role === "hitl_request")).toHaveLength(2);
+  });
+
+  it("shows the tool approval choice as a user response below its confirmation card", () => {
+    const rows = toThreadMessages(
+      [hitlRequestMsg("e1", {}, 1), hitlResponseMsg("e1", { choice_id: "cancel" }, 2)],
+      false,
+    );
+
+    expect(rows.filter((row) => row.role === "hitl_request")).toHaveLength(1);
+    expect(rows.filter((row) => row.role === "hitl_response").map((row) => row.text)).toEqual(["cancel"]);
   });
 
   it("omits the trailing UNANSWERED gate's readonly card (the live prompt renders it instead)", () => {
@@ -249,6 +366,53 @@ describe("toThreadMessages — open HITL gate rendering", () => {
 
     expect(rows.filter((row) => row.role === "hitl_response").map((row) => row.text)).toEqual(["first", "second"]);
     expect(reconstructPendingHitl(messages)).toBeNull();
+  });
+
+  it("resolves and renders a skipped agent question after reload", () => {
+    const messages = [
+      hitlRequestMsg("e1", { stage: "agent_question", occurrence_id: "call-skip" }, 1),
+      hitlResponseMsg("e1", { occurrence_id: "call-skip", choice_id: null, skipped: true }, 2),
+    ];
+    expect(reconstructPendingHitl(messages)).toBeNull();
+    const response = toThreadMessages(messages, false).find((row) => row.role === "hitl_response");
+    expect(response?.hitlSkipped).toBe(true);
+  });
+
+  it("renders a selected option with its optional comment", () => {
+    const messages = [
+      hitlRequestMsg("e1", { stage: "agent_question", occurrence_id: "call-comment" }, 1),
+      hitlResponseMsg("e1", { occurrence_id: "call-comment", choice_id: "yes", text: "Please" }, 2),
+    ];
+    expect(toThreadMessages(messages, false).find((row) => row.role === "hitl_response")?.text).toBe("yes: Please");
+  });
+
+  it("attaches an answered agent question to its matching tool call", () => {
+    const messages = [
+      msg({
+        rank: 0,
+        channel: "tool_call",
+        parts: [{ type: "tool_call", call_id: "call-bread", name: "ask_user", args: {} }],
+      }),
+      hitlRequestMsg(
+        "e1",
+        {
+          stage: "agent_question",
+          occurrence_id: "call-bread",
+          question: "Which bread?",
+          choices: [{ id: "complet", label: "Pain complet" }],
+        },
+        1,
+      ),
+      hitlResponseMsg("e1", { occurrence_id: "call-bread", choice_id: "complet" }, 2),
+    ];
+
+    const rows = toThreadMessages(messages, false);
+    expect(rows.map((row) => row.role)).toEqual(["assistant"]);
+    expect(rows[0].hitlAnswerSummariesByCallId?.["call-bread"]).toMatchObject({
+      question: "Which bread?",
+      answer: "Pain complet",
+      choiceId: "complet",
+    });
   });
 
   it("renders a pure free-text response from its dedicated text field", () => {

@@ -33,15 +33,19 @@ export default function Sidebar() {
 
   return (
     <div className={styles["sidebar-container"]}>
-      <div className={styles["main-nav-bar-container"]}>
-        <MainNavBar />
+      <div className={styles.rail}>
+        <div className={styles["main-nav-bar-container"]}>
+          <MainNavBar />
+        </div>
+        <div className={styles["user-profile-container"]}>
+          <UserProfile />
+        </div>
       </div>
-      {sidebarMode === "HOME" && <HomeNavPanel />}
-      {sidebarMode === "TEAM" && <TeamContentNavbar />}
-      {sidebarMode === "MARKETPLACE" && <MarketplaceNavbar />}
-      {sidebarMode === "ADMIN" && <AdminNavbar />}
-      <div className={styles["user-profile-container"]}>
-        <UserProfile />
+      <div className={styles["nav-panel-card"]}>
+        {sidebarMode === "HOME" && <HomeNavPanel />}
+        {sidebarMode === "TEAM" && <TeamContentNavbar />}
+        {sidebarMode === "MARKETPLACE" && <MarketplaceNavbar />}
+        {sidebarMode === "ADMIN" && <AdminNavbar />}
       </div>
     </div>
   );

@@ -25,7 +25,7 @@ import { EntityIdentity } from "@shared/molecules/EntityIdentity/EntityIdentity.
 import Switch from "@shared/atoms/Switch/Switch.tsx";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialog";
-import DataTable, { type DataTableColumn } from "@shared/molecules/DataTable/DataTable.tsx";
+import DataTable, { type DataTableColumn } from "@shared/molecules/DataTable/LocalizedDataTable.tsx";
 import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState.tsx";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";

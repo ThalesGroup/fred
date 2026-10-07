@@ -96,6 +96,8 @@ from fred_core.security.rebac.rebac_factory import rebac_factory
 from fred_core.security.structure import KeycloakUser, is_service_agent
 from fred_sdk.contracts.capability import (
     CapabilityCatalogEntry,
+    CapabilityConfigCopyRequest,
+    CapabilityConfigCopyResult,
     CapabilityIdentity,
     ChatControlsRequest,
     ChatControlsResponse,
@@ -139,9 +141,13 @@ from fred_sdk.contracts.runtime import (
     ExecutionConfig,
     FinalRuntimeEvent,
     HistoryStorePort,
+    HumanInputRequest,
+    InterruptedAction,
     RuntimeErrorEvent,
     RuntimeEvent,
+    RuntimeEventKind,
     RuntimeServices,
+    parse_human_input_answer,
 )
 from fred_sdk.contracts.ui_part_union import current_ui_part_union
 from fred_sdk.support.authored_toolsets import (
@@ -164,6 +170,10 @@ from fred_runtime.capabilities import (
     enforce_asset_slots,
     evaluate_chat_controls_batch,
     validate_turn_options,
+)
+from fred_runtime.capabilities.copy import (
+    CapabilityCopyRejectedError,
+    prepare_capability_copy,
 )
 from fred_runtime.capabilities.errors import (
     CapabilityError,
@@ -205,10 +215,13 @@ from fred_runtime.runtime_support.checkpoints import (
     graph_thread_prefix,
     load_checkpoint,
 )
+from fred_runtime.runtime_support.hitl_batch import (
+    BatchedHumanAnswer,
+    parse_batched_human_answers,
+)
 from fred_runtime.runtime_support.sql_checkpointer import FredSqlCheckpointer
 
 from ..common.structures import AgentSettingsLike
-from ..integrations.inprocess_toolkit_registry import build_inprocess_toolkit
 from ..integrations.v2_runtime.adapters import (
     AgentConfigAssetsAdapter,
     CompositeToolInvoker,
@@ -790,6 +803,8 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
             context=context_dict,
             resume_payload=None,
             invocation_turns=request.prior_turns,
+            # A child has no user to offer "continue" to.
+            interrupted_action="restart",
         )
 
         # Each child names itself on the run it shares with its parent, so a
@@ -1000,7 +1015,6 @@ def _build_runtime_services(
             settings=settings,
             ports=AuthoredToolRuntimePorts(
                 chat_model_factory=runtime_config.chat_model_factory,
-                workspace_fs=workspace_fs,
                 fallback_tool_invoker=base_tool_invoker,
                 media_fetcher=_build_media_fetcher(
                     binding=binding,
@@ -1169,6 +1183,8 @@ class _AgentExecuteRequest(BaseModel):
         default=(),
         description="Prior conversation turns forwarded by the calling agent.",
     )
+    interrupted_action: InterruptedAction | None = None
+    interruption_id: str | None = Field(default=None, min_length=1)
     inline_tuning: dict[str, TuningValue] | None = Field(
         default=None,
         description="Optional inline tuning overrides. Honored only in agent_id (direct template) mode.",
@@ -1205,7 +1221,11 @@ class _AgentExecuteRequest(BaseModel):
 
         if bool(self.agent_id) == bool(self.agent_instance_id):
             raise ValueError("Provide exactly one of agent_id or agent_instance_id")
-        if self.resume_payload is None and not self.message.strip():
+        if (
+            self.resume_payload is None
+            and self.interrupted_action != "continue"
+            and not self.message.strip()
+        ):
             raise ValueError("message is required when resume_payload is not set")
         return self
 
@@ -1233,6 +1253,8 @@ def _to_internal_request(r: RuntimeExecuteRequest) -> "_AgentExecuteRequest":
         occurrence_id=r.occurrence_id,
         resume_payload=r.resume_payload,
         invocation_turns=r.invocation_turns,
+        interrupted_action=r.interrupted_action,
+        interruption_id=r.interruption_id,
         inline_tuning=r.inline_tuning,
         turn_options=r.turn_options,
     )
@@ -2334,6 +2356,9 @@ async def _authorize_and_resolve(
     )
     async with runtime_stage_timer(container.get_kpi_writer(), "pod_authz"):
         await _authorize_execution_or_raise(request, authenticated_user, container)
+    if await _validate_agent_question_answer(request):
+        base_ctx = request.runtime_context or RuntimeContext()
+        request.runtime_context = base_ctx.model_copy(update={"ask_user": True})
     # After authorization, before the context is copied into the internal
     # request: the record is written only for a run this pod accepted, and the
     # copy below must not carry a token this run may no longer use.
@@ -2512,6 +2537,125 @@ def _pending_interrupt_occurrences(
     return frozenset(occurrences)
 
 
+async def _validate_agent_question_answer(request: RuntimeExecuteRequest) -> bool:
+    """Validate pending platform questions before the single-use resume claim."""
+    try:
+        batch = parse_batched_human_answers(request.resume_payload)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
+    if batch is not None:
+        session_id = request.effective_session_id()
+        checkpointer = get_runtime_context().config.checkpointer
+        if not session_id or checkpointer is None:
+            return False
+        for thread_id, checkpoint_ns in _resume_checkpoint_locations(
+            request, session_id
+        ):
+            loaded = await load_checkpoint(
+                checkpointer, thread_id=thread_id, checkpoint_ns=checkpoint_ns
+            )
+            if loaded is None:
+                continue
+            _, pending_writes = loaded
+            prompts: dict[tuple[str, str], HumanInputRequest] = {}
+            for _task_id, channel, value in pending_writes:
+                if channel != _REACT_V2_INTERRUPT_CHANNEL:
+                    continue
+                candidates = value if isinstance(value, (list, tuple)) else (value,)
+                for candidate in candidates:
+                    interrupt_id = getattr(candidate, "id", None)
+                    payload = getattr(candidate, "value", None)
+                    if isinstance(candidate, dict):
+                        interrupt_id = candidate.get("id")
+                        payload = candidate.get("value")
+                    if (
+                        not isinstance(payload, dict)
+                        or payload.get("stage") != "agent_question"
+                    ):
+                        continue
+                    occurrence_id = payload.get("occurrence_id")
+                    if isinstance(interrupt_id, str) and isinstance(occurrence_id, str):
+                        try:
+                            prompts[(interrupt_id, occurrence_id)] = (
+                                HumanInputRequest.model_validate(payload)
+                            )
+                        except ValidationError as exc:
+                            raise HTTPException(
+                                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                                detail=str(exc),
+                            ) from exc
+            if set(prompts) != {
+                (item.interrupt_id, item.occurrence_id) for item in batch
+            }:
+                continue
+            for item in batch:
+                try:
+                    parse_human_input_answer(
+                        item.answer, prompts[(item.interrupt_id, item.occurrence_id)]
+                    )
+                except (ValueError, ValidationError) as exc:
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                        detail=str(exc),
+                    ) from exc
+            return True
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="batch answers do not match pending agent questions",
+        )
+    if request.resume_payload is None or not request.interrupt_id:
+        return False
+    session_id = request.effective_session_id()
+    checkpointer = get_runtime_context().config.checkpointer
+    if not session_id or checkpointer is None:
+        return False
+    for thread_id, checkpoint_ns in _resume_checkpoint_locations(request, session_id):
+        loaded = await load_checkpoint(
+            checkpointer, thread_id=thread_id, checkpoint_ns=checkpoint_ns
+        )
+        if loaded is None:
+            continue
+        _, pending_writes = loaded
+        for _task_id, channel, value in pending_writes:
+            if channel != _REACT_V2_INTERRUPT_CHANNEL:
+                continue
+            candidates = value if isinstance(value, (list, tuple)) else (value,)
+            for candidate in candidates:
+                interrupt_id = getattr(candidate, "id", None)
+                payload = getattr(candidate, "value", None)
+                if isinstance(candidate, dict):
+                    interrupt_id = candidate.get("id")
+                    payload = candidate.get("value")
+                if interrupt_id != request.interrupt_id or not isinstance(
+                    payload, dict
+                ):
+                    continue
+                if payload.get("occurrence_id") != request.occurrence_id:
+                    continue
+                if payload.get("stage") != "agent_question":
+                    continue
+                try:
+                    prompt = HumanInputRequest.model_validate(payload)
+                    parse_human_input_answer(request.resume_payload, prompt)
+                except (ValueError, ValidationError) as exc:
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                        detail=str(exc),
+                    ) from exc
+                return True
+    if (
+        isinstance(request.resume_payload, dict)
+        and request.resume_payload.get("skipped") is True
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="skip is only available for agent questions",
+        )
+    return False
+
+
 def _resume_checkpoint_locations(
     request: RuntimeExecuteRequest, session_id: str
 ) -> tuple[tuple[str, str], ...]:
@@ -2614,6 +2758,26 @@ async def _validate_session_checkpoint_access(
             status_code=status.HTTP_409_CONFLICT,
             detail="checkpoint is not waiting for resume.",
         )
+    try:
+        batch = parse_batched_human_answers(request.resume_payload)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
+    if batch is not None:
+        if request.interrupt_id is not None or request.occurrence_id is not None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="batch resumes use item identities only",
+            )
+        if {
+            (item.interrupt_id, item.occurrence_id) for item in batch
+        } != pending_occurrences:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="batch answers must match every pending HITL occurrence",
+            )
+        return tuple(item.occurrence_id for item in batch)
     matching_occurrence_ids = {
         occurrence_id
         for interrupt_id, occurrence_id in pending_occurrences
@@ -2674,6 +2838,15 @@ def _turn_command(ctx: dict[str, Any]) -> CommandDescriptor | None:
     except ValidationError:
         logger.warning("[history] ignoring malformed turn command descriptor")
         return None
+
+
+def _ran_no_turn(payloads: list[dict[str, Any]]) -> bool:
+    """An interrupted execution was only reported; the user's message returns
+    to the composer, so the turn leaves no history row and no KPI."""
+    return any(
+        payload.get("kind") == RuntimeEventKind.EXECUTION_INTERRUPTED.value
+        for payload in payloads
+    )
 
 
 async def _write_turn_history(
@@ -2740,6 +2913,8 @@ async def _write_turn_history(
     )
     from fred_core.store.vector_search import VectorSearchHit
 
+    if _ran_no_turn(payloads):
+        return
     try:
         base_rank: int = await history_store.next_rank(session_id)
     except Exception:
@@ -2756,37 +2931,47 @@ async def _write_turn_history(
     messages: list[ChatMessage] = []
     rank = base_rank
 
-    # 1. Opening row: user text on normal turns, HITL response on resume turns.
+    # 1. Opening rows: user text or one HITL response per resumed occurrence.
     if resume_payload is not None:
-        choice_id: str | None = None
-        text: str | None = None
-        if isinstance(resume_payload, dict):
-            raw_choice_id = resume_payload.get("choice_id")
-            if isinstance(raw_choice_id, str) and raw_choice_id:
-                choice_id = raw_choice_id
-            raw_text = resume_payload.get("text")
-            if isinstance(raw_text, str) and raw_text:
-                text = raw_text
-            elif choice_id is None:
-                raw_answer = resume_payload.get("answer")
-                if isinstance(raw_answer, str) and raw_answer:
-                    text = raw_answer
-        elif isinstance(resume_payload, str):
-            choice_id = resume_payload
-        else:
-            choice_id = str(resume_payload)
-        if choice_id or text:
-            messages.append(
-                make_hitl_response(
-                    session_id,
-                    exchange_id,
-                    rank,
-                    choice_id=choice_id,
-                    text=text,
-                    occurrence_id=occurrence_id,
+        batch = parse_batched_human_answers(resume_payload)
+        answer_rows = (
+            tuple((item.answer, item.occurrence_id) for item in batch)
+            if batch is not None
+            else ((resume_payload, occurrence_id),)
+        )
+        for answer_payload, answer_occurrence_id in answer_rows:
+            choice_id: str | None = None
+            text: str | None = None
+            skipped = False
+            if isinstance(answer_payload, dict):
+                skipped = answer_payload.get("skipped") is True
+                raw_choice_id = answer_payload.get("choice_id")
+                if isinstance(raw_choice_id, str) and raw_choice_id:
+                    choice_id = raw_choice_id
+                raw_text = answer_payload.get("text")
+                if isinstance(raw_text, str) and raw_text:
+                    text = raw_text
+                elif choice_id is None:
+                    raw_answer = answer_payload.get("answer")
+                    if isinstance(raw_answer, str) and raw_answer:
+                        text = raw_answer
+            elif isinstance(answer_payload, str):
+                choice_id = answer_payload
+            else:
+                choice_id = str(answer_payload)
+            if choice_id or text or skipped:
+                messages.append(
+                    make_hitl_response(
+                        session_id,
+                        exchange_id,
+                        rank,
+                        choice_id=choice_id,
+                        text=text,
+                        skipped=skipped,
+                        occurrence_id=answer_occurrence_id,
+                    )
                 )
-            )
-            rank += 1
+                rank += 1
     elif request_message:
         messages.append(
             make_user_text(
@@ -2932,6 +3117,48 @@ async def _write_turn_history(
             # AND a reload while the gate is still open can reconstruct a
             # working (not just readable) prompt.
             req = payload.get("request", {})
+            raw_usage = payload.get("token_usage")
+            pause_sources = [
+                VectorSearchHit.model_validate(source)
+                for source in (payload.get("sources") or [])
+                if isinstance(source, dict)
+            ]
+            pause_ui_parts = [
+                part
+                for part in (payload.get("ui_parts") or [])
+                if isinstance(part, dict) and isinstance(part.get("type"), str)
+            ]
+            if (
+                isinstance(raw_usage, dict)
+                or pause_sources
+                or pause_ui_parts
+                or payload.get("model_name") is not None
+                or payload.get("context_tokens") is not None
+            ):
+                messages.append(
+                    ChatMessage(
+                        session_id=session_id,
+                        exchange_id=exchange_id,
+                        rank=rank,
+                        timestamp=datetime.now(timezone.utc),
+                        role=Role.system,
+                        channel=Channel.system_note,
+                        parts=[],
+                        metadata=ChatMetadata.model_validate(
+                            {
+                                "model": payload.get("model_name"),
+                                "token_usage": raw_usage
+                                if isinstance(raw_usage, dict)
+                                else None,
+                                "context_tokens": payload.get("context_tokens"),
+                                "sources": pause_sources,
+                                "ui_parts": pause_ui_parts,
+                                "extras": {"pause_metadata": True},
+                            }
+                        ),
+                    )
+                )
+                rank += 1
             # A resumed run re-raises the siblings still waiting, so the same
             # pause is emitted again. One question keeps one row: the run that
             # first surfaced it already wrote it.
@@ -2944,36 +3171,35 @@ async def _write_turn_history(
             question = req.get("question") or req.get("title") or "HITL pause"
             raw_choices = req.get("choices") or []
             raw_pending_calls = req.get("pending_calls") or []
-            messages.append(
-                make_hitl_request(
-                    session_id,
-                    exchange_id,
-                    rank,
-                    question=question,
-                    choices=[
-                        {
-                            "id": c.get("id", ""),
-                            "label": c.get("label", c.get("id", "")),
-                        }
-                        for c in raw_choices
-                        if isinstance(c, dict)
-                    ],
-                    stage=req.get("stage"),
-                    title=req.get("title"),
-                    free_text=bool(req.get("free_text")),
-                    interrupt_id=req.get("interrupt_id"),
-                    occurrence_id=req.get("occurrence_id"),
-                    pending_calls=[
-                        {
-                            "tool_call_id": c.get("tool_call_id", ""),
-                            "tool_name": c.get("tool_name", ""),
-                            "args_preview": c.get("args_preview", ""),
-                        }
-                        for c in raw_pending_calls
-                        if isinstance(c, dict)
-                    ],
-                )
+            hitl_message = make_hitl_request(
+                session_id,
+                exchange_id,
+                rank,
+                question=question,
+                choices=[
+                    {
+                        "id": c.get("id", ""),
+                        "label": c.get("label", c.get("id", "")),
+                    }
+                    for c in raw_choices
+                    if isinstance(c, dict)
+                ],
+                stage=req.get("stage"),
+                title=req.get("title"),
+                free_text=bool(req.get("free_text")),
+                interrupt_id=req.get("interrupt_id"),
+                occurrence_id=req.get("occurrence_id"),
+                pending_calls=[
+                    {
+                        "tool_call_id": c.get("tool_call_id", ""),
+                        "tool_name": c.get("tool_name", ""),
+                        "args_preview": c.get("args_preview", ""),
+                    }
+                    for c in raw_pending_calls
+                    if isinstance(c, dict)
+                ],
             )
+            messages.append(hitl_message)
             rank += 1
 
         elif kind == "node_error":
@@ -3226,6 +3452,8 @@ def _emit_turn_completed(
       Incremented only on execution_error turns.  Lets Prometheus alert on
       the error rate without filtering histograms by label value.
     """
+    if _ran_no_turn(payloads):
+        return
     try:
         kpi = get_runtime_context().get_kpi_writer()
         outcome = _parse_turn_outcome(payloads, turn_start)
@@ -3753,6 +3981,82 @@ class _HitlResumeClaim:
         )
 
 
+@dataclass(slots=True)
+class _BatchHitlResumeClaim:
+    _checkpointer: FredSqlCheckpointer
+    _thread_id: str
+    _checkpoint_ns: str
+    _occurrences: tuple[tuple[str, str], ...]
+    _claim_token: str
+
+    async def consume(self) -> None:
+        for interrupt_id, occurrence_id in self._occurrences:
+            await self._checkpointer.aconsume_hitl_resume(
+                thread_id=self._thread_id,
+                checkpoint_ns=self._checkpoint_ns,
+                interrupt_id=interrupt_id,
+                occurrence_id=occurrence_id,
+                claim_token=self._claim_token,
+            )
+
+
+async def _claim_hitl_resumes_before_invocation(
+    *,
+    session_id: str | None,
+    checkpoint_ns: str,
+    answers: tuple[BatchedHumanAnswer, ...],
+) -> _BatchHitlResumeClaim | None:
+    """Acquire and start the complete sibling set without partial claims."""
+    if not session_id:
+        raise RuntimeError("Cannot claim HITL answers without a session_id.")
+    checkpointer = get_runtime_context().config.checkpointer
+    if not isinstance(checkpointer, FredSqlCheckpointer):
+        logger.warning(
+            "[fred-runtime][HITL] checkpointer does not support batch resume claims"
+        )
+        return None
+    occurrences = tuple((item.interrupt_id, item.occurrence_id) for item in answers)
+    token = await checkpointer.aclaim_hitl_resumes(
+        thread_id=session_id, checkpoint_ns=checkpoint_ns, occurrences=occurrences
+    )
+    if token is None:
+        raise HitlResumeAlreadyClaimedError(
+            "Another attempt holds a sibling resume claim."
+        )
+    try:
+        started = await checkpointer.astart_hitl_resumes(
+            thread_id=session_id,
+            checkpoint_ns=checkpoint_ns,
+            occurrences=occurrences,
+            claim_token=token,
+        )
+    except Exception:
+        for interrupt_id, occurrence_id in occurrences:
+            await checkpointer.arelease_hitl_resume(
+                thread_id=session_id,
+                checkpoint_ns=checkpoint_ns,
+                interrupt_id=interrupt_id,
+                occurrence_id=occurrence_id,
+                claim_token=token,
+            )
+        raise
+    if not started:
+        for interrupt_id, occurrence_id in occurrences:
+            await checkpointer.arelease_hitl_resume(
+                thread_id=session_id,
+                checkpoint_ns=checkpoint_ns,
+                interrupt_id=interrupt_id,
+                occurrence_id=occurrence_id,
+                claim_token=token,
+            )
+        raise HitlResumeAlreadyClaimedError(
+            "Lost a sibling resume claim before invocation."
+        )
+    return _BatchHitlResumeClaim(
+        checkpointer, session_id, checkpoint_ns, occurrences, token
+    )
+
+
 async def _claim_hitl_resume_before_invocation(
     *,
     session_id: str | None,
@@ -4130,6 +4434,7 @@ async def _iterate_runtime_event_payloads_inner(
             if tuning is not None and tuning.reasoning_enabled
             else []
         ),
+        ask_user=ctx.get("ask_user"),
         # The user's per-question reasoning choice (REASON-01 level 4). Same
         # trap as every field above: unnamed here means silently dropped. Kept
         # tri-state on purpose — `ctx.get` yielding None means "the agent never
@@ -4173,6 +4478,8 @@ async def _iterate_runtime_event_payloads_inner(
         interrupt_id=request.interrupt_id,
         resume_payload=request.resume_payload,
         invocation_turns=getattr(request, "invocation_turns", ()),
+        interrupted_action=request.interrupted_action,
+        interruption_id=request.interruption_id,
     )
 
     runtime: ReActRuntime | DeepAgentRuntime | GraphRuntime | None = None
@@ -4232,7 +4539,8 @@ async def _iterate_runtime_event_payloads_inner(
             # On a HITL resume the runtime ignores input entirely (state is loaded
             # from the checkpoint), so bypass validation with model_construct.
             input_cls = definition.input_model()
-            if request.resume_payload is not None:
+            continuing = request.interrupted_action == "continue"
+            if request.resume_payload is not None or continuing:
                 graph_input = input_cls.model_construct(message="")
             else:
                 graph_input = input_cls.model_validate(
@@ -4240,8 +4548,15 @@ async def _iterate_runtime_event_payloads_inner(
                 )
             # A graph pause is a native interrupt too: its resume takes the
             # same single-use claim as ReAct, on the agent's own thread.
-            graph_claim: _HitlResumeClaim | None = None
-            if (
+            graph_claim: _HitlResumeClaim | _BatchHitlResumeClaim | None = None
+            graph_batch = parse_batched_human_answers(request.resume_payload)
+            if isinstance(executor, GraphExecutor) and graph_batch is not None:
+                graph_claim = await _claim_hitl_resumes_before_invocation(
+                    session_id=executor.thread_id(execution_config),
+                    checkpoint_ns="",
+                    answers=graph_batch,
+                )
+            elif (
                 isinstance(executor, GraphExecutor)
                 and request.resume_payload is not None
                 and request.interrupt_id
@@ -4262,6 +4577,8 @@ async def _iterate_runtime_event_payloads_inner(
             if graph_claim is not None:
                 await graph_claim.consume()
         else:
+            if request.interrupted_action == "continue":
+                raise RuntimeError("Only Graph agents can continue an interrupted run.")
             # DeepAgentDefinition is-a ReActAgentDefinition (same typed
             # input/output, same event contract), so it shares this branch's
             # ReActInput plumbing below — only the runtime class differs.
@@ -4309,8 +4626,15 @@ async def _iterate_runtime_event_payloads_inner(
             # claim behind. See `_claim_hitl_resume_before_invocation`'s
             # docstring for the full claimed → started lifecycle and the
             # guarantees it does and does not provide.
-            hitl_claim: _HitlResumeClaim | None = None
-            if request.resume_payload is not None and request.interrupt_id:
+            hitl_claim: _HitlResumeClaim | _BatchHitlResumeClaim | None = None
+            react_batch = parse_batched_human_answers(request.resume_payload)
+            if react_batch is not None:
+                hitl_claim = await _claim_hitl_resumes_before_invocation(
+                    session_id=ctx.get("session_id"),
+                    checkpoint_ns="",
+                    answers=react_batch,
+                )
+            elif request.resume_payload is not None and request.interrupt_id:
                 hitl_claim = await _claim_hitl_resume_before_invocation(
                     session_id=ctx.get("session_id"),
                     # Unnamespaced: this branch is ReAct/Deep only (never Graph),
@@ -4884,6 +5208,70 @@ def _build_agent_router(
             schema_version=capability.manifest.version,
             config=stored.model_dump(mode="json"),
         )
+
+    @router.post("/capabilities/{capability_id}/copy-config")
+    async def copy_capability_config(
+        capability_id: str,
+        body: CapabilityConfigCopyRequest,
+        http_request: Request,
+        caller: KeycloakUser | None = Depends(_authenticated_user),
+    ) -> CapabilityConfigCopyResult:
+        """
+        Prepare one capability's stored config for a copied agent instance.
+
+        POST <base_url>/agents/capabilities/{capability_id}/copy-config
+        Body: CapabilityConfigCopyRequest — the source envelope, the source and
+        target team and agent instance.
+
+        Why this endpoint exists:
+        - only the pod knows a capability's hidden and nested settings, so the
+          pod resets its scope-private settings when the scope changes and
+          re-submits its configuration files to the capability's own save in
+          the target, with the caller's token on both sides
+        - 404 when the capability is not installed here, 422 when it rejects
+          the config for the target; the control plane then copies the agent
+          without it. `notices` says what an editor must redo in the target.
+        """
+
+        capability_registry = _capability_registry_of(http_request)
+        if capability_registry is None or capability_id not in capability_registry:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Capability '{capability_id}' is not installed on this pod.",
+            )
+        capability = capability_registry.capability(capability_id)
+        user_id = (caller.uid if caller is not None else None) or "anonymous"
+        auth = http_request.headers.get("Authorization", "")
+        access_token = auth.removeprefix("Bearer ").strip() or None
+
+        def save_ctx(team_id: str, agent_instance_id: str) -> SaveContext:
+            return SaveContext(
+                identity=CapabilityIdentity(
+                    user_id=user_id,
+                    team_id=team_id,
+                    agent_instance_id=agent_instance_id,
+                ),
+                services=_build_capability_save_services(
+                    capability_id=capability_id,
+                    user_id=user_id,
+                    team_id=team_id,
+                    access_token=access_token,
+                    agent_instance_id=agent_instance_id,
+                ),
+            )
+
+        try:
+            return await prepare_capability_copy(
+                capability,
+                body,
+                source_ctx=save_ctx(body.source_team_id, body.source_agent_instance_id),
+                target_ctx=save_ctx(body.target_team_id, body.target_agent_instance_id),
+            )
+        except CapabilityCopyRejectedError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=str(exc),
+            ) from exc
 
     @router.post("/capabilities/chat-controls")
     async def evaluate_chat_controls(
@@ -5954,7 +6342,6 @@ def create_agent_app(
                         platform_instructions=_platform_prompt_file_field(
                             config, "platform_instructions"
                         ),
-                        inprocess_toolkit_factory=build_inprocess_toolkit,
                         control_plane_url=config.platform.control_plane_url,
                         control_plane_http_client=container.get_control_plane_http_client(),
                         rebac_engine=rebac_engine,

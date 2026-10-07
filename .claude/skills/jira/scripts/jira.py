@@ -51,7 +51,7 @@ Site and email are read from acli's own config, so there is nothing else to set 
 def acli_profile() -> dict:
     """Site + email of the acli profile currently logged in."""
     if not ACLI_CONFIG.exists():
-        sys.exit(f"{ACLI_CONFIG} not found -- run `acli jira auth login` first.")
+        raise SystemExit(f"{ACLI_CONFIG} not found -- run `acli jira auth login` first.")
     text = ACLI_CONFIG.read_text(encoding="utf-8")
     try:
         import yaml
@@ -69,7 +69,7 @@ def acli_profile() -> dict:
         email = re.search(r"^\s*email:\s*(\S+)", text, re.M)
         if site and email:
             return {"site": site.group(1), "email": email.group(1)}
-    sys.exit(f"Could not read a Jira profile from {ACLI_CONFIG} -- run `acli jira auth status`.")
+    raise SystemExit(f"Could not read a Jira profile from {ACLI_CONFIG} -- run `acli jira auth status`.")
 
 
 def api_token() -> str:

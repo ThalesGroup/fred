@@ -15,13 +15,12 @@ quickstart this doc builds on.
 ## Shape 1 — Blank-slate ReAct assistant (no custom tool code)
 
 **Use this when:** you want a conversational assistant built entirely out of
-Fred's existing platform tools and MCP servers (search, filesystem, tabular
+Fred's existing platform tools and MCP servers (document search, tabular
 analysis…). You declare which tools it can reach and write a prompt — no
 Python business logic.
 
 ```python
 from fred_sdk import (
-    MCP_SERVER_KNOWLEDGE_FLOW_CORPUS,
     FieldSpec,
     MCPServerRef,
     UIHints,
@@ -35,7 +34,7 @@ class ItSupportDefinition(ReActAgentDefinition):
     system_prompt_template: str = "You are a helpful IT support assistant..."
 
     default_mcp_servers: tuple[MCPServerRef, ...] = (
-        MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_CORPUS),
+        MCPServerRef(id="document_access"),
     )
 
     fields: tuple[FieldSpec, ...] = (
@@ -72,7 +71,7 @@ planning engine is wired by the runtime (`DeepAgentRuntime` in
 `fred-runtime`), not by you.
 
 ```python
-from fred_sdk import MCP_SERVER_KNOWLEDGE_FLOW_CORPUS, MCPServerRef
+from fred_sdk import MCPServerRef
 from fred_sdk.contracts.models import DeepAgentDefinition
 
 class MyInvestigatorDefinition(DeepAgentDefinition):
@@ -81,7 +80,7 @@ class MyInvestigatorDefinition(DeepAgentDefinition):
     description: str = "Investigates questions over a corpus and reports back."
     system_prompt_template: str = "You are a helpful assistant that plans before it acts..."
     default_mcp_servers: tuple[MCPServerRef, ...] = (
-        MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_CORPUS),
+        MCPServerRef(id="document_access"),
     )
 ```
 
@@ -323,16 +322,14 @@ Import from `fred_sdk`:
 | ----------------------------------------- | -------------------------------------------------------- |
 | `TOOL_REF_KNOWLEDGE_SEARCH`               | Search document libraries and return grounded snippets   |
 | `TOOL_REF_SIMILARITY_SEARCH`              | Compare an anchor passage against explicit target documents |
-| `TOOL_REF_ARTIFACTS_PUBLISH_TEXT`         | Publish a markdown file artifact for the user             |
-| `TOOL_REF_RESOURCES_FETCH_TEXT`           | Read a config or template file                            |
 | `TOOL_REF_GEO_RENDER_POINTS`              | Render geographic points on a map                         |
 | `TOOL_REF_TRACES_SUMMARIZE_CONVERSATION`  | Summarise an execution trace                               |
 
 ```python
-from fred_sdk import TOOL_REF_KNOWLEDGE_SEARCH, TOOL_REF_ARTIFACTS_PUBLISH_TEXT
+from fred_sdk import TOOL_REF_KNOWLEDGE_SEARCH
 
 class MyAgent(ReActAgentDefinition):
-    declared_tool_refs = (TOOL_REF_KNOWLEDGE_SEARCH, TOOL_REF_ARTIFACTS_PUBLISH_TEXT)
+    declared_tool_refs = (TOOL_REF_KNOWLEDGE_SEARCH,)
 ```
 
 ## Available MCP server groups
@@ -341,14 +338,12 @@ Import from `fred_sdk`:
 
 | Constant                                    | What it gives access to          |
 | --------------------------------------------- | --------------------------------- |
-| `MCP_SERVER_KNOWLEDGE_FLOW_CORPUS`            | Document search and retrieval     |
-| `MCP_SERVER_KNOWLEDGE_FLOW_FS`                | User filesystem operations        |
 | `MCP_SERVER_KNOWLEDGE_FLOW_TABULAR`           | Tabular data analysis             |
 | `MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS`    | OpenSearch health and monitoring  |
 
 ```python
 class MyRagAgent(ReActAgentDefinition):
-    default_mcp_servers = (MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_CORPUS),)
+    default_mcp_servers = (MCPServerRef(id="document_access"),)
 ```
 
 Both tables are non-exhaustive — grep `fred_sdk` for `TOOL_REF_` / `MCP_SERVER_`

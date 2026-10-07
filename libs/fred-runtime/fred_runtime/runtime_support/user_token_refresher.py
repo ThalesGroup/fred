@@ -69,8 +69,8 @@ _DEFAULT_EXPIRES_IN_SECONDS = 300
 # on the value. `adapters.py` writes `runtime_context.access_token_expires_at`
 # and no reader exists — `_workspace_access_token` returns any non-empty token
 # string without consulting expiry at all. The clamp bounds the field for the
-# first consumer that does read it (the AUTH-TX exchange cache is the expected
-# one) rather than leaving a value that would be nonsense on arrival.
+# first consumer that does read it rather than leaving a value that would be
+# nonsense on arrival.
 #
 # Clamped, not rejected: a realm legitimately configured with a multi-day token
 # keeps working, it is merely re-checked after a day.
@@ -326,14 +326,14 @@ def _loop_state() -> _LoopState:
     return state
 
 
-def _identity_digest(keycloak_url: str, client_id: str, refresh_token: str) -> str:
+def _identity_digest(token_url: str, client_id: str, refresh_token: str) -> str:
     """Stable coalescing key for one principal's refresh, holding no secret.
 
     Why it exists:
     - concurrent refreshes must coalesce per identity, but the raw refresh
       token must not become a dictionary key we could later log or dump.
     """
-    material = "\x00".join((keycloak_url, client_id, refresh_token))
+    material = "\x00".join((token_url, client_id, refresh_token))
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
 
@@ -381,12 +381,11 @@ async def _post_token_request(
 
 async def _exchange_refresh_token(
     client: httpx.AsyncClient,
-    keycloak_url: str,
+    token_url: str,
     client_id: str,
     refresh_token: str,
 ) -> dict[str, object]:
-    """Perform one Keycloak refresh round trip and normalize its failures."""
-    token_url = f"{keycloak_url.rstrip('/')}/protocol/openid-connect/token"
+    """Perform one token refresh round trip and normalize its failures."""
 
     form = {
         "grant_type": "refresh_token",
@@ -500,7 +499,7 @@ async def _exchange_refresh_token(
 
 
 async def refresh_user_access_token_from_keycloak(
-    keycloak_url: str, client_id: str, refresh_token: str
+    token_url: str, client_id: str, refresh_token: str
 ) -> dict[str, object]:
     """Exchange a refresh token for a fresh access/refresh pair, without blocking.
 
@@ -514,8 +513,8 @@ async def refresh_user_access_token_from_keycloak(
       refresh already completed presents a token Keycloak has consumed and
       still gets `invalid_grant`. Closing that needs a cached result keyed on
       the pre-rotation token, which means holding live credentials in pod
-      memory — an AUTH-TX decision (`DELEGATED-DOWNSTREAM-AUTH-RFC.md` Q8), not
-      one to make here. It degrades to one failed tool call, not a dead turn.
+      memory, which delegated execution avoids by holding no refresh token.
+      It degrades to one failed tool call, not a dead turn.
 
     How to use it:
     - `payload = await refresh_user_access_token_from_keycloak(url, cid, token)`
@@ -524,12 +523,12 @@ async def refresh_user_access_token_from_keycloak(
 
     Example:
         >>> payload = await refresh_user_access_token_from_keycloak(
-        ...     "https://kc/realms/app", "app-client", refresh_token
+        ...     "https://kc/realms/app/protocol/openid-connect/token", "app-client", refresh_token
         ... )
         >>> payload["access_token"]
     """
     state = _loop_state()
-    digest = _identity_digest(keycloak_url, client_id, refresh_token)
+    digest = _identity_digest(token_url, client_id, refresh_token)
 
     # There is no `await` between the lookup and the insert, so the event loop
     # cannot interleave another caller here. That is the whole mutual exclusion
@@ -537,9 +536,7 @@ async def refresh_user_access_token_from_keycloak(
     task = state.inflight.get(digest)
     if task is None:
         task = asyncio.create_task(
-            _exchange_refresh_token(
-                state.client, keycloak_url, client_id, refresh_token
-            ),
+            _exchange_refresh_token(state.client, token_url, client_id, refresh_token),
             name="keycloak-token-refresh",
         )
         state.inflight[digest] = task
@@ -574,10 +571,9 @@ async def refresh_user_access_token_from_keycloak(
     #
     # The cost of NOT cancelling is a rotation nobody consumes: the exchange
     # completes, Keycloak invalidates the presented refresh token, and the
-    # replacement is dropped. That is the protocol-inherent lost-rotation race
-    # already recorded as open question 8 in
-    # `docs/swift/rfc/DELEGATED-DOWNSTREAM-AUTH-RFC.md`, and it degrades to one
-    # `invalid_grant` retry — strictly better than cancelling a live turn.
+    # replacement is dropped. That lost-rotation race is inherent to the
+    # protocol, and it degrades to one `invalid_grant` retry — strictly better
+    # than cancelling a live turn.
     #
     # Each waiter gets its OWN dict: the task resolves to a single object, and
     # handing the same mutable payload to every coalesced caller would let the

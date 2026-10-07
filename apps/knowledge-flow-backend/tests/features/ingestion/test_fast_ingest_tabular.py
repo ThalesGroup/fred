@@ -13,8 +13,8 @@
 # limitations under the License.
 
 """
-ATTACH-TAB-01: CSV chat attachments build a real `tabular_v1` dataset
-instead of the text-chunk vector preview other attachments get (DESIGN.md,
+Chat spreadsheets build complete tabular datasets instead of text-chunk
+vector previews (DESIGN.md,
 "Session-Scoped Attachment Datasets"). These tests cover the ingestion
 controller's build/delete orchestration; `TabularService`'s ownership-based
 authorization fallback is covered in `tests/services/test_tabular_service.py`.
@@ -37,10 +37,11 @@ from fred_core.documents.document_structures import (
 )
 
 from knowledge_flow_backend.application_context import ApplicationContext
+from knowledge_flow_backend.core.processors.input.excel_processor.excel_processor import ExcelProcessor
 from knowledge_flow_backend.core.processors.output.tabular_processor.tabular_processor import TabularProcessor
 from knowledge_flow_backend.features.ingestion.ingestion_controller import IngestionController
 from knowledge_flow_backend.features.metadata.service import MetadataService
-from knowledge_flow_backend.features.tabular.artifacts import FAST_INGEST_SOURCE_TAG, document_artifact_prefix, read_tabular_artifact
+from knowledge_flow_backend.features.tabular.artifacts import FAST_INGEST_SOURCE_TAG, document_artifact_prefix, read_tabular_artifact, read_tabular_multi_artifact
 
 
 def _user(uid: str = "u-1") -> KeycloakUser:
@@ -201,13 +202,11 @@ async def test_build_attachment_tabular_dataset_offloads_orphan_cleanup_to_a_thr
 async def test_build_attachment_tabular_dataset_does_not_collide_across_users_with_the_same_filename(tmp_path: Path, metadata_store):
     """
     Regression: an earlier version of this method built metadata via
-    `IngestionService.extract_metadata()`, whose versioning step scans the
-    whole metadata catalog for a document sharing the uploaded filename's
-    canonical name and raises when one already exists — folder/tag semantics
-    that make no sense for an untagged, session-scoped attachment. Building
-    `DocumentMetadata` directly (no versioning, no corpus `document_sources`
-    registry lookup) means two unrelated users attaching a file with the same
-    common name (e.g. "sales.csv") never collide.
+    `IngestionService.extract_metadata()`, which assumes a corpus document —
+    folder/tag semantics that make no sense for an untagged, session-scoped
+    attachment. Building `DocumentMetadata` directly (no corpus
+    `document_sources` registry lookup) means two unrelated users attaching a
+    file with the same common name (e.g. "sales.csv") never collide.
     """
     content_store = ApplicationContext.get_instance().get_content_store()
     content_store.clear()
@@ -520,3 +519,99 @@ async def test_delete_attachment_tabular_dataset_refuses_a_tagged_document_with_
     persisted = await metadata_store.get_metadata_by_uid("doc-tagged")
     assert persisted is not None
     assert read_tabular_artifact(persisted) is not None
+
+
+def _excel_workbook(path: Path) -> None:
+    from openpyxl import Workbook
+
+    workbook = Workbook()
+    sheet = workbook.active
+    assert sheet is not None
+    sheet.append(["city", "amount"])
+    for index in range(30):
+        sheet.append([f"city-{index}", index])
+    workbook.save(path)
+
+
+@pytest.mark.asyncio
+async def test_excel_attachment_build_failure_removes_all_artifacts(tmp_path: Path, metadata_store, monkeypatch):
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+    monkeypatch.setattr(ExcelProcessor, "recalc", False)
+    path = tmp_path / "sales.xlsx"
+    _excel_workbook(path)
+
+    async def fail_save(user, metadata):
+        await MetadataService().save_document_metadata(user, metadata)
+        raise RuntimeError("metadata unavailable")
+
+    controller = _controller_with_fake_metadata_service(fail_save)
+    with pytest.raises(RuntimeError, match="metadata unavailable"):
+        await controller._build_attachment_excel_dataset(user=_user(), document_uid="excel-orphan", filename=path.name, raw_path=path)
+
+    prefix = document_artifact_prefix(
+        artifacts_prefix=ApplicationContext.get_instance().get_config().storage.tabular_store.artifacts_prefix,
+        document_uid="excel-orphan",
+    )
+    assert list(content_store.list_objects(prefix)) == []
+    with pytest.raises(FileNotFoundError):
+        content_store.get_output_artifact("excel-orphan/output/output.md")
+    assert await metadata_store.get_metadata_by_uid("excel-orphan") is None
+
+
+@pytest.mark.asyncio
+async def test_excel_attachment_delete_removes_tables_and_roadmap(tmp_path: Path, metadata_store, monkeypatch):
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+    monkeypatch.setattr(ExcelProcessor, "recalc", False)
+    path = tmp_path / "sales.xlsx"
+    _excel_workbook(path)
+    controller = _controller_with_fake_metadata_service(MetadataService().save_document_metadata)
+    await controller._build_attachment_excel_dataset(user=_user(), document_uid="excel-delete", filename=path.name, raw_path=path)
+    metadata = await metadata_store.get_metadata_by_uid("excel-delete")
+    assert metadata is not None and read_tabular_multi_artifact(metadata) is not None
+
+    await controller._delete_attachment_tabular_dataset(user=_user(), document_uid="excel-delete", is_platform_bypass=False)
+    prefix = document_artifact_prefix(
+        artifacts_prefix=ApplicationContext.get_instance().get_config().storage.tabular_store.artifacts_prefix,
+        document_uid="excel-delete",
+    )
+    assert list(content_store.list_objects(prefix)) == []
+    with pytest.raises(FileNotFoundError):
+        content_store.get_output_artifact("excel-delete/output/output.md")
+    assert await metadata_store.get_metadata_by_uid("excel-delete") is None
+
+
+@pytest.mark.asyncio
+async def test_unreadable_excel_attachment_is_rejected(tmp_path: Path, metadata_store, monkeypatch):
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+    monkeypatch.setattr(ExcelProcessor, "recalc", False)
+    path = tmp_path / "broken.xlsx"
+    path.write_bytes(b"not a workbook")
+    controller = _controller_with_fake_metadata_service(MetadataService().save_document_metadata)
+
+    with pytest.raises(Exception):
+        await controller._build_attachment_excel_dataset(user=_user(), document_uid="excel-broken", filename=path.name, raw_path=path)
+    assert await metadata_store.get_metadata_by_uid("excel-broken") is None
+
+
+@pytest.mark.asyncio
+async def test_tableless_excel_attachment_is_rejected(tmp_path: Path, metadata_store, monkeypatch):
+    from openpyxl import Workbook
+
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+    monkeypatch.setattr(ExcelProcessor, "recalc", False)
+    path = tmp_path / "empty.xlsx"
+    Workbook().save(path)
+    controller = _controller_with_fake_metadata_service(MetadataService().save_document_metadata)
+
+    with pytest.raises(ValueError, match="no complete set of queryable tables"):
+        await controller._build_attachment_excel_dataset(user=_user(), document_uid="excel-empty", filename=path.name, raw_path=path)
+    assert await metadata_store.get_metadata_by_uid("excel-empty") is None
+    prefix = document_artifact_prefix(
+        artifacts_prefix=ApplicationContext.get_instance().get_config().storage.tabular_store.artifacts_prefix,
+        document_uid="excel-empty",
+    )
+    assert list(content_store.list_objects(prefix)) == []

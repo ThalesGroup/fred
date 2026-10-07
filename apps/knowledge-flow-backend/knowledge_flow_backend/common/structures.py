@@ -46,7 +46,12 @@ to define clear workflows and data structures.
 class Status(str, Enum):
     IN_PROGRESS = "in_progress"
     SUCCESS = "success"
+    # The user chose to keep the document already in the folder: nothing was
+    # imported for this file, and that is not a failure.
     IGNORED = "ignored"
+    # The name was taken while the import was under way, so the file still
+    # needs the user's overwrite-or-skip answer. Also not a failure.
+    CONFLICT = "conflict"
     FAILED = "failed"
     ERROR = "error"
     FINISHED = "finished"
@@ -625,10 +630,6 @@ class MCPConfig(BaseModel):
     prometheus_ops_enabled: bool = Field(
         default=False,
         description="Expose Prometheus operational endpoints and the corresponding MCP server.",
-    )
-    filesystem_enabled: bool = Field(
-        default=False,
-        description="Expose agent filesystem utils endpoints and the corresponding MCP server.",
     )
     filesystem_read_default_limit: int = Field(
         default=100,

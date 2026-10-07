@@ -46,7 +46,7 @@ clean: ## Clean all submodules
 ##@ Tests
 
 .PHONY: test
-test: ## Run non-integration test suites in all submodules and print coverage summary
+test: k3d-tests ## Run non-integration test suites in all submodules and print coverage summary
 	@set -e; \
 	for dir in $(TEST_DIRS); do \
 		echo "************ Running tests in $$dir ************"; \
@@ -294,126 +294,13 @@ db-check-combined-postgres: db-check-combined-postgres-down db-check-combined-po
 include scripts/makefiles/help.mk
 include scripts/makefiles/chart-schema.mk
 
-# =============================================================================
-# k3d local deployment
-# =============================================================================
+# k3d: fred-deployment-factory deploys this chart on its local k3d instance
+# (`make k3d-up`, then `make k3d-app DIR=<this checkout>`) from deploy/k3d/:
+# its helmfile, its values, and the build, prepare and finish hooks.
 
-K3D_CLUSTER    ?= fred
-K3D_NAMESPACE  ?= fred
-HELM_RELEASE   ?= fred-app
-HELM_CHART     ?= deploy/charts/fred
-HELM_VALUES    ?= deploy/local/k3d/values-local.yaml
-HELM_VALUES_BENCH ?= deploy/local/k3d/values-bench.yaml
-
-# Image names
-FRED_AGENTS_IMAGE ?= ghcr.io/thalesgroup/fred-agent/fred-agents:0.2
-KF_IMAGE       ?= ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend:0.2
-FRONTEND_IMAGE ?= ghcr.io/thalesgroup/fred-agent/frontend:0.2
-CP_IMAGE       ?= ghcr.io/thalesgroup/fred-agent/control-plane-backend:0.2
-
-##@ k3d Deployment
-
-.PHONY: k3d-build
-k3d-build: ## Build Docker images for all services (in parallel)
-	@echo "🔨 Building all images in parallel..."
-	@$(MAKE) -j4 build-fred-agents build-kf build-frontend build-cp
-
-.PHONY: build-fred-agents
-build-fred-agents:
-	$(MAKE) -C apps/fred-agents docker-build
-
-.PHONY: build-kf
-build-kf:
-	$(MAKE) -C apps/knowledge-flow-backend docker-build
-
-.PHONY: build-frontend
-build-frontend:
-	$(MAKE) -C apps/frontend docker-build
-
-.PHONY: build-cp
-build-cp:
-	$(MAKE) -C apps/control-plane-backend docker-build
-
-.PHONY: k3d-import
-k3d-import: ## Import Docker images into k3d cluster
-	@echo "📦 Importing images into k3d cluster '$(K3D_CLUSTER)'..."
-	k3d image import $(FRED_AGENTS_IMAGE) $(KF_IMAGE) $(FRONTEND_IMAGE) $(CP_IMAGE) -c $(K3D_CLUSTER)
-
-.PHONY: k3d-deploy
-k3d-deploy: k3d-build k3d-import k3d-deploy-only ## Build, import, and deploy all services to k3d
-
-.PHONY: k3d-deploy-only
-k3d-deploy-only: ## Deploy/upgrade Helm chart (images must already be in k3d)
-	@echo "🚀 Deploying $(HELM_RELEASE) to namespace $(K3D_NAMESPACE)..."
-	helm upgrade --install $(HELM_RELEASE) $(HELM_CHART) \
-		--namespace $(K3D_NAMESPACE) \
-		--create-namespace \
-		-f $(HELM_VALUES)
-	@echo "🔄 Forcing pods to restart to pick up newest local images..."
-	kubectl rollout restart deployment -n $(K3D_NAMESPACE) fred-agents knowledge-flow-backend frontend control-plane-backend
-
-.PHONY: k3d-deploy-only-bench
-k3d-deploy-only-bench: ## Deploy/upgrade Helm chart with local + bench values (images must already be in k3d)
-	@echo "🚀 Deploying $(HELM_RELEASE) bench to namespace $(K3D_NAMESPACE)..."
-	helm upgrade --install $(HELM_RELEASE) $(HELM_CHART) \
-		--namespace $(K3D_NAMESPACE) \
-		--create-namespace \
-		-f $(HELM_VALUES) \
-		-f $(HELM_VALUES_BENCH)
-	@echo "🔄 Forcing pods to restart to pick up newest local images..."
-	kubectl rollout restart deployment -n $(K3D_NAMESPACE) fred-agents knowledge-flow-backend frontend control-plane-backend
-
-# --- Selective Turbo Deploy Targets ---
-
-.PHONY: k3d-turbo-fred-agents
-k3d-turbo-fred-agents: build-fred-agents ## Turbo: build, import and roll fred-agents ONLY
-	k3d image import $(FRED_AGENTS_IMAGE) -c $(K3D_CLUSTER)
-	kubectl rollout restart deployment -n $(K3D_NAMESPACE) fred-agents
-
-.PHONY: k3d-turbo-kf
-k3d-turbo-kf: build-kf ## Turbo: build, import and roll knowledge-flow-backend ONLY
-	k3d image import $(KF_IMAGE) -c $(K3D_CLUSTER)
-	kubectl rollout restart deployment -n $(K3D_NAMESPACE) knowledge-flow-backend
-
-.PHONY: k3d-turbo-frontend
-k3d-turbo-frontend: build-frontend ## Turbo: build, import and roll frontend ONLY
-	k3d image import $(FRONTEND_IMAGE) -c $(K3D_CLUSTER)
-	kubectl rollout restart deployment -n $(K3D_NAMESPACE) frontend
-
-.PHONY: k3d-turbo-cp
-k3d-turbo-cp: build-cp ## Turbo: build, import and roll control-plane-backend ONLY
-	k3d image import $(CP_IMAGE) -c $(K3D_CLUSTER)
-	kubectl rollout restart deployment -n $(K3D_NAMESPACE) control-plane-backend
-
-.PHONY: k3d-turbo-all
-k3d-turbo-all: k3d-build ## Turbo: build and import all images, then roll all deployments
-	k3d image import $(FRED_AGENTS_IMAGE) $(KF_IMAGE) $(FRONTEND_IMAGE) $(CP_IMAGE) -c $(K3D_CLUSTER)
-	kubectl rollout restart deployment -n $(K3D_NAMESPACE) fred-agents knowledge-flow-backend frontend control-plane-backend
-
-.PHONY: k3d-undeploy
-k3d-undeploy: ## Uninstall the Helm release
-	@echo "🗑️  Uninstalling $(HELM_RELEASE)..."
-	helm uninstall $(HELM_RELEASE) --namespace $(K3D_NAMESPACE)
-
-.PHONY: k3d-status
-k3d-status: ## Show status of pods in the fred namespace
-	@echo "📊 Pod status in namespace $(K3D_NAMESPACE):"
-	kubectl get pods -n $(K3D_NAMESPACE) -o wide
-	@echo ""
-	@echo "📊 Services:"
-	kubectl get svc -n $(K3D_NAMESPACE)
-
-.PHONY: k3d-logs-fred-agents
-k3d-logs-fred-agents: ## Tail logs for fred-agents
-	kubectl logs -n $(K3D_NAMESPACE) -l app=fred-agents -f --tail=100
-
-.PHONY: k3d-logs-kf
-k3d-logs-kf: ## Tail logs for knowledge-flow-backend
-	kubectl logs -n $(K3D_NAMESPACE) -l app=knowledge-flow-backend -f --tail=100
-
-.PHONY: k3d-logs-frontend
-k3d-logs-frontend: ## Tail logs for frontend
-	kubectl logs -n $(K3D_NAMESPACE) -l app=frontend -f --tail=100
+.PHONY: k3d-tests
+k3d-tests: ## Test local k3d image preparation and configuration without a cluster
+	python3 -m unittest discover -s deploy/k3d -p 'test_*.py'
 
 ##@ Migration notes and release preparation
 

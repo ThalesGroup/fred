@@ -38,6 +38,7 @@ const h = vi.hoisted(() => ({
   wikiEnabled: undefined as boolean | undefined,
   defaultTeamAvatarFile: "",
   teamAvatarImageUrl: undefined as string | undefined,
+  userPictureUrl: undefined as string | undefined,
 }));
 
 vi.mock("react-i18next", () => ({
@@ -73,14 +74,20 @@ vi.mock("../../../../../../hooks/useSelectedTeam.ts", () => ({
 }));
 vi.mock("@hooks/useTeamCapabilities.ts", () => ({
   useTeamCapabilities: () => ({
-    canUpdateAgents: false,
+    canUpdateAgents: true,
     canUpdateInfo: false,
     canUseTeamKnowledgeBases: h.canUseKnowledgeBases,
   }),
 }));
 vi.mock("../../../../../../hooks/useFrontendBootstrap.ts", () => ({
   useFrontendBootstrap: () => ({
-    bootstrap: h.charterEnabled === undefined ? undefined : { team_admin_charter_enabled: h.charterEnabled },
+    bootstrap:
+      h.charterEnabled === undefined && h.userPictureUrl === undefined
+        ? undefined
+        : {
+            team_admin_charter_enabled: h.charterEnabled,
+            current_user: { id: "u-1", avatar_image_url: h.userPictureUrl },
+          },
   }),
 }));
 vi.mock("@hooks/useFrontendFeatureFlag.ts", () => ({
@@ -195,6 +202,7 @@ describe("TeamContentNavbar — the team avatar", () => {
     h.isPersonalTeam = false;
     h.defaultTeamAvatarFile = "";
     h.teamAvatarImageUrl = undefined;
+    h.userPictureUrl = undefined;
   });
 
   it("falls back to the deployment default when the team has no image of its own", () => {
@@ -223,6 +231,12 @@ describe("TeamContentNavbar — the team avatar", () => {
     h.isPersonalTeam = true;
     h.defaultTeamAvatarFile = "acme-team-avatar.svg";
     expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain("acme-team-avatar.svg");
+  });
+
+  it("shows the user's profile picture in the personal space", () => {
+    h.isPersonalTeam = true;
+    h.userPictureUrl = "https://store.example/me.webp";
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).toContain('src="https://store.example/me.webp"');
   });
 });
 
@@ -336,5 +350,16 @@ describe("TeamContentNavbar Responsibilities entry", () => {
 
     h.charterEnabled = undefined;
     expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/settings/responsibilities"');
+  });
+});
+
+describe("retired evaluation navigation", () => {
+  it("keeps Members but removes Evaluations for an agent editor", () => {
+    h.pathname = "/team/team-1/settings/members";
+    h.relations = ["team_editor"];
+    const html = renderToStaticMarkup(<TeamContentNavbar />);
+    expect(html).toContain('href="/team/team-1/settings/members"');
+    expect(html).not.toContain("/settings/evaluations");
+    expect(html).not.toContain("rework.teamSettings.navigation.evaluations");
   });
 });

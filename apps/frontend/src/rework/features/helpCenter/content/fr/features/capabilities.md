@@ -23,30 +23,38 @@ elle est utile.
 
 ### Accès aux ressources de l'équipe
 
-**Ce qu'elle fait** — l'agent consulte le corpus de l'équipe : il y cherche les
-passages utiles et les cite, lit un document mot à mot, ou en extrait une
-information de façon exhaustive. Les trois façons de lire sont détaillées sur
-[Les ressources](/help/fr/features/resources).
+**Ce qu'elle fait** - l'agent consulte le corpus de l'équipe et les fichiers
+joints à la conversation en cours. Il cherche les passages utiles et les cite,
+lit un document mot à mot ou en extrait une information de façon exhaustive.
+Les façons de lire sont détaillées sur [Les ressources](/help/fr/features/resources).
 
-**Ses limites** — l'agent ne voit que les bibliothèques rattachées à son
-paramétrage, et un document déposé hors bibliothèque reste invisible. La
-recherche remonte les passages qu'elle juge pertinents : elle est rapide, mais
-pas exhaustive. C'est l'agent qui choisit sa façon de lire, selon la demande.
+**Ses limites** - la recherche dans le corpus ne voit que les bibliothèques
+rattachées à l'agent. Une pièce jointe reste dans sa conversation et n'entre
+pas dans le corpus de l'équipe. La recherche remonte les passages qu'elle juge
+pertinents : elle est rapide, mais pas exhaustive.
 
-**Un exemple** — « Que disent nos procédures sur le délai de réponse à un
-incident ? » L'agent cherche dans le corpus et répond en citant les passages
-sur lesquels il s'appuie.
+**Exemples** - demander ce que prévoient les procédures de l'équipe pour un
+incident, ou joindre un contrat et demander à l'agent d'en relever les échéances.
 
 Cette capacité en regroupe plusieurs, que la vue **Avancé** sépare :
 
-| Fonction                          | Ce qu'elle fait                                       | À savoir                                                                               |
-| --------------------------------- | ----------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| Rechercher dans les ressources    | Trouve les passages pertinents et les cite            | Peut afficher dans la conversation un sélecteur de bibliothèque ou de document         |
-| Exploiter les fichiers tabulaires | Exploite les données d'un CSV ou d'un Excel du corpus | Le fichier doit être déposé dans une bibliothèque ; ce n'est pas un outil de reporting |
-| Résumer un document               | Produit le résumé d'un document                       | Demande votre confirmation avant chaque résumé ; longueur réglable                     |
-| Comparer des documents            | Retrouve les passages proches d'un passage donné      | Travaille sur le corpus, jamais sur une pièce jointe                                   |
-| Verbatim document                 | Restitue le texte exact, page par page                | Les pages renvoyées ont une longueur limitée                                           |
-| Extraction d'information          | Parcourt le document entier sans rien omettre         | La plus lente et la plus coûteuse ; confirmation demandée par défaut                   |
+| Fonction                          | Ce qu'elle fait                                                                | À savoir                                                                                                           |
+| --------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| Rechercher dans les ressources    | Trouve les passages pertinents et les cite                                     | Peut afficher dans la conversation un sélecteur de bibliothèque ou de document                                     |
+| Joindre des fichiers              | Ajoute des fichiers à la conversation                                          | Ils restent dans la conversation, hors du corpus de l'équipe                                                       |
+| Exploiter les fichiers tabulaires | Interroge les fichiers tabulaires des bibliothèques et les CSV ou Excel joints | Les nouveaux CSV et Excel joints sont interrogeables en SQL ; les anciens Excel peuvent n’avoir qu’un aperçu texte |
+| Résumer un document               | Produit le résumé d'un document                                                | Demande votre confirmation avant chaque résumé ; longueur réglable                                                 |
+| Comparer des documents            | Retrouve les passages proches d'un passage donné                               | Travaille sur le corpus, jamais sur une pièce jointe                                                               |
+| Verbatim document                 | Restitue le texte exact, page par page                                         | Les pages renvoyées ont une longueur limitée                                                                       |
+| Extraction d'information          | Parcourt le document entier sans rien omettre                                  | La plus lente et la plus coûteuse ; confirmation demandée par défaut                                               |
+
+En mode **Simple**, ce pack active d'abord ensemble les ressources de l'équipe
+et les pièces jointes des conversations. Sous le réglage des bibliothèques,
+activez **Rechercher uniquement dans les pièces jointes** pour arrêter la
+recherche documentaire dans le corpus et désactiver la comparaison. Les outils
+tabulaires restent disponibles pour les CSV et Excel joints. Utilisez-les pour lire leurs tableaux complets ; les outils de lecture documentaire sont destinés aux pièces jointes textuelles. Désactivez cette option pour retrouver les deux sources. En mode **Avancé**, on
+peut activer les pièces jointes sans ajouter les autres outils de ressources.
+Les agents existants conservent leur sélection tant qu'elle n'est pas modifiée.
 
 ### Accès au Wiki de l'équipe
 
@@ -67,20 +75,6 @@ un substitut au corpus documentaire.
 **Un exemple** — une équipe consigne dans son wiki ses conventions de nommage ;
 l'agent chargé de rédiger des comptes rendus les applique sans qu'on les lui
 rappelle à chaque fois.
-
-### Pièces jointes à une conversation
-
-**Ce qu'elle fait** — ajoute à l'interface de conversation un bouton permettant
-de joindre un fichier (PDF, image, texte) à un message. L'agent peut alors le
-résumer, le lire mot à mot ou en extraire une information.
-
-**Ses limites** — une pièce jointe appartient à la conversation : elle n'entre
-pas dans le corpus de l'équipe et n'est pas réutilisable ailleurs. Si cette
-capacité est la seule activée, l'agent travaille **uniquement** sur les pièces
-jointes et n'interroge jamais le corpus.
-
-**Un exemple** — vous recevez un contrat par courriel, vous le joignez à une
-conversation et demandez à l'agent d'en relever les échéances.
 
 ## Production de documents
 
@@ -107,8 +101,7 @@ attendre du texte ou une image tirée d'un dossier de ressources.
 **Ses limites** — l'agent remplit un modèle, il ne conçoit pas de
 présentation : sans modèle déposé, la capacité ne fonctionne pas. Le modèle est
 vérifié au dépôt et les erreurs de repérage vous sont signalées. Un agent
-dupliqué conserve la configuration mais **pas le fichier du modèle**, qui est à
-redéposer.
+dupliqué ou copié dans une autre équipe emporte son propre exemplaire du modèle.
 
 **Un exemple** — un modèle de revue mensuelle en cinq diapositives, que l'agent
 remplit chaque mois à partir des documents de la période.

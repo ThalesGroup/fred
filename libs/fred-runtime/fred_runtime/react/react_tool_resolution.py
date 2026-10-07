@@ -41,8 +41,6 @@ from typing import cast
 
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
-    ToolContentBlock,
-    ToolContentKind,
     ToolInvocationRequest,
     ToolInvocationResult,
 )
@@ -60,6 +58,7 @@ from pydantic import BaseModel, Field
 
 from fred_runtime.common.context_aware_tool import ContextAwareTool
 from fred_runtime.common.mcp_utils import MCP_SERVER_ID_METADATA_KEY
+from fred_runtime.runtime_support.ask_user import AskUserArgs, ask_user
 
 from .react_tool_rendering import (
     normalize_runtime_provider_artifact,
@@ -156,6 +155,7 @@ class ReActRuntimeToolResolver:
         toolset_key: str | None,
         services: RuntimeServices,
         binding: BoundRuntimeContext,
+        capability_tool_names: tuple[str, ...] = (),
     ) -> None:
         """
         Store the collaborators needed to resolve one runtime tool surface.
@@ -176,6 +176,7 @@ class ReActRuntimeToolResolver:
         self._toolset_key = toolset_key
         self._services = services
         self._binding = binding
+        self._capability_tool_names = capability_tool_names
 
     def resolve_tools(self) -> list[FredRuntimeToolSpec]:
         """
@@ -201,6 +202,37 @@ class ReActRuntimeToolResolver:
         used_names: set[str] = set()
         specs.extend(self._resolve_declared_tools(used_names=used_names))
         specs.extend(self._resolve_runtime_provider_tools(used_names=used_names))
+        if self._binding.runtime_context.ask_user is True:
+            if "ask_user" in used_names or "ask_user" in self._capability_tool_names:
+                raise RuntimeError(
+                    "Platform ask_user tool collides with another runtime tool"
+                )
+            used_names.add("ask_user")
+
+            async def invoke_ask_user(payload: dict[str, object]) -> tuple[str, None]:
+                return (
+                    await ask_user(
+                        payload, language=self._binding.runtime_context.language
+                    ),
+                    None,
+                )
+
+            specs.append(
+                FredRuntimeToolSpec(
+                    runtime_name="ask_user",
+                    description=(
+                        "Ask the user one question and continue after their answer. "
+                        "When possible, give the question a short subject title of a few words. "
+                        "Hard limit: choices must contain no more than four items. "
+                        "If you have five or more candidates, first select the four that best satisfy the user's constraints; "
+                        "the interface always offers an Other free-text answer alongside multiple choices. "
+                        "Use allow_free_text for questions without choices."
+                    ),
+                    args_schema=AskUserArgs,
+                    tool_ref="platform.ask_user",
+                    invoke=invoke_ask_user,
+                )
+            )
         logger.debug(
             "[V2][TOOL_RESOLVER] resolved %d tool(s): %r",
             len(specs),
@@ -365,83 +397,6 @@ class ReActRuntimeToolResolver:
                 tool_name=tool_name,
                 description=description,
                 args_schema=builtin_spec.args_schema,
-            )
-
-        if backend == BuiltinToolBackend.WORKSPACE_WRITE:
-            workspace_fs = self._services.workspace_fs
-            if workspace_fs is None:
-                raise RuntimeError(
-                    "ReActRuntime requires RuntimeServices.workspace_fs for artifacts.publish_text."
-                )
-
-            async def _invoke(
-                payload: dict[str, object],
-            ) -> tuple[str, ToolInvocationResult]:
-                file_name = str(payload["file_name"])
-                artifact = await workspace_fs.write(
-                    file_name,
-                    str(payload["content"]).encode("utf-8"),
-                    content_type=str(
-                        payload.get("content_type") or "text/plain; charset=utf-8"
-                    ),
-                    title=self._optional_str(payload.get("title")),
-                )
-                result = ToolInvocationResult(
-                    tool_ref=requirement.tool_ref,
-                    blocks=(
-                        ToolContentBlock(
-                            kind=ToolContentKind.TEXT,
-                            text=f"Published {artifact.file_name} for the user.",
-                        ),
-                    ),
-                    ui_parts=(artifact.to_link_part(),),
-                )
-                return (render_tool_result(result), result)
-
-            return FredRuntimeToolSpec(
-                runtime_name=tool_name,
-                description=description,
-                args_schema=builtin_spec.args_schema,
-                tool_ref=requirement.tool_ref,
-                invoke=_invoke,
-                trace_span_name="artifact.publish",
-                build_trace_attributes=lambda payload: {
-                    "artifact_file_name": str(payload.get("file_name") or ""),
-                },
-            )
-
-        if backend == BuiltinToolBackend.WORKSPACE_READ:
-            workspace_fs = self._services.workspace_fs
-            if workspace_fs is None:
-                raise RuntimeError(
-                    "ReActRuntime requires RuntimeServices.workspace_fs for resources.fetch_text."
-                )
-
-            async def _invoke(
-                payload: dict[str, object],
-            ) -> tuple[str, ToolInvocationResult]:
-                text = await workspace_fs.read_text(str(payload["path"]))
-                result = ToolInvocationResult(
-                    tool_ref=requirement.tool_ref,
-                    blocks=(
-                        ToolContentBlock(
-                            kind=ToolContentKind.TEXT,
-                            text=text,
-                        ),
-                    ),
-                )
-                return (render_tool_result(result), result)
-
-            return FredRuntimeToolSpec(
-                runtime_name=tool_name,
-                description=description,
-                args_schema=builtin_spec.args_schema,
-                tool_ref=requirement.tool_ref,
-                invoke=_invoke,
-                trace_span_name="resource.fetch",
-                build_trace_attributes=lambda payload: {
-                    "resource_path": str(payload.get("path") or ""),
-                },
             )
 
         raise RuntimeError(

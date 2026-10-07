@@ -77,6 +77,9 @@ export default function TeamCard({ team, withDescription, onJoined }: TeamCardPr
               src={team.avatar_image_url}
               alt=""
               aria-hidden="true"
+              width={48}
+              height={48}
+              decoding="async"
             />
           ) : avatarFile ? (
             <img
@@ -85,6 +88,9 @@ export default function TeamCard({ team, withDescription, onJoined }: TeamCardPr
               src={`/images/${avatarFile}`}
               alt=""
               aria-hidden="true"
+              width={48}
+              height={48}
+              decoding="async"
             />
           ) : (
             <TeamInitials
@@ -109,7 +115,10 @@ export default function TeamCard({ team, withDescription, onJoined }: TeamCardPr
         <div className={styles.teamCardFooter}>
           <div className={styles.teamCardAdmins}>
             <AvatarGroup
-              avatars={(team.admins ?? []).map((o) => ({ name: o.first_name + " " + o.last_name }))}
+              avatars={(team.admins ?? []).map((o) => ({
+                name: o.first_name + " " + o.last_name,
+                imageUrl: o.avatar_image_url,
+              }))}
               max={canJoinDirectly ? 2 : 4}
             />
           </div>

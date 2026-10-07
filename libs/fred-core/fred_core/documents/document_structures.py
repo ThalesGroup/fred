@@ -15,7 +15,6 @@
 
 from __future__ import annotations
 
-import re
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
@@ -117,15 +116,6 @@ class Identity(BaseModel):
         ..., description="Original file name incl. extension (display name)"
     )
     document_uid: str = Field(..., description="Stable unique id across the system")
-    canonical_name: Optional[str] = Field(
-        default=None,
-        description="Base file name without transient version suffix (e.g., 'report.docx' for 'report.docx (1)')",
-    )
-    version: int = Field(
-        default=0,
-        description="Version number within a folder/tag. 0 means canonical/original name, 1 -> 'name (1)', etc.",
-        ge=0,
-    )
     title: Optional[str] = Field(None, description="Human-friendly title for UI")
     author: Optional[str] = Field(
         default=None,
@@ -157,25 +147,6 @@ class Identity(BaseModel):
         if v.tzinfo is None:
             return v.replace(tzinfo=timezone.utc)
         return v
-
-    @model_validator(mode="after")
-    def _set_canonical_defaults(self) -> "Identity":
-        # Backfill canonical_name when missing for older records
-        if not self.canonical_name:
-            match = re.match(
-                r"^(?P<base>.+)\s\((?P<version>\d+)\)$", self.document_name.strip()
-            )
-            self.canonical_name = match.group("base") if match else self.document_name
-        else:
-            canon_match = re.match(
-                r"^(?P<base>.+)\s\((?P<version>\d+)\)$", self.canonical_name.strip()
-            )
-            if canon_match:
-                self.canonical_name = canon_match.group("base")
-        # Guard against negative versions
-        if self.version is None or self.version < 0:
-            self.version = 0
-        return self
 
     @property
     def stem(self) -> str:

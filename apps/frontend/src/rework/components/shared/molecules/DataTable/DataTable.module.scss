@@ -23,7 +23,12 @@
   background-color: var(--datatable-background-color);
   height: 100%;
   min-height: 0;
-  overflow: hidden;
+  /* The horizontal scroll lives HERE, not on the body: fixed-width columns
+   * stop the grid shrinking past their total, and a body scrolling on its own
+   * slid the rows out from under a header that stayed put. One scroller over
+   * both grids keeps every column above its own cells, at any width. */
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 /* Its own grid, structurally outside `.datatable-body`'s scroll area — so the
@@ -45,6 +50,11 @@
   flex-shrink: 0;
   background-color: var(--datatable-background-color);
   padding-top: 0.25rem;
+  /* Never narrower than the columns need: both grids reach the same width, so
+   * the container scrolls them together instead of one outrunning the other.
+   * Cells truncate (`min-width: 0` below), so this is the fixed tracks' total,
+   * not the longest cell's. */
+  min-width: min-content;
   overflow-y: scroll;
   scrollbar-width: thin;
 
@@ -64,8 +74,11 @@
   grid-auto-rows: minmax(min-content, auto);
   flex: 1;
   align-content: start;
+  min-width: min-content;
   min-height: 0;
-  overflow-x: auto;
+  /* Its own horizontal scroll would desynchronise it from the header; the
+   * container above owns that axis now. */
+  overflow-x: hidden;
   /* Always reserve the vertical scrollbar's space, even when content
    * doesn't overflow yet — keeps the column grid the same width as
    * `.datatable-header`'s regardless of row count, instead of only
@@ -83,7 +96,7 @@
 
   &::-webkit-scrollbar-thumb {
     border-radius: 999px;
-    background-color: var(--outline-retreat);
+    background-color: var(--outline-muted);
   }
 }
 
@@ -113,7 +126,7 @@
 .datatable-cell {
   display: flex;
   align-items: center;
-  border-bottom: 1px solid var(--surface-container-highest);
+  border-bottom: 1px solid var(--outline-muted);
   padding: 0 var(--spacing-s);
   min-width: 0;
   min-height: var(--datatable-row-height, 3.5rem);
@@ -207,4 +220,8 @@
 
 .header-sort-button:hover .sort-icon[data-visible] {
   opacity: 1;
+}
+
+.datatable-row[data-activatable="true"] {
+  cursor: pointer;
 }

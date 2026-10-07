@@ -13,9 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Coverage for FRONT-09.G: the tab switcher replaces the always-expanded root
-// tree — only the active tab's browser renders, "Espace partagé" is hidden
-// for a personal team, and the team storage quota shows in the header.
+// Corpus resources page, quota meter, stats, and health gate.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -37,19 +35,7 @@ const probe = vi.hoisted(() => ({
   teamUninitialized: false,
   teamRefetch: () => {},
   onDocumentsChanged: undefined as (() => void) | undefined,
-  // Existing "tab switcher" coverage below exercises the 4-tab (flag-on)
-  // behavior — defaults true so it keeps passing unmodified. The dedicated
-  // "resource spaces feature flag" describe block below overrides this to
-  // cover the off (shipped default) case.
-  enableAllResourceSpaces: true,
-  // True while useGetFrontendBootstrapControlPlaneV1FrontendBootstrapGetQuery
-  // hasn't resolved yet — bootstrap is undefined during that window.
-  bootstrapPending: false,
-  // Last `skip` each stats query was rendered with — the stats endpoints are
-  // whole-corpus scans, so whether they run at all is the behaviour worth
-  // pinning, and it is invisible in the DOM.
   corpusStatsSkip: true,
-  fsStatsSkip: {} as Record<string, boolean>,
   // Lifecycle flags of the KF health probe that gates the whole page.
   kfProbe: { isLoading: false, isFetching: false, isUninitialized: false, isError: false },
 }));
@@ -60,14 +46,6 @@ vi.mock("react-i18next", () => ({
   }),
 }));
 vi.mock("react-router-dom", () => ({ useParams: () => ({ teamId: "team-1" }) }));
-vi.mock("../../../../hooks/useFrontendBootstrap.ts", () => ({
-  useFrontendBootstrap: () => ({
-    activeTeam: probe.isPersonalTeam ? { id: "team-1" } : { id: "other-team" },
-    bootstrap: probe.bootstrapPending
-      ? undefined
-      : { feature_flags: { enableAllResourceSpaces: probe.enableAllResourceSpaces } },
-  }),
-}));
 vi.mock("../../../../security/KeycloakService.ts", () => ({ KeyCloakService: { GetUserId: () => "u-1" } }));
 vi.mock("@shared/utils/teamId.ts", () => ({
   isPersonalTeamId: () => probe.isPersonalTeam,
@@ -80,7 +58,6 @@ vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
     refetch: probe.teamRefetch,
   }),
 }));
-vi.mock("@hooks/useTeamCapabilities.ts", () => ({ useTeamCapabilities: () => ({ canUpdateResources: true }) }));
 vi.mock("../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   // The rollup reads the team's terminal ingestion history (#2384); no
   // history in these fixtures, so it falls back to the live task feed.
@@ -96,22 +73,17 @@ vi.mock("../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
       refetch: probe.corpusStatsRefetch,
     };
   },
-  useFilesystemTypeStatsQuery: (arg: { path: string }, options?: { skip?: boolean }) => {
-    probe.fsStatsSkip[arg.path] = options?.skip ?? false;
-    return { data: { entries: [] }, isLoading: false, isError: false };
-  },
+}));
+// Reads the task store; this suite renders the page without a Provider and is
+// about the tab switcher, not the import rail — which has its own tests.
+vi.mock("@shared/organisms/ImportPanel/ImportPanel.tsx", () => ({
+  ImportPanel: () => <aside data-testid="import-panel" />,
 }));
 vi.mock("./DocumentWorkspace/DocumentWorkspace.tsx", () => ({
   default: (props: { onDocumentsChanged?: () => void }) => {
     probe.onDocumentsChanged = props.onDocumentsChanged;
     return <div data-testid="panel-resources" />;
   },
-}));
-vi.mock("./FilesystemWorkspace/FilesystemWorkspace.tsx", () => ({
-  default: (props: { root: string }) => <div data-testid="panel-fs">{props.root}</div>,
-}));
-vi.mock("./AgentsWorkspace/AgentsWorkspace.tsx", () => ({
-  default: () => <div data-testid="panel-agents" />,
 }));
 vi.mock("./ResourceStatsCards/ResourceStatsCards.tsx", () => ({ default: () => <div data-testid="stats-cards" /> }));
 
@@ -141,10 +113,7 @@ beforeEach(() => {
   probe.teamUninitialized = false;
   probe.teamRefetch = vi.fn();
   probe.onDocumentsChanged = undefined;
-  probe.enableAllResourceSpaces = true;
-  probe.bootstrapPending = false;
   probe.corpusStatsSkip = true;
-  probe.fsStatsSkip = {};
   probe.kfProbe = { isLoading: false, isFetching: false, isUninitialized: false, isError: false };
 });
 
@@ -155,41 +124,16 @@ afterEach(() => {
   container.remove();
 });
 
-function tabButtons(): HTMLButtonElement[] {
-  return Array.from(container.querySelectorAll('[role="tab"]'));
-}
-
 function click(el: Element | null) {
   act(() => {
     el?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
   });
 }
 
-describe("TeamResourcesPage tab switcher", () => {
-  it("shows only the Corpus panel by default", () => {
+describe("TeamResourcesPage corpus and quota", () => {
+  it("renders the corpus workspace", () => {
     render();
     expect(container.querySelector('[data-testid="panel-resources"]')).not.toBeNull();
-    expect(container.querySelector('[data-testid="panel-fs"]')).toBeNull();
-    expect(container.querySelector('[data-testid="panel-agents"]')).toBeNull();
-  });
-
-  it("switches panels when a tab is clicked, never rendering two at once", () => {
-    render();
-    expect(tabButtons()).toHaveLength(4); // resources, mine, team, agents
-
-    click(tabButtons()[3]); // agents
-    expect(container.querySelector('[data-testid="panel-agents"]')).not.toBeNull();
-    expect(container.querySelector('[data-testid="panel-resources"]')).toBeNull();
-
-    click(tabButtons()[1]); // mine
-    expect(container.querySelector('[data-testid="panel-fs"]')?.textContent).toBe("teams/team-1/users/u-1");
-    expect(container.querySelector('[data-testid="panel-agents"]')).toBeNull();
-  });
-
-  it("hides the Espace partagé tab for a personal team", () => {
-    probe.isPersonalTeam = true;
-    render();
-    expect(tabButtons()).toHaveLength(3); // no "team" tab
   });
 
   it("shows the team storage quota when the team carries a quota", () => {
@@ -201,38 +145,6 @@ describe("TeamResourcesPage tab switcher", () => {
     probe.team = { id: "team-1" };
     render();
     expect(container.textContent).not.toContain("rework.resources.storageQuota");
-  });
-});
-
-// The team isn't yet confident Mon espace/Espace d'équipe/Agents pull their
-// weight — shipped default is Corpus d'équipe only, with the other three
-// gated behind the platform-wide enableAllResourceSpaces flag
-// (configuration.yaml, off by default) so they can be turned back on later
-// without a code change.
-describe("TeamResourcesPage resource spaces feature flag", () => {
-  it("shows only Corpus d'équipe, no tab switcher at all, when the flag is off", () => {
-    probe.enableAllResourceSpaces = false;
-    render();
-
-    expect(tabButtons()).toHaveLength(0);
-    expect(container.querySelector('[data-testid="panel-resources"]')).not.toBeNull();
-    expect(container.querySelector('[data-testid="panel-fs"]')).toBeNull();
-    expect(container.querySelector('[data-testid="panel-agents"]')).toBeNull();
-  });
-
-  it("shows the full 4-tab switcher when the flag is on", () => {
-    probe.enableAllResourceSpaces = true;
-    render();
-
-    expect(tabButtons()).toHaveLength(4);
-  });
-
-  it("treats a not-yet-loaded bootstrap as off (safe default), not a crash", () => {
-    probe.bootstrapPending = true;
-    render();
-
-    expect(tabButtons()).toHaveLength(0);
-    expect(container.querySelector('[data-testid="panel-resources"]')).not.toBeNull();
   });
 });
 
@@ -289,7 +201,7 @@ describe("TeamResourcesPage storage meter freshness", () => {
 describe("TeamResourcesPage stats toggle", () => {
   function statsToggle(): HTMLButtonElement {
     const button = Array.from(container.querySelectorAll("button")).find((b) => b.hasAttribute("aria-expanded"));
-    if (!button) throw new Error("stats toggle chip not rendered");
+    if (!button) throw new Error("stats toggle button not rendered");
     return button;
   }
 
@@ -299,7 +211,7 @@ describe("TeamResourcesPage stats toggle", () => {
     expect(statsToggle().getAttribute("aria-expanded")).toBe("false");
   });
 
-  it("shows the stats cards when the header chip is toggled on, and back off when clicked again", () => {
+  it("shows the stats cards when the header button is toggled on, and back off when clicked again", () => {
     render();
 
     click(statsToggle());
@@ -322,20 +234,6 @@ describe("TeamResourcesPage stats toggle", () => {
 
     click(statsToggle());
     expect(probe.corpusStatsSkip).toBe(true);
-  });
-
-  it("queries only the open tab's stats source", () => {
-    render();
-    click(statsToggle());
-
-    // "Mon espace" and "Espace partagé" both read /fs stats, on different roots.
-    expect(probe.corpusStatsSkip).toBe(false);
-    expect(Object.values(probe.fsStatsSkip).every((skipped) => skipped)).toBe(true);
-
-    click(tabButtons()[1]);
-    expect(probe.corpusStatsSkip).toBe(true);
-    expect(probe.fsStatsSkip["teams/team-1/users/u-1"]).toBe(false);
-    expect(probe.fsStatsSkip["teams/team-1/shared"]).toBe(true);
   });
 });
 

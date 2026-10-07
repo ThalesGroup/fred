@@ -57,9 +57,9 @@ It is **suspended**. Three causes:
 - One of its functions' **configuration** is no longer valid: untick the
   function on the agent, save, tick it again, save again.
 
-A related case: a **duplicated** agent inherits the configuration but not the
-files it references. A PowerPoint template, for instance, has to be uploaded
-again on the copy.
+A related case: an agent **copied to another team** loses the choices that
+belonged to its origin team (libraries, folders, documents) and the
+capabilities that team lacks. Attach the resources of its new team.
 
 ## The answer stops or never arrives
 

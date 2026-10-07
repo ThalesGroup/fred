@@ -92,7 +92,7 @@ vi.mock("../../../security/KeycloakService", () => ({
 import { KeyCloakService } from "../../../security/KeycloakService";
 
 let prepareExecutionImpl: (args: unknown) => Promise<unknown> = async () => ({
-  execute_stream_url: "http://runtime.test/execute_stream",
+  execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
   chat_controls: [],
   capability_base_urls: {},
 });
@@ -125,6 +125,7 @@ function TestHost({ onRender }: { onRender: (hook: ReturnType<typeof useChatSse>
     onError: (msg) => onErrorMock(msg),
     onTurnStarted: () => onTurnStartedMock(),
     onTurnRejected: (draft, sessionId) => onTurnRejectedMock(draft, sessionId),
+    onAwaitingHuman: (event) => onAwaitingHumanMock(event),
     isTurnCurrent,
   });
   onRender(hook);
@@ -136,6 +137,7 @@ let isTurnCurrent: ((sessionId: string) => boolean) | undefined;
 const onErrorMock = vi.fn();
 const onTurnStartedMock = vi.fn();
 const onTurnRejectedMock = vi.fn();
+const onAwaitingHumanMock = vi.fn();
 
 describe("useChatSse — send() ordering barrier and prepare-execution failure handling", () => {
   let container: HTMLDivElement;
@@ -157,10 +159,11 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     onErrorMock.mockClear();
     onTurnStartedMock.mockClear();
     onTurnRejectedMock.mockClear();
+    onAwaitingHumanMock.mockClear();
     dispatchMock.mockClear();
     prepareExecutionCalls.length = 0;
     prepareExecutionImpl = async () => ({
-      execute_stream_url: "http://runtime.test/execute_stream",
+      execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
       chat_controls: [],
       capability_base_urls: {},
     });
@@ -178,6 +181,24 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       root.unmount();
     });
     container.remove();
+  });
+
+  it("does not send the bearer to a tampered preparation URL", async () => {
+    prepareExecutionImpl = async () => ({
+      execute_stream_url: "https://outside.example/agents/execute/stream",
+      chat_controls: [],
+      capability_base_urls: {},
+    });
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    mount();
+
+    await act(async () => {
+      await latest.send("hello", "session-1");
+    });
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(onErrorMock).toHaveBeenCalled();
+    fetchSpy.mockRestore();
   });
 
   it("never calls prepare-execution when the write barrier reports a failure", async () => {
@@ -210,6 +231,34 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     expect(seenSids).toEqual(["session-42"]);
     fetchSpy.mockRestore();
   });
+
+  it.each([
+    { offered: true, requested: true, expected: true },
+    { offered: true, requested: false, expected: false },
+    { offered: true, requested: undefined, expected: true },
+    { offered: false, requested: true, expected: undefined },
+  ])(
+    "uses the current preparation for first-turn ask_user availability ($offered, $requested)",
+    async ({ offered, requested, expected }) => {
+      prepareExecutionImpl = async () => ({
+        execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
+        chat_controls: offered
+          ? [{ capability_id: "platform", widget: "ask_user_toggle", params: { default: true } }]
+          : [],
+        capability_base_urls: {},
+      });
+      const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("no network in test"));
+      mount();
+
+      await act(async () => {
+        await latest.send("first question", "session-1", requested === undefined ? {} : { ask_user: requested });
+      });
+
+      const body = JSON.parse(String(fetchSpy.mock.calls[0][1]?.body));
+      expect(body.runtime_context.ask_user).toBe(expected);
+      fetchSpy.mockRestore();
+    },
+  );
 
   it("forwards a caller-supplied prompt command descriptor on runtime_context", async () => {
     // The trigger slice sets `command` on the context it already passes; the
@@ -269,7 +318,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
   it("parses a structured length rejection, removes the optimistic message, and restores the full draft", async () => {
     flushPendingWrites = async () => true;
     prepareExecutionImpl = async () => ({
-      execute_stream_url: "http://runtime.test/execute_stream",
+      execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
       chat_controls: [],
       capability_base_urls: {},
       max_chat_input_chars: 5,
@@ -310,7 +359,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
   it("suppresses a late length rejection after the request's session is reset", async () => {
     flushPendingWrites = async () => true;
     prepareExecutionImpl = async () => ({
-      execute_stream_url: "http://runtime.test/execute_stream",
+      execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
       chat_controls: [],
       capability_base_urls: {},
       max_chat_input_chars: 10,
@@ -319,7 +368,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockReturnValue(response.promise);
     mount();
 
-    let sendPromise!: Promise<void>;
+    let sendPromise!: Promise<boolean>;
     await act(async () => {
       sendPromise = latest.send("old session draft", "session-a");
       await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
@@ -352,7 +401,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     let activeSessionId = "session-a";
     isTurnCurrent = (turnSessionId) => turnSessionId === activeSessionId;
     prepareExecutionImpl = async () => ({
-      execute_stream_url: "http://runtime.test/execute_stream",
+      execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
       chat_controls: [],
       capability_base_urls: {},
       max_chat_input_chars: 10,
@@ -361,7 +410,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockReturnValue(response.promise);
     mount();
 
-    let sendPromise!: Promise<void>;
+    let sendPromise!: Promise<boolean>;
     await act(async () => {
       sendPromise = latest.send("old session draft", "session-a");
       await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
@@ -481,7 +530,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
 
     // Explicit retry: this time prepare-execution succeeds.
     prepareExecutionImpl = async () => ({
-      execute_stream_url: "http://runtime.test/execute_stream",
+      execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
       chat_controls: [],
       capability_base_urls: {},
     });
@@ -519,7 +568,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       const firstSend = latest.send("hello", "session-1");
       const secondSend = latest.send("hello", "session-1");
       prep.resolve({
-        execute_stream_url: "http://runtime.test/execute_stream",
+        execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
         chat_controls: [],
         capability_base_urls: {},
       });
@@ -545,7 +594,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       latest.abort();
       // The network reply arrives late, after cancellation.
       prep.resolve({
-        execute_stream_url: "http://runtime.test/execute_stream",
+        execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
         chat_controls: [],
         capability_base_urls: {},
       });
@@ -558,7 +607,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
 
     // The lock must not be stuck — a subsequent Send proceeds normally.
     prepareExecutionImpl = async () => ({
-      execute_stream_url: "http://runtime.test/execute_stream",
+      execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
       chat_controls: [],
       capability_base_urls: {},
     });
@@ -600,7 +649,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
 
       // B's prepare-execution reply finally arrives.
       prep.resolve({
-        execute_stream_url: "http://runtime.test/execute_stream",
+        execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
         chat_controls: [],
         capability_base_urls: {},
       });
@@ -744,13 +793,13 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       // A's reply arrives late, after reset() and after B has already
       // taken over the lock.
       preps[0].resolve({
-        execute_stream_url: "http://runtime.test/execute_stream",
+        execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
         chat_controls: [],
         capability_base_urls: {},
       });
       await sendA;
       preps[1].resolve({
-        execute_stream_url: "http://runtime.test/execute_stream",
+        execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
         chat_controls: [],
         capability_base_urls: {},
       });
@@ -772,6 +821,122 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
   // the UI's own locale because nothing ever sent it. Fixed by reading the
   // live i18next language (mocked to "fr-FR" for this file, see the
   // react-i18next mock above) into every request's runtime_context.
+  it("an interrupted run gives the draft back and offers continue or restart on the HITL card", async () => {
+    flushPendingWrites = async () => true;
+    const interrupted = {
+      kind: "execution_interrupted",
+      interruption_id: "int-1",
+      request: { stage: "execution_interrupted", metadata: { node_id: "publish", node_title: "Publish" } },
+    };
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(`data: ${JSON.stringify(interrupted)}\n\n`, { status: 200 }));
+    mount();
+
+    await act(async () => {
+      await latest.send("again", "session-1");
+    });
+
+    expect(latest.messages).toHaveLength(0);
+    expect(onTurnRejectedMock).toHaveBeenCalledWith("", "session-1");
+    const card = onAwaitingHumanMock.mock.calls[0][0] as RuntimeAwaitingHumanEvent;
+    expect(card.payload.stage).toBe("execution_interrupted");
+    expect(card.payload.choices?.map((choice) => choice.id)).toEqual(["continue", "restart", "later"]);
+    expect(card.payload.metadata?.interruption_id).toBe("int-1");
+    fetchSpy.mockRestore();
+  });
+
+  it("continue sends the interruption with no input, no user bubble and the composer untouched", async () => {
+    flushPendingWrites = async () => true;
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("no network in test"));
+    mount();
+
+    await act(async () => {
+      await latest.send("", "session-1", undefined, undefined, { action: "continue", interruptionId: "int-1" });
+    });
+
+    const body = JSON.parse(String(fetchSpy.mock.calls[0][1]?.body));
+    expect(body).toMatchObject({ input: "", interrupted_action: "continue", interruption_id: "int-1" });
+    expect(onTurnStartedMock).not.toHaveBeenCalled();
+    expect(latest.messages.filter((message) => message.role === "user")).toHaveLength(0);
+    fetchSpy.mockRestore();
+  });
+
+  it("restart sends the message with interrupted_action restart", async () => {
+    flushPendingWrites = async () => true;
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("no network in test"));
+    mount();
+
+    await act(async () => {
+      await latest.send("again", "session-1", undefined, undefined, { action: "restart" });
+    });
+
+    const body = JSON.parse(String(fetchSpy.mock.calls[0][1]?.body));
+    expect(body).toMatchObject({ input: "again", interrupted_action: "restart", interruption_id: null });
+    fetchSpy.mockRestore();
+  });
+
+  it("after Stop, the next message of that session restarts, even after visiting another session", async () => {
+    flushPendingWrites = async () => true;
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async () => new Response(": accepted\n\n", { status: 200 }));
+    mount();
+
+    await act(async () => {
+      await latest.send("running", "session-1");
+    });
+    act(() => latest.abort());
+    act(() => latest.reset()); // navigating to another session
+    await act(async () => {
+      await latest.send("elsewhere", "session-2");
+    });
+    fetchSpy.mockResolvedValueOnce(new Response("refused", { status: 503 }));
+    await act(async () => {
+      await latest.send("after stop", "session-1");
+    });
+    await act(async () => {
+      await latest.send("retry", "session-1");
+    });
+    await act(async () => {
+      await latest.send("later", "session-1");
+    });
+
+    const bodies = fetchSpy.mock.calls.map((call) => JSON.parse(String(call[1]?.body)));
+    expect(bodies.map((body) => body.interrupted_action)).toEqual([
+      undefined,
+      undefined,
+      "restart",
+      "restart",
+      undefined,
+    ]);
+    fetchSpy.mockRestore();
+  });
+
+  it.each([401, 503])("send() reports HTTP %i as not accepted", async (status) => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("refused", { status }));
+    mount();
+    let accepted: boolean | undefined;
+    await act(async () => {
+      accepted = await latest.send("", "session-1", undefined, undefined, {
+        action: "continue",
+        interruptionId: "int-1",
+      });
+    });
+    expect(accepted).toBe(false);
+    fetchSpy.mockRestore();
+  });
+
+  it("send() reports whether the turn started", async () => {
+    flushPendingWrites = async () => false;
+    mount();
+    let started: boolean | undefined;
+    await act(async () => {
+      started = await latest.send("hello", "session-1");
+    });
+    expect(started).toBe(false);
+  });
+
   it("send() forwards the UI language into runtime_context", async () => {
     flushPendingWrites = async () => true;
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("no network in test"));
@@ -812,7 +977,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     // it fell back to the pod default model and lost the context prompt and
     // search scope of the turn it continued.
     prepareExecutionImpl = async () => ({
-      execute_stream_url: "http://runtime.test/execute_stream",
+      execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
       chat_controls: [],
       capability_base_urls: {},
       context_prompt_text: "session prompt",
@@ -1086,13 +1251,14 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
 
     expect(reached).toBe(false);
     expect(onErrorMock).toHaveBeenCalledTimes(1);
+    expect(latest.messages.filter((message) => message.channel === "hitl_response")).toHaveLength(0);
     fetchSpy.mockRestore();
   });
 
   it("handles a structured HITL length rejection without echoing its content", async () => {
     const rejectedText = "🙂🙂🙂🙂🙂🙂";
     prepareExecutionImpl = async () => ({
-      execute_stream_url: "http://runtime.test/execute_stream",
+      execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
       chat_controls: [],
       capability_base_urls: {},
       max_chat_input_chars: 10,
@@ -1125,6 +1291,190 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     expect(onErrorMock.mock.calls.flat().join(" ")).not.toContain(rejectedText);
     expect(errorSpy.mock.calls.flat().join(" ")).not.toContain(rejectedText);
     errorSpy.mockRestore();
+    fetchSpy.mockRestore();
+  });
+
+  it("sends agent-question answers and skip while keeping the pending tool mounted", async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+      bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      return new Response(JSON.stringify({ detail: "runtime unavailable" }), { status: 503 });
+    });
+    mount();
+    const question = {
+      ...hitlEvent,
+      payload: { ...hitlEvent.payload, stage: "agent_question", choices: [{ id: "yes", label: "Yes" }] },
+    } as RuntimeAwaitingHumanEvent;
+    await act(async () => {
+      await latest.sendHitlResume(question, "yes", " Please ", { ask_user: false });
+      await latest.sendHitlResume(question, undefined, undefined, { ask_user: false }, undefined, true);
+    });
+    expect(bodies[0].resume_payload).toEqual({ choice_id: "yes", text: " Please " });
+    expect(bodies[1].resume_payload).toEqual({ skipped: true });
+    expect((bodies[0].runtime_context as Record<string, unknown>).ask_user).toBe(true);
+    expect((bodies[1].runtime_context as Record<string, unknown>).ask_user).toBe(true);
+    fetchSpy.mockRestore();
+  });
+
+  it("sends simultaneous question answers in one runtime request", async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+      bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      return new Response('data: {"kind":"status","status":"running"}\n\n', { status: 200 });
+    });
+    mount();
+    const first = {
+      ...hitlEvent,
+      payload: {
+        ...hitlEvent.payload,
+        stage: "agent_question",
+        interrupt_id: "interrupt-a",
+        occurrence_id: "call-a",
+        choices: [{ id: "yes", label: "Yes" }],
+      },
+    } as RuntimeAwaitingHumanEvent;
+    const second = {
+      ...hitlEvent,
+      payload: {
+        ...hitlEvent.payload,
+        stage: "agent_question",
+        interrupt_id: "interrupt-b",
+        occurrence_id: "call-b",
+        choices: [],
+      },
+    } as RuntimeAwaitingHumanEvent;
+    await act(async () => {
+      await latest.sendHitlResume(first, undefined, undefined, undefined, undefined, false, undefined, [
+        { event: first, answer: "yes", skipped: false },
+        { event: second, answer: undefined, freeText: " Other ", skipped: false },
+      ]);
+    });
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0].interrupt_id).toBeNull();
+    expect(bodies[0]).not.toHaveProperty("occurrence_id");
+    expect(bodies[0].resume_payload).toEqual({
+      answers: [
+        { interrupt_id: "interrupt-a", occurrence_id: "call-a", answer: { choice_id: "yes" } },
+        { interrupt_id: "interrupt-b", occurrence_id: "call-b", answer: { text: " Other " } },
+      ],
+    });
+    expect(latest.messages.filter((message) => message.channel === "hitl_response")).toHaveLength(2);
+    fetchSpy.mockRestore();
+  });
+
+  it.each([
+    { answer: "proceed", skipped: false, expectedChoice: "proceed" },
+    { answer: "cancel", skipped: false, expectedChoice: "cancel" },
+    { answer: undefined, skipped: true, expectedChoice: null },
+  ])(
+    "shows an accepted tool approval response for $answer (skipped: $skipped)",
+    async ({ answer, skipped, expectedChoice }) => {
+      const fetchSpy = vi
+        .spyOn(globalThis, "fetch")
+        .mockResolvedValue(new Response('data: {"kind":"status","status":"running"}\n\n', { status: 200 }));
+      mount();
+      const approval = {
+        ...hitlEvent,
+        payload: {
+          ...hitlEvent.payload,
+          stage: "tool_approval",
+          question: "Execute Summarize Document?",
+          choices: [
+            { id: "proceed", label: "Continue" },
+            { id: "cancel", label: "Cancel" },
+          ],
+        },
+      } as RuntimeAwaitingHumanEvent;
+
+      await act(async () => {
+        await latest.sendHitlResume(approval, answer, undefined, undefined, undefined, skipped);
+      });
+
+      expect(latest.messages.filter((message) => message.channel === "hitl_request")).toHaveLength(1);
+      expect(latest.messages.find((message) => message.channel === "hitl_request")?.parts[0]).toMatchObject({
+        stage: "tool_approval",
+        interrupt_id: "interrupt-a",
+      });
+      expect(latest.messages.filter((message) => message.channel === "hitl_response")).toHaveLength(1);
+      expect(latest.messages.find((message) => message.channel === "hitl_response")?.parts[0]).toMatchObject({
+        choice_id: expectedChoice,
+        skipped,
+      });
+      fetchSpy.mockRestore();
+    },
+  );
+
+  it("does not duplicate an existing tool approval prompt when showing its answer", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response('data: {"kind":"status","status":"running"}\n\n', { status: 200 }));
+    mount();
+    const approval = {
+      ...hitlEvent,
+      payload: {
+        ...hitlEvent.payload,
+        stage: "tool_approval",
+        question: "Execute Summarize Document?",
+        choices: [{ id: "proceed", label: "Continue" }],
+      },
+    } as RuntimeAwaitingHumanEvent;
+    act(() => {
+      latest.replaceAllMessages([
+        {
+          session_id: "session-1",
+          exchange_id: "exch-1",
+          rank: 1,
+          timestamp: new Date().toISOString(),
+          role: "system",
+          channel: "hitl_request",
+          parts: [
+            {
+              type: "hitl_request",
+              stage: "tool_approval",
+              question: "Execute Summarize Document?",
+              interrupt_id: "interrupt-a",
+              choices: [{ id: "proceed", label: "Continue" }],
+            },
+          ],
+        } as Parameters<typeof latest.replaceAllMessages>[0][number],
+      ]);
+    });
+
+    await act(async () => {
+      await latest.sendHitlResume(approval, "proceed");
+    });
+
+    expect(latest.messages.filter((message) => message.channel === "hitl_request")).toHaveLength(1);
+    expect(latest.messages.filter((message) => message.channel === "hitl_response")).toHaveLength(1);
+    fetchSpy.mockRestore();
+  });
+
+  it("shows an accepted agent-question choice without waiting for history reload", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response('data: {"kind":"status","status":"running"}\n\n', { status: 200 }));
+    mount();
+    const question = {
+      ...hitlEvent,
+      payload: {
+        ...hitlEvent.payload,
+        stage: "agent_question",
+        question: "Which bread?",
+        occurrence_id: "call-bread",
+        choices: [{ id: "complet", label: "Pain complet" }],
+      },
+    } as RuntimeAwaitingHumanEvent;
+
+    await act(async () => {
+      await latest.sendHitlResume(question, "complet");
+    });
+
+    expect(latest.messages.filter((message) => message.channel === "hitl_request")).toHaveLength(1);
+    expect(latest.messages.filter((message) => message.channel === "hitl_response")).toHaveLength(1);
+    expect(latest.messages.find((message) => message.channel === "hitl_response")?.parts[0]).toMatchObject({
+      choice_id: "complet",
+      occurrence_id: "call-bread",
+    });
     fetchSpy.mockRestore();
   });
 
@@ -1228,6 +1578,72 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     expect(onErrorMock).not.toHaveBeenCalled();
   });
 
+  it("retains pause metadata when a sibling request is re-emitted", async () => {
+    flushPendingWrites = async () => true;
+    const event = {
+      kind: "awaiting_human",
+      sequence: 1,
+      request: {
+        stage: "agent_question",
+        question: "Continue?",
+        choices: [
+          { id: "yes", label: "Yes" },
+          { id: "no", label: "No" },
+        ],
+        free_text: true,
+        interrupt_id: "interrupt-1",
+        occurrence_id: "question-1",
+      },
+      sources: [{ uid: "source-1", title: "Guide", content: "Evidence", score: 1 }],
+      ui_parts: [{ type: "link", href: "https://example.test/guide" }],
+      token_usage: { input_tokens: 100, output_tokens: 20, total_tokens: 120 },
+      context_tokens: 100,
+      model_name: "test-model",
+    };
+    const previouslySurfaced = {
+      ...event,
+      sources: [],
+      ui_parts: [],
+      token_usage: null,
+      context_tokens: null,
+      model_name: null,
+    };
+    const bytes = new TextEncoder().encode(
+      `data: ${JSON.stringify(previouslySurfaced)}\n\ndata: ${JSON.stringify(event)}\n\n`,
+    );
+    let readCount = 0;
+    const body = {
+      getReader: () => ({
+        read: async () => (readCount++ === 0 ? { done: false, value: bytes } : { done: true, value: undefined }),
+        releaseLock: () => {},
+      }),
+    } as unknown as ReadableStream<Uint8Array>;
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      body,
+    } as Response);
+    mount();
+
+    await act(async () => {
+      await latest.send("hello", "session-1");
+    });
+
+    const request = latest.messages.find((message) => message.channel === "hitl_request");
+    const metadata = latest.messages.find(
+      (message) => message.channel === "system_note" && message.metadata?.extras?.pause_metadata,
+    );
+    expect(request?.parts[0].type).toBe("hitl_request");
+    expect(latest.messages.filter((message) => message.channel === "hitl_request")).toHaveLength(1);
+    expect(metadata?.metadata?.sources?.[0].uid).toBe("source-1");
+    expect(metadata?.metadata?.ui_parts?.[0].type).toBe("link");
+    expect(metadata?.metadata?.token_usage?.total_tokens).toBe(120);
+    expect(metadata?.metadata?.context_tokens).toBe(100);
+    expect(latest.messages.some((message) => message.role === "assistant" && message.channel === "final")).toBe(false);
+    fetchSpy.mockRestore();
+  });
+
   it("a user abort of an accepted stream reports no error and never re-requests", async () => {
     flushPendingWrites = async () => true;
     const read = deferred<ReadableStreamReadResult<Uint8Array>>();
@@ -1242,7 +1658,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     } as Response);
     mount();
 
-    let sendPromise!: Promise<void>;
+    let sendPromise!: Promise<boolean>;
     await act(async () => {
       sendPromise = latest.send("hello", "session-1");
       await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));

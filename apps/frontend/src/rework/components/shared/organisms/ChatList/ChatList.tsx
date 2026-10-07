@@ -25,6 +25,8 @@ import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import { ChatListItem } from "./ChatListItem/ChatListItem.tsx";
 import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
 import styles from "./ChatList.module.scss";
+import { KeyCloakService } from "../../../../../security/KeycloakService";
+import { clearToolApprovalGrants } from "@core/utils/toolApprovalGrants";
 
 type Session = NonNullable<
   ReturnType<typeof useGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery>["data"]
@@ -72,26 +74,30 @@ export default function ChatList({ teamId }: ChatListProps) {
   );
   const isEmpty = !isLoading && managedSessions.length === 0;
 
-  const handleDelete = (sessionId: string, href: string, label: string) => (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    showConfirmationDialog({
-      criticalAction: true,
-      title: t("rework.sidebar.chatList.deleteDialog.title"),
-      message: t("rework.sidebar.chatList.deleteDialog.message", { name: label }),
-      confirmButtonLabel: t("rework.sidebar.chatList.deleteDialog.confirm"),
-      cancelButtonLabel: t("rework.sidebar.chatList.deleteDialog.cancel"),
-      onConfirm: async () => {
-        await deleteSession({ teamId: teamId!, sessionId })
-          .unwrap()
-          .catch(() => {});
-        const sessionPath = href.split("?")[0];
-        if (window.location.pathname === sessionPath) {
-          navigate(`/team/${teamId}/agents`);
-        }
-      },
-    });
-  };
+  const handleDelete =
+    (sessionId: string, agentInstanceId: string, href: string, label: string) => (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      showConfirmationDialog({
+        criticalAction: true,
+        title: t("rework.sidebar.chatList.deleteDialog.title"),
+        message: t("rework.sidebar.chatList.deleteDialog.message", { name: label }),
+        confirmButtonLabel: t("rework.sidebar.chatList.deleteDialog.confirm"),
+        cancelButtonLabel: t("rework.sidebar.chatList.deleteDialog.cancel"),
+        onConfirm: async () => {
+          try {
+            await deleteSession({ teamId: teamId!, sessionId }).unwrap();
+            clearToolApprovalGrants({ userId: KeyCloakService.GetUserId(), agentInstanceId, sessionId });
+          } catch {
+            // Keep grants if deletion failed and the conversation still exists.
+          }
+          const sessionPath = href.split("?")[0];
+          if (window.location.pathname === sessionPath) {
+            navigate(`/team/${teamId}/agents`);
+          }
+        },
+      });
+    };
 
   const renderItem = (session: Session & { agent_instance_id: string }, showAgentName: boolean) => {
     const href = `/team/${teamId}/managed-chat/${session.agent_instance_id}?session=${session.session_id}`;
@@ -104,7 +110,7 @@ export default function ChatList({ teamId }: ChatListProps) {
         label={label}
         agentName={showAgentName ? agentNameByInstanceId.get(session.agent_instance_id) : undefined}
         dateLabel={formatSessionDate(session.updated_at)}
-        onDelete={handleDelete(session.session_id, href, label)}
+        onDelete={handleDelete(session.session_id, session.agent_instance_id, href, label)}
       />
     );
   };

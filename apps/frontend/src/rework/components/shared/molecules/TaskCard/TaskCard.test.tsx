@@ -45,10 +45,14 @@ function vm(overrides: Partial<TaskViewModel> = {}): TaskViewModel {
     step: null,
     error: null,
     lastSeq: -1,
+    stage: null,
+    conflict: null,
+    teamId: null,
     registeredAt: 1000,
     terminalAt: null,
     acknowledgedAt: null,
     warnings: null,
+    untracked: false,
     ...overrides,
   };
 }
@@ -90,5 +94,87 @@ describe("TaskCard ack affordance visibility", () => {
       <TaskCard task={vm({ state: "succeeded", acknowledgedAt: null })} onAcknowledge={() => {}} />,
     );
     expect(html).not.toContain("rework.tasks.card.acknowledge");
+  });
+});
+
+describe("TaskCard layout", () => {
+  it("leads with the state's colour, then the name", () => {
+    const html = renderToStaticMarkup(<TaskCard task={vm({ state: "running", step: "processing" })} />);
+
+    // The dot is what tells the state apart at a glance; it belongs at the
+    // start of the line the name is on, not after it.
+    expect(html.indexOf('role="img"')).toBeLessThan(html.indexOf("report.pdf"));
+  });
+
+  it("puts the progress bar at the bottom, under everything it describes", () => {
+    const html = renderToStaticMarkup(<TaskCard task={vm({ state: "running", step: "processing" })} />);
+
+    expect(html.indexOf("rework.tasks.time.justNow")).toBeLessThan(html.indexOf("progressbar"));
+  });
+
+  it("keeps the dismiss button in a toolbar that is there whether or not it is", () => {
+    // The buttons are twice the line's height: a row that sized itself would
+    // jolt the card every time one appeared.
+    const quiet = renderToStaticMarkup(<TaskCard task={vm({ state: "running" })} />);
+    const acting = renderToStaticMarkup(
+      <TaskCard task={vm({ state: "failed", acknowledgedAt: null })} onAcknowledge={vi.fn()} />,
+    );
+
+    expect(quiet).toContain("toolbar");
+    expect(acting).toContain("toolbar");
+  });
+});
+
+describe("TaskCard status line", () => {
+  it("truncates on the tooltip's own trigger, not on the row around it", () => {
+    // `text-overflow` acts on the block whose inline content overflows. Once a
+    // Tooltip wraps the text, that block is the trigger — and an unbounded
+    // trigger also anchors the panel to the full width of the untruncated
+    // text, which put it outside the card entirely.
+    const html = renderToStaticMarkup(
+      <TaskCard task={vm({ state: "running" })} statusText="A phase" statusDetail="What that phase does" />,
+    );
+
+    expect(html).toContain("truncate");
+    expect(html).toContain("A phase");
+  });
+
+  it("leaves the line alone when there is nothing to explain", () => {
+    const html = renderToStaticMarkup(<TaskCard task={vm({ state: "running" })} statusText="A phase" />);
+
+    expect(html).toContain("A phase");
+    expect(html).not.toContain("truncate");
+  });
+});
+
+describe("TaskCard trailing slot", () => {
+  it("shows the relative time when no caller claims the trailing corner", () => {
+    expect(renderToStaticMarkup(<TaskCard task={vm()} />)).toContain("rework.tasks.time.");
+  });
+
+  it("gives the corner to the caller's own content instead", () => {
+    // The import panel puts live phase markers there while a file moves, and
+    // takes them away once it settles — two things cannot share the corner.
+    const html = renderToStaticMarkup(<TaskCard task={vm()} trailingSlot={<b>markers</b>} />);
+    expect(html).toContain("markers");
+    expect(html).not.toContain("rework.tasks.time.");
+  });
+});
+
+describe("TaskCard filename", () => {
+  it("renders the whole name and lets the CSS ellipsis do the cutting", () => {
+    // A character count cut at the same place in a narrow card and a wide one,
+    // so a name that had room to spare was shortened anyway.
+    const name = `${"long-report-name-".repeat(4)}.pdf`;
+    const html = renderToStaticMarkup(<TaskCard task={vm({ target: target({ label: name }) })} />);
+    expect(html).toContain(name);
+    expect(html).not.toContain("…");
+  });
+
+  it("keeps the full name reachable on hover", () => {
+    const name = `${"long-report-name-".repeat(4)}.pdf`;
+    expect(renderToStaticMarkup(<TaskCard task={vm({ target: target({ label: name }) })} />)).toContain(
+      `title="${name}"`,
+    );
   });
 });

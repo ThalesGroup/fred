@@ -12,7 +12,19 @@
       "context": ".",
       "dockerfile": "apps/knowledge-flow-backend/dockerfiles/Dockerfile-prod",
       "build_args": "PRODUCTION_FASTAPI_DOCS_ENABLED=false",
-      "publish": true
+      "publish": true,
+      "pr_inputs_reason": "Its expensive build only depends on these paths: its own tree, its local libraries fred-core and fred-pod (closed: fred-core imports only fred-pod), the scripts it copies, the root alembic.ini and build context rules, and this selection itself. Adding a dependency edits a pyproject.toml already listed here, so the image rebuilds and a missing COPY still fails.",
+      "pr_inputs": [
+        "apps/knowledge-flow-backend/**",
+        "libs/fred-core/**",
+        "libs/fred-pod/**",
+        "scripts/**",
+        "alembic.ini",
+        ".dockerignore",
+        ".github/docker-images.json",
+        ".github/workflows/Docker-images.yml",
+        ".github/workflows/Check-docker-images.yml"
+      ]
     },
     {
       "name": "control-plane-backend",
@@ -33,9 +45,29 @@
       "context": "developer_tools/benchmarks",
       "dockerfile": "developer_tools/benchmarks/Dockerfile",
       "build_args": "",
-      "publish": false
+      "publish": false,
+      "scan": false
     }
   ],
+  "pr_selection": {
+    "rules": [
+      {
+        "paths": ["docs/**", "openspec/**", "*.md"],
+        "images": [],
+        "reason": "Documentation only: no image copies docs/, openspec/ or root Markdown files. Markdown under apps/ or libs/ is code (a README can be package metadata)."
+      },
+      {
+        "paths": ["apps/frontend/**"],
+        "images": ["frontend"],
+        "reason": "No other image copies the frontend application."
+      },
+      {
+        "paths": ["libs/frontend/**"],
+        "images": [],
+        "reason": "The npm package producer reads apps/frontend sources but no image copies it; Check pending request validates the packages."
+      }
+    ]
+  },
   "excluded": [
     {
       "dockerfile": ".devcontainer/Dockerfile-devcontainer",

@@ -12,11 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useTranslation } from "react-i18next";
+import type { StatusBadgeTone } from "../../atoms/StatusBadge/StatusBadge.tsx";
 import styles from "./KpiStatCard.module.scss";
 
-interface KpiStatCardProps {
+export interface KpiStatCardProps {
   label: string;
+  tone?: StatusBadgeTone;
+  loadingLabel?: string;
+  errorLabel?: string;
+  noDataLabel?: string;
   value?: number | null;
   delta?: number | null;
   unavailable?: boolean;
@@ -24,9 +28,18 @@ interface KpiStatCardProps {
   isError: boolean;
 }
 
-export default function KpiStatCard({ label, value, delta, unavailable, isLoading, isError }: KpiStatCardProps) {
-  const { t } = useTranslation();
-
+export default function KpiStatCard({
+  label,
+  tone = "neutral",
+  value,
+  delta,
+  unavailable,
+  isLoading,
+  isError,
+  loadingLabel = "Loading",
+  errorLabel = "Loading error",
+  noDataLabel = "No data",
+}: KpiStatCardProps) {
   const deltaClass =
     delta == null
       ? undefined
@@ -42,11 +55,11 @@ export default function KpiStatCard({ label, value, delta, unavailable, isLoadin
   const hasValue = !isLoading && !isError && !unavailable && value != null;
 
   return (
-    <section className={styles.card}>
+    <section className={styles.card} data-tone={tone}>
       <span className={styles.label}>{label}</span>
-      {isLoading && <span className={styles.state}>{t("common.loading")}</span>}
-      {isError && <span className={styles.stateError}>{t("common.loadingError")}</span>}
-      {isUnavailable && <span className={styles.state}>{t("common.noData")}</span>}
+      {isLoading && <span className={styles.state}>{loadingLabel}</span>}
+      {isError && <span className={styles.stateError}>{errorLabel}</span>}
+      {isUnavailable && <span className={styles.state}>{noDataLabel}</span>}
       {hasValue && (
         <div className={styles.valueRow}>
           <span className={styles.value}>{value!.toLocaleString()}</span>

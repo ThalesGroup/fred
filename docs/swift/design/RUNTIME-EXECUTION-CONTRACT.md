@@ -670,16 +670,16 @@ OpenAI-style markdown-first message bodies.
 Do not introduce structured `code` or `diagram` parts unless a concrete UI
 need proves markdown is insufficient and the contract is extended by RFC.
 
-**2026-06-18 — MCP filesystem-first file exchange (AGENT-FILESYSTEM):**
-`ArtifactPublisherPort` and `ResourceReaderPort` in `RuntimeServices`, and the
-associated SDK types (`ArtifactPublishRequest`, `PublishedArtifact`,
-`ResourceFetchRequest`, `FetchedResource`, `ArtifactScope`, `ResourceScope`) are
-removed or no longer exported in the fresh Swift target. Agents and graph nodes use
-the authenticated Knowledge Flow MCP filesystem through SDK `ctx.fs` / `context.fs`
-helpers or direct MCP tools. Generated files are written to filesystem paths and
-returned to chat as safe Fred/Knowledge Flow `LinkPart` download references. The
-`LinkPart` / `ui_parts` SSE contract is unchanged; runtime history must persist those
-parts so live streaming and replay match. See `docs/swift/design/FILESYSTEM.md`.
+**2026-06-18 — historical file-exchange decision, retired by #2984/#2986:**
+The MCP filesystem and generic SDK `ctx.fs` / `context.fs` helpers described in
+the original decision are no longer available. The retained PPT Filler path uses
+`RuntimeServices.workspace_fs.write` for generated files and
+`RuntimeServices.agent_assets` for its configured template; the authenticated
+Knowledge Flow binary `/fs` transport supplies its download link. The
+`LinkPart` / `ui_parts` SSE contract is unchanged, and runtime history persists
+those parts so live streaming and replay match. Corpus documents, attachments,
+Deep conversation files, Wiki and writable documents use their separate
+contracts. See `docs/swift/design/FILESYSTEM.md`.
 
 ---
 
@@ -899,7 +899,10 @@ The Rico system prompt (`basic_react_rag_expert_system_prompt.md`) was also
 rewritten to add explicit `[N]` citation format rules, inline placement
 requirements, and a "never reproduce URLs" guardrail.
 
-### 8.8 ✅ `artifacts.publish_text` — `key` arg removed — FILES-04 (June 2026)
+### 8.8 Historical: `artifacts.publish_text` — retired by #2986
+
+The whole legacy tool was subsequently removed. The note below records its
+June 2026 schema correction and does not describe a current agent tool.
 
 **Was**: `ArtifactPublishTextToolArgs` (`fred-sdk` builtin catalog) exposed an
 optional `key` "logical storage key" field with the promise *"leave empty to let
@@ -2611,9 +2614,9 @@ the `folder:` form. Regression tests:
 > delayed-Keycloak, two-SSE-stream pod test. That one is not merely unrun — it
 > is currently *unrunnable*, because `_authorize_and_resolve` nulls
 > body-supplied refresh tokens and no producer supplies one, so nothing can
-> drive a real refresh end to end. It stays owed until
-> `DELEGATED-DOWNSTREAM-AUTH-RFC.md` lands or the criterion is formally
-> revised. See the TURN-07 dossier for the full accounting.
+> drive a real refresh end to end. Delegated execution
+> ([`DELEGATED-EXECUTION.md`](../platform/DELEGATED-EXECUTION.md)) removes the
+> need for it when `act_for_people` is on. See the TURN-07 dossier for the full accounting.
 
 **Enforces §0.2 invariant #2 on the last path that violated it.**
 `refresh_user_access_token_from_keycloak` was a synchronous `httpx.post(...,
@@ -2690,9 +2693,10 @@ Two consequences, and the second is the one that matters:
 Restoring delegated refresh is **not** simply re-adding the producer: F-B
 neutralizes body-supplied refresh tokens deliberately, and giving a pod a user's
 long-lived refresh token is a security decision, not a bug fix. The design for
-closing the root cause is `docs/swift/rfc/DELEGATED-DOWNSTREAM-AUTH-RFC.md`
-(token exchange at admission) — written, not implemented, awaiting its own
-issue. §8.49 and §8.50 record the two no-RFC mitigations landed alongside this
+The root cause was closed differently: with `act_for_people` on, downstream
+calls present a renewable workload token plus a person grant instead of the
+person's bearer ([`DELEGATED-EXECUTION.md`](../platform/DELEGATED-EXECUTION.md));
+with it off, the person's bearer is still forwarded. §8.49 and §8.50 record the two no-RFC mitigations landed alongside this
 change.
 
 **Contract-visible signature changes** (all internal to `fred-runtime`; the
@@ -2769,8 +2773,8 @@ bookkeeping. Any last-waiter-cancels scheme races the waiters' own resumption
 401-recovery handler misses — killing turns instead of degrading them. The
 accepted cost is a rotation nobody consumes (the exchange completes, Keycloak
 invalidates the presented token, the replacement is dropped): the
-protocol-inherent lost-rotation race already recorded as
-`DELEGATED-DOWNSTREAM-AUTH-RFC.md` open question 8, which degrades to one
+protocol-inherent lost-rotation race (Keycloak invalidates the presented
+refresh token before the response arrives), which degrades to one
 `invalid_grant` retry. Each waiter also receives its **own** copy of the
 payload, since one task resolves to one object and a shared mutable dict would
 let the first mutator corrupt what its peers already read.
@@ -2779,7 +2783,7 @@ let the first mutator corrupt what its peers already read.
 earlier refresh completed finds no in-flight entry and presents a token Keycloak
 has already consumed, so it still gets `invalid_grant`. Closing that needs a
 cached result keyed on the pre-rotation token — live credentials held in pod
-memory, an AUTH-TX decision rather than a refresher one.
+memory, which delegated execution avoids by holding no refresh token.
 
 **A 2xx is not a promise of a token.** The success path validates the response
 shape — JSON object, non-empty string `access_token`, and an `expires_in` that
@@ -2979,12 +2983,11 @@ server still accepts. And
 `createKeycloakInstance` registers `onAuthLogout` to drop the persisted copy
 the moment Keycloak ends the session. The removal is hygiene against the app's
 own fallback, not a boundary — anything running in the page could keep a copy
-of the token regardless; only the 300 s TTL (and, eventually, the RFC's
-server-side exchange) actually bounds a leaked bearer.
+of the token regardless; only the 300 s TTL actually bounds a leaked bearer.
 
 This narrows the window; it does not close it (a turn can still outlive a
-120–300 s token). The close is `DELEGATED-DOWNSTREAM-AUTH-RFC.md` (token
-exchange at admission), deliberately not implemented here.
+120–300 s token). The close is delegated execution with `act_for_people` on
+([`DELEGATED-EXECUTION.md`](../platform/DELEGATED-EXECUTION.md)).
 
 Regression tests: `useChatSse.test.tsx` (refusal below the hard floor, degraded
 proceed above it, HITL refusal reporting not-reached with no optimistic
@@ -3571,9 +3574,8 @@ route, no plumbing duplication.
 
 **Bounded context.** `CorpusTreeService` is a read-only projection over the
 already-ingested corpus — it stores no bytes, accepts no writes, and is
-intentionally distinct from the future `WorkspaceService` (mutable,
-persistent user/agent files, currently implemented under `/fs`). See
-`FILESYSTEM.md` "Business labels vs. scope tags".
+intentionally distinct from the retired general-purpose user/agent filesystem.
+See `FILESYSTEM.md` "Business labels vs. scope tags".
 
 Tests: `test_corpus_tree_builder.py` (renderer invariant),
 `test_corpus_tree_service.py`, `test_metadata_service_labels.py` +
@@ -4954,6 +4956,10 @@ inspection.
 
 ### 8.69 ✅ MCP tool descriptions stop carrying response schemas — issue #2412 item 2 (2026-08-28)
 
+This section records the August 2026 measurements. The filesystem and corpus
+MCP mounts, and later the corpus-manager HTTP API, were retired by #2984;
+the corresponding follow-up findings below are historical.
+
 **What changed.** No MCP tool description carries response documentation any
 more. Two steps, landed together in knowledge-flow's `main.py`:
 
@@ -5077,12 +5083,8 @@ consolidation phase's scope-discipline rule — each is its own change):
    `corpus_manager_controller`'s `corpus_repair_vector_metadata` exist in
    code but not in the committed spec. Runtime is unaffected (`FastApiMCP`
    reads the live app), but the committed spec feeds frontend codegen.
-7. **`mcp-web-github-readonly` is `enabled: true` but inert**: catalog
-   declares `transport: inprocess, provider: web_github_readonly`, while
-   `build_inprocess_toolkit` (`inprocess_toolkit_registry.py`) only knows
-   `kf_vector_search`. It logs "no toolkit built for provider=..." and
-   contributes zero tools. No prompt pollution — `build_runtime_tool_prompt_suffix`
-   already skips empty groups — but it is a dead entry in the capability picker.
+7. **Resolved 2026-09-30:** the unimplemented GitHub catalog entry was removed
+   with the legacy local MCP transport (see §8.104).
 
 ---
 
@@ -6245,19 +6247,31 @@ ReAct and Deep parent/child frames may recover a tool call only at the completed
 assistant-message boundary, only for a Mistral-qualified response, and only when
 the reconstructed provider content contains the exact empty typed sentinel
 `{"type":"reference","reference_ids":[]}` between a registered tool name
-and strict JSON arguments. Prose before, between, or after valid calls remains
-assistant content; the calls execute. Non-empty citation references, extra
-reference fields, literal exporter placeholders, duplicate JSON keys, unknown
-tools, schema-invalid arguments and over-cap representations remain assistant
-text. The exact empty sentinel is distinct from ordinary cited-answer blocks,
-which carry reference IDs.
-Native tool calls, including duplicates, are preserved unchanged.
+and JSON arguments. Literal CR/LF inside a quoted JSON string are accepted;
+other raw control characters remain invalid. Arguments are checked against the
+model-visible tool schema and the full input schema, using a temporary call ID
+only for an injected `tool_call_id` so cross-field validators still run. The bounded content list may mix typed text blocks
+and plain string fragments; their original order and bytes are retained even
+when they split a tool name or JSON argument. A response may contain several
+exact sentinels when each follows a registered tool name and every resulting
+call validates. The whole candidate is rejected if a later marker or call is
+invalid. Prose before, between, or after valid calls remains assistant content;
+the calls execute. Non-empty citation references, extra reference fields,
+literal exporter placeholders, duplicate JSON keys, unknown tools,
+schema-invalid arguments and over-cap representations remain assistant text.
+The exact empty sentinel is distinct from ordinary cited-answer blocks, which
+carry reference IDs. Native tool calls, including duplicates and their IDs, are
+preserved unchanged.
 
 Recovery is bounded, validates every call before allocating call IDs, and marks
 the normalized message so the Mistral-gated streaming bridge withholds the typed
-marker and call syntax from assistant/reasoning SSE. Only the longest suffix
-that remains a prefix of a registered tool name is held while the marker is
-unresolved; ordinary and non-Mistral text is released unchanged. Each completed
+marker and call syntax from assistant/reasoning SSE for the same mixed content
+shape. If a completed message already carries native calls and marked content,
+the bridge discards pending encoded syntax instead of publishing it as a Planning
+preamble; safe prose emitted before the tool-name probe is retained. Only
+the longest suffix that remains a prefix of a registered tool name is held
+while the marker is unresolved; ordinary, unrecognized-block,
+and non-Mistral text is released unchanged. Each completed
 representation is normalized at most once and then follows the normal tool
 route: existing limits run before HITL proposals, approved calls execute through
 tool observability, and every call keeps normal `ToolMessage` pairing. Recovery
@@ -6341,7 +6355,6 @@ Tool-name collision checks, authorization, audit and HITL are unchanged.
 Identity, services and typed capability options already use one assembly path;
 model middleware and MCP prompt injection remain specific to ReAct/Deep.
 
-
 ### 8.98 Prompt command descriptor on a user turn (2026-09-28)
 
 `RuntimeContext` gains an optional `command` — the prompt command a turn was
@@ -6360,3 +6373,160 @@ selects a renderer and nothing more, and a malformed value is dropped rather
 than failing the turn. `prompt_id` is attribution, never resolved at display
 time — a prompt is overwritten on edit and can be deleted, so the turn's own
 text is the record of what was sent.
+
+### 8.99 Agent-initiated human questions
+
+An interactive ReAct or Deep turn exposes the platform `ask_user` tool only when
+`RuntimeContext.ask_user` is explicitly `true`. Graph steps may invoke the same
+platform tool explicitly under that control. An absent value or `false` leaves
+the tool unavailable; ReAct and Deep also omit it from the model catalog. The tool accepts a nonblank question, an optional short subject title, up to
+four distinct single-choice options, and/or free text. Two or more choices
+automatically allow a text answer even when the agent sets `allow_free_text=false`;
+zero- and one-choice questions follow that flag. The agent selects the most
+relevant options before calling; a longer list is rejected, never trimmed.
+Its injected tool call ID is hidden from
+the model and becomes the `HumanInputRequest.occurrence_id`; the platform sets
+`stage="agent_question"`. A collision with a declared, provider or capability
+tool named `ask_user` rejects executor construction.
+
+A pending human interrupt is the turn's result until the person responds. If an
+earlier tool call failed and the agent recovered by asking a valid question, the
+stream retains the failed tool trace but emits no stale failure as a final answer.
+The pause event carries sources, UI parts, model usage and context size accumulated
+before the interrupt. History stores them in a metadata-only system note
+before deduplicating the HITL request row; managed chat combines each pause
+segment with the resumed answer in the same exchange. For parallel pending
+questions, the stream attaches shared metadata only to the first pause event
+so usage is counted once, even when that request was previously surfaced.
+Managed chat also reads metadata stored on older HITL request rows.
+
+The tool pauses through LangGraph before any external effect. A resume must carry
+the pending interrupt and occurrence IDs. After authorization and before the
+single-use claim, the runtime validates a selected option against the pending
+question. `resume_payload` may be `{"choice_id":"id"}`, `{"text":"..."}`,
+both fields, or `{"skipped":true}`. Skip cannot carry an answer. The tool result
+is compact JSON with `status="answered"` and the supplied fields, or
+`status="skipped"` and a French or English `instruction` that tells the agent to continue with stated assumptions. The turn language chooses French when it starts with `fr`; English is the fallback. Each sibling question keeps its own tool call identity.
+Approval gates retain their existing resume behavior and do not accept skip.
+A Graph question pause leaves its tool call in progress; only the resumed call
+emits a tool result. The no-LLM Graph test assistant exercises confirmation,
+choice, free text, and choice with comment through this platform tool.
+
+Managed chat groups simultaneous agent questions in one HITL card with short
+subject tabs in call order. Tabs scroll horizontally when needed, and older
+questions without titles use localized numbered labels. The first unanswered
+question is selected initially. Selecting a choice or skipping stages that
+answer and advances to the next unanswered tab. The person can revisit any
+tab and change its answer. Once every tab has an answer or skip, one Send
+resumes all pending calls in a single backend request. The card remains visible
+until that request succeeds and retains every draft if it fails. Reload
+reconstructs unanswered siblings from history by occurrence ID.
+
+A batch resume uses `resume_payload={"answers":[{"interrupt_id":"...",
+"occurrence_id":"...","answer":{...}},...]}` without top-level interrupt or
+occurrence IDs. The request must cover the exact pending set of agent questions.
+The runtime validates each answer, claims the occurrences in one database
+transaction, and resumes LangGraph once with an interrupt-ID-to-answer map.
+It persists one response row per occurrence. Existing single-answer resumes
+remain valid.
+
+`HitlResponsePart.skipped` is optional and defaults to false for old history.
+A skipped question writes a response row even without choice or text. Graph
+choice helpers expose the same typed answer through `choice_step_response`;
+`choice_step` keeps its string return contract for existing authors.
+
+### 8.100 Explicit continuation of unfinished Graph work (revised 2026-10-04)
+
+Graph agents await checkpoint persistence before the next step. Pending work without
+HITL is unfinished execution, not evidence that a process died or an external operation
+failed. Errors and step limits are reported without clearing the continuation point.
+A later authorized request receives `execution_interrupted` and a current opaque
+`interruption_id`; discovery runs no step and writes no fictitious history or turn KPI.
+
+`interrupted_action="continue"` requires that id, empty input and no HITL payload.
+It continues with saved state and current authorization, without a user row. `restart`
+starts a new turn and does not undo prior external effects. The chat also offers Later,
+a local dismissal that leaves saved work intact. HTTP refusals restore controls;
+accepted streams are never automatically replayed. Stop intent survives navigation,
+but not reload, and is consumed only on HTTP acceptance.
+
+The author must persist operation identity and content before an external call and
+provide safe replay or reconciliation. A durable receipt permits finalization without
+republishing. Fred does not provide exactly-once external delivery. The supported usage
+has one active execution per Graph conversation; ordinary-turn/Restart races, partitions
+and late writers are not coordinated. Agent definitions must remain compatible with
+saved state. ReAct/Deep and ordinary HITL retain their existing behavior. Non-interactive
+Graph callers retain their documented restart behavior.
+
+Authoring and acceptance scenarios: `openspec/changes/resume-interrupted-graph-execution/`.
+This slice does not complete the broader external-effect contract in #2892.
+
+### 8.101 Bounded admission for technical continuation (revised 2026-10-04)
+
+Technical Continue uses the existing PostgreSQL transaction advisory lock or local
+SQLite POSIX file lock, not a permanent HITL claim. It validates the checkpoint inside
+admission and closes the underlying engine stream before releasing ownership. This
+rejects overlapping continuations while held; it does not establish global ownership
+against ordinary turns, Restart or external requests surviving cancellation.
+
+PostgreSQL requires at least two base pool connections (or NullPool), reserves at most
+half the base pool for continuations and disables transaction timers locally while
+holding admission. File-backed SQLite uses `<database>.graph-locks/`; do not remove
+sidecars while any runtime process is running. Unsupported providers reject Continue.
+No schema migration, claim purge, lease or heartbeat is introduced.
+
+### 8.102 Capability config copy and scope classification (2026-10-04)
+
+Additive. `POST /agents/capabilities/{id}/copy-config` (body `CapabilityConfigCopyRequest`:
+source envelope, source and target team and agent instance) returns the target
+`StoredCapabilityConfig`, or 404 when the capability is not installed and 422 when it
+cannot be prepared for the target. When the teams differ, settings declared
+`ScopePrivate` (or `FieldSpec.scope_private: true` for catalog-declared keys) go back to
+their default. Every `AssetKey` file is read in the source and re-submitted to the
+capability's `validate_config` in the target, with the caller's token on both sides.
+The response is `CapabilityConfigCopyResult`: the envelope plus `notices`. In another
+scope, `SaveContext.copied_from_another_scope` is true: a capability may then leave a
+reference the target lacks unset instead of rejecting, and append to
+`SaveContext.notices` what an editor must redo (ppt-filler: image folders missing in
+the target).
+Teams are the only scope today; the classification is scope-based so that it holds for
+future kinds of scope. `FieldSpec` gains the optional `scope_private`. Authoring rule:
+`capabilities/AUTHORING.md` "Scope-private settings". Acceptance:
+`openspec/changes/copy-agent-across-teams/`.
+
+### 8.103 MCP catalog packages use SDK capability primitives (2026-09-29)
+
+`McpCapability`, its prompt/configuration types and builders now live in
+`fred_sdk.contracts.capability.mcp`; runtime imports remain compatibility aliases.
+`fred_sdk.resources.mcp` owns YAML validation and instruction resource loading.
+Pods discover installed `fred.mcp_catalogs` providers when no whole-catalog
+replacement is selected. An optional `mcp_catalog_external.yaml` adds
+deployment-owned servers to those providers; duplicate IDs fail startup.
+`fred-capability-mcp` supplies only Fred's internal servers and prompt files;
+transport and capability registration consume the same resolved server list.
+See `openspec/specs/mcp-capabilities/spec.md` for precedence and failure behavior.
+Server IDs, team policies, composer controls, prompt rendering and API payloads
+are unchanged; live MCP clients remain runtime-owned.
+
+`fred_sdk.contracts.services` defines typed Fred service identifiers and the
+`ServiceEndpointsPort` address contract. Runtime `ConfiguredServiceEndpoints`
+implements it from existing pod configuration and supplies it to catalog loaders
+at boot. Internal HTTP entries declare `service` + `path`; their resolved URLs
+preserve the configured port and API prefix. Service references are catalog-only metadata,
+absent from capability payloads; concrete deployment-owned URLs remain supported.
+
+### 8.104 Retire local MCP transport and duplicate document search (2026-09-30)
+
+MCP configuration no longer accepts `inprocess` or exposes a `provider` field;
+local toolkit factories and lifecycle support have been removed. Native capability
+invokers remain available. The old document-search MCP and unimplemented GitHub
+entry are absent from packaged and Helm catalogs. ReAct RAG, Mindmap and Comparison
+keep their template IDs and now default to `document_access`.
+
+Control-plane revision `ba2c3c7fd0c1` removes legacy RAG and GitHub selections
+and configuration from stored tuning, including their historical `mcp:`-prefixed
+forms; it does not select a replacement or change grants/suspensions. A revision
+already applied before this combined cleanup must be reapplied as described in
+the operator migration note.
+See the migration note at `docs/swift/ops/migrations/extract-mcp-agent-instructions.md`
+and `openspec/specs/mcp-capabilities/spec.md` for the current contract.

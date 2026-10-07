@@ -32,8 +32,8 @@ export const PPT_FILLER_TEMPLATE_KEY = "ppt_filler_template.pptx";
 /**
  * Percent-encodes each segment the way the runtime's own KF client does
  * (`quote(path, safe="/")`): `encodeURI` would leave `#`, `?` and `&` raw, and
- * the `/fs/download/{path:path}` route carries a real `token` query param — a
- * raw `?` in an id would silently truncate the path into a query string.
+ * a raw `?` in an id would silently truncate the `/fs/download/{path:path}`
+ * path into a query string.
  */
 function encodePath(segments: string[]): string {
   return segments.map(encodeURIComponent).join("/");

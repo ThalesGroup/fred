@@ -56,6 +56,7 @@ from fred_sdk.contracts.capability import (
     StoredCapabilityConfig,
     ToolCarrierMiddleware,
 )
+from fred_sdk.contracts.capability.mcp import McpCapability, McpPromptGroup
 from fred_sdk.contracts.runtime import RuntimeServices
 from langchain.agents.middleware import AgentMiddleware
 from langchain_core.tools import BaseTool
@@ -68,7 +69,6 @@ from .errors import (
     CapabilityConfigInvalidError,
     TurnOptionsInvalidError,
 )
-from .mcp import McpCapability, McpPromptGroup
 from .registry import CapabilityRegistry
 
 

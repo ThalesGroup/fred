@@ -22,6 +22,18 @@
   gap: var(--spacing-xs);
 }
 
+/* Search takes the width; the favorites toggle keeps its own size beside it. */
+.searchRow {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.searchRow > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
 /* The list is the only part that scrolls: the space picker, the search field
    and the category chips stay reachable however long the list gets. */
 .list {
@@ -36,6 +48,17 @@
   list-style: none;
 }
 
+.item {
+  position: relative;
+}
+
+/* Over the row's top-right corner; the row keeps its text clear of it. */
+.favorite {
+  position: absolute;
+  top: var(--spacing-2xs);
+  right: var(--spacing-2xs);
+}
+
 .row {
   display: flex;
   flex-direction: column;
@@ -44,7 +67,7 @@
   border: 1px solid var(--outline-muted);
   border-radius: var(--radius-s);
   background: none;
-  padding: var(--spacing-xs) var(--spacing-s);
+  padding: var(--spacing-xs) var(--spacing-xl) var(--spacing-xs) var(--spacing-s);
   width: 100%;
   text-align: left;
 }

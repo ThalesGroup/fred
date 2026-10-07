@@ -41,7 +41,8 @@ interface TeamSelectionListItemProps {
   roles?: UserTeamRelation[];
   /** Personal space: renders the user's initials avatar and hides the role line. */
   personal?: boolean;
-  /** Team banner image; when absent, coloured initials are shown instead. */
+  /** Team banner image, or the user's picture for the personal space; when
+   *  absent, initials are shown instead. */
   imgUrl?: string;
   /** Initials source — the user's full name for the personal space, the team
    *  name for a team's fallback avatar. */
@@ -76,11 +77,11 @@ export default function TeamSelectionListItem({
       : heldRoles.map((relation) => t(`rework.teamRoles.${relation}`)).join(" · ");
 
   return (
-    <Link to={redirection} className={styles.item} aria-label={name}>
+    <Link to={redirection} className={`${styles.item}${personal ? ` ${styles.itemPersonal}` : ""}`} aria-label={name}>
       {personal ? (
-        <UserAvatar name={avatarName} size="small" />
+        <UserAvatar name={avatarName} size="small" imageUrl={imgUrl} />
       ) : imgUrl ? (
-        <img className={styles.avatar} src={imgUrl} alt="" />
+        <img className={styles.avatar} src={imgUrl} alt="" width={32} height={32} decoding="async" />
       ) : (
         <TeamInitials className={styles.avatar} name={avatarName} size="small" color={avatarColor} />
       )}

@@ -522,3 +522,35 @@ were also independently checked against the downloaded ZIP bytes. The extracted
 candidate archive's SHA-512 matched the public coordinate and retained final
 record. The artifacts are retention-limited; their recorded identities and
 results do not authorize rebuilding or replacing the published bytes.
+
+## UI alpha.3 candidate (superseded)
+
+The hosted-application component extension prepares only `@fred-oss/ui@0.1.0-alpha.3`.
+Select `ui` under the ordinary independent-release procedure above. Keep the
+compatible published token baseline and unrelated SDK coordinate unchanged.
+Run producer regression, archive checks, the isolated React consumer including
+type-negative cases, and both-theme browser smoke before preparing immutable
+candidate evidence. This source change does not publish alpha.3 or record it as
+verified in the public registry; use the protected workflow for publication and
+subsequent genuine registry verification.
+
+## Next library release candidates
+
+The next release set is `@fred-oss/design-tokens@0.1.0-alpha.4`,
+`@fred-oss/ui@0.1.0-alpha.4`, and `@fred-oss/iframe-sdk@0.1.0-alpha.4`.
+The UI candidate supersedes the unpublished alpha.3 coordinate above and includes
+its hosted-application extensions. Token consumers should review the removals and
+replacements in [the token migration notes](design-tokens/README.md).
+
+The token alpha.4 candidate supersedes the unpublished alpha.2 candidate so all
+three packages share this release coordinate. This is a release-set alignment;
+independent package selection remains supported. Upgrade UI and design tokens
+together to alpha.4: compatibility with earlier UI/token combinations is not a
+release requirement, and no compatibility aliases are added for this prerelease.
+Prepare fresh archives after this version change; the earlier token alpha.2
+candidate must not be reused for publication.
+
+After merge into `swift`, select `designTokens,ui,iframeSdk` in the protected
+workflow using the ordinary independent-release procedure. These are preparation
+coordinates only; publication and registry verification remain separate steps.
+Historical publication evidence and compatibility baselines remain unchanged.

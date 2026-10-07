@@ -43,7 +43,7 @@ from __future__ import annotations
 
 import time as time_module
 from typing import Any, Iterable, cast
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from _rebac_test_doubles import CountingRebacEngine
@@ -51,6 +51,7 @@ from control_plane_backend.teams import service as teams_service
 from control_plane_backend.teams.dependencies import TeamServiceDependencies
 from control_plane_backend.teams.schemas import UserTeamRelation
 from control_plane_backend.teams.service import _enrich_teams_with_membership
+from control_plane_backend.users.schemas import UserSummary
 from fred_core import RebacReference, Relation, RelationType, Resource
 from fred_core.common import TeamId
 from fred_core.teams.metadata_store import TeamMetadata
@@ -87,6 +88,7 @@ def _fake_deps() -> TeamServiceDependencies:
         get_purge_queue_store=cast(Any, object),
         get_policy_catalog=cast(Any, object),
         get_users_by_ids=cast(Any, _fake_get_users_by_ids),
+        attach_avatar_urls=AsyncMock(side_effect=lambda summaries: summaries),
         search_users=cast(Any, _fake_search_users),
         run_lifecycle_manager_once_in_memory=cast(Any, lambda _input: object()),
     )
@@ -235,3 +237,68 @@ async def test_team_relations_cache_invalidated_on_membership_write() -> None:
     )
     assert len(engine.list_direct_relations_calls) == 3
     assert engine.list_direct_relations_calls[-1][0].id == team_ids[0]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("with_active_admin", [False, True])
+async def test_team_listing_includes_pending_admin_contacts(
+    with_active_admin: bool,
+) -> None:
+    team_id = TeamId("team-0")
+    relations = [
+        Relation(
+            subject=RebacReference(Resource.USER, uid),
+            relation=relation,
+            resource=RebacReference(Resource.TEAM, team_id),
+        )
+        for uid, relation in [
+            ("pending", RelationType.PENDING_TEAM_ADMIN),
+            ("pending", RelationType.TEAM_EDITOR),
+            ("member", RelationType.TEAM_MEMBER),
+        ]
+    ]
+    if with_active_admin:
+        relations.extend(
+            Relation(
+                subject=RebacReference(Resource.USER, "active"),
+                relation=relation,
+                resource=RebacReference(Resource.TEAM, team_id),
+            )
+            for relation in (RelationType.TEAM_ADMIN, RelationType.PENDING_TEAM_ADMIN)
+        )
+    engine = CountingRebacEngine(direct_relations=relations)
+    deps = _fake_deps()
+    deps.configuration.app.team_admin_charter_version = "2026-09"
+    summary_calls: list[set[str]] = []
+
+    async def get_users_by_ids(ids: Iterable[str]) -> dict[str, UserSummary]:
+        summary_calls.append(set(ids))
+        return {
+            uid: UserSummary(id=uid, first_name=uid.capitalize(), last_name="Admin")
+            for uid in ids
+        }
+
+    deps.get_users_by_ids = get_users_by_ids
+    [team] = await _enrich_teams_with_membership(
+        engine,
+        user=cast(Any, type("User", (), {"uid": "pending"})()),
+        teams_metadata=_teams(1),
+        deps=deps,
+    )
+
+    expected_ids = {"pending", "active"} if with_active_admin else {"pending"}
+    assert {admin.id for admin in team.admins} == expected_ids
+    assert len(team.admins) == len(expected_ids)
+    assert {admin.first_name for admin in team.admins} == {
+        uid.capitalize() for uid in expected_ids
+    }
+    assert summary_calls == [expected_ids]
+    assert team.member_count == (3 if with_active_admin else 2)
+    assert team.is_member is True
+    assert set(team.my_relations) == {
+        UserTeamRelation.PENDING_TEAM_ADMIN,
+        UserTeamRelation.TEAM_EDITOR,
+    }
+    assert len(engine.list_direct_relations_calls) == 1
+    assert engine.lookup_subjects_calls == 0
+    assert engine.lookup_resources_calls == 0

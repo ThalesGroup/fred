@@ -22,6 +22,7 @@ from fred_pod.security.backend_to_backend_auth import (
     TokenLease,
     make_m2m_asgi_client,
 )
+from fred_pod.security.oidc_endpoints import OidcEndpoints, resolve_endpoints
 from fred_pod.security.structure import (
     LOCAL_DEV_CLIENT_ID,
     SERVICE_AGENT_ROLE,
@@ -45,6 +46,7 @@ __all__ = [
     "M2MBearerAuth",
     "M2MSecurity",
     "M2MTokenProvider",
+    "OidcEndpoints",
     "RefreshableTokenProvider",
     "TokenLease",
     "OpenFgaRebacConfig",
@@ -56,4 +58,5 @@ __all__ = [
     "UserSecurity",
     "is_service_agent",
     "make_m2m_asgi_client",
+    "resolve_endpoints",
 ]

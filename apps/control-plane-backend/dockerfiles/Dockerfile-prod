@@ -25,7 +25,7 @@ COPY libs/fred-pod /workspace/libs/fred-pod
 COPY libs/fred-core /workspace/libs/fred-core
 COPY libs/fred-sdk /workspace/libs/fred-sdk
 
-RUN make dev VENV=/app/venv TARGET=/app/target
+RUN make prod VENV=/app/venv TARGET=/app/target
 
 # -----------------------------------------------------------------------------
 # FINAL STAGE
@@ -37,6 +37,10 @@ ARG USER_ID=1000
 ARG GROUP_ID=1000
 ARG PRODUCTION_FASTAPI_DOCS_ENABLED=false
 
+RUN apt-get update && \
+    apt-get upgrade -y --no-install-recommends && \
+    rm -rf /var/lib/apt/lists/*
+
 RUN groupadd -g ${GROUP_ID} ${USER_NAME} && \
     useradd -u ${USER_ID} -g ${GROUP_ID} -m ${USER_NAME}
 
@@ -46,7 +50,7 @@ ENV PRODUCTION_FASTAPI_DOCS_ENABLED=${PRODUCTION_FASTAPI_DOCS_ENABLED}
 
 WORKDIR /app
 
-# `make dev` installs the local projects in editable mode, so the runtime image
+# `make prod` installs the local projects in editable mode, so the runtime image
 # must keep the same source roots available under `/workspace/...`.
 COPY --chown=${USER_ID}:${GROUP_ID} apps/control-plane-backend/pyproject.toml /workspace/apps/control-plane-backend/pyproject.toml
 COPY --chown=${USER_ID}:${GROUP_ID} apps/control-plane-backend/README.md /workspace/apps/control-plane-backend/README.md

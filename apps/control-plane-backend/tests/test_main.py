@@ -26,10 +26,12 @@ Ref: docs/backlog/BACKLOG.md §3d — managed agent CRUD, enrollment, update, tu
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Optional, cast
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -444,6 +446,7 @@ class _FakePromptStore:
 
     def __init__(self, records: list[PromptRecord] | None = None) -> None:
         self._records: list[PromptRecord] = list(records or [])
+        self._favorites: set[tuple[str, str]] = set()
 
     async def create(self, record: PromptRecord) -> PromptRecord:
         if any(
@@ -496,6 +499,23 @@ class _FakePromptStore:
             )
             if record.command is not None
         ]
+
+    async def favorite_ids(self, user_id: str, prompt_ids: list[str]) -> set[str]:
+        return {pid for pid in prompt_ids if (user_id, pid) in self._favorites}
+
+    async def set_favorite(self, user_id: str, prompt_id: str, favorite: bool) -> None:
+        if favorite:
+            self._favorites.add((user_id, prompt_id))
+        else:
+            self._favorites.discard((user_id, prompt_id))
+
+    async def delete_favorites_for_team(self, user_id: str, team_id: object) -> None:
+        team_prompts = {
+            r.prompt_id for r in self._records if str(r.team_id) == str(team_id)
+        }
+        self._favorites = {
+            (u, p) for u, p in self._favorites if u != user_id or p not in team_prompts
+        }
 
     async def get(self, prompt_id: str) -> PromptRecord | None:
         return next((r for r in self._records if r.prompt_id == prompt_id), None)
@@ -917,8 +937,10 @@ async def test_frontend_bootstrap_returns_typed_phase_3a_surface() -> None:
     assert payload["available_teams"][0]["id"] == _PERSONAL_TEAM_ID
     assert payload["gcu_version"] == "V1"
     assert payload["team_admin_charter_enabled"] is False
-    assert payload["feature_flags"]["enableK8Features"] is False
-    assert payload["feature_flags"]["enableApplications"] is False
+    assert payload["feature_flags"] == {
+        "enableApplications": False,
+        "enableInformationSystems": False,
+    }
     assert "ui_settings" not in payload
     # AUTHZ-05 review item 11: `permissions` only ever carries the
     # OpenFGA-derived role list now — the Keycloak-role-derived `items` list
@@ -1706,8 +1728,13 @@ async def test_prepare_execution_returns_ingress_relative_urls(
     )
     assert payload["supports_streaming"] is True
     assert payload["supports_hitl"] is True
-    # #1976: no selected capabilities → no computed chat controls.
-    assert payload["chat_controls"] == []
+    assert payload["chat_controls"] == [
+        {
+            "capability_id": "platform",
+            "widget": "ask_user_toggle",
+            "params": {"default": True},
+        }
+    ]
     # RUNTIME-07 rev. 2: no signed grant in the response — the control-plane issues
     # no capability; the pod authenticates via Keycloak and authorizes via OpenFGA.
     assert "execution_grant" not in payload
@@ -3286,6 +3313,7 @@ def _build_erasure_deps(
         get_team_routing_policy_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_platform_model_binding_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_platform_prompt_store=lambda: None,  # type: ignore[arg-type,return-value]
+        get_platform_ui_settings_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_announcement_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_model_reasoning_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_session_metadata_store=lambda: session_store,  # type: ignore[arg-type,return-value]
@@ -5977,6 +6005,7 @@ async def test_enrich_teams_with_membership_resolves_banner_and_metadata_fields(
         get_purge_queue_store=cast(Any, object),
         get_policy_catalog=cast(Any, object),
         get_users_by_ids=_fake_get_users_by_ids,
+        attach_avatar_urls=AsyncMock(side_effect=lambda summaries: summaries),
         search_users=_fake_search_users,
         run_lifecycle_manager_once_in_memory=cast(Any, lambda _input: object()),
     )
@@ -6056,6 +6085,7 @@ async def test_enrich_teams_dedupes_owner_alias_and_canonical_user(
         get_purge_queue_store=cast(Any, object),
         get_policy_catalog=cast(Any, object),
         get_users_by_ids=_fake_get_users_by_ids,
+        attach_avatar_urls=AsyncMock(side_effect=lambda summaries: summaries),
         search_users=_fake_search_users,
         run_lifecycle_manager_once_in_memory=cast(Any, lambda _input: object()),
     )
@@ -6185,6 +6215,15 @@ async def test_upload_team_avatar_rejects_file_too_large(
     assert resp.json()["detail"].startswith("File too large:")
 
 
+class _PresentTeamMetadataStore:
+    async def get_by_team_id(self, team_id: TeamId):
+        return TeamMetadata(id=team_id, name="Test team")
+
+    @asynccontextmanager
+    async def advisory_lock(self, _key: str):
+        yield
+
+
 @pytest.mark.asyncio
 async def test_delete_team_member_enqueues_matching_team_sessions(monkeypatch) -> None:
     class _FakeRebac:
@@ -6248,6 +6287,10 @@ async def test_delete_team_member_enqueues_matching_team_sessions(monkeypatch) -
     monkeypatch.setattr(
         "control_plane_backend.teams.service._validate_team_and_check_permission",
         _fake_validate_team_and_check_permission,
+    )
+    monkeypatch.setattr(
+        "control_plane_backend.app.context.ApplicationContext.get_team_metadata_store",
+        lambda _self: _PresentTeamMetadataStore(),
     )
     monkeypatch.setattr(
         "control_plane_backend.app.context.ApplicationContext.get_rebac_engine",
@@ -6368,16 +6411,17 @@ async def test_delete_team_member_runs_in_memory_lifecycle_pass_when_enabled(
         configuration=cast(Any, fake_configuration),
         rebac=cast(Any, fake_rebac),
         scheduler_backend=SchedulerBackend.MEMORY,
-        get_team_metadata_store=lambda: cast(Any, object()),
+        get_team_metadata_store=lambda: cast(Any, _PresentTeamMetadataStore()),
         get_default_team_store=cast(Any, object),
         get_team_admin_charter_store=cast(Any, object),
-        get_prompt_store=cast(Any, object),
+        get_prompt_store=cast(Any, _FakePromptStore),
         get_prompt_category_store=cast(Any, object),
         get_content_store=lambda: cast(Any, object()),
         get_session_store=cast(Any, lambda: fake_session_store),
         get_purge_queue_store=cast(Any, lambda: fake_queue_store),
         get_policy_catalog=cast(Any, object),
         get_users_by_ids=_fake_get_users_by_ids,
+        attach_avatar_urls=AsyncMock(side_effect=lambda summaries: summaries),
         search_users=_fake_search_users,
         run_lifecycle_manager_once_in_memory=_fake_run_lifecycle_manager_once_in_memory,
     )
@@ -6480,11 +6524,18 @@ async def test_revoke_team_member_role_blocks_last_admin_demotion(
         _rebac,
         _team_id: TeamId,
         relation: RelationType,
+        *,
+        consistency_token: str | None = None,
     ) -> set[str]:
+        assert consistency_token == "HIGHER_CONSISTENCY"
         if relation == RelationType.TEAM_ADMIN:
             return {"user-001"}
         return set()
 
+    monkeypatch.setattr(
+        "control_plane_backend.app.context.ApplicationContext.get_team_metadata_store",
+        lambda _self: _PresentTeamMetadataStore(),
+    )
     monkeypatch.setattr(
         "control_plane_backend.teams.service._get_user_roles_in_team",
         _fake_get_user_roles_in_team,
@@ -6522,11 +6573,18 @@ async def test_remove_team_member_blocks_removing_last_admin(
         _rebac,
         _team_id: TeamId,
         relation: RelationType,
+        *,
+        consistency_token: str | None = None,
     ) -> set[str]:
+        assert consistency_token == "HIGHER_CONSISTENCY"
         if relation == RelationType.TEAM_ADMIN:
             return {"user-001"}
         return set()
 
+    monkeypatch.setattr(
+        "control_plane_backend.app.context.ApplicationContext.get_team_metadata_store",
+        lambda _self: _PresentTeamMetadataStore(),
+    )
     monkeypatch.setattr(
         "control_plane_backend.teams.service._get_user_roles_in_team",
         _fake_get_user_roles_in_team,
@@ -7825,6 +7883,11 @@ async def test_prepare_execution_attaches_computed_chat_controls(
             "params": {"default": "semantic"},
         },
         {"capability_id": _MCP_SEARCH_ID, "widget": "rag_scope"},
+        {
+            "capability_id": "platform",
+            "widget": "ask_user_toggle",
+            "params": {"default": True},
+        },
     ]
 
 
@@ -7903,7 +7966,10 @@ async def test_prepare_execution_chat_controls_are_cache_aside(
     assert first.status_code == 200
     assert second.status_code == 200
     assert first.json()["chat_controls"] == second.json()["chat_controls"]
-    assert [c["widget"] for c in first.json()["chat_controls"]] == ["attach_files"]
+    assert [c["widget"] for c in first.json()["chat_controls"]] == [
+        "attach_files",
+        "ask_user_toggle",
+    ]
     assert calls[0] == 1  # second prep hit the cache
 
 
@@ -7939,7 +8005,13 @@ async def test_prepare_execution_skips_capability_chat_controls_on_error(
         )
 
     assert resp.status_code == 200
-    assert resp.json()["chat_controls"] == []
+    assert resp.json()["chat_controls"] == [
+        {
+            "capability_id": "platform",
+            "widget": "ask_user_toggle",
+            "params": {"default": True},
+        }
+    ]
 
 
 @pytest.mark.asyncio
@@ -7963,7 +8035,13 @@ async def test_prepare_execution_chat_controls_empty_when_pod_unreachable(
         )
 
     assert resp.status_code == 200
-    assert resp.json()["chat_controls"] == []
+    assert resp.json()["chat_controls"] == [
+        {
+            "capability_id": "platform",
+            "widget": "ask_user_toggle",
+            "params": {"default": True},
+        }
+    ]
 
 
 @pytest.mark.asyncio
@@ -8056,6 +8134,69 @@ async def test_list_prompts_returns_team_scoped_summaries(
     assert item["session_count"] == 0
     # score is null and response_model_exclude_none=True strips null fields
     assert item.get("score") is None
+
+
+@pytest.mark.asyncio
+async def test_prompt_favorite_toggles_and_shows_in_the_listing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """PUT / DELETE favorite are idempotent and drive `is_favorite` on the listing."""
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
+    )
+    store = _FakePromptStore(
+        [_make_prompt_record(prompt_id="prompt-1", team_id="personal")]
+    )
+    app = create_app()
+    _patch_prompt_store(monkeypatch, store)
+    url = "/control-plane/v1/teams/personal/prompts"
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.get(url)
+        assert response.json()[0]["is_favorite"] is False
+        response = await client.put(f"{url}/prompt-1/favorite")
+        assert response.status_code == 204
+        response = await client.put(f"{url}/prompt-1/favorite")
+        assert response.status_code == 204
+        response = await client.get(url)
+        assert response.json()[0]["is_favorite"] is True
+        response = await client.delete(f"{url}/prompt-1/favorite")
+        assert response.status_code == 204
+        response = await client.delete(f"{url}/prompt-1/favorite")
+        assert response.status_code == 204
+        response = await client.get(url)
+        assert response.json()[0]["is_favorite"] is False
+
+
+@pytest.mark.asyncio
+async def test_prompt_favorite_refuses_a_prompt_of_another_team(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A prompt id from another team cannot be starred through this team."""
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
+    )
+    store = _FakePromptStore(
+        [_make_prompt_record(prompt_id="prompt-2", team_id="other-team")]
+    )
+    app = create_app()
+    _patch_prompt_store(monkeypatch, store)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.put(
+            "/control-plane/v1/teams/personal/prompts/prompt-2/favorite"
+        )
+
+    assert resp.status_code == 404
+    assert store._favorites == set()
 
 
 @pytest.mark.asyncio

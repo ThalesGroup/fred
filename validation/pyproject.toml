@@ -20,6 +20,9 @@ dependencies = [
   "pytest>=8.0",
 ]
 
+[tool.setuptools]
+py-modules = ["factory_config", "generate_report"]
+
 [tool.pytest.ini_options]
 testpaths = ["scenarios"]
 addopts = "-v -ra"

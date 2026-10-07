@@ -80,7 +80,7 @@ export default function TeamContentNavbar() {
     navigate(`/team/${teamId}/agents`);
   };
   const capabilities = useTeamCapabilities(selectedTeam);
-  const { canUpdateAgents, canUpdateInfo } = capabilities;
+  const { canUpdateInfo } = capabilities;
 
   const settingsBase = `/team/${teamId}/settings`;
   const inSettings = !!teamId && pathname.startsWith(settingsBase);
@@ -160,11 +160,31 @@ export default function TeamContentNavbar() {
   // is you" signal — sized down to fit this compact header.
   const teamDisplayName = isPersonalTeam ? t("rework.sidebar.team.userTeam") : (selectedTeam?.name ?? "");
   const teamAvatar = isPersonalTeam ? (
-    <UserAvatar name={KeyCloakService.GetUserFullName()} size="x-small" />
+    <UserAvatar
+      name={KeyCloakService.GetUserFullName()}
+      size="x-small"
+      imageUrl={bootstrap?.current_user?.avatar_image_url}
+    />
   ) : selectedTeam?.avatar_image_url ? (
-    <img className={styles.teamPanelAvatar} src={selectedTeam.avatar_image_url} alt="" aria-hidden="true" />
+    <img
+      className={styles.teamPanelAvatar}
+      src={selectedTeam.avatar_image_url}
+      alt=""
+      aria-hidden="true"
+      width={28}
+      height={28}
+      decoding="async"
+    />
   ) : defaultTeamAvatarFile ? (
-    <img className={styles.teamPanelAvatar} src={`/images/${defaultTeamAvatarFile}`} alt="" aria-hidden="true" />
+    <img
+      className={styles.teamPanelAvatar}
+      src={`/images/${defaultTeamAvatarFile}`}
+      alt=""
+      aria-hidden="true"
+      width={28}
+      height={28}
+      decoding="async"
+    />
   ) : (
     <TeamInitials
       className={styles.teamPanelAvatar}
@@ -222,11 +242,6 @@ export default function TeamContentNavbar() {
     });
   }
 
-  // Launching and cancelling evaluation campaigns requires agent-update rights
-  // (AGENT-EVALUATION-RFC §8.4), not member administration — so the Evaluations
-  // section is gated separately from the settings entry point itself.
-  const canManageEvaluations = canUpdateAgents;
-
   // AUTHZ-09: the settings entry point is now open to every team member
   // (`canOpenTeamSettings` = `canReadMembers`), so Activity — meant only for
   // elevated roles, not the baseline member surface — needs its own gate
@@ -273,14 +288,6 @@ export default function TeamContentNavbar() {
       label: t("rework.teamSettings.navigation.activity"),
       icon: { category: "outlined", type: "build", filled: false },
       linkProps: { to: `${settingsBase}/activity` },
-    });
-  }
-  if (canManageEvaluations) {
-    settingsItems.push({
-      type: "link",
-      label: t("rework.teamSettings.navigation.evaluations"),
-      icon: { category: "outlined", type: "reviews", filled: false },
-      linkProps: { to: `${settingsBase}/evaluations` },
     });
   }
   if (canSeeActivity) {

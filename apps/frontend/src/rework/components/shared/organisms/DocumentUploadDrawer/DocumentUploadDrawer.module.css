@@ -31,8 +31,8 @@
   flex-direction: column;
   box-shadow: var(--shadow-l);
   border-radius: var(--radius-m);
-  background-color: var(--surface-container-high);
-  width: min(480px, 92vw);
+  background-color: var(--surface-floating);
+  width: min(560px, 92vw);
   max-height: 85vh;
   color: var(--on-surface);
 }
@@ -68,7 +68,7 @@
 
 .path {
   border-radius: var(--radius-xs);
-  background: var(--surface-container-highest);
+  background: var(--surface-container-low);
   padding: 0 var(--spacing-2xs);
   color: var(--on-surface);
   font: var(--font-label-medium);
@@ -83,10 +83,19 @@
   overflow-y: auto;
 }
 
+/* Mode and profile side by side: two short choices that belong together, and
+   the room they leave is room the file list gets. */
+.fieldRow {
+  display: flex;
+  gap: var(--spacing-m);
+}
+
 .field {
   display: flex;
+  flex: 1;
   flex-direction: column;
   gap: var(--spacing-xs);
+  min-width: 0;
 }
 
 .label {
@@ -102,8 +111,8 @@
     border-color 150ms,
     background 150ms;
   cursor: pointer;
-  border: 1.5px dashed var(--outline-retreat);
-  border-radius: var(--radius-m);
+  border: 1.5px dashed var(--outline-muted);
+  border-radius: var(--radius-s);
   min-height: 180px;
   overflow-y: auto;
 }
@@ -164,7 +173,7 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
-  border-bottom: 1px solid var(--outline-retreat);
+  border-bottom: 1px solid var(--outline-muted);
   padding: var(--spacing-xs) var(--spacing-s);
   font: var(--font-body-small);
 }
@@ -229,12 +238,55 @@
   font-weight: 600;
 }
 
+/* ── Name conflicts ────────────────────────────────────────────────────────── */
+
+.conflicts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-s);
+  background: var(--surface-container);
+  padding: var(--spacing-s) var(--spacing-m);
+}
+
+.conflictsTitle {
+  color: var(--on-surface);
+  font: var(--font-label-medium);
+}
+
+.conflictsMessage {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.conflictsBulk {
+  display: flex;
+  gap: var(--spacing-xs);
+}
+
+.conflictList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.conflictRow {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
 /* ── Actions ───────────────────────────────────────────────────────────────── */
 
 .actions {
   display: flex;
   justify-content: flex-end;
   gap: var(--spacing-s);
-  border-top: 1px solid var(--outline-retreat);
+  border-top: 1px solid var(--outline-muted);
   padding: var(--spacing-s) var(--spacing-m);
 }

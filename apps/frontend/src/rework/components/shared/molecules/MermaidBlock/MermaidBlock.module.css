@@ -28,7 +28,7 @@
   justify-content: space-between;
   align-items: center;
   border-bottom: 0.5px solid var(--outline-muted);
-  background: var(--surface-container);
+  background: var(--surface-container-high);
   padding: var(--spacing-2xs) var(--spacing-s);
   min-height: 32px;
 }
@@ -63,7 +63,7 @@
 }
 
 .copy:hover {
-  background: var(--surface-container-low);
+  background: var(--state-on-surface-hover);
   color: var(--on-surface);
 }
 
@@ -71,7 +71,7 @@
 .body {
   display: flex;
   justify-content: center;
-  background: var(--surface-container-low);
+  background: var(--surface-container);
   padding: var(--spacing-m);
   overflow-x: auto;
 }
@@ -144,7 +144,7 @@
   align-items: center;
   border: 0.5px solid var(--outline-muted);
   border-radius: var(--radius-s);
-  background: var(--surface-container-low);
+  background: var(--surface-container);
   padding: var(--spacing-l);
   min-height: 0;
   overflow: auto;

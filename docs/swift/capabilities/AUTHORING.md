@@ -59,11 +59,11 @@ chat-control params `DocumentScopeControlParams`, `SearchPolicyControlParams`,
 | File | What it shows |
 | --- | --- |
 | `libs/capabilities/fred-capability-document-access/` (`DocumentAccessCapability`) | **Canonical real capability**: two live tools (vector search and `list_document_tree`) each reaching a platform service through its typed `RuntimeServices` port (`document_search` / `document_tree`), static config-field scoping, one computed chat-turn control, and transport failures rendered as `is_error` tool results via the SDK-typed `DocumentPortCallError`. The tutorial, and the single-capability package shape. Implements `tools()` — works on ReAct and Graph agents. |
-| `libs/fred-runtime/fred_runtime/capabilities/mcp.py` (`McpCapability`, #1978, id contract fixed #1988) | An MCP catalog server surfaced *as* a capability — the zero-Fred-code lane, in code. Capability id is the catalog server id verbatim (no `mcp:` prefix); `fred_sdk.contracts.capability.mcp_ids` and its `is_mcp_capability_id` helper are retired — MCP-ness is detected via catalog/registry membership, never id sniffing. Its own tool loading is a separate, pre-existing path (`FredMcpToolProvider`) already common to ReAct and Graph — it legitimately overrides `middleware()` only for its prompt fragment. |
+| `libs/fred-sdk/fred_sdk/contracts/capability/mcp.py` (`McpCapability`) | SDK construction and composer controls for catalog-backed MCP capabilities. `libs/capabilities/fred-capability-mcp/` supplies the default catalog through `fred.mcp_catalogs`; loaders accept `ServiceEndpointsPort` from `fred_sdk.contracts.services` and pass it to SDK resource loaders as `services`. Internal HTTP entries use `service` + `path`; runtime configuration supplies the base URL, including its port and API prefix. SDK resource loaders also resolve `prompt_file` references. IDs remain the catalog server IDs. Live MCP tool loading stays in `FredMcpToolProvider`; prompt groups are rendered beside the server’s tools. |
 | `libs/capabilities/fred-capability-ppt-filler/` (`PptFillerCapability`, #1903) | **First OUT-OF-TREE capability package** and the asset-bearing reference: its own pip package installed in the `fred-agents` pod (entry point in ITS `pyproject.toml`), an `AssetSlot` upload parsed and stored in `validate_config` (via `ctx.services.agent_assets` — keys only in the stored config), config-derived dynamic tools, a custom form widget (`FieldSpec.ui.widget` → plugin `configWidgets`), a contributed chat part + side panel, and a stateless `/analyze` route on `manifest.router`. Copy its shape for any capability that uploads a file or ships its own package. Implements only `middleware()` (its tool schema is built per turn from the parsed template — a genuine ReAct-specific need) and declares `execution_models=("react",)` — selecting it on a Graph agent fails loudly at assembly rather than silently contributing nothing. |
 | `libs/capabilities/fred-capability-platform-ops/` (`PlatformPostgresCapability`, #2458) | **First capability package of the admin-ops family** (same `libs/capabilities/fred-capability-*` packaging as `ppt-filler`): two tools (`postgres_list_tables`, `postgres_run_query`) reaching the platform database through the typed `RuntimeServices.platform_sql` port (`PlatformSqlPort`, fred-sdk) — Tier B credentials never enter the package; transport/server failures rendered as `is_error` tool results via the SDK-typed `PlatformSqlPortError`. Implements `tools()` only — works on ReAct and Graph agents. |
 | `libs/capabilities/fred-capability-team-wiki/` (`TeamWikiCapability`, #2573) | **The `tools()` + `middleware()` combination, worked.** Two tools reaching control-plane through the typed `RuntimeServices.team_wiki` port (`TeamWikiPort`, fred-sdk), PLUS a `middleware()` override contributing a system-prompt fragment `tools()` cannot express. Read its `middleware()`: it returns ONLY the prompt middleware — the assembler already builds the tool carrier from `tools()` and calls this hook separately, so returning a carrier here too registers every tool twice. Declares `execution_models=("react",)` even though it implements `tools()`, because the fragment it injects is non-negotiable and Graph would silently skip it. |
-| `libs/capabilities/fred-capability-documents/` (`document_summarize`, `document_similarity`, `document_label_search`, `document_extract`, `document_verbatim`) | **One package, several entry points.** Five sibling capabilities over the Knowledge Flow document ports, each its own `fred.capabilities` entry point and each admin-gated; four of them share one module (`document_read_common.py`: read config, pagination, error shaping). Extracted from `fred-runtime` so the runtime ships only the capability *framework* (`registry.py`, `assembly.py`, `mcp.py`). Copy its shape when several small capabilities share plumbing and would otherwise cost one package each. |
+| `libs/capabilities/fred-capability-documents/` (`document_summarize`, `document_similarity`, `document_label_search`, `document_extract`, `document_verbatim`) | **One package, several entry points.** Five sibling capabilities over the Knowledge Flow document ports, each its own `fred.capabilities` entry point and each admin-gated; four of them share one module (`document_read_common.py`: read config, pagination, error shaping). Extracted from `fred-runtime` so the runtime ships only the capability *framework* (`registry.py`, `assembly.py`). Copy its shape when several small capabilities share plumbing and would otherwise cost one package each. |
 
 ---
 
@@ -154,6 +154,53 @@ migrations described under "Registration, boot invariants, tables" below
   capability code. Before GA, dry-run at least one real breaking change
   through this path deliberately, rather than discovering rough edges the
   first time it actually matters.
+
+---
+
+## Scope-private settings — what may leave the agent's scope
+
+An agent lives in a **scope**: today a team or a personal space. Projects and
+organisations are expected to become scopes too. When an agent is copied to
+another scope, each capability setting falls into exactly one class:
+
+| Class | Meaning | On a copy to another scope | Declare with |
+| --- | --- | --- | --- |
+| **scope-private** | points to an item the scope owns (library, folder, document, tag) | reset to its default; the capability stays enabled | `ScopePrivate[...]` |
+| **asset key** | names a configuration file stored through `agent_assets` | the file is fetched and re-submitted to your `validate_config` in the target, in its slot | `Annotated[str, AssetKey("<slot>")]` |
+| **public** | everything else (options, limits, texts) | kept as is | nothing, or `Public[...]` for an identifier-like field that is safe to copy |
+
+Classify against "the scope", never against "the team": the question is
+whether the value means anything outside the place the agent lives, and it does
+not change when new kinds of scope arrive. A duplicate in the same scope keeps
+every setting and still re-submits configuration files for the new instance.
+
+```python
+from fred_sdk.contracts.capability import AssetKey, Public, ScopePrivate
+
+class Config(BaseModel):
+    library_tag_ids: ScopePrivate[list[str]] = []      # must have a default
+    template_key: Annotated[str, AssetKey("template")] = "template.pptx"
+    output_key: Public[str] = "summary"                # a name, not a reference
+```
+
+- Markers work at any depth (`KeyField.folder_tag_id` in
+  `fred_capability_ppt_filler/parser.py` is nested in a list of slides).
+- Keep the file extension in an asset key: the slot's `accepted_types` gate
+  runs on it when the file is re-submitted.
+- Catalog-declared fields of an open model (MCP servers in `mcp_catalog.yaml`)
+  classify with `scope_private: true` (or `false` for public) on the field.
+- The runtime does the copy (`POST /agents/capabilities/{id}/copy-config`,
+  `fred_runtime/capabilities/copy.py`); you write no copy code. Your
+  `validate_config` must accept its own stored config back with the files as
+  uploads, which is the normal "editor uploads a file" path.
+- A file may reference items the new scope lacks (ppt-filler image folders).
+  When `ctx.copied_from_another_scope` is true, prefer leaving such a reference
+  unset over rejecting, and append to `ctx.notices` what an editor must redo;
+  the user sees it after the copy.
+- Guard: `apps/fred-agents/tests/test_capability_scope_classification.py` fails
+  on any text field whose name looks like a reference (`*_id(s)`, `*_uid(s)`,
+  `*_key(s)`, `*folder(s)`, `*library/libraries`, `*tag(s)`, `*path(s)`) that
+  carries no class.
 
 ---
 
@@ -366,6 +413,8 @@ if you touched the contract surface) — green before you claim done.
   eliminate (RFC §1.1); extend the `UiPart` union by *declaring* a chat part, not by
   editing the union.
 - **No capability runtime code in control-plane** (RFC §7).
+- **Classify every reference-like setting** scope-private, asset key or public (see
+  "Scope-private settings"); the guard test fails otherwise.
 - **Never persist asset blobs in `tuning_json`** — store binaries through a service in
   `validate_config` and keep only their keys (RFC §3.8).
 - **Keep runtime info out of LLM-exposed tool signatures** (RFC §3.5).

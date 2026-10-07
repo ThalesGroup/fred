@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from datetime import datetime, timezone
 from typing import Any
 
@@ -309,6 +310,7 @@ class TaskStore:
         state: str | None = None,
         created_by: str | None = None,
         exclude_terminal: bool = False,
+        task_ids: Sequence[str] | None = None,
         session: AsyncSession | None = None,
     ) -> list[TaskSummary]:
         _TERMINAL = {TaskState.succeeded, TaskState.failed, TaskState.cancelled}
@@ -323,6 +325,8 @@ class TaskStore:
             q = q.where(self._run.created_by == created_by)
         if exclude_terminal:
             q = q.where(self._run.state.notin_([s.value for s in _TERMINAL]))
+        if task_ids is not None:
+            q = q.where(self._run.task_id.in_(task_ids))
         q = q.order_by(self._run.created_at.desc())
         async with use_session(self._sessions, session) as s:
             result = await s.execute(q)

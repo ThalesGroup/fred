@@ -13,14 +13,14 @@
 // limitations under the License.
 
 import { createSelector, createSlice, type PayloadAction } from "@reduxjs/toolkit";
-import { TERMINAL_STATES, type AnyTaskEvent, type TaskTarget, type TaskViewModel } from "./taskTypes";
+import type { TaskSummary } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { TERMINAL_STATES, type AnyTaskEvent, type ImportStage, type TaskTarget, type TaskViewModel } from "./taskTypes";
 
 export interface TasksState {
   byId: Record<string, TaskViewModel>;
-  // Monotonic counter bumped by the tray clock (see `trayClockTicked`). Terminal
-  // tasks age out of the tray purely by elapsed wall-clock, which `byId` does not
-  // reflect; this gives `selectVisibleTasks` an input to recompute on.
-  tick?: number;
+  // Bumped when something asks the import panel to show itself
+  // (see `importPanelOpenRequested`).
+  importPanelOpenRequest?: number;
 }
 
 // Local root-state shape — avoids circular import with store.tsx.
@@ -29,7 +29,7 @@ interface TasksRootState {
   tasks: TasksState;
 }
 
-const initialState: TasksState = { byId: {}, tick: 0 };
+const initialState: TasksState = { byId: {}, importPanelOpenRequest: 0 };
 
 export const EVICTION_DELAY_MS = 5 * 60 * 1000;
 
@@ -45,9 +45,14 @@ export const taskSlice = createSlice({
         target?: TaskTarget | null;
         owner?: string;
         localOnly?: boolean;
+        teamId?: string | null;
+        /** Pass `null` for a document ingestion that is not an import — a
+         *  relaunch of a document already in the corpus — so it does not turn
+         *  up in the import panel. */
+        stage?: ImportStage | null;
       }>,
     ) {
-      const { taskId, kind, target, owner, localOnly } = action.payload;
+      const { taskId, kind, target, owner, localOnly, stage, teamId } = action.payload;
       if (state.byId[taskId]) return;
       state.byId[taskId] = {
         taskId,
@@ -60,11 +65,141 @@ export const taskSlice = createSlice({
         step: null,
         error: null,
         lastSeq: -1,
+        // A document ingestion known to the server is past its transfer by
+        // definition — including one rehydrated after a reload, whose bytes
+        // went up in a browser session that may no longer exist.
+        stage: stage !== undefined ? stage : kind === "ingestion" && target?.type === "document" ? "analysis" : null,
+        conflict: null,
+        teamId: teamId ?? null,
         registeredAt: Date.now(),
         terminalAt: null,
         acknowledgedAt: null,
         warnings: null,
+        untracked: false,
       };
+    },
+
+    /** A file whose bytes are on their way, before the server has named a task
+     *  for it.
+     *
+     *  Without this the file is invisible for the whole transfer — the panel
+     *  only ever learns of it once the upload is over, which for a large import
+     *  is most of the wait. `localId` is the browser's own handle on it; the
+     *  real task id replaces it at handoff. */
+    uploadStarted(state, action: PayloadAction<{ localId: string; filename: string; teamId: string | null }>) {
+      const { localId, filename, teamId } = action.payload;
+      const existing = state.byId[localId];
+      if (existing) {
+        // Sent again — a retry, or a conflict just answered. Same entry, back
+        // to the transfer, with whatever it was waiting on cleared.
+        existing.stage = "upload";
+        existing.state = "running";
+        existing.progress = null;
+        existing.step = null;
+        existing.error = null;
+        existing.conflict = null;
+        existing.terminalAt = null;
+        existing.acknowledgedAt = null;
+        existing.untracked = false;
+        return;
+      }
+      state.byId[localId] = {
+        taskId: localId,
+        kind: "ingestion",
+        // No document uid until the server has written one. The label is what
+        // the panel shows; an empty id keeps this entry out of every selector
+        // that resolves a task back to a real document row.
+        target: { type: "document", id: "", label: filename },
+        owner: null,
+        // Nothing server-side to subscribe to or acknowledge yet.
+        localOnly: true,
+        state: "running",
+        progress: null,
+        step: null,
+        error: null,
+        lastSeq: -1,
+        stage: "upload",
+        conflict: null,
+        teamId,
+        registeredAt: Date.now(),
+        terminalAt: null,
+        acknowledgedAt: null,
+        warnings: null,
+        untracked: false,
+      };
+    },
+
+    /** The server took the file and named the ingestion task that owns it now.
+     *
+     *  Re-keyed rather than replaced: the entry keeps its start time, so the
+     *  panel's list does not reshuffle as each file crosses over. The state
+     *  goes back to `pending` because the analysis has not started — the
+     *  transfer being done says nothing about the document being usable. */
+    uploadHandedOff(
+      state,
+      action: PayloadAction<{ localId: string; taskId: string; documentUid: string | null; filename: string }>,
+    ) {
+      const { localId, taskId, documentUid, filename } = action.payload;
+      const vm = state.byId[localId];
+      delete state.byId[localId];
+      if (state.byId[taskId]) return;
+      state.byId[taskId] = {
+        ...(vm ?? { registeredAt: Date.now() }),
+        taskId,
+        kind: "ingestion",
+        target: documentUid ? { type: "document", id: documentUid, label: filename } : null,
+        owner: vm?.owner ?? null,
+        localOnly: false,
+        state: "pending",
+        progress: null,
+        step: null,
+        error: null,
+        lastSeq: -1,
+        stage: "analysis",
+        conflict: null,
+        teamId: vm?.teamId ?? null,
+        terminalAt: null,
+        acknowledgedAt: null,
+        warnings: null,
+        untracked: false,
+      };
+    },
+
+    /** The transfer got there and the server refused to write: the folder
+     *  gained a document of that name while the import was under way.
+     *
+     *  Not a failure — nothing went wrong and nothing was lost. The file is
+     *  still ours to send; what is missing is the user's answer. */
+    uploadConflicted(state, action: PayloadAction<{ localId: string; tagId: string | null; filename: string }>) {
+      const vm = state.byId[action.payload.localId];
+      if (!vm || vm.stage !== "upload") return;
+      vm.stage = "decision";
+      // Nothing is running and nothing has settled: the entry is waiting.
+      vm.state = "pending";
+      vm.progress = null;
+      vm.step = null;
+      vm.error = null;
+      vm.conflict = { tagId: action.payload.tagId, filename: action.payload.filename };
+    },
+
+    /** The transfer ended with nothing left to wait for: upload-only mode, or a
+     *  file the user chose to skip. A file that was handed off is already gone
+     *  from here and its task owns the rest. */
+    uploadFinished(state, action: PayloadAction<{ localId: string }>) {
+      const vm = state.byId[action.payload.localId];
+      if (!vm || vm.stage !== "upload") return;
+      vm.state = "succeeded";
+      vm.terminalAt = Date.now();
+    },
+
+    /** The transfer itself failed — the file never reached a task, so no task
+     *  will ever report this. */
+    uploadFailed(state, action: PayloadAction<{ localId: string; error: string }>) {
+      const vm = state.byId[action.payload.localId];
+      if (!vm || vm.stage !== "upload") return;
+      vm.state = "failed";
+      vm.error = action.payload.error;
+      vm.terminalAt = Date.now();
     },
 
     taskEventReceived(state, action: PayloadAction<AnyTaskEvent>) {
@@ -94,34 +229,63 @@ export const taskSlice = createSlice({
       }
     },
 
+    /** The owning backend's current state for the tasks a read asked about.
+     *
+     *  A task that has an outcome keeps it: following ends there, as the
+     *  stream did when it closed on it. A task the answer leaves out is marked
+     *  untracked: its outcome is unknown, never assumed. */
+    taskSnapshotsReceived(state, action: PayloadAction<{ requestedIds: string[]; tasks: TaskSummary[] }>) {
+      const returned = new Map(action.payload.tasks.map((task) => [task.task_id, task]));
+      for (const taskId of action.payload.requestedIds) {
+        const vm = state.byId[taskId];
+        if (!vm || vm.untracked || TERMINAL_STATES.has(vm.state)) continue;
+        const task = returned.get(taskId);
+        if (!task) {
+          vm.untracked = true;
+          continue;
+        }
+        vm.state = task.state;
+        // Same sparse-field rule as `taskEventReceived`.
+        if (task.progress != null) vm.progress = task.progress;
+        if (task.step != null) vm.step = task.step;
+        vm.error = task.error ?? null;
+        if (task.target) vm.target = task.target;
+        const result = task.kind === "migration" && task.detail && "result" in task.detail ? task.detail.result : null;
+        if (result && "warnings" in result && result.warnings) vm.warnings = result.warnings;
+        if (TERMINAL_STATES.has(task.state) && vm.terminalAt === null) vm.terminalAt = Date.now();
+      }
+    },
+
     taskEvicted(state, action: PayloadAction<string>) {
       delete state.byId[action.payload];
     },
 
-    /** Advance the tray clock so time-based selectors (`selectVisibleTasks`)
-     *  recompute. Dispatched by a timer when a succeeded task crosses its
-     *  eviction window — it must drop out of the floating tray without being
-     *  removed from the store (admin history keeps it for the session). */
-    trayClockTicked(state) {
-      state.tick = (state.tick ?? 0) + 1;
+    /** Ask the import panel to open itself.
+     *
+     *  For work the user has just handed off and expects to see continue
+     *  somewhere — an import, once its dialog closes. Without this the work
+     *  would carry on behind a closed panel, which reads as nothing happening:
+     *  the very complaint that put the panel there.
+     *
+     *  A counter rather than a boolean, so a second import reopens a panel the
+     *  user closed in between, and so no one has to reset a flag. */
+    importPanelOpenRequested(state) {
+      state.importPanelOpenRequest = (state.importPanelOpenRequest ?? 0) + 1;
     },
 
-    /** Manually drop every terminal task (succeeded/failed/cancelled). Backs the
+    /** Manually drop every terminal or untracked task. Backs the
      *  admin "Clear completed" button — done tasks are kept for the whole session
      *  (useful after big ingestions) and only removed when the user asks. */
     completedTasksCleared(state) {
       for (const id of Object.keys(state.byId)) {
-        if (TERMINAL_STATES.has(state.byId[id].state)) {
+        if (!isFollowed(state.byId[id])) {
           delete state.byId[id];
         }
       }
     },
 
-    /** A single task was acknowledged server-side (`POST /tasks/{id}/ack`,
-     *  TASK-EVENT-STREAM-RFC.md §2.10) — mirror the server's timestamp into
-     *  the local view model so `selectVisibleTasks`'s eviction timer and
-     *  `selectUnacknowledgedFailures` see it, same as before, but driven by a
-     *  real per-task server record instead of a per-browser bulk flag. */
+    /** Mirror the server's per-task acknowledgement timestamp so task
+     *  selectors update without a browser-local bulk flag. */
     taskAcknowledged(state, action: PayloadAction<{ taskId: string; acknowledgedAt: string }>) {
       const vm = state.byId[action.payload.taskId];
       if (!vm) return;
@@ -132,9 +296,15 @@ export const taskSlice = createSlice({
 
 export const {
   taskRegistered,
+  uploadStarted,
+  uploadConflicted,
+  uploadHandedOff,
+  uploadFinished,
+  uploadFailed,
   taskEventReceived,
+  taskSnapshotsReceived,
   taskEvicted,
-  trayClockTicked,
+  importPanelOpenRequested,
   taskAcknowledged,
   completedTasksCleared,
 } = taskSlice.actions;
@@ -142,54 +312,80 @@ export const {
 // ── Selectors ─────────────────────────────────────────────────────────────────
 
 const selectById = (state: TasksRootState) => state.tasks.byId;
-const selectTick = (state: TasksRootState) => state.tasks.tick;
 
-export const selectActiveTasks = createSelector(selectById, (byId) =>
-  Object.values(byId).filter((vm) => !TERMINAL_STATES.has(vm.state)),
-);
+/** Still being followed: no outcome yet, and not untracked. An untracked task
+ *  has stopped like a finished one, and is dismissed like a failure. */
+const isFollowed = (vm: TaskViewModel) => !TERMINAL_STATES.has(vm.state) && !vm.untracked;
 
-// `selectTick` is a memoization input only: it carries no data into the result but
-// forces a recompute when the tray clock advances, so terminal tasks age out on time.
-export const selectVisibleTasks = createSelector([selectById, selectTick], (byId) => {
+/** Bumped every time something asks the import panel to open; it watches this. */
+export const selectImportPanelOpenRequest = (state: TasksRootState) => state.tasks.importPanelOpenRequest ?? 0;
+
+/** Tasks still being followed: no outcome yet, and not untracked. */
+export const selectActiveTasks = createSelector(selectById, (byId) => Object.values(byId).filter(isFollowed));
+
+export const selectVisibleTasks = createSelector(selectById, (byId) => {
   const now = Date.now();
   return Object.values(byId)
     .filter((vm) => {
-      if (!TERMINAL_STATES.has(vm.state)) return true;
+      if (isFollowed(vm)) return true;
       if (vm.state === "succeeded") {
         return vm.terminalAt !== null && now - vm.terminalAt < EVICTION_DELAY_MS;
       }
-      // failed/cancelled: show until acknowledgedAt + 5min, or until acknowledged
+      // failed/cancelled/untracked: shown until acknowledged, then for 5 more minutes
       if (vm.acknowledgedAt !== null) {
         return now - vm.acknowledgedAt < EVICTION_DELAY_MS;
       }
       return true;
     })
     .sort((a, b) => {
-      const aActive = !TERMINAL_STATES.has(a.state);
-      const bActive = !TERMINAL_STATES.has(b.state);
+      const aActive = isFollowed(a);
+      const bActive = isFollowed(b);
       if (aActive !== bActive) return aActive ? -1 : 1;
       return b.registeredAt - a.registeredAt;
     });
 });
 
 /**
+ * The imports this user has running or just finished in one team — what that
+ * team's import panel lists.
+ *
+ * Scoped to the team whose page the panel is on: someone else's folder is not
+ * where you follow your own import. Chat attachments are ingestions too, but
+ * they belong to the conversation, not to a team's resources — `target.type`
+ * is what separates those, not `localOnly`, since a file still being
+ * transferred has no server task either and does belong here.
+ *
+ * Factory (one memoized selector per team); memoize the call with `useMemo`.
+ */
+export const makeSelectImportTasks = (teamId: string | null) =>
+  createSelector(selectVisibleTasks, (tasks) =>
+    tasks
+      // A stage is what makes it an import: re-processing a document already
+      // in the corpus is registered without one.
+      .filter(
+        (vm) => vm.kind === "ingestion" && vm.stage !== null && vm.target?.type === "document" && vm.teamId === teamId,
+      )
+      // Oldest first: these are the files of one import, and
+      // reading them in the order they were sent beats having the list reshuffle
+      // under the eye as each new one registers.
+      .sort((a, b) => a.registeredAt - b.registeredAt),
+  );
+
+/**
  * All tasks in the store, active first then most-recently-finished, with NO age
  * cutoff. Backs the admin Tasks page, which keeps the full session history until
- * the user clears it — unlike `selectVisibleTasks` (tray) which drops old ones.
+ * the user clears it; `selectVisibleTasks` drops old ones.
  */
 export const selectAllTasks = createSelector(selectById, (byId) =>
   Object.values(byId).sort((a, b) => {
-    const aActive = !TERMINAL_STATES.has(a.state);
-    const bActive = !TERMINAL_STATES.has(b.state);
+    const aActive = isFollowed(a);
+    const bActive = isFollowed(b);
     if (aActive !== bActive) return aActive ? -1 : 1;
     return b.registeredAt - a.registeredAt;
   }),
 );
 
-export const selectActiveCount = createSelector(
-  selectById,
-  (byId) => Object.values(byId).filter((vm) => !TERMINAL_STATES.has(vm.state)).length,
-);
+export const selectActiveCount = createSelector(selectById, (byId) => Object.values(byId).filter(isFollowed).length);
 
 export const selectUnacknowledgedFailures = createSelector(
   selectById,
@@ -210,7 +406,8 @@ export const selectActiveTaskForTarget =
   (type: string, id: string) =>
   (state: TasksRootState): TaskViewModel | undefined =>
     Object.values(state.tasks.byId).find(
-      (vm) => vm.state !== "succeeded" && vm.target?.type === type && vm.target?.id === id,
+      // An untracked task says nothing about the entity: its own status does.
+      (vm) => vm.state !== "succeeded" && !vm.untracked && vm.target?.type === type && vm.target?.id === id,
     );
 
 /** A task that settled on an outcome which changed its entity, paired with that entity's id. */
@@ -234,7 +431,9 @@ export interface SettledTarget {
  * its storage quota (`delete_cancelled_document`, #2315). The entity the caller
  * cached is gone, so it needs the same refresh a success gets. `failed` is
  * deliberately excluded: the document survives, and its row keeps rendering
- * from the retained task rather than from a refetched snapshot.
+ * from the retained task rather than from a refetched snapshot. An untracked
+ * task counts too: the row falls back to the entity, whose cached copy may
+ * predate the task.
  *
  * Factory (one memoized selector per `type`); memoize the call with `useMemo`.
  */
@@ -242,7 +441,10 @@ export const makeSelectSettledTargetsOfType = (type: string) =>
   createSelector(selectById, (byId): SettledTarget[] =>
     Object.values(byId)
       .filter(
-        (vm) => (vm.state === "succeeded" || vm.state === "cancelled") && vm.target?.type === type && !!vm.target?.id,
+        (vm) =>
+          (vm.state === "succeeded" || vm.state === "cancelled" || vm.untracked) &&
+          vm.target?.type === type &&
+          !!vm.target?.id,
       )
       .map((vm) => ({ taskId: vm.taskId, targetId: vm.target!.id })),
   );

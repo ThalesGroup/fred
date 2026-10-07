@@ -92,6 +92,22 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/control-plane/v1/users/${queryArg.userId}`, method: "DELETE" }),
     }),
+    uploadMyAvatarControlPlaneV1UsersMeAvatarPost: build.mutation<
+      UploadMyAvatarControlPlaneV1UsersMeAvatarPostApiResponse,
+      UploadMyAvatarControlPlaneV1UsersMeAvatarPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/users/me/avatar`,
+        method: "POST",
+        body: queryArg.bodyUploadMyAvatarControlPlaneV1UsersMeAvatarPost,
+      }),
+    }),
+    deleteMyAvatarControlPlaneV1UsersMeAvatarDelete: build.mutation<
+      DeleteMyAvatarControlPlaneV1UsersMeAvatarDeleteApiResponse,
+      DeleteMyAvatarControlPlaneV1UsersMeAvatarDeleteApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/users/me/avatar`, method: "DELETE" }),
+    }),
     getUserDetailsControlPlaneV1UserGet: build.query<
       GetUserDetailsControlPlaneV1UserGetApiResponse,
       GetUserDetailsControlPlaneV1UserGetApiArg
@@ -354,6 +370,24 @@ const injectedRtkApi = api.injectEndpoints({
           body: queryArg.bodyPatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatch,
         }),
       }),
+    getAgentInstanceCopyTargetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyTargetsGet: build.query<
+      GetAgentInstanceCopyTargetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyTargetsGetApiResponse,
+      GetAgentInstanceCopyTargetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyTargetsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances/${queryArg.agentInstanceId}/copy-targets`,
+      }),
+    }),
+    postAgentInstanceCopyControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyPost: build.mutation<
+      PostAgentInstanceCopyControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyPostApiResponse,
+      PostAgentInstanceCopyControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances/${queryArg.agentInstanceId}/copy`,
+        method: "POST",
+        body: queryArg.agentCopyRequest,
+      }),
+    }),
     getTeamPromptsControlPlaneV1TeamsTeamIdPromptsGet: build.query<
       GetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetApiResponse,
       GetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetApiArg
@@ -424,6 +458,24 @@ const injectedRtkApi = api.injectEndpoints({
       query: (queryArg) => ({
         url: `/control-plane/v1/teams/${queryArg.teamId}/prompts/${queryArg.promptId}/use`,
         method: "POST",
+      }),
+    }),
+    addTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoritePut: build.mutation<
+      AddTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoritePutApiResponse,
+      AddTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoritePutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/prompts/${queryArg.promptId}/favorite`,
+        method: "PUT",
+      }),
+    }),
+    removeTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoriteDelete: build.mutation<
+      RemoveTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoriteDeleteApiResponse,
+      RemoveTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoriteDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/prompts/${queryArg.promptId}/favorite`,
+        method: "DELETE",
       }),
     }),
     postPromotePromptControlPlaneV1TeamsTeamIdPromptsPromptIdPromotePost: build.mutation<
@@ -1043,6 +1095,22 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/control-plane/v1/admin/platform/instructions` }),
     }),
+    getPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGet: build.query<
+      GetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetApiResponse,
+      GetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/ui-settings` }),
+    }),
+    putPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPut: build.mutation<
+      PutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutApiResponse,
+      PutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/ui-settings`,
+        method: "PUT",
+        body: queryArg.setPlatformUiSettingsRequest,
+      }),
+    }),
     getActiveAnnouncementsControlPlaneV1AnnouncementsActiveGet: build.query<
       GetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetApiResponse,
       GetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetApiArg
@@ -1111,6 +1179,7 @@ const injectedRtkApi = api.injectEndpoints({
           team_id: queryArg.teamId,
           kind: queryArg.kind,
           state: queryArg.state,
+          task_id: queryArg.taskId,
         },
       }),
     }),
@@ -1632,6 +1701,12 @@ export type DeleteUserControlPlaneV1UsersUserIdDeleteApiResponse = unknown;
 export type DeleteUserControlPlaneV1UsersUserIdDeleteApiArg = {
   userId: string;
 };
+export type UploadMyAvatarControlPlaneV1UsersMeAvatarPostApiResponse = unknown;
+export type UploadMyAvatarControlPlaneV1UsersMeAvatarPostApiArg = {
+  bodyUploadMyAvatarControlPlaneV1UsersMeAvatarPost: BodyUploadMyAvatarControlPlaneV1UsersMeAvatarPost;
+};
+export type DeleteMyAvatarControlPlaneV1UsersMeAvatarDeleteApiResponse = unknown;
+export type DeleteMyAvatarControlPlaneV1UsersMeAvatarDeleteApiArg = void;
 export type GetUserDetailsControlPlaneV1UserGetApiResponse = /** status 200 Successful Response */ UserDetails;
 export type GetUserDetailsControlPlaneV1UserGetApiArg = void;
 export type ValidateGcuControlPlaneV1GcuPostApiResponse = /** status 200 Successful Response */ any;
@@ -1782,6 +1857,19 @@ export type PatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstan
     agentInstanceId: string;
     bodyPatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatch: BodyPatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatch;
   };
+export type GetAgentInstanceCopyTargetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyTargetsGetApiResponse =
+  /** status 200 Successful Response */ AgentCopyTargetsResponse;
+export type GetAgentInstanceCopyTargetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyTargetsGetApiArg = {
+  teamId: string;
+  agentInstanceId: string;
+};
+export type PostAgentInstanceCopyControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyPostApiResponse =
+  /** status 200 Successful Response */ AgentCopyResponse;
+export type PostAgentInstanceCopyControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyPostApiArg = {
+  teamId: string;
+  agentInstanceId: string;
+  agentCopyRequest: AgentCopyRequest;
+};
 export type GetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetApiResponse =
   /** status 200 Successful Response */ PromptSummary[];
 export type GetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetApiArg = {
@@ -1830,6 +1918,16 @@ export type PatchTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPatchApiArg =
 };
 export type PostRecordPromptUseControlPlaneV1TeamsTeamIdPromptsPromptIdUsePostApiResponse = unknown;
 export type PostRecordPromptUseControlPlaneV1TeamsTeamIdPromptsPromptIdUsePostApiArg = {
+  teamId: string;
+  promptId: string;
+};
+export type AddTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoritePutApiResponse = unknown;
+export type AddTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoritePutApiArg = {
+  teamId: string;
+  promptId: string;
+};
+export type RemoveTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoriteDeleteApiResponse = unknown;
+export type RemoveTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoriteDeleteApiArg = {
   teamId: string;
   promptId: string;
 };
@@ -2235,6 +2333,14 @@ export type PutPlatformPromptControlPlaneV1AdminPlatformPromptPutApiArg = {
 export type GetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetApiResponse =
   /** status 200 Successful Response */ PlatformInstructions;
 export type GetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetApiArg = void;
+export type GetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetApiResponse =
+  /** status 200 Successful Response */ PlatformUiSettings;
+export type GetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetApiArg = void;
+export type PutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutApiResponse =
+  /** status 200 Successful Response */ PlatformUiSettings;
+export type PutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutApiArg = {
+  setPlatformUiSettingsRequest: SetPlatformUiSettingsRequest;
+};
 export type GetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetApiResponse =
   /** status 200 Successful Response */ Announcement[];
 export type GetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetApiArg = void;
@@ -2284,6 +2390,8 @@ export type ListTasksControlPlaneV1TasksGetApiArg = {
   teamId?: string | null;
   kind?: string | null;
   state?: string | null;
+  /** With scope=user: these of the caller's tasks, in any state (1 to 50). */
+  taskId?: string[] | null;
 };
 export type StreamTaskEventsControlPlaneV1TasksTaskIdEventsGetApiResponse = /** status 200 Successful Response */ any;
 export type StreamTaskEventsControlPlaneV1TasksTaskIdEventsGetApiArg = {
@@ -2709,6 +2817,7 @@ export type UserSummary = {
   last_name?: string | null;
   username?: string | null;
   email?: string | null;
+  avatar_image_url?: string | null;
 };
 export type CreateUserRequest = {
   username: string;
@@ -2736,7 +2845,10 @@ export type PlatformRolesResponse = {
 export type GrantPlatformRoleRequest = {
   relation: PlatformRoleRelation;
 };
-export type GcuVersionsType = "v1";
+export type BodyUploadMyAvatarControlPlaneV1UsersMeAvatarPost = {
+  /** Profile picture file (max 5MB, JPEG/PNG/WebP) */
+  file: string;
+};
 export type UserTeamRelation = "team_admin" | "pending_team_admin" | "team_editor" | "team_analyst" | "team_member";
 export type JoiningMode = "open" | "invite_only";
 export type TeamVisibility = "public" | "private";
@@ -2786,7 +2898,7 @@ export type TeamWithPermissions = {
   retention?: TeamRetentionView | null;
 };
 export type UserDetails = {
-  cguValidated: GcuVersionsType | null;
+  cguValidated: string | null;
   personalTeam: TeamWithPermissions;
   currentUser?: UserSummary | null;
 };
@@ -2876,12 +2988,8 @@ export type ApplicationList = {
   items: ApplicationSummary[];
 };
 export type FrontendFeatureFlags = {
-  enableK8Features?: boolean;
-  enableElecWarfare?: boolean;
   /** Enable Fred's integrated Apps surface deployment-wide. When false, application discovery, application catalog administration, and the frontend Apps experience stay disabled. */
   enableApplications?: boolean;
-  /** Show Mon espace/Espace d'équipe/Agents tabs on the Resources page, not just Corpus d'équipe. */
-  enableAllResourceSpaces?: boolean;
   /** Reserved for the standalone rags-services admin UI; unused now that its temporary in-repo copy is gone. */
   enableInformationSystems?: boolean;
 };
@@ -2912,6 +3020,15 @@ export type FrontendUserAuthConfig = {
   enabled: boolean;
   realm_url?: string | null;
   client_id?: string | null;
+  provider?: string;
+  scope?: string | null;
+  user_directory?: string;
+  uid_claim?: string;
+  roles_claim?: string[] | null;
+};
+export type FrontendUiThemes = {
+  default_theme?: string | null;
+  hidden_themes?: string[];
 };
 export type FrontendConfig = {
   user_auth: FrontendUserAuthConfig;
@@ -2920,6 +3037,8 @@ export type FrontendConfig = {
   root_bootstrap_completed: boolean;
   /** The authoritative frontend gating decision for BootstrapGuard — true only when `security.user.enabled AND security.rebac.enabled AND NOT root_bootstrap_completed`. Deliberately distinct from `root_bootstrap_completed`, which stays the truthful durable historical marker and is never reinterpreted: on deployments where user authentication or ReBAC is disabled, `root_bootstrap_completed` is still False on a fresh database even though `POST /bootstrap/platform-admin` deliberately refuses with 503 there, so the frontend must not treat 'not completed' alone as 'must show the bootstrap page'. The frontend must gate on this field, not re-derive the ReBAC/auth predicate itself. */
   root_bootstrap_required: boolean;
+  /** Platform UI theme settings, omitted when never saved. Public on purpose: the frontend resolves the theme before its first paint, before authentication. Theme ids only, no admin-authored content. */
+  ui_themes?: FrontendUiThemes | null;
 };
 export type ManagedAgentUiHints = {
   multiline?: boolean;
@@ -3023,6 +3142,7 @@ export type FieldSpec = {
       )
     | null;
   ui?: UiHints;
+  scope_private?: boolean | null;
 };
 export type AssetSlot = {
   key: string;
@@ -3216,6 +3336,39 @@ export type BodyPatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentIn
     asset_slots?: string[];
     asset_files?: string[];
   };
+export type AgentCopyCapability = {
+  id: string;
+  /** i18n key of the capability's display name. */
+  name: string;
+};
+export type AgentCopyTarget = {
+  team_id: string;
+  template_enabled: boolean;
+  missing_capabilities?: AgentCopyCapability[];
+};
+export type AgentCopyTargetsResponse = {
+  targets: AgentCopyTarget[];
+};
+export type AgentCopyNotice = {
+  capability: AgentCopyCapability;
+  message: string;
+};
+export type AgentCopyResult = {
+  team_id: string;
+  agent?: ManagedAgentInstanceSummary | null;
+  /** Capabilities left out: not usable in the destination, or rejected there. */
+  dropped_capabilities?: AgentCopyCapability[];
+  /** What an editor must redo in the destination, per capability. */
+  notices?: AgentCopyNotice[];
+  error?: string | null;
+};
+export type AgentCopyResponse = {
+  results: AgentCopyResult[];
+};
+export type AgentCopyRequest = {
+  target_team_ids: string[];
+  display_name?: string | null;
+};
 export type PromptSummary = {
   id: string;
   name: string;
@@ -3235,6 +3388,7 @@ export type PromptSummary = {
   avg_output_tokens?: number | null;
   created_at?: string | null;
   updated_at?: string | null;
+  is_favorite?: boolean;
 };
 export type CreatePromptRequest = {
   name: string;
@@ -3262,6 +3416,7 @@ export type ContextPromptSummary = {
   version: number;
   session_count: number;
   score?: number | null;
+  is_favorite?: boolean;
 };
 export type PromptDetail = {
   id: string;
@@ -3282,6 +3437,7 @@ export type PromptDetail = {
   avg_output_tokens?: number | null;
   created_at?: string | null;
   updated_at?: string | null;
+  is_favorite?: boolean;
   team_id: string;
   text: string;
 };
@@ -3320,6 +3476,7 @@ export type MarketplacePromptSummary = {
   avg_output_tokens?: number | null;
   created_at?: string | null;
   updated_at?: string | null;
+  is_favorite?: boolean;
   team_id: string;
   team_name: string;
 };
@@ -3342,6 +3499,7 @@ export type MarketplacePromptDetail = {
   avg_output_tokens?: number | null;
   created_at?: string | null;
   updated_at?: string | null;
+  is_favorite?: boolean;
   team_id: string;
   text: string;
   team_name: string;
@@ -3946,6 +4104,19 @@ export type PlatformInstructions = {
   /** True when no runtime pod could be reached to report its shipped instructions. `text` is then empty for lack of an answer, not because agents receive no instructions — the UI must distinguish the two rather than render an empty read-only panel. */
   source_unavailable?: boolean;
 };
+export type PlatformUiSettings = {
+  /** Theme new users get, or null to use the frontend's own default. */
+  default_theme?: string | null;
+  /** Theme ids withdrawn from the users' choice. */
+  hidden_themes?: string[];
+  updated_by?: string | null;
+  /** Null when the settings were never saved. */
+  updated_at?: string | null;
+};
+export type SetPlatformUiSettingsRequest = {
+  default_theme?: string | null;
+  hidden_themes?: string[];
+};
 export type Announcement = {
   id: string;
   severity: "info" | "warning" | "error" | "success";
@@ -4026,18 +4197,6 @@ export type TaskTarget = {
   id: string;
   label: string;
 };
-export type RepairVectorMetadataResult = {
-  source_tag: string;
-  metadata_documents?: number;
-  already_done?: number;
-  eligible_with_vectors_and_content?: number;
-  repaired?: number;
-  missing_vectors?: number;
-  missing_content?: number;
-  tabular_excluded?: number;
-  failed_or_running_excluded?: number;
-  errors?: number;
-};
 export type IngestionDetail = {
   processed: number;
   total: number;
@@ -4045,7 +4204,6 @@ export type IngestionDetail = {
   preview: number;
   vectorized: number;
   sql_indexed: number;
-  result?: RepairVectorMetadataResult | null;
 };
 export type EvaluationDetail = {
   campaign_id: string;
@@ -4355,6 +4513,8 @@ export const {
   useGrantPlatformRoleControlPlaneV1UsersUserIdPlatformRolesPostMutation,
   useRevokePlatformRoleControlPlaneV1UsersUserIdPlatformRolesRelationDeleteMutation,
   useDeleteUserControlPlaneV1UsersUserIdDeleteMutation,
+  useUploadMyAvatarControlPlaneV1UsersMeAvatarPostMutation,
+  useDeleteMyAvatarControlPlaneV1UsersMeAvatarDeleteMutation,
   useGetUserDetailsControlPlaneV1UserGetQuery,
   useLazyGetUserDetailsControlPlaneV1UserGetQuery,
   useValidateGcuControlPlaneV1GcuPostMutation,
@@ -4401,6 +4561,9 @@ export const {
   useDeleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDeleteMutation,
   usePostTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesWithAssetsPostMutation,
   usePatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatchMutation,
+  useGetAgentInstanceCopyTargetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyTargetsGetQuery,
+  useLazyGetAgentInstanceCopyTargetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyTargetsGetQuery,
+  usePostAgentInstanceCopyControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyPostMutation,
   useGetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetQuery,
   useLazyGetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetQuery,
   usePostTeamPromptControlPlaneV1TeamsTeamIdPromptsPostMutation,
@@ -4414,6 +4577,8 @@ export const {
   useDeleteTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdDeleteMutation,
   usePatchTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPatchMutation,
   usePostRecordPromptUseControlPlaneV1TeamsTeamIdPromptsPromptIdUsePostMutation,
+  useAddTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoritePutMutation,
+  useRemoveTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoriteDeleteMutation,
   usePostPromotePromptControlPlaneV1TeamsTeamIdPromptsPromptIdPromotePostMutation,
   usePostPublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPublishPostMutation,
   usePostUnpublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdUnpublishPostMutation,
@@ -4514,6 +4679,9 @@ export const {
   usePutPlatformPromptControlPlaneV1AdminPlatformPromptPutMutation,
   useGetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetQuery,
   useLazyGetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetQuery,
+  useGetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetQuery,
+  useLazyGetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetQuery,
+  usePutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutMutation,
   useGetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetQuery,
   useLazyGetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetQuery,
   useListAnnouncementsControlPlaneV1AdminPlatformAnnouncementsGetQuery,

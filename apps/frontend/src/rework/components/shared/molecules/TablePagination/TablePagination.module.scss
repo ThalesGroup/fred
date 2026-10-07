@@ -19,9 +19,10 @@
   flex-shrink: 0;
   justify-content: space-between;
   align-items: center;
-  border-top: 1px solid var(--surface-container-highest);
+  border-top: 1px solid var(--outline-muted);
   background-color: var(--datatable-background-color);
-  height: 3.75rem;
+  /* Sized by its 32px controls rather than a fixed height, to stay compact. */
+  padding: var(--spacing-xs) 0;
 }
 
 .datatable-footer-left {
@@ -35,6 +36,12 @@
   align-items: center;
   gap: var(--spacing-xs);
   padding-right: var(--spacing-m);
+}
+
+.footer-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3xs);
 }
 
 .footer-label {

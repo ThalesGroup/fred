@@ -162,7 +162,7 @@ export default function HomeSearch() {
   const rowVisual = (hit: SearchHit) => {
     if (hit.kind === "team") {
       return hit.avatarImageUrl ? (
-        <img className={styles.rowAvatar} src={hit.avatarImageUrl} alt="" />
+        <img className={styles.rowAvatar} src={hit.avatarImageUrl} alt="" width={32} height={32} decoding="async" />
       ) : (
         <TeamInitials className={styles.rowAvatar} name={hit.name} size="small" shape="square" />
       );

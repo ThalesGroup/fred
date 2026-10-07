@@ -13,8 +13,7 @@
 # limitations under the License.
 
 """
-Return-shape investigation for `AgentCapability.tools()` (Phase 1,
-NOTES-GRAPH-CAPABILITY-BRIDGE.md).
+Return-shape investigation for `AgentCapability.tools()`.
 
 Why this file exists:
 - the bridge plan assumed a capability tool's `content_and_artifact` tuple
@@ -38,7 +37,7 @@ What it proves:
    tool goes through today, Phase 1 included): the artifact survives intact
    on `ToolMessage.artifact`, with `.sources` populated.
 3. The candidate fix from the original plan text (switch to a bare
-   `ToolInvocationResult` return, `KfVectorSearchToolkit`'s convention) does
+   `ToolInvocationResult` return, the runtime-provider convention) does
    fix path (1) but breaks path (2): a bare pydantic return gets stringified
    into `ToolMessage.content` and `.artifact` is never populated. There is no
    single return convention that is correct on both invocation paths with a
@@ -164,7 +163,7 @@ async def test_content_and_artifact_tool_preserves_artifact_via_tool_call() -> N
 
 
 # ---------------------------------------------------------------------------
-# 3. The naive "fix": bare ToolInvocationResult return (KfVectorSearchToolkit's
+# 3. The naive "fix": bare ToolInvocationResult return (runtime-provider
 #    convention) — fixes path 1, breaks path 2. No single-tool free lunch.
 # ---------------------------------------------------------------------------
 
@@ -183,7 +182,7 @@ async def _bare_result_tool(x: str) -> ToolInvocationResult:
 @pytest.mark.asyncio
 async def test_bare_result_tool_survives_plain_dict_invoke() -> None:
     """The plain-dict path DOES preserve a bare `ToolInvocationResult` return —
-    this is why `KfVectorSearchToolkit` uses this convention for MCP-provider
+    this convention is suitable for runtime-provider
     tools, which are only ever invoked this way."""
 
     result = await _bare_result_tool.ainvoke({"x": "hello"})
@@ -196,7 +195,7 @@ async def test_bare_result_tool_loses_artifact_via_tool_call() -> None:
     """But the SAME bare-return convention, invoked through create_agent()'s
     real ToolCall loop, stringifies the whole result into `ToolMessage.content`
     and never populates `.artifact` — proving a naive migration of
-    `document_access` to `KfVectorSearchToolkit`'s convention would silently
+    `document_access` to the runtime-provider convention would silently
     break the ReAct Sources panel it serves today. An adapter at the
     tool-carrier/assembly seam (not a tool return-shape change) is required
     once Phase 4 wires capability tools into Graph's plain-dict invocation."""

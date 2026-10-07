@@ -24,7 +24,7 @@
 .trigger {
   all: unset;
   cursor: pointer;
-  border: 1px solid var(--outline-retreat);
+  border: 1px solid var(--outline-variant);
   border-radius: var(--radius-s);
   background: var(--surface-container-high);
 
@@ -67,9 +67,9 @@
   flex-direction: column;
   z-index: 200;
   box-shadow: var(--shadow-m);
-  border: 1px solid var(--outline-retreat);
+  border: 1px solid var(--outline-muted);
   border-radius: var(--radius-m);
-  background: var(--surface-container-high);
+  background: var(--surface-floating);
   overflow: hidden;
 }
 
@@ -95,7 +95,7 @@
   white-space: nowrap;
 
   &:hover {
-    background: var(--surface-container-highest);
+    background: var(--state-on-surface-hover);
   }
 
   &.active {
@@ -106,7 +106,7 @@
 
 .divider {
   margin: var(--spacing-s) 0;
-  background: var(--outline-retreat);
+  background: var(--outline-muted);
   width: 1px;
 }
 
@@ -123,7 +123,7 @@
 .monthStrip {
   display: flex;
   position: relative;
-  border-top: 1px solid var(--outline-retreat);
+  border-top: 1px solid var(--outline-muted);
   padding: var(--spacing-xs) 0;
   width: 0;
   min-width: 100%;

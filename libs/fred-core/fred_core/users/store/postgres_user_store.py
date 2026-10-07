@@ -13,18 +13,21 @@
 # limitations under the License.
 
 import logging
-from datetime import datetime
-from typing import Optional
+from datetime import datetime, timezone
+from typing import Iterable, Optional, cast
 from uuid import UUID
 
-from sqlalchemy import case, func, select, update
+from sqlalchemy import case, func, or_, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from fred_core.sql import make_session_factory, use_session
 from fred_core.users.user_models import GcuVersionsType, UserRow
 
-from .base_user_store import BaseUserStore
+from .base_user_store import AmbiguousUsernameError, BaseUserStore
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +60,147 @@ class PostgresUserStore(BaseUserStore):
     async def save(self, user: UserRow) -> None:
         pass
 
+    @staticmethod
+    def _identity_dict(user: UserRow) -> dict[str, str | None]:
+        return {
+            "id": str(user.id),
+            "username": user.username,
+            "email": user.email,
+            "firstName": user.first_name,
+            "lastName": user.last_name,
+        }
+
+    async def upsert_identity(
+        self,
+        user_id: UUID,
+        username: str,
+        email: str | None,
+        first_name: str | None,
+        last_name: str | None,
+    ) -> None:
+        values = {
+            "username": username,
+            "email": email,
+            "first_name": first_name,
+            "last_name": last_name,
+            "last_seen_at": datetime.now(timezone.utc),
+        }
+        async with use_session(self._sessions) as session:
+            result = await session.execute(
+                update(UserRow).where(UserRow.id == user_id).values(**values)
+            )
+            if cast(CursorResult, result).rowcount:
+                return
+            try:
+                async with session.begin_nested():
+                    session.add(UserRow(id=user_id, **values))
+                    await session.flush()
+            except IntegrityError:
+                await session.execute(
+                    update(UserRow).where(UserRow.id == user_id).values(**values)
+                )
+
+    async def search_identities(
+        self, query: str, limit: int
+    ) -> list[dict[str, str | None]]:
+        pattern = f"%{query}%"
+        fields = (
+            UserRow.username,
+            UserRow.email,
+            UserRow.first_name,
+            UserRow.last_name,
+        )
+        async with use_session(self._sessions) as session:
+            rows = (
+                await session.scalars(
+                    select(UserRow)
+                    .where(UserRow.username.is_not(None))
+                    .where(or_(*(field.ilike(pattern) for field in fields)))
+                    .order_by(UserRow.username, UserRow.id)
+                    .limit(limit)
+                )
+            ).all()
+        return [self._identity_dict(row) for row in rows]
+
+    async def list_identities(
+        self, offset: int, limit: int
+    ) -> list[dict[str, str | None]]:
+        async with use_session(self._sessions) as session:
+            rows = (
+                await session.scalars(
+                    select(UserRow)
+                    .where(UserRow.username.is_not(None))
+                    .order_by(UserRow.username, UserRow.id)
+                    .offset(offset)
+                    .limit(limit)
+                )
+            ).all()
+        return [self._identity_dict(row) for row in rows]
+
+    async def get_identities(self, ids: list[UUID]) -> list[dict[str, str | None]]:
+        if not ids:
+            return []
+        async with use_session(self._sessions) as session:
+            rows = (
+                await session.scalars(
+                    select(UserRow).where(
+                        UserRow.id.in_(ids), UserRow.username.is_not(None)
+                    )
+                )
+            ).all()
+        by_id = {row.id: self._identity_dict(row) for row in rows}
+        return [by_id[user_id] for user_id in ids if user_id in by_id]
+
+    async def count_identities(self) -> int:
+        async with use_session(self._sessions) as session:
+            count = await session.scalar(
+                select(func.count())
+                .select_from(UserRow)
+                .where(UserRow.username.is_not(None))
+            )
+        return count or 0
+
+    async def find_ids_by_usernames(
+        self, usernames: list[str] | None = None
+    ) -> dict[str, str]:
+        stmt = select(UserRow).where(UserRow.username.is_not(None))
+        if usernames is not None:
+            if not usernames:
+                return {}
+            stmt = stmt.where(
+                func.lower(UserRow.username).in_([name.lower() for name in usernames])
+            )
+        async with use_session(self._sessions) as session:
+            rows = (await session.scalars(stmt)).all()
+        resolved: dict[str, str] = {}
+        ambiguous: set[str] = set()
+        for row in rows:
+            if row.username is None:
+                continue
+            user_id = str(row.id)
+            if row.username in resolved and resolved[row.username] != user_id:
+                ambiguous.add(row.username)
+            resolved[row.username] = user_id
+        if ambiguous:
+            # SQL matches case-insensitively; consumers resolve exact names.
+            requested = (
+                ambiguous if usernames is None else ambiguous.intersection(usernames)
+            )
+            if requested:
+                raise AmbiguousUsernameError(list(requested))
+            for username in ambiguous:
+                resolved.pop(username, None)
+        return resolved
+
+    async def identity_exists(self, user_id: UUID) -> bool:
+        async with use_session(self._sessions) as session:
+            value = await session.scalar(
+                select(UserRow.id).where(
+                    UserRow.id == user_id, UserRow.username.is_not(None)
+                )
+            )
+        return value is not None
+
     async def find_user_by_id(
         self, user_id: UUID, session: AsyncSession | None = None
     ) -> Optional[UserRow]:
@@ -67,22 +211,36 @@ class PostgresUserStore(BaseUserStore):
     async def update_gcu_version(
         self,
         user_id: UUID,
-        gcu_version: GcuVersionsType,
+        gcu_version: str | GcuVersionsType,
         session: AsyncSession | None = None,
     ) -> None:
+        version = (
+            gcu_version.value
+            if isinstance(gcu_version, GcuVersionsType)
+            else gcu_version
+        )
+        accepted_at = datetime.now(timezone.utc)
         async with use_session(self._sessions, session) as s:
-            user = await s.get(UserRow, user_id)
-
-            if user is None:
-                user = UserRow(
+            insert = (
+                pg_insert
+                if s.get_bind().dialect.name == "postgresql"
+                else sqlite_insert
+            )
+            await s.execute(
+                insert(UserRow)
+                .values(
                     id=user_id,
-                    gcuVersionAccepted=gcu_version,
-                    gcuAcceptedAt=datetime.now(),
+                    gcuVersionAccepted=version,
+                    gcuAcceptedAt=accepted_at,
                 )
-                s.add(user)
-            else:
-                user.gcuVersionAccepted = gcu_version
-                user.gcuAcceptedAt = datetime.now()
+                .on_conflict_do_update(
+                    index_elements=["id"],
+                    set_={
+                        "gcuVersionAccepted": version,
+                        "gcuAcceptedAt": accepted_at,
+                    },
+                )
+            )
 
     async def increment_current_storage_size(
         self,
@@ -156,3 +314,55 @@ class PostgresUserStore(BaseUserStore):
                         )
                     )
                 )
+
+    async def swap_avatar_key(
+        self,
+        user_id: UUID,
+        key: str | None,
+        session: AsyncSession | None = None,
+    ) -> str | None:
+        async with use_session(self._sessions, session) as s:
+            # Row lock so two concurrent uploads cannot both read the same
+            # previous key and leave one object orphaned.
+            previous = await s.execute(
+                select(UserRow.avatar_object_storage_key)
+                .where(UserRow.id == user_id)
+                .with_for_update()
+            )
+            row = previous.one_or_none()
+            if row is not None:
+                await s.execute(
+                    update(UserRow)
+                    .where(UserRow.id == user_id)
+                    .values(avatar_object_storage_key=key)
+                )
+                return row[0]
+            if key is None:
+                return None
+            try:
+                async with s.begin_nested():
+                    s.add(UserRow(id=user_id, avatar_object_storage_key=key))
+            except IntegrityError:
+                # A concurrent first write created the row: swap on it instead.
+                return await self.swap_avatar_key(user_id, key, session=s)
+            return None
+
+    async def get_avatar_keys(
+        self, user_ids: Iterable[str], session: AsyncSession | None = None
+    ) -> dict[str, str]:
+        requested: dict[UUID, str] = {}
+        for user_id in user_ids:
+            try:
+                requested[UUID(str(user_id))] = user_id
+            except ValueError:
+                continue
+        if not requested:
+            return {}
+        async with use_session(self._sessions, session) as s:
+            result = await s.execute(
+                select(UserRow.id, UserRow.avatar_object_storage_key).where(
+                    UserRow.id.in_(requested.keys()),
+                    UserRow.avatar_object_storage_key.is_not(None),
+                )
+            )
+            return {requested[row_id]: key for row_id, key in result.all()}

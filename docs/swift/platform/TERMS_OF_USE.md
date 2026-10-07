@@ -46,7 +46,7 @@ app:
   address: 0.0.0.0
   port: 8222
   log_level: info
-  gcu_version: V1
+  gcu_version: v1
 ```
 
 Disable it by leaving the field unset or explicitly setting it to `null`.
@@ -114,8 +114,26 @@ installation.
 Today, a deployment owner can:
 
 - decide whether the feature is enabled
-- choose the active version string (`V1`, `2026-04`, etc.)
+- choose the active version string (`v1`, `v2`, `2026-04`, etc.)
 - force re-acceptance by changing that version
+
+## Stored Acceptance
+
+CGU keeps only the latest accepted version and its timestamp in `users`.
+Version identifiers are opaque, case-sensitive strings. Each acceptance
+replaces both fields. Protected human requests require that the stored version
+matches the active configuration; switching from `v2` back to `v1` requires
+acceptance again if `v2` is currently stored.
+
+`GET /control-plane/v1/user` returns that stored string or `null` in
+`cguValidated`. CGU reacceptance does not repeat first-acceptance default-team
+enrollment. The team administrator charter retains its separate per-version
+acceptance history and authorization policy.
+
+The control-plane migration converts legacy `V1` storage to the wire value
+`v1`, preserving available timestamps. Upgrade ordering and guarded rollback
+are described in the
+[version acceptance migration note](../ops/migrations/2972-configurable-gcu-versions.md).
 
 ## Current Limitation: Terms Text Is Not Yet Configurable
 

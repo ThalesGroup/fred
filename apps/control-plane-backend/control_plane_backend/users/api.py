@@ -17,24 +17,34 @@ import uuid as _uuid_mod
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, FastAPI, Path, Query, Request, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    FastAPI,
+    File,
+    Path,
+    Query,
+    Request,
+    UploadFile,
+    status,
+)
 from fastapi.responses import JSONResponse
 from fred_core import (
     ORGANIZATION_ID,
     BaseUserStore,
-    GcuVersionsType,
     KeycloakUser,
     OrganizationPermission,
     RebacEngine,
     get_current_user,
-    get_current_user_without_gcu,
 )
 from fred_core.common import personal_team_id
+from fred_core.security.oidc import get_current_user_before_gcu
 from fred_core.users.store.postgres_user_store import get_user_store
 from pydantic import BaseModel
 
 from control_plane_backend.app.dependencies import get_application_container
 from control_plane_backend.bootstrap.store import PlatformBootstrapStore
+from control_plane_backend.prompts.store import PromptStore
 from control_plane_backend.teams.dependencies import (
     TeamServiceDependencies,
     get_team_service_dependencies,
@@ -60,8 +70,10 @@ from control_plane_backend.users.platform_roles import (
     revoke_platform_role as revoke_platform_role_from_service,
 )
 from control_plane_backend.users.schemas import (
+    AccountSuspensionDisabledError,
     CreateUserRequest,
     GrantPlatformRoleRequest,
+    IdentityManagedByProviderError,
     KeycloakM2MUserOperationDisabledError,
     PlatformAdminRootOnlyError,
     PlatformBootstrapNotCompletedError,
@@ -77,7 +89,9 @@ from control_plane_backend.users.schemas import (
 from control_plane_backend.users.service import (
     _get_keycloak_admin_for_user_operations,
     find_user_details_by_id,
+    remove_user_avatar,
     update_gcu_validation,
+    upload_user_avatar,
 )
 from control_plane_backend.users.service import (
     create_user as create_user_from_service,
@@ -112,6 +126,10 @@ def _get_platform_bootstrap_store(request: Request) -> PlatformBootstrapStore:
     return get_application_container(request).get_platform_bootstrap_store()
 
 
+def _get_prompt_store(request: Request) -> PromptStore:
+    return get_application_container(request).get_prompt_store()
+
+
 def _parse_user_uuid(user: KeycloakUser) -> UUID:
     """
     Return the persisted user UUID for the authenticated subject.
@@ -139,12 +157,33 @@ def _parse_user_uuid(user: KeycloakUser) -> UUID:
 def register_exception_handlers(app: FastAPI) -> None:
     """Register user-domain exception handlers."""
 
+    @app.exception_handler(AccountSuspensionDisabledError)
+    async def account_suspension_disabled_handler(
+        _request, exc: AccountSuspensionDisabledError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=403,
+            content={"detail": str(exc), "reason": "account_suspension_disabled"},
+        )
+
     @app.exception_handler(KeycloakM2MUserOperationDisabledError)
     async def keycloak_disabled_for_users_handler(
         _request,
         exc: KeycloakM2MUserOperationDisabledError,
     ) -> JSONResponse:
         return JSONResponse(status_code=503, content={"detail": str(exc)})
+
+    @app.exception_handler(IdentityManagedByProviderError)
+    async def identity_managed_by_provider_handler(
+        _request, exc: IdentityManagedByProviderError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "detail": str(exc),
+                "reason": "managed_by_identity_provider",
+            },
+        )
 
     @app.exception_handler(UserAlreadyExistsError)
     async def user_already_exists_handler(
@@ -372,32 +411,67 @@ async def delete_user(
     bootstrap_store: Annotated[
         PlatformBootstrapStore, Depends(_get_platform_bootstrap_store)
     ],
+    prompt_store: Annotated[PromptStore, Depends(_get_prompt_store)],
     user: KeycloakUser = Depends(get_current_user),
 ) -> None:
     await rebac.check_user_permission_or_raise(
         user, OrganizationPermission.CAN_ADMINISTER_USERS, ORGANIZATION_ID
     )
-    # PLATFORM-ADMIN-DELEGATION-RFC.md §3 (#2405): deleting the bootstrap
-    # root's Keycloak account would be a one-call bypass of the root's
-    # unrevocability — completed_by could never authenticate again while
-    # bootstrap stays permanently closed, freezing the platform_admin
-    # population with no in-product recovery.
+    # Deleting the root would freeze bootstrap with no in-product recovery.
     if user_id == await bootstrap_store.get_completed_by():
         raise PlatformRoleRootProtectedError()
     # "*" is the wildcard subject and "#" marks a userset: neither names a person.
     if user_id == "*" or "#" in user_id:
         raise UserNotFoundError(user_id)
+    if deps.configuration.security.user_directory == "local":
+        if not rebac.requires_active_accounts:
+            raise AccountSuspensionDisabledError()
+        await rebac.suspend_account(user_id)
+        return
+
     admin = _get_keycloak_admin_for_user_operations(deps)
     # The ban alone ends access, so the person's other relations stay. It comes before
     # the identity-provider account: a failure after it leaves the person refused, and
     # a retry rewrites the same ban.
     if rebac.requires_active_accounts:
         await rebac.suspend_account(user_id)
+    # Before the account, so a failure here is retried rather than orphaned.
+    await prompt_store.delete_favorites_for_user(user_id)
+    await remove_user_avatar(user_id, deps)
     await delete_user_from_service(admin, user_id)
 
 
+@router.post(
+    "/users/me/avatar",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Upload the caller's profile picture.",
+)
+async def upload_my_avatar(
+    deps: UserDependencies,
+    file: UploadFile = File(
+        ..., description="Profile picture file (max 5MB, JPEG/PNG/WebP)"
+    ),
+    user: KeycloakUser = Depends(get_current_user),
+) -> None:
+    """Replace the caller's profile picture; the target is always the caller."""
+    await upload_user_avatar(user, file, deps)
+
+
+@router.delete(
+    "/users/me/avatar",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete the caller's profile picture.",
+)
+async def delete_my_avatar(
+    deps: UserDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> None:
+    """Remove the caller's profile picture; succeeds when there is none."""
+    await remove_user_avatar(user.uid, deps)
+
+
 class UserDetails(BaseModel):
-    cguValidated: GcuVersionsType | None
+    cguValidated: str | None
     personalTeam: TeamWithPermissions
     currentUser: UserSummary | None = None
 
@@ -408,7 +482,7 @@ class UserDetails(BaseModel):
 )
 async def get_user_details(
     team_deps: TeamDependencies,
-    user: KeycloakUser = Depends(get_current_user_without_gcu),
+    user: KeycloakUser = Depends(get_current_user_before_gcu),
     user_store: BaseUserStore = Depends(get_user_store),
 ) -> UserDetails:
     """Return the personal team through the shared team resolver.
@@ -438,7 +512,7 @@ async def get_user_details(
 async def validate_gcu(
     deps: UserDependencies,
     team_deps: TeamDependencies,
-    user: KeycloakUser = Depends(get_current_user_without_gcu),
+    user: KeycloakUser = Depends(get_current_user_before_gcu),
     user_store: BaseUserStore = Depends(get_user_store),
 ) -> None:
     """

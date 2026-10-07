@@ -19,12 +19,13 @@ import styles from "./UserProfile.module.scss";
 import { KeyCloakService } from "../../../../../security/KeycloakService.ts";
 import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
 import UserAvatar from "@shared/atoms/UserAvatar/UserAvatar.tsx";
-import Icon from "@shared/atoms/Icon/Icon.tsx";
+import { useFrontendBootstrap } from "../../../../../hooks/useFrontendBootstrap.ts";
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import MenuPopover from "@shared/molecules/MenuPopover/MenuPopover.tsx";
 import MenuPopoverItem from "@shared/molecules/MenuPopover/MenuPopoverItem.tsx";
 
 /**
- * Bottom-of-rail user entry. Clicking the row opens a popover above it grouping
+ * Bottom-of-rail user entry: an avatar button. Clicking it opens a popover above it grouping
  * user-scoped actions: Profile (the existing settings page), optional Contact
  * support, and Logout. The Help Center and the platform admin console moved out
  * of this menu to the mainNavBar (#2298); team admin stays on the team banner
@@ -38,7 +39,7 @@ export default function UserProfile() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   const userFullName = KeyCloakService.GetUserFullName();
-  const username = KeyCloakService.GetUserName();
+  const { bootstrap } = useFrontendBootstrap();
   const userEmail = KeyCloakService.GetUserMail();
 
   useEffect(() => {
@@ -106,22 +107,18 @@ export default function UserProfile() {
         </div>
       )}
 
-      <button
-        type="button"
-        className={styles.trigger}
-        onClick={() => setOpen((value) => !value)}
-        aria-expanded={open}
-        aria-haspopup="menu"
-      >
-        <UserAvatar name={userFullName} size="medium" />
-        <span className={styles.identity}>
-          <span className={styles.identityName}>{userFullName}</span>
-          <span className={styles.identityId}>{username}</span>
-        </span>
-        <span className={styles.chevron} aria-hidden>
-          <Icon category="outlined" type={open ? "expand_more" : "expand_less"} />
-        </span>
-      </button>
+      <Tooltip text={t("rework.profileMenu.trigger", { name: userFullName })} placement="right">
+        <button
+          type="button"
+          className={styles.trigger}
+          onClick={() => setOpen((value) => !value)}
+          aria-expanded={open}
+          aria-haspopup="menu"
+          aria-label={t("rework.profileMenu.trigger", { name: userFullName })}
+        >
+          <UserAvatar name={userFullName} size="small" imageUrl={bootstrap?.current_user?.avatar_image_url} />
+        </button>
+      </Tooltip>
     </div>
   );
 }

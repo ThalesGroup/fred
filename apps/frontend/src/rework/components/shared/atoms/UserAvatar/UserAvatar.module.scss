@@ -22,6 +22,7 @@
   background-color: var(--secondary-container);
   color: var(--on-secondary-container);
   corner-shape: unset;
+  overflow: hidden;
 
   &[data-size="x-small"] {
     width: 1.5rem;
@@ -48,4 +49,10 @@
 
     font: var(--font-title-large);
   }
+}
+
+.user-avatar-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }

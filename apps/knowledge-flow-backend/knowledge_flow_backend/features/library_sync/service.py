@@ -145,9 +145,6 @@ class LibrarySyncService:
                 tags=[folder_id],
                 source_tag=source_tag,
                 profile=profile,
-                # The suffix-based draft version is what makes two uploads two
-                # documents. Here the key already says they are one.
-                apply_versioning=False,
             )
             if existing is not None:
                 # The identifier is reused, never recomputed from the key: this
@@ -390,8 +387,6 @@ class LibrarySyncService:
         a source watched for months grows an index of every revision it ever
         had — which is the defect this surface exists to remove, one layer down.
 
-        The same step the revectorize workflow takes before re-embedding a
-        document it is rebuilding from stored content.
         """
         context = ApplicationContext.get_instance()
         vector_store = context.get_create_vector_store(context.get_embedder())

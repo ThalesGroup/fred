@@ -183,9 +183,14 @@ value is served by a separate **public (unauthenticated)** surface:
     - `enabled`
     - `realm_url` — emitted only when `enabled`
     - `client_id` — emitted only when `enabled`
+    - `provider`, `scope`, `user_directory`, `uid_claim`, `roles_claim` — added 2026-09-30 for the common browser OIDC flow; public provider and identity mapping only, with Keycloak defaults when authentication is disabled.
   - `gcu_version` — **added 2026-06-22 (FRONT-10)** — active Terms-of-Use / CGU
     version the deployment requires, or omitted/`null` when gating is off. This
     is the **authoritative** source the frontend GCU guard reads.
+  - `ui_themes` → `FrontendUiThemes` — **added 2026-10-02 (#2933)** — platform
+    default UI theme and hidden theme ids, omitted until an admin saves them
+    (§57). Pre-auth for the same reason as `gcu_version`: the frontend resolves
+    the theme before its first paint.
 
 The handler derives `user_auth` directly from `fred_core` `SecurityConfiguration.user`
 (`security.user`), the same config that drives backend JWT validation — so the backend
@@ -673,6 +678,18 @@ snapshot-only requirement; see §33 and `PROMPTS.md` §6.1 for the rationale):
   only), `POST /marketplace/prompts/{id}/import` (per-target
   `can_update_resources`, `_imported-N` naming)
 
+Per-user favorites (2026-10-01, OpenSpec `add-prompt-favorites`):
+
+- table `prompt_favorite (user_id, prompt_id → prompt ON DELETE CASCADE)`;
+  personal data, never read on behalf of another user
+- `PUT` / `DELETE /teams/{team_id}/prompts/{prompt_id}/favorite`: idempotent,
+  `204`, `can_use_team_agents` (reading the prompt is enough), `404` for a
+  prompt outside the team
+- `PromptSummary.is_favorite` (team listing) and `ContextPromptSummary.is_favorite`
+  (chat picker) are computed for the caller; other payloads carry `false`
+- removed with the prompt, when the user leaves or is removed from the
+  prompt's team (`remove_team_member`), and on account deletion (`DELETE /users/{id}`)
+
 ### 3.7 Feedback
 
 Feedback must align with managed execution semantics:
@@ -702,28 +719,19 @@ POST /knowledge-flow/v1/storage/user/upload   (knowledge-flow-backend, existing 
   Response: { download_url, key, file_name, size, … }
 ```
 
-The control-plane does not proxy or store binary content. File identity is a path in
-the Knowledge Flow virtual filesystem. Users see four team-scoped roots:
-`Resources`, `Mon espace`, `Espace d'equipe`, and `Agents`. Those map server-side to
-canonical paths such as `/corpus/...`,
-`/teams/{team}/users/{uid}/...`, `/teams/{team}/shared/...`, and
-`/teams/{team}/agents/{agent_instance_id}/users/{uid}/...`. The agent uses the Knowledge
-Flow MCP filesystem to read/write those paths through the simplified SDK/MCP
-surface. The control-plane's role is session and instance management only; file
-storage is `knowledge-flow-backend`'s responsibility.
-
-This boundary is intentionally simple so that future skills can treat files as a
-basic filesystem capability rather than a special control-plane feature. A skill
-should only need to know the path model and the MCP filesystem primitives; it should
-not need to learn a second storage abstraction owned by control-plane.
+The control-plane does not proxy or store binary content. Users browse corpus
+documents in Resources; conversation attachments use their existing document
+path. Knowledge Flow retains technical `/fs` paths for capability configuration
+assets and generated PPT outputs under
+`/teams/{team}/agents/{agent_instance_id}/...`. The runtime writes PPT outputs
+through `workspace_fs.write` and returns a Knowledge Flow download link. The
+control-plane manages sessions and agent instances, not file bytes.
 
 Implementation note: the system must stay compatible with open-source storage stacks
 without hard-coding MinIO, OpenSearch, or any other specific vendor service into the
 contract. Browser-facing download references remain Fred/Knowledge Flow links represented
 as `LinkPart`; storage-provider URLs and credentials are implementation details.
 
-Attachment metadata (filename, size, MIME type) may appear in `SessionListItem`
-as display-only fields once CHAT-04 (attachment picker) is implemented.
 See `docs/swift/design/FILESYSTEM.md`.
 
 ---
@@ -759,6 +767,8 @@ See `docs/swift/design/FILESYSTEM.md`.
 - `POST /teams/{team_id}/agent-instances` → `ManagedAgentInstanceSummary`
 - `PATCH /teams/{team_id}/agent-instances/{id}` → `ManagedAgentInstanceSummary`
 - `DELETE /teams/{team_id}/agent-instances/{id}` → 204
+- `GET /teams/{team_id}/agent-instances/{id}/copy-targets` → `AgentCopyTargetsResponse`
+- `POST /teams/{team_id}/agent-instances/{id}/copy` → `AgentCopyResponse` (§58)
 
 > **2026-07-17 (CAPAB-01, PR review finding — closes an unmet #1980 acceptance
 > criterion).** `capability_ids` omitted (or explicitly `null`) on
@@ -1208,13 +1218,19 @@ RFC):
   `UpdateTeamMemberRequest`). Grants one additional role. Checked against
   `can_administer_{admins,editors,analysts,members}` for the granted role,
   exactly as before.
-- `DELETE /teams/{team_id}/members/{user_id}/roles/{relation}` — revokes one
-  role, leaving any other role the member holds untouched. Refuses to revoke
-  a role not currently held (`404`) or a member's only remaining role
-  (`409`, `TeamMemberLastRoleError` — that is a removal, not a role change;
-  use `DELETE /teams/{team_id}/members/{user_id}` instead). The "team must
+- `DELETE /teams/{team_id}/members/{user_id}/roles/{relation}` - revokes one
+  role, leaving any other stored role untouched. When it is the person's only
+  stored elevated role (`team_admin`, `pending_team_admin`, `team_editor`, or
+  `team_analyst`), the service first grants a direct `team_member` relation,
+  requiring `can_administer_members` as well as permission for the revoked role.
+  This retains the person as a simple member. A role not held returns `404`;
+  revoking the sole direct `team_member` returns `409` (`TeamMemberLastRoleError`).
+  Full removal uses `DELETE /teams/{team_id}/members/{user_id}`. The "team must
   keep at least one `team_admin`" guard applies exactly when `team_admin` is
-  the role being revoked, by either this endpoint or a full member removal.
+  the role being revoked, by either endpoint. Both endpoints serialize their
+  role reads and writes for the same team member with a Postgres advisory lock
+  and force a higher-consistency direct-role read after acquiring it, so a
+  concurrent demotion cannot recreate membership after full removal.
 
 `AddTeamMemberRequest` (`POST /teams/{team_id}/members`, for a brand-new
 member) and `DELETE /teams/{team_id}/members/{user_id}` (full removal) are
@@ -1834,62 +1850,12 @@ silently-partial `succeeded`):
    already hold `team_admin` on every touched team). Idempotent — re-running
    an already-reconciled bundle re-writes the same tuples with no error.
 
-## 28. Contract Notes — MIGR-07, corpus re-vectorization (finalized 2026-07-25)
+## 28. Contract Notes — MIGR-07 corpus re-vectorization (retired)
 
-MIGR-07 backend is built (issue #2111). No knowledge-flow-backend equivalent
-of this contract doc exists yet (checked `docs/swift/design/` and
-`docs/swift/platform/` — nothing covers corpus/ingestion endpoint contracts);
-this section is the interim canonical record for the shape below until one is
-created — **flagged to Dimitri, not unilaterally created here.**
-
-**Endpoint:** `POST /knowledge-flow/v1/corpus/revectorize` (admin/owner-only,
-`RevectorizeCorpusRequestV1`: `scope` + `mode`/`force`) — starts a real
-`task_run` (`kind="ingestion"`, not a new `"revectorize"` kind — reuses
-`emit_ingestion_task_event`/`IngestionTaskEvent` verbatim so `TaskService`'s
-terminal-event reconciliation emits the right event type) and a Temporal
-workflow, `202 { task_id }`.
-
-**Temporal workflow shape** (`features/scheduler/workflow.py`, mirrors the
-`ProcessPull`/`ProcessPullFile` parent/child pattern):
-
-- `RevectorizeCorpusWorkflow.run(payload)` — resolves `scope` to
-  `document_uids` via the `list_documents_in_scope` activity, then batches
-  `RevectorizeDocument` children at `scheduler.temporal.ingestion_workflow_parallelism`
-  (reused, not a new request field), emitting one running/succeeded task
-  event with `processed`/`total`/`failed` counts.
-- `RevectorizeDocument.run(document_uid, options, user, task_id)` — skips a
-  document already vectorized under `mode: incremental` + no `force`
-  (`get_chunk_count` == 0 check); otherwise deletes existing vectors (if any)
-  and re-runs `output_process` (reused verbatim — restores from the mirrored
-  `output.md` in object storage, no re-extraction). Catches its own
-  exceptions and returns `{"failed": true}` rather than raising, so one bad
-  document cannot abort the whole corpus batch — the entire body from the
-  initial `get_chunk_count` call onward must stay inside the `try` (a gap in
-  the first cut, where `get_chunk_count` sat outside the `try`, was found and
-  fixed in review — see PR #2106).
-- `list_documents_in_scope` activity resolves a `CorpusScopeV1`-shaped dict:
-  `document_uids` wins outright; otherwise `tag_ids`/`source_tag` query the
-  raw metadata store directly (not per-user READ-filtered — the scope was
-  already authorized at the platform/team level by
-  `corpus_manager_controller._authorize_scope`).
-
-**Scope semantics:** `mode: full` → delete + re-embed every in-scope doc.
-`mode: incremental` → only docs with 0 vectors. `force: true` → always
-re-embed regardless of mode. `embedding_model` is advisory only (not wired
-into `prepare_revectorize_file`, which always uses
-`IngestionProcessingProfile.medium`; this repair path does not yet use the
-optional `DocumentMetadata.processing.profile`). Migration default scope: all migrated
-documents (by `source_tag`), `mode: full`.
-
-**Authorization:** a `source_tag`-only scope spans arbitrary teams (it's the
-migration's default scope) and requires `OrganizationPermission.CAN_MANAGE_PLATFORM`
-— same gate as `/documents/audit` and the import-export reset endpoints — not
-just per-tag/per-document ReBAC checks. Fixed alongside this build (the field
-existed but wasn't authorized before).
-
-**Remaining open item:** MIGR-07.04, the migration UI's "Rebuild embeddings"
-final-step trigger button (reuse the same task atoms already used by import)
-— a real future item, not yet built.
+The `/knowledge-flow/v1/corpus/*` maintenance API and its dedicated Temporal
+revectorization and vector-metadata repair workflows were retired with #2984.
+The independent document tree and ordinary ingestion APIs remain available.
+See the [migration note](../ops/migrations/retire-corpus-filesystem-mcp.md).
 
 ## 29. Contract Notes — TEAM-09 amendment, `joining_mode` narrowed to 2 states (2026-07-26, #2084)
 
@@ -3915,6 +3881,19 @@ platform features — capabilities, agent templates and models — so it takes t
 name of the role that governs it. The backend endpoints keep their
 `/admin/capabilities` prefix: there the word is accurate.
 
+## Versioned terms acceptance (2026-10-06)
+
+CGU acceptance uses opaque, case-sensitive configured strings. `POST /gcu`
+replaces the accepted version and timestamp in `users`; no acceptance history
+is kept. First acceptance alone enrolls default teams (section 52).
+
+`GET /user` keeps the `cguValidated` name and returns the stored `string | null`.
+It remains reachable before acceptance. Protected human requests require that
+the stored version matches the active configuration, including when returning
+to an older version; existing service/asserted-user exemptions remain in effect.
+The charter retains its independent per-version history. Deployment steps live
+in the [CGU migration note](../ops/migrations/2972-configurable-gcu-versions.md).
+
 ## 52. Contract Notes - default teams for new users (2026-09-14, issue #2649)
 
 **What it is.** A platform admin picks any number of registry teams that every
@@ -4000,7 +3979,18 @@ team creation, import) writes `pending_team_admin` instead while a version is
 set and the user has not accepted it. `pending_team_admin` cannot be requested
 directly (422). Revoking it cancels the nomination and needs
 `can_administer_admins`; removing the member deletes it with the other roles.
-`my_relations` and the member list expose it.
+`my_relations` and the member list expose it. Charter acceptance and startup
+reconciliation take the same per-member lock as nomination cancellation and
+recheck the pending tuple with higher consistency before promotion; a
+completed cancellation cannot be promoted from a stale lookup.
+
+**Display contacts (2026-10-05).** Membership-enriched team listings include
+both `team_admin` and `pending_team_admin` in `Team.admins`, so marketplace
+cards keep showing whom to contact before charter acceptance. The per-team
+`TeamWithPermissions.admins` projection keeps accepted `team_admin` users only,
+as required by the charter gate. While only bootstrap contacts are available,
+a pending administrator sees the charter until the detail confirms an accepted
+administrator exists. Contact avatars confer no permissions.
 
 **Endpoint.**
 
@@ -4162,6 +4152,98 @@ a collision in the destination team, appends the first free `-N` suffix from
 turn; the turn's content is the prompt's text, and the runtime knows nothing
 about prompts.
 
+## 57. Contract Notes — platform UI theme settings (2026-10-02, #2933)
+
+**What it is.** A platform admin sets the UI theme users get by default and the
+themes withdrawn from their choice. Theme ids are opaque to the control plane:
+the frontend owns the theme catalog and ignores ids it does not ship.
+
+**Model.** One `platform_ui_settings` row at most (`id = 'default'`, CHECK
+constraint): `default_theme` (nullable), `hidden_themes` (JSON list),
+`updated_by`, `updated_at`. No row means "never set".
+
+**Endpoints.**
+
+- `GET /control-plane/v1/admin/platform/ui-settings` → `PlatformUiSettings`
+  (`default_theme`, `hidden_themes`, `updated_by`, `updated_at`; defaults and
+  `updated_at: null` when never saved).
+- `PUT /control-plane/v1/admin/platform/ui-settings` with
+  `SetPlatformUiSettingsRequest` (`default_theme`, `hidden_themes`) replaces both.
+  Ids match `^[a-z][a-z0-9-]{0,31}$`, at most 32 distinct hidden ids, and the
+  default must not be hidden; violations are 422 at parsing. Emits the audit
+  event `platform.ui_settings.updated`.
+- Both require `organization#can_manage_platform`, like announcements.
+
+**Public exposure.** `FrontendConfig.ui_themes` (`default_theme`,
+`hidden_themes`) on the unauthenticated `GET /frontend/config`, omitted while
+no row exists, `default_theme` omitted when null (`exclude_none`). Ids only, no
+admin-authored content. The frontend caches it so its boot script can apply the
+theme before the next load's config arrives; a change applies to each user at
+their next load. Full behavior: OpenSpec `platform-ui-theme-settings`.
+
+## 58. Contract Notes — copy an agent to other teams (2026-10-04, #2949)
+
+**What it is.** An editor copies an agent's configuration into the personal
+space or other teams they edit, or duplicates it in its own team. Each
+destination gets a new, independent agent; nothing records its origin except
+the audit event.
+
+**Endpoints.** Both require `team.can_update_agents` on the source team.
+
+- `GET …/agent-instances/{id}/copy-targets` → `AgentCopyTargetsResponse`: for
+  the personal space and every team the caller edits (the source included),
+  `template_enabled` and `missing_capabilities` (`id`, `name` i18n key).
+  Advisory; the copy re-checks everything.
+- `POST …/agent-instances/{id}/copy` with `AgentCopyRequest`
+  (`target_team_ids`, optional `display_name`) → `AgentCopyResponse`, one
+  `AgentCopyResult` per distinct target (`agent` or `error`, plus
+  `dropped_capabilities` and `notices`, each naming the capability by `id` and
+  `name` i18n key; a notice says what an editor must redo there). Each target needs `team.can_update_agents` and is
+  stored under its canonical id (`personal` → `personal-<uid>`). A target where
+  the template is not enabled fails; a failed target never stops the others.
+  `display_name` is only accepted for a single target equal to the source
+  (Duplicate), otherwise 422.
+
+**What a copy carries.** Name (kept when free in the destination, else the
+first free `<name>_imported-<n>`), description, template, tuning values and
+reasoning settings. Each selected capability the destination can use goes
+through the pod's `copy-config` (`RUNTIME-EXECUTION-CONTRACT.md` §8.102):
+scope-private settings are reset when the team changes, configuration files
+are recreated. A capability the destination cannot use, or that the pod
+answers with 404/422, is left out and listed. Not carried: conversations, the
+agent file space, prompt references, team-level settings. Emits the KPI
+`agent.created_total` and the audit event `agent.copied` (source agent and
+team, target team, new agent, user, dropped capabilities). Full behavior:
+OpenSpec `agent-copy`.
+
+## 59. Contract Notes — user profile pictures (2026-10-06, #2977)
+
+**What it is.** A person sets or removes their own profile picture; it replaces
+their initials wherever their avatar is shown.
+
+**Endpoints.** Both are `authenticated_user`, self only: the target is always
+the caller and no parameter can name someone else.
+
+- `POST /control-plane/v1/users/me/avatar` (multipart, field `file`) → 204.
+  Same validation as team avatars (5 MB, JPEG/PNG/WebP, declared type must match
+  the content), 400 otherwise with the picture unchanged. Accounts whose id is
+  not a UUID (service accounts) get 400.
+- `DELETE /control-plane/v1/users/me/avatar` → 204, idempotent.
+
+**Model.** Nullable `users.avatar_object_storage_key`; objects live at
+`users/{uid}/avatar-{uuid}{ext}` in the content bucket. The previous object is
+deleted (best effort, warning on failure) on replace, delete and
+identity-provider account deletion (the local directory only suspends, so the
+picture stays); `ContentStore.delete_object` is idempotent on every backend.
+
+**Exposure.** `UserSummary.avatar_image_url` (optional, presigned 1 h) only
+where a picture renders: the bootstrap `current_user` and team admin summaries
+(team list and single team). Member lists, platform-role holders,
+`GET /users/by-ids` and `GET /user` never carry it. Attached after the 5-minute
+display-name cache, so a change shows on the next call; presigns of one batch
+run concurrently, at most 8 at a time. Never exported or logged. Full behavior:
+OpenSpec `user-profile-picture`.
+
 ## Knowledge Flow ingestion cancellation — 2026-09-23
 
 `POST /knowledge-flow/v1/tasks/{task_id}/cancel` retains its existing task-mutation
@@ -4201,6 +4283,39 @@ and presents no bearer to the agent pod
 Detailed cases are in the
 [subject and account status specification](../../../openspec/changes/add-delegated-agent-execution/specs/delegation-subject-and-account-status/spec.md).
 
+## Definitive browser renewal refusal clears the Fred session (2026-10-05)
+
+The common Keycloak/OIDC browser lifecycle classifies structured renewal error
+codes. `invalid_grant`, `login_required`, `interaction_required`,
+`consent_required` and `account_selection_required` immediately invalidate live
+credentials and clear the persisted OIDC user before coalesced refresh callers
+receive `false`. Failed storage cleanup cannot expose credentials in the current
+session. Network failures, timeouts and transient provider errors retain an
+otherwise unexpired bearer and allow retry. Late results cannot restore an
+invalidated generation or erase a newer accepted session. The boolean facade
+and existing provider sign-out flow remain compatible.
+
+## Local username ambiguity aborts import preflight (2026-10-05)
+
+In local-directory mode, username resolution rejects distinct IDs sharing the
+same exact username with `ambiguous_username`; it never picks an ID by row order.
+The importer prefetches its referenced names before opening the business-data
+transaction, so an ambiguity prevents all bundle SQL and OpenFGA writes. Names
+outside the bundle do not block it. Unique/missing-name behavior, case-sensitive
+resolution, identity snapshots and the Keycloak path remain unchanged. Failure
+is reported through the existing migration task error. No database uniqueness
+constraint or current IdP ownership lookup is introduced.
+
+## Local-directory suspension is independent of delegation (2026-10-05)
+
+With `security.user_directory: local`, an enforced OpenFGA engine validates
+account-status support at startup and refuses suspended authenticated subjects
+regardless of the delegation switches. `DELETE /users/{user_id}` retains root
+and wildcard protection, writes the suspension and leaves memberships, local
+identity snapshots and provider accounts unchanged. Disabled enforcement returns
+403 with `reason: account_suspension_disabled` before any write; unavailable
+account-status checks retain 503 `account_status_unavailable`.
+
 ## Deleting a person suspends their account first (2026-09-23)
 
 User deletion retains administrator permission and protected-account checks,
@@ -4214,7 +4329,7 @@ already authorized. That includes personal-team routes such as the runtime-bindi
 lookup and execution preparation, which refuse a suspended subject with 403
 `account_suspended`, or 503 `account_status_unavailable` when account status cannot
 be read. Direct identity-provider changes do not update platform account status.
-With account status disabled, deletion writes no suspension. Exact refusal and retry
+With the Keycloak directory and account status disabled, deletion writes no suspension. Exact refusal and retry
 scenarios are maintained in the
 [subject and account status specification](../../../openspec/changes/add-delegated-agent-execution/specs/delegation-subject-and-account-status/spec.md).
 
@@ -4245,3 +4360,32 @@ remain active; absence from a browser's task cache never proves abandonment.
 Raw-file preparation is outside the admission transaction: this does not make
 external content writes atomic with SQL, or recover historical unbound tasks.
 The source synchronization preparation contract is unchanged.
+
+## Agent-question composer control
+
+Managed execution preparation appends a platform-owned `ask_user_toggle`
+`ChatControlDescriptor` with `params.default=true` for a person with an own
+credential. It is independent of capability chat controls and model reasoning.
+The frontend stores the choice per conversation and sends `RuntimeContext.ask_user`
+only when the turn's preparation offers the descriptor. It retains the choice
+before eager controls load, so the first turn uses the fresh preparation and the
+enabled default. `false` disables questions on new turns; an absent descriptor
+sends no field. A question already pending remains
+answerable when the control is switched off during its pause. Asserted-person
+preparation does not offer the control.
+
+## Task progress read by id — 2026-10-03
+
+`GET /tasks?scope=user` on Knowledge Flow and Control Plane accepts a repeated
+`task_id` query parameter of 1 to 50 values. With it, the response holds the
+caller's own tasks among those ids, terminal ones included; ids the caller did
+not create are absent, which reveals nothing about them. More than 50 values, or
+the parameter with another scope, is rejected with HTTP 422. Without it, the
+listing is unchanged. The single owner is `fred_core.tasks.authz.list_tasks_scoped`.
+
+The frontend follows the tasks a user started with this read, in rounds five
+seconds apart (batches of 50, one read at a time) while any is active, instead of one SSE connection per task: held-open connections
+filled the browser's six per HTTP/1.1 origin during an import. A task absent from
+the answer is shown as untracked, never as an outcome. `GET /tasks/{id}/events`
+remains for its other consumers. Current behaviour:
+`openspec/specs/task-progress-tracking/spec.md`.

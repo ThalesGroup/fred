@@ -33,7 +33,6 @@ How to use:
 
 Example:
 - `binding.portable_context.session_id`
-- `await services.workspace_fs.read_text("shared/templates/template.md")`
 """
 
 from __future__ import annotations
@@ -548,6 +547,14 @@ class RuntimeContext(BaseModel):
             "guarantee: level 2 remains a ceiling this cannot raise (§5.3)."
         ),
     )
+    ask_user: bool | None = Field(
+        default=None,
+        description=(
+            "Whether this interactive conversation offers the agent's ask_user tool. "
+            "True mounts it, False disables it for new turns, and None means no "
+            "interactive control was offered."
+        ),
+    )
     # NOTE (2026-08-12): a per-question `reasoning_effort` override was built
     # and withdrawn the same day — providers disagree on accepted values
     # (Mistral small 400s on low/medium), and the declaration machinery it
@@ -909,19 +916,6 @@ class PublishedArtifact(FrozenModel):
             document_uid=self.document_uid,
             file_name=self.file_name,
         )
-
-
-class FsEntry(FrozenModel):
-    """
-    One entry returned when listing a team-rooted filesystem directory.
-
-    Paths are author-relative (e.g. ``templates/deck.pptx`` or ``shared/...``); the team and
-    user prefixes are injected by the runtime and never appear here.
-    """
-
-    path: str = Field(..., min_length=1)
-    size: int | None = None
-    is_dir: bool = False
 
 
 class BoundRuntimeContext(FrozenModel):

@@ -19,6 +19,7 @@ from typing import Callable
 
 from fastapi import Request
 from fred_core import KeycloackDisabled, create_keycloak_admin
+from fred_core.store import ContentStore
 from keycloak import KeycloakAdmin
 
 from control_plane_backend.app.container import ControlPlaneContainer
@@ -49,6 +50,7 @@ class UserServiceDependencies:
 
     configuration: Configuration
     create_keycloak_admin_client: KeycloakAdminFactory
+    get_content_store: Callable[[], ContentStore]
 
 
 def build_user_service_dependencies(
@@ -72,8 +74,10 @@ def build_user_service_dependencies(
     return UserServiceDependencies(
         configuration=container.configuration,
         create_keycloak_admin_client=lambda: create_keycloak_admin(
-            container.configuration.security.m2m
+            container.configuration.security.m2m,
+            user_directory=container.configuration.security.user_directory,
         ),
+        get_content_store=container.get_content_store,
     )
 
 

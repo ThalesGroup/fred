@@ -16,7 +16,7 @@ import { Dispatch, SetStateAction, useCallback, useEffect, useMemo, useRef, useS
 
 type Initializer<T> = T | (() => T);
 
-const isBrowser = typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+const isBrowser = typeof window !== "undefined";
 
 const resolveInitializer = <T>(value: Initializer<T>): T =>
   typeof value === "function" ? (value as () => T)() : value;
@@ -45,17 +45,19 @@ function readFromStorage<T>(key: string): T | undefined {
 function writeToStorage<T>(key: string, value: T): void {
   if (!isBrowser) return;
 
-  if (value === undefined) {
-    window.localStorage.removeItem(key);
-    return;
-  }
-
   try {
+    if (value === undefined) {
+      window.localStorage.removeItem(key);
+      return;
+    }
     window.localStorage.setItem(key, JSON.stringify(value));
   } catch (error) {
     console.warn(`useLocalStorageState: failed to write key "${key}" to localStorage`, error);
   }
 }
+
+// The key a value is stored under; public/theme-boot.js reads two of them directly.
+export const localStorageKey = (key: string): string => `localHook:${key}`;
 
 // React state hook with a localStorage backing so values survive reloads and stay in sync across tabs.
 export function useLocalStorageState<T>(key: string, initialValue: Initializer<T>): [T, Dispatch<SetStateAction<T>>] {
@@ -66,7 +68,7 @@ export function useLocalStorageState<T>(key: string, initialValue: Initializer<T
     initialValueRef.current = initialValue;
   }, [initialValue]);
 
-  const storageKey = useMemo(() => `localHook:${key}`, [key]);
+  const storageKey = useMemo(() => localStorageKey(key), [key]);
 
   const readValue = useCallback(() => {
     const storedValue = readFromStorage<T>(storageKey);

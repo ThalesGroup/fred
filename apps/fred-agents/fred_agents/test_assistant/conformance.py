@@ -210,7 +210,7 @@ async def _crash(driver: Driver, session: str) -> list[str]:
 async def _hitl_resume(driver: Driver, session: str) -> list[str]:
     expect = _Expect()
     pause = expect.paused(
-        await driver.send(session, "hitl choice"), "test_choice", "pause"
+        await driver.send(session, "hitl choice"), "agent_question", "pause"
     )
     if pause is None:
         return expect.failures
@@ -233,33 +233,15 @@ async def _assist(driver: Driver, session: str) -> list[str]:
     expect.that(
         _tool_calls(first, "knowledge.search") == 1, "knowledge.search not called once"
     )
-    review = expect.paused(first, "assist_review", "gate 1")
+    review = expect.paused(first, "assist_review", "review gate")
     if review is None:
         return expect.failures
     second = await driver.resume(session, review, "approve")
-    confirm = expect.paused(second, "assist_confirm", "gate 2")
-    if confirm is None:
-        return expect.failures
-    third = await driver.resume(session, confirm, "publish")
-    content = expect.final(third, "publish")
-    # The publish step calls the model again, after two resumes: it must be the
-    # model a fresh turn gets, not a fallback (a resume without the routing).
-    probe = await driver.send(session, "model probe")
-    expect.final(probe, "model probe")
-    expected_model = (_final(probe) or {}).get("model_name")
+    content = expect.final(second, "approve")
+    expect.that(bool(content), "approved draft was not returned")
     expect.that(
-        (_final(third) or {}).get("model_name") == expected_model,
-        f"resumed turn used model {(_final(third) or {}).get('model_name')!r}, "
-        f"a fresh turn uses {expected_model!r}",
-    )
-    expect.that(
-        "Published as" in content or "Not published" in content,
-        f"side-effect step did not run: {content[:80]!r}",
-    )
-    expect.that(
-        _tool_calls(second, "knowledge.search") + _tool_calls(third, "knowledge.search")
-        == 0,
-        "search re-ran on resume (a replayed side effect)",
+        _tool_calls(second, "knowledge.search") == 0,
+        "search re-ran on resume",
     )
     return expect.failures
 
@@ -279,7 +261,7 @@ async def _continuity(driver: Driver, session: str) -> list[str]:
 async def _abandoned_pause(driver: Driver, session: str) -> list[str]:
     expect = _Expect()
     pause = expect.paused(
-        await driver.send(session, "hitl choice"), "test_choice", "pause"
+        await driver.send(session, "hitl choice"), "agent_question", "pause"
     )
     content = expect.final(await driver.send(session, "echo moving on"), "new message")
     expect.that(content.startswith("Echo: echo moving on"), "new message did not run")
@@ -307,7 +289,7 @@ CHECKS: tuple[Check, ...] = (
     Check("on-error", "node error routed, failing node's status kept", _on_error),
     Check("crash", "a node error without on_error fails the turn cleanly", _crash),
     Check("hitl-resume", "pause, resume, answered pause refused", _hitl_resume),
-    Check("assist", "routing, search, draft, two gates, side effect once", _assist),
+    Check("assist", "routing, search, draft and review gate", _assist),
     Check("continuity", "history carried, other fields reset", _continuity),
     Check(
         "abandoned-pause", "a new message discards a pending pause", _abandoned_pause
@@ -413,7 +395,7 @@ class HttpDriver:
             )
         response.raise_for_status()
         prep = response.json()
-        context: dict[str, Any] = {"team_id": self._team_id}
+        context: dict[str, Any] = {"team_id": self._team_id, "ask_user": True}
         for key in (
             "context_prompt_text",
             "chat_default_profile_id",

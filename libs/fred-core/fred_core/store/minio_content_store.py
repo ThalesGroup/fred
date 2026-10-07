@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import io
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from typing import BinaryIO
 from urllib.parse import urlparse
 
@@ -24,6 +24,10 @@ from minio import Minio
 from minio.error import S3Error
 
 logger = logging.getLogger(__name__)
+
+# The signing grid is a quarter of the requested TTL, so a minted URL always
+# keeps at least three quarters of `expires` while staying stable and cacheable.
+_SIGNING_WINDOW_DIVISOR = 4
 
 
 def _clean_endpoint(endpoint: str) -> str:
@@ -46,6 +50,26 @@ def _clean_endpoint(endpoint: str) -> str:
             f"Invalid MinIO endpoint '{endpoint}'. Paths are not allowed."
         )
     return parsed.netloc or endpoint.replace("https://", "").replace("http://", "")
+
+
+def _stable_signing_date(expires: timedelta) -> datetime | None:
+    """Anchor a presigned signature to a fixed time grid.
+
+    Signing with the raw wall clock mints a different URL on every call, so a
+    browser can never reuse its cached copy of the object. Anchoring keeps the
+    URL byte-identical within a window while leaving most of `expires` valid.
+
+    Example:
+    ```python
+    _stable_signing_date(timedelta(hours=1))  # same value for 15 minutes
+    ```
+    """
+
+    window = expires.total_seconds() / _SIGNING_WINDOW_DIVISOR
+    if window <= 0:
+        return None
+    now = datetime.now(timezone.utc).timestamp()
+    return datetime.fromtimestamp(now - (now % window), tz=timezone.utc)
 
 
 class MinioContentStore:
@@ -156,12 +180,20 @@ class MinioContentStore:
             content_type=content_type or "application/octet-stream",
         )
 
+    def delete_object(self, key: str) -> None:
+        """Remove object `key`; S3 `remove_object` is already a no-op when missing."""
+
+        self.client.remove_object(self.object_bucket, self._normalize_key(key))
+
     def get_presigned_url(
         self, key: str, expires: timedelta = timedelta(hours=1)
     ) -> str:
         """Create a temporary download URL for object `key`.
 
-        Use this when the API should return a direct file link to the UI.
+        Use this when the API should return a direct file link to the UI. The
+        URL is stable within a signing window and carries a `Cache-Control`
+        override, so repeated renders reuse the browser cache instead of
+        re-downloading the object.
 
         Example:
         ```python
@@ -175,11 +207,19 @@ class MinioContentStore:
         """
 
         object_name = self._normalize_key(key)
+        # Browsers only reuse a cached object when told to: S3 response-header
+        # overrides ride along in the signature, so no re-upload is needed. One
+        # URL is only handed out for a single window, which is the real horizon.
+        max_age = int(expires.total_seconds() / _SIGNING_WINDOW_DIVISOR)
         try:
             return self.public_client.presigned_get_object(
                 self.object_bucket,
                 object_name,
                 expires=expires,
+                request_date=_stable_signing_date(expires),
+                response_headers={
+                    "response-cache-control": f"private, max-age={max_age}"
+                },
             )
         except S3Error as exc:
             if getattr(exc, "code", "") in {

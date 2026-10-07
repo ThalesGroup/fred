@@ -1,0 +1,472 @@
+# =============================================================================
+# Fred on the local k3d instance of fred-deployment-factory: values for this
+# repository's chart (deploy/charts/fred), deployed by the factory's
+# `make k3d-app DIR=<this checkout>` through deploy/k3d/helmfile.yaml.gotmpl.
+#
+# Only what this instance decides lives here. Everything else is the chart's
+# default, so this file is also the list of every way k3d differs from a
+# default install. Anchors below are local to this file: the chart's own
+# anchors are resolved when the chart is read and cannot be overridden, which
+# is why the knowledge-flow and control-plane blocks are repeated for the
+# backend and its worker.
+#
+# What each block is:
+#   address  where a service of the k3d stack (`make k3d-up`) is reached
+#   secret   a credential, always by reference to `fred-secrets`, the
+#            Foundation Secret created by `make k3d-up`; never a literal
+#   posture  a switch set as on fredlab (GKE): c3, delegation, migration Job,
+#            workers
+#   choice   a production choice the chart leaves to each instance; each one is
+#            a candidate to become a chart default
+#   models   Mistral, through its OpenAI-compatible API
+#   sizing   one replica, one worker serving every role
+#
+# Image tags are not set here: deploy/k3d/build builds the images and writes
+# each one's content tag into the image values the helmfile adds after this file.
+# =============================================================================
+
+# ── address ──────────────────────────────────────────────────────────────────
+x-realm-url: &realm-url "http://keycloak:8080/realms/app"
+x-origins: &origins
+  - "http://localhost:8088"
+x-rebac: &rebac
+  api_url: "http://openfga:9080"
+
+# ── secret ───────────────────────────────────────────────────────────────────
+# One entry per credential, reused in each application's extraEnvVars. The
+# applications read these variables before their .env file, which only holds
+# the chart's empty placeholders.
+x-env-postgres: &env-postgres
+  name: FRED_POSTGRES_PASSWORD
+  valueFrom:
+    secretKeyRef: { name: fred-secrets, key: POSTGRES_FRED_PASSWORD, optional: false }
+x-env-opensearch: &env-opensearch
+  name: OPENSEARCH_PASSWORD
+  valueFrom:
+    secretKeyRef: { name: fred-secrets, key: OPENSEARCH_ADMIN_PASSWORD, optional: false }
+x-env-openfga: &env-openfga
+  name: OPENFGA_API_TOKEN
+  valueFrom:
+    secretKeyRef: { name: fred-secrets, key: OPENFGA_API_TOKEN, optional: false }
+x-env-s3: &env-s3
+  name: MINIO_SECRET_KEY
+  valueFrom:
+    secretKeyRef: { name: fred-secrets, key: SEAWEEDFS_ADMIN_PASSWORD, optional: false }
+# Set by deploy/k3d/prepare from this checkout's apps/fred-agents/config/.env.
+x-env-model-key: &env-model-key
+  name: OPENAI_API_KEY
+  valueFrom:
+    secretKeyRef: { name: fred-secrets, key: OPENAI_API_KEY, optional: false }
+
+# ── observability ────────────────────────────────────────────────────────────
+# The console handler (Rich) wraps at 80 columns when there is no terminal, so
+# one log line became several: every app gets a wide console, and one line
+# stays one record for the log collector (k3d-logs-* in OpenSearch).
+x-env-columns: &env-columns
+  name: COLUMNS
+  value: "250"
+# The KPI Prometheus endpoint listens on 127.0.0.1 by default, which only the
+# pod itself reaches: open it to Prometheus, which scrapes every container
+# port named `metrics`.
+x-observability: &observability
+  kpi:
+    prometheus:
+      address: "0.0.0.0"
+
+# ── knowledge-flow (backend and worker) ──────────────────────────────────────
+x-kf-security: &kf-security
+  profile: c3                              # posture
+  m2m: { realm_url: *realm-url }           # address
+  user: { realm_url: *realm-url }          # address
+  authorized_origins: *origins             # address
+  rebac: *rebac                            # address
+  delegation:                              # posture: fred-agents calls in for a person
+    accept_delegated_calls: true
+    service_accounts_only: true
+
+x-kf-scheduler: &kf-scheduler
+  temporal:
+    host: "temporal:7233"                  # address
+
+x-kf-content-storage: &kf-content-storage  # choice: S3 (SeaweedFS), shared by API and worker
+  type: minio
+  root_path: null
+  endpoint: http://seaweedfs:8333          # address
+  access_key: "admin"
+  bucket_name: "app-content"
+  secure: false
+
+x-kf-filesystem: &kf-filesystem            # choice: S3 (SeaweedFS)
+  type: minio
+  endpoint: http://seaweedfs:8333          # address
+  access_key: "admin"
+  bucket_name: "filesystem"
+  secure: false
+
+x-kf-storage: &kf-storage
+  postgres:
+    host: postgres                         # address
+    username: fred                         # address: the `fred` database owner
+    pool_size: 2                           # choice (as on fredlab)
+    max_overflow: 0
+    pool_timeout: 30
+    pool_recycle: 1800
+    pool_pre_ping: true
+  opensearch:
+    host: https://opensearch:9200          # address
+  resource_store: { type: postgres, duckdb_path: null }   # choice
+  tag_store: { type: postgres, duckdb_path: null }        # choice
+  metadata_store: { type: postgres, duckdb_path: null }   # choice
+  vector_store:                            # choice
+    type: opensearch
+    # The API and the worker must use the same index, or every RAG query
+    # searches an empty one.
+    index: vector-index-mistral
+    bulk_size: 1000
+  log_store: { type: opensearch, index: app-logs-index }  # choice
+  tabular_store:
+    query:                                 # sizing: bounded DuckDB pool
+      max_concurrent_queries: 2
+      max_queued_queries: 4
+      query_timeout_seconds: 30.0
+      duckdb_threads: 1
+      duckdb_memory_limit: "256MB"
+      max_selected_datasets: 50
+
+x-kf-mcp: &kf-mcp                          # choice (as on fredlab)
+  opensearch_ops_enabled: true
+  filesystem_read_default_limit: 100
+  filesystem_read_max_limit: 500
+  filesystem_read_default_max_chars: 20000
+  filesystem_read_absolute_max_chars: 50000
+
+x-kf-crossencoder-model: &kf-crossencoder-model   # choice: download from Hugging Face
+  settings:
+    online: true
+    max_retries: 0
+    timeout: { connect: 10.0, read: 120.0 }
+    http_client_limits: { max_connections: 500, max_keepalive_connections: 0, keepalive_expiry_seconds: 10 }
+
+# ── models ───────────────────────────────────────────────────────────────────
+x-kf-embedding-model: &kf-embedding-model
+  provider: openai
+  name: mistral-embed
+  settings:
+    base_url: https://api.mistral.ai/v1
+    check_embedding_ctx_length: false
+x-kf-chat-model: &kf-chat-model
+  provider: openai
+  name: mistral-small-latest
+  settings:
+    base_url: https://api.mistral.ai/v1
+x-kf-vision-model: &kf-vision-model
+  provider: openai
+  # mistral-medium is not vision-capable: pixtral-12b or mistral-small-3.1 only.
+  name: pixtral-12b-2409
+  settings:
+    base_url: https://api.mistral.ai/v1
+
+x-kf-configuration: &kf-configuration
+  app:
+    # choice: the control-plane displays this quota, knowledge-flow enforces it.
+    default_team_max_resources_storage_size: 5368709120
+    personal_max_resources_storage_size: 5368709120
+  security: *kf-security
+  content_storage: *kf-content-storage
+  embedding_model: *kf-embedding-model
+  chat_model: *kf-chat-model
+  vision_model: *kf-vision-model
+  crossencoder_model: *kf-crossencoder-model
+  storage: *kf-storage
+  mcp: *kf-mcp
+  filesystem: *kf-filesystem
+  observability: *observability
+
+# ── control-plane (backend and worker) ───────────────────────────────────────
+x-cp-security: &cp-security
+  profile: c3                              # posture
+  m2m: { realm_url: *realm-url }           # address
+  user: { realm_url: *realm-url }          # address
+  authorized_origins: *origins             # address
+  rebac: *rebac                            # address
+  delegation:                              # posture
+    accept_delegated_calls: true
+    service_accounts_only: true
+
+x-cp-scheduler: &cp-scheduler
+  temporal:
+    host: "temporal:7233"                  # address
+
+x-cp-storage: &cp-storage
+  postgres:
+    host: postgres                         # address
+    pool_timeout: 30                       # choice (as on fredlab)
+    pool_recycle: 1800
+    pool_pre_ping: true
+  opensearch:                              # address
+    host: https://opensearch:9200
+    secure: true
+    verify_certs: false
+    username: admin
+  log_store: { type: opensearch, index: app-logs-index }  # choice
+  content_storage:                         # choice: S3 (SeaweedFS)
+    type: minio
+    root_path: null
+    endpoint: http://seaweedfs:8333        # address
+    access_key: "admin"
+    bucket_name: "control-plane-content"
+    secure: false
+
+x-cp-configuration: &cp-configuration
+  app:
+    # choice: must mirror knowledge-flow above, displayed here, enforced there.
+    default_team_max_resources_storage_size: 5368709120
+    personal_max_resources_storage_size: 5368709120
+  security: *cp-security
+  scheduler: *cp-scheduler
+  storage: *cp-storage
+  observability: *observability
+
+applications:
+
+  # ===========================================================================
+  fred-agents:
+    migration:
+      enabled: true                        # posture
+      extraEnvVars: [*env-postgres]
+    extraEnvVars:                          # secret
+      - *env-columns                     # observability
+      - *env-postgres
+      - *env-opensearch
+      - *env-openfga
+      - *env-s3
+      - *env-model-key
+      - name: KEYCLOAK_AGENTIC_CLIENT_SECRET
+        valueFrom:
+          secretKeyRef: { name: fred-secrets, key: KEYCLOAK_AGENTIC_CLIENT_SECRET, optional: false }
+    configuration:
+      app:
+        # posture: c3 refuses to boot with the OpenAI-compatible surface, which
+        # runs a template directly by agent_id (off on fredlab too).
+        openai_compat: false
+      scheduler:
+        temporal:
+          host: "temporal:7233"            # address
+      security:
+        profile: c3                        # posture
+        m2m: { realm_url: *realm-url }     # address
+        user: { realm_url: *realm-url }    # address
+        authorized_origins: *origins       # address
+        rebac: *rebac                      # address
+        delegation:                        # posture: speaks for a person to the other backends
+          act_for_people: true
+      ai:
+        timeout: { connect: 20, read: 60 } # choice (as on fredlab)
+      observability: *observability
+      storage:
+        object_store:                      # choice: S3 (SeaweedFS)
+          type: minio
+          endpoint: http://seaweedfs:8333  # address
+          access_key: "admin"
+          secure: false
+        postgres:
+          host: postgres                   # address
+          username: fred                   # address
+          pool_timeout: 30                 # choice (as on fredlab)
+          pool_recycle: 1800
+          pool_pre_ping: true
+        opensearch:
+          host: https://opensearch:9200    # address
+        log_store: { type: opensearch, index: app-logs-index }  # choice
+    models_catalog:                        # models
+      default_profile_by_capability:
+        chat: default.chat.mistral-small
+      profiles:
+        # Medium is the non-reasoning profile on purpose: a reasoning model
+        # emits its content as `thinking` blocks, which breaks structured output
+        # and the tool loop.
+        - profile_id: default.chat.mistral-medium
+          capability: chat
+          model_display_name: "Mistral Medium 3.5"
+          model:
+            provider: openai
+            name: mistral-medium-latest
+            settings:
+              base_url: https://api.mistral.ai/v1
+        # supports_thinking declares the aptitude, it does not switch reasoning
+        # on: that stays the platform admin's per-model toggle.
+        - profile_id: default.chat.mistral-small
+          capability: chat
+          model_display_name: "Mistral Small 4"
+          description: "Faster and lower-cost Mistral Small profile for everyday chat tasks."
+          supports_thinking: true
+          model:
+            provider: openai
+            name: mistral-small-latest
+            settings:
+              base_url: https://api.mistral.ai/v1
+              reasoning_effort: high
+        # The Test agent's deterministic model, served inside the fred-agents
+        # pod (streamed text, structured output, tool calls): no LLM, no cost.
+        # A development instance keeps it, as the docker-compose catalog does.
+        - profile_id: default.chat.fred-test-mock
+          capability: chat
+          model_display_name: "Fred test mock (in-process)"
+          model:
+            provider: fred-test-mock
+            name: fred-test-mock
+            settings:
+              chunk_delay_s: 0.03
+
+  # ===========================================================================
+  frontend:
+    env:
+      - name: VITE_BACKEND_URL_KNOWLEDGE   # address
+        value: "http://localhost:8088"
+      # address: where the gateway proxies /apps/<id>/ and /app-services/<id>/,
+      # one entry per application_sources entry above. Fully qualified names:
+      # nginx resolves them per request, so an application not deployed yet
+      # never stops the frontend from starting.
+      - name: FRONTEND_APPLICATIONS_JSON
+        value: >-
+          [{"app_id": "evaluation",
+          "ui_upstream": "http://fred-evaluator-ui.fred.svc.cluster.local:8080",
+          "service_upstream": "http://fred-evaluator-api.fred.svc.cluster.local:8336",
+          "service_required": true}]
+    # Branding fetched from SeaweedFS at startup; with no object the pod logs
+    # one warning and serves the baked assets. See the fred frontend README.
+    extraEnvVars:
+      - name: FRONTEND_THEME_URL           # address
+        value: "http://seaweedfs:8333/fred-themes/theme.zip"
+      - name: FRONTEND_THEME_S3_ACCESS_KEY # secret
+        valueFrom:
+          secretKeyRef: { name: fred-secrets, key: SEAWEEDFS_ADMIN_USER, optional: true }
+      - name: FRONTEND_THEME_S3_SECRET_KEY # secret
+        valueFrom:
+          secretKeyRef: { name: fred-secrets, key: SEAWEEDFS_ADMIN_PASSWORD, optional: true }
+    ingress:                               # address: everything on http://localhost:8088
+      enabled: true
+      className: "traefik"
+      hosts:
+        - host: ""
+          paths:
+            - { path: /, pathType: Prefix, service: { name: frontend, port: 80 } }
+            - { path: /fred/agents/v2, pathType: Prefix, service: { name: fred-agents, port: 80 } }
+            - { path: /knowledge-flow, pathType: Prefix, service: { name: knowledge-flow-backend, port: 8000 } }
+            - { path: /control-plane, pathType: Prefix, service: { name: control-plane-backend, port: 8222 } }
+            - { path: /realms, pathType: Prefix, service: { name: keycloak, port: 8080 } }
+            - { path: /resources, pathType: Prefix, service: { name: keycloak, port: 8080 } }
+      tls: []
+    configuration:
+      config_json:                         # address
+        backend_url_api: "http://localhost:8088"
+        backend_url_knowledge: "http://localhost:8088"
+        websocket_url: "ws://localhost:8088/fred/chatbot/query"
+        frontend_basename: "/"
+
+  # ===========================================================================
+  knowledge-flow-backend:
+    migration:
+      enabled: true                        # posture
+      extraEnvVars: [*env-postgres]
+    extraEnvVars: &kf-env                  # secret
+      - *env-columns                     # observability
+      - *env-postgres
+      - *env-opensearch
+      - *env-openfga
+      - *env-s3
+      - *env-model-key
+      - name: KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET
+        valueFrom:
+          secretKeyRef: { name: fred-secrets, key: KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET, optional: false }
+    configuration:
+      <<: *kf-configuration
+      scheduler: *kf-scheduler
+
+  knowledge-flow-worker:
+    enabled: true                          # posture
+    deployment:
+      enabled: true
+    replicaCount: 1                        # sizing
+    # sizing: this one pod runs every extraction. A docling extraction takes
+    # 1 to 2 GiB; 3 per role (the chart's default, sized for one role per pod)
+    # put up to 9 in 4 GiB and got the pod OOMKilled on a batch of PDFs.
+    resources:
+      requests: { cpu: "1", memory: 2Gi }
+      limits: { cpu: "4", memory: 6Gi }
+    extraEnvVars: *kf-env                  # secret
+    configuration:
+      <<: *kf-configuration
+      scheduler:
+        <<: *kf-scheduler
+        # sizing: one pod serves the four roles (the chart's production layout
+        # gives each role its own deployment). Drop a role and the documents
+        # routed to it wait on a queue nobody polls.
+        worker_roles: ["common", "extraction-fast", "extraction-medium", "extraction-rich"]
+        temporal:
+          host: "temporal:7233"            # address (the merge above is shallow)
+          # sizing: one extraction at a time per role, 3 at most in this pod.
+          ingestion_max_concurrent_activities: 1
+
+  # ===========================================================================
+  control-plane-backend:
+    migration:
+      enabled: true                        # posture
+      extraEnvVars: [*env-postgres]
+    extraEnvVars:                          # secret
+      - *env-columns                     # observability
+      - *env-postgres
+      - *env-opensearch
+      - *env-openfga
+      - *env-s3
+      - name: KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET
+        valueFrom:
+          secretKeyRef: { name: fred-secrets, key: KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET, optional: false }
+      # Root platform-admin bootstrap (AUTHZ-07), consumed by `the first-login bootstrap flow`.
+      - name: FRED_BOOTSTRAP_TOKEN
+        valueFrom:
+          secretKeyRef: { name: fred-secrets, key: CONTROL_PLANE_BOOTSTRAP_TOKEN, optional: false }
+    configuration:
+      <<: *cp-configuration
+      platform:
+        runtime_catalog_sources:           # address
+          - runtime_id: fred-agents
+            base_url: http://fred-agents/fred/agents/v2
+            enabled: true
+            ingress_prefix: /fred/agents/v2
+        # choice: the applications this instance serves. Registration alone
+        # shows nothing: a platform admin enables an application per team
+        # (Admin > Features, filter "app"). The frontend's gateway entry for
+        # each one is FRONTEND_APPLICATIONS_JSON, below.
+        frontend:
+          feature_flags:
+            enableApplications: true
+        application_sources:
+          # fred-agent-evaluator, deployed by `make k3d-app DIR=../fred-agent-evaluator`. Until it is,
+          # /apps/evaluation/ answers with an error and nothing else breaks.
+          - app_id: evaluation
+            ui_prefix: /apps/evaluation
+            version: 1.1.0
+            icon: fact_check
+            display_name:
+              en: "Evaluation"
+              fr: "Évaluation"
+            description:
+              en: "Evaluate agents against versioned test sets."
+              fr: "Évaluer les agents sur des jeux de tests versionnés."
+            enabled: true
+
+  control-plane-worker:
+    enabled: true                          # posture
+    deployment:
+      enabled: true
+    extraEnvVars:                          # secret: the bootstrap token stays on the backend
+      - *env-columns                     # observability
+      - *env-postgres
+      - *env-opensearch
+      - *env-openfga
+      - *env-s3
+      - name: KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET
+        valueFrom:
+          secretKeyRef: { name: fred-secrets, key: KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET, optional: false }
+    configuration: *cp-configuration

@@ -18,6 +18,23 @@ export type { TaskState, TaskTarget };
 
 export const TERMINAL_STATES: ReadonlySet<TaskState> = new Set(["succeeded", "failed", "cancelled"]);
 
+/**
+ * The two halves of importing a document, which the user experiences as two
+ * different waits and which only the second one makes usable.
+ *
+ * - `upload` — the browser is sending the bytes. There is no server task yet,
+ *   so nothing but the browser knows this file exists.
+ * - `analysis` — the server took the file and named an ingestion task. Only
+ *   when that task succeeds is the document actually searchable.
+ * - `decision` — the transfer got there and the server refused to write,
+ *   because the folder gained a document of that name meanwhile. Nothing went
+ *   wrong and nothing is happening: the answer is the user's to give.
+ *
+ * Null for everything that is not a document import (chat attachments, the
+ * other task kinds): they have no such split.
+ */
+export type ImportStage = "upload" | "analysis" | "decision";
+
 // ─────────────────────────────────────────────────────────────────────────────
 // HAND-MAINTAINED ADAPTER — keep in sync with the backend by hand.
 //
@@ -28,7 +45,7 @@ export const TERMINAL_STATES: ReadonlySet<TaskState> = new Set(["succeeded", "fa
 // FRONTEND-BACKLOG — "generate TaskEvent union"), these interfaces MIRROR the
 // canonical Pydantic models in libs/fred-core/fred_core/tasks/models.py and must be
 // updated together with them. Adding a backend kind means adding it here too (and
-// to taskEventsBasePath + taskKinds).
+// to taskKinds).
 //
 // `TaskLogEvent` (kind "log") is intentionally omitted: log tasks are an internal
 // diagnostic kind and are never surfaced in this UI, so the union covers only the
@@ -79,28 +96,6 @@ export interface MigrationTaskEvent {
   } | null;
 }
 
-export interface EvaluationTaskEvent {
-  kind: "evaluation";
-  task_id: string;
-  state: TaskState;
-  seq: number;
-  timestamp: string;
-  progress: number | null;
-  step: string | null;
-  error: string | null;
-  target?: TaskTarget | null;
-  owner?: string | null;
-  detail: {
-    campaign_id: string;
-    completed: number;
-    total: number;
-    passed: number;
-    failed: number;
-    execution_errors: number;
-    scoring_errors: number;
-  } | null;
-}
-
 export interface ErasureTaskEvent {
   kind: "erasure";
   task_id: string;
@@ -124,7 +119,7 @@ export interface ErasureTaskEvent {
   } | null;
 }
 
-export type AnyTaskEvent = IngestionTaskEvent | MigrationTaskEvent | EvaluationTaskEvent | ErasureTaskEvent;
+export type AnyTaskEvent = IngestionTaskEvent | MigrationTaskEvent | ErasureTaskEvent;
 
 export interface TaskViewModel {
   taskId: string;
@@ -137,10 +132,21 @@ export interface TaskViewModel {
   step: string | null;
   error: string | null;
   lastSeq: number;
+  /** Which half of an import this is (see `ImportStage`); null otherwise. */
+  stage: ImportStage | null;
+  /** The team whose resources this touches. The import panel belongs to one
+   *  team's page and shows only that team's imports. */
+  teamId: string | null;
+  /** Set while `stage` is `decision`: the name and the folder it clashes in, so
+   *  a row in that folder can point at the panel where the answer is given. */
+  conflict: { tagId: string | null; filename: string } | null;
   registeredAt: number;
   terminalAt: number | null;
   acknowledgedAt: number | null;
   // Populated from `MigrationTaskEvent.detail.result.warnings` only (see
   // taskSlice's taskEventReceived) — every other task kind leaves this null.
   warnings: string[] | null;
+  /** The owning backend answered without this task, so its outcome is unknown
+   *  and it is no longer followed. Never read as succeeded or failed. */
+  untracked: boolean;
 }

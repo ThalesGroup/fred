@@ -21,8 +21,10 @@ steps (model, assist) degrade to fixed text when no model is bound.
 
 Scenario routing (handled by dispatch_step):
   "echo"        → dispatch routes "echo"        → echo_step        → finalize
-  "hitl choice" → dispatch routes "hitl_choice" → hitl_choice_step → finalize
-  "hitl text"   → dispatch routes "hitl_text"   → hitl_text_step   → finalize
+  "hitl confirm" → dispatch routes "hitl_confirm" → hitl_confirm_step → finalize
+  "hitl choice"  → dispatch routes "hitl_choice"  → hitl_choice_step  → finalize
+  "hitl text"    → dispatch routes "hitl_text"    → hitl_text_step    → finalize
+  "hitl comment" → dispatch routes "hitl_comment" → hitl_comment_step → finalize
   "trace"       → dispatch routes "trace"        → trace_step       → finalize
   "error"       → dispatch routes "error"        → error_step
                                                    (raises)         → finalize via on_error
@@ -30,11 +32,10 @@ Scenario routing (handled by dispatch_step):
   "markdown"    → dispatch routes "markdown"     → markdown_step    → finalize
   "mermaid"     → dispatch routes "mermaid"      → mermaid_step     → finalize
   "long"        → dispatch routes "long"         → long_step        → finalize
-  "files"       → dispatch routes "files"        → files_step       → finalize
   "geo"         → dispatch routes "geo"          → geo_step         → finalize
   "document"    → dispatch routes "document"    → document_step    → finalize
   "assist"      → assist_route → [assist_search] → assist_draft → assist_review
-                  (HITL) → assist_confirm (HITL) → [assist_commit] → finalize
+                  (HITL) → finalize
   "delegate"    → dispatch routes "delegate"     → delegate_step    → finalize
   "crash"       → dispatch routes "crash"        → crash_step (raises, no on_error)
   "graph check" → dispatch routes "graph_check"  → graph_check_step → finalize
@@ -53,6 +54,7 @@ from fred_sdk import (
     GraphNodeContext,
     GraphNodeResult,
     HumanChoiceOption,
+    HumanInputAnswer,
     StepResult,
     TuningValue,
     choice_step,
@@ -159,15 +161,16 @@ async def dispatch_step(
     Routes (set via route_key):
       "echo"        → echo_step
       "model_probe" → model_probe_step
-      "hitl_choice" → hitl_choice_step
-      "hitl_text"   → hitl_text_step
+      "hitl_confirm" → hitl_confirm_step
+      "hitl_choice"  → hitl_choice_step
+      "hitl_text"    → hitl_text_step
+      "hitl_comment" → hitl_comment_step
       "trace"       → trace_step
       "error"       → error_step
       "think"       → think_step
       "markdown"    → markdown_step
       "mermaid"     → mermaid_step
       "long"        → long_step
-      "files"       → files_step
       "geo"         → geo_step
       "document"    → document_step
       "assist"      → assist_route_step
@@ -190,10 +193,14 @@ async def dispatch_step(
         scenario = "echo"
     elif text.startswith("model"):
         scenario = "model_probe"
+    elif text.startswith("hitl confirm"):
+        scenario = "hitl_confirm"
     elif text.startswith("hitl choice"):
         scenario = "hitl_choice"
     elif text.startswith("hitl text"):
         scenario = "hitl_text"
+    elif text.startswith("hitl comment"):
+        scenario = "hitl_comment"
     elif text.startswith("trace"):
         scenario = "trace"
     elif text.startswith("error"):
@@ -206,8 +213,6 @@ async def dispatch_step(
         scenario = "mermaid"
     elif text.startswith("long"):
         scenario = "long"
-    elif text.startswith("files"):
-        scenario = "files"
     elif text.startswith("geo"):
         scenario = "geo"
     elif text.startswith("document"):
@@ -352,7 +357,76 @@ async def model_probe_step(
     )
 
 
-# ── Step: hitl_choice ─────────────────────────────────────────────────────────
+# ── Steps: human questions ────────────────────────────────────────────────────
+
+
+async def _ask_test_user(
+    context: GraphNodeContext,
+    *,
+    question: str,
+    choices: list[HumanChoiceOption],
+    allow_free_text: bool = False,
+) -> HumanInputAnswer | None:
+    """Use the same platform tool and call ID as ReAct and Deep questions."""
+    try:
+        result = await context.invoke_runtime_tool(
+            "ask_user",
+            {
+                "question": question,
+                "choices": [choice.model_dump(mode="json") for choice in choices],
+                "allow_free_text": allow_free_text,
+            },
+        )
+    except RuntimeError as exc:
+        if "Runtime tool 'ask_user' is not available." not in str(exc):
+            raise
+        context.emit_status(
+            "ask_user_unavailable",
+            "Enable Questions de l'agent for this conversation.",
+        )
+        return None
+    if not isinstance(result, dict):
+        return None
+    if result.get("status") == "skipped":
+        return HumanInputAnswer(skipped=True)
+    if result.get("status") != "answered":
+        return None
+    return HumanInputAnswer(
+        choice_id=result.get("choice_id")
+        if isinstance(result.get("choice_id"), str)
+        else None,
+        text=result.get("text") if isinstance(result.get("text"), str) else None,
+    )
+
+
+@typed_node(TestState)
+async def hitl_confirm_step(
+    state: TestState,
+    context: GraphNodeContext,
+) -> StepResult:
+    """Exercise a two-option confirmation through the platform question tool."""
+    context.emit_status("hitl_confirm", "Preparing yes/no confirmation.")
+    answer = await _ask_test_user(
+        context,
+        question="Should the test agent continue?",
+        choices=[
+            HumanChoiceOption(id="yes", label="Yes", description="Continue this test."),
+            HumanChoiceOption(id="no", label="No", description="Stop this test."),
+        ],
+    )
+    if answer is None:
+        result, reason = "No valid answer received.", "hitl_confirm_invalid"
+    elif answer.skipped:
+        result, reason = "You skipped the confirmation.", "hitl_confirm_skipped"
+    else:
+        result = f"You selected **{answer.choice_id}**."
+        reason = f"hitl_confirm_{answer.choice_id}"
+    return StepResult(
+        state_update={
+            "final_text": f"HITL confirmation: {result}",
+            "done_reason": reason,
+        }
+    )
 
 
 @typed_node(TestState)
@@ -360,44 +434,46 @@ async def hitl_choice_step(
     state: TestState,
     context: GraphNodeContext,
 ) -> StepResult:
-    """
-    Pause execution and ask the user to select one of three options.
-
-    SSE events exercised: status, awaiting_human (choice), assistant_delta, final.
-    """
-    context.emit_status("hitl_choice", "Preparing confirmation request.")
-
-    choice_id = await choice_step(
+    """Exercise four described choices and an explicit skipped response."""
+    context.emit_status("hitl_choice", "Preparing multiple-choice request.")
+    answer = await _ask_test_user(
         context,
-        stage="test_choice",
-        title="Test HITL — Binary Choice",
-        question=(
-            "This is a test HITL confirmation gate.\n\n"
-            "The graph has paused and is waiting for your selection.\n"
-            "Pick any option to resume the workflow."
-        ),
+        question="Select one of the four test options.",
         choices=[
-            HumanChoiceOption(id="option_a", label="Option A — approve"),
-            HumanChoiceOption(id="option_b", label="Option B — reject"),
-            HumanChoiceOption(id="option_c", label="Option C — defer"),
+            HumanChoiceOption(
+                id="option_a", label="Option A", description="Approve the proposal."
+            ),
+            HumanChoiceOption(
+                id="option_b", label="Option B", description="Reject the proposal."
+            ),
+            HumanChoiceOption(
+                id="option_c", label="Option C", description="Defer the decision."
+            ),
+            HumanChoiceOption(
+                id="option_d", label="Option D", description="Request another review."
+            ),
         ],
     )
-
-    if choice_id is None:
+    if answer is None or answer.skipped:
         return StepResult(
             state_update={
-                "final_text": "HITL choice test: no selection received (None).",
-                "done_reason": "hitl_choice_none",
+                "final_text": "HITL choice test: the question was skipped."
+                if answer is not None
+                else "HITL choice test: no valid selection received.",
+                "done_reason": "hitl_choice_skipped"
+                if answer is not None
+                else "hitl_choice_invalid",
             }
         )
 
+    choice_id = answer.choice_id
     labels: dict[str, str] = {
         "option_a": "approved",
         "option_b": "rejected",
         "option_c": "deferred",
+        "option_d": "sent for another review",
     }
-    label = labels.get(choice_id, choice_id)
-
+    label = labels.get(choice_id or "", choice_id or "(none)")
     return StepResult(
         state_update={
             "final_text": (
@@ -409,48 +485,77 @@ async def hitl_choice_step(
     )
 
 
-# ── Step: hitl_text ───────────────────────────────────────────────────────────
-
-
 @typed_node(TestState)
 async def hitl_text_step(
     state: TestState,
     context: GraphNodeContext,
 ) -> StepResult:
-    """
-    Pause execution and ask the user to type a free-text response.
-
-    SSE events exercised: status, awaiting_human (free-text), assistant_delta, final.
-
-    Note: free-text HITL is implemented as a single-option choice_step where the
-    user's reply text is carried back in the choice_id field by the runtime.
-    """
+    """Exercise a genuine free-text form with no placeholder choice."""
     context.emit_status("hitl_text", "Preparing free-text input request.")
-
-    reply = await choice_step(
+    answer = await _ask_test_user(
         context,
-        stage="test_free_text",
-        title="Test HITL — Free Text Input",
-        question=(
-            "This is a test HITL free-text gate.\n\n"
-            "Type any text below and submit to resume the workflow."
-        ),
-        choices=[
-            HumanChoiceOption(id="__free_text__", label="Your reply"),
-        ],
+        question="What should the test agent say next?",
+        choices=[],
+        allow_free_text=True,
     )
-
-    received = reply if reply is not None else "(no reply)"
-
+    if answer is None or answer.skipped:
+        received = "(no reply)"
+        outcome = (
+            "You skipped this question."
+            if answer is not None
+            else "No valid reply received."
+        )
+        reason = "hitl_text_skipped" if answer is not None else "hitl_text_invalid"
+    else:
+        received = answer.text or "(no reply)"
+        outcome = f"You replied: **{received}**"
+        reason = "hitl_text_complete"
     return StepResult(
         state_update={
             "human_text_reply": received,
             "final_text": (
-                f"HITL free-text test complete.\n\n"
-                f"You replied: **{received}**\n\n"
+                "HITL free-text test complete.\n\n"
+                f"{outcome}\n\n"
                 "The workflow resumed successfully after the free-text HITL gate."
             ),
-            "done_reason": "hitl_text_complete",
+            "done_reason": reason,
+        }
+    )
+
+
+@typed_node(TestState)
+async def hitl_comment_step(
+    state: TestState,
+    context: GraphNodeContext,
+) -> StepResult:
+    """Exercise one choice with an optional free-text comment."""
+    context.emit_status("hitl_comment", "Preparing choice and comment request.")
+    answer = await _ask_test_user(
+        context,
+        question="Which draft should the test agent use? Add a comment if useful.",
+        choices=[
+            HumanChoiceOption(
+                id="short", label="Short draft", description="A concise answer."
+            ),
+            HumanChoiceOption(
+                id="detailed", label="Detailed draft", description="An expanded answer."
+            ),
+        ],
+        allow_free_text=True,
+    )
+    if answer is None:
+        outcome, reason = "No valid answer received.", "hitl_comment_invalid"
+    elif answer.skipped:
+        outcome, reason = "You skipped this question.", "hitl_comment_skipped"
+    else:
+        selected = answer.choice_id or "no option selected"
+        comment = answer.text or "no comment"
+        outcome = f"Choice: **{selected}**. Comment: **{comment}**."
+        reason = "hitl_comment_complete"
+    return StepResult(
+        state_update={
+            "final_text": f"HITL choice and comment: {outcome}",
+            "done_reason": reason,
         }
     )
 
@@ -1335,132 +1440,6 @@ async def think_step(
     )
 
 
-# ── Step: files ───────────────────────────────────────────────────────────────
-
-_FILES_PATH = "outputs/sample.txt"
-
-_FILES_SAMPLE = """\
-Hello from the Test Assistant.
-
-This file was written to your personal workspace through the unified /fs
-filesystem. Send "files <your own text>" to store your own content instead.
-"""
-
-
-@typed_node(TestState)
-async def files_step(
-    state: TestState,
-    context: GraphNodeContext,
-) -> StepResult:
-    """
-    Round-trip a small text file through the unified team-rooted /fs workspace.
-
-    Writes a file into the agent's own workspace (the Agents space — bare paths route
-    to teams/{team}/agents/{instance}/users/{uid}/...), reads it back to prove the
-    round-trip, then lists the directory. Exercises the workspace API
-    (`write` / `read` / `ls`) — i.e. the FILES-04 unified filesystem.
-
-    The artifact is surfaced as a `LinkPart` ui_part (not a markdown link): the
-    `/fs/download` route is session-authenticated, so the chat renders the link as
-    a download chip that fetches it with the live Bearer token. A plain anchor to
-    the raw URL would fail with "No authentication token provided".
-
-    Content: the text after the `files` keyword, or a built-in sample when the
-    user supplies none.
-
-    SSE events exercised: status (x3), assistant_delta, final (with ui_parts).
-
-    This branch needs a Knowledge Flow workspace backend. When none is wired it
-    degrades to an explanatory message instead of failing, preserving the test
-    assistant's "runs anywhere" promise for the other scenarios.
-    """
-    delay = _delay_seconds(context)
-
-    # Everything after the "files" keyword is the user-provided content.
-    remainder = state.latest_user_text.strip()[len("files") :].strip()
-    content = remainder or _FILES_SAMPLE
-    source = "your message" if remainder else "the built-in sample"
-
-    context.emit_status("files", f"Writing {_FILES_PATH} from {source}.")
-    await asyncio.sleep(0.05 + delay)
-
-    # Write first. The download chip is built from this artifact and is ALWAYS returned
-    # when the write succeeds — even if the read-back/listing below hiccups — so the user
-    # can fetch the generated file straight from the conversation, not only via the Files UI.
-    try:
-        artifact = await context.write(
-            _FILES_PATH,
-            content,
-            content_type="text/plain; charset=utf-8",
-            title="Test Assistant sample",
-        )
-    except Exception as exc:  # noqa: BLE001 — nothing was written, so there is no link
-        context.emit_status("files", "Workspace backend unavailable.")
-        reply = (
-            "**Filesystem test could not run.**\n\n"
-            "This scenario writes and reads a file through the unified `/fs` "
-            "workspace, which needs a Knowledge Flow backend wired into the pod "
-            f"(`RuntimeServices.workspace_fs`).\n\nError: `{type(exc).__name__}: {exc}`"
-        )
-        return StepResult(
-            state_update={"final_text": reply, "done_reason": "files_unavailable"}
-        )
-
-    link_parts = [artifact.to_link_part().model_dump(mode="json")]
-
-    # Best-effort verification (read-back + listing). Any failure here is reported but
-    # must NOT drop the download link, since the file was already written.
-    readback: str | None = None
-    listing = ""
-    verify_error: str | None = None
-    try:
-        context.emit_status("files", "Reading the file back to verify the round-trip.")
-        await asyncio.sleep(0.05 + delay)
-        readback = await context.read(_FILES_PATH)
-
-        context.emit_status("files", "Listing the workspace directory.")
-        entries = await context.ls("outputs")
-        listing = "\n".join(
-            f"- `{entry.path}` ({'dir' if entry.is_dir else f'{entry.size} bytes'})"
-            for entry in entries
-        )
-    except Exception as exc:  # noqa: BLE001 — keep the link; just note the check failed
-        verify_error = f"{type(exc).__name__}: {exc}"
-
-    if verify_error is None:
-        reply = (
-            "**Filesystem round-trip complete.**\n\n"
-            f"Wrote {source} to this agent's workspace (Agents space) and read it straight back. "
-            "Use the download chip below to fetch it.\n\n"
-            f"| Step | Result |\n|---|---|\n"
-            f"| Write | {artifact.file_name} ({artifact.size} bytes) |\n"
-            f"| Read back | {'matches' if readback == content else 'differs'} |\n\n"
-            "**Content read back:**\n\n```\n"
-            f"{readback}\n```\n\n"
-            "**Directory listing (`outputs/`):**\n\n"
-            f"{listing or '_empty_'}"
-        )
-    else:
-        reply = (
-            "**File generated.**\n\n"
-            f"Wrote {source} to this agent's workspace (Agents space) as "
-            f"`{artifact.file_name}` ({artifact.size} bytes). Use the download chip below to fetch it.\n\n"
-            f"_The read-back/listing check did not complete (`{verify_error}`), "
-            "but the file was written._"
-        )
-    context.emit_assistant_delta(reply)
-
-    # Surface the artifact as a LinkPart ui_part; build_output forwards it on the
-    # FinalRuntimeEvent so the chat renders an authenticated download chip.
-    return StepResult(
-        state_update={
-            "final_text": reply,
-            "done_reason": "files_complete",
-            "link_parts": link_parts,
-        }
-    )
-
-
 # ── Step: geo ──────────────────────────────────────────────────────────────────
 
 _GEO_SAMPLE = {
@@ -1670,11 +1649,10 @@ async def document_step(
 # ── Scenario: assist ──────────────────────────────────────────────────────────
 #
 # The shape of a real business graph agent, in one branch: a structured routing
-# decision, a declared platform tool, a streamed model answer, two HITL gates
-# in successive nodes, and a side effect that must run only once.
+# decision, a declared platform tool, a streamed model answer, and one HITL
+# review gate.
 
 _ASSIST_DEFAULT_QUESTION = "What is Fred?"
-_ASSIST_OUTPUT_PATH = "outputs/test_assistant_answer.md"
 
 _ASSIST_ROUTE_PROMPT = """\
 Decide how to answer the user's request:
@@ -1791,7 +1769,7 @@ async def assist_review_step(
     state: TestState,
     context: GraphNodeContext,
 ) -> StepResult:
-    """HITL gate #1: approve or discard the draft. Nothing runs before the pause."""
+    """HITL gate: approve or discard the draft. Nothing runs before the pause."""
     choice_id = await choice_step(
         context,
         stage="assist_review",
@@ -1805,84 +1783,18 @@ async def assist_review_step(
     if choice_id != "approve":
         return StepResult(
             state_update={
-                "final_text": "Draft discarded. Nothing was published.",
+                "final_text": "Draft discarded.",
                 "done_reason": "assist_discarded",
             },
             route_key="discarded",
         )
-    return StepResult(route_key="approved")
-
-
-@typed_node(TestState)
-async def assist_confirm_step(
-    state: TestState,
-    context: GraphNodeContext,
-) -> StepResult:
-    """HITL gate #2: publish the approved draft as a file, or keep it in the chat."""
-    choice_id = await choice_step(
-        context,
-        stage="assist_confirm",
-        title="Publish the answer",
-        question=f"Publish the approved answer to `{_ASSIST_OUTPUT_PATH}`?",
-        choices=[
-            HumanChoiceOption(id="publish", label="Publish as a file"),
-            HumanChoiceOption(id="keep", label="Keep it in the chat only"),
-        ],
-    )
-    if choice_id != "publish":
-        return StepResult(
-            state_update={
-                "final_text": state.assist_draft,
-                "sources_data": state.assist_hits,
-                "done_reason": "assist_kept",
-            },
-            route_key="keep",
-        )
-    return StepResult(route_key="publish")
-
-
-@typed_node(TestState)
-async def assist_commit_step(
-    state: TestState,
-    context: GraphNodeContext,
-) -> StepResult:
-    """The side effect, once, after both gates; then a model call on the resumed
-    turn (it must use the session's model). Degrades without a workspace."""
-    context.emit_status("assist_commit", f"Publishing {_ASSIST_OUTPUT_PATH}.")
-    try:
-        artifact = await context.write(
-            _ASSIST_OUTPUT_PATH,
-            state.assist_draft,
-            content_type="text/markdown; charset=utf-8",
-            title="Test Assistant answer",
-        )
-    except Exception as exc:  # noqa: BLE001 — degrade like files_step
-        return StepResult(
-            state_update={
-                "final_text": (
-                    f"{state.assist_draft}\n\n_Not published: workspace backend "
-                    f"unavailable ({type(exc).__name__})._"
-                ),
-                "sources_data": state.assist_hits,
-                "done_reason": "assist_publish_unavailable",
-            }
-        )
-    note = await model_text_step(
-        context,
-        system_prompt="Confirm the publication in one short sentence.",
-        user_prompt=f"Published: {artifact.file_name}",
-        fallback_text="",
-    )
     return StepResult(
         state_update={
-            "final_text": (
-                f"{state.assist_draft}\n\n_Published as `{artifact.file_name}`._"
-                + (f" {note}" if note else "")
-            ),
+            "final_text": state.assist_draft,
             "sources_data": state.assist_hits,
-            "link_parts": [artifact.to_link_part().model_dump(mode="json")],
-            "done_reason": "assist_published",
-        }
+            "done_reason": "assist_approved",
+        },
+        route_key="approved",
     )
 
 
@@ -1980,7 +1892,7 @@ async def graph_check_step(
             }
         )
 
-    pod = load_agent_pod_config()
+    pod = await asyncio.to_thread(load_agent_pod_config)
     control_plane_url = pod.platform.control_plane_url
     if not control_plane_url:
         return StepResult(
@@ -2056,19 +1968,20 @@ _SCENARIO_TABLE = """\
 | `echo` | Status events (x3) → simple reply |
 | `model routing` | Optional model call using operation label `routing` |
 | `model planning` | Optional model call using operation label `planning` |
-| `hitl choice` | HITL binary choice gate (3 options) |
-| `hitl text` | HITL free-text input gate |
+| `hitl confirm` | Yes/no question |
+| `hitl choice` | Four choices with descriptions |
+| `hitl text` | Free-text question without placeholder choice |
+| `hitl comment` | Choice plus optional text comment |
 | `trace` | Status events + streamed text + inline citations [1][2][3] + mock sources + mock token usage |
 | `error` | Deliberate node error → on_error route |
 | `think` | Chain-of-thought: all 5 `thought_kind` values (planning → tool_use → observation → reflection → synthesis) |
 | `markdown` | All rich content types: code block, Mermaid, GFM table, GeoJSON, math (inline + block), details collapsible |
 | `mermaid` | Deliberately malformed Mermaid: validates the frontend sanitizer fallback ,repairs it instead of showing a parse error |
 | `long` | 30-sentence word-by-word streaming reply |
-| `files` | Unified `/fs` round-trip: write to the agent's space → read back → list directory |
 | `geo` | Sample GeoJSON `FeatureCollection` rendered as a `GeoPart` ui_part (feature-count summary chip) |
 | `document` | `document_access` capability tool call via `invoke_runtime_tool` + HITL confirm/discard gate on the top hit |
-| `document summarize <question>` | Search, then call `summarize_document` on the top hit through its capability approval gate; no business confirmation or agent model call |
-| `assist` | Real-agent shape: structured routing → `knowledge.search` → streamed model draft → two HITL gates → file publish (`assist direct …` skips the search) |
+| `document summarize <question>` | Tool approval on `summarize_document` when its capability is selected and confirmation enabled; requires documents and a model for the summary |
+| `assist` | Real-agent shape: structured routing → `knowledge.search` → streamed model draft → HITL review (`assist direct …` skips the search) |
 | `delegate` | `invoke_agent` on this same agent (`delegate model hi` makes the sub-agent call the model) |
 | `crash` | Node error with no `on_error` route → the turn fails cleanly |
 | `graph check` | Runs every graph conformance check live, through this pod's HTTP API (HITL included) |"""
@@ -2086,6 +1999,9 @@ async def fallback_step(
         "**fred.github.test_assistant** — available test scenarios:",
         "",
         _SCENARIO_TABLE,
+        "",
+        "These questions call the platform `ask_user` tool without a model.",
+        "Enable Questions de l'agent; Skip is available for these questions.",
         "",
     ]
     lines.append("Type the keyword at the start of your message to run that scenario.")

@@ -414,6 +414,7 @@
       "runErrorDetail": "The prompt behind this command could not be read. Please try again in a moment."
     },
     "composerPlaceholder": "Ask your question, or type / for a command",
+    "newConversation": "New conversation",
     "uiParts": {
       "ariaLabel": "Agent cards",
       "geoAria": "Map data",
@@ -482,6 +483,10 @@
       "resetTooltip": "Reset"
     },
     "composerSettings": {
+      "askUserLabel": "Let the agent ask questions",
+      "askUserTitle": "Agent questions",
+      "askUserOn": "Enabled",
+      "askUserOff": "Disabled",
       "attachFile": "Attach file",
       "boundLibrariesTitle": "Bound libraries",
       "documentPickerTitle": "Document picker",
@@ -532,17 +537,36 @@
       "attachmentDeleteFailedDetail": "Could not delete this file. Please try again.",
       "attachmentDeleteForbiddenDetail": "You don't have permission to delete this file.",
       "attachmentUploadFailedDetail": "Could not upload this file. Please try again.",
-      "chatInputTooLong": "Your message exceeds the {{limit}}-character limit."
+      "chatInputTooLong": "Your message exceeds the {{limit}}-character limit.",
+      "toolApprovalSaveFailedSummary": "Approval not saved",
+      "toolApprovalSaveFailedDetail": "This tool was approved once, but the conversation preference could not be saved."
     },
+    "hitlOtherAnswerPlaceholder": "Other",
+    "hitlOtherAnswerWithText": "Other: {{answer}}",
     "hitlFreeTextLabel": "Your answer",
+    "hitlQuestionTabsAria": "Questions",
+    "hitlQuestionTabFallback": "Question",
     "hitlWaitingAria": "Agent is waiting for your input",
+    "interruptedRun": {
+      "title": "The previous execution is unfinished at “{{step}}”.",
+      "question": "An external operation may already have happened. Resume only after other executions have stopped. Restart does not undo previous effects.",
+      "continue": "Continue",
+      "restart": "Restart",
+      "later": "Later"
+    },
     "loadingHistory": "Loading conversation history...",
     "markdownPreview": {
       "closeAria": "Close markdown preview",
       "empty": "No markdown preview available."
     },
     "recordAudio": "Record audio",
+    "nextHitlQuestion": "Next",
+    "sendAllHitlAnswers": "Send all",
     "sendHitlAnswer": "Send",
+    "skipHitlQuestion": "Skip",
+    "skipHitlQuestionAria": "Skip this question",
+    "skipAllHitlQuestionsAria": "Skip all questions",
+    "approveForConversation": "Approve for this conversation",
     "sendMessage": "Send message",
     "sessionAttachments": {
       "deleteAria": "Delete {{name}}",
@@ -688,6 +712,16 @@
     "confirmDeleteFolderTitle": "Delete folder?",
     "confirmRemoveMessage": "Remove « {{doc}} » from « {{folder}} »?",
     "confirmRemoveTitle": "Remove from library?",
+    "conflictDecisionFor": "What to do with “{{name}}”",
+    "conflictReplace": "Replace",
+    "conflictReplaceAll": "Replace all",
+    "conflictSkip": "Skip",
+    "conflictSkipAll": "Skip all",
+    "conflictSkippedSummary_one": "{{count}} file was skipped: the folder keeps the document it already had.",
+    "conflictSkippedSummary_other": "{{count}} files were skipped: the folder keeps the documents it already had.",
+    "conflictsMessage": "Choose whether to replace the existing document or skip the file. A replaced document keeps its links and its place in the folder.",
+    "conflictsTitle_one": "{{count}} file already exists in this folder",
+    "conflictsTitle_other": "{{count}} files already exist in this folder",
     "currentUsage": "Current Usage: ",
     "documents": "{{count}} document(s)",
     "download": "Download",
@@ -727,8 +761,11 @@
     "removeSuccess": "Documents Removed",
     "removedManyDocuments": "Documents removed from library.",
     "removedOneDocument": "Document removed from library.",
-    "save": "Save",
-    "saving": "Saving...",
+    "sameNameTwice_one": "Two files would land in this folder under the name {{names}}. Remove one of them: a folder cannot hold two documents of the same name.",
+    "sameNameTwice_other": "Several files would land in this folder under names already used by another selected file: {{names}}. Remove the duplicates: a folder cannot hold two documents of the same name.",
+    "import": "Import",
+    "importCount_one": "Import {{count}} file",
+    "importCount_other": "Import {{count}} files",
     "searchOff": "Search off",
     "searchOn": "Search on",
     "searchPlaceholder": "Search a document",
@@ -743,7 +780,7 @@
     "tooDeepTitle": "Folder too deep",
     "uploadAndProcess": "Upload & process",
     "uploadDestination": "Files will be added to",
-    "uploadDrawerTitle": "Upload a document",
+    "uploadDrawerTitle": "Add documents",
     "uploadInLibrary": "Add files",
     "uploadOnly": "Upload only",
     "viewOriginalPdf": "View Original PDF"
@@ -830,54 +867,6 @@
   },
   "mcp": {
     "servers": {
-      "corpus": {
-        "description": "Allow your agent to manage your corpus of documents, with admin tools such as vectorization, cleanup, and metadata management.",
-        "name": "Corpus Management",
-        "fields": {
-          "chat_options": {
-            "libraries_selection": {
-              "title": "Document library picker",
-              "description": "Show a document library selector in the chat interface."
-            },
-            "libraries_binding": {
-              "title": "Bind to specific libraries",
-              "description": "Restrict this agent to a fixed set of document libraries chosen at configuration time."
-            },
-            "bound_library_ids": {
-              "title": "Bound document libraries",
-              "description": "Restrict the chat library picker to this preselected set of document libraries."
-            },
-            "documents_selection": {
-              "title": "Document picker",
-              "description": "Show a document selector in the chat interface."
-            },
-            "attach_files": {
-              "title": "File attachments",
-              "description": "Allow users to attach files (PDF, images, text) to their messages in the chat interface."
-            },
-            "search_policy_enabled": {
-              "title": "Search policy picker in chat",
-              "description": "Allow users to switch the search policy from the chat interface."
-            },
-            "search_policy": {
-              "title": "Default search policy",
-              "description": "Search strategy used when the user has not overridden it."
-            },
-            "search_rag_scope_enabled": {
-              "title": "RAG scope picker in chat",
-              "description": "Allow users to switch the RAG scope from the chat interface."
-            },
-            "search_rag_scope": {
-              "title": "Default RAG scope",
-              "description": "Scope used when the user has not overridden it."
-            }
-          }
-        }
-      },
-      "filesystem": {
-        "description": "Ability to browse all folders and files present in the resources.",
-        "name": "Browse the resource folders"
-      },
       "jira": {
         "description": "Allow your agent to interact with Jira",
         "name": "Jira access"
@@ -890,50 +879,6 @@
         "description": "Allow your agent to query Prometheus metrics and execute PromQL requests",
         "name": "Prometheus access"
       },
-      "search_documents": {
-        "description": "Legacy semantic document search (pre-capability MCP path, no per-agent scoping). Superseded by the Document access capability — do not enable both on the same agent.",
-        "name": "Document search (legacy)",
-        "fields": {
-          "chat_options": {
-            "libraries_selection": {
-              "title": "Document library picker",
-              "description": "Show a document library selector in the chat interface."
-            },
-            "libraries_binding": {
-              "title": "Bind to specific libraries",
-              "description": "Restrict this agent to a fixed set of document libraries chosen at configuration time."
-            },
-            "bound_library_ids": {
-              "title": "Bound document libraries",
-              "description": "Restrict the chat library picker to this preselected set of document libraries."
-            },
-            "documents_selection": {
-              "title": "Document picker",
-              "description": "Show a document selector in the chat interface."
-            },
-            "attach_files": {
-              "title": "File attachments",
-              "description": "Allow users to attach files (PDF, images, text) to their messages in the chat interface."
-            },
-            "search_policy_enabled": {
-              "title": "Search policy picker in chat",
-              "description": "Allow users to switch the search policy from the chat interface."
-            },
-            "search_policy": {
-              "title": "Default search policy",
-              "description": "Search strategy used when the user has not overridden it."
-            },
-            "search_rag_scope_enabled": {
-              "title": "RAG scope picker in chat",
-              "description": "Allow users to switch the RAG scope from the chat interface."
-            },
-            "search_rag_scope": {
-              "title": "Default RAG scope",
-              "description": "Scope used when the user has not overridden it."
-            }
-          }
-        }
-      },
       "search_opensearch": {
         "description": "Allow your agent to search in opensearch indices",
         "name": "Search in opensearch"
@@ -941,10 +886,6 @@
       "tabular": {
         "description": "Ability to use data from tabular files present in the resources (CSV, Excel...).",
         "name": "Use tabular files"
-      },
-      "web_github_readonly": {
-        "description": "Local in-process capability for public web pages and GitHub repository inspection (read-only)",
-        "name": "Web + GitHub Read-only"
       }
     }
   },
@@ -975,7 +916,6 @@
       "env": "Environment variables",
       "id": "Identifier",
       "name": "Display name (i18n key)",
-      "provider": "Local provider",
       "timeout": "SSE timeout (s)",
       "transport": "Transport",
       "url": "Server URL"
@@ -990,14 +930,13 @@
     },
     "helpers": {
       "args": "Space or comma separated arguments",
-      "env": "One KEY=VALUE per line",
-      "provider": "Example: web_github_readonly"
+      "env": "One KEY=VALUE per line"
     },
     "noResultsHint": "Try removing filters or broadening the search.",
     "noResultsTitle": "No connector matches your search",
     "restoreButton": "Restore catalog from configuration",
     "resultsLabel": "results",
-    "searchPlaceholder": "Search by id, name, description, URL, command, or provider",
+    "searchPlaceholder": "Search by id, name, description, URL, command",
     "source": {
       "local": "Local",
       "mcp": "MCP"
@@ -1018,7 +957,6 @@
       "updated": "MCP server updated"
     },
     "transport": {
-      "inprocess": "inprocess",
       "sse": "Server-sent events",
       "stdio": "stdio",
       "streamable_http": "HTTP",
@@ -1344,6 +1282,36 @@
       "suspended": "Suspended — a capability this agent uses is broken or unavailable. Edit the agent to fix it.",
       "suspendedToggleLocked": "Suspended",
       "duplicate": "Duplicate",
+      "copyTo": "Copy to…",
+      "copyDialog": {
+        "title": "Copy {{name}} to another team",
+        "subtitle": "Select the spaces to copy this agent into.",
+        "confirm": "Copy",
+        "noEditableTeams": "You are not an editor of any team. Only an editor can copy an agent into one — ask a team administrator for that role.",
+        "templateDisabled": "Agent template not enabled",
+        "missingCapabilities_one": "{{count}} missing capability",
+        "missingCapabilities_other": "{{count}} missing capabilities",
+        "missingCapabilitiesTitle": "Not enabled in this team:",
+        "explanation": "Some teams do not have every capability of this agent. The copy will work there without them, but its instructions and other settings stay intact.",
+        "info": {
+          "copiedLabel": "Copied",
+          "copied": "The agent's name, description, instructions and settings",
+          "resetLabel": "Reset",
+          "reset": "Choices that belong to the origin team: libraries, folders, documents. The capabilities stay enabled.",
+          "recreatedLabel": "Recreated",
+          "recreated": "Configuration files, such as a PowerPoint template",
+          "notCopiedLabel": "Not copied",
+          "notCopied": "Conversations, the agent's files and capabilities not enabled in the team"
+        },
+        "loadError": "Could not check the destination teams.",
+        "successToast_one": "Agent copied to {{count}} space",
+        "successToast_other": "Agent copied to {{count}} spaces",
+        "droppedToast": "Copied without some capabilities",
+        "droppedDetail": "{{team}}: without {{capabilities}}",
+        "noticesToast": "Copied, with settings to redo",
+        "errorToast_one": "Copy failed for {{count}} space",
+        "errorToast_other": "Copy failed for {{count}} spaces"
+      },
       "delete": "Delete",
       "tooltip": {
         "label": "Agent details",
@@ -1366,6 +1334,7 @@
       },
       "duplicateSuccess": "{{agent}} duplicated",
       "duplicateError": "Failed to duplicate the {{agent}}",
+      "duplicateDropped": "Without: {{capabilities}}",
       "deleteSuccess": "{{agent}} deleted",
       "deleteError": "Failed to delete the {{agent}}",
       "createSuccess": "{{agent}} created",
@@ -1523,6 +1492,79 @@
         "empty": "No team conversations in this period.",
         "title": "Teams with most conversations",
         "valueLabel": "Conversations"
+      }
+    },
+    "imports": {
+      "cancel": {
+        "action": "Cancel the transfer",
+        "tooLate": "This file is already on its way and can no longer be cancelled."
+      },
+      "conflict": {
+        "question": "A document of this name is already in this folder.",
+        "replace": "Replace",
+        "rowHint": "A file waiting on a decision has this name. Open the imports panel.",
+        "skip": "Skip"
+      },
+      "failure": {
+        "analysis": "Analysing this file failed.",
+        "attemptsExhausted": "Several attempts failed.",
+        "connectionLost": "The connection was lost during the transfer.",
+        "extraction": "This file's content could not be read.",
+        "indexing": "The file was read, but indexing it failed.",
+        "noAnswer": "The upload ended without the server saying what became of this file.",
+        "notSent": "Import interrupted",
+        "notSentDetail": "This file never left: the import stopped before it was sent. Send it again to finish.",
+        "interrupted": "Processing stopped before finishing.",
+        "notAllowed": "You are not allowed to import into this folder.",
+        "preparation": "Preparing this file failed.",
+        "quotaExceeded": "The team's storage is full.",
+        "quotaExceededPersonal": "Your storage is full.",
+        "quotaUnknown": "Available storage could not be checked. Worth retrying.",
+        "serverUnavailable": "The server did not answer.",
+        "ambiguousName": "This folder already holds two documents of that name. Rename or delete one of them before importing again.",
+        "unreported": "Failed, with no cause reported.",
+        "unsupportedType": "This file type is not supported.",
+        "upload": "Sending this file failed."
+      },
+      "panel": {
+        "collapse": "Hide imports",
+        "empty": "Nothing being imported. Files you add show up here while they are processed.",
+        "expand": "Show imports",
+        "resize": "Resize the imports panel",
+        "title": "Imports"
+      },
+      "phaseState": {
+        "current": "in progress",
+        "done": "done",
+        "failed": "failed",
+        "pending": "waiting",
+        "waiting": "queued"
+      },
+      "stepper": {
+        "label": "Import progress",
+        "waiting": "Waiting…",
+        "hint": {
+          "upload": "The file leaves your computer for its destination. This is the only phase that depends on your connection.",
+          "uploading": "The kind of document is worked out, and what it takes to process it is set aside.",
+          "processing": "The text is pulled out of the document, page by page, so it can be used.",
+          "done": "The document is ready. Agents can now find it and quote it.",
+          "doneUpload": "The file has arrived. It was not analysed — this mode only sends it.",
+          "indexing": "The content is filed away so agents can find it and quote it in their answers.",
+          "waiting": "The file has arrived. Its analysis starts as soon as a slot frees up."
+        }
+      },
+      "resend": {
+        "action": "Send again",
+        "wrongFile": "None of the files picked is named {{name}}."
+      },
+      "retry": {
+        "action": "Try again",
+        "relaunchFromRow": "This document has already arrived: relaunch its processing from its row in the table.",
+        "unavailable": "This file has to be picked again before it can be retried."
+      },
+      "untracked": {
+        "summary": "Following stopped",
+        "detail": "The server no longer reports on this file, so its outcome is unknown here. Its row in the table shows the document's own status."
       }
     },
     "tokenUsageImpact": {
@@ -1688,6 +1730,9 @@
       "validate": "Accept the TOS"
     },
     "hitlPrompt": {
+      "answerSummary": "Question and answer",
+      "selected": "Selected",
+      "skipped": "Skipped",
       "accepted": "Accepted",
       "refused": "Refused"
     },
@@ -1714,16 +1759,12 @@
         "empty": "No prompt has been published to the marketplace yet.",
         "emptySearch": "No prompt matches this search.",
         "import": {
-          "title": "Copy this prompt to a team",
-          "subtitle": "Select the spaces to copy “{{name}}” into.",
-          "confirm": "Copy",
-          "personalSpace": "Personal space",
-          "searchPlaceholder": "Search a team",
-          "clearSearch": "Clear search",
-          "noTeams": "No team matches.",
-          "successToast": "Prompt copied ({{count}})",
-          "errorToast": "Copy failed ({{count}})",
-          "originTeam": "Origin team"
+          "title": "Import this prompt into a team",
+          "subtitle": "Select the spaces to import “{{name}}” into.",
+          "confirm": "Import",
+          "noEditableTeams": "You are not an editor of any team. Only an editor can import a prompt into one — ask a team administrator for that role.",
+          "successToast": "Prompt imported ({{count}})",
+          "errorToast": "Import failed ({{count}})"
         },
         "unpublish": {
           "title": "Remove this prompt from the marketplace?",
@@ -1760,6 +1801,12 @@
       "title": "Crop avatar",
       "save": "Save",
       "zoom": "Zoom"
+    },
+    "avatarUpload": {
+      "invalidType": "This file type is not supported",
+      "tooLarge": "This image is larger than 5 MB",
+      "uploadFailed": "The image could not be uploaded",
+      "uploadFailedDetail": "Please try again in a moment."
     },
     "home": {
       "title": "Home",
@@ -1872,7 +1919,8 @@
     },
     "profileMenu": {
       "contactSupport": "Contact support",
-      "profile": "Profile"
+      "profile": "Profile",
+      "trigger": "{{name}}'s account"
     },
     "promptCategories": {
       "pickerTitle": "Category",
@@ -1908,32 +1956,14 @@
       "workspaceTitle": "Files",
       "pageTitle": "Team resources",
       "pageSubtitle": "Manage local resources, manually added to the team",
-      "rootsAria": "Resource spaces",
       "storageQuota": "Storage",
       "roots": {
         "resources": "Team corpus",
-        "mine": "My space",
-        "team": "Shared space",
-        "agents": "Agents",
-        "removedAgent": "Removed agent",
         "indexed": "indexed corpus",
         "private": "private · in {{team}}",
         "privatePersonal": "private · personal",
         "fileCount": "{{count}} files",
         "empty": "empty"
-      },
-      "hints": {
-        "resources": "Your team's searchable knowledge base. Create a library (folder) first, then add documents inside it. A file at the top level has no library and won't be indexed.",
-        "mine": "Your private files in this team. Only you can see them. Drafts, templates, anything personal.",
-        "team": "Files shared with the whole team. Upload shared templates, or use \"Copy to Team space\" to share one of your files.",
-        "agents": "Files your agents created for you, grouped by agent. They stay private to you, and you decide what to copy to the team."
-      },
-      "provenance": {
-        "origins": {
-          "uploaded": "Uploaded",
-          "agent_generated": "Generated",
-          "shared_copy": "Shared"
-        }
       },
       "search": {
         "placeholder": "Search",
@@ -1969,7 +1999,6 @@
         "addFile": "Add files",
         "addFileHint": "Select a folder first",
         "back": "Back to previous folder",
-        "copyToTeam": "Copy to Team space",
         "delete": "Delete",
         "deleteDisabledWhileProcessing": "Unavailable while ingestion is pending or running",
         "download": "Download",
@@ -2155,10 +2184,6 @@
       "knowledgeService": {
         "description": "Start the knowledge-flow service to browse resources.",
         "title": "Knowledge service not running"
-      },
-      "evaluationService": {
-        "title": "Evaluation service not running",
-        "description": "Start the fred-evaluation service to manage evaluations and runs."
       }
     },
     "sidebar": {
@@ -2176,7 +2201,8 @@
           "tasks": "Activity",
           "teams": "Teams",
           "platformPrompt": "Platform global prompt",
-          "announcements": "Announcements"
+          "announcements": "Announcements",
+          "uiSettings": "User interface"
         },
         "title": "Administration spaces"
       },
@@ -2217,6 +2243,8 @@
         "title": "Self-test"
       },
       "report": {
+        "verified": "Verified",
+        "partial": "Partial — no failures",
         "running": "Running…",
         "empty": "No run yet.",
         "counts": "{{passed}} passed · {{failed}} failed · {{skipped}} skipped · {{total}} steps",
@@ -2229,6 +2257,8 @@
         "run": "Run campaign"
       },
       "authz": {
+        "identityTitle": "JWT authentication self-test",
+        "identityDescription": "Checks authenticated access to the three APIs, rejection of missing or invalid tokens, public routes and personal-space identity. Checks that do not apply to this provider are skipped with a reason.",
         "title": "Authorization self-test",
         "subtitle": "Proves the live API honors the authorization model: platform-admin flags match real endpoint access, and nobody — not even a platform admin — gets implicit access to a team they don't belong to.",
         "runSelf": "Run for myself",
@@ -2251,7 +2281,8 @@
           "run": "Run",
           "caption": "Requires that account's own password and Keycloak direct-grant login enabled for this realm — already on in local/demo realms, test/dev-only by design. This does not grant any new access — it reports what that account can already do.",
           "disabledInsecure": "Not available in this deployment — there is no real Keycloak realm to authenticate against."
-        }
+        },
+        "identityRun": "Run checks"
       }
     },
     "tasks": {
@@ -2263,7 +2294,6 @@
         "ingestion": "Processing",
         "migration": "Migration",
         "reindex": "Reindexing",
-        "evaluation": "Evaluation",
         "erasure": "Erasure"
       },
       "migration": {
@@ -2319,11 +2349,19 @@
         "terminalCount": "Completed ({{count}})",
         "title": "Tasks"
       },
+      "importStage": {
+        "upload": "Sending the file",
+        "uploadDone": "Upload complete",
+        "analysis": "Analysing the document"
+      },
       "ingestionStep": {
         "uploading": "Document preparation",
         "processing": "Content extraction",
         "indexing": "Indexing",
-        "done": "Processing complete"
+        "listed": "Document preparation",
+        "vectorized": "Content indexed",
+        "skip": "Already up to date",
+        "done": "Ingestion complete"
       },
       "popover": {
         "acknowledge": "Dismiss",
@@ -2340,20 +2378,14 @@
         "failed": "Failed",
         "pending": "Pending",
         "running": "Running",
-        "succeeded": "Done"
+        "succeeded": "Done",
+        "untracked": "No longer followed"
       },
       "time": {
+        "daysAgo": "{{count}}d ago",
         "hoursAgo": "{{count}}h ago",
         "justNow": "just now",
         "minAgo": "{{count}} min ago"
-      },
-      "tray": {
-        "empty": "No recent tasks",
-        "failed": "{{count}} failed",
-        "progress": "Task progress",
-        "running": "{{count}} running",
-        "title": "Recent tasks",
-        "trigger": "Tasks"
       },
       "due": {
         "imminent": "imminent",
@@ -2534,7 +2566,6 @@
         "members": "Members",
         "settings": "Settings",
         "activity": "Activity",
-        "evaluations": "Evaluations",
         "usage": "Usage",
         "responsibilities": "Responsibilities",
         "routing": "Model routing",
@@ -2678,15 +2709,11 @@
           "packs": {
             "teamResources": {
               "title": "Access to team resources",
-              "description": "Lets the agent use the team's resources to carry out its mission."
+              "description": "Lets the agent use team resources and files attached to conversations."
             },
             "teamWiki": {
               "title": "Access to the team wiki",
               "description": "Lets the agent read the team's wiki pages and follow the rules the team set there."
-            },
-            "conversationAttachments": {
-              "title": "Attachments in a conversation",
-              "description": "Allows adding documents to a conversation to use their information."
             },
             "wordDocument": {
               "title": "Generate a Word document",
@@ -2780,7 +2807,7 @@
             "publish": "Publish to marketplace",
             "unpublish": "Remove from marketplace",
             "delete": "Delete",
-            "import": "Copy to...",
+            "import": "Import into...",
             "removeFromMarketplace": "Remove from marketplace"
           }
         },
@@ -2834,7 +2861,15 @@
           "message": "This prompt is published on the marketplace. Your changes will be immediately visible there to every user.",
           "confirm": "Save"
         },
-        "titlePersonal": "Your personal prompts"
+        "titlePersonal": "Your personal prompts",
+        "favorite": {
+          "add": "Add to favorites",
+          "remove": "Remove from favorites",
+          "filter": "Favorites",
+          "empty": "No favorite prompts here. Star a prompt to find it here.",
+          "errorSummary": "Could not update favorites",
+          "errorDetail": "The change was not saved. Please try again."
+        }
       }
     },
     "userSettings": {
@@ -2848,6 +2883,11 @@
         "light": "Light",
         "system": "System",
         "themeAria": "Theme",
+        "themeCloud": "Cloud",
+        "themeCobalt": "Cobalt",
+        "themePebble": "Pebble",
+        "uiThemeAria": "UI theme",
+        "interfaceTitle": "Interface: theme and mode",
         "languageAria": "Language"
       },
       "conversationProfile": {
@@ -2855,313 +2895,29 @@
         "title": "Conversation profile"
       },
       "disconnect": "Disconnect",
+      "picture": {
+        "title": "Profile picture",
+        "import": "Import",
+        "hint": "JPEG, PNG or WebP · 5 MB maximum",
+        "empty": "No picture",
+        "delete": "Delete",
+        "deleteTitle": "Delete your profile picture?",
+        "deleteMessage": "Your initials will be shown instead.",
+        "deleteConfirm": "Delete",
+        "deleteCancel": "Cancel",
+        "deleteFailed": "The profile picture could not be deleted",
+        "deleteFailedDetail": "Please try again in a moment.",
+        "uploaded": "Profile picture updated",
+        "deleted": "Profile picture deleted"
+      },
       "title": "Your profile"
-    },
-    "evaluation": {
-      "comingSoon": "This screen is moving here — coming next.",
-      "create": {
-        "back": "Back",
-        "target": {
-          "managed": {
-            "title": "Managed instance",
-            "desc": "A team agent instance approved through the control plane"
-          }
-        },
-        "instance": {
-          "label": "Agent instance",
-          "placeholder": "Select an instance",
-          "loading": "Loading instances..."
-        },
-        "instanceTools": {
-          "label": "Tools enabled on this agent",
-          "inherited": "This instance follows its template's default tools — no per-instance override.",
-          "none": "No tools enabled on this instance."
-        },
-        "modelOverride": {
-          "label": "Model override (optional)",
-          "placeholder": "Use the team's default model"
-        },
-        "agent": {
-          "label": "Agent ID",
-          "placeholder": "agent-..."
-        },
-        "securityNote": "Runtime URLs are never exposed to the browser. Only controlled identifiers are accepted.",
-        "manual": {
-          "label": "Test cases"
-        },
-        "case": {
-          "n": "Case {{n}}",
-          "input": "Input",
-          "expected": "Expected output (optional)",
-          "add": "Add a case",
-          "remove": "Remove case"
-        },
-        "import": {
-          "json": "Import JSON",
-          "dropHint": "Drag & drop a {{mode}} file, or click to browse",
-          "dropSub": "Up to 200 cases",
-          "jsonImported": "{{count}} cases imported from JSON",
-          "error": "Invalid file. Check the JSON or CSV format.",
-          "tooMany": "Maximum 200 cases allowed.",
-          "total": "Total: {{count}} cases to evaluate",
-          "empty": "The file contains no cases."
-        },
-        "judge": {
-          "label": "Judge profile",
-          "help": "Model profile used to score answers"
-        },
-        "concurrency": {
-          "label": "Max concurrency"
-        },
-        "timeout": {
-          "label": "Case timeout (s)"
-        },
-        "builtinMetrics": {
-          "label": "Metrics",
-          "help": "Pick which metrics to score this run against — nothing is added automatically.",
-          "answerRelevancy": "Answer Relevancy",
-          "answerRelevancyDesc": "Does the answer address the question asked?",
-          "faithfulness": "Faithfulness",
-          "faithfulnessDesc": "Does the answer stay grounded in the retrieved context?",
-          "contextualRelevancy": "Contextual Relevancy",
-          "contextualRelevancyDesc": "Is the retrieved context relevant to the question?",
-          "contextualPrecision": "Contextual Precision",
-          "contextualPrecisionDesc": "Are the most relevant chunks ranked first? Requires an expected output.",
-          "contextualRecall": "Contextual Recall",
-          "contextualRecallDesc": "Does the context cover everything the expected output needs? Requires an expected output.",
-          "none": "Select at least one metric to start a run."
-        },
-        "metrics": {
-          "label": "Custom metrics",
-          "help": "Natural-language criteria, judged alongside the built-in metrics",
-          "add": "Add a criterion",
-          "remove": "Remove criterion",
-          "n": "Criterion {{n}}",
-          "name": "Name",
-          "namePlaceholder": "e.g. cites_source",
-          "criteria": "Criterion to evaluate",
-          "criteriaPlaceholder": "e.g. The answer must name the method and cite the figure reported in the paper.",
-          "parameters": "Fields the judge may read",
-          "parameterOptions": {
-            "input": "Input",
-            "actualOutput": "Actual output",
-            "expectedOutput": "Expected output",
-            "retrievalContext": "Retrieved context"
-          },
-          "threshold": "Pass threshold"
-        },
-        "recap": {
-          "title": "Summary",
-          "targetType": "Target type",
-          "managed": "Managed instance",
-          "runtime": "Runtime agent",
-          "instance": "Instance",
-          "runtimeId": "Runtime ID",
-          "agent": "Agent ID",
-          "judge": "Judge",
-          "concurrency": "Concurrency",
-          "timeout": "Timeout",
-          "metrics": "Metrics",
-          "customMetrics": "Custom metrics",
-          "profile": "Profile",
-          "profileAuto": "Automatic",
-          "modelOverride": "Model override"
-        }
-      },
-      "detail": {
-        "cancelError": "Could not cancel the run",
-        "analyzeError": "Analysis failed",
-        "loading": "Loading run...",
-        "notFound": "Run not found",
-        "loadingCases": "Loading cases...",
-        "subtitle": "Run · {{id}}",
-        "back": "Back",
-        "rerun": "↻ Rerun this run",
-        "cancel": "Cancel",
-        "cancelling": "Cancelling...",
-        "analyze": "Analyze",
-        "analyzing": "Analyzing...",
-        "langfuseOpen": "View on Langfuse ↗",
-        "langfuseWaiting": "Waiting for Langfuse...",
-        "langfuseOffline": "Langfuse offline",
-        "running": "Running",
-        "verdictLabel": "Verdict: {{verdict}}",
-        "rateSummary": "{{rate}}% pass · {{done}}/{{total}} cases",
-        "stats": {
-          "passed": "Passed",
-          "failed": "Failed",
-          "insufficient": "Insufficient",
-          "execErrors": "Exec. errors",
-          "scoringErrors": "Scoring errors"
-        },
-        "metricScores": "Scores by metric",
-        "metricScoresPartial": "Scores by metric — partial, {{done}}/{{total}} cases scored so far",
-        "globalScore": "Global score",
-        "analysisTitle": "Analysis",
-        "risk": "risk: {{level}}",
-        "dismiss": "Dismiss",
-        "strengths": "Strengths",
-        "weaknesses": "Weaknesses",
-        "recommendations": "Recommendations",
-        "campaignInfo": "Run information",
-        "meta": {
-          "dataset": "Evaluation",
-          "author": "Author",
-          "profile": "Structural-check profile",
-          "judge": "Judge",
-          "modelOverride": "Model override",
-          "team": "Evaluation ID",
-          "created": "Created",
-          "started": "Started",
-          "completed": "Completed"
-        },
-        "cases": "Cases ({{count}})",
-        "col": {
-          "id": "ID",
-          "input": "Input",
-          "status": "Status",
-          "verdict": "Verdict",
-          "latency": "Latency",
-          "metrics": "Metrics"
-        },
-        "caseTitle": "Case detail",
-        "copyJson": "Copy JSON",
-        "copied": "Copied",
-        "downloadJson": "Download JSON",
-        "downloadRun": "Download JSON",
-        "downloading": "Preparing…",
-        "downloadError": "Download failed",
-        "latency": "Latency",
-        "actualModel": "Actual model",
-        "input": "Input",
-        "expected": "Expected output",
-        "actual": "Actual output",
-        "execError": "Execution error",
-        "scoringErrors": "Scoring errors",
-        "metrics": "Metrics ({{count}})",
-        "structural": "Structural checks ({{count}})",
-        "skipped": "skipped",
-        "passed": "passed",
-        "failed": "failed"
-      },
-      "controls": {
-        "searchEvaluations": "Search by name…",
-        "sortLabel": "Sort",
-        "sort": {
-          "newest": "Newest first",
-          "oldest": "Oldest first",
-          "name": "Name (A–Z)"
-        },
-        "page": "Page {{current}} of {{total}}",
-        "prev": "Previous",
-        "next": "Next"
-      },
-      "evaluations": {
-        "title": "Evaluations",
-        "description": "Versioned, reusable case sets. Open one to see its runs.",
-        "new": "+ New evaluation",
-        "empty": "No evaluation yet. Create one to get started.",
-        "openRuns": "Runs",
-        "caseCount": "{{count}} cases",
-        "col": {
-          "name": "Name / ID",
-          "version": "Version",
-          "author": "Author",
-          "origin": "Origin",
-          "cases": "Cases"
-        },
-        "origin": {
-          "upload": "Import",
-          "manual": "Manual",
-          "capture": "Capture"
-        },
-        "deleteTitle": "Delete evaluation",
-        "deleteMessage": "Delete evaluation {{id}}? This permanently removes it and every one of its runs, cases, metrics and events.",
-        "deleteSuccess": "Evaluation deleted",
-        "deleteError": "Failed to delete evaluation"
-      },
-      "evaluationCreate": {
-        "title": "New evaluation",
-        "description": "Name the evaluation and give it its cases. No run is started.",
-        "name": {
-          "label": "Evaluation name",
-          "placeholder": "e.g. usage-arxivai"
-        },
-        "versionNote": "Reusing an existing name creates a new version (v1 → v2), which becomes the current one.",
-        "submit": "Create evaluation",
-        "saving": "Creating...",
-        "success": "Evaluation “{{name}}” created as {{version}}",
-        "error": "Could not create the evaluation",
-        "mode": {
-          "label": "How do you want to supply the cases?",
-          "import": {
-            "title": "Import my dataset",
-            "desc": "A JSON file holding the cases (input / expected_output)"
-          },
-          "manual": {
-            "title": "Write the cases by hand",
-            "desc": "Type each case directly into the form"
-          }
-        }
-      },
-      "runs": {
-        "casesError": "Failed to load cases.",
-        "noCases": "No cases available.",
-        "drawerTitle": "Run cases",
-        "drawerHint": "Click a case to see full details",
-        "inputLabel": "Input",
-        "executionError": "Execution error",
-        "viewFullDetail": "View full detail →",
-        "metricsCount": "{{count}} metrics",
-        "targetInstance": "Instance · {{id}}",
-        "targetManaged": "Managed instance",
-        "detail": "Detail",
-        "deleteTitle": "Delete run",
-        "deleteSuccess": "Run deleted",
-        "deleteError": "Failed to delete run",
-        "loadError": "Failed to load runs.",
-        "description": "Runs of this evaluation",
-        "backToEvaluations": "Evaluations",
-        "newRun": "+ New run",
-        "rerun": "↻ Rerun · {{target}}",
-        "rerunHint": "Reruns immediately with the last target ({{target}} · {{model}}). Use “New run…” to pick a different one.",
-        "rerunRow": "↻ Rerun",
-        "empty": "No run for this evaluation yet",
-        "versionLabel": "Evaluation {{version}}",
-        "deleteMessage": "Delete run {{id}}? This permanently removes its cases, metrics and events.",
-        "kpi": {
-          "active": "Active runs",
-          "completed": "Completed runs",
-          "casesEvaluated": "Cases evaluated",
-          "criticalFailures": "Critical failures"
-        },
-        "col": {
-          "run": "Run",
-          "target": "Agent",
-          "state": "Status",
-          "verdict": "Verdict",
-          "progress": "Done",
-          "judge": "Judge"
-        }
-      },
-      "runCreate": {
-        "title": "New run",
-        "description": "Evaluation “{{name}}” — pick the agent to evaluate.",
-        "submit": "Start run",
-        "starting": "Starting...",
-        "success": "Run started",
-        "error": "Could not start the run",
-        "recap": {
-          "evaluation": "Evaluation"
-        }
-      }
     },
     "taskActivity": {
       "title": "Activity",
       "subtitle": "Scheduled, running and completed tasks.",
       "loading": "Loading activity…",
       "loadError": "Could not load activity.",
-      "empty": "No scheduled or running tasks. Tasks (erasures, imports, evaluations) appear here until they complete.",
+      "empty": "No scheduled or running tasks. Tasks (erasures, imports) appear here until they complete.",
       "scheduled": "Scheduled",
       "inProgress": "In progress",
       "completed": "Completed",
@@ -3195,21 +2951,21 @@
           "docs_imported": "Documents imported",
           "docs_skipped": "Documents skipped"
         }
-      },
-      "repair": {
-        "detailsTitle": "Repair report",
-        "counter": {
-          "metadata_documents": "Documents matching this source_tag",
-          "already_done": "Already marked done",
-          "eligible_with_vectors_and_content": "Vectors and content confirmed",
-          "repaired": "Repaired",
-          "missing_vectors": "Missing vectors (left untouched)",
-          "missing_content": "Missing content (left untouched)",
-          "tabular_excluded": "Tabular documents excluded (sql, out of scope)",
-          "failed_or_running_excluded": "Failed or running (left untouched)",
-          "errors": "Errors"
-        }
       }
+    },
+    "uiSettings": {
+      "title": "User interface",
+      "subtitle": "Default theme and themes available to users. Changes apply the next time each user loads the application.",
+      "hint": "A disabled theme disappears from users' profile; their choice is kept and comes back if the theme is offered again. The default theme applies to users who have not chosen one, and is always offered.",
+      "offeredLabel": "Offer the {{theme}} theme to users",
+      "offeredTooltip": "Offered to users",
+      "setDefault": "Set as default",
+      "isDefault": "Default",
+      "unknown": "Themes unknown to this version, kept as they are: {{ids}}",
+      "saveFailed": "Interface settings were not saved",
+      "lastUpdated": "Changed by {{who}} on {{when}}",
+      "loadFailed": "Could not load the interface settings. Reload the page.",
+      "unknownAuthor": "an administrator"
     },
     "platformPrompt": {
       "title": "Platform global prompt",
@@ -3491,6 +3247,14 @@
         "title": "Delete this announcement?",
         "message": "\"{{title}}\" will be removed for good. Users who can see it will stop seeing it."
       }
+    },
+    "copyToTeams": {
+      "personalSpace": "Personal space",
+      "searchPlaceholder": "Search a team",
+      "clearSearch": "Clear search",
+      "noTeams": "No team matches.",
+      "originTeam": "Origin team",
+      "infoLabel": "What a copy does"
     }
   },
   "runtime": {

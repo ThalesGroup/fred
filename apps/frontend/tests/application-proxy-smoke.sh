@@ -99,6 +99,9 @@ config="${TEST_DIR}/fred.conf"
 # inspects the registration list.
 disabled_config="${TEST_DIR}/fred-disabled.conf"
 run_entrypoint_with_default_flag "${disabled_config}" 'not-json'
+# The theme boot script is served uncached so a removed theme id cannot linger.
+assert_contains "${disabled_config}" 'location = /theme-boot.js {'
+assert_contains "${disabled_config}" 'add_header Cache-Control "no-cache";'
 assert_contains "${disabled_config}" 'location = /apps {'
 assert_contains "${disabled_config}" 'location ^~ /apps/ {'
 assert_contains "${disabled_config}" 'location = /app-services {'

@@ -58,7 +58,15 @@ export default function TopTeams({ period }: TopTeamsProps) {
       const displayName = isPersonal ? t("rework.home.topTeams.personalSpace") : team.name;
       const roles = isPersonal ? [] : ROLE_ORDER.filter((role) => (team.my_relations ?? []).includes(role));
       const avatar = team.avatar_image_url ? (
-        <img className={styles.avatar} src={team.avatar_image_url} alt="" aria-hidden="true" />
+        <img
+          className={styles.avatar}
+          src={team.avatar_image_url}
+          alt=""
+          aria-hidden="true"
+          width={28}
+          height={28}
+          decoding="async"
+        />
       ) : (
         <TeamInitials
           className={styles.avatar}

@@ -297,6 +297,41 @@
           "title": "Client Id",
           "type": "string"
         },
+        "provider": {
+          "default": "keycloak",
+          "enum": [
+            "keycloak",
+            "oidc"
+          ],
+          "title": "Provider",
+          "type": "string"
+        },
+        "scope": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scope"
+        },
+        "token_url": {
+          "anyOf": [
+            {
+              "format": "uri",
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Token Url"
+        },
         "secret_env_var": {
           "default": "M2M_CLIENT_SECRET",
           "title": "Secret Env Var",
@@ -978,6 +1013,15 @@
         "user": {
           "$ref": "#/$defs/UserSecurity"
         },
+        "user_directory": {
+          "default": "keycloak",
+          "enum": [
+            "keycloak",
+            "local"
+          ],
+          "title": "User Directory",
+          "type": "string"
+        },
         "delegation": {
           "$ref": "#/$defs/DelegationConfig"
         },
@@ -1134,6 +1178,39 @@
       "title": "TracerBackend",
       "type": "string"
     },
+    "UserClaims": {
+      "description": "Claim names used to construct an authenticated person's identity.",
+      "properties": {
+        "uid": {
+          "default": "sub",
+          "title": "Uid",
+          "type": "string"
+        },
+        "username": {
+          "default": "preferred_username",
+          "title": "Username",
+          "type": "string"
+        },
+        "email": {
+          "default": "email",
+          "title": "Email",
+          "type": "string"
+        },
+        "given_name": {
+          "default": "given_name",
+          "title": "Given Name",
+          "type": "string"
+        },
+        "family_name": {
+          "default": "family_name",
+          "title": "Family Name",
+          "type": "string"
+        }
+      },
+      "title": "UserClaims",
+      "type": "object",
+      "additionalProperties": false
+    },
     "UserSecurity": {
       "description": "Configuration for user authentication.",
       "properties": {
@@ -1143,6 +1220,7 @@
           "type": "boolean"
         },
         "realm_url": {
+          "description": "Keycloak realm URL or OIDC issuer URL",
           "format": "uri",
           "minLength": 1,
           "title": "Realm Url",
@@ -1151,6 +1229,85 @@
         "client_id": {
           "title": "Client Id",
           "type": "string"
+        },
+        "provider": {
+          "default": "keycloak",
+          "enum": [
+            "keycloak",
+            "oidc"
+          ],
+          "title": "Provider",
+          "type": "string"
+        },
+        "audience": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Audience"
+        },
+        "scope": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scope"
+        },
+        "jwks_url": {
+          "anyOf": [
+            {
+              "format": "uri",
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Jwks Url"
+        },
+        "token_url": {
+          "anyOf": [
+            {
+              "format": "uri",
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Token Url"
+        },
+        "roles_claim": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Roles Claim"
+        },
+        "claims": {
+          "$ref": "#/$defs/UserClaims"
         }
       },
       "required": [
@@ -1162,7 +1319,7 @@
       "additionalProperties": false
     }
   },
-  "description": "Complete structured configuration for a Fred agent pod.\n\nMirrors agentic-backend's `Configuration` model, scoped to what an agent\npod actually needs. All field types are reused from fred-core and fred-sdk\n\u2014 no new types invented here.\n\nHow to use it:\n- write a `config/configuration.yaml` alongside `config/models_catalog.yaml`\n  and `config/mcp_catalog.yaml`\n- call `load_agent_pod_config()` at startup\n- pass the result to `create_agent_app(config=...)`\n\nThe `security` field is a `SecurityConfiguration` from fred-core, the same\ntype used in agentic-backend. When `security.user.enabled` is True,\n`create_agent_app` enforces Keycloak JWT validation on every endpoint.",
+  "description": "Complete structured configuration for a Fred agent pod.\n\nMirrors agentic-backend's `Configuration` model, scoped to what an agent\npod actually needs. All field types are reused from fred-core and fred-sdk\n\u2014 no new types invented here.\n\nHow to use it:\n- write a `config/configuration.yaml` alongside `config/models_catalog.yaml`\n  and, optionally, `config/mcp_catalog_external.yaml`\n- call `load_agent_pod_config()` at startup\n- pass the result to `create_agent_app(config=...)`\n\nThe `security` field is a `SecurityConfiguration` from fred-core, the same\ntype used in agentic-backend. When `security.user.enabled` is True,\n`create_agent_app` enforces Keycloak JWT validation on every endpoint.",
   "properties": {
     "app": {
       "$ref": "#/$defs/PodAppConfig"

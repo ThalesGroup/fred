@@ -15,7 +15,7 @@
 import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
 import { useMutationAction } from "@core/hooks/useMutationAction.ts";
 import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu.tsx";
-import DataTable, { DataTableColumn, DataTableRowSize } from "@shared/molecules/DataTable/DataTable.tsx";
+import DataTable, { DataTableColumn, DataTableRowSize } from "@shared/molecules/DataTable/LocalizedDataTable.tsx";
 import TeamRoleChips from "@shared/molecules/TeamRoleChips/TeamRoleChips.tsx";
 import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";

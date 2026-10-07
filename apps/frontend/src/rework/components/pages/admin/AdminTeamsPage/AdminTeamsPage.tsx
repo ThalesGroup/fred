@@ -17,7 +17,7 @@ import { useTranslation } from "react-i18next";
 import Autocomplete from "@shared/molecules/Autocomplete/Autocomplete.tsx";
 import AvatarGroup from "@shared/molecules/AvatarGroup/AvatarGroup.tsx";
 import Button from "@shared/atoms/Button/Button.tsx";
-import DataTable, { DataTableColumn } from "@shared/molecules/DataTable/DataTable.tsx";
+import DataTable, { DataTableColumn } from "@shared/molecules/DataTable/LocalizedDataTable.tsx";
 import Chip from "@shared/atoms/Chip/Chip.tsx";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
 import Separator from "@shared/atoms/Separator/Separator.tsx";
@@ -108,7 +108,10 @@ export default function AdminTeamsPage() {
         label: t("rework.adminTeams.existingTeams.table.admins"),
         cellRenderer: (team) => (
           <AvatarGroup
-            avatars={(team.admins ?? []).map((admin) => ({ name: `${admin.first_name} ${admin.last_name}` }))}
+            avatars={(team.admins ?? []).map((admin) => ({
+              name: `${admin.first_name} ${admin.last_name}`,
+              imageUrl: admin.avatar_image_url,
+            }))}
           />
         ),
       },

@@ -51,7 +51,7 @@ vi.mock("../../../../hooks/useSelectedTeam.ts", () => ({
 }));
 
 vi.mock("@hooks/useTeamCapabilities.ts", () => ({
-  useTeamCapabilities: () => ({ canUpdateInfo: false, canUpdateAgents: false, canUpdateResources: false }),
+  useTeamCapabilities: () => ({ canUpdateInfo: false, canUpdateAgents: true, canUpdateResources: false }),
 }));
 
 vi.mock("@hooks/teamCapabilities.ts", () => ({ hasElevatedTeamRole: () => false }));
@@ -61,9 +61,6 @@ vi.mock("@shared/organisms/TeamSettingsPanel/TeamSettingsMembers/TeamSettingsMem
 }));
 vi.mock("@shared/organisms/TeamSettingsPanel/TeamSettingsParameters/TeamSettingsParameters.tsx", () => ({
   default: () => "parameters-section",
-}));
-vi.mock("@shared/organisms/TeamSettingsPanel/TeamSettingsEvaluations/TeamSettingsEvaluations.tsx", () => ({
-  default: () => "evaluations-section",
 }));
 vi.mock("@shared/organisms/TeamSettingsPanel/TeamSettingsRouting/TeamSettingsRouting.tsx", () => ({
   default: () => "routing-section",
@@ -128,6 +125,15 @@ describe("TeamSettingsPage responsibilities", () => {
   it("redirects a plain member away from the Responsibilities section", () => {
     render("responsibilities", ["team_member"]);
 
+    expect(container.textContent).toBe("navigate:/team/team-1/settings/members");
+  });
+});
+
+// The old entry was visible to agent editors. It must no longer render even
+// when that capability is granted.
+describe("retired evaluation settings", () => {
+  it("redirects an old evaluation settings URL to Members", () => {
+    render("evaluations", ["team_editor"]);
     expect(container.textContent).toBe("navigate:/team/team-1/settings/members");
   });
 });

@@ -14,12 +14,14 @@
 
 import styles from "./ButtonGroup.module.scss";
 import ButtonGroupItem, { ButtonGroupItemProps } from "@shared/atoms/ButtonGroup/ButtonGroupItem/ButtonGroupItem.tsx";
-import { ComponentSize, ColorTheme } from "@shared/utils/Type.ts";
+import { ButtonSize, ColorTheme } from "@shared/utils/Type.ts";
 import { CSSProperties, KeyboardEvent, MouseEvent, useRef, useState } from "react";
 
 interface ButtonGroupProps {
   items: ButtonGroupItemProps[];
-  size: ComponentSize;
+  /** Only the tiers this component styles: `xs` has no rule here and
+   *  rendered an item with no height and no padding. */
+  size: ButtonSize;
   color: ColorTheme;
   /**
    * Semantic role: a mutually-exclusive filter/setting pick ("radio", e.g.
@@ -78,6 +80,13 @@ export default function ButtonGroup({
     el?.focus();
     el?.click();
   };
+
+  // Roving tabindex: the selected item is the group's single tab stop. A
+  // controlled group can legitimately have nothing selected yet — a decision
+  // still to be made — and then the first enabled item takes it, or the group
+  // could not be reached by keyboard at all.
+  const firstEnabled = items.findIndex((item) => !item.disabled);
+  const tabStop = resolvedIndex >= 0 ? resolvedIndex : firstEnabled;
 
   const moveFocus = (fromIndex: number, delta: number) => {
     for (let i = 0, next = fromIndex; i < items.length; i++) {
@@ -148,7 +157,7 @@ export default function ButtonGroup({
           variant={variant}
           fullWidth={fullWidth}
           selected={index === resolvedIndex}
-          tabIndex={index === resolvedIndex ? 0 : -1}
+          tabIndex={index === tabStop ? 0 : -1}
           onClick={(e) => selectIndex(index, e)}
           onKeyDown={(e) => handleKeyDown(e, index)}
         />

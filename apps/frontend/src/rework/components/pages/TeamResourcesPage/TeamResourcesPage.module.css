@@ -18,7 +18,7 @@
   flex: 1;
   flex-direction: column;
   gap: var(--spacing-m);
-  padding: var(--spacing-l);
+  padding: var(--spacing-m);
   min-height: 0;
   color: var(--on-surface);
 }
@@ -72,21 +72,36 @@
   font-variant-numeric: tabular-nums;
 }
 
-.content {
+/* A row, not a column: the workspace holds the left and the import rail keeps
+   the right, widening in place when it is opened. */
+.panel {
   display: flex;
   flex: 1;
-  flex-direction: column;
+  gap: var(--spacing-2xs);
   min-height: 0;
+  /* How wide the import panel may get: whatever is left once the table has its
+     floor. The panel reads this; the floor belongs here, to the page that knows
+     what the table needs.
+
+     Floored at the panel's own minimum. Below roughly 664px that subtraction
+     goes negative, and a negative `max-width` is clamped to zero — the open
+     panel would vanish, taking the button that closes it with it, with no way
+     back short of a reload. A squeezed table is the lesser loss. */
+  --import-panel-max: max(280px, calc(100% - 660px - var(--spacing-2xs)));
+  /* The two cards sit a hair apart, so the corners along that seam are tighter
+     than the ones on the page's own edges — they read as one surface split in
+     two rather than two things that happen to be adjacent. Each card rounds its
+     own facing corners with this; unset, both stay fully rounded. */
+  --card-seam-radius: var(--radius-s);
 }
 
-.tree,
-.panel {
+.workspace {
   display: flex;
-  flex-direction: column;
-}
-
-.panel {
   flex: 1;
+  flex-direction: column;
+  /* No hard floor: a fixed one pushed the panel off screen when both could not
+     fit. The table's middle columns shrink instead (see the workspaces' columns). */
+  min-width: 0;
   min-height: 0;
 }
 

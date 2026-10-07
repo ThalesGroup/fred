@@ -28,7 +28,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from typing import Any, cast
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from control_plane_backend.teams.schemas import (
@@ -253,6 +253,7 @@ def _deps(
         get_purge_queue_store=cast(Any, object),
         get_policy_catalog=cast(Any, object),
         get_users_by_ids=cast(Any, _no_users_by_ids),
+        attach_avatar_urls=AsyncMock(side_effect=lambda summaries: summaries),
         search_users=cast(Any, search_users or _no_search_users),
         run_lifecycle_manager_once_in_memory=cast(Any, lambda _i: object()),
     )

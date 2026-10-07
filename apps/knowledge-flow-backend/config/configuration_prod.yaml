@@ -12,6 +12,7 @@
 # limitations under the License.
 
 app:
+  gcu_version: v1
   name: "Knowledge Flow Backend"
   base_url: "/knowledge-flow/v1"
   address: "127.0.0.1"
@@ -503,7 +504,6 @@ mcp:
   resources_enabled: true
   opensearch_ops_enabled: true
   prometheus_ops_enabled: false
-  filesystem_enabled: true
   filesystem_read_default_limit: 100
   filesystem_read_max_limit: 500
   filesystem_read_default_max_chars: 20000

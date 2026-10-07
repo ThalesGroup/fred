@@ -30,11 +30,35 @@ n'accèdent donc pas nécessairement à la même page.
 - **Fonctionnalités** — le catalogue des fonctions et leur ouverture par équipe.
 - **Prompt global** — les instructions communes ajoutées en tête des
   instructions de chaque agent.
+- **Interface utilisateur** — le thème proposé par défaut et les thèmes
+  disponibles pour les utilisateurs.
 - **Analytiques** — les indicateurs d'usage à l'échelle de la plateforme.
 - **Activité** — les traitements en cours et leur historique.
 - **Auto-test** et **Audit du corpus** — les vérifications de bon
   fonctionnement.
 - **Données plateforme** — export et import de l'état de la plateforme.
+
+## Le thème de l'interface
+
+Chaque utilisateur choisit son thème (Galet, Cobalt, Nuage…) et son mode clair,
+sombre ou système dans **Profil** → **Interface : thème et mode**.
+
+Sur la page **Interface utilisateur**, chaque thème a sa tuile, avec ses trois
+couleurs principales. Un **Admin plateforme** y décide :
+
+- des **thèmes proposés** : un thème désactivé disparaît du profil des
+  utilisateurs ;
+- du **thème par défaut**, avec **Définir par défaut** : celui des
+  utilisateurs qui n'ont encore rien choisi. Galet l'est tant que rien n'a été
+  changé. Le thème par défaut reste toujours proposé.
+
+Chaque changement est enregistré aussitôt.
+
+Un utilisateur dont le thème n'est plus proposé passe au thème par défaut. Son choix est conservé : il le retrouve si le thème est de nouveau proposé. Choisir
+un thème dans son profil, même celui déjà affiché, le garde ensuite si le thème
+par défaut change. Si un seul thème est proposé, le
+profil n'affiche plus que le mode. Les changements s'appliquent au prochain
+chargement de l'application par chaque utilisateur.
 
 ## Qui ouvre les fonctions à votre équipe
 

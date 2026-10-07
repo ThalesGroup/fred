@@ -242,7 +242,7 @@ service.
 
 | Policy field                             | Enforcement point                                                          |
 | ---------------------------------------- | -------------------------------------------------------------------------- |
-| `storage.max_object_upload_bytes`        | object upload boundary in Knowledge Flow / team-scoped filesystem surfaces |
+| `storage.max_object_upload_bytes`        | Knowledge Flow object upload boundary, including retained technical `/fs/upload` paths |
 | `storage.max_user_object_bytes_total`    | object-store write path before persist                                     |
 | `storage.max_user_file_count`            | object-store write path before persist                                     |
 | `storage.team_storage_bytes_total`       | object-store write path before persist (after per-user check)              |

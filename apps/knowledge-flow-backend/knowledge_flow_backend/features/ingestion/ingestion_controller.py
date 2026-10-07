@@ -22,6 +22,7 @@ import shutil
 import tempfile
 import time
 import uuid
+from enum import Enum
 from typing import Dict, List, Literal, Optional, Type
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile
@@ -45,6 +46,7 @@ from fred_core.documents.document_structures import (
     FileInfo,
     FileType,
     Identity,
+    ProcessingStage,
     SourceInfo,
     SourceType,
     Tagging,
@@ -62,6 +64,8 @@ from knowledge_flow_backend.common.structures import (
     IngestionProcessingProfile,
     Status,
 )
+from knowledge_flow_backend.core.processors.input.common.base_input_processor import InputValidationError
+from knowledge_flow_backend.core.processors.input.excel_processor.excel_processor import ExcelProcessor
 from knowledge_flow_backend.core.processors.input.fast_text_processor.base_fast_text_processor import (
     BaseFastTextProcessor,
     FastTextOptions,
@@ -95,6 +99,7 @@ from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_plain
 from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_spreadsheet_processor import (
     FastSpreadsheetProcessor,
 )
+from knowledge_flow_backend.core.processors.output.excel_processor.excel_table_registration_processor import ExcelTableRegistrationProcessor
 from knowledge_flow_backend.core.processors.output.tabular_processor.tabular_processor import TabularProcessor
 from knowledge_flow_backend.core.stores.vector.base_vector_store import (
     CHUNK_ID_FIELD,
@@ -108,7 +113,7 @@ from knowledge_flow_backend.features.scheduler.scheduler_structures import (
     FileToProcess,
     FileToProcessWithoutUser,
 )
-from knowledge_flow_backend.features.tabular.artifacts import FAST_INGEST_SOURCE_TAG, document_artifact_prefix, read_tabular_artifact
+from knowledge_flow_backend.features.tabular.artifacts import FAST_INGEST_SOURCE_TAG, document_artifact_prefix, read_tabular_artifact, read_tabular_multi_artifact
 from knowledge_flow_backend.features.tag.synchronized import refuse_if_synchronized_by_id
 
 logger = logging.getLogger(__name__)
@@ -124,7 +129,7 @@ async def _authorize_fast_ingest_delete(rebac: RebacEngine, user: KeycloakUser, 
 
     Fast-ingested attachments carry no ReBAC tuple, so a document-level READ
     check can never resolve for them: classification (tagged documents
-    refused outright; otherwise CSV-tabular ownership via `uploaded_by`, or
+    refused outright; otherwise tabular ownership via `uploaded_by`, or
     vectors-only ownership via the chunk's own `scope`/`user_id`) always runs
     first, for every caller including the platform-admin bypass
     (`can_manage_platform`, e.g. the control-plane lifecycle worker erasing a
@@ -143,7 +148,7 @@ async def _authorize_fast_ingest_delete(rebac: RebacEngine, user: KeycloakUser, 
     if metadata is not None and metadata.tags.tag_ids:
         raise deny()
 
-    if metadata is not None and metadata.source_tag == FAST_INGEST_SOURCE_TAG and read_tabular_artifact(metadata) is not None:
+    if metadata is not None and metadata.source_tag == FAST_INGEST_SOURCE_TAG and (read_tabular_artifact(metadata) is not None or read_tabular_multi_artifact(metadata) is not None):
         if is_platform_admin:
             return True
         if metadata.identity.uploaded_by == user.uid:
@@ -181,6 +186,82 @@ async def _authorize_upload_targets(user: KeycloakUser, tags: List[str]) -> None
         await refuse_if_synchronized_by_id(tag_store, tag_id, user)
 
 
+class ImportConflictDecision(str, Enum):
+    """What the user answered about a file whose name the folder already holds."""
+
+    OVERWRITE = "overwrite"
+    SKIP = "skip"
+
+
+@dataclasses.dataclass(frozen=True)
+class ImportPlan:
+    """What each file of one import is to become, decided before any write.
+
+    Names absent from every field are ordinary new documents. The plan is
+    resolved once per request rather than per file: the question is one query
+    for the whole batch, and a decision taken mid-batch would already be as
+    stale as one taken at its start.
+    """
+
+    overwrite_uid: Dict[str, str]
+    """File name → the document uid it replaces, keeping that document's identity."""
+
+    skipped: List[str]
+    """The user chose to keep the document already there; import nothing."""
+
+    undecided: List[str]
+    """Conflicts with no answer — most often a name taken since the user was
+    asked. Never resolved on their behalf."""
+
+    ambiguous: List[str]
+    """The folder holds more than one document under that name, so "the
+    existing document" does not identify one. Reachable by adding a document to
+    a folder that already holds its name — `add_tag_id_to_document` has no
+    collision guard, unlike `rename_document`."""
+
+
+EMPTY_IMPORT_PLAN = ImportPlan(overwrite_uid={}, skipped=[], undecided=[], ambiguous=[])
+
+
+async def _plan_import(filenames: List[str], tags: List[str], decisions: Dict[str, ImportConflictDecision]) -> ImportPlan:
+    """Ask the destination folder which of these names it already holds, and
+    pair each answer with what the user decided about it.
+
+    Scoped to the folder the documents land in — its first tag.
+    """
+    destination = tags[0] if tags else None
+    if not destination:
+        return EMPTY_IMPORT_PLAN
+
+    store = ApplicationContext.get_instance().get_metadata_store()
+    held = await store.document_uids_by_name_in_tag(destination, filenames)
+    if not held:
+        return EMPTY_IMPORT_PLAN
+
+    overwrite_uid: Dict[str, str] = {}
+    skipped: List[str] = []
+    undecided: List[str] = []
+    ambiguous: List[str] = []
+    for filename in dict.fromkeys(filenames):
+        uids = held.get(filename)
+        if not uids:
+            continue
+        decision = decisions.get(filename)
+        if decision is None:
+            undecided.append(filename)
+        elif decision is ImportConflictDecision.SKIP:
+            skipped.append(filename)
+        elif len(uids) > 1:
+            ambiguous.append(filename)
+        else:
+            overwrite_uid[filename] = uids[0]
+    return ImportPlan(overwrite_uid=overwrite_uid, skipped=skipped, undecided=undecided, ambiguous=ambiguous)
+
+
+UNDECIDED_CONFLICT_MESSAGE = "A document named '{filename}' already exists in this folder. Choose to overwrite it or to keep it."
+AMBIGUOUS_CONFLICT_MESSAGE = "This folder holds more than one document named '{filename}'. Rename or delete one of them before importing again."
+
+
 STEP_UPLOAD_PREPARATION = "upload preparation"
 STEP_QUEUED_FOR_PROCESSING = "queued for processing"
 STEP_PROCESSING = "processing"
@@ -191,6 +272,9 @@ class IngestionInput(BaseModel):
     tags: List[str] = []
     source_tag: str = "fred"
     profile: IngestionProcessingProfile | None = None
+    # Keyed by file name: a batch never repeats one (the client splits a
+    # repeated leaf name across batches), so the name identifies the file.
+    conflict_decisions: Dict[str, ImportConflictDecision] = {}
 
 
 class QuotaPrecheckRequest(BaseModel):
@@ -220,14 +304,41 @@ class QuotaPrecheckResponse(BaseModel):
     limit: Optional[int] = None
 
 
+class ImportDestinationNames(BaseModel):
+    """The names one import wants to write into one destination folder.
+
+    An import can target several folders at once (a dropped directory becomes
+    one folder per subdirectory), so the check is asked per destination.
+    """
+
+    tag_id: str
+    names: List[str] = []
+
+
+class ImportNameConflicts(BaseModel):
+    """The subset of `names` that folder `tag_id` already holds."""
+
+    tag_id: str
+    names: List[str]
+
+
+class ImportNameCheckRequest(BaseModel):
+    destinations: List[ImportDestinationNames] = []
+
+
+class ImportNameCheckResponse(BaseModel):
+    """Only the destinations with at least one conflict are listed; an import
+    with nothing to resolve gets an empty list."""
+
+    conflicts: List[ImportNameConflicts] = []
+
+
 class FastIngestResponse(BaseModel):
     """Result of one fast-ingested chat attachment (`POST /fast/ingest`).
 
-    `tabular_available` is `True` only for a `.csv` attachment (ATTACH-TAB-01)
-    — non-CSV attachments never attempt a tabular build. It's never `False`
-    on a 200: a failed tabular build rejects the whole upload (422) rather
-    than returning a degraded success, since a CSV attachment has no vector
-    chunks to fall back to (DESIGN.md, "Session-Scoped Attachment Datasets").
+    `tabular_available` is true for new CSV and Excel attachments, whose
+    complete datasets are stored without vector previews. A failed build
+    rejects the upload rather than returning an unusable attachment.
     """
 
     document_uid: str
@@ -341,6 +452,24 @@ def cleanup_uploaded_temp_file(file_path: pathlib.Path) -> None:
             shutil.rmtree(temp_root)
     except Exception:  # noqa: BLE001
         logger.warning("Failed to clean up temporary upload workdir: %s", temp_root, exc_info=True)
+
+
+def cleanup_uploaded_temp_file_after(pending_save: asyncio.Future[None] | None, file_path: pathlib.Path) -> None:
+    """
+    Same as `cleanup_uploaded_temp_file`, but waits for a content-store write still
+    running in a worker thread: cancelling the request cannot stop that thread, so
+    deleting the workdir right away would pull its input out from under it.
+    """
+    if pending_save is None or pending_save.done():
+        cleanup_uploaded_temp_file(file_path)
+        return
+
+    def _after_save(task: asyncio.Future[None]) -> None:
+        if not task.cancelled() and task.exception() is not None:
+            logger.warning("Content-store write failed after its upload request was cancelled", exc_info=task.exception())
+        cleanup_uploaded_temp_file(file_path)
+
+    pending_save.add_done_callback(_after_save)
 
 
 async def resolve_tag_owners(tags: List[str], user: KeycloakUser) -> tuple[set[str], set[str]]:
@@ -471,6 +600,50 @@ class IngestionController:
             preloaded_files.append((filename, input_temp_file))
         return preloaded_files
 
+    @staticmethod
+    def _plan_events(plan: ImportPlan) -> list[str]:
+        """One event per file the plan excludes, emitted before the import starts.
+
+        A skip and an unanswered conflict are both outcomes, not failures: the
+        client shows the first as "kept the existing document" and the second
+        as still awaiting an answer.
+        """
+        events: list[str] = []
+        for filename in plan.skipped:
+            events.append(IngestionController._progress_event(step=STEP_UPLOAD_PREPARATION, status=Status.IGNORED, filename=filename))
+        for filename in plan.undecided:
+            events.append(
+                IngestionController._progress_event(
+                    step=STEP_UPLOAD_PREPARATION,
+                    status=Status.CONFLICT,
+                    filename=filename,
+                    error=UNDECIDED_CONFLICT_MESSAGE.format(filename=filename),
+                )
+            )
+        for filename in plan.ambiguous:
+            events.append(
+                IngestionController._progress_event(
+                    step=STEP_UPLOAD_PREPARATION,
+                    status=Status.FAILED,
+                    filename=filename,
+                    error=AMBIGUOUS_CONFLICT_MESSAGE.format(filename=filename),
+                )
+            )
+        return events
+
+    @staticmethod
+    def _files_to_import(preloaded_files: list[tuple[str, pathlib.Path]], plan: ImportPlan) -> list[tuple[str, pathlib.Path]]:
+        """Drop the files the plan excludes, releasing their temporary copies —
+        nothing downstream will reach the `finally` that normally does it."""
+        excluded = set(plan.skipped) | set(plan.undecided) | set(plan.ambiguous)
+        kept: list[tuple[str, pathlib.Path]] = []
+        for filename, input_temp_file in preloaded_files:
+            if filename in excluded:
+                cleanup_uploaded_temp_file(input_temp_file)
+            else:
+                kept.append((filename, input_temp_file))
+        return kept
+
     def _scheduler_backend(self) -> SchedulerBackend:
         if self.scheduler_task_service is None:
             return SchedulerBackend.MEMORY
@@ -478,6 +651,8 @@ class IngestionController:
 
     @staticmethod
     def _format_exception_message(exc: Exception) -> str:
+        if isinstance(exc, InputValidationError):
+            return str(exc)
         return f"{type(exc).__name__}: {str(exc).strip() or 'No error message'}"
 
     @staticmethod
@@ -545,17 +720,14 @@ class IngestionController:
           accept an attachment the agent can neither search nor query,
           exactly like the "no text could be extracted" empty-file check
           above.
-        - Reuses `document_uid` from the fast-ingest vector chunks so the one
-          bracketed id the agent is given works for both search and SQL.
+        - Reuses the upload `document_uid` so the bracketed id given to the
+          agent resolves to this SQL dataset.
         - Persists metadata with no tags, so no ReBAC tuple is created —
           `TabularService._resolve_owned_attachment_dataset` authorizes this
           document class by ownership metadata instead.
         - Builds `DocumentMetadata` directly rather than going through
           `IngestionService.extract_metadata()`/`process_metadata()`: those
-          assume a corpus document. `extract_metadata()`'s versioning step
-          scans the whole metadata catalog for a same-named document and
-          raises if one exists — folder semantics that make no sense for an
-          untagged, session-scoped attachment. `process_metadata()` also
+          assume a corpus document. `process_metadata()`
           requires `source_tag` to resolve against the operator-configured
           `document_sources` registry (`resolve_source_type`), which a chat
           attachment was never meant to be a member of.
@@ -595,6 +767,53 @@ class IngestionController:
                     document_uid,
                     exc_info=True,
                 )
+            raise
+
+    async def _build_attachment_excel_dataset(self, *, user: KeycloakUser, document_uid: str, filename: str, raw_path: pathlib.Path) -> str:
+        """Run the corpus Excel processors and persist their table roadmap."""
+        metadata = DocumentMetadata(
+            identity=Identity(document_name=filename, document_uid=document_uid, title=filename, uploaded_by=user.uid),
+            source=SourceInfo(source_type=SourceType.PUSH, source_tag=FAST_INGEST_SOURCE_TAG),  # type: ignore[reportCallIssue]
+            file=FileInfo(
+                file_type=FileType.XLSX,
+                mime_type={
+                    ".xls": "application/vnd.ms-excel",
+                    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    ".xlsm": "application/vnd.ms-excel.sheet.macroEnabled.12",
+                }[pathlib.Path(filename).suffix.lower()],
+            ),
+            tags=Tagging(tag_ids=[]),
+        )
+
+        def build() -> str:
+            with tempfile.TemporaryDirectory(prefix="fred-attachment-excel-") as temporary:
+                output_dir = pathlib.Path(temporary) / "output"
+                converted = ExcelProcessor().convert_file_to_markdown(raw_path, output_dir, document_uid)
+                entries = json.loads((output_dir / "tables.json").read_text(encoding="utf-8"))
+                if not entries or any(not entry.get("object_key") for entry in entries):
+                    raise ValueError("Workbook contains no complete set of queryable tables")
+                ExcelTableRegistrationProcessor().process(converted["md_file"], metadata)
+                artifact = read_tabular_multi_artifact(metadata)
+                if artifact is None or not artifact.tables:
+                    raise ValueError("Workbook contains no queryable table")
+                ApplicationContext.get_instance().get_content_store().save_output(document_uid, output_dir)
+                metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
+                return pathlib.Path(converted["md_file"]).read_text(encoding="utf-8")
+
+        try:
+            preview = await asyncio.to_thread(build)
+            await self.service.metadata_service.save_document_metadata(user, metadata)
+            return preview
+        except Exception:
+            try:
+                await asyncio.to_thread(self._delete_tabular_artifact_objects, document_uid=document_uid)
+                await asyncio.to_thread(ApplicationContext.get_instance().get_content_store().delete_content, document_uid)
+            except Exception:
+                logger.warning("Failed to clean up Excel attachment artifacts for %s", document_uid, exc_info=True)
+            try:
+                await ApplicationContext.get_instance().get_metadata_store().delete_metadata(document_uid)
+            except Exception:
+                logger.warning("Failed to clean up Excel attachment metadata for %s", document_uid, exc_info=True)
             raise
 
     async def _delete_fast_ingest_artifacts(
@@ -653,7 +872,7 @@ class IngestionController:
         context = ApplicationContext.get_instance()
         metadata_store = context.get_metadata_store()
         metadata = await metadata_store.get_metadata_by_uid(document_uid)
-        if metadata is None or read_tabular_artifact(metadata) is None:
+        if metadata is None or (read_tabular_artifact(metadata) is None and read_tabular_multi_artifact(metadata) is None):
             return
         if metadata.source_tag != FAST_INGEST_SOURCE_TAG:
             return
@@ -662,6 +881,8 @@ class IngestionController:
         if not is_platform_bypass and metadata.identity.uploaded_by != user.uid:
             return
         await asyncio.to_thread(self._delete_tabular_artifact_objects, document_uid=document_uid)
+        if read_tabular_multi_artifact(metadata) is not None:
+            await asyncio.to_thread(context.get_content_store().delete_content, document_uid)
         await metadata_store.delete_metadata(document_uid)
 
     @staticmethod
@@ -759,14 +980,39 @@ class IngestionController:
 
         return QuotaPrecheckResponse(allowed=True)
 
-    async def _check_quota_before_upload(self, files: List[UploadFile], tags: List[str], user: KeycloakUser) -> None:
+    @staticmethod
+    async def _replaced_bytes(plan: ImportPlan) -> int:
+        """How much the documents this import replaces already occupy.
+
+        Read at the same moment as the rest of the check, so a document deleted
+        since the plan was drawn simply credits nothing.
+        """
+        if not plan.overwrite_uid:
+            return 0
+        store = ApplicationContext.get_instance().get_metadata_store()
+        total = 0
+        for document_uid in plan.overwrite_uid.values():
+            replaced = await store.get_metadata_by_uid(document_uid)
+            if replaced and replaced.file:
+                total += replaced.file.file_size_bytes or 0
+        return total
+
+    async def _check_quota_before_upload(self, files: List[UploadFile], tags: List[str], user: KeycloakUser, plan: ImportPlan = EMPTY_IMPORT_PLAN) -> None:
         """Reject (400) an upload that would exceed the owning team's or user's
         quota. Post-receive enforcement point — the sizes are read from the
         actually-received files, unlike the client-declared precheck. Kept even
         with the precheck in place: declared sizes can lie.
+
+        What the import costs is not what it carries: a file the plan leaves out
+        is never stored, and one replacing a document costs the difference
+        between the two. Charging the whole batch refused replacements that free
+        space, on exactly the teams closest to their limit.
         """
+        excluded = set(plan.skipped) | set(plan.undecided) | set(plan.ambiguous)
         total_upload_size = 0
         for f in files:
+            if upload_basename(f.filename) in excluded:
+                continue
             file_size = getattr(f, "size", None)
             if file_size is not None:
                 total_upload_size += file_size
@@ -774,6 +1020,8 @@ class IngestionController:
                 f.file.seek(0, 2)
                 total_upload_size += f.file.tell()
                 f.file.seek(0)
+
+        total_upload_size = max(0, total_upload_size - await self._replaced_bytes(plan))
 
         verdict = await self._evaluate_quota(total_upload_size, tags, user)
         if not verdict.allowed:
@@ -788,6 +1036,7 @@ class IngestionController:
         self,
         *,
         preloaded_files: list[tuple[str, pathlib.Path]],
+        plan: ImportPlan = EMPTY_IMPORT_PLAN,
         user: KeycloakUser,
         tags: list[str],
         source_tag: str,
@@ -802,15 +1051,20 @@ class IngestionController:
         total = len(preloaded_files)
         scheduled_candidates: list[tuple[str, str, str | None, str | None]] = []
 
+        for event in self._plan_events(plan):
+            yield event
+
         for filename, input_temp_file in preloaded_files:
             file_started = time.perf_counter()
             file_status = "error"
             file_type = pathlib.Path(filename).suffix.lstrip(".") or None
             current_step = STEP_UPLOAD_PREPARATION
+            pending_save: asyncio.Future[None] | None = None
             try:
                 output_temp_dir = input_temp_file.parent.parent
 
                 yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
+                overwrites = plan.overwrite_uid.get(filename)
                 metadata = await self.service.extract_metadata(
                     user,
                     file_path=input_temp_file,
@@ -818,9 +1072,12 @@ class IngestionController:
                     source_tag=source_tag,
                     profile=profile,
                 )
+                if overwrites:
+                    metadata = await self.service.adopt_existing_document(user, metadata, overwrites)
                 metadata_file_type = getattr(metadata, "file_type", None)
                 file_type = metadata_file_type or file_type
-                self.service.save_input(user, metadata=metadata, input_dir=output_temp_dir / "input")
+                pending_save = asyncio.ensure_future(asyncio.to_thread(self.service.save_input, user, metadata=metadata, input_dir=output_temp_dir / "input"))
+                await asyncio.shield(pending_save)
 
                 if scheduler_task_service is None:
                     yield (
@@ -889,7 +1146,7 @@ class IngestionController:
                 logger.exception("Ingestion error during '%s' for file '%s'", current_step, filename, exc_info=True)
                 yield self._progress_event(step=current_step, status=Status.FAILED, filename=filename, error=error_message)
             finally:
-                cleanup_uploaded_temp_file(input_temp_file)
+                cleanup_uploaded_temp_file_after(pending_save, input_temp_file)
                 duration_ms = (time.perf_counter() - file_started) * 1000.0
                 kpi.emit(
                     name="ingestion.document_duration_ms",
@@ -1007,18 +1264,25 @@ class IngestionController:
             profile = parsed_input.profile or ApplicationContext.get_instance().get_config().processing.default_profile
 
             await _authorize_upload_targets(user, tags)
-            await self._check_quota_before_upload(files, tags, user)
+            plan = await _plan_import([upload_basename(f.filename) for f in files], tags, parsed_input.conflict_decisions)
+            await self._check_quota_before_upload(files, tags, user, plan)
 
             preloaded_files = self._preload_uploaded_files(files)
+            plan_events = self._plan_events(plan)
+            preloaded_files = self._files_to_import(preloaded_files, plan)
 
             total = len(preloaded_files)
 
             async def event_stream():
                 success = 0
+                for event in plan_events:
+                    yield event
                 for filename, input_temp_file in preloaded_files:
                     current_step = STEP_UPLOAD_PREPARATION
+                    pending_save: asyncio.Future[None] | None = None
                     try:
                         yield self._progress_event(step=current_step, status=Status.IN_PROGRESS, filename=filename)
+                        overwrites = plan.overwrite_uid.get(filename)
                         metadata = await self.service.extract_metadata(
                             user,
                             file_path=input_temp_file,
@@ -1026,8 +1290,11 @@ class IngestionController:
                             source_tag=source_tag,
                             profile=profile,
                         )
+                        if overwrites:
+                            metadata = await self.service.adopt_existing_document(user, metadata, overwrites)
                         output_temp_dir = input_temp_file.parent.parent
-                        self.service.save_input(user, metadata=metadata, input_dir=output_temp_dir / "input")
+                        pending_save = asyncio.ensure_future(asyncio.to_thread(self.service.save_input, user, metadata=metadata, input_dir=output_temp_dir / "input"))
+                        await asyncio.shield(pending_save)
                         await self.service.save_metadata(user, metadata=metadata)
                         yield self._progress_event(
                             step=current_step,
@@ -1053,7 +1320,7 @@ class IngestionController:
                             error=error_message,
                         )
                     finally:
-                        cleanup_uploaded_temp_file(input_temp_file)
+                        cleanup_uploaded_temp_file_after(pending_save, input_temp_file)
 
                 overall_status = Status.SUCCESS if success == total else Status.FAILED
                 yield json.dumps({"step": "done", "status": overall_status}) + "\n"
@@ -1080,11 +1347,13 @@ class IngestionController:
             profile = parsed_input.profile or ApplicationContext.get_instance().get_config().processing.default_profile
 
             await _authorize_upload_targets(user, tags)
-            await self._check_quota_before_upload(files, tags, user)
+            plan = await _plan_import([upload_basename(f.filename) for f in files], tags, parsed_input.conflict_decisions)
+            await self._check_quota_before_upload(files, tags, user, plan)
 
             preloaded_files = self._preload_uploaded_files(files)
             event_stream = self._stream_upload_process(
-                preloaded_files=preloaded_files,
+                preloaded_files=self._files_to_import(preloaded_files, plan),
+                plan=plan,
                 user=user,
                 tags=tags,
                 source_tag=source_tag,
@@ -1128,6 +1397,39 @@ class IngestionController:
                 user,
                 extra_team_ids={team_id} if team_id else None,
             )
+
+        @router.post(
+            "/documents/name-check",
+            tags=["Processing"],
+            summary="Which of these names does each destination folder already hold?",
+            description=(
+                "Answers, before any byte is sent, which of the given file names already "
+                "identify a document in each destination folder, so the user can decide to "
+                "overwrite or skip once for the whole import. Advisory only, and not "
+                "re-checked at write time: a name a teammate creates in between is not "
+                "seen, and both imports create a document."
+            ),
+        )
+        async def import_name_check(
+            request: ImportNameCheckRequest,
+            user: KeycloakUser = Depends(get_current_user),
+        ) -> ImportNameCheckResponse:
+            # Same authorization as an import into those folders: a caller who
+            # could not write there learns nothing about what they contain.
+            await _authorize_upload_targets(user, [destination.tag_id for destination in request.destinations])
+
+            store = ApplicationContext.get_instance().get_metadata_store()
+            conflicts: List[ImportNameConflicts] = []
+            for destination in request.destinations:
+                if not destination.names:
+                    continue
+                held = await store.document_uids_by_name_in_tag(destination.tag_id, destination.names)
+                # Keep the caller's order rather than the store's, and drop the
+                # duplicates a single import can legitimately carry.
+                names = list(dict.fromkeys(name for name in destination.names if name in held))
+                if names:
+                    conflicts.append(ImportNameConflicts(tag_id=destination.tag_id, names=names))
+            return ImportNameCheckResponse(conflicts=conflicts)
 
         @router.post(
             "/fast/text",
@@ -1225,9 +1527,9 @@ class IngestionController:
             summary="Fast ingest of a single file (fast path for attachments)",
             description=(
                 """
-                Extract compact text via the fast processor and store it as vectors with user/session scoping.
-                Uses scheduler backend from configuration (memory or temporal) for vector storage.
-                Returns vector ingest metadata and a compact summary for UI previews.
+                Ingest a chat attachment as scoped vectors or a complete tabular dataset.
+                CSV and Excel use the tabular route; other supported files use fast text extraction.
+                Returns ingest metadata and a compact summary for UI previews.
             """
             ),
         )
@@ -1240,12 +1542,12 @@ class IngestionController:
         ) -> FastIngestResponse:
             """
             Why this exists:
-            - Chat attachments need a lightweight ingestion path that stays responsive for the UI.
-            - The route extracts compact text, splits oversized payloads, then stores session-scoped vectors.
+            - Chat attachments need a direct ingestion path for text or tabular content.
+            - Spreadsheets build complete datasets; other supported files store scoped vectors.
 
             How to use:
             - Upload one file plus optional `options_json`, `session_id`, and `scope`.
-            - The handler extracts text with the fast attachment processor, chunks it for embeddings, and returns summary metadata for the UI.
+            - The handler builds tabular artifacts for spreadsheets or text vectors for other files, then returns UI preview metadata.
             """
             # AUTHZ-05 §27/8a: session-scoped chat-attachment vectors, not
             # team-owned — the org-level CAN_PROCESS_CONTENT gate it used is
@@ -1280,6 +1582,35 @@ class IngestionController:
             raw_path = uploadfile_to_path(file)
             document_uid = uuid.uuid4().hex
             tabular_available = False
+
+            if pathlib.Path(filename).suffix.lower() in {".xls", ".xlsx", ".xlsm"}:
+                try:
+                    try:
+                        roadmap = await self._build_attachment_excel_dataset(user=user, document_uid=document_uid, filename=filename, raw_path=raw_path)
+                    except Exception:
+                        logger.exception("[FAST TEXT][INGEST] Failed to build Excel dataset for %s", filename)
+                        raise HTTPException(
+                            status_code=422,
+                            detail={"code": "tabular_dataset_build_failed", "message": f"Could not build a queryable dataset from {filename}."},
+                        )
+                finally:
+                    cleanup_uploaded_temp_file(raw_path)
+                summary_md = roadmap.replace("\x00", "").strip() if include_summary else ""
+                summary_truncated = False
+                if summary_max_chars is not None and len(summary_md) > summary_max_chars:
+                    summary_md = summary_md[:summary_max_chars].rstrip() + "\n…"
+                    summary_truncated = True
+                return FastIngestResponse(
+                    document_uid=document_uid,
+                    chunks=0,
+                    total_chars=len(roadmap),
+                    truncated=False,
+                    scope=scope,
+                    summary_md=summary_md,
+                    summary_chars=len(summary_md),
+                    summary_truncated=summary_truncated,
+                    tabular_available=True,
+                )
 
             # The tabular build (best-effort, after vectors below) still needs
             # the raw file, so cleanup now wraps the whole handler instead of

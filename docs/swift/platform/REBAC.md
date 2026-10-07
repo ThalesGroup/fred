@@ -2,6 +2,13 @@
 
 Fred supports relationship-aware authorization so users can keep resources private, share them with teams, or publish them broadly.
 
+> **Current behavior versus proposed target:** this page describes the shipped
+> model. The [team/project authorization change](../../../openspec/changes/simplify-corpus-authorization/proposal.md)
+> defines the proposed corpus replacement; it is not yet implemented. Use that
+> change for target decisions, including its governance/content-access decision.
+> The [organization RFC](../rfc/ORGANIZATIONS-AND-PROJECTS-RFC.md) covers the later
+> multi-organization extension only.
+
 > Frontend counterpart: [`FRONTEND-AUTHZ-PATTERN.md`](./FRONTEND-AUTHZ-PATTERN.md) —
 > how the two hooks (`useUserCapabilities`, `useTeamCapabilities`) consume the
 > model described below, and how that layer is tested.
@@ -81,12 +88,17 @@ team's own `team_admin`(s), never on `platform_admin`.
 A person may hold `team_admin`, `team_editor`, and `team_analyst` on the same
 team at the same time — common on small teams where one person governs, edits
 content, and evaluates. Nothing in the OpenFGA schema enforces exclusivity;
-each role is an independent stored relation. Each grant and each revoke is its
-own explicit, individually permission-checked action (`POST
+each role is an independent stored relation. Grants and revocations use
+individually permission-checked actions (`POST
 /teams/{team_id}/members/{user_id}/roles`, `DELETE
-/teams/{team_id}/members/{user_id}/roles/{relation}`) — never a bulk "replace
-the role set" call. Revoking a member's only remaining role is refused (use
-`DELETE /teams/{team_id}/members/{user_id}` to remove them entirely instead).
+/teams/{team_id}/members/{user_id}/roles/{relation}`), with no bulk role-set
+replacement. Revoking the only stored elevated role grants a direct
+`team_member` relation before removing that role, so the person remains a simple
+member. Revoking a sole direct `team_member` is refused; use
+`DELETE /teams/{team_id}/members/{user_id}` to remove the person entirely.
+Role revocation and explicit removal of the same person use a shared advisory
+lock and read direct roles with higher consistency after acquiring it, so a
+concurrent demotion cannot restore membership after removal.
 
 ### Team admin — team `team_admin`
 
@@ -105,7 +117,8 @@ charter (`app.team_admin_charter_version`) holds `pending_team_admin` instead:
 a `team_member` with no admin authority. Accepting the charter
 (`POST /team-admin-charter`) turns it into `team_admin`, and a version change
 moves admins back to pending at the next startup. The last-admin guard and the
-rescue check count `team_admin` only. Contract:
+rescue check count `team_admin` only. Charter acceptance and startup reconciliation recheck a pending nomination
+under the same per-member lock as cancellation before promotion. Contract:
 `CONTROL-PLANE-PRODUCT-CONTRACT.md` §54.
 
 Cannot (unless also separately granted `team_editor`/`team_analyst` — see
@@ -483,14 +496,17 @@ as people included, has an active account; nothing is stored for them.
 Fred operation that suspends an account: it writes `suspended` before deleting the
 identity-provider account and leaves the person's other relations in place (see
 [`CONTROL-PLANE-PRODUCT-CONTRACT.md`](../design/CONTROL-PLANE-PRODUCT-CONTRACT.md#deleting-a-person-suspends-their-account-first-2026-09-23)).
-While control-plane delegation is off it writes no ban; the deleted person has no
-identity-provider account left.
+With the Keycloak directory and delegation off, it writes no ban; the deleted
+person has no identity-provider account left. With the local directory, deletion
+requires enforced account status even with delegation off, retains the provider
+account and returns 403 `account_suspension_disabled` when enforcement is disabled.
 Generic writes and deletes of `suspended` are refused, and user tokens and
 delegation grants never write it, so a caller cannot lift its own suspension.
 
-**Enforcement.** Delegation turns the check on, with no separate switch; a service
-whose relationship engine would not enforce — no OpenFGA, or either OIDC half
-disabled — does not start. While delegation is on, the shared user dependency
+**Enforcement.** Delegation or an enforced local-directory engine turns the check
+on, with no separate switch. Under delegation, a service whose relationship engine
+would not enforce - no OpenFGA, or either OIDC half disabled - does not start.
+When account status is enforced, the shared user dependency
 checks once per authenticated request, where the subject is set and before the
 route runs, that the subject is not `suspended`: a signed-in person, a person
 named by a grant or a service identity, with no exemption. A tool mount only
@@ -510,11 +526,12 @@ expires; delegated agents continue until the person is deleted in Fred.
 **Activation and rollback.** Account status needs OpenFGA 1.10 or later: a retried
 delete rewrites the ban, relying on the server ignoring duplicate writes. Publish
 and select a model carrying `suspended` on every participating reader and writer
-before enabling delegation. Every service validates the selected model at startup
-while its delegation is on, refuses an incompatible one and installs its engine for
-the request check; services start in any order. Rollback: disable delegation before pointing any service back at an older
-model. Suspensions may stay; with delegation off no decision consults them, so a
-retained ban has no effect.
+before enabling delegation or local-directory enforcement. Every enforcing service
+validates the selected model at startup, refuses an incompatible one and installs
+its engine for the request check; services start in any order. Local-directory
+enforcement remains active with delegation off. Rollback: restore the Keycloak
+directory and disable delegation before selecting an older model. Suspensions
+may stay; in that configuration no decision consults them.
 
 ## Configuration
 

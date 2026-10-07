@@ -236,7 +236,6 @@ async def test_removing_the_last_tag_releases_using_the_pre_removal_tags(monkeyp
     team_increments, _ = _install_fakes(monkeypatch, tag_owner="team-a", known_teams={"team-a"})
     metadata = _make_metadata("doc-3", tag_ids=["tag-1"])
     service = _build_service(_FakeMetadataStore(metadata), _PermissiveRebac(team_owners=["team-a"]))
-    service._promote_alternate_version = _make_async(None)
 
     await service.remove_tag_id_from_document(_user(str(uuid4())), metadata, "tag-1")
 

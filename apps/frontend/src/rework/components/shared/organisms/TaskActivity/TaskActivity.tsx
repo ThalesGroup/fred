@@ -21,20 +21,19 @@
 // exact same view.
 //
 // Data comes from the standard task surface (`GET /tasks`, already scoped
-// platform vs team server-side) — but that surface is per-backend: each of
-// control-plane, knowledge-flow, and the evaluation backend runs its own task
+// platform vs team server-side) — both control-plane and knowledge-flow run
+// their own task
 // store behind an identical `GET /tasks`/`TaskSummary` contract (fred-core's
-// shared `tasks` module), none of them proxying the others. No `kind` filter
-// means "every kind" (this component's whole point), so this queries all
-// three and merges; a `kind` filter narrows both the query args AND which
+// shared `tasks` module), neither proxying the other. No `kind` filter
+// means "every kind", so this queries both and merges; a `kind` filter narrows both the query args AND which
 // single backend gets queried (`taskBackendFor` — the same map
-// `useTaskSseManager`/`useTaskAcknowledgement` route SSE/ack by), since
+// `useTaskPolling`/`useTaskAcknowledgement` route by), since
 // asking the wrong backend for a kind it doesn't own just returns nothing
 // (#2123 review: kind="ingestion" used to always query control-plane, which
 // never has ingestion tasks — the ingestion panel was silently always empty).
 // Rendering reuses the shared task atoms (`TaskStateBadge`, `TaskProgressBar`);
-// polling covers the scheduled→running→done transitions the client is not
-// SSE-subscribed to.
+// polling covers the scheduled→running→done transitions of tasks the user
+// did not start, which the task store does not follow.
 
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
@@ -52,12 +51,7 @@ import {
   type MigrationResult,
   type TaskSummary,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
-import {
-  useListTasksKnowledgeFlowV1TasksGetQuery,
-  type IngestionDetail,
-  type RepairVectorMetadataResult,
-} from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { useListTasksEvaluationV1TasksGetQuery } from "../../../../../slices/evaluation/evaluationOpenApi";
+import { useListTasksKnowledgeFlowV1TasksGetQuery } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import styles from "./TaskActivity.module.css";
 
 // Principal counters shown in the migration result disclosure, in display
@@ -107,59 +101,6 @@ function hasMigrationWarnings(task: TaskSummary): boolean {
   return !!result && (result.warnings?.length ?? 0) > 0;
 }
 
-// Counters shown in the vector-metadata repair disclosure ("3a — Réparer
-// uniquement", #2234), in display order. Zero-valued counters are omitted —
-// same filtering spirit as MIGRATION_COUNTER_KEYS above.
-const REPAIR_COUNTER_KEYS = [
-  "metadata_documents",
-  "already_done",
-  "eligible_with_vectors_and_content",
-  "repaired",
-  "missing_vectors",
-  "missing_content",
-  "tabular_excluded",
-  "failed_or_running_excluded",
-  "errors",
-] as const satisfies readonly (keyof RepairVectorMetadataResult)[];
-
-/** Narrow a generic `TaskSummary.detail` to `IngestionDetail` — only valid for
- *  the vector-metadata repair task specifically (`target.type`), since other
- *  `kind === "ingestion"` tasks never populate `detail.result`. */
-function repairResult(task: TaskSummary): RepairVectorMetadataResult | null {
-  if (task.kind !== "ingestion" || task.target?.type !== "corpus-repair-vector-metadata" || task.detail == null) {
-    return null;
-  }
-  return (task.detail as IngestionDetail).result ?? null;
-}
-
-function RepairResultDetails({ result, t }: { result: RepairVectorMetadataResult; t: TFunction }) {
-  const counters = REPAIR_COUNTER_KEYS.map((key) => [key, result[key]] as const).filter(
-    ([, value]) => typeof value === "number" && value > 0,
-  );
-
-  return (
-    <Disclosure
-      title={t("rework.taskActivity.repair.detailsTitle")}
-      defaultOpen={
-        (result.missing_vectors ?? 0) +
-          (result.missing_content ?? 0) +
-          (result.failed_or_running_excluded ?? 0) +
-          (result.errors ?? 0) >
-        0
-      }
-    >
-      <dl className={styles.counterList}>
-        {counters.map(([key, value]) => (
-          <div key={key} className={styles.counterRow}>
-            <dt className={styles.counterLabel}>{t(`rework.taskActivity.repair.counter.${key}`)}</dt>
-            <dd className={styles.counterValue}>{value}</dd>
-          </div>
-        ))}
-      </dl>
-    </Disclosure>
-  );
-}
-
 function MigrationResultDetails({ result, t }: { result: MigrationResult; t: TFunction }) {
   const warnings = result.warnings ?? [];
   const counters = MIGRATION_COUNTER_KEYS.map((key) => [key, result[key]] as const).filter(
@@ -207,8 +148,8 @@ interface TaskActivityProps {
 }
 
 // Scheduled work can be days out, but a running task finishes in seconds; poll
-// often enough to catch the scheduled→running→done transitions the client is not
-// SSE-subscribed to, without hammering the admin surface.
+// often enough to catch the scheduled→running→done transitions the task store
+// does not follow, without hammering the admin surface.
 const ACTIVITY_POLL_MS = 30_000;
 
 /** Soonest-due first; tasks without a due date sort last. */
@@ -223,7 +164,7 @@ export default function TaskActivity({ scope, teamId, kind }: TaskActivityProps)
   const { acknowledge, isAcknowledging } = useTaskAcknowledgement();
 
   // No kind filter → query every backend (see module docstring). A kind
-  // filter narrows to the single backend that owns it — the other two are
+  // filter narrows to the single backend that owns it — the other backend is
   // `skip`ped, never fired.
   const wantsBackend = (backend: TaskBackend) => !kind || taskBackendFor(kind) === backend;
   const queryArgs = { scope, teamId: teamId ?? undefined, kind };
@@ -237,25 +178,12 @@ export default function TaskActivity({ scope, teamId, kind }: TaskActivityProps)
     ...pollOpts,
     skip: !wantsBackend("knowledge-flow"),
   });
-  // The evaluation backend's GET /tasks has no "platform" scope (evaluation
-  // campaigns are inherently team/user work, never platform-wide) and no
-  // `kind` param (every task it owns is already kind="evaluation" — nothing
-  // to filter). "team" is a safe placeholder when skipped; it's never sent.
-  const evaluation = useListTasksEvaluationV1TasksGetQuery(
-    { scope: "team", teamId: teamId ?? undefined },
-    { ...pollOpts, skip: !wantsBackend("evaluation") || scope !== "team" },
-  );
-
-  const isLoading = controlPlane.isLoading || knowledgeFlow.isLoading || evaluation.isLoading;
-  const isError = controlPlane.isError || knowledgeFlow.isError || evaluation.isError;
-  // The three backends' TaskSummary are independently generated from the
-  // same shared fred-core Pydantic model — structurally identical except
-  // evaluation's lacks acknowledged_at/acknowledged_by (that backend has no
-  // ack endpoint yet, see useTaskAcknowledgement); safe to merge as one list.
+  const isLoading = controlPlane.isLoading || knowledgeFlow.isLoading;
+  const isError = controlPlane.isError || knowledgeFlow.isError;
+  // Both backends generate TaskSummary from the shared fred-core model.
   const tasks: TaskSummary[] = [
     ...(controlPlane.data?.tasks ?? []),
     ...((knowledgeFlow.data?.tasks ?? []) as TaskSummary[]),
-    ...((evaluation.data?.tasks ?? []) as TaskSummary[]),
   ];
   const scheduled = tasks.filter((task) => task.state === "pending").sort(byDueAsc);
   const running = tasks.filter((task) => task.state === "running" || task.state === "cancelling");
@@ -280,7 +208,6 @@ export default function TaskActivity({ scope, teamId, kind }: TaskActivityProps)
 
   const row = (task: TaskSummary, meta: React.ReactNode, showBadgeLabel = false) => {
     const result = migrationResult(task);
-    const repair = repairResult(task);
     const withWarnings = hasMigrationWarnings(task);
     // Same gate TaskCard/TaskDetailPopover use for the session-local Redux
     // view of this task — the persisted server-side record (this component's
@@ -321,11 +248,6 @@ export default function TaskActivity({ scope, teamId, kind }: TaskActivityProps)
         {result && (
           <div className={styles.rowDisclosure}>
             <MigrationResultDetails result={result} t={t} />
-          </div>
-        )}
-        {repair && (
-          <div className={styles.rowDisclosure}>
-            <RepairResultDetails result={repair} t={t} />
           </div>
         )}
       </li>

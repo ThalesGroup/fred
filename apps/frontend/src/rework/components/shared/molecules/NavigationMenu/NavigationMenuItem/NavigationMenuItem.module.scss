@@ -36,12 +36,8 @@
   }
 
   &[data-selected="true"] {
-    background-color: var(--state-secondary-selected);
-    color: var(--on-surface);
-
-    .icon {
-      color: var(--secondary);
-    }
+    background-color: var(--secondary-container);
+    color: var(--on-secondary-container);
   }
 }
 

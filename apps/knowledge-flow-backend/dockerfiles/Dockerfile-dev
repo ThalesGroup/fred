@@ -70,7 +70,6 @@ WORKDIR /app/knowledge-flow-backend
 
 # Install dependencies with uv
 RUN make dev
-RUN python /app/scripts/patch_docling_rapidocr_openvino.py
 RUN mkdir -p ${DUCKDB_EXTENSION_DIRECTORY}
 RUN python -c "\
 import duckdb; \

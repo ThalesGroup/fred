@@ -28,7 +28,7 @@ implementations execute it.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from typing import (
@@ -54,7 +54,6 @@ from .context import (
     AgentInvocationResult,
     BoundRuntimeContext,
     ConversationTurn,
-    FsEntry,
     JsonScalar,
     PublishedArtifact,
     ToolInvocationRequest,
@@ -158,6 +157,10 @@ class RuntimeEventKind(str, Enum):
     FINAL = "final"
     TURN_PERSISTED = "turn_persisted"
     EXECUTION_ERROR = "execution_error"
+    EXECUTION_INTERRUPTED = "execution_interrupted"
+
+
+InterruptedAction: TypeAlias = Literal["continue", "restart"]
 
 
 class ExecutionConfig(FrozenModel):
@@ -189,6 +192,9 @@ class ExecutionConfig(FrozenModel):
     resume_payload: object | None = None
     invocation_turns: tuple[ConversationTurn, ...] = ()
     """Prior conversation turns forwarded by the calling agent for context seeding."""
+    interrupted_action: InterruptedAction | None = None
+    """Choice for a Graph execution with pending non-HITL work."""
+    interruption_id: str | None = None
 
 
 class RuntimeEventBase(FrozenModel):
@@ -328,9 +334,94 @@ class HumanInputRequest(FrozenModel):
     pending_calls: tuple[PendingToolCall, ...] = ()
 
 
+class HumanInputAnswer(FrozenModel):
+    """The selected option, human text, or explicit skip of one human prompt."""
+
+    choice_id: str | None = None
+    text: str | None = None
+    skipped: bool = False
+
+
+def parse_human_input_answer(
+    value: object,
+    request: HumanInputRequest,
+    *,
+    allow_legacy_string: bool = False,
+) -> HumanInputAnswer:
+    """Validate a resume against the question it answers."""
+
+    choice_id: object = None
+    text: object = None
+    skipped = False
+    if isinstance(value, str) and allow_legacy_string:
+        if request.choices:
+            choice_id = value
+        elif request.free_text:
+            text = value
+    elif isinstance(value, Mapping):
+        raw_skipped = value.get("skipped", False)
+        if not isinstance(raw_skipped, bool):
+            raise ValueError("skipped must be a boolean")
+        skipped = raw_skipped
+        choice_id = value.get("choice_id")
+        text = value.get("text")
+        answer = value.get("answer")
+        if choice_id is None and request.choices and isinstance(answer, str):
+            choice_id = answer
+        if text is None and request.free_text and not request.choices:
+            text = answer
+    else:
+        raise ValueError("human answer must be an object")
+
+    if skipped:
+        if choice_id is not None or text is not None:
+            raise ValueError("a skipped question cannot carry an answer")
+        return HumanInputAnswer(skipped=True)
+
+    if choice_id is not None:
+        if not isinstance(choice_id, str) or not choice_id.strip():
+            raise ValueError("choice_id must be a nonempty string")
+        choice_id = choice_id.strip()
+        if choice_id not in {option.id for option in request.choices}:
+            raise ValueError("choice_id is not offered by the pending question")
+    if text is not None:
+        if not isinstance(text, str) or not text.strip():
+            raise ValueError("text must be a nonempty string")
+        if not request.free_text:
+            raise ValueError("the pending question does not allow text")
+    if request.choices and choice_id is None and text is None:
+        raise ValueError("the pending question requires a choice or text")
+    if not request.choices and request.free_text and text is None:
+        raise ValueError("the pending question requires text")
+    if not request.choices and not request.free_text:
+        raise ValueError("the pending question has no answer form")
+    return HumanInputAnswer(choice_id=choice_id, text=text)
+
+
 class AwaitingHumanRuntimeEvent(RuntimeEventBase):
     kind: Literal[RuntimeEventKind.AWAITING_HUMAN] = RuntimeEventKind.AWAITING_HUMAN
     request: HumanInputRequest
+    sources: tuple[VectorSearchHit, ...] = ()
+    ui_parts: tuple[UiPart, ...] = ()
+    model_name: str | None = None
+    token_usage: dict[str, int] | None = None
+    context_tokens: int | None = None
+
+
+class ExecutionInterruptedRuntimeEvent(RuntimeEventBase):
+    """
+    A Graph execution has unfinished work; this request ran no step.
+
+    `request` is shown like a human-input card offering `continue` or
+    `restart`; the answer goes back as `interrupted_action` plus
+    `interruption_id`, never as a HITL resume.
+    """
+
+    kind: Literal[RuntimeEventKind.EXECUTION_INTERRUPTED] = (
+        RuntimeEventKind.EXECUTION_INTERRUPTED
+    )
+    request: HumanInputRequest
+    interruption_id: str = Field(..., min_length=1)
 
 
 class AssistantDeltaRuntimeEvent(RuntimeEventBase):
@@ -449,7 +540,8 @@ RuntimeEvent: TypeAlias = Annotated[
     | NodeErrorRuntimeEvent
     | FinalRuntimeEvent
     | TurnPersistedEvent
-    | RuntimeErrorEvent,
+    | RuntimeErrorEvent
+    | ExecutionInterruptedRuntimeEvent,
     Field(discriminator="kind"),
 ]
 
@@ -531,53 +623,12 @@ class ToolProviderPort(ABC):
         """Release provider resources."""
 
 
-class WorkspaceFileNotFound(Exception):
-    """Raised by ``WorkspaceFsPort`` when a path does not exist."""
-
-
 class WorkspaceFsPort(ABC):
-    """
-    Path-addressed access to the team-rooted virtual filesystem (FILES-04).
-
-    Why this port exists:
-    - agents read and write files by short, author-relative paths; the team and the acting
-      user are injected from the verified session context, never typed by the agent
-    - this is the single file capability behind ``ctx.read/write/ls/resolve_template``
-
-    Path grammar (implemented by the concrete adapter, not the agent):
-    - a bare/relative path → the acting user's private space
-    - a leading ``shared/`` → the team-shared space
-    - an absolute ``/teams/{t}/...`` is accepted only when ``t`` is the session team
-
-    Implementations must raise ``WorkspaceFileNotFound`` for a missing path so callers such
-    as ``resolve_template`` can fall through to the next candidate.
-    """
+    """Technical output writer used by capabilities such as PPT Filler."""
 
     @abstractmethod
     def bind(self, binding: BoundRuntimeContext) -> None:
-        """Refresh context-scoped filesystem state for the current runtime."""
-
-    @abstractmethod
-    async def read_bytes(self, path: str) -> bytes:
-        """Read one file as raw bytes."""
-
-    @abstractmethod
-    async def read_text(self, path: str) -> str:
-        """Read one file as UTF-8 text."""
-
-    @abstractmethod
-    async def read_user_bytes(self, path: str) -> bytes:
-        """Read one file from the user's Mon espace (``teams/{team}/users/{uid}/...``).
-
-        For the run's acting user only; raise ``WorkspaceFileNotFound`` if missing.
-        """
-
-    @abstractmethod
-    async def read_team_bytes(self, path: str) -> bytes:
-        """Read one file from the team's Espace d'equipe (``teams/{team}/shared/...``).
-
-        Governed by the user's team read access; raise ``WorkspaceFileNotFound`` if missing.
-        """
+        """Refresh the verified team, agent and user context for this run."""
 
     @abstractmethod
     async def write(
@@ -588,25 +639,7 @@ class WorkspaceFsPort(ABC):
         content_type: str | None = None,
         title: str | None = None,
     ) -> PublishedArtifact:
-        """Write one file and return its downloadable description."""
-
-    @abstractmethod
-    async def ls(self, path: str = "") -> list[FsEntry]:
-        """List one directory."""
-
-    @abstractmethod
-    async def delete(self, path: str) -> None:
-        """Delete one file."""
-
-    @abstractmethod
-    async def link_for(self, path: str) -> PublishedArtifact:
-        """
-        Return a downloadable description of an **existing** file — no copy.
-
-        Used to hand a file already in the workspace back to the user as a download link
-        (RFC §7.3). The adapter mints a signed, short-TTL URL; raise
-        ``WorkspaceFileNotFound`` if the path does not exist.
-        """
+        """Write an agent output and return its downloadable description."""
 
 
 class ConversationScratchpadError(Exception):
@@ -894,7 +927,7 @@ class AgentAssetPort(ABC):
 
     Reads are team-membership-gated on the KF side, so ANY user chatting with
     the agent can fetch the asset at tool time; writes require the same team
-    resource-update permission as the team-shared space.
+    resource-update permission.
     """
 
     @abstractmethod

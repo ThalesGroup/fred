@@ -15,7 +15,7 @@
 .page {
   display: flex;
   flex-direction: column;
-  background: var(--surface-container);
+  background: var(--surface-main);
   height: 100%;
   color: var(--on-surface);
 }
@@ -25,7 +25,7 @@
   justify-content: space-between;
   align-items: center;
   border-bottom: 1px solid var(--outline-muted);
-  background: var(--surface-container);
+  background: var(--surface-main);
   padding: var(--spacing-s) var(--spacing-l);
   color: var(--on-surface);
 }

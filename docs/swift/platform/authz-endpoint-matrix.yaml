@@ -484,6 +484,17 @@ operations:
     path: /control-plane/v1/teams/{team_id}/agent-instances/{agent_instance_id}
     review_status: pending_review
     required_permission: pending_review
+  # Copy: team.can_update_agents on the source, and again on every destination.
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/teams/{team_id}/agent-instances/{agent_instance_id}/copy-targets
+    review_status: pending_review
+    required_permission: team.can_update_agents
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/agent-instances/{agent_instance_id}/copy
+    review_status: pending_review
+    required_permission: team.can_update_agents
   - service: control-plane
     method: POST
     path: /control-plane/v1/teams/{team_id}/agent-instances/{agent_instance_id}/prepare-execution
@@ -572,6 +583,16 @@ operations:
   - service: control-plane
     method: PUT
     path: /control-plane/v1/teams/{team_id}/prompts/{prompt_id}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/teams/{team_id}/prompts/{prompt_id}/favorite
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/teams/{team_id}/prompts/{prompt_id}/favorite
     review_status: pending_review
     required_permission: pending_review
   - service: control-plane
@@ -696,6 +717,18 @@ operations:
     path: /control-plane/v1/users/by-ids
     review_status: approved
     required_permission: authenticated_user
+  # Own profile picture: the target is always the caller, no path parameter
+  # can name someone else.
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/users/me/avatar
+    review_status: approved
+    required_permission: authenticated_user # self only
+  - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/users/me/avatar
+    review_status: approved
+    required_permission: authenticated_user # self only
   # Platform-role management (PLATFORM-ADMIN-DELEGATION-RFC.md, #2405).
   # can_administer_users gates all three; the platform_admin relation is
   # additionally guarded service-side: grant/revoke root-only, root never
@@ -852,6 +885,16 @@ operations:
     required_permission: can_edit_platform_prompt # organization_authz.require_edit_platform_prompt. Writes the FIRST block of every agent's system prompt platform-wide, so this gate is the only thing between an actor and prepending text ahead of every agent on the deployment. Carved out of can_manage_platform so this one surface can be delegated to a prompt_editor without import/export, tasks and platform reset coming with it. Body length-capped by SetPlatformPromptRequest (max_length) at parsing, before authz runs. Saving "" suppresses the block; there is no DELETE (row absence means "never set", which is a distinct state).
   - service: control-plane
     method: GET
+    path: /control-plane/v1/admin/platform/ui-settings
+    review_status: pending_review
+    required_permission: can_manage_platform # platform_ui_settings/service._require_manage_platform, same catch-all gate as announcements. Returns the platform default UI theme and hidden theme ids; defaults (null / []) when never saved. The same two values are public on /frontend/config (theme ids only, no admin-authored content) so the frontend can resolve the theme before its first paint.
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/admin/platform/ui-settings
+    review_status: pending_review
+    required_permission: can_manage_platform # platform_ui_settings/service._require_manage_platform. Replaces both settings; SetPlatformUiSettingsRequest bounds ids to [a-z][a-z0-9-]{0,31}, at most 32 distinct hidden ids, default not hidden (422 at parsing, before authz). Emits audit event platform.ui_settings.updated.
+  - service: control-plane
+    method: GET
     path: /control-plane/v1/admin/platform/instructions
     review_status: approved
     required_permission: can_edit_platform_prompt # organization_authz.require_edit_platform_prompt, same gate as its editable sibling above — this pane is the reference an editor needs to know what agents are already told. Read-only: returns the `platform_instructions` field of the pod's `config/platform_prompt.json`, the text shipped with the platform and composed into every agent prompt. No row, no PUT, no DELETE — it exists so an admin can see what agents are told, not change it.
@@ -899,46 +942,6 @@ operations:
   - service: knowledge-flow
     method: POST
     path: /knowledge-flow/v1/audio/transcriptions
-    review_status: pending_review
-    required_permission: pending_review
-  - service: knowledge-flow
-    method: POST
-    path: /knowledge-flow/v1/corpus/build-toc
-    review_status: pending_review
-    required_permission: pending_review
-  - service: knowledge-flow
-    method: GET
-    path: /knowledge-flow/v1/corpus/capabilities
-    review_status: pending_review
-    required_permission: pending_review
-  - service: knowledge-flow
-    method: POST
-    path: /knowledge-flow/v1/corpus/purge-vectors
-    review_status: pending_review
-    required_permission: pending_review
-  - service: knowledge-flow
-    method: POST
-    path: /knowledge-flow/v1/corpus/repair-vector-metadata
-    review_status: pending_review
-    required_permission: pending_review
-  - service: knowledge-flow
-    method: POST
-    path: /knowledge-flow/v1/corpus/revectorize
-    review_status: pending_review
-    required_permission: pending_review
-  - service: knowledge-flow
-    method: POST
-    path: /knowledge-flow/v1/corpus/tasks/get
-    review_status: pending_review
-    required_permission: pending_review
-  - service: knowledge-flow
-    method: POST
-    path: /knowledge-flow/v1/corpus/tasks/list
-    review_status: pending_review
-    required_permission: pending_review
-  - service: knowledge-flow
-    method: POST
-    path: /knowledge-flow/v1/corpus/tasks/result
     review_status: pending_review
     required_permission: pending_review
   - service: knowledge-flow
@@ -1001,6 +1004,11 @@ operations:
     path: /knowledge-flow/v1/documents/metadata/{document_uid}
     review_status: pending_review
     required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/documents/name-check
+    review_status: approved
+    required_permission: tag.update
   - service: knowledge-flow
     method: POST
     path: /knowledge-flow/v1/documents/tree
@@ -1072,11 +1080,6 @@ operations:
     review_status: pending_review
     required_permission: pending_review
   - service: knowledge-flow
-    method: POST
-    path: /knowledge-flow/v1/fs/copy-to-shared/{path:path}
-    review_status: pending_review
-    required_permission: pending_review
-  - service: knowledge-flow
     method: DELETE
     path: /knowledge-flow/v1/fs/delete/{path:path}
     review_status: pending_review
@@ -1084,11 +1087,6 @@ operations:
   - service: knowledge-flow
     method: GET
     path: /knowledge-flow/v1/fs/download/{path:path}
-    review_status: pending_review
-    required_permission: pending_review
-  - service: knowledge-flow
-    method: POST
-    path: /knowledge-flow/v1/fs/edit/{path:path}
     review_status: pending_review
     required_permission: pending_review
   - service: knowledge-flow
@@ -1107,23 +1105,8 @@ operations:
     review_status: pending_review
     required_permission: pending_review
   - service: knowledge-flow
-    method: POST
-    path: /knowledge-flow/v1/fs/mkdir/{path:path}
-    review_status: pending_review
-    required_permission: pending_review
-  - service: knowledge-flow
     method: GET
     path: /knowledge-flow/v1/fs/page/{path:path}
-    review_status: pending_review
-    required_permission: pending_review
-  - service: knowledge-flow
-    method: POST
-    path: /knowledge-flow/v1/fs/rename/{path:path}
-    review_status: pending_review
-    required_permission: pending_review
-  - service: knowledge-flow
-    method: GET
-    path: /knowledge-flow/v1/fs/share/{path:path}
     review_status: pending_review
     required_permission: pending_review
   - service: knowledge-flow
@@ -1132,18 +1115,8 @@ operations:
     review_status: pending_review
     required_permission: pending_review
   - service: knowledge-flow
-    method: GET
-    path: /knowledge-flow/v1/fs/stats/{path:path}
-    review_status: pending_review
-    required_permission: pending_review
-  - service: knowledge-flow
     method: POST
     path: /knowledge-flow/v1/fs/upload/{path:path}
-    review_status: pending_review
-    required_permission: pending_review
-  - service: knowledge-flow
-    method: POST
-    path: /knowledge-flow/v1/fs/write/{path:path}
     review_status: pending_review
     required_permission: pending_review
   - service: knowledge-flow

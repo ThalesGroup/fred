@@ -141,6 +141,26 @@
                 },
                 "podAnnotations": {
                   "type": "object"
+                },
+                "extraEnvVars": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "type": "string"
+                      },
+                      "valueFrom": {
+                        "type": "object",
+                        "properties": {},
+                        "additionalProperties": true
+                      }
+                    },
+                    "additionalProperties": true
+                  }
                 }
               },
               "additionalProperties": false
@@ -836,7 +856,7 @@
               "additionalProperties": false
             },
             "configuration": {
-              "description": "Complete structured configuration for a Fred agent pod.\n\nMirrors agentic-backend's `Configuration` model, scoped to what an agent\npod actually needs. All field types are reused from fred-core and fred-sdk\n\u2014 no new types invented here.\n\nHow to use it:\n- write a `config/configuration.yaml` alongside `config/models_catalog.yaml`\n  and `config/mcp_catalog.yaml`\n- call `load_agent_pod_config()` at startup\n- pass the result to `create_agent_app(config=...)`\n\nThe `security` field is a `SecurityConfiguration` from fred-core, the same\ntype used in agentic-backend. When `security.user.enabled` is True,\n`create_agent_app` enforces Keycloak JWT validation on every endpoint.",
+              "description": "Complete structured configuration for a Fred agent pod.\n\nMirrors agentic-backend's `Configuration` model, scoped to what an agent\npod actually needs. All field types are reused from fred-core and fred-sdk\n\u2014 no new types invented here.\n\nHow to use it:\n- write a `config/configuration.yaml` alongside `config/models_catalog.yaml`\n  and, optionally, `config/mcp_catalog_external.yaml`\n- call `load_agent_pod_config()` at startup\n- pass the result to `create_agent_app(config=...)`\n\nThe `security` field is a `SecurityConfiguration` from fred-core, the same\ntype used in agentic-backend. When `security.user.enabled` is True,\n`create_agent_app` enforces Keycloak JWT validation on every endpoint.",
               "properties": {
                 "app": {
                   "description": "Identity and HTTP server settings for an agent pod.\n\nWhy this exists:\n- every pod needs the same identity and HTTP binding knobs, in the same\n  place, whoever built it\n- keeping these fields in `app` preserves the familiar startup contract for\n  local benches and scrape-based debugging\n\nHow to use it:\n- declare `runtime_id`; every other field defaults sanely for local work\n- the metrics exporter is configured under `observability.kpi.prometheus`,\n  not here\n\nExample:\n- `PodAppConfig(runtime_id=\"my-agents\", base_url=\"/pod/v1\", port=8000)`",
@@ -939,6 +959,41 @@
                           "title": "Client Id",
                           "type": "string"
                         },
+                        "provider": {
+                          "default": "keycloak",
+                          "enum": [
+                            "keycloak",
+                            "oidc"
+                          ],
+                          "title": "Provider",
+                          "type": "string"
+                        },
+                        "scope": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Scope"
+                        },
+                        "token_url": {
+                          "anyOf": [
+                            {
+                              "format": "uri",
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Token Url"
+                        },
                         "secret_env_var": {
                           "default": "M2M_CLIENT_SECRET",
                           "title": "Secret Env Var",
@@ -961,6 +1016,7 @@
                           "type": "boolean"
                         },
                         "realm_url": {
+                          "description": "Keycloak realm URL or OIDC issuer URL",
                           "format": "uri",
                           "minLength": 1,
                           "title": "Realm Url",
@@ -969,6 +1025,115 @@
                         "client_id": {
                           "title": "Client Id",
                           "type": "string"
+                        },
+                        "provider": {
+                          "default": "keycloak",
+                          "enum": [
+                            "keycloak",
+                            "oidc"
+                          ],
+                          "title": "Provider",
+                          "type": "string"
+                        },
+                        "audience": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Audience"
+                        },
+                        "scope": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Scope"
+                        },
+                        "jwks_url": {
+                          "anyOf": [
+                            {
+                              "format": "uri",
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Jwks Url"
+                        },
+                        "token_url": {
+                          "anyOf": [
+                            {
+                              "format": "uri",
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Token Url"
+                        },
+                        "roles_claim": {
+                          "anyOf": [
+                            {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Roles Claim"
+                        },
+                        "claims": {
+                          "description": "Claim names used to construct an authenticated person's identity.",
+                          "properties": {
+                            "uid": {
+                              "default": "sub",
+                              "title": "Uid",
+                              "type": "string"
+                            },
+                            "username": {
+                              "default": "preferred_username",
+                              "title": "Username",
+                              "type": "string"
+                            },
+                            "email": {
+                              "default": "email",
+                              "title": "Email",
+                              "type": "string"
+                            },
+                            "given_name": {
+                              "default": "given_name",
+                              "title": "Given Name",
+                              "type": "string"
+                            },
+                            "family_name": {
+                              "default": "family_name",
+                              "title": "Family Name",
+                              "type": "string"
+                            }
+                          },
+                          "title": "UserClaims",
+                          "type": "object",
+                          "additionalProperties": false
                         }
                       },
                       "required": [
@@ -978,6 +1143,15 @@
                       "title": "UserSecurity",
                       "type": "object",
                       "additionalProperties": false
+                    },
+                    "user_directory": {
+                      "default": "keycloak",
+                      "enum": [
+                        "keycloak",
+                        "local"
+                      ],
+                      "title": "User Directory",
+                      "type": "string"
                     },
                     "delegation": {
                       "additionalProperties": false,
@@ -1949,10 +2123,175 @@
               "properties": {},
               "additionalProperties": true
             },
-            "mcp_catalog": {
+            "mcp_catalog_external": {
               "type": "object",
-              "properties": {},
-              "additionalProperties": true
+              "properties": {
+                "version": {
+                  "const": "v1"
+                },
+                "servers": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "description": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "transport": {
+                        "enum": [
+                          "sse",
+                          "stdio",
+                          "websocket",
+                          "streamable_http",
+                          null
+                        ]
+                      },
+                      "url": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "enabled": {
+                        "type": "boolean"
+                      },
+                      "auth_mode": {
+                        "enum": [
+                          "user_token",
+                          "no_token",
+                          "delegated"
+                        ]
+                      },
+                      "sse_read_timeout": {
+                        "anyOf": [
+                          {
+                            "type": "integer"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "command": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "args": {
+                        "anyOf": [
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "env": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "additionalProperties": {
+                              "type": "string"
+                            }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "prompt_file": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "agent_instructions": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "prompt_group_title": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "config_fields": {
+                        "type": "array",
+                        "items": {}
+                      },
+                      "team_scope": {
+                        "enum": [
+                          "default_on",
+                          "admin_gated"
+                        ]
+                      },
+                      "service": {
+                        "enum": [
+                          "knowledge_flow",
+                          "control_plane",
+                          null
+                        ]
+                      },
+                      "path": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                      "id",
+                      "name"
+                    ]
+                  }
+                }
+              },
+              "additionalProperties": false
             }
           },
           "additionalProperties": false
@@ -2031,6 +2370,26 @@
                 },
                 "podAnnotations": {
                   "type": "object"
+                },
+                "extraEnvVars": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "type": "string"
+                      },
+                      "valueFrom": {
+                        "type": "object",
+                        "properties": {},
+                        "additionalProperties": true
+                      }
+                    },
+                    "additionalProperties": true
+                  }
                 }
               },
               "additionalProperties": false
@@ -2817,6 +3176,26 @@
                 },
                 "podAnnotations": {
                   "type": "object"
+                },
+                "extraEnvVars": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "type": "string"
+                      },
+                      "valueFrom": {
+                        "type": "object",
+                        "properties": {},
+                        "additionalProperties": true
+                      }
+                    },
+                    "additionalProperties": true
+                  }
                 }
               },
               "additionalProperties": false
@@ -4063,6 +4442,41 @@
                           "title": "Client Id",
                           "type": "string"
                         },
+                        "provider": {
+                          "default": "keycloak",
+                          "enum": [
+                            "keycloak",
+                            "oidc"
+                          ],
+                          "title": "Provider",
+                          "type": "string"
+                        },
+                        "scope": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Scope"
+                        },
+                        "token_url": {
+                          "anyOf": [
+                            {
+                              "format": "uri",
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Token Url"
+                        },
                         "secret_env_var": {
                           "default": "M2M_CLIENT_SECRET",
                           "title": "Secret Env Var",
@@ -4085,6 +4499,7 @@
                           "type": "boolean"
                         },
                         "realm_url": {
+                          "description": "Keycloak realm URL or OIDC issuer URL",
                           "format": "uri",
                           "minLength": 1,
                           "title": "Realm Url",
@@ -4093,6 +4508,115 @@
                         "client_id": {
                           "title": "Client Id",
                           "type": "string"
+                        },
+                        "provider": {
+                          "default": "keycloak",
+                          "enum": [
+                            "keycloak",
+                            "oidc"
+                          ],
+                          "title": "Provider",
+                          "type": "string"
+                        },
+                        "audience": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Audience"
+                        },
+                        "scope": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Scope"
+                        },
+                        "jwks_url": {
+                          "anyOf": [
+                            {
+                              "format": "uri",
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Jwks Url"
+                        },
+                        "token_url": {
+                          "anyOf": [
+                            {
+                              "format": "uri",
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Token Url"
+                        },
+                        "roles_claim": {
+                          "anyOf": [
+                            {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Roles Claim"
+                        },
+                        "claims": {
+                          "description": "Claim names used to construct an authenticated person's identity.",
+                          "properties": {
+                            "uid": {
+                              "default": "sub",
+                              "title": "Uid",
+                              "type": "string"
+                            },
+                            "username": {
+                              "default": "preferred_username",
+                              "title": "Username",
+                              "type": "string"
+                            },
+                            "email": {
+                              "default": "email",
+                              "title": "Email",
+                              "type": "string"
+                            },
+                            "given_name": {
+                              "default": "given_name",
+                              "title": "Given Name",
+                              "type": "string"
+                            },
+                            "family_name": {
+                              "default": "family_name",
+                              "title": "Family Name",
+                              "type": "string"
+                            }
+                          },
+                          "title": "UserClaims",
+                          "type": "object",
+                          "additionalProperties": false
                         }
                       },
                       "required": [
@@ -4102,6 +4626,15 @@
                       "title": "UserSecurity",
                       "type": "object",
                       "additionalProperties": false
+                    },
+                    "user_directory": {
+                      "default": "keycloak",
+                      "enum": [
+                        "keycloak",
+                        "local"
+                      ],
+                      "title": "User Directory",
+                      "type": "string"
                     },
                     "delegation": {
                       "additionalProperties": false,
@@ -7258,12 +7791,6 @@
                       "default": false,
                       "description": "Expose Prometheus operational endpoints and the corresponding MCP server.",
                       "title": "Prometheus Ops Enabled",
-                      "type": "boolean"
-                    },
-                    "filesystem_enabled": {
-                      "default": false,
-                      "description": "Expose agent filesystem utils endpoints and the corresponding MCP server.",
-                      "title": "Filesystem Enabled",
                       "type": "boolean"
                     },
                     "filesystem_read_default_limit": {
@@ -7527,6 +8054,26 @@
                 },
                 "podAnnotations": {
                   "type": "object"
+                },
+                "extraEnvVars": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "type": "string"
+                      },
+                      "valueFrom": {
+                        "type": "object",
+                        "properties": {},
+                        "additionalProperties": true
+                      }
+                    },
+                    "additionalProperties": true
+                  }
                 }
               },
               "additionalProperties": false
@@ -8773,6 +9320,41 @@
                           "title": "Client Id",
                           "type": "string"
                         },
+                        "provider": {
+                          "default": "keycloak",
+                          "enum": [
+                            "keycloak",
+                            "oidc"
+                          ],
+                          "title": "Provider",
+                          "type": "string"
+                        },
+                        "scope": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Scope"
+                        },
+                        "token_url": {
+                          "anyOf": [
+                            {
+                              "format": "uri",
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Token Url"
+                        },
                         "secret_env_var": {
                           "default": "M2M_CLIENT_SECRET",
                           "title": "Secret Env Var",
@@ -8795,6 +9377,7 @@
                           "type": "boolean"
                         },
                         "realm_url": {
+                          "description": "Keycloak realm URL or OIDC issuer URL",
                           "format": "uri",
                           "minLength": 1,
                           "title": "Realm Url",
@@ -8803,6 +9386,115 @@
                         "client_id": {
                           "title": "Client Id",
                           "type": "string"
+                        },
+                        "provider": {
+                          "default": "keycloak",
+                          "enum": [
+                            "keycloak",
+                            "oidc"
+                          ],
+                          "title": "Provider",
+                          "type": "string"
+                        },
+                        "audience": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Audience"
+                        },
+                        "scope": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Scope"
+                        },
+                        "jwks_url": {
+                          "anyOf": [
+                            {
+                              "format": "uri",
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Jwks Url"
+                        },
+                        "token_url": {
+                          "anyOf": [
+                            {
+                              "format": "uri",
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Token Url"
+                        },
+                        "roles_claim": {
+                          "anyOf": [
+                            {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Roles Claim"
+                        },
+                        "claims": {
+                          "description": "Claim names used to construct an authenticated person's identity.",
+                          "properties": {
+                            "uid": {
+                              "default": "sub",
+                              "title": "Uid",
+                              "type": "string"
+                            },
+                            "username": {
+                              "default": "preferred_username",
+                              "title": "Username",
+                              "type": "string"
+                            },
+                            "email": {
+                              "default": "email",
+                              "title": "Email",
+                              "type": "string"
+                            },
+                            "given_name": {
+                              "default": "given_name",
+                              "title": "Given Name",
+                              "type": "string"
+                            },
+                            "family_name": {
+                              "default": "family_name",
+                              "title": "Family Name",
+                              "type": "string"
+                            }
+                          },
+                          "title": "UserClaims",
+                          "type": "object",
+                          "additionalProperties": false
                         }
                       },
                       "required": [
@@ -8812,6 +9504,15 @@
                       "title": "UserSecurity",
                       "type": "object",
                       "additionalProperties": false
+                    },
+                    "user_directory": {
+                      "default": "keycloak",
+                      "enum": [
+                        "keycloak",
+                        "local"
+                      ],
+                      "title": "User Directory",
+                      "type": "string"
                     },
                     "delegation": {
                       "additionalProperties": false,
@@ -11970,12 +12671,6 @@
                       "title": "Prometheus Ops Enabled",
                       "type": "boolean"
                     },
-                    "filesystem_enabled": {
-                      "default": false,
-                      "description": "Expose agent filesystem utils endpoints and the corresponding MCP server.",
-                      "title": "Filesystem Enabled",
-                      "type": "boolean"
-                    },
                     "filesystem_read_default_limit": {
                       "default": 100,
                       "description": "Default line count returned by filesystem read_file when callers omit limit.",
@@ -12237,6 +12932,26 @@
                 },
                 "podAnnotations": {
                   "type": "object"
+                },
+                "extraEnvVars": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "type": "string"
+                      },
+                      "valueFrom": {
+                        "type": "object",
+                        "properties": {},
+                        "additionalProperties": true
+                      }
+                    },
+                    "additionalProperties": true
+                  }
                 }
               },
               "additionalProperties": false
@@ -13480,6 +14195,41 @@
                           "title": "Client Id",
                           "type": "string"
                         },
+                        "provider": {
+                          "default": "keycloak",
+                          "enum": [
+                            "keycloak",
+                            "oidc"
+                          ],
+                          "title": "Provider",
+                          "type": "string"
+                        },
+                        "scope": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Scope"
+                        },
+                        "token_url": {
+                          "anyOf": [
+                            {
+                              "format": "uri",
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Token Url"
+                        },
                         "secret_env_var": {
                           "default": "M2M_CLIENT_SECRET",
                           "title": "Secret Env Var",
@@ -13498,6 +14248,7 @@
                           "type": "boolean"
                         },
                         "realm_url": {
+                          "description": "Keycloak realm URL or OIDC issuer URL",
                           "format": "uri",
                           "minLength": 1,
                           "title": "Realm Url",
@@ -13506,11 +14257,129 @@
                         "client_id": {
                           "title": "Client Id",
                           "type": "string"
+                        },
+                        "provider": {
+                          "default": "keycloak",
+                          "enum": [
+                            "keycloak",
+                            "oidc"
+                          ],
+                          "title": "Provider",
+                          "type": "string"
+                        },
+                        "audience": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Audience"
+                        },
+                        "scope": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Scope"
+                        },
+                        "jwks_url": {
+                          "anyOf": [
+                            {
+                              "format": "uri",
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Jwks Url"
+                        },
+                        "token_url": {
+                          "anyOf": [
+                            {
+                              "format": "uri",
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Token Url"
+                        },
+                        "roles_claim": {
+                          "anyOf": [
+                            {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Roles Claim"
+                        },
+                        "claims": {
+                          "description": "Claim names used to construct an authenticated person's identity.",
+                          "properties": {
+                            "uid": {
+                              "default": "sub",
+                              "title": "Uid",
+                              "type": "string"
+                            },
+                            "username": {
+                              "default": "preferred_username",
+                              "title": "Username",
+                              "type": "string"
+                            },
+                            "email": {
+                              "default": "email",
+                              "title": "Email",
+                              "type": "string"
+                            },
+                            "given_name": {
+                              "default": "given_name",
+                              "title": "Given Name",
+                              "type": "string"
+                            },
+                            "family_name": {
+                              "default": "family_name",
+                              "title": "Family Name",
+                              "type": "string"
+                            }
+                          },
+                          "title": "UserClaims",
+                          "type": "object",
+                          "additionalProperties": false
                         }
                       },
                       "title": "UserSecurity",
                       "type": "object",
                       "additionalProperties": false
+                    },
+                    "user_directory": {
+                      "default": "keycloak",
+                      "enum": [
+                        "keycloak",
+                        "local"
+                      ],
+                      "title": "User Directory",
+                      "type": "string"
                     },
                     "delegation": {
                       "additionalProperties": false,
@@ -16482,12 +17351,6 @@
                       "default": false,
                       "description": "Expose Prometheus operational endpoints and the corresponding MCP server.",
                       "title": "Prometheus Ops Enabled",
-                      "type": "boolean"
-                    },
-                    "filesystem_enabled": {
-                      "default": false,
-                      "description": "Expose agent filesystem utils endpoints and the corresponding MCP server.",
-                      "title": "Filesystem Enabled",
                       "type": "boolean"
                     },
                     "filesystem_read_default_limit": {
@@ -16737,6 +17600,26 @@
                 },
                 "podAnnotations": {
                   "type": "object"
+                },
+                "extraEnvVars": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "type": "string"
+                      },
+                      "valueFrom": {
+                        "type": "object",
+                        "properties": {},
+                        "additionalProperties": true
+                      }
+                    },
+                    "additionalProperties": true
+                  }
                 }
               },
               "additionalProperties": false
@@ -17980,6 +18863,41 @@
                           "title": "Client Id",
                           "type": "string"
                         },
+                        "provider": {
+                          "default": "keycloak",
+                          "enum": [
+                            "keycloak",
+                            "oidc"
+                          ],
+                          "title": "Provider",
+                          "type": "string"
+                        },
+                        "scope": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Scope"
+                        },
+                        "token_url": {
+                          "anyOf": [
+                            {
+                              "format": "uri",
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Token Url"
+                        },
                         "secret_env_var": {
                           "default": "M2M_CLIENT_SECRET",
                           "title": "Secret Env Var",
@@ -17998,6 +18916,7 @@
                           "type": "boolean"
                         },
                         "realm_url": {
+                          "description": "Keycloak realm URL or OIDC issuer URL",
                           "format": "uri",
                           "minLength": 1,
                           "title": "Realm Url",
@@ -18006,11 +18925,129 @@
                         "client_id": {
                           "title": "Client Id",
                           "type": "string"
+                        },
+                        "provider": {
+                          "default": "keycloak",
+                          "enum": [
+                            "keycloak",
+                            "oidc"
+                          ],
+                          "title": "Provider",
+                          "type": "string"
+                        },
+                        "audience": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Audience"
+                        },
+                        "scope": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Scope"
+                        },
+                        "jwks_url": {
+                          "anyOf": [
+                            {
+                              "format": "uri",
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Jwks Url"
+                        },
+                        "token_url": {
+                          "anyOf": [
+                            {
+                              "format": "uri",
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Token Url"
+                        },
+                        "roles_claim": {
+                          "anyOf": [
+                            {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Roles Claim"
+                        },
+                        "claims": {
+                          "description": "Claim names used to construct an authenticated person's identity.",
+                          "properties": {
+                            "uid": {
+                              "default": "sub",
+                              "title": "Uid",
+                              "type": "string"
+                            },
+                            "username": {
+                              "default": "preferred_username",
+                              "title": "Username",
+                              "type": "string"
+                            },
+                            "email": {
+                              "default": "email",
+                              "title": "Email",
+                              "type": "string"
+                            },
+                            "given_name": {
+                              "default": "given_name",
+                              "title": "Given Name",
+                              "type": "string"
+                            },
+                            "family_name": {
+                              "default": "family_name",
+                              "title": "Family Name",
+                              "type": "string"
+                            }
+                          },
+                          "title": "UserClaims",
+                          "type": "object",
+                          "additionalProperties": false
                         }
                       },
                       "title": "UserSecurity",
                       "type": "object",
                       "additionalProperties": false
+                    },
+                    "user_directory": {
+                      "default": "keycloak",
+                      "enum": [
+                        "keycloak",
+                        "local"
+                      ],
+                      "title": "User Directory",
+                      "type": "string"
                     },
                     "delegation": {
                       "additionalProperties": false,
@@ -20982,12 +22019,6 @@
                       "default": false,
                       "description": "Expose Prometheus operational endpoints and the corresponding MCP server.",
                       "title": "Prometheus Ops Enabled",
-                      "type": "boolean"
-                    },
-                    "filesystem_enabled": {
-                      "default": false,
-                      "description": "Expose agent filesystem utils endpoints and the corresponding MCP server.",
-                      "title": "Filesystem Enabled",
                       "type": "boolean"
                     },
                     "filesystem_read_default_limit": {
@@ -21237,6 +22268,26 @@
                 },
                 "podAnnotations": {
                   "type": "object"
+                },
+                "extraEnvVars": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "type": "string"
+                      },
+                      "valueFrom": {
+                        "type": "object",
+                        "properties": {},
+                        "additionalProperties": true
+                      }
+                    },
+                    "additionalProperties": true
+                  }
                 }
               },
               "additionalProperties": false
@@ -22480,6 +23531,41 @@
                           "title": "Client Id",
                           "type": "string"
                         },
+                        "provider": {
+                          "default": "keycloak",
+                          "enum": [
+                            "keycloak",
+                            "oidc"
+                          ],
+                          "title": "Provider",
+                          "type": "string"
+                        },
+                        "scope": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Scope"
+                        },
+                        "token_url": {
+                          "anyOf": [
+                            {
+                              "format": "uri",
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Token Url"
+                        },
                         "secret_env_var": {
                           "default": "M2M_CLIENT_SECRET",
                           "title": "Secret Env Var",
@@ -22498,6 +23584,7 @@
                           "type": "boolean"
                         },
                         "realm_url": {
+                          "description": "Keycloak realm URL or OIDC issuer URL",
                           "format": "uri",
                           "minLength": 1,
                           "title": "Realm Url",
@@ -22506,11 +23593,129 @@
                         "client_id": {
                           "title": "Client Id",
                           "type": "string"
+                        },
+                        "provider": {
+                          "default": "keycloak",
+                          "enum": [
+                            "keycloak",
+                            "oidc"
+                          ],
+                          "title": "Provider",
+                          "type": "string"
+                        },
+                        "audience": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Audience"
+                        },
+                        "scope": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Scope"
+                        },
+                        "jwks_url": {
+                          "anyOf": [
+                            {
+                              "format": "uri",
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Jwks Url"
+                        },
+                        "token_url": {
+                          "anyOf": [
+                            {
+                              "format": "uri",
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Token Url"
+                        },
+                        "roles_claim": {
+                          "anyOf": [
+                            {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Roles Claim"
+                        },
+                        "claims": {
+                          "description": "Claim names used to construct an authenticated person's identity.",
+                          "properties": {
+                            "uid": {
+                              "default": "sub",
+                              "title": "Uid",
+                              "type": "string"
+                            },
+                            "username": {
+                              "default": "preferred_username",
+                              "title": "Username",
+                              "type": "string"
+                            },
+                            "email": {
+                              "default": "email",
+                              "title": "Email",
+                              "type": "string"
+                            },
+                            "given_name": {
+                              "default": "given_name",
+                              "title": "Given Name",
+                              "type": "string"
+                            },
+                            "family_name": {
+                              "default": "family_name",
+                              "title": "Family Name",
+                              "type": "string"
+                            }
+                          },
+                          "title": "UserClaims",
+                          "type": "object",
+                          "additionalProperties": false
                         }
                       },
                       "title": "UserSecurity",
                       "type": "object",
                       "additionalProperties": false
+                    },
+                    "user_directory": {
+                      "default": "keycloak",
+                      "enum": [
+                        "keycloak",
+                        "local"
+                      ],
+                      "title": "User Directory",
+                      "type": "string"
                     },
                     "delegation": {
                       "additionalProperties": false,
@@ -25484,12 +26689,6 @@
                       "title": "Prometheus Ops Enabled",
                       "type": "boolean"
                     },
-                    "filesystem_enabled": {
-                      "default": false,
-                      "description": "Expose agent filesystem utils endpoints and the corresponding MCP server.",
-                      "title": "Filesystem Enabled",
-                      "type": "boolean"
-                    },
                     "filesystem_read_default_limit": {
                       "default": 100,
                       "description": "Default line count returned by filesystem read_file when callers omit limit.",
@@ -25737,6 +26936,26 @@
                 },
                 "podAnnotations": {
                   "type": "object"
+                },
+                "extraEnvVars": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "type": "string"
+                      },
+                      "valueFrom": {
+                        "type": "object",
+                        "properties": {},
+                        "additionalProperties": true
+                      }
+                    },
+                    "additionalProperties": true
+                  }
                 }
               },
               "additionalProperties": false
@@ -26551,26 +27770,10 @@
                         "feature_flags": {
                           "description": "Typed feature flags exposed to the frontend bootstrap.",
                           "properties": {
-                            "enableK8Features": {
-                              "default": false,
-                              "title": "Enablek8Features",
-                              "type": "boolean"
-                            },
-                            "enableElecWarfare": {
-                              "default": false,
-                              "title": "Enableelecwarfare",
-                              "type": "boolean"
-                            },
                             "enableApplications": {
                               "default": false,
                               "description": "Enable Fred's integrated Apps surface deployment-wide. When false, application discovery, application catalog administration, and the frontend Apps experience stay disabled.",
                               "title": "Enableapplications",
-                              "type": "boolean"
-                            },
-                            "enableAllResourceSpaces": {
-                              "default": false,
-                              "description": "Show Mon espace/Espace d'\u00e9quipe/Agents tabs on the Resources page, not just Corpus d'\u00e9quipe.",
-                              "title": "Enableallresourcespaces",
                               "type": "boolean"
                             },
                             "enableInformationSystems": {
@@ -26672,6 +27875,7 @@
                           "ingress_prefix": {
                             "anyOf": [
                               {
+                                "pattern": "^/[A-Za-z0-9._~/-]+$",
                                 "type": "string"
                               },
                               {
@@ -26679,7 +27883,7 @@
                               }
                             ],
                             "default": null,
-                            "description": "Ingress-relative URL prefix for browser-facing runtime access, e.g. /runtime/agents-v2. Required for execution preparation. MUST NOT be a cluster-internal hostname or pod IP.",
+                            "description": "Canonical root-relative URL prefix for browser-facing runtime access, e.g. /runtime/agents-v2. Required for execution preparation. Absolute URLs, encoded characters, and path traversal are rejected.",
                             "title": "Ingress Prefix"
                           }
                         },
@@ -26882,6 +28086,41 @@
                           "title": "Client Id",
                           "type": "string"
                         },
+                        "provider": {
+                          "default": "keycloak",
+                          "enum": [
+                            "keycloak",
+                            "oidc"
+                          ],
+                          "title": "Provider",
+                          "type": "string"
+                        },
+                        "scope": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Scope"
+                        },
+                        "token_url": {
+                          "anyOf": [
+                            {
+                              "format": "uri",
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Token Url"
+                        },
                         "secret_env_var": {
                           "default": "M2M_CLIENT_SECRET",
                           "title": "Secret Env Var",
@@ -26904,6 +28143,7 @@
                           "type": "boolean"
                         },
                         "realm_url": {
+                          "description": "Keycloak realm URL or OIDC issuer URL",
                           "format": "uri",
                           "minLength": 1,
                           "title": "Realm Url",
@@ -26912,6 +28152,115 @@
                         "client_id": {
                           "title": "Client Id",
                           "type": "string"
+                        },
+                        "provider": {
+                          "default": "keycloak",
+                          "enum": [
+                            "keycloak",
+                            "oidc"
+                          ],
+                          "title": "Provider",
+                          "type": "string"
+                        },
+                        "audience": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Audience"
+                        },
+                        "scope": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Scope"
+                        },
+                        "jwks_url": {
+                          "anyOf": [
+                            {
+                              "format": "uri",
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Jwks Url"
+                        },
+                        "token_url": {
+                          "anyOf": [
+                            {
+                              "format": "uri",
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Token Url"
+                        },
+                        "roles_claim": {
+                          "anyOf": [
+                            {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Roles Claim"
+                        },
+                        "claims": {
+                          "description": "Claim names used to construct an authenticated person's identity.",
+                          "properties": {
+                            "uid": {
+                              "default": "sub",
+                              "title": "Uid",
+                              "type": "string"
+                            },
+                            "username": {
+                              "default": "preferred_username",
+                              "title": "Username",
+                              "type": "string"
+                            },
+                            "email": {
+                              "default": "email",
+                              "title": "Email",
+                              "type": "string"
+                            },
+                            "given_name": {
+                              "default": "given_name",
+                              "title": "Given Name",
+                              "type": "string"
+                            },
+                            "family_name": {
+                              "default": "family_name",
+                              "title": "Family Name",
+                              "type": "string"
+                            }
+                          },
+                          "title": "UserClaims",
+                          "type": "object",
+                          "additionalProperties": false
                         }
                       },
                       "required": [
@@ -26921,6 +28270,15 @@
                       "title": "UserSecurity",
                       "type": "object",
                       "additionalProperties": false
+                    },
+                    "user_directory": {
+                      "default": "keycloak",
+                      "enum": [
+                        "keycloak",
+                        "local"
+                      ],
+                      "title": "User Directory",
+                      "type": "string"
                     },
                     "delegation": {
                       "additionalProperties": false,
@@ -27866,6 +29224,26 @@
                 },
                 "podAnnotations": {
                   "type": "object"
+                },
+                "extraEnvVars": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "type": "string"
+                      },
+                      "valueFrom": {
+                        "type": "object",
+                        "properties": {},
+                        "additionalProperties": true
+                      }
+                    },
+                    "additionalProperties": true
+                  }
                 }
               },
               "additionalProperties": false
@@ -28680,26 +30058,10 @@
                         "feature_flags": {
                           "description": "Typed feature flags exposed to the frontend bootstrap.",
                           "properties": {
-                            "enableK8Features": {
-                              "default": false,
-                              "title": "Enablek8Features",
-                              "type": "boolean"
-                            },
-                            "enableElecWarfare": {
-                              "default": false,
-                              "title": "Enableelecwarfare",
-                              "type": "boolean"
-                            },
                             "enableApplications": {
                               "default": false,
                               "description": "Enable Fred's integrated Apps surface deployment-wide. When false, application discovery, application catalog administration, and the frontend Apps experience stay disabled.",
                               "title": "Enableapplications",
-                              "type": "boolean"
-                            },
-                            "enableAllResourceSpaces": {
-                              "default": false,
-                              "description": "Show Mon espace/Espace d'\u00e9quipe/Agents tabs on the Resources page, not just Corpus d'\u00e9quipe.",
-                              "title": "Enableallresourcespaces",
                               "type": "boolean"
                             },
                             "enableInformationSystems": {
@@ -28801,6 +30163,7 @@
                           "ingress_prefix": {
                             "anyOf": [
                               {
+                                "pattern": "^/[A-Za-z0-9._~/-]+$",
                                 "type": "string"
                               },
                               {
@@ -28808,7 +30171,7 @@
                               }
                             ],
                             "default": null,
-                            "description": "Ingress-relative URL prefix for browser-facing runtime access, e.g. /runtime/agents-v2. Required for execution preparation. MUST NOT be a cluster-internal hostname or pod IP.",
+                            "description": "Canonical root-relative URL prefix for browser-facing runtime access, e.g. /runtime/agents-v2. Required for execution preparation. Absolute URLs, encoded characters, and path traversal are rejected.",
                             "title": "Ingress Prefix"
                           }
                         },
@@ -29011,6 +30374,41 @@
                           "title": "Client Id",
                           "type": "string"
                         },
+                        "provider": {
+                          "default": "keycloak",
+                          "enum": [
+                            "keycloak",
+                            "oidc"
+                          ],
+                          "title": "Provider",
+                          "type": "string"
+                        },
+                        "scope": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Scope"
+                        },
+                        "token_url": {
+                          "anyOf": [
+                            {
+                              "format": "uri",
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Token Url"
+                        },
                         "secret_env_var": {
                           "default": "M2M_CLIENT_SECRET",
                           "title": "Secret Env Var",
@@ -29033,6 +30431,7 @@
                           "type": "boolean"
                         },
                         "realm_url": {
+                          "description": "Keycloak realm URL or OIDC issuer URL",
                           "format": "uri",
                           "minLength": 1,
                           "title": "Realm Url",
@@ -29041,6 +30440,115 @@
                         "client_id": {
                           "title": "Client Id",
                           "type": "string"
+                        },
+                        "provider": {
+                          "default": "keycloak",
+                          "enum": [
+                            "keycloak",
+                            "oidc"
+                          ],
+                          "title": "Provider",
+                          "type": "string"
+                        },
+                        "audience": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Audience"
+                        },
+                        "scope": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Scope"
+                        },
+                        "jwks_url": {
+                          "anyOf": [
+                            {
+                              "format": "uri",
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Jwks Url"
+                        },
+                        "token_url": {
+                          "anyOf": [
+                            {
+                              "format": "uri",
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Token Url"
+                        },
+                        "roles_claim": {
+                          "anyOf": [
+                            {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Roles Claim"
+                        },
+                        "claims": {
+                          "description": "Claim names used to construct an authenticated person's identity.",
+                          "properties": {
+                            "uid": {
+                              "default": "sub",
+                              "title": "Uid",
+                              "type": "string"
+                            },
+                            "username": {
+                              "default": "preferred_username",
+                              "title": "Username",
+                              "type": "string"
+                            },
+                            "email": {
+                              "default": "email",
+                              "title": "Email",
+                              "type": "string"
+                            },
+                            "given_name": {
+                              "default": "given_name",
+                              "title": "Given Name",
+                              "type": "string"
+                            },
+                            "family_name": {
+                              "default": "family_name",
+                              "title": "Family Name",
+                              "type": "string"
+                            }
+                          },
+                          "title": "UserClaims",
+                          "type": "object",
+                          "additionalProperties": false
                         }
                       },
                       "required": [
@@ -29050,6 +30558,15 @@
                       "title": "UserSecurity",
                       "type": "object",
                       "additionalProperties": false
+                    },
+                    "user_directory": {
+                      "default": "keycloak",
+                      "enum": [
+                        "keycloak",
+                        "local"
+                      ],
+                      "title": "User Directory",
+                      "type": "string"
                     },
                     "delegation": {
                       "additionalProperties": false,

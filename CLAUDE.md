@@ -286,19 +286,9 @@ client/cache, or anything else that runs per-turn or per-request under
 concurrent load, also run the `fred-performance-reviewer` skill before
 reporting done.
 
-**Self-review is not enough for non-trivial logic changes.** Before reporting
-done, run `/code-review` on your own diff — default effort at minimum, higher
-for anything touching correctness-sensitive shared code. Tests you write from
-the same reasoning pass that wrote the code confirm your own assumptions
-instead of falsifying them; an agent checking its own work shares whatever
-blind spot produced the bug in the first place. (2026-08-13: a same-day
-ReAct size-budget fix — issue #2350, PR #2352 — passed its own tests,
-`make code-quality`, and a `fred-performance-reviewer` pass, then shipped
-with three P1 correctness bugs that an independent reviewer bot caught on
-first read of the cold diff — each one a case not covered by the tests
-written alongside the code they were breaking.) Do not skip this under time
-pressure — that is exactly when a design's blind spots survive to
-production instead of being caught same-session.
+Author and independent review requirements are defined in
+[AGENTS.md — Author review before readiness](AGENTS.md#author-review-before-readiness).
+Use its repository-backed procedure rather than a tool-specific slash command.
 
 **Step 6 - Documentation and OpenSpec close-out.** Reconcile the existing
 OpenSpec change with the implemented behavior, record exact verification
@@ -392,9 +382,10 @@ The mandatory read order below applies to **development tasks only**. Skip for s
 Python tooling uses uv with an existing pyproject.toml and committed uv.lock
 where practical. Do not add a parallel requirements.txt/pip installation path.
 
-Every PR must add an English migration note, even when no operator action is
-needed. Follow `docs/swift/ops/MIGRATION-GUIDES.md` and its template. The maximum
-operational impact determines the minimum paired code/chart version increment:
+Every PR except those opened by `dependabot[bot]` must add an English
+migration note, even when no operator action is needed. Follow
+`docs/swift/ops/MIGRATION-GUIDES.md` and its template. The maximum operational
+impact determines the minimum paired code/chart version increment:
 none -> patch, operations (including optional activation) -> minor, substantial
 incompatibility -> major. The release skill must generate and present the operator
 guide alongside UI notes before asking for tag approval.

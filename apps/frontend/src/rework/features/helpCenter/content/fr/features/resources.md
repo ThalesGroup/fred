@@ -29,12 +29,87 @@ Les formats courants passent : PDF, texte, Word, OpenDocument, PowerPoint,
 Excel, CSV, Markdown, images et fichiers audio. Un format inhabituel peut être
 refusé ; convertissez-le dans un format courant.
 
+## Un document du même nom existe déjà
+
+Si un document porte déjà le même nom dans la bibliothèque visée, Fred vous le
+dit **avant** d'envoyer quoi que ce soit, et vous laisse choisir :
+
+- **Remplacer** : le document existant garde sa place et ses liens, seul son
+  contenu change. Tout ce qui le citait continue de fonctionner et renvoie
+  désormais vers la nouvelle version.
+- **Ignorer** : votre fichier est écarté de l'import, le document déjà présent
+  ne bouge pas.
+
+Vous pouvez répondre en une fois pour tous les fichiers concernés, ou fichier
+par fichier. Le même nom dans une **autre** bibliothèque n'est pas un doublon :
+ce sont deux documents indépendants.
+
+> Si quelqu'un dépose ce nom pendant votre import, la question vous est simplement
+> reposée dans le panneau de suivi : **Remplacer** ou **Ignorer**. Votre fichier
+> n'est pas perdu, il attend votre réponse.
+
+## Suivre vos imports
+
+Dès que vous validez, la fenêtre se ferme : vous récupérez Fred tout de suite et
+l'envoi continue derrière. Un **panneau** s'ouvre à droite de la page et suit
+chaque fichier. Vous pouvez le replier en simple bouton, le rouvrir, et
+l'élargir en tirant son bord gauche.
+
+Chaque fichier passe par quatre temps. Le panneau les montre comme quatre
+repères qui se cochent l'un après l'autre, et nomme celui en cours :
+
+1. **Envoi du fichier** — votre navigateur transmet. Tant que ce temps dure,
+   rien n'est encore arrivé chez Fred.
+2. **Préparation du document** — Fred a reçu le fichier et le range.
+3. **Extraction du contenu** — Fred lit le document. C'est presque toujours le
+   temps le plus long : un PDF volumineux ou scanné peut y rester plusieurs
+   minutes.
+4. **Indexation** — Fred range ce qu'il a lu pour pouvoir le retrouver.
+
+Fred analyse quelques fichiers à la fois. Quand vous en importez plusieurs, ceux
+qui attendent leur tour affichent **En attente…**, en gris, avec un repère
+immobile : le fichier est bien arrivé, son analyse démarrera dès qu'une place se
+libère.
+
+**C'est à la fin du dernier temps, et pas à la fin de l'envoi, que le document
+devient utilisable par un agent.**
+
+Quand un fichier est arrivé au bout, sa ligne affiche **Ingestion terminée**
+puis disparaît d'elle-même au bout de quelques secondes : le document est dans
+le tableau, il n'y a plus rien à suivre. Seuls les fichiers en échec ou en
+attente de réponse restent.
+
+> Aucun de ces temps n'annonce de pourcentage : Fred ne sait pas combien de
+> temps il lui reste, et préfère ne pas l'inventer. Un temps qui dure n'est
+> pas un temps bloqué.
+
+### Si un fichier échoue
+
+Il reste dans le panneau avec la raison de l'échec, et un bouton **Réessayer**
+tant que votre navigateur a encore le fichier sous la main. Si vous avez
+rechargé la page entre-temps, le panneau vous demande de le sélectionner à
+nouveau : un navigateur ne peut pas rouvrir un fichier tout seul.
+
+### Annuler un envoi
+
+Les fichiers partent quelques-uns à la fois. Ceux qui attendent encore leur tour
+peuvent être annulés d'un clic ; ceux qui sont déjà partis appartiennent à Fred
+et vont au bout.
+
+### Si vous fermez l'onglet en cours d'import
+
+Ce qui est déjà arrivé chez Fred continue sans vous. Le reste n'est jamais
+parti : à votre retour, le panneau **nomme les fichiers qui ne sont pas
+arrivés** et vous propose de les sélectionner à nouveau. Seuls ceux-là
+repartent, vers la même bibliothèque.
+
 ## Après le dépôt
 
-Un document a besoin d'un court moment de **préparation** avant d'être
-utilisable. Une étiquette **Traitement** s'affiche à côté de son nom et
-disparaît d'elle-même : vous n'avez rien à faire. Chaque document indique aussi
-son origine — **Déposé**, **Généré** par un agent, ou **Partagé**.
+Sur la ligne de chaque document, une étiquette **Traitement** s'affiche le temps
+de l'analyse et disparaît d'elle-même : vous n'avez rien à faire. Un repère peut
+aussi y apparaître lorsqu'un import attend votre décision — un clic ouvre le
+panneau, où la réponse se donne. Chaque document indique par ailleurs son
+origine : **Déposé**, **Généré** par un agent, ou **Partagé**.
 
 ## Gérer ses documents
 

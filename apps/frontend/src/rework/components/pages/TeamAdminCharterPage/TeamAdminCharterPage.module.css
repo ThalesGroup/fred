@@ -27,7 +27,7 @@
 }
 
 .content {
-  border: 1px solid var(--outline-retreat);
+  border: 1px solid var(--outline-muted);
   border-radius: var(--radius-m) var(--radius-m) 0 0;
   background-color: var(--surface-container-lowest);
   padding: var(--spacing-m);

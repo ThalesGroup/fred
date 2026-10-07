@@ -15,9 +15,12 @@
 from __future__ import annotations
 
 import resource
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from types import SimpleNamespace
 
+import duckdb
 import pytest
 from fred_core import KeycloakUser, RebacDisabledResult
 from fred_core.common import OwnerFilter
@@ -47,8 +50,9 @@ from knowledge_flow_backend.features.tabular.artifacts import (
     max_categories,
     read_tabular_artifact,
 )
+from knowledge_flow_backend.features.tabular.execution import open_duckdb_connection
 from knowledge_flow_backend.features.tabular.service import TabularDatasetAccessUnsupportedError, TabularDatasetReadError, TabularService
-from knowledge_flow_backend.features.tabular.structures import TabularQueryRequest
+from knowledge_flow_backend.features.tabular.structures import TabularQueryRequest, TabularSearchRequest
 from knowledge_flow_backend.features.tag.structure import MissingTeamIdError
 
 
@@ -281,9 +285,6 @@ class _TrackingMetadataStore(BaseMetadataStore):
 
     async def get_metadata_in_tag(self, tag_id: str, session=None) -> list[DocumentMetadata]:
         return await self._delegate.get_metadata_in_tag(tag_id, session=session)
-
-    async def list_by_source_tag(self, source_tag: str, session=None) -> list[DocumentMetadata]:
-        return await self._delegate.list_by_source_tag(source_tag, session=session)
 
     async def list_by_source_library(self, source_library_id: str, *, limit: int, session=None) -> list[DocumentMetadata]:
         return await self._delegate.list_by_source_library(source_library_id, limit=limit, session=session)
@@ -929,6 +930,69 @@ async def test_resolve_owned_attachment_dataset_authorizes_the_uploader_without_
     dataset = await service._resolve_owned_attachment_dataset(_user(), "doc-attachment")
     assert dataset is not None
     assert dataset.metadata.document_uid == "doc-attachment"
+
+
+@pytest.mark.asyncio
+async def test_excel_attachment_uses_corpus_tables_and_roadmap(tmp_path, metadata_store, monkeypatch):
+    from openpyxl import Workbook
+
+    from knowledge_flow_backend.core.processors.input.excel_processor.excel_processor import ExcelProcessor
+    from knowledge_flow_backend.features.ingestion.ingestion_controller import IngestionController
+    from knowledge_flow_backend.features.tabular.artifacts import read_tabular_multi_artifact
+
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+    monkeypatch.setattr(ExcelProcessor, "recalc", False)
+
+    workbook = Workbook()
+    first = workbook.active
+    assert first is not None
+    first.title = "Ventes"
+    first.append(["city", "amount"])
+    for index in range(30):
+        first.append([f"city-{index}", index])
+    second = workbook.create_sheet("Cibles")
+    second.append(["city", "target"])
+    second.append(["Paris", 42])
+    path = tmp_path / "attachment.xlsx"
+    workbook.save(path)
+
+    controller = IngestionController.__new__(IngestionController)
+    controller.service = SimpleNamespace(metadata_service=MetadataService())
+    roadmap = await controller._build_attachment_excel_dataset(user=_user(), document_uid="excel-attachment", filename=path.name, raw_path=path)
+    metadata = await metadata_store.get_metadata_by_uid("excel-attachment")
+    assert metadata is not None
+    multi = read_tabular_multi_artifact(metadata)
+    assert multi is not None and len(multi.tables) == 2
+    assert "Ventes" in roadmap and "Cibles" in roadmap
+    assert content_store.get_output_artifact("excel-attachment/output/output.md").decode() == roadmap
+
+    service = TabularService()
+    service.rebac = _FakeRebac(set())
+    schemas = await service.describe_documents(_user(), ["excel-attachment"])
+    assert len(schemas[0].tables) == 2
+    assert schemas[0].markdown == roadmap
+    response = await service.query_read(
+        _user(),
+        request=TabularQueryRequest(
+            sql=f"SELECT COUNT(*) AS n FROM {multi.tables[0].query_alias}",
+            dataset_uids=["excel-attachment"],
+        ),
+    )
+    assert response.rows == [{"n": 30}]
+    search = await service.search_values(_user(), request=TabularSearchRequest(keyword="city-29", dataset_uids=["excel-attachment"]))
+    assert len(search.matches) == 1
+    assert search.matches[0].document_uid == "excel-attachment"
+    with pytest.raises(PermissionError):
+        await service.describe_documents(_user("different-user"), ["excel-attachment"])
+
+    service.rebac = _FakeRebacDisabled()
+    assert "excel-attachment" not in {item.document_uid for item in await service.list_datasets(_user("different-user"))}
+    with pytest.raises(FileNotFoundError):
+        await service.query_read(
+            _user("different-user"),
+            request=TabularQueryRequest(sql=f"SELECT * FROM {multi.tables[0].query_alias}", dataset_uids=["excel-attachment"]),
+        )
 
 
 @pytest.mark.asyncio
@@ -2114,8 +2178,16 @@ async def test_query_referencing_more_datasets_than_the_cap_is_rejected(tmp_path
 
 
 @pytest.mark.asyncio
-async def test_duckdb_resource_limits_are_applied_on_the_query_path(tmp_path):
+async def test_duckdb_resource_limits_are_applied_on_the_query_path(tmp_path, monkeypatch):
     """Every online connection must carry explicit threads/memory/spill settings."""
+    observed_settings: list[tuple[int, str]] = []
+
+    def record_connection(handle, *, config):
+        connection = open_duckdb_connection(handle, config=config)
+        observed_settings.append(connection.execute("SELECT current_setting('threads'), current_setting('temp_directory')").fetchone())
+        return connection
+
+    monkeypatch.setattr("knowledge_flow_backend.features.tabular.service.open_duckdb_connection", record_connection)
     app_context = ApplicationContext.get_instance()
     app_context.get_content_store().clear()
 
@@ -2131,7 +2203,120 @@ async def test_duckdb_resource_limits_are_applied_on_the_query_path(tmp_path):
     alias = (await service.list_datasets(_user()))[0].query_alias
     response = await service.query_read(
         _user(),
-        request=TabularQueryRequest(sql=f"SELECT current_setting('threads') AS t, current_setting('temp_directory') AS d FROM {alias} LIMIT 1"),
+        request=TabularQueryRequest(sql=f"SELECT amount FROM {alias} LIMIT 1"),
     )
 
-    assert response.rows == [{"t": service.tabular_config.query.duckdb_threads, "d": ""}]
+    assert response.rows == [{"amount": 10}]
+    assert observed_settings == [(service.tabular_config.query.duckdb_threads, "")]
+
+
+@pytest.mark.asyncio
+async def test_query_cannot_read_outside_its_local_dataset(tmp_path, monkeypatch):
+    app_context = ApplicationContext.get_instance()
+    app_context.get_content_store().clear()
+    await _ingest_csv(
+        tmp_path=tmp_path,
+        metadata_store=app_context.get_metadata_store(),
+        document_uid="doc-sales",
+        file_name="sales.csv",
+        content="city,amount\nParis,10\n",
+    )
+
+    service = TabularService()
+    original_mount = service._mount_datasets
+
+    def inspect_mount(*, connection, datasets, handle):
+        original_mount(connection=connection, datasets=datasets, handle=handle)
+        assert connection.execute("SELECT current_setting('enable_external_access')").fetchone() == (False,)
+        with pytest.raises(duckdb.PermissionException):
+            connection.execute("SELECT * FROM read_parquet('/etc/passwd')")
+
+    monkeypatch.setattr(service, "_mount_datasets", inspect_mount)
+    alias = (await service.list_datasets(_user()))[0].query_alias
+    analytical_query = f"SELECT regexp_replace(lower(city), 'a', '_') AS city, quantile_cont(amount, 0.5) AS median_amount FROM {alias} GROUP BY city"
+    response = await service.query_read(_user(), request=TabularQueryRequest(sql=analytical_query))
+    assert response.rows == [{"city": "p_ris", "median_amount": 10.0}]
+
+    with pytest.raises(ValueError, match="restricted SQL function"):
+        await service.query_read(_user(), request=TabularQueryRequest(sql=f"SELECT current_setting('allowed_paths') FROM {alias}"))
+    with pytest.raises(ValueError, match=r"unauthorized datasets: read_parquet\(\)"):
+        await service.query_read(_user(), request=TabularQueryRequest(sql="SELECT * FROM read_parquet('/etc/passwd')"))
+    with pytest.raises(ValueError, match=r"unauthorized datasets: duckdb_settings\(\)"):
+        await service.query_read(_user(), request=TabularQueryRequest(sql=f"SELECT (SELECT value FROM duckdb_settings() LIMIT 1) FROM {alias}"))
+
+    response = await service.query_read(_user(), request=TabularQueryRequest(sql=analytical_query))
+    assert response.rows == [{"city": "p_ris", "median_amount": 10.0}]
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_query_reads_only_its_signed_parquet_url(tmp_path, monkeypatch):
+    app_context = ApplicationContext.get_instance()
+    content_store = app_context.get_content_store()
+    content_store.clear()
+    metadata = await _ingest_csv(
+        tmp_path=tmp_path,
+        metadata_store=app_context.get_metadata_store(),
+        document_uid="doc-sales",
+        file_name="sales.csv",
+        content="city,amount\nParis,10\n",
+    )
+    artifact = read_tabular_artifact(metadata)
+    assert artifact is not None
+    parquet_bytes = (content_store.object_root / artifact.object_key).read_bytes()
+
+    class ParquetHandler(BaseHTTPRequestHandler):
+        def log_message(self, *_args):
+            pass
+
+        def do_HEAD(self):
+            self._respond(include_body=False)
+
+        def do_GET(self):
+            self._respond(include_body=True)
+
+        def _respond(self, *, include_body: bool):
+            range_header = self.headers.get("Range")
+            start, end = 0, len(parquet_bytes) - 1
+            if range_header:
+                first, last = range_header.removeprefix("bytes=").split("-")
+                start = int(first) if first else 0
+                end = min(int(last), end) if last else end
+            self.send_response(206 if range_header else 200)
+            self.send_header("Content-Length", str(end - start + 1))
+            self.send_header("Accept-Ranges", "bytes")
+            if range_header:
+                self.send_header("Content-Range", f"bytes {start}-{end}/{len(parquet_bytes)}")
+            self.end_headers()
+            if include_body:
+                self.wfile.write(parquet_bytes[start : end + 1])
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), ParquetHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    signed_url = f"http://127.0.0.1:{server.server_port}/data.parquet?signature=test"
+    try:
+        service = TabularService()
+        monkeypatch.setattr(service, "_resolve_dataset_location", lambda _key: signed_url)
+        original_mount = service._mount_datasets
+
+        def inspect_mount(*, connection, datasets, handle):
+            original_mount(connection=connection, datasets=datasets, handle=handle)
+            assert connection.execute("SELECT current_setting('allowed_paths')").fetchone()[0] == [signed_url]
+            with pytest.raises(duckdb.PermissionException):
+                connection.execute("SELECT * FROM read_parquet('/etc/passwd')")
+
+        monkeypatch.setattr(service, "_mount_datasets", inspect_mount)
+        alias = (await service.list_datasets(_user()))[0].query_alias
+        response = await service.query_read(_user(), request=TabularQueryRequest(sql=f"SELECT amount FROM {alias}"))
+        assert response.rows == [{"amount": 10}]
+        for inspection_query in (
+            f"SELECT current_setting('allowed_paths') FROM {alias}",
+            f"SELECT pg_get_viewdef(1) FROM {alias}",
+        ):
+            with pytest.raises(ValueError, match="restricted SQL function") as error:
+                await service.query_read(_user(), request=TabularQueryRequest(sql=inspection_query))
+            assert signed_url not in str(error.value)
+    finally:
+        server.shutdown()
+        server.server_close()

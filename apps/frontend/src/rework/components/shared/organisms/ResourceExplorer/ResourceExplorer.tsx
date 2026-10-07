@@ -18,7 +18,7 @@ import DataTable, {
   type DataTableColumn,
   type ServerPagination,
   type SortState,
-} from "@shared/molecules/DataTable/DataTable.tsx";
+} from "@shared/molecules/DataTable/LocalizedDataTable.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
@@ -78,7 +78,6 @@ export interface ResourceExplorerProps<T> {
   pageSize?: number;
   rowHeight?: string;
   firstColumnInset?: boolean;
-  tableBackgroundColor?: string;
 }
 
 /**
@@ -86,7 +85,7 @@ export interface ResourceExplorerProps<T> {
  * page's tabs: a toolbar (back button, breadcrumb, caller-supplied actions,
  * an optional search box) above a DataTable, with loading/empty states in
  * between. Extracted from the Corpus d'équipe tab (FRONT-09.H/RFC §13.7) so
- * the other three tabs (Mon espace/Espace d'équipe/Agents) can eventually
+ * the other two tabs (Espace d'équipe/Agents) can eventually
  * get the same rich table instead of their current single-line rows —
  * this component itself has no idea what a "document" or a "tag" is:
  * rows, columns, and every cell's rendering are entirely caller-supplied.
@@ -112,7 +111,6 @@ export default function ResourceExplorer<T>({
   pageSize,
   rowHeight = "2.5rem",
   firstColumnInset = true,
-  tableBackgroundColor = "var(--surface-container-high)",
 }: ResourceExplorerProps<T>) {
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -135,27 +133,27 @@ export default function ResourceExplorer<T>({
           <Breadcrumb segments={breadcrumb.segments} />
         </span>
         <span className={styles.toolbarEnd}>
-          {toolbarActions}
+          {toolbarActions && <span className={styles.toolbarActions}>{toolbarActions}</span>}
           {search && (
             <span className={styles.search}>
               <TextInput
                 ref={searchInputRef}
                 compact
-                size="small"
+                size="xs"
                 icon={{ category: "outlined", type: "search" }}
                 value={search.value}
                 onChange={(e) => search.onChange(e.target.value)}
                 placeholder={search.placeholder}
                 aria-label={search.ariaLabel}
                 style={
-                  search.value ? { paddingRight: "calc(var(--spacing-2xs) + 2rem + var(--spacing-xs))" } : undefined
+                  search.value ? { paddingRight: "calc(var(--spacing-2xs) + 1.5rem + var(--spacing-xs))" } : undefined
                 }
               />
               {search.value && (
                 <span className={styles.searchClear}>
                   <IconButton
                     type="button"
-                    size="small"
+                    size="2xs"
                     color="on-surface-retreat"
                     variant="icon"
                     icon={{ category: "outlined", type: "close" }}
@@ -190,7 +188,6 @@ export default function ResourceExplorer<T>({
             selectable={selectable}
             selectedKeys={selectedKeys}
             onSelectionChange={onSelectedKeysChange}
-            backgroundColor={tableBackgroundColor}
             serverPagination={serverPagination}
             sortState={sortState}
             onSortChange={onSortChange}

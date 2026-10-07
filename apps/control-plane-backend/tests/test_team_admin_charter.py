@@ -17,6 +17,7 @@ until they accept the configured charter version, then `team_admin`."""
 
 from __future__ import annotations
 
+import asyncio
 import re
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -38,6 +39,7 @@ from control_plane_backend.teams.schemas import (
     AddTeamMemberRequest,
     GrantTeamMemberRoleRequest,
     TeamAdminCharterDisabledError,
+    TeamMemberRoleNotHeldError,
     UserTeamRelation,
 )
 from control_plane_backend.teams.service import (
@@ -50,11 +52,13 @@ from control_plane_backend.teams.service import (
     grant_team_member_role,
     reconcile_team_admin_charter_roles,
     resolve_granted_team_relation,
+    revoke_team_member_role,
 )
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from fred_core import (
     KeycloakUser,
+    RebacEngine,
     RebacReference,
     Relation,
     RelationType,
@@ -148,6 +152,7 @@ class _FakeMetadataStore:
     def __init__(self, team_ids: list[str]) -> None:
         self.team_ids = team_ids
         self.listed = 0
+        self._locks: dict[str, asyncio.Lock] = {}
 
     async def get_by_team_id(self, team_id):
         return SimpleNamespace(id=team_id)
@@ -157,8 +162,9 @@ class _FakeMetadataStore:
         return [SimpleNamespace(id=TeamId(team_id)) for team_id in self.team_ids]
 
     @asynccontextmanager
-    async def advisory_lock(self, _key: str):
-        yield
+    async def advisory_lock(self, key: str):
+        async with self._locks.setdefault(key, asyncio.Lock()):
+            yield
 
 
 def _deps(
@@ -359,6 +365,79 @@ async def test_accepting_promotes_every_pending_team_and_audits_once(
 
 
 @pytest.mark.asyncio
+async def test_cancelled_nomination_is_not_promoted_after_acceptance_lookup() -> None:
+    looked_up = asyncio.Event()
+    resume_acceptance = asyncio.Event()
+
+    class PausedLookupRebac(_FakeRebac):
+        async def lookup_resources(self, subject, permission, resource_type, **kwargs):
+            teams = await super().lookup_resources(
+                subject, permission, resource_type, **kwargs
+            )
+            looked_up.set()
+            await resume_acceptance.wait()
+            return teams
+
+    rebac = PausedLookupRebac(
+        {("owner", _ADMIN, "team-a"), ("nominee", _PENDING, "team-a")}
+    )
+    deps = _deps(rebac, _FakeCharterStore(), teams=["team-a"])
+    acceptance = asyncio.create_task(accept_team_admin_charter(_user("nominee"), deps))
+    await looked_up.wait()
+
+    await revoke_team_member_role(
+        _user("owner"),
+        TeamId("team-a"),
+        "nominee",
+        UserTeamRelation.PENDING_TEAM_ADMIN,
+        deps,
+    )
+    resume_acceptance.set()
+    assert (await acceptance).accepted_at is not None
+
+    assert ("nominee", _ADMIN, "team-a") not in rebac.tuples
+    assert ("nominee", RelationType.TEAM_MEMBER.value, "team-a") in rebac.tuples
+
+
+@pytest.mark.asyncio
+async def test_nomination_cancellation_waits_for_acceptance_promotion() -> None:
+    promoting = asyncio.Event()
+    resume_promotion = asyncio.Event()
+
+    class PausedPromotionRebac(_FakeRebac):
+        async def add_relation(self, relation: Relation, **kwargs: object) -> None:
+            if relation.relation == RelationType.TEAM_ADMIN:
+                promoting.set()
+                await resume_promotion.wait()
+            await super().add_relation(relation, **kwargs)
+
+    rebac = PausedPromotionRebac(
+        {("owner", _ADMIN, "team-a"), ("nominee", _PENDING, "team-a")}
+    )
+    deps = _deps(rebac, _FakeCharterStore(), teams=["team-a"])
+    acceptance = asyncio.create_task(accept_team_admin_charter(_user("nominee"), deps))
+    await promoting.wait()
+    cancellation = asyncio.create_task(
+        revoke_team_member_role(
+            _user("owner"),
+            TeamId("team-a"),
+            "nominee",
+            UserTeamRelation.PENDING_TEAM_ADMIN,
+            deps,
+        )
+    )
+    await asyncio.sleep(0)
+    assert not cancellation.done()
+
+    resume_promotion.set()
+    assert (await acceptance).accepted_at is not None
+    with pytest.raises(TeamMemberRoleNotHeldError):
+        assert (await cancellation) is None
+    assert ("nominee", _ADMIN, "team-a") in rebac.tuples
+    assert ("nominee", _PENDING, "team-a") not in rebac.tuples
+
+
+@pytest.mark.asyncio
 async def test_reading_the_acceptance_returns_its_time_for_the_configured_version() -> (
     None
 ):
@@ -426,6 +505,124 @@ async def test_a_new_version_promotes_pending_admins_who_already_accepted_it() -
     await reconcile_team_admin_charter_roles(_deps(rebac, store, version="2027-01"))
 
     assert rebac.tuples == {("ready", _ADMIN, "team-b")}
+
+
+@pytest.mark.asyncio
+async def test_returning_to_an_accepted_version_keeps_admin_authority() -> None:
+    rebac = _FakeRebac({("admin", _ADMIN, "team-a")})
+    store = _FakeCharterStore({("admin", "v1")}, applied="v1")
+    newer = _deps(rebac, store, version="v2")
+    await reconcile_team_admin_charter_roles(newer)
+    assert rebac.tuples == {("admin", _PENDING, "team-a")}
+    await accept_team_admin_charter(_user("admin"), newer)
+    assert rebac.tuples == {("admin", _ADMIN, "team-a")}
+    older = _deps(rebac, store, version="v1")
+    assert await reconcile_team_admin_charter_roles(older) == 0
+    assert await get_team_admin_charter_acceptance(_user("admin"), older) is not None
+    assert rebac.tuples == {("admin", _ADMIN, "team-a")}
+
+
+@pytest.mark.asyncio
+async def test_reconciliation_does_not_promote_cancelled_nomination() -> None:
+    snapshot_read = asyncio.Event()
+    resume_reconciliation = asyncio.Event()
+
+    class PausedSnapshotRebac(_FakeRebac):
+        async def list_direct_relations(self, resource, **kwargs):
+            relations = await super().list_direct_relations(resource, **kwargs)
+            if resource.id == "team-a" and kwargs.get("subject") is None:
+                snapshot_read.set()
+                await resume_reconciliation.wait()
+            return relations
+
+    rebac = PausedSnapshotRebac(
+        {("owner", _ADMIN, "team-a"), ("nominee", _PENDING, "team-a")}
+    )
+    store = _FakeCharterStore(
+        {("owner", _VERSION), ("nominee", _VERSION)}, applied="2025-01"
+    )
+    deps = _deps(rebac, store, teams=["team-a"])
+    reconciliation = asyncio.create_task(reconcile_team_admin_charter_roles(deps))
+    await snapshot_read.wait()
+
+    await revoke_team_member_role(
+        _user("owner"),
+        TeamId("team-a"),
+        "nominee",
+        UserTeamRelation.PENDING_TEAM_ADMIN,
+        deps,
+    )
+    resume_reconciliation.set()
+    assert await reconciliation == 0
+    assert ("nominee", _ADMIN, "team-a") not in rebac.tuples
+    assert ("nominee", RelationType.TEAM_MEMBER.value, "team-a") in rebac.tuples
+
+
+@pytest.mark.asyncio
+async def test_reconciliation_skips_plain_members_for_fresh_role_reads() -> None:
+    class CountingRebac(_FakeRebac):
+        def __init__(self, tuples: set[tuple[str, str, str]]) -> None:
+            super().__init__(tuples)
+            self.read_subjects: list[str | None] = []
+
+        async def list_direct_relations(self, resource, **kwargs):
+            subject = kwargs.get("subject")
+            self.read_subjects.append(subject.id if subject else None)
+            return await super().list_direct_relations(resource, **kwargs)
+
+    rebac = CountingRebac(
+        {
+            ("owner", _ADMIN, "team-a"),
+            ("nominee", _PENDING, "team-a"),
+            ("plain", RelationType.TEAM_MEMBER.value, "team-a"),
+        }
+    )
+    store = _FakeCharterStore(
+        {("owner", _VERSION), ("nominee", _VERSION)}, applied="2025-01"
+    )
+
+    moved = await reconcile_team_admin_charter_roles(
+        _deps(rebac, store, teams=["team-a"])
+    )
+
+    assert moved == 1
+    assert rebac.read_subjects.count(None) == 1
+    assert set(rebac.read_subjects[1:]) == {"nominee", "owner"}
+    assert ("plain", RelationType.TEAM_MEMBER.value, "team-a") in rebac.tuples
+
+
+@pytest.mark.asyncio
+async def test_reconciliation_uses_fresh_snapshot_before_filtering_members() -> None:
+    class StaleSnapshotRebac(_FakeRebac):
+        async def list_direct_relations(self, resource, **kwargs):
+            relations = await super().list_direct_relations(resource, **kwargs)
+            if (
+                kwargs.get("subject") is None
+                and kwargs.get("consistency_token") != RebacEngine.HIGHER_CONSISTENCY
+            ):
+                return [
+                    relation
+                    for relation in relations
+                    if relation.relation != RelationType.TEAM_ADMIN
+                ]
+            return relations
+
+    rebac = StaleSnapshotRebac(
+        {
+            ("unaware", _ADMIN, "team-a"),
+            ("plain", RelationType.TEAM_MEMBER.value, "team-a"),
+        }
+    )
+    store = _FakeCharterStore(applied="2025-01")
+
+    moved = await reconcile_team_admin_charter_roles(
+        _deps(rebac, store, teams=["team-a"])
+    )
+
+    assert moved == 1
+    assert ("unaware", _PENDING, "team-a") in rebac.tuples
+    assert ("unaware", _ADMIN, "team-a") not in rebac.tuples
+    assert ("plain", RelationType.TEAM_MEMBER.value, "team-a") in rebac.tuples
 
 
 @pytest.mark.asyncio

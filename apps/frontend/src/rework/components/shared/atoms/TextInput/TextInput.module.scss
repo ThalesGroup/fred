@@ -41,11 +41,11 @@
     flex: 1;
     min-width: 0;
     --input-outline: transparent;
-    --input-border: var(--outline-retreat);
+    --input-border: var(--outline-variant);
     outline: 2px solid var(--input-outline);
     border: 1px solid var(--input-border);
-    border-radius: var(--spacing-xs);
-    background-color: var(--surface-container-lowest);
+    border-radius: var(--radius-s);
+    background-color: var(--surface-container-low);
     padding: 0 var(--spacing-xs) 0 var(--spacing-s);
     height: 3rem;
     color: var(--on-surface);
@@ -58,7 +58,7 @@
     &:-webkit-autofill,
     &:-webkit-autofill:hover,
     &:-webkit-autofill:focus {
-      -webkit-box-shadow: 0 0 0 100px var(--surface-container-lowest) inset;
+      -webkit-box-shadow: 0 0 0 100px var(--surface-container-low) inset;
       -webkit-text-fill-color: var(--on-surface);
     }
   }

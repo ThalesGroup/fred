@@ -13,10 +13,10 @@
 // limitations under the License.
 
 import { PropsWithChildren, useState } from "react";
-import Icon from "@shared/atoms/Icon/Icon.tsx";
+import { MaterialIcon as Icon } from "../Icon/Icon.tsx";
 import styles from "./Disclosure.module.css";
 
-interface DisclosureProps {
+export interface DisclosureProps {
   title: string;
   defaultOpen?: boolean;
 }
@@ -28,7 +28,7 @@ export default function Disclosure({ title, defaultOpen = false, children }: Pro
     <div className={styles.disclosure}>
       <button type="button" className={styles.summary} aria-expanded={open} onClick={() => setOpen((o) => !o)}>
         <span className={styles.title}>{title}</span>
-        <Icon category="outlined" type={open ? "expand_less" : "expand_more"} />
+        <Icon type={open ? "expand_less" : "expand_more"} />
       </button>
       {open && <div className={styles.content}>{children}</div>}
     </div>

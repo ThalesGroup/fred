@@ -37,9 +37,7 @@ from fred_sdk.contracts.context import (
     AgentInvocationResult,
     BoundRuntimeContext,
     ConversationTurn,
-    FsEntry,
     InvocationScope,
-    PublishedArtifact,
     ToolContentBlock,
     ToolContentKind,
     ToolInvocationRequest,
@@ -60,13 +58,12 @@ from fred_sdk.contracts.runtime import (
     ThoughtStartEvent,
     ToolCallRuntimeEvent,
     ToolResultRuntimeEvent,
-    WorkspaceFileNotFound,
 )
 from fred_sdk.support.mcp_utils import normalize_mcp_content
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import BaseMessage, ToolMessage
 from langchain_core.tools import BaseTool
-from langgraph.errors import GraphInterrupt
+from langgraph.errors import GraphBubbleUp, GraphInterrupt
 from langgraph.func import task
 from langgraph.types import interrupt
 from pydantic import BaseModel, ValidationError
@@ -624,6 +621,8 @@ class NodeContext:
                     )
                 )
                 return normalized
+            except GraphBubbleUp:
+                raise
             except Exception as exc:
                 self.sink(
                     ToolResultRuntimeEvent(
@@ -723,52 +722,6 @@ class NodeContext:
             if result.is_error:
                 obs.fail()
         return result
-
-    def _require_workspace_fs(self):
-        fs = self.services.workspace_fs
-        if fs is None:
-            raise RuntimeError(
-                "GraphRuntime requires RuntimeServices.workspace_fs for filesystem access."
-            )
-        return fs
-
-    async def write(
-        self,
-        path: str,
-        content: bytes | str,
-        *,
-        content_type: str | None = None,
-        title: str | None = None,
-    ) -> PublishedArtifact:
-        """Write a file (bare path = your private space, ``shared/`` = the team) and return a downloadable artifact."""
-        fs = self._require_workspace_fs()
-        data = content.encode("utf-8") if isinstance(content, str) else content
-        with _observe(self, "v2.graph.fs_write", {"path": path}):
-            return await fs.write(path, data, content_type=content_type, title=title)
-
-    async def read_bytes(self, path: str) -> bytes:
-        """Read a file as raw bytes."""
-        return await self._require_workspace_fs().read_bytes(path)
-
-    async def read(self, path: str) -> str:
-        """Read a file as UTF-8 text."""
-        return await self._require_workspace_fs().read_text(path)
-
-    async def ls(self, path: str = "") -> list[FsEntry]:
-        """List a directory."""
-        return await self._require_workspace_fs().ls(path)
-
-    async def resolve_template(self, name: str) -> bytes:
-        """Find a template by name: your ``templates/{name}`` first, then the team's ``shared/templates/{name}``."""
-        fs = self._require_workspace_fs()
-        for candidate in (f"templates/{name}", f"shared/templates/{name}"):
-            try:
-                return await fs.read_bytes(candidate)
-            except WorkspaceFileNotFound:
-                continue
-        raise WorkspaceFileNotFound(
-            f"No template '{name}' found in your space or the team's shared templates."
-        )
 
     async def request_human_input(self, request: HumanInputRequest) -> object:
         # Replayed from the node start on resume: `interrupt` then returns the

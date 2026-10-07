@@ -1,6 +1,6 @@
 # RFC: Agent Filesystem Hardening and Completion
 
-**Status:** proposed follow-up; no implementation approved by this RFC alone
+**Status:** superseded by #2984/#2986; historical proposal, not an active implementation plan
 **Author:** Dimitri Tombroff
 **Date:** 2026-06-26
 **ID:** AGENT-FILESYSTEM-HARDENING
@@ -8,6 +8,15 @@
 **Related docs:** `docs/swift/design/FILESYSTEM.md`, `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md` §8.11
 
 ---
+
+> **Historical only (2026-10-07).** The personal and team-shared areas, Files
+> UI, general-purpose SDK/Graph filesystem helpers, corpus/filesystem MCPs,
+> and `/fs/share` discussed below have been retired. This RFC's “current”
+> descriptions and Workspace API proposal do not describe the shipped product
+> or an approved replacement. The retained PPT Filler binary transport and
+> virtual corpus view are documented in [FILESYSTEM.md](../design/FILESYSTEM.md).
+> Deep's conversation filesystem, Wiki and writable documents have separate
+> contracts. Any new agent save/read/expose-file design needs a fresh decision.
 
 ## 1. Problem
 

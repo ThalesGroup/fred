@@ -456,7 +456,6 @@ def patch_vscode_tasks(wt: Path, ports: dict[str, int], autorun_task: str | None
 INTER_SERVICE_CONFIGS = [
     *[f"{service_dir(svc)}/config/configuration.yaml" for svc in PYTHON_SERVICES],
     *[f"{service_dir(svc)}/config/configuration_prod.yaml" for svc in PYTHON_SERVICES],
-    f"{service_dir('fred-agents')}/config/mcp_catalog.yaml",
     "apps/knowledge-flow-backend/config/configuration_worker.yaml",
     "apps/control-plane-backend/config/configuration_worker.yaml",
 ]
@@ -473,7 +472,6 @@ def worktree_skip_paths(wt: Path) -> list[str]:
     paths = [
         *INTER_SERVICE_CONFIGS,
         f"{service_dir('fred-agents')}/config/models_catalog.yaml",
-        "deploy/local/k3d/values-local.yaml",
         ".vscode/tasks.json",
         ".vscode/launch.json",
         ".vscode/fred.code-workspace",
@@ -523,7 +521,8 @@ def warn_unpatched_default_ports(wt: Path, ports: dict[str, int]) -> None:
         return
 
     findings: list[str] = []
-    for cfg in sorted((wt / "apps").glob("*/config/*.yaml")):
+    configs = set((wt / "apps").glob("*/config/*.yaml")) | set(inter_service_config_paths(wt))
+    for cfg in sorted(configs):
         try:
             content = cfg.read_text()
         except OSError:

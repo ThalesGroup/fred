@@ -1,5 +1,10 @@
 # Ingestion: workers, queues and performance
 
+> **Scope:** this document describes current behavior and its stated limitations.
+> Proposed changes to corpus ownership, folder permissions and project context
+> are defined in the [team/project authorization change](../../../openspec/changes/simplify-corpus-authorization/proposal.md),
+> not implemented by this documentation update.
+
 Reference for the Knowledge Flow ingestion architecture.
 **Branch status:** normal-path local test passed; failure recovery and production sizing remain to validate.
 
@@ -24,13 +29,47 @@ we do not distribute individual PDF pages or OCR calls across Temporal workers.
 the second rich waits; the fast worker can continue. When the first rich finishes
 extraction, its indexing goes to common while the second rich starts extraction.
 
+## When a folder already holds that name
+
+Importing a name the destination already holds is answered, not guessed: the
+caller is asked whether to replace the document that is there or to skip the
+file, one decision per name, and replacing keeps the existing `document_uid` so
+every citation and link already pointing at it still resolves — to the new
+content.
+
+The import answers that question once, before any byte is sent, and does not ask
+it again at write time. Two concurrent imports of one name therefore both create
+a document, and so does adding an existing document to a folder that already
+holds its name — `add_tag_id_to_document` has no collision guard, unlike
+`rename_document` (#2877). A folder holding two documents of one name is a state
+the platform can still reach; what the import does is refuse to guess which one
+was meant, and say so.
+
+Callers that address their documents by a source key of their own
+(`library_sync`) never reach that question: one document per key by
+construction, so a second write of a key is the same document again.
+
+The name question is asked of the database, not of the corpus in memory:
+`document_uids_by_name_in_tag` is answered by `idx_metadata_document_name`
+together with the GIN index on `tag_ids`. Any store other than PostgreSQL still
+falls back to loading the table (#2860).
+
+Until 2026-09-30 the platform did something else: it stored the second document
+under the same name with a hidden `version = 1`, and deleting the first promoted
+the second back. Nothing rendered that distinction and no action promoted it by
+hand, so a folder simply showed one name twice — and both halves scanned the
+whole `metadata` table to do it, once per imported file and once per deleted
+document. The mechanism and the `canonical_name`/`version` fields it used are
+gone; existing alternates were renamed to `report (1).pdf` by migration
+`02d556a6f182`.
+
 ## Four roles, four queues
 
 Queue names below assume `scheduler.temporal.task_queue: ingestion`.
 
 | Role | Queue | What it executes | Initial activity slots per process/pod |
 | --- | --- | --- | ---: |
-| Common | `ingestion` | All workflows; metadata, progress, indexing, revectorization, repair, PDF-render expiry | 3 |
+| Common | `ingestion` | Ingestion workflows; metadata, progress, indexing, PDF-render expiry | 3 |
 | Fast | `ingestion-fast` | Fast extraction only | 4 |
 | Medium | `ingestion-medium` | Medium extraction only | 2 |
 | Rich | `ingestion-rich` | Rich extraction only | 1 |
@@ -198,8 +237,8 @@ Temporal orchestration errors to expose the cause. Exhausted activity attempts
 are named only when Temporal reports them. Resource error details include a
 copyable document reference; task details include the task reference as well.
 Resources reads terminal history after reload, including explicit failed/succeeded
-queries for personal space. The global task tray still restores only active tasks;
-restoring its historical failures and retrying its initial fetch remain separate.
+queries for personal space. The import panel rehydrates non-terminal user tasks;
+completed tasks remain available through Resources history.
 
 **User cancellation is deferred.** The document menu has no Stop ingestion action;
 the task cancellation endpoint rejects ingestion tasks with HTTP 409 after the

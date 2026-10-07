@@ -297,8 +297,8 @@ describe("streamUploadOrProcessDocument", () => {
   });
 
   it("does not reject on a later failure once a task_id was already discovered", async () => {
-    // The tray/Activity SSE feed for that task_id is the source of truth once
-    // a task exists — re-throwing here would double-report the same failure.
+    // The task SSE feed is the source of truth once a task exists;
+    // re-throwing here would double-report the same failure.
     stubFetch([
       JSON.stringify({ step: "prep", status: "success", filename: "a.pdf", document_uid: "doc-1", task_id: "t-1" }),
       JSON.stringify({
@@ -339,5 +339,24 @@ describe("multipart filename pinning", () => {
     const body = fetchMock.mock.calls[0][1].body as FormData;
     const part = body.get("files") as File;
     expect(part.name).toBe("a.csv");
+  });
+});
+
+describe("the server's own explanation", () => {
+  it("keeps the reason a refused upload came with", async () => {
+    // Quota and permission checks run before the stream opens and answer with
+    // an ordinary error. Throwing away the body left the user reading a status
+    // code for the most common reason an import is refused.
+    globalThis.fetch = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ detail: "Storage quota exceeded for team fredlab: limit is 10 GB." }), {
+          status: 400,
+          statusText: "Bad Request",
+        }),
+    ) as unknown as typeof fetch;
+
+    await expect(streamUploadOrProcessDocument([new File(["x"], "a.pdf")], "process")).rejects.toThrow(
+      /Storage quota exceeded/,
+    );
   });
 });

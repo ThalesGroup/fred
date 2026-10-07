@@ -65,9 +65,14 @@ section dépend de votre rôle.
 - **Routage des modèles** — quel profil de modèle les agents de l'équipe
   utilisent, par défaut et selon l'opération. Laissé vide, le profil du
   déploiement s'applique (**Éditeur**).
-- **Évaluations** — les campagnes de mesure de la qualité d'un agent
-  (**Analyste** ou **Admin**). Voir le guide
-  [Évaluer un agent](/help/fr/guides/evaluate-agents).
+
+## L’application d’évaluation
+
+Ouvrez l’evaluator enregistré depuis l’entrée **Apps** de l’équipe. C’est une
+application autonome, pas une section des réglages de l’équipe. Elle doit être
+déployée, enregistrée et activée pour votre équipe ; ses droits d’accès restent
+applicables. Si elle est indisponible, contactez votre administrateur. Voir
+[Évaluer un agent](/help/fr/guides/evaluate-agents).
 
 ## Les rôles de plateforme
 

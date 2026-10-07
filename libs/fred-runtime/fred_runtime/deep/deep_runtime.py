@@ -42,7 +42,7 @@ from fred_sdk.contracts.runtime import (
     RuntimeServices,
     TracerPort,
 )
-from langchain.agents.middleware import AgentMiddleware
+from langchain.agents.middleware import AgentMiddleware, TodoListMiddleware
 from langchain.agents.middleware.tool_call_limit import ToolCallLimitMiddleware
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.tools import BaseTool
@@ -196,6 +196,9 @@ class DeepAgentRuntime(ReActRuntime):
             toolset_key=self._toolset_key(),
             services=self.services,
             binding=binding,
+            capability_tool_names=tuple(tool.name for tool in capability_block.tools)
+            if capability_block is not None
+            else (),
         ).resolve_tools()
         bound_tools = ReActToolBinder(
             runtime_tools=runtime_tools,
@@ -263,6 +266,11 @@ class DeepAgentRuntime(ReActRuntime):
         compiled_agent = _create_compiled_deep_agent(
             model=self._model,
             tools=[bound_tool.tool for bound_tool in bound_tools],
+            subagent_tools=[
+                bound_tool.tool
+                for bound_tool in bound_tools
+                if bound_tool.runtime_name != "ask_user"
+            ],
             system_prompt=system_prompt,
             checkpointer=cast(Checkpointer, self.services.checkpointer),
             middleware=_build_deepagent_runtime_middleware(
@@ -304,6 +312,7 @@ def _create_compiled_deep_agent(
     tools: Sequence[BaseTool],
     system_prompt: str,
     checkpointer: Checkpointer,
+    subagent_tools: Sequence[BaseTool] | None = None,
     middleware: Sequence[AgentMiddleware],
     subagent_middleware: Sequence[AgentMiddleware],
     backend: BackendProtocol,
@@ -335,7 +344,7 @@ def _create_compiled_deep_agent(
         "system_prompt": "\n\n".join(
             (system_prompt, _SUBAGENT_FRAMING, DEFAULT_SUBAGENT_PROMPT)
         ),
-        "tools": list(tools),
+        "tools": list(subagent_tools if subagent_tools is not None else tools),
         "middleware": list(subagent_middleware),
         "permissions": child_permissions,
     }
@@ -450,6 +459,8 @@ def _build_deepagent_runtime_middleware(
             binding=binding,
             kpi=kpi,
         ),
+        # Deep Agents no longer installs planning for non-Codex models.
+        cast(AgentMiddleware, TodoListMiddleware()),
         *(capability_block.middleware if capability_block is not None else ()),
         *((ConcatFilesMiddleware(filesystem),) if filesystem is not None else ()),
         RateLimitRetryMiddleware(kpi=kpi, binding=binding),
@@ -458,6 +469,7 @@ def _build_deepagent_runtime_middleware(
             tracer=tracer,
             kpi=kpi,
             binding=binding,
+            role="child" if child else "root",
         ),
         ToolObservabilityMiddleware(kpi=kpi, binding=binding, tracer=tracer),
         (DeepChildHitlMiddleware if child else FredHitlMiddleware)(

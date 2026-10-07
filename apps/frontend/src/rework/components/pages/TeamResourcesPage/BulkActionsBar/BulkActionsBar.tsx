@@ -27,7 +27,7 @@ interface BulkActionsBarProps {
    *  the create-folder/add-file toolbar. */
   onClearSelection: () => void;
   /** Corpus-only (RFC §13.9 — "exclure de la recherche" has no meaning for
-   *  the other three tabs). `mode` picks the button's direction: "exclude"
+   *  the other two tabs). `mode` picks the button's direction: "exclude"
    *  when every selected doc is currently searchable, "include" when every
    *  one is already excluded. Omit to hide the action entirely — including
    *  on a mixed selection (some excluded, some not), where there's no single

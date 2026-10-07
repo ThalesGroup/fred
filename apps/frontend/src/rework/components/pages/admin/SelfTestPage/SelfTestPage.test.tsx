@@ -94,6 +94,7 @@ vi.mock("../../../../features/pipeline/useAuthzProbeRun", () => ({
     steps: h.steps.authz,
     isRunning: false,
     runForMyself: vi.fn(),
+    runIdentity: vi.fn(),
     runForProfile: vi.fn(),
   }),
 }));
@@ -105,6 +106,7 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
 vi.mock("../../../../../security/KeycloakService", () => ({
   KeyCloakService: {
     GetUserName: () => h.signedIn,
+    GetToken: () => "session-token",
     GetKeycloakRealmConfig: () => h.realmConfig,
     GetTokenSecondsLeft: () => h.tokenSecondsLeft,
   },
@@ -273,7 +275,7 @@ describe("SelfTestPage credential-expiry check", () => {
     expect(fr.rework.selftest.authz.expiry.title).toBe("Accès de l'agent après l'expiration de votre session");
   });
 
-  it("offers nothing of the check on a deployment with no realm", () => {
+  it("keeps expiry available for OIDC while hiding password login", () => {
     // The realm is read once per mount, so this needs a fresh one.
     h.realmConfig = null;
     act(() => root.unmount());
@@ -282,7 +284,7 @@ describe("SelfTestPage credential-expiry check", () => {
       root.render(<SelfTestPage />);
     });
 
-    expect(container.textContent).not.toContain("rework.selftest.authz.expiry");
-    expect(container.textContent).toContain("rework.selftest.authz.testProfile.disabledInsecure");
+    expect(container.textContent).toContain("rework.selftest.authz.expiry.title");
+    expect(container.textContent).not.toContain("rework.selftest.authz.testProfile.title");
   });
 });

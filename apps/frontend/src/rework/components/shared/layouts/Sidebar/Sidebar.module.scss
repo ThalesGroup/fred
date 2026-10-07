@@ -14,27 +14,36 @@
  * limitations under the License.
  */
 
+/* Rail on the left (primary navigation on top, user avatar at the bottom), the
+ * nav panel beside it as a card. */
 .sidebar-container {
-  display: grid;
-  position: relative;
-  grid-template-rows: auto 64px;
-  grid-template-columns: 1fr auto;
-  background-color: var(--surface-container-low);
+  display: flex;
+  height: 100%;
+}
+
+.rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-bottom: var(--spacing-s);
+  width: 48px;
   height: 100%;
 }
 
 .main-nav-bar-container {
-  grid-row: 1 / span 2;
-  height: 100%;
+  flex: 1;
   min-height: 0;
 }
 
 .user-profile-container {
-  display: flex;
-  position: absolute;
-  bottom: 0;
-  flex-direction: column;
-  gap: var(--spacing-2xs);
-  padding: 0 var(--spacing-xs) var(--spacing-xs);
   width: 100%;
+}
+
+.nav-panel-card {
+  display: flex;
+  flex-direction: column;
+  margin: var(--spacing-xs) 0;
+  border-radius: var(--radius-s);
+  background-color: var(--surface-container);
+  min-height: 0;
 }

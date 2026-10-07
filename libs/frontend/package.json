@@ -59,7 +59,7 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^4.7.0",
-    "ajv": "8.17.1",
+    "ajv": "8.20.0",
     "ajv-formats": "3.0.1",
     "eslint": "10.10.0",
     "fontkit": "2.0.4",
@@ -72,7 +72,7 @@
     "react-dom": "^19.2.4",
     "sass": "^1.98.0",
     "semver": "6.3.1",
-    "sigstore": "4.0.0",
+    "sigstore": "4.1.1",
     "typescript": "5.9.3",
     "vite": "^6.4.3",
     "yaml": "2.9.0"

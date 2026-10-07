@@ -45,6 +45,7 @@ from fred_core.store import (
 )
 from fred_core.tasks.service import TaskService
 from fred_core.teams.metadata_store import TeamMetadataStore
+from fred_pod.security.oidc_endpoints import resolve_endpoints
 from prometheus_client import start_http_server
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -69,6 +70,7 @@ from control_plane_backend.knowledge_bases.instance_store import (
 from control_plane_backend.knowledge_bases.store import KnowledgeBaseDefinitionStore
 from control_plane_backend.models.task_models import TASK_TABLES
 from control_plane_backend.platform_prompt.store import PlatformPromptStore
+from control_plane_backend.platform_ui_settings.store import PlatformUiSettingsStore
 from control_plane_backend.prompts.category_store import PromptCategoryStore
 from control_plane_backend.prompts.store import PromptStore
 from control_plane_backend.routing_policy.store import (
@@ -112,6 +114,7 @@ class ApplicationContext:
         self._team_routing_policy_store: TeamRoutingPolicyStore | None = None
         self._platform_model_binding_store: PlatformModelBindingStore | None = None
         self._platform_prompt_store: PlatformPromptStore | None = None
+        self._platform_ui_settings_store: PlatformUiSettingsStore | None = None
         self._announcement_store: AnnouncementStore | None = None
         self._knowledge_base_instance_store: KnowledgeBaseInstanceStore | None = None
         self._knowledge_base_definition_store: KnowledgeBaseDefinitionStore | None = (
@@ -340,10 +343,17 @@ class ApplicationContext:
         """
         if self._service_token_provider is None:
             m2m = self.configuration.security.m2m
+            token_endpoint = resolve_endpoints(
+                provider=m2m.provider,
+                realm_url=str(m2m.realm_url).rstrip("/"),
+                token_url=str(m2m.token_url) if m2m.token_url else None,
+            ).token_endpoint
             self._service_token_provider = M2MTokenProvider(
                 M2MAuthConfig(
                     keycloak_realm_url=str(m2m.realm_url).rstrip("/"),
                     client_id=m2m.client_id,
+                    scope=m2m.scope,
+                    token_url_override=token_endpoint,
                     secret_env=m2m.secret_env_var,
                 )
             )
@@ -407,6 +417,13 @@ class ApplicationContext:
                 engine=self.get_pg_async_engine()
             )
         return self._platform_prompt_store
+
+    def get_platform_ui_settings_store(self) -> PlatformUiSettingsStore:
+        if self._platform_ui_settings_store is None:
+            self._platform_ui_settings_store = PlatformUiSettingsStore(
+                engine=self.get_pg_async_engine()
+            )
+        return self._platform_ui_settings_store
 
     def get_announcement_store(self) -> AnnouncementStore:
         if self._announcement_store is None:

@@ -1,0 +1,176 @@
+/* Copyright Thales 2026
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/* One element, two widths. It carries the documents card's surface, radius and
+   full height in both, so expanding reads as the same object growing rather
+   than a second one arriving. */
+.panel {
+  display: flex;
+  position: relative; /* anchors the resize handle */
+  flex-shrink: 0;
+  flex-direction: column;
+  transition: width var(--duration-medium-1, 250ms) ease;
+  /* Left corners face the card this sits beside; the host decides how tight
+     they are (see `--card-seam-radius`). */
+  border-radius: var(--card-seam-radius, var(--radius-m)) var(--radius-m) var(--radius-m)
+    var(--card-seam-radius, var(--radius-m));
+  background: var(--surface-container);
+  width: 48px;
+  /* The head and the body carry every inset; the panel itself has none.
+     `--panel-edge` is what touches the border, `--panel-inset` how far the
+     title sits in from it. */
+  --panel-inset: calc(var(--spacing-xs) + var(--spacing-s));
+  --panel-edge: var(--spacing-xs);
+  min-height: 0;
+  /* The count badge extends past the button's corner. */
+  overflow: visible;
+}
+
+.panel[data-expanded="true"] {
+  width: min(var(--import-panel-width, 360px), 45vw);
+  /* Set by whoever mounts the panel, when what sits beside it has a width it
+     cannot go below. Unset, the width above is the only bound. */
+  max-width: var(--import-panel-max, none);
+}
+
+/* No transition while dragging: the width already follows the pointer, and
+   easing it turns a 1:1 drag into a lag. */
+.panel[data-dragging="true"] {
+  transition: none;
+}
+
+/* Same grab affordance as the chat's resizable panes. */
+.resizeHandle {
+  display: flex;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  justify-content: center;
+  align-items: center;
+  z-index: 2;
+  cursor: col-resize;
+  width: var(--spacing-s);
+  touch-action: none;
+}
+
+.resizeHandle::before {
+  transition:
+    background-color 0.15s,
+    height 0.15s;
+  border-radius: var(--radius-s);
+  background: var(--outline-variant);
+  width: 4px;
+  height: 40px;
+  content: "";
+}
+
+.resizeHandle:hover::before,
+.panel[data-dragging="true"] .resizeHandle::before {
+  background: var(--primary);
+}
+
+/* Pinned to the right edge: that edge holds still while the panel widens
+   leftwards, so the toggle is the one thing that does not move between the two
+   forms. */
+.head {
+  display: flex;
+  flex-shrink: 0;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--panel-edge);
+}
+
+/* Only once there is a title to inset: collapsed, the rail is exactly as wide
+   as its button, and anything more on the left would push it off the edge. */
+.panel[data-expanded="true"] .head {
+  padding-left: var(--panel-inset);
+}
+
+.title {
+  margin-right: auto;
+  color: var(--on-surface);
+  font: var(--font-title-medium);
+  white-space: nowrap;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  /* The body is laid out while the panel is still widening, so its text
+     reflows for as long as that takes — a name's ellipsis walking, the empty
+     line sliding. Held invisible for exactly that long: the reflow still
+     happens, nobody watches it, and what appears is already at its final
+     width. The delay reads the panel's own duration, so the two cannot drift
+     apart. */
+  animation: reveal-body var(--duration-short-3, 150ms) ease var(--duration-medium-1, 250ms) both;
+  /* Tighter than the title above it: the cards carry their own border, and
+     letting them run wider is what keeps them from reading as a narrow column
+     in a wide panel. */
+  padding: 0 var(--spacing-s) var(--panel-edge);
+  min-height: 0;
+  overflow-y: auto;
+}
+
+@keyframes reveal-body {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+/* Asked for less motion: the wait would only be a blank panel. */
+@media (prefers-reduced-motion: reduce) {
+  .body {
+    animation: none;
+  }
+}
+
+/* Nothing to follow: the line sits in the middle of an empty column rather
+   than hanging off its left edge where the cards' text would start. */
+.empty {
+  margin: 0;
+  padding: var(--spacing-m) var(--spacing-s) 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+  text-align: center;
+}
+
+.item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+}
+
+/* A failure whose file the browser no longer holds: the card cannot offer a
+   retry, so the panel says what to do instead. Its own line, because the
+   card's status row truncates to one. */
+.reselect {
+  margin: 0 0 var(--spacing-2xs) var(--spacing-xs);
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+}
+
+/* The two answers, under the card they belong to. */
+.decision {
+  display: flex;
+  gap: var(--spacing-2xs);
+  margin: 0 0 var(--spacing-2xs) var(--spacing-xs);
+}

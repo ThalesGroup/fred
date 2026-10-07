@@ -28,6 +28,22 @@ export function leafFileName(file: File): string {
   return file.name.split("/").pop() || file.name;
 }
 
+/** FastAPI puts its explanation in `detail`; anything else is returned as-is. */
+async function errorDetail(response: Response): Promise<string> {
+  try {
+    const body = await response.text();
+    if (!body) return "";
+    try {
+      const parsed = JSON.parse(body) as { detail?: unknown };
+      return typeof parsed.detail === "string" ? parsed.detail : body;
+    } catch {
+      return body;
+    }
+  } catch {
+    return "";
+  }
+}
+
 /**
  * Streams a batch upload/process request for one or more files sharing the same
  * destination metadata — one request per batch lets the backend's ReBAC/quota
@@ -36,10 +52,13 @@ export function leafFileName(file: File): string {
  *
  * Every file gets exactly one outcome callback, fired the moment its own line
  * appears in the stream (not after the whole batch finishes): `onTaskDiscovered`
- * (it got a task_id — the tray/Activity owns any later failure for that task
- * from here on), `onFileFailed` (it failed before ever getting one), or
- * `onFileResolved` (its terminal `finished` line, with no task_id at all —
- * upload-only mode, and the no-scheduler process path, never emit one). It
+ * (it got a task_id; its task stream owns later failures),
+ * `onFileFailed` (it failed before ever getting one),
+ * `onFileConflicted` (the folder gained a document of that name while the
+ * import was under way, so the file still needs the user's overwrite-or-keep
+ * answer — an outcome, not a failure), or `onFileResolved` (its terminal
+ * `finished` line, with no task_id at all — upload-only mode, and the
+ * no-scheduler process path, never emit one). It
  * fires only on that terminal line, not an earlier `success` one: the
  * no-scheduler path emits an intermediate `success` line for the upload-prep
  * step *before* actually processing the file, so treating that as done would
@@ -52,6 +71,7 @@ export async function streamUploadOrProcessDocument(
   onTaskDiscovered?: (task: ScheduledTask) => void,
   onFileFailed?: (filename: string, message: string) => void,
   onFileResolved?: (filename: string) => void,
+  onFileConflicted?: (filename: string) => void,
 ): Promise<ScheduledTask[]> {
   const token = KeyCloakService.GetToken();
   const formData = new FormData();
@@ -72,14 +92,18 @@ export async function streamUploadOrProcessDocument(
   });
 
   if (!response.ok || !response.body) {
-    throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
+    // The checks that run before the stream opens — storage quota, permissions
+    // — answer with an ordinary error and put their explanation in the body.
+    // Dropping it left the user reading a status code for the most common
+    // reason an import is refused.
+    throw new Error(`Upload failed: ${response.status} ${response.statusText}. ${await errorDetail(response)}`.trim());
   }
 
   const tasks: ScheduledTask[] = [];
   const seenTaskIds = new Set<string>();
   // Filenames that got a task_id at some point — any later failure for one of
-  // these is that task's own failure to report, via the tray/Activity, forever
-  // exempt from onFileFailed regardless of event order.
+  // these belongs to the task SSE feed and must not trigger onFileFailed
+  // regardless of event order.
   const taskFilenames = new Set<string>();
   // Last known failed/not per filename that never got a task_id — used only for
   // the final "did anything in the batch actually succeed" decision below, since
@@ -117,7 +141,16 @@ export async function streamUploadOrProcessDocument(
           // its own (`{step: "done", status, error}`) — every genuine per-file
           // outcome already has its own named line before that, so a status line
           // with no filename carries nothing to attribute to any one file.
-          if (event.status === "failed" || event.status === "error") {
+          if (event.status === "conflict") {
+            // Nothing was written for this file and nothing went wrong: the
+            // name was taken meanwhile and the answer is the user's to give.
+            lastFailedByFilename.set(eventFilename, false);
+            onFileConflicted?.(eventFilename);
+          } else if (event.status === "ignored") {
+            // The caller asked for this file to be skipped and it was.
+            lastFailedByFilename.set(eventFilename, false);
+            onFileResolved?.(eventFilename);
+          } else if (event.status === "failed" || event.status === "error") {
             const message =
               typeof event.error === "string" && event.error ? event.error : `Failed to process ${eventFilename}`;
             lastFailedByFilename.set(eventFilename, true);
