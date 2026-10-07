@@ -90,8 +90,6 @@ PreparedImage = Tuple[bytes, int, int]
 @dataclass
 class RenderResult:
     pptx: bytes
-    # Everything the render found, for the logs; the agent reads `report`.
-    warnings: List[str] = field(default_factory=list)
     slide_count: int = 0
     # The same deck adjusted for the PDF preview only (see `_widen_no_wrap_text`).
     preview_pptx: bytes = b""
@@ -1142,7 +1140,6 @@ class _Renderer:
         self.images = images
         self.width = presentation.slide_width
         self.height = presentation.slide_height
-        self.warnings: List[str] = []
         self.layouts = _all_layouts(presentation)
         self.theme = theme_fonts(presentation)
         self.slides_by_id = {slide.slide_id: slide for slide in presentation.slides}
@@ -1167,11 +1164,7 @@ class _Renderer:
         for position, slide_plan in enumerate(plan.slides, start=1):
             # Messages name the deck's slide; a split list's parts share a source.
             source = numbers[position - 1] if numbers else position
-            if slide_plan.invalid_entry is not None:
-                self.warnings.append(
-                    f"Entry {position} of 'slides' was not a slide object and was skipped "
-                    f"({slide_plan.invalid_entry!r})."
-                )
+            if slide_plan.invalid_entry is not None:  # the tool's notes name it
                 continue
             pattern = patterns[position - 1]
             if pattern is None:
@@ -1247,7 +1240,6 @@ class _Renderer:
             self.prs.save(preview)
         return RenderResult(
             pptx=buffer.getvalue(),
-            warnings=self.warnings,
             slide_count=rendered,
             preview_pptx=preview.getvalue(),
             report=self.report,
@@ -1290,8 +1282,7 @@ class _Renderer:
             self.report.note("other_kind", kind=asked)
 
     def _tell(self, note: str) -> None:
-        """A finding the after-check report does not carry: logged and sent to the agent."""
-        self.warnings.append(note)
+        """A finding the after-check report does not carry: sent to the agent."""
         self.report.notes.append(note)
 
     def _create(self, pattern: Pattern) -> Tuple[Any, Pattern]:
@@ -1336,11 +1327,6 @@ class _Renderer:
         )
         if removed:
             self.report.slide(position).removed.extend(removed)
-            quoted = ", ".join(f"'{text}'" for text in removed)
-            self.warnings.append(
-                f"Slide {position}: example text of '{pattern.label}' that no zone "
-                f"replaced was removed: {quoted}."
-            )
 
     def _fill(
         self, slide, pattern: Pattern, plan: SlidePlan, position: int, start: int = 0
@@ -1376,10 +1362,6 @@ class _Renderer:
             text.update(group_text)
             image_ids.update(group_images)
             if len(plan.items) > group.count:
-                self.warnings.append(
-                    f"Slide {position}: '{pattern.label}' holds {group.count} items, "
-                    f"{len(plan.items) - group.count} were dropped."
-                )
                 report.lost.append(f"{len(plan.items) - group.count} item(s)")
                 self.report.note("items_left_out", len(plan.items) - group.count)
             items = _item_shapes(group, index)
@@ -1403,10 +1385,6 @@ class _Renderer:
         report.lost.extend(lost)
         if lost:
             self.report.note("content_left_out")
-            self.warnings.append(
-                f"Slide {position}: '{pattern.label}' has no place for {', '.join(lost)}; "
-                "that content is not in the deck."
-            )
         if pattern.groups:
             # Widths and removals changed the slide: re-read absolute geometry.
             index = _shape_index(slide)
@@ -1483,10 +1461,6 @@ class _Renderer:
             if truncated:
                 report.truncated.append(zone.role)
                 self.report.note("text_shortened")
-                self.warnings.append(
-                    f"Slide {position}: text for the {zone.role} zone of '{pattern.label}' was too long "
-                    f"and got truncated (about {zone.chars_per_line} characters × {zone.max_lines} lines fit)."
-                )
 
         # Zones that play the same part on one slide are read as a set: two
         # column headings at 24 pt and 13 pt look like a mistake, even when each
@@ -1502,7 +1476,7 @@ class _Renderer:
             placed = index.get(zone.key)
             if placed is None or plan.table is None:
                 continue
-            self._fill_table(placed, zone, plan.table, position, pattern.label)
+            self._fill_table(placed, zone, plan.table, position)
 
         for zone in [z for z in pattern.zones if z.role == "image"] + [
             z
@@ -1522,9 +1496,6 @@ class _Renderer:
             prepared = self.images.get(image_id)
             if prepared is None:
                 # A bad image reference costs the picture, never the deck.
-                self.warnings.append(
-                    f"Slide {position}: image '{image_id}' is not a usable image document and was left out."
-                )
                 report.lost.append(f"image '{image_id}'")
                 self.report.note("image_unusable", 1)
                 if cast(Any, placed.shape).is_placeholder:
@@ -1538,7 +1509,6 @@ class _Renderer:
         zone: Zone,
         table: PlanTable,
         position: int,
-        label: str,
     ) -> None:
         report = self.report.slide(position)
         fit = fit_table(zone, table)
@@ -1561,9 +1531,6 @@ class _Renderer:
         if placed.top + frame.height > self.height:
             report.lost.append("table rows below the slide")
             self.report.note("content_left_out")
-            self.warnings.append(
-                f"Slide {position}: the table of '{label}' runs off the slide."
-            )
 
     @staticmethod
     def _loose_decoration(

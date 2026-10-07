@@ -1104,8 +1104,6 @@ def build_builder_tools(
         turn_shape[0] = None
         await plans.write(deck)
 
-        if result.warnings:
-            logger.info("[PPTBUILD][TOOL] render warnings: %s", result.warnings)
         notes = _build_notes(
             plan,
             result.report.issues(),

@@ -62,7 +62,7 @@ from fred_capability_ppt_filler.builder.render import (
     _write_lines,
     render_deck,
 )
-from fred_capability_ppt_filler.builder.tools import catalogue
+from fred_capability_ppt_filler.builder.tools import _issue_line, catalogue
 from fred_capability_ppt_filler.images import prepare_picture
 from fred_capability_ppt_filler.traversal import walk_shapes
 from pptx import Presentation
@@ -98,6 +98,11 @@ def _texts(slide) -> list[str]:
             if text and text != FOOTER:
                 out.append(text)
     return out
+
+
+def _findings(result) -> list[str]:
+    """What the agent reads of a render: one line per slide, then the notes."""
+    return [_issue_line(r) for r in result.report.issues()] + result.report.notes
 
 
 def _pictures(slide) -> int:
@@ -143,7 +148,7 @@ def test_layout_pattern_fills_title_and_levelled_bullets():
             ],
         )
     )
-    assert result.warnings == []
+    assert _findings(result) == []
     (slide,) = deck.slides
     assert _title(slide) == "Quarterly results"
     body = cast(Any, slide.placeholders[1]).text_frame
@@ -265,7 +270,7 @@ def test_notes_are_skipped_when_the_notes_slide_has_no_body():
     silent = _pattern("Silent notes")
     result, deck = _render(_on(silent, title="Quiet", bullets=["a"], notes="ignored"))
     assert len(deck.slides) == 1
-    assert result.warnings == []
+    assert _findings(result) == []
 
 
 def test_columns_without_enough_bodies_are_reported():
@@ -280,7 +285,7 @@ def test_columns_without_enough_bodies_are_reported():
             ],
         )
     )
-    assert any("no place for column 2, column 3" in w for w in result.warnings)
+    assert any("not placed: column 2, column 3" in w for w in _findings(result))
 
 
 def test_columns_fill_two_content_and_comparison_headings():
@@ -328,7 +333,7 @@ def test_overflow_shrinks_then_truncates_with_a_warning():
             bullets=very_long,
         )
     )
-    assert any("truncated" in w for w in result.warnings)
+    assert any("text cut to fit" in w for w in _findings(result))
     body = cast(Any, deck.slides[0].placeholders[1])
     assert len(body.text_frame.paragraphs) < 40
 
@@ -337,7 +342,7 @@ def test_image_zone_filled_from_prepared_bytes_or_removed_when_empty():
     photo = _pattern("Photo")
     prepared = {"doc-1": prepare_picture(png_bytes(30, 20, "blue"))}
     result, deck = _render(_on(photo, title="Site", image="doc-1"), images=prepared)
-    assert result.warnings == []
+    assert _findings(result) == []
     assert _pictures(deck.slides[0]) == 1
 
     caption = _pattern("Picture with Caption")
@@ -349,7 +354,7 @@ def test_image_zone_filled_from_prepared_bytes_or_removed_when_empty():
         _on(photo, title="Site", image="doc-missing"),
         images=prepared,
     )
-    assert any("'doc-missing' is not a usable image" in w for w in result.warnings)
+    assert any("not placed: image 'doc-missing'" in w for w in _findings(result))
     assert _pictures(deck.slides[0]) == 1  # the template's own picture stays
 
 
@@ -383,7 +388,8 @@ def test_non_slide_entries_are_skipped_and_an_all_invalid_plan_is_an_error():
         SlidePlan.model_validate("junk"),
     )
     assert len(deck.slides) == 1
-    assert any("not a slide object" in w for w in result.warnings)
+    # The tool's notes name the skipped entry; the render only leaves it out.
+    assert _findings(result) == []
     with pytest.raises(RenderError, match="no usable slide"):
         _render(SlidePlan.model_validate("junk"))
 
@@ -415,7 +421,7 @@ def test_fixed_pattern_is_copied_verbatim_and_notes_are_written():
 
 
 def test_content_the_pattern_cannot_show_is_reported():
-    # The agent only learns what the deck lost from these warnings.
+    # The agent only learns what the deck lost from this report.
     result, _ = _render(
         _on(_pattern("Title Only"), title="Spain", bullets=["55 years"]),
         _on(
@@ -431,17 +437,16 @@ def test_content_the_pattern_cannot_show_is_reported():
             items=[PlanItem(heading="x")],
         ),
     )
-    warnings = " ".join(result.warnings)
-    assert "Slide 1: 'Title Only' has no place for bullets" in warnings
-    assert "Slide 2: 'Key figures' has no place for items' text" in warnings
+    findings = " ".join(_findings(result))
+    assert "Slide 1: not placed: bullets" in findings
+    assert "Slide 2: not placed: items' text" in findings
     assert result.report.notes == [
         "Slide 3: 'Motif' is a fixed slide shown as is, so its content was left out. "
         "If it matters, move it to another slide; otherwise nothing to do."
     ]
-    assert (
-        "Slide 4:" not in warnings
-    )  # a fixed slide named by its own title lost nothing
-    assert "Slide 5: 'Free text' has no place for items" in warnings
+    # A fixed slide named by its own title lost nothing.
+    assert "Slide 4:" not in findings
+    assert "Slide 5: not placed: items" in findings
 
 
 def test_zone_role_names_used_as_plan_keys_still_fill_the_zones():
@@ -455,7 +460,7 @@ def test_zone_role_names_used_as_plan_keys_still_fill_the_zones():
     result, deck = _render(
         (_pattern("Process"), steps), (_pattern("Title and Content"), content)
     )
-    assert result.warnings == []
+    assert _findings(result) == []
     assert "Kick-off meeting" in _texts(deck.slides[0])
     assert any("one" in text and "two" in text for text in _texts(deck.slides[1]))
     # A field under its name and an alias keeps both texts, never first-wins.
@@ -493,7 +498,7 @@ def test_one_line_heading_shrinks_then_asks_to_be_shortened():
             ],
         )
     )
-    assert not [w for w in figures.warnings if "one line" in w]
+    assert not [w for w in _findings(figures) if "text cut to fit" in w]
 
 
 def test_truncation_drops_the_lines_the_measured_capacity_cannot_hold():
@@ -503,7 +508,7 @@ def test_truncation_drops_the_lines_the_measured_capacity_cannot_hold():
     result, deck = _render(
         _on(_pattern("Title and Content"), title="Overflow", bullets=shouting)
     )
-    assert any("truncated" in w for w in result.warnings)
+    assert any("text cut to fit" in w for w in _findings(result))
     body = cast(Any, deck.slides[0].placeholders[1]).text_frame
     kept = [p.text for p in body.paragraphs if p.text.strip()]
     assert 0 < len(kept) < len(shouting)
@@ -546,7 +551,7 @@ def test_long_item_text_in_a_one_line_box_wraps_without_a_warning():
         ),
         inventory=inventory,
     )
-    assert not [w for w in result.warnings if "one line" in w]
+    assert not [w for w in _findings(result) if "text cut to fit" in w]
 
 
 def _zone(key: str, role: str, y: int) -> Zone:
@@ -897,7 +902,7 @@ def test_a_placeholder_that_does_not_wrap_on_its_layout_is_not_truncated():
         inventory=inventory,
     )
     assert long_title in _texts(deck.slides[0])
-    assert not [w for w in result.warnings if "truncated" in w]
+    assert not [w for w in _findings(result) if "text cut to fit" in w]
 
 
 # --- unused item slots leave the slide clean ---
@@ -1071,7 +1076,7 @@ def test_the_hero_image_is_not_dropped_when_images_is_also_given():
         },
     )
     assert _pictures(deck.slides[0]) >= 1
-    assert not [w for w in result.warnings if "not a usable image" in w]
+    assert not [w for w in _findings(result) if "not placed: image" in w]
 
 
 def test_a_bullet_wrapped_under_an_unknown_key_keeps_its_text():
@@ -1190,7 +1195,7 @@ def test_a_title_that_auto_sizes_in_height_is_fitted_not_widened():
     assert widest <= designed / 1000 * inventory.slide_width * 1.02, (
         "the box was widened"
     )
-    assert [w for w in result.warnings if "truncated" in w]
+    assert [w for w in _findings(result) if "text cut to fit" in w]
 
 
 def test_an_agenda_announcing_more_than_the_deck_holds_is_reported():
@@ -1353,7 +1358,7 @@ def test_example_text_left_on_a_duplicated_slide_is_removed_and_reported():
     assert "Go to target" not in texts
     assert "Plan" in texts and _SHARED in texts
     assert result.report.slide(1).removed == ["Go to target"]
-    assert any("'Go to target'" in w for w in result.warnings)
+    assert any("'Go to target'" in w for w in _findings(result))
 
 
 def test_each_level_of_a_body_keeps_its_template_formatting():
