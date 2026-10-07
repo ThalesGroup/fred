@@ -377,7 +377,7 @@ describe("ManagedChatPage agent todo panel", () => {
 });
 
 describe("ManagedChatPage deleted agent", () => {
-  it("strikes the preserved name, explains read-only mode, freezes the thread and visibly disables the composer", () => {
+  it("strikes the preserved name, freezes the thread and disables the composer without a redundant banner", () => {
     chatValue = {
       ...baseChatValue([]),
       executionDisabled: true,
@@ -391,7 +391,9 @@ describe("ManagedChatPage deleted agent", () => {
     expect(html).toContain('data-agent-deleted="true"');
     expect(html).toContain('data-placeholder="chatbot.readOnlyComposerPlaceholder"');
     expect(html).toContain('data-description="chatbot.deletedAgentReadOnly"');
-    expect(html).toContain("chatbot.deletedAgentReadOnly");
+    const rendered = document.createElement("div");
+    rendered.innerHTML = html;
+    expect(rendered.textContent).not.toContain("chatbot.deletedAgentReadOnly");
     expect(html).toContain('data-composer-disabled="true"');
     expect(html).toContain('data-send-disabled="true"');
     expect(html).toContain('data-readonly="true"');

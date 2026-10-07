@@ -10,7 +10,7 @@
 
 ## 3. Read-only interactions
 
-- [x] 3.1 Add the localized deleted-agent notice in chat/sidebar agent labels and gate composer submission, keyboard/commands, retries, new-conversation, voice/file paste/drop, context selectors and attachment additions/removals. Guard the corresponding hook callbacks. Verify focused page/hook tests assert no execution or optimistic message for a deleted instance, and preserve title management, downloads and conversation deletion.
+- [x] 3.1 Add localized accessible deleted-agent status in chat/sidebar agent labels and gate composer submission, keyboard/commands, retries, new-conversation, voice/file paste/drop, context selectors and attachment additions/removals. Guard the corresponding hook callbacks. Verify focused page/hook tests assert no execution or optimistic message for a deleted instance, and preserve title management, downloads and conversation deletion.
 - [x] 3.2 Render historical unanswered HITL and interrupted-execution content without executable actions; guard single/batch/skip HITL and continuation/restart callbacks. Verify `ConversationThread`, `toThreadMessages` and managed-chat regressions for readable trailing prompts and no resume after deletion.
 - [x] 3.3 Cover opening a deleted-agent conversation through the existing sidebar URL and subsequent navigation to a live conversation. Verify focused `ChatList`/navigation tests retain the deleted-agent entry and live chat remains usable.
 
@@ -44,6 +44,7 @@ import order in the new backend test. No baseline suppressions were added.
 - [x] 5.2 Regenerate OpenAPI and the frontend client. Preserve names in sidebar, grouped headers, conversation header and inactive previews; replace the suffix with strikethrough, an accessible status and hover/focus tooltip. Verify catalog failures are not inferred as deletion.
 - [x] 5.3 Keep the composer visible and disabled with read-only placeholder and matching disabled surface/text tokens. Verify native disabled controls, preserved drafts, and live-chat behavior.
 - [x] 5.4 Reconcile contracts, UX documentation and migration note; prepare the issue/PR update; run affected suites, migration and specification checks, root quality and full author review plus independent read-only review. Sync and archive the refined change for delivery on the same draft PR.
+- [x] 5.5 Remove the separate deletion banner at the developer's request, retain the struck agent name, disabled composer and accessible descriptions, align existing specs and refresh the PR screenshots. Verify the page regression and the browser lifecycle again.
 
 Refinement verification: 309 frontend tests passed across 21 affected files. The
 final hook correction passed its 203-case suite; the other 34 UI and 72 consumer
@@ -102,3 +103,15 @@ captures are in `docs/swift/ux/screenshots/deleted-agent-read-only/` and embedde
 in the PR. This closes the browser-rendering gap for these frontend scenarios;
 production-backend deletion, database migration/concurrency and LLM execution
 were not exercised by this browser campaign.
+
+Banner-removal refinement (2026-10-07): the 27 ManagedChatPage cases and the same
+7 Playwright browser scenarios passed after removing the redundant deletion
+banner. The struck name, disabled composer, retained draft/history and accessible
+hover/focus explanations remain intact. Light/dark captures were refreshed for
+the PR; no page errors, unexpected requests, deleted-agent preparation or
+execution requests occurred. Validation still uses local OIDC and synthetic API
+fixtures, without backend deletion or LLM execution.
+Root make code-quality passed across all 16 configured modules; the main lifecycle
+spec passed strict validation. Author review of the presentation-only delta found
+no remaining findings; execution guards, accessible descriptions and the separate
+unavailable-history notice are retained.

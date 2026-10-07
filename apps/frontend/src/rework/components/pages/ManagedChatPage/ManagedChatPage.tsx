@@ -842,11 +842,6 @@ export default function ManagedChatPage() {
 
                 {!isInitialState && (
                   <div className={styles.inputOverlay}>
-                    {chat.isReadOnly && (
-                      <p className={styles.conversationNotice} role="status">
-                        {t("chatbot.deletedAgentReadOnly")}
-                      </p>
-                    )}
                     {(chat.historyUnavailable || chat.sessionUnavailable) && (
                       <p className={styles.conversationNotice} role="status">
                         {t("chatbot.historyUnavailable")}

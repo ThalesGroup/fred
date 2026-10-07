@@ -19,7 +19,7 @@ Deleting a managed agent SHALL preserve its existing conversation metadata and r
 
 ### Requirement: Deleted-agent conversations are read-only for execution
 
-A conversation whose managed agent has been deleted SHALL preserve its recorded agent display name, strike through only that name in the chat header and sidebar, provide an accessible deleted/read-only description with a tooltip on hover and keyboard focus, and display a localized explanation that the agent was deleted and the conversation is read-only. Its composer SHALL remain visible and disabled with a localized read-only placeholder. It SHALL prevent messages, commands, retries, human-input responses/skips, execution continuation/restart, attachment additions/removals and execution-context changes. Its historical human-input prompts and interrupted-execution records SHALL remain readable without executable actions. Starting a fresh conversation with that deleted instance SHALL be unavailable. Existing title management, reading/downloading attachments and conversation deletion SHALL retain their current permissions.
+A conversation whose managed agent has been deleted SHALL preserve its recorded agent display name, strike through only that name in the chat header and sidebar, provide an accessible deleted/read-only description with a tooltip on hover and keyboard focus. Its composer SHALL remain visible and disabled with a localized read-only placeholder, without a separate deletion banner. It SHALL prevent messages, commands, retries, human-input responses/skips, execution continuation/restart, attachment additions/removals and execution-context changes. Its historical human-input prompts and interrupted-execution records SHALL remain readable without executable actions. Starting a fresh conversation with that deleted instance SHALL be unavailable. Existing title management, reading/downloading attachments and conversation deletion SHALL retain their current permissions.
 
 #### Scenario: Preserve a renamed agent after deletion and reload
 
@@ -46,7 +46,7 @@ A conversation whose managed agent has been deleted SHALL preserve its recorded 
 
 - **GIVEN** a conversation confirmed to reference a deleted agent
 - **WHEN** the user reaches the composer, a command, keyboard submission or a retry action
-- **THEN** the read-only explanation is visible and no execution request or new optimistic user message is produced
+- **THEN** the composer remains visibly disabled and no execution request or new optimistic user message is produced
 - **AND** no new conversation is started with that instance
 
 #### Scenario: Pending human input or execution recovery
