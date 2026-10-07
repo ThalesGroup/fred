@@ -2,7 +2,7 @@
 
 Define optional, values-driven HorizontalPodAutoscalers for applications deployed by Fred's Helm chart.
 
-## Requirements
+## ADDED Requirements
 
 ### Requirement: Optional per-application HPA
 
