@@ -69,6 +69,7 @@ export type Zone = {
   grows?: boolean;
   purpose?: string | null;
   table?: TableSpec | null;
+  framed?: boolean;
 };
 export type RepeatGroup = {
   key: string;
