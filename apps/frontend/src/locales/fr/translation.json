@@ -1805,7 +1805,7 @@
           "rejected": "La requête a été refusée.",
           "invalid_response": "La réponse est illisible.",
           "activity_unavailable": "La recherche web est indisponible : son journal d'activité ne peut pas être écrit.",
-          "unsafe_destination": "Adresse interne ou non publique : bloquée par Fred.",
+          "unsafe_destination": "Adresse interne ou non publique : bloquée par sécurité.",
           "too_many_redirects": "Trop de redirections.",
           "unsupported_content": "Ce n'est pas une page texte lisible (fichier binaire ou compressé).",
           "response_too_large": "La page est trop volumineuse.",

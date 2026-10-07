@@ -1805,7 +1805,7 @@
           "rejected": "The request was rejected.",
           "invalid_response": "The response could not be read.",
           "activity_unavailable": "Web research is unavailable: its activity log cannot be written.",
-          "unsafe_destination": "Internal or non-public address: blocked by Fred.",
+          "unsafe_destination": "Internal or non-public address: blocked for security.",
           "too_many_redirects": "Too many redirects.",
           "unsupported_content": "Not a readable text page (binary or compressed file).",
           "response_too_large": "The page is too large.",
