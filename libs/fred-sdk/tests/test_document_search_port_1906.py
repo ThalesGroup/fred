@@ -129,11 +129,17 @@ def test_deprecated_attachments_only_alias_maps_onto_the_ceilings(
         pinned = resolve_search_sources(
             include_attachments=True, include_team_documents=True, attachments_only=True
         )
+        narrowed_off = resolve_search_sources(
+            include_attachments=False,
+            include_team_documents=True,
+            attachments_only=True,
+        )
         off = resolve_search_sources(
             include_attachments=True,
             include_team_documents=True,
             attachments_only=False,
         )
     assert pinned == (True, False)
+    assert narrowed_off == (False, False)
     assert off == (True, True)
     assert len([r for r in caplog.records if "deprecated" in r.getMessage()]) == 1

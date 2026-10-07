@@ -882,7 +882,8 @@ def resolve_search_sources(
     attachments_only: bool | None,
 ) -> tuple[bool, bool]:
     """Fold the deprecated `attachments_only` keyword into the two source
-    ceilings (`True` = attachments only), warning once per process."""
+    ceilings, warning once per process. `True` only narrows to attachments:
+    it never re-enables a source the caller turned off."""
 
     global _attachments_only_warned
     if attachments_only is None:
@@ -894,7 +895,7 @@ def resolve_search_sources(
             "pass include_attachments / include_team_documents instead."
         )
     if attachments_only:
-        return True, False
+        return include_attachments, False
     return include_attachments, include_team_documents
 
 

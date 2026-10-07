@@ -292,6 +292,12 @@ LEGACY_SOURCES = [
     # An absent paperclip key counts as on, which was its default.
     ({"search_attachments_only": True}, (True, False)),
     ({}, (True, True)),
+    # String booleans parse like the former bool fields, not as truthy text.
+    ({"show_attach_files_control": "false"}, (False, True)),
+    (
+        {"show_attach_files_control": "true", "search_attachments_only": "false"},
+        (True, True),
+    ),
 ]
 
 

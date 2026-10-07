@@ -103,7 +103,7 @@ from fred_sdk.contracts.runtime import (
     unwrap_run_stop_error,
 )
 from langchain_core.tools import BaseTool, tool
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, TypeAdapter, model_validator
 
 # The tool-result `tool_ref` this capability stamps on its artifact — distinct
 # from the builtin `knowledge.search` ref so the two paths stay traceable apart.
@@ -241,6 +241,10 @@ def narrow_scope_ids(
     return [value for value in inner if value in allowed]
 
 
+# Legacy keys parse like the fields they replace: "false" must stay false.
+_LEGACY_BOOL = TypeAdapter(bool)
+
+
 class DocumentAccessConfig(BaseModel):
     """
     Agent-creation / stored config of the document-access capability (RFC §3.2),
@@ -299,10 +303,14 @@ class DocumentAccessConfig(BaseModel):
 
         if isinstance(data, dict):
             data = dict(data)
-            paperclip = data.pop("show_attach_files_control", True)
-            only_attached = data.pop("search_attachments_only", False)
+            paperclip = _LEGACY_BOOL.validate_python(
+                data.pop("show_attach_files_control", True)
+            )
+            only_attached = _LEGACY_BOOL.validate_python(
+                data.pop("search_attachments_only", False)
+            )
             if "attachments" not in data and "team_documents" not in data:
-                data["attachments"] = bool(paperclip)
+                data["attachments"] = paperclip
                 data["team_documents"] = not (paperclip and only_attached)
             if (
                 "show_document_scope_control" in data
@@ -354,11 +362,9 @@ class DocumentAccessCapability(
 
     manifest = CapabilityManifest(
         id="document_access",
-        # Pre-GA: the version stays 0.1.0 while the platform has not shipped —
-        # config-surface changes land without bumps. Start bumping (it keys the
-        # stored-slice schema_version and the control-plane chat-controls
-        # cache) once real deployments hold stored configs.
-        version="0.1.0",
+        # Bump on every config-surface change: the version keys the stored-slice
+        # schema_version and the control-plane chat-controls cache.
+        version="0.2.0",
         name="capability.document_access.name",
         description="capability.document_access.description",
         icon="find_in_page",
