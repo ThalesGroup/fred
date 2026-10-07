@@ -4907,9 +4907,10 @@ capabilities, in `run_capability_reconciliation_sweep` after availability and co
 health, and on
 `POST /teams/{team_id}/agent-instances/{agent_instance_id}/readiness-check`
 (`CAN_UPDATE_AGENTS`, returns the summary), which the agent form polls, and on
-`GET /teams/{team_id}/agent-instances` for up to 10 `capability_pending` instances,
-concurrently, with the caller's token and a 2 s bound (the sweep has no production
-host). Readiness verdicts alone set and clear `capability_pending`; every other
+`GET /teams/{team_id}/agent-instances` for up to 10 `capability_pending` instances
+without a failure detail (a random subset over the cap; a failure only changes on a
+save, a re-run or a re-check), concurrently on the shared runtime HTTP client, with
+the caller's token and a 2 s bound (the sweep has no production host). Readiness verdicts alone set and clear `capability_pending`; every other
 reason outranks it. An older pod without the route (404) reads as ready.
 
 After an enrol, a copy or a capability save, the instance gets one suspension write: none

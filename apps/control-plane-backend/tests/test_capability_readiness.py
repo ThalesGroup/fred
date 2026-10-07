@@ -149,6 +149,7 @@ async def test_fetch_sends_stored_slices_and_folds_results(
     record = _record_with_selection()
 
     verdict = await service._fetch_capability_readiness(
+        client=httpx.AsyncClient(),
         base_url="http://runtime-a/pod/v1",
         instance=record,
         authorization=None,
@@ -175,6 +176,7 @@ async def test_fetch_from_an_older_pod_reads_as_ready(
     monkeypatch.setattr(httpx.AsyncClient, "post", _fake_post)
 
     verdict = await service._fetch_capability_readiness(
+        client=httpx.AsyncClient(),
         base_url="http://runtime-a/pod/v1",
         instance=_record_with_selection(),
         authorization=None,
@@ -191,6 +193,7 @@ async def test_fetch_error_gives_no_verdict(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setattr(httpx.AsyncClient, "post", _fake_post)
 
     verdict = await service._fetch_capability_readiness(
+        client=httpx.AsyncClient(),
         base_url="http://runtime-a/pod/v1",
         instance=_record_with_selection(),
         authorization=None,
@@ -535,3 +538,60 @@ async def test_save_answered_ready_clears_pending(
 
     assert resp.status_code == 200
     assert store._records[0].suspension_reason is None
+
+
+@pytest.mark.asyncio
+async def test_listing_skips_failed_preparations(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    failed = _pending_record("failed")
+    failed.suspension_detail = "Template unreadable."
+    app, store = _setup(monkeypatch, records=[failed, _pending_record("pending")])
+    calls: list[str] = []
+
+    async def _fake(*, instance, **_: Any):
+        calls.append(instance.agent_instance_id)
+        return _READY
+
+    monkeypatch.setattr(service, "_fetch_capability_readiness", _fake)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get(_LIST_URL)
+
+    assert resp.status_code == 200
+    assert calls == ["pending"]
+    assert store._records[0].suspension_detail == "Template unreadable."
+
+
+@pytest.mark.asyncio
+async def test_listing_rotates_over_the_cap_on_one_shared_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    records = [_pending_record(f"instance-{i}") for i in range(12)]
+    app, _ = _setup(monkeypatch, records=records)
+    calls: list[str] = []
+    clients: set[int] = set()
+
+    async def _fake(*, client, instance, **_: Any):
+        calls.append(instance.agent_instance_id)
+        clients.add(id(client))
+        return None
+
+    class _LastFirst:
+        def sample(self, population, k):
+            return list(reversed(population))[:k]
+
+    monkeypatch.setattr(service, "_fetch_capability_readiness", _fake)
+    monkeypatch.setattr(service, "_readiness_sampler", _LastFirst())
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get(_LIST_URL)
+        await client.get(_LIST_URL)
+
+    assert resp.status_code == 200
+    assert "instance-11" in calls and "instance-0" not in calls
+    assert len(clients) == 1

@@ -7192,7 +7192,9 @@ Acceptance scenarios: `openspec/changes/ppt-builder-capability/`.
 `AgentCapability.readiness(stored, identity) -> CapabilityReadiness` is an optional
 async hook (default `ready`) for a capability whose save starts background work.
 `CapabilityReadiness` is `state: "ready" | "pending" | "failed"` plus `detail` (the
-failure message). The hook must be a cheap read.
+failure message). The hook runs on agent listings and must return quickly: it may
+start or refresh background work (`ppt_builder` restarts an interrupted or outdated
+analysis) but never waits for it.
 
 `POST /agents/capabilities/readiness` (authenticated like chat-controls) takes
 `{agent_instance_id, team_id, items: [{capability_id, stored: {schema_version,

@@ -20,6 +20,7 @@ import contextvars
 import hashlib
 import json
 import logging
+import secrets
 import time
 from collections import OrderedDict
 from dataclasses import dataclass, field
@@ -1742,6 +1743,8 @@ async def list_agent_templates(
 
 _LISTING_READINESS_MAX = 10
 _LISTING_READINESS_TIMEOUT_S = 2.0
+# Stateless rotation: any replica may serve the next listing.
+_readiness_sampler = secrets.SystemRandom()
 
 
 async def _refresh_pending_readiness(
@@ -1752,15 +1755,21 @@ async def _refresh_pending_readiness(
 ) -> list[AgentInstanceRecord]:
     """Re-check `capability_pending` instances while listing, so an agent
     whose preparation finished becomes available without anyone polling.
-    Concurrent, capped and time-bounded: listing never waits on a slow pod."""
+    Concurrent, capped and time-bounded: listing never waits on a slow pod.
+    A failed preparation (detail set) only changes on a save, a re-run or
+    the form's re-check, so it is skipped; over the cap a random subset is
+    checked so every pending agent gets its turn."""
 
     pending = [
         r
         for r in records
         if r.suspension_reason == SuspensionReason.CAPABILITY_PENDING.value
-    ][:_LISTING_READINESS_MAX]
+        and r.suspension_detail is None
+    ]
     if not pending:
         return records
+    if len(pending) > _LISTING_READINESS_MAX:
+        pending = _readiness_sampler.sample(pending, _LISTING_READINESS_MAX)
     results = await asyncio.gather(
         *(
             apply_capability_readiness(
@@ -2025,7 +2034,10 @@ async def run_capability_reconciliation_sweep(
                         instance=fresh,
                         store=store,
                         verdict=await _fetch_capability_readiness(
-                            base_url=base_url, instance=fresh, authorization=None
+                            client=deps.get_runtime_http_client(),
+                            base_url=base_url,
+                            instance=fresh,
+                            authorization=None,
                         ),
                         kpi_writer=kpi_writer,
                     )
@@ -2446,6 +2458,7 @@ async def rename_agent_capability_ids_to_namespaced_form(
 
 async def _fetch_capability_readiness(
     *,
+    client: httpx.AsyncClient,
     base_url: str,
     instance: AgentInstanceRecord,
     authorization: str | None,
@@ -2476,8 +2489,9 @@ async def _fetch_capability_readiness(
     try:
         # Total bound, not per phase: the listing path relies on it.
         async with asyncio.timeout(timeout):
-            async with httpx.AsyncClient(timeout=timeout) as client:
-                response = await client.post(url, json=body, headers=headers)
+            response = await client.post(
+                url, json=body, headers=headers, timeout=timeout
+            )
         if response.status_code == 404:
             return ReadinessVerdict(ready=True)
         response.raise_for_status()
@@ -2514,6 +2528,7 @@ async def _readiness_verdict(
     if source is None:
         return None
     return await _fetch_capability_readiness(
+        client=deps.get_runtime_http_client(),
         base_url=source.base_url,
         instance=record,
         authorization=authorization,
