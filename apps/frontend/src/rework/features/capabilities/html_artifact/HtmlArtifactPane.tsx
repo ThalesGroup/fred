@@ -57,7 +57,7 @@ import {
 import { nextBufferAction } from "./previewBuffers";
 import { measureArtifactWidth } from "./htmlArtifactExport";
 import HtmlArtifactDownloadButton from "./HtmlArtifactDownloadButton";
-import { useHtmlArtifactJavaScriptAllowed } from "./useHtmlArtifactJavaScript";
+import { useCheckHtmlArtifactJavaScriptAllowed, useHtmlArtifactJavaScriptAllowed } from "./useHtmlArtifactJavaScript";
 import styles from "./HtmlArtifactPane.module.css";
 
 export function HtmlArtifactPane({ onClose }: CapabilitySidePanelProps) {
@@ -100,7 +100,9 @@ export function HtmlArtifactPane({ onClose }: CapabilitySidePanelProps) {
 
   // Whether THIS team may run script, resolved now rather than when the artifact
   // was produced — withdrawing the right has to reach pages that already exist.
-  const allowJavaScript = useHtmlArtifactJavaScriptAllowed();
+  const postureKey = selected ? `${selected.artifact_id}:${selected.version}` : "";
+  const allowJavaScript = useHtmlArtifactJavaScriptAllowed(postureKey);
+  const checkJavaScriptAllowed = useCheckHtmlArtifactJavaScriptAllowed();
 
   // The composed, CSP-carrying document for the Preview iframe (recomputed when the
   // selected artifact's markup, the zoom, OR the team's posture changes).
@@ -224,7 +226,11 @@ export function HtmlArtifactPane({ onClose }: CapabilitySidePanelProps) {
               variant="icon"
               size="small"
               icon={{ category: "outlined", type: "open_in_new" }}
-              onClick={() => openHtmlArtifactInNewTab(selected.html, selected.css, allowJavaScript)}
+              onClick={() => {
+                void checkJavaScriptAllowed().then((allowed) =>
+                  openHtmlArtifactInNewTab(selected.html, selected.css, allowed),
+                );
+              }}
               aria-label={t("capability.html_artifact.openInNewTab", { defaultValue: "Open in a new tab" })}
             />
           </Tooltip>

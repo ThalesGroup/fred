@@ -12,8 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { useEffect, useState } from "react";
 import { useSelectedTeam } from "../../../../hooks/useSelectedTeam";
-import { useTeamCapabilitySettingsQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import {
+  useLazyTeamCapabilitySettingsQuery,
+  useTeamCapabilitySettingsQuery,
+} from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 
 export const HTML_ARTIFACT_CAPABILITY_ID = "html_artifact";
 
@@ -29,9 +33,9 @@ export const HTML_ARTIFACT_CAPABILITY_ID = "html_artifact";
  * briefly renders inert and then becomes interactive is a cosmetic flicker; the
  * reverse would run script the team may not run.
  */
-export function useHtmlArtifactJavaScriptAllowed(): boolean {
+export function useHtmlArtifactJavaScriptAllowed(displayKey = ""): boolean {
   const { teamId } = useSelectedTeam();
-  const { currentData, isFetching, isError } = useTeamCapabilitySettingsQuery(
+  const { currentData, isFetching, isError, refetch } = useTeamCapabilitySettingsQuery(
     { teamId: teamId ?? "", capabilityId: HTML_ARTIFACT_CAPABILITY_ID },
     {
       skip: !teamId,
@@ -41,7 +45,48 @@ export function useHtmlArtifactJavaScriptAllowed(): boolean {
     },
   );
 
+  // A card can stay mounted while an administrator changes the posture. When
+  // the pane selects a new artifact, demand a fresh read before displaying it.
+  const [verifiedDisplay, setVerifiedDisplay] = useState<string | null>(null);
+  const identity = `${teamId ?? ""}:${displayKey}`;
+  useEffect(() => {
+    if (!teamId || !displayKey) return;
+    let active = true;
+    void refetch()
+      .unwrap()
+      .then((result) => {
+        if (active && result.settings?.allow_javascript === true) setVerifiedDisplay(identity);
+      })
+      .catch(() => {
+        // A failed refresh leaves the current display unverified.
+      });
+    return () => {
+      active = false;
+    };
+  }, [teamId, displayKey, identity, refetch]);
+
   // `data` can belong to the previous team, and a cached success can survive a
   // failed refetch. Neither is evidence of the current team's right.
-  return Boolean(teamId && !isFetching && !isError && currentData?.settings?.allow_javascript === true);
+  return Boolean(
+    teamId &&
+      !isFetching &&
+      !isError &&
+      currentData?.settings?.allow_javascript === true &&
+      (!displayKey || verifiedDisplay === identity),
+  );
+}
+
+/** Recheck at an export/open action: a mounted chat card's cached grant is not enough. */
+export function useCheckHtmlArtifactJavaScriptAllowed(): () => Promise<boolean> {
+  const { teamId } = useSelectedTeam();
+  const [read] = useLazyTeamCapabilitySettingsQuery();
+  return async () => {
+    if (!teamId) return false;
+    try {
+      const result = await read({ teamId, capabilityId: HTML_ARTIFACT_CAPABILITY_ID }, false).unwrap();
+      return result.settings?.allow_javascript === true;
+    } catch {
+      return false;
+    }
+  };
 }

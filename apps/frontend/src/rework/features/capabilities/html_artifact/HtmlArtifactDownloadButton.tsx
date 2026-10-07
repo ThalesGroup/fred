@@ -23,6 +23,7 @@ import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import type { OptionModel } from "@models/Option.model.ts";
 import { artifactHasScript, downloadHtmlArtifact } from "./htmlArtifactDocument";
 import { downloadHtmlArtifactPdf, downloadHtmlArtifactPng } from "./htmlArtifactExport";
+import { useCheckHtmlArtifactJavaScriptAllowed } from "./useHtmlArtifactJavaScript";
 
 type DownloadFormat = "html" | "pdf" | "png";
 
@@ -41,6 +42,7 @@ export default function HtmlArtifactDownloadButton({
 }) {
   const { t } = useTranslation();
   const { showError, showInfo } = useToast();
+  const checkJavaScriptAllowed = useCheckHtmlArtifactJavaScriptAllowed();
   const label = t("capability.html_artifact.download", { defaultValue: "Download" });
 
   const options: OptionModel<DownloadFormat>[] = [
@@ -68,7 +70,7 @@ export default function HtmlArtifactDownloadButton({
     if (format === "html") {
       // The saved file opens outside the app, where nothing else would deny
       // script — so the posture has to travel INSIDE the document.
-      downloadHtmlArtifact(html, css, title, allowJavaScript);
+      downloadHtmlArtifact(html, css, title, await checkJavaScriptAllowed());
       return;
     }
     // The rasterizing frame cannot run script (it grants same-origin, so granting

@@ -54,6 +54,7 @@ vi.mock("../useOpenSessionId", () => ({ useOpenSessionId: () => "s1" }));
 let allowJavaScript = true;
 vi.mock("./useHtmlArtifactJavaScript", () => ({
   useHtmlArtifactJavaScriptAllowed: () => allowJavaScript,
+  useCheckHtmlArtifactJavaScriptAllowed: () => async () => allowJavaScript,
 }));
 vi.mock("react-redux", () => ({
   useSelector: (fn: (s: unknown) => unknown) => fn({}),

@@ -789,6 +789,8 @@ export const {
     useLazyAdminTeamCapabilitySettingsQuery,
   useGetTeamCapabilitySettingsControlPlaneV1TeamsTeamIdCapabilitiesCapabilityIdSettingsGetQuery:
     useTeamCapabilitySettingsQuery,
+  useLazyGetTeamCapabilitySettingsControlPlaneV1TeamsTeamIdCapabilitiesCapabilityIdSettingsGetQuery:
+    useLazyTeamCapabilitySettingsQuery,
   // Every team's settings for one capability, so the drawer can mark the rows
   // whose options are set in one round trip instead of one request per row.
   useGetAdminCapabilityTeamSettingsMapControlPlaneV1AdminCapabilitiesCapabilityIdTeamsSettingsGetQuery:

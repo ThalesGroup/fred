@@ -43,6 +43,8 @@ const STATIC_ONLY = "<h1>hi</h1><p>nothing to run</p>";
 let html = WITH_SCRIPT;
 let artifactId = "a1";
 let extraIds: string[] = [];
+let freshPermission = true;
+const openInNewTab = vi.fn();
 
 const snapshot = (id: string) => ({
   type: "html_artifact" as const,
@@ -63,7 +65,14 @@ vi.mock("./htmlArtifactSlice", () => ({
 }));
 vi.mock("../useOpenSessionId", () => ({ useOpenSessionId: () => "s1" }));
 // The posture is resolved through RTK Query; these tests are about the tabs.
-vi.mock("./useHtmlArtifactJavaScript", () => ({ useHtmlArtifactJavaScriptAllowed: () => true }));
+vi.mock("./useHtmlArtifactJavaScript", () => ({
+  useHtmlArtifactJavaScriptAllowed: () => true,
+  useCheckHtmlArtifactJavaScriptAllowed: () => async () => freshPermission,
+}));
+vi.mock("./htmlArtifactDocument", async (original) => ({
+  ...(await original<typeof import("./htmlArtifactDocument")>()),
+  openHtmlArtifactInNewTab: (...args: unknown[]) => openInNewTab(...args),
+}));
 vi.mock("react-redux", () => ({
   useSelector: (fn: (s: unknown) => unknown) => fn({}),
   useDispatch: () => () => undefined,
@@ -108,6 +117,8 @@ beforeEach(() => {
   html = WITH_SCRIPT;
   artifactId = "a1";
   extraIds = [];
+  freshPermission = true;
+  openInNewTab.mockClear();
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -184,4 +195,13 @@ describe("HtmlArtifactPane tab close control", () => {
     expect(container.querySelectorAll('[role="tab"]').length).toBe(1);
     expect(container.querySelector('button[aria-label="Close this artifact"]')).not.toBeNull();
   });
+});
+
+it("opens a restricted new tab when a fresh check withdraws a cached grant", async () => {
+  render();
+  freshPermission = false;
+
+  await act(async () => button("Open in a new tab")!.click());
+
+  expect(openInNewTab).toHaveBeenCalledWith(WITH_SCRIPT, "", false);
 });

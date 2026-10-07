@@ -12,17 +12,35 @@ let query: {
   currentData?: { settings: { allow_javascript: boolean } };
   isFetching: boolean;
   isError: boolean;
+  refetch?: () => { unwrap: () => Promise<unknown> };
 };
+let freshAnswer = true;
+let freshError = false;
+const freshRead = vi.fn(() => ({
+  unwrap: async () => {
+    if (freshError) throw new Error("unavailable");
+    return { settings: { allow_javascript: freshAnswer } };
+  },
+}));
 
 vi.mock("../../../../hooks/useSelectedTeam", () => ({ useSelectedTeam: () => ({ teamId }) }));
 vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useTeamCapabilitySettingsQuery: () => query,
+  useLazyTeamCapabilitySettingsQuery: () => [freshRead],
 }));
 
-const { useHtmlArtifactJavaScriptAllowed } = await import("./useHtmlArtifactJavaScript");
+const { useCheckHtmlArtifactJavaScriptAllowed, useHtmlArtifactJavaScriptAllowed } = await import(
+  "./useHtmlArtifactJavaScript"
+);
 
-function Probe() {
-  return <span>{String(useHtmlArtifactJavaScriptAllowed())}</span>;
+function Probe({ displayKey = "" }: { displayKey?: string }) {
+  return <span>{String(useHtmlArtifactJavaScriptAllowed(displayKey))}</span>;
+}
+
+let checkNow: () => Promise<boolean>;
+function CheckProbe() {
+  checkNow = useCheckHtmlArtifactJavaScriptAllowed();
+  return null;
 }
 
 let container: HTMLDivElement;
@@ -30,6 +48,9 @@ let root: Root;
 
 beforeEach(() => {
   teamId = "team-a";
+  freshAnswer = true;
+  freshError = false;
+  freshRead.mockClear();
   query = { currentData: { settings: { allow_javascript: true } }, isFetching: false, isError: false };
   container = document.createElement("div");
   document.body.appendChild(container);
@@ -42,7 +63,7 @@ afterEach(() => {
 });
 
 describe("HTML artifact JavaScript posture", () => {
-  const render = () => act(() => root.render(<Probe />));
+  const render = (displayKey = "") => act(() => root.render(<Probe displayKey={displayKey} />));
 
   it("denies cached grants during a same-team refetch and after its failure", () => {
     render();
@@ -70,5 +91,35 @@ describe("HTML artifact JavaScript posture", () => {
     query = { data: { settings: { allow_javascript: true } }, isFetching: false, isError: false };
     render();
     expect(container.textContent).toBe("false");
+  });
+
+  it("requires a fresh read before showing another artifact in an open pane", async () => {
+    const pending: Array<(value: unknown) => void> = [];
+    query.refetch = () => ({ unwrap: () => new Promise((resolve) => pending.push(resolve)) });
+
+    render("artifact-a:v1");
+    expect(container.textContent).toBe("false");
+    await act(async () => pending.shift()!({ settings: { allow_javascript: true } }));
+    expect(container.textContent).toBe("true");
+
+    render("artifact-b:v1");
+    expect(container.textContent).toBe("false");
+    await act(async () => pending.shift()!({ settings: { allow_javascript: false } }));
+    expect(container.textContent).toBe("false");
+  });
+
+  it("forces a new read for an HTML export and denies errors", async () => {
+    act(() => root.render(<CheckProbe />));
+    freshAnswer = false;
+
+    expect(await checkNow()).toBe(false);
+    expect(freshRead).toHaveBeenCalledWith({ teamId: "team-a", capabilityId: "html_artifact" }, false);
+
+    freshError = true;
+    expect(await checkNow()).toBe(false);
+    teamId = undefined;
+    act(() => root.render(<CheckProbe />));
+    expect(await checkNow()).toBe(false);
+    expect(freshRead).toHaveBeenCalledTimes(2);
   });
 });

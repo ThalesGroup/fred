@@ -31,6 +31,11 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const infos: string[] = [];
 type Format = "html" | "pdf" | "png";
 let select: ((format: Format) => void | Promise<void>) | null = null;
+let freshPermission = true;
+
+vi.mock("./useHtmlArtifactJavaScript", () => ({
+  useCheckHtmlArtifactJavaScriptAllowed: () => async () => freshPermission,
+}));
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -84,6 +89,7 @@ function mount(html: string, allowJavaScript = true) {
 beforeEach(() => {
   infos.length = 0;
   select = null;
+  freshPermission = true;
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -139,5 +145,13 @@ describe("HtmlArtifactDownloadButton pre-script capture warning", () => {
     expect(downloadHtml).toHaveBeenCalledOnce();
     expect(downloadPdf).not.toHaveBeenCalled();
     expect(downloadPng).not.toHaveBeenCalled();
+  });
+
+  it("saves a restricted file when a fresh check withdraws a cached grant", async () => {
+    mount("<script>window.x=1</script>", true);
+    freshPermission = false;
+    await act(async () => void (await select!("html")));
+
+    expect(downloadHtml).toHaveBeenCalledWith("<script>window.x=1</script>", "", "My Page", false);
   });
 });
