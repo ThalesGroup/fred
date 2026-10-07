@@ -54,10 +54,17 @@ package, so every fred-agents pod that installs that package registers it.
 
 ## Rollback
 
-Roll back the code and chart normally. The new column and table are additive
-and unread by older versions; leave them in place. Agents configured with
-`ppt_builder` stop working on an older release, which does not know the
-capability; their stored configs are kept.
+1. Downgrade the control-plane schema first, while the new code still runs:
+   `alembic downgrade aac66348e27b` in the control-plane backend. The
+   downgrade lifts every `capability_pending` suspension and drops
+   `agent_instance.suspension_detail`. An older control plane does not know
+   `capability_pending` and fails listing a team's agents if one row still
+   carries it.
+2. Then roll back the code and chart normally. The fred-agents table
+   `cap_ppt_builder_analysis` is unread by older versions; leave it in place.
+
+Agents configured with `ppt_builder` stop working on an older release, which
+does not know the capability; their stored configs are kept.
 
 ## Limitations
 

@@ -78,6 +78,14 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Older control planes parse suspension_reason into an enum without this
+    # value and would fail listing the team's agents, so lift these first.
+    op.execute(
+        sa.text(
+            "UPDATE agent_instance SET suspension_reason = NULL "
+            "WHERE suspension_reason = 'capability_pending'"
+        )
+    )
     with op.batch_alter_table("agent_instance") as batch_op:
         batch_op.alter_column(
             "suspension_reason",
