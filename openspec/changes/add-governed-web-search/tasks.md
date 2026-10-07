@@ -35,6 +35,10 @@
 
 - [x] 7.1 Move the engine and providers into `fred-runtime` with their tests and dependencies; the capability keeps tools and citations; the runtime no longer imports any capability package.
 
+## 8. Long pages
+
+- [x] 8.1 Add `offset` to `fetch_url` and `next_offset` to returned pages; tell the model to use `focus` first and `offset` when the end of the text leads into the relevant part.
+
 ## Evidence
 
 Previous version: 67 focused tests and root quality gates passed; separate egress HTTPS topology was reviewed against implementation head `289b26e509aae586ae5b4b27fbc09a584cfcaf4a`. This is historical evidence, not verification of the revised transport. Current work reuses issue #2980 and branch `codex/add-governed-web-search`.
@@ -48,3 +52,5 @@ Admin view (2026-10-07): runtime KPI emission test (content-free, cost only on s
 Explicit erasure (2026-10-07): control-plane erasure fan-out, its test and the runtime per-user fence (model, migration table, store locking, test) removed; 10 runtime web-research/migration tests and 216 control-plane user/delete tests pass (one unrelated Postgres-5433 integration test needs a database not running locally); ruff and basedpyright clean.
 
 Engine in the runtime (2026-10-07): engine, providers and their tests moved with `git mv`; runtime no longer imports any capability (dev dependency and uv source removed, `trafilatura`/`httpcore` in the `app` extra, `dev` includes `app`); redundant end-to-end tool test dropped (adapter and tools stay covered separately). Runtime `make code-quality` 0 errors (5 pre-existing warnings in untouched files) and `make test` 1855 passed; proxy integration test passes; capability `make code-quality` and `make test` (5) pass; Fred Agents loads the runtime engine.
+
+Long pages (2026-10-07): `offset`/`next_offset` engine test (three consecutive slices, last one not truncated) and tool-description test; runtime web-research suites 33 passed, capability 6 passed, ruff and basedpyright clean on the touched modules. Not yet observed on a live page.

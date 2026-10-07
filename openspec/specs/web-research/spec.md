@@ -15,6 +15,11 @@ Fred SHALL expose bounded `web_search` and `fetch_url` tools only to agents for 
 - **THEN** Fred returns bounded titles, public URLs and snippets with source attribution
 - **AND** the call is recorded with its user and outcome
 
+#### Scenario: Reading the rest of a long page
+- **WHEN** a page read without focus holds more text than the per-page ceiling
+- **THEN** the result marks it truncated and gives the next offset, and a call with that offset and no focus returns the following part within the same ceiling
+- **AND** a call combining focus and offset is rejected, because the offset is a position in the full page
+
 #### Scenario: Deployment context ceilings
 - **WHEN** a tool call requests more results or page text than the deployment `max_results` or `max_chars_per_page` allows
 - **THEN** Fred returns at most those ceilings to the model and cites only the returned pages

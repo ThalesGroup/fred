@@ -188,3 +188,15 @@ def test_citations_skip_failed_duplicate_and_non_http_pages():
         ("https://a.org/y", "A"),
         ("https://d.org/page", "d.org"),
     ]
+
+
+def test_fetch_tool_tells_the_model_to_focus_long_pages():
+    fetch = next(
+        t
+        for t in WebResearchCapability().tools(context(Port()))
+        if t.name == "fetch_url"
+    )
+    assert "Never combine focus and offset" in fetch.description
+    assert "without focus and with offset set to next_offset" in fetch.description
+    schema = cast(type[BaseModel], fetch.args_schema).model_json_schema()
+    assert "Never combine with offset" in schema["properties"]["focus"]["description"]

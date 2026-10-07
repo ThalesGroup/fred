@@ -262,14 +262,19 @@ class ResearchEngine:
                             content, request.focus or "", request.max_passages
                         )
                     )
+                end = request.offset + request.max_chars
                 return WebPage(
                     url=request.url,
                     final_url=url,
                     title=title,
                     status=response.status_code,
                     content_type=content_type[:128],
-                    content=content[: request.max_chars],
-                    truncated=truncated or len(content) > request.max_chars,
+                    content=content[request.offset : end],
+                    truncated=truncated or len(content) > end,
+                    # A continuation point only exists in the full, unfocused text.
+                    next_offset=end
+                    if len(content) > end and not request.focus
+                    else None,
                 )
         raise WebResearchError("too_many_redirects")
 

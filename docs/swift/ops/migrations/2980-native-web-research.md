@@ -88,7 +88,10 @@ outbound I/O. Saturation returns `busy`; each activity write has its own 5-secon
 storage deadline. Defaults also bound pages to 5 MiB and ports 80/443. To limit
 model context, at most `max_results` (default 5) results and `max_chars_per_page`
 (default 6,000) characters per read page reach the model, whatever the tool
-arguments request. Configure these, `max_bytes`, `retries` and the `safesearch`
+arguments request. For longer pages the model passes `focus` to get the relevant
+passages, or reads without `focus` and continues with `offset` from the previous
+`next_offset` (the two are mutually exclusive); each
+continuation re-downloads the page and adds tokens, but is not billed by the provider. Configure these, `max_bytes`, `retries` and the `safesearch`
 floor at deployment level. Direct access pins vetted public DNS addresses to connections.
 All modes check redirects, refuse binary/compressed responses and isolate cookies.
 Extraction/focus runs in bounded worker threads.

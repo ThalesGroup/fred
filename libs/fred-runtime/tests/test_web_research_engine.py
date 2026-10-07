@@ -143,6 +143,53 @@ async def test_text_fetch_is_bounded_and_focus_selects_passages():
 
 
 @pytest.mark.asyncio
+async def test_long_page_continues_from_next_offset():
+    from fred_runtime.app.web_research_engine import ResearchEngine
+    from fred_sdk.contracts.web_research import FetchRequest
+
+    text = "a" * 500 + "b" * 500 + "c" * 200
+
+    def respond(request):
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/plain"},
+            stream=httpx.ByteStream(text.encode()),
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+        engine = ResearchEngine(
+            WebResearchDeploymentConfig(enabled=True), Provider(), client
+        )
+        first = await engine.fetch(
+            FetchRequest(url="https://example.com", max_chars=500)
+        )
+        assert (
+            first.truncated
+            and first.next_offset == 500
+            and set(first.content or "") == {"a"}
+        )
+        second = await engine.fetch(
+            FetchRequest(
+                url="https://example.com", max_chars=500, offset=first.next_offset
+            )
+        )
+        assert second.next_offset == 1000 and set(second.content or "") == {"b"}
+        last = await engine.fetch(
+            FetchRequest(url="https://example.com", max_chars=500, offset=1000)
+        )
+        assert last.content == "c" * 200
+        assert not last.truncated and last.next_offset is None
+        focused = await engine.fetch(
+            FetchRequest(
+                url="https://example.com", max_chars=500, focus="aaaa bbbb cccc"
+            )
+        )
+        assert focused.truncated and focused.next_offset is None
+    with pytest.raises(ValueError, match="cannot be combined"):
+        FetchRequest(url="https://example.com", focus="evidence", offset=500)
+
+
+@pytest.mark.asyncio
 async def test_provider_uses_guarded_client_and_actual_safesearch_parameter():
     from urllib.parse import parse_qs
 

@@ -31,9 +31,26 @@ class FetchArguments(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     url: str = Field(min_length=1, max_length=4096)
-    focus: str | None = Field(default=None, max_length=2048)
+    focus: str | None = Field(
+        default=None,
+        max_length=2048,
+        description=(
+            "Key terms of what you are looking for. Selects the matching passages "
+            "anywhere in the page; without it the page is read from the start or from offset. "
+            "Never combine with offset."
+        ),
+    )
     max_passages: int = Field(default=8, ge=1, le=20)
     max_chars: int = Field(default=12_000, ge=500, le=50_000)
+    offset: int = Field(
+        default=0,
+        ge=0,
+        le=10_000_000,
+        description=(
+            "Continue reading the full page from this character: pass the previous "
+            "result's next_offset, without focus."
+        ),
+    )
     include_links: bool = False
 
     @field_validator("url")
@@ -54,6 +71,15 @@ class FetchArguments(BaseModel):
         if not valid:
             raise ValueError("unsupported_url")
         return value
+
+    @model_validator(mode="after")
+    def offset_reads_the_full_page(self) -> FetchArguments:
+        # next_offset is a position in the full page, meaningless inside focused passages.
+        if self.offset and self.focus:
+            raise ValueError(
+                "focus and offset cannot be combined; omit focus to continue a page"
+            )
+        return self
 
 
 class WebSearchRequest(WebSearchArguments):
@@ -81,6 +107,8 @@ class WebPage(BaseModel):
     content_type: str | None = Field(default=None, max_length=128)
     status: int | None = Field(default=None, ge=100, le=599)
     truncated: bool = False
+    # Offset of the text that follows, when the page continues past this result.
+    next_offset: int | None = Field(default=None, ge=0)
     error_code: str | None = Field(default=None, pattern=r"^[a-z_]{1,64}$")
 
 

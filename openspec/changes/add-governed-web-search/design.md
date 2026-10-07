@@ -24,6 +24,8 @@ The existing package has a reusable asynchronous DuckDuckGo/extraction engine wr
 
 9. **Engine in the runtime, capability as a plain plugin.** Like every other capability (document search, workspace filesystem, conversation filesystem), the SDK declares the port, `fred-runtime` implements it and the capability only calls `ctx.services.web_research`. The engine and providers move from the capability package to `fred_runtime/app/web_research_engine.py` and `web_research_providers.py`; `trafilatura`/`httpcore` join the runtime `app` extra. The runtime no longer imports a capability (previously an undeclared dependency that failed at startup without the plugin), and the capability keeps only tools and citations. No behavior change.
 
+10. **Reading long pages.** `fetch_url` returns at most `max_chars_per_page`. `focus` stays the primary way to reach relevant passages anywhere in the page; `offset` continues from the previous result's `next_offset` when the returned text ends just before what is needed. Offsets are positions in the full page, so `focus` and `offset` are mutually exclusive (rejected together) and `next_offset` is only returned for unfocused reads. Each continuation re-downloads the page (bounded by `max_bytes`, not billed by the provider) and adds model tokens, so the tool description makes it a deliberate choice rather than a full-page read.
+
 ## Risks / Trade-offs
 
 - Brave availability, quotas and pricing are commercial prerequisites; no live Brave call is claimed by mocked-transport tests.
