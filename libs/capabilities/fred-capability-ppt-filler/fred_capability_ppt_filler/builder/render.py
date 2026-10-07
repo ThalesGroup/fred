@@ -74,6 +74,7 @@ _NO_WRAP_MARGIN = 1.06
 _R_NS = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
 _MEDIA_RELS = ("/image", "/media", "/video", "/audio", "/hdphoto")
 _HYPERLINK_REL = "/hyperlink"
+_SECTIONS_EXT_URI = "{521415D9-36F7-43E2-AB2F-B90AF26B5E84}"
 # Elements meaningless without their uncopied target (a link to another slide).
 _DROPPED_LINKS = frozenset(
     qn(tag) for tag in ("a:hlinkClick", "a:hlinkHover", "p:tags")
@@ -282,12 +283,18 @@ def _duplicate_slide(presentation, source):
 
 
 def _remove_slides(presentation, slide_ids: Sequence[int]) -> None:
+    """Drop the template's own slides, and its sections with them."""
     wanted = set(slide_ids)
     id_list = presentation.slides._sldIdLst
     for sldId in list(id_list):
         if sldId.id in wanted:
             presentation.part.drop_rel(sldId.rId)
             id_list.remove(sldId)
+    # Sections list the template's slides, never the copies: kept, they make
+    # PowerPoint repair the file, and their names mean nothing in a new deck.
+    for ext in presentation.part._element.findall(f"{qn('p:extLst')}/{qn('p:ext')}"):
+        if ext.get("uri") == _SECTIONS_EXT_URI:
+            ext.getparent().remove(ext)
 
 
 # --- shape addressing -----------------------------------------------------------

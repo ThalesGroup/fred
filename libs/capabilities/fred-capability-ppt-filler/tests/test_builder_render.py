@@ -61,6 +61,7 @@ from fred_capability_ppt_filler.builder.render import (
     _write_lines,
     render_deck,
 )
+from fred_capability_ppt_filler.builder.preview import build_patterns_deck
 from fred_capability_ppt_filler.builder.tools import catalogue
 from fred_capability_ppt_filler.images import prepare_picture
 from fred_capability_ppt_filler.traversal import walk_shapes
@@ -963,6 +964,27 @@ def test_builtin_process_with_three_steps_drops_the_fourth():
         if p.shape.has_text_frame
     }
     assert tops["Un"] == tops["Deux"] > Inches(2).emu
+
+
+def _section_slide_ids(presentation) -> list[str]:
+    return [
+        el.get("id")
+        for el in presentation.part._element.iter(
+            "{http://schemas.microsoft.com/office/powerpoint/2010/main}sldId"
+        )
+    ]
+
+
+def test_rendered_and_patterns_decks_carry_no_stale_sections():
+    """The built-in template's sections name its own slides, which the render
+    removes: a section list naming vanished slides makes PowerPoint repair."""
+    content, inventory = builtin.builtin_template()
+    assert _section_slide_ids(Presentation(io.BytesIO(content)))
+    cover = next(p for p in inventory.patterns if p.kind == "cover")
+    _, deck = _render(_on(cover, title="Titre"), template=content, inventory=inventory)
+    assert _section_slide_ids(deck) == []
+    patterns = Presentation(io.BytesIO(build_patterns_deck(content, inventory)))
+    assert _section_slide_ids(patterns) == []
 
 
 def test_an_unfilled_placeholder_is_removed_not_left_prompting():
