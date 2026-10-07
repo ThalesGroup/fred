@@ -19,28 +19,26 @@
   overflow: hidden;
   color: var(--on-surface);
   --card-bg: var(--surface-container-low);
-  --card-hover-bg: var(--surface-container);
 }
 
 .card[data-checked="true"] {
   --card-bg: var(--surface-container);
-  --card-hover-bg: var(--surface-container-high);
 }
 
 .header {
   display: flex;
   align-items: center;
   gap: var(--spacing-m);
-  transition: background var(--duration-short-4) var(--easing-standard);
+  transition: box-shadow var(--duration-short-4) var(--easing-standard);
   cursor: pointer;
   background: var(--card-bg);
   padding: var(--spacing-xs) var(--spacing-m);
   user-select: none;
 }
 
-/* Hover steps one surface up, like the Simple pack cards. */
+/* State layer as an inset shadow: unlike a gradient it can fade in. */
 .header:hover {
-  background: var(--card-hover-bg);
+  box-shadow: inset 0 0 0 100vmax var(--state-on-surface-hover);
 }
 
 .meta {
