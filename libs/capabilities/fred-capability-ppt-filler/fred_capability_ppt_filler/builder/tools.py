@@ -961,7 +961,7 @@ def build_builder_tools(
             ):
                 return _error(_UNCHANGED)
 
-        def evaluated(stored: DeckPlan) -> None:
+        def refused(stored: DeckPlan) -> None:
             turn_base[:] = [stored]
             turn_parent[:] = [] if base is None else [base]
             turn_shape[0] = shape
@@ -998,7 +998,7 @@ def build_builder_tools(
         if repeats and deck_delivered(history()):
             repeats = []
         if assignment.problems:
-            evaluated(plan)
+            refused(plan)
             return _needs_revision(
                 assignment,
                 plan,
@@ -1009,7 +1009,7 @@ def build_builder_tools(
             )
         previous_problems.clear()
         if repeats:
-            evaluated(plan)
+            refused(plan)
             return _variety_revision(repeats, assignment)
 
         if workspace is None:
@@ -1093,7 +1093,11 @@ def build_builder_tools(
                 "The deck was built but could not be saved to the conversation files, so the "
                 "user cannot get it. Tell the user and suggest trying again in a moment."
             )
-        evaluated(deck)
+        # Delivered, the deck is the base: the same changes sent again are a
+        # new change to it, not a corrected resend of a refused one.
+        turn_base[:] = [deck]
+        turn_parent.clear()
+        turn_shape[0] = None
         await plans.write(deck)
 
         if result.warnings:

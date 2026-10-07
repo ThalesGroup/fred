@@ -616,6 +616,25 @@ async def test_a_corrected_resend_of_refused_changes_replaces_them(
 
 
 @pytest.mark.asyncio
+async def test_the_same_changes_after_a_delivery_are_a_new_change(monkeypatch):
+    """Two inserts of one shape in one turn, the first delivered: the second
+    adds to that deck, it never replaces the first insert."""
+    turn = _Turn(monkeypatch, FakeWorkspace())
+    await turn.build(slides=[COVER, {"title": "Agenda", "bullets": ["a"]}])
+    for title in ("A", "B"):
+        text, result = await turn.build(
+            changes=[{"op": "insert", "after": 2, "slides": [{"title": title}]}]
+        )
+        assert not result.is_error, text
+    assert [s.title for s in turn.rendered[-1].slides] == [
+        "Kick-off",
+        "Agenda",
+        "B",
+        "A",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_null_slides_and_a_single_change_object_are_read(monkeypatch):
     turn = _Turn(monkeypatch, FakeWorkspace())
     await turn.build(slides=[COVER, {"title": "Agenda", "bullets": ["a"]}])
