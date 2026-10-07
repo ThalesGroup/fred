@@ -219,6 +219,39 @@ async def test_get_agent_instances_requires_can_use_team_agents(
 
 
 @pytest.mark.asyncio
+async def test_readiness_check_requires_can_update_agents_and_own_credential(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import inspect
+
+    from fred_core.security.oidc import require_own_credential
+
+    get_team = AsyncMock(return_value=_FAKE_TEAM_ID)
+    monkeypatch.setattr(product_api, "require_team_access", get_team)
+    monkeypatch.setattr(
+        product_api,
+        "recheck_agent_instance_readiness",
+        AsyncMock(return_value=object()),
+    )
+
+    deps = cast(Any, SimpleNamespace(team_dependencies=SimpleNamespace()))
+    request = cast(Any, SimpleNamespace(headers={}))
+    await product_api.post_team_agent_instance_readiness_check(
+        TeamId("t"), "agent-1", deps, request, _user()
+    )
+
+    assert get_team.await_args is not None
+    assert get_team.await_args.kwargs["required_permissions"] == [
+        TeamPermission.CAN_UPDATE_AGENTS
+    ]
+    # An asserted person (no credential of their own) is refused at the door.
+    user_param = inspect.signature(
+        product_api.post_team_agent_instance_readiness_check
+    ).parameters["user"]
+    assert user_param.default.dependency is require_own_credential
+
+
+@pytest.mark.asyncio
 async def test_record_prompt_use_requires_can_use_team_agents(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
