@@ -26,18 +26,24 @@ import type { CapabilityChatTurnControlProps, RagScopeName } from "../types";
 
 export interface RagScopeControlParams {
   default?: RagScopeName;
+  /** Choices the agent's document sources allow; absent means all. */
+  options?: RagScopeName[] | null;
 }
 
-export function RagScopeControl({ composer, open, onToggleOpen }: CapabilityChatTurnControlProps) {
+export function RagScopeControl({ params, composer, open, onToggleOpen }: CapabilityChatTurnControlProps) {
   const { t } = useTranslation();
+  const offered = (params as RagScopeControlParams).options;
 
   const options = useMemo<EnumSelectOption<RagScopeName>[]>(
-    () => [
-      { value: "corpus_only", label: t("chatbot.composerSettings.scopeCorpus") },
-      { value: "hybrid", label: t("chatbot.composerSettings.scopeCorpusAndWeb") },
-      { value: "general_only", label: t("chatbot.composerSettings.scopeGeneral") },
-    ],
-    [t],
+    () =>
+      (
+        [
+          { value: "corpus_only", label: t("chatbot.composerSettings.scopeCorpus") },
+          { value: "hybrid", label: t("chatbot.composerSettings.scopeCorpusAndWeb") },
+          { value: "general_only", label: t("chatbot.composerSettings.scopeGeneral") },
+        ] satisfies EnumSelectOption<RagScopeName>[]
+      ).filter((option) => !offered || offered.includes(option.value)),
+    [t, offered],
   );
 
   return (
