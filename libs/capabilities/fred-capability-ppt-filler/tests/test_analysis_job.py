@@ -37,6 +37,7 @@ from fred_capability_ppt_filler.builder.analysis_job import (
     status_response,
 )
 from fred_capability_ppt_filler.builder.capability import (
+    PPT_BUILDER_TEMPLATE_KEY,
     PptBuilderCapability,
     PptBuilderConfig,
 )
@@ -247,7 +248,7 @@ async def test_changing_the_toggle_or_the_rules_re_runs_the_analysis(
 @pytest.mark.asyncio
 async def test_a_lost_row_is_rebuilt_from_the_stored_template(analysis_db):
     stored = PptBuilderConfig(template_sha256=SHA, use_vision=False)
-    assets = FakeAssets({stored.template_key: TEMPLATE})
+    assets = FakeAssets({PPT_BUILDER_TEMPLATE_KEY: TEMPLATE})
     assert (await PptBuilderCapability().readiness(stored, IDENTITY)).state == "failed"
     await _save(stored, assets=assets)
     await drain()
