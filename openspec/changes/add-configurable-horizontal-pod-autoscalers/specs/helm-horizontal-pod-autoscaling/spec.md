@@ -25,12 +25,17 @@ The chart SHALL render an `autoscaling/v2` HorizontalPodAutoscaler for an applic
 - **WHEN** autoscaling is enabled for an application whose Deployment is disabled
 - **THEN** chart rendering fails with an actionable validation error
 
-### Requirement: Knowledge Flow worker policy examples
+### Requirement: HPA policy examples for chart Deployments
 
-The chart's default values SHALL provide disabled, independent CPU-based HPA examples for the common, extraction-fast, extraction-medium, and extraction-rich Knowledge Flow workers using their respective replica bounds, CPU utilization targets, scale-up policies, and scale-down stabilization and policies.
+The chart's default values SHALL provide disabled CPU-based HPA policy examples for every chart-managed Deployment. The common, extraction-fast, extraction-medium, and extraction-rich Knowledge Flow workers SHALL use their respective replica bounds, CPU utilization targets, scale-up policies, and scale-down stabilization and policies supplied for those roles. Other Deployments SHALL have independently configurable example policies. All examples SHALL remain disabled by default.
 
 #### Scenario: Render the four worker HPAs
 
-- **WHEN** deployment values enable autoscaling for the Knowledge Flow worker Deployments and the chart is rendered
-- **THEN** each of the four workers has an HPA targeting its corresponding Deployment
-- **AND** each HPA reflects the policy configured for that worker role
+- **WHEN** deployment values enable autoscaling for chart Deployments and the chart is rendered
+- **THEN** each enabled Deployment has an HPA targeting its corresponding Deployment
+- **AND** each HPA reflects that application's configured policy
+
+#### Scenario: Scaling Fred Agents above one replica with local storage
+
+- **WHEN** Fred Agents autoscaling is enabled with `maxReplicas` greater than one and its filesystem backend is local
+- **THEN** chart rendering fails with guidance to configure shared storage

@@ -54,12 +54,14 @@ Applications can opt into an `autoscaling/v2` HorizontalPodAutoscaler under
 `applications.<name>.autoscaling`. Set `enabled: true`, `minReplicas`, `maxReplicas`,
 and a Kubernetes resource `metrics` list. Optional `behavior.scaleUp` and
 `behavior.scaleDown` values use the Kubernetes HPA behavior fields directly. The chart
-ships CPU policies for the four Knowledge Flow workers as disabled examples; copy or
-adjust them in your deployment values and enable only the workers you deploy. An enabled
-HPA requires that application's Deployment to be enabled. CPU utilization targets require
-CPU requests on the pod, and the cluster must provide the Kubernetes metrics API. When an
-HPA is active, configure your deployment reconciler not to continuously overwrite the
-Deployment replica count.
+ships disabled CPU policy examples for every Deployment. The four Knowledge Flow worker
+examples preserve their separate queue-specific limits; the other applications have
+conservative starting values. Adjust each policy and set CPU requests for its container
+before enabling it. An enabled HPA requires that application's Deployment to be enabled,
+CPU requests on its container, and the cluster's Kubernetes metrics API. While an HPA is
+active, the chart leaves `spec.replicas` unset so the HPA can own the Deployment's replica
+count. `fred-agents` must use shared storage (`gcs` or `minio`) if its autoscaling
+`maxReplicas` is greater than one.
 
 With `storage.*_store.type: opensearch` in `fred-agents` or `knowledge-flow-backend`, the
 application creates its indexes at startup.

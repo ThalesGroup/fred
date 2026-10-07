@@ -8,7 +8,7 @@ Tracking: to be linked to the existing GitHub issue or created before implementa
 
 - Add optional per-application HPA configuration to chart values, including replica bounds, resource metrics, and Kubernetes scaling behavior.
 - Render an `autoscaling/v2` HorizontalPodAutoscaler targeting the configured application's Deployment.
-- Add the supplied CPU thresholds and scaling policies as opt-in examples for the four Knowledge Flow worker roles in the chart's default values.
+- Add disabled CPU HPA policy examples for every chart-managed Deployment in the chart's default values, preserving the supplied policies for the four Knowledge Flow worker roles.
 - Validate and document the new values; leave autoscaling disabled by default so existing installations retain fixed replica counts.
 
 ## Capabilities

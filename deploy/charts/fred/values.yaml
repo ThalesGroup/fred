@@ -546,6 +546,31 @@ applications:
     deployment:
       enabled: true
     replicaCount: 1
+    # CPU autoscaling example. Add CPU requests to deployment values before enabling.
+    autoscaling:
+      enabled: false
+      minReplicas: 1
+      maxReplicas: 3
+      metrics:
+        - type: Resource
+          resource:
+            name: cpu
+            target:
+              type: Utilization
+              averageUtilization: 70
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: 0
+          policies:
+            - type: Pods
+              value: 1
+              periodSeconds: 60
+        scaleDown:
+          stabilizationWindowSeconds: 600
+          policies:
+            - type: Pods
+              value: 1
+              periodSeconds: 180
     statefulset:
       enabled: false
     job:
@@ -1031,6 +1056,31 @@ applications:
     deployment:
       enabled: true
     replicaCount: 1
+    # CPU autoscaling example. Add CPU requests to deployment values before enabling.
+    autoscaling:
+      enabled: false
+      minReplicas: 1
+      maxReplicas: 3
+      metrics:
+        - type: Resource
+          resource:
+            name: cpu
+            target:
+              type: Utilization
+              averageUtilization: 70
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: 0
+          policies:
+            - type: Pods
+              value: 1
+              periodSeconds: 60
+        scaleDown:
+          stabilizationWindowSeconds: 600
+          policies:
+            - type: Pods
+              value: 1
+              periodSeconds: 180
     statefulset:
       enabled: false
     job:
@@ -1240,6 +1290,31 @@ applications:
     deployment:
       enabled: true
     replicaCount: 1
+    # CPU autoscaling example. Add CPU requests to deployment values before enabling.
+    autoscaling:
+      enabled: false
+      minReplicas: 1
+      maxReplicas: 3
+      metrics:
+        - type: Resource
+          resource:
+            name: cpu
+            target:
+              type: Utilization
+              averageUtilization: 70
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: 0
+          policies:
+            - type: Pods
+              value: 1
+              periodSeconds: 60
+        scaleDown:
+          stabilizationWindowSeconds: 600
+          policies:
+            - type: Pods
+              value: 1
+              periodSeconds: 180
     statefulset:
       enabled: false
     job:
@@ -1883,6 +1958,31 @@ applications:
     deployment:
       enabled: true
     replicaCount: 1
+    # CPU autoscaling example. Add CPU requests to deployment values before enabling.
+    autoscaling:
+      enabled: false
+      minReplicas: 1
+      maxReplicas: 3
+      metrics:
+        - type: Resource
+          resource:
+            name: cpu
+            target:
+              type: Utilization
+              averageUtilization: 70
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: 0
+          policies:
+            - type: Pods
+              value: 1
+              periodSeconds: 60
+        scaleDown:
+          stabilizationWindowSeconds: 600
+          policies:
+            - type: Pods
+              value: 1
+              periodSeconds: 180
     statefulset:
       enabled: false
     job:
@@ -2178,6 +2278,31 @@ applications:
     deployment:
       enabled: false
     replicaCount: 1
+    # CPU autoscaling example. Add CPU requests to deployment values before enabling.
+    autoscaling:
+      enabled: false
+      minReplicas: 1
+      maxReplicas: 3
+      metrics:
+        - type: Resource
+          resource:
+            name: cpu
+            target:
+              type: Utilization
+              averageUtilization: 70
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: 0
+          policies:
+            - type: Pods
+              value: 1
+              periodSeconds: 60
+        scaleDown:
+          stabilizationWindowSeconds: 600
+          policies:
+            - type: Pods
+              value: 1
+              periodSeconds: 180
     statefulset:
       enabled: false
     job:

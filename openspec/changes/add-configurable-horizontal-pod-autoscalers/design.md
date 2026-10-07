@@ -19,7 +19,8 @@
 - Place optional autoscaling settings on each `applications.<name>` entry so a policy can be set independently for each Deployment.
 - Render an HPA only when that application's deployment and autoscaling are enabled. Use `applicationName` for its target and resource name.
 - Keep the chart's `replicaCount` as the initial Deployment replica count; Kubernetes HPA owns subsequent scaling while present.
-- Include the four supplied worker policies as disabled examples in the chart's default values. Environments opt in through their own Helm values, so the portable defaults remain inactive.
+- Include disabled CPU HPA examples for every chart-managed Deployment in the chart's default values. Preserve the supplied worker policies and use conservative, adjustable examples for other Deployments. Environments opt in through their own Helm values, so the portable defaults remain inactive.
+- When `fred-agents` autoscaling can raise the replica count above one, enforce the same shared-storage requirement as a fixed multi-replica deployment; local filesystem state is not safe across independently scaled pods.
 - Extend the chart's authoritative values schema and chart guide alongside the values and template.
 
 ## Risks / Trade-offs
@@ -27,3 +28,4 @@
 - CPU utilization requires CPU requests on target containers; verify the worker values resolve requests before enabling the policies.
 - HPA and a GitOps controller that continuously enforces Deployment replicas can conflict; operators must configure ownership consistently.
 - HPA resources require the cluster's metrics API to report CPU usage.
+- CPU-utilization policies require per-container CPU requests in deployment values; chart defaults do not define them for every application.
