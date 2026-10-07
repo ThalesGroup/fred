@@ -26,6 +26,8 @@ package, so every fred-agents pod that installs that package registers it.
   Azure and Mistral Medium profiles. Operators with a private catalogue overlay
   add `supports_vision: true` to their multimodal profiles; without it, template
   slides are labelled by rules only and the agent form says so.
+- Add `supports_vision` to an overlay only once the new fred-agents image is
+  rolled out: older pods reject unknown model profile keys and fail to boot.
 - No new secret, endpoint or permission: labelling goes through the agent's
   own routed chat model, within the team's usable models.
 
