@@ -653,6 +653,12 @@ mean 54 chars with 5/11 rebuilds (E), 83 chars with 5/13 rebuilds (F).
 
 ## Checks
 
+- WP30 (template preparation guide, frontend and Help Center only, 2026-10-07):
+  `npx tsc --noEmit -p .` clean; `npx prettier --check` clean on the touched files;
+  `npx vitest run` on `helpCenter/`, `HelpCenterPage/` and `ppt_builder/`: 8 files,
+  57 passed (new: `TemplateGuideLink` fr and en targets, new tab; the guide page
+  resolves in both languages); full `npx vitest run`: 301 files passed, 1 skipped,
+  3419 tests passed, 7 skipped. Not proven: the link and the page in a browser.
 - WP26 (variety ask counts misfit slides by their closest fit): package `make code-quality`
   passed (basedpyright 0 errors, the 1 warning in `tests/builder_decks.py` untouched);
   `make test` 425 passed, 5 skipped (the reference-template tests). Added

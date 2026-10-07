@@ -335,3 +335,10 @@ Owns: `plan.py` (`capacity_text`), `assign.py` (shortening options), `tools.py` 
 - [ ] 29.1 One generic rule turns a zone's measured room into a word budget (`floor((chars per line + 1) / 7)` per line × lines, floor 1, "1 short word" under 6 chars per line), quoted before the chars everywhere the model reads a room: catalogue, schema hints, `needs_revision` reasons and options, kind advice. Same rooms, same fit check, no template-specific logic, no sample-text example (D22)
 - [ ] 29.2 Tests: the wording for 1-word, multi-word, multi-line and under-6-char rooms; a shortening option names words and chars; schema hints and catalogue on the Paintress and built-in references read coherently
 - [ ] 29.3 Package `make code-quality` + `make test`; eval strictly sequential, WP21 settings (Paintress rules, 14 prompts, `--no-builtin`, `template_slide` max 1): small + stand-in (vs A), medium + stand-in (vs C); `verification.md` with success, first call, calls, figure-label and cover-subtitle too-long problems, decks ×3+, tokens, and a keep/revert recommendation
+
+## WP30. Template preparation guide
+
+Owns: Help Center `guides/prepare-powerpoint-template.md` (fr + en), `PptBuilderTemplatePanel` (guide link), `verification.md`.
+
+- [x] 30.1 Help Center page "Préparer son template PowerPoint" / "Prepare your PowerPoint template" in `guides`, written from the analysis rules (example slides before layouts, one slide per design, the `SlideKind` list, `kind:`/`label:` notes, kind names and shape-name roles, repeat groups, measured room, picture zones and framed pictures, data tables, exclusion reasons, review, re-analysis), with a do/avoid table; linked from the capabilities page and the guides index
+- [x] 30.2 A discreet "How to prepare your template?" link at the end of the template card opens the page in the Help Center language matching the app, in a new tab. Tests: the link's text, target and language; the page exists in both languages
