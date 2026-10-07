@@ -332,9 +332,9 @@ Owns: `assign.py` (close kinds, problems, notes), `tools.py` and `render.py` (me
 
 Owns: `plan.py` (`capacity_text`), `assign.py` (shortening options), `tools.py` (catalogue header), `design.md` D22, delta spec, tests, `verification.md`.
 
-- [ ] 29.1 One generic rule turns a zone's measured room into a word budget (`floor((chars per line + 1) / 7)` per line × lines, floor 1, "1 short word" under 6 chars per line), quoted before the chars everywhere the model reads a room: catalogue, schema hints, `needs_revision` reasons and options, kind advice. Same rooms, same fit check, no template-specific logic, no sample-text example (D22)
-- [ ] 29.2 Tests: the wording for 1-word, multi-word, multi-line and under-6-char rooms; a shortening option names words and chars; schema hints and catalogue on the Paintress and built-in references read coherently
-- [ ] 29.3 Package `make code-quality` + `make test`; eval strictly sequential, WP21 settings (Paintress rules, 14 prompts, `--no-builtin`, `template_slide` max 1): small + stand-in (vs A), medium + stand-in (vs C); `verification.md` with success, first call, calls, figure-label and cover-subtitle too-long problems, decks ×3+, tokens, and a keep/revert recommendation
+- [x] 29.1 One generic rule turns a zone's measured room into a word budget (`floor((chars per line + 1) / 7)` per line × lines, floor 1, "1 short word" under 6 chars per line), quoted before the chars everywhere the model reads a room: catalogue, schema hints, `needs_revision` reasons and options, kind advice. Same rooms, same fit check, no template-specific logic, no sample-text example (D22)
+- [x] 29.2 Tests: the wording for 1-word, multi-word, multi-line and under-6-char rooms; a shortening option names words and chars; schema hints and catalogue on the Paintress and built-in references read coherently
+- [x] 29.3 Package `make code-quality` + `make test`; eval strictly sequential, WP21 settings (Paintress rules, 14 prompts, `--no-builtin`, `template_slide` max 1): small + stand-in (vs A), medium + stand-in (vs C); `verification.md` with success, first call, calls, figure-label and cover-subtitle too-long problems, decks ×3+, tokens, and a keep/revert recommendation
 
 ## WP30. Template preparation guide
 

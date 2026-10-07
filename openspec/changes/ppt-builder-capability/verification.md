@@ -1,6 +1,6 @@
 # Verification: ppt-builder-capability
 
-Evidence for WP9, WP11, WP12, WP13, WP15, WP16, WP17, WP18, WP19, WP20, WP21 and WP22 (design D11). Run on 2026-10-05 on a developer laptop. This is
+Evidence for WP9, WP11, WP12, WP13, WP15, WP16, WP17, WP18, WP19, WP20, WP21, WP22 and WP29 (design D11). Run on 2026-10-05 on a developer laptop. This is
 evidence for the tool path and the analysis, not for the UI.
 
 ## How it was run
@@ -586,6 +586,54 @@ mean 54 chars with 5/11 rebuilds (E), 83 chars with 5/13 rebuilds (F).
   mistral-small, the admin default; its figures rule does not change what either model writes here.
   If a shorter answer is wanted, the place to measure next is the delivery message itself (it already
   steers the model and is model-independent), not an author prompt.
+
+## Results: WP29 (limits phrased in words)
+
+Run on 2026-10-07 on `0342e5d3a` (words) and on `be7eefa06`, the commit before it (baseline: the
+package's source at that commit, `git archive` into the scratchpad and put first on `PYTHONPATH`,
+same venv), WP21's options (`eval/run_eval.py --no-builtin --modes rules --variety template_slide
+--max-uses 1`, Paintress `~/fred-tmp/paintress.pptx`, 14 prompts, stand-in agent prompt, no contact
+sheets), four processes strictly one after the other, no 429 or quota line in any log. A and C
+(WP21) are not comparable as a baseline: WP23–WP28 changed the tool since (close-kind fallback,
+message texts, renderer notes), so the baseline was re-run. One run per cell. Fit problems: counted
+as in WP21 (a `needs_revision` entry split into its problems); "label elements" counts each
+`items[i].label` named as too long on a figures slide.
+
+| cell | model | code | success | apart | first call | tool calls | problem slides | figure labels too long (elements) | cover subtitle too long | decks ×3+ | max kind repeat (mean) | slides (mean) | tokens in/out (k) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| A (WP21) | small | WP21 | 13/13 | 1 image id | 3 | 30 | 24 | 6 | 3 | 7 | 6 (3.31) | 7.5 | 132/39 |
+| base | small | `be7eefa06` | 11/11 | 3 image id | 2 | 28 | 24 | 9 (14) | 4 | 8 | 5 (3.18) | 7.8 | 126/35 |
+| words | small | `0342e5d3a` | 11/11 | 3 image id | 4 | 23 | 10 | 4 (6) | 2 | 5 | 4 (2.27) | 6.8 | 109/25 |
+| C (WP21) | medium | WP21 | 14/14 | – | 5 | 25 | 9 | 2 | 0 | 8 | 6 (3.00) | 7.4 | 83/15 |
+| base | medium | `be7eefa06` | 14/14 | – | 7 | 23 | 8 | 1 (2) | 0 | 9 | 5 (2.93) | 7.0 | 80/17 |
+| words | medium | `0342e5d3a` | 14/14 | – | 5 | 24 | 5 | 1 (3) | 0 | 8 | 5 (2.86) | 7.7 | 92/14 |
+
+No failure in any cell; the "apart" runs are the eval's invented-image-id artifact (no
+`document_content` port), on different prompts per run. Truncated, lost, leftovers and removed-by-check
+are 0 in all four cells. Run dirs (not committed): `target/eval-wp29-{small,medium}-{base,words}`.
+
+- **Small (the target):** every measure moves the right way. First call 2 → 4, build calls 28 →
+  23, problem slides 24 → 10, too-long figure labels 9 → 4 problems (14 → 6 labels), cover
+  subtitles 4 → 2, decks with a kind on 3+ slides 8 → 5, tokens −13 % in / −29 % out (fewer
+  repair rounds outweigh the longer description).
+- **Medium:** neutral. Same success, calls 23 → 24, problem slides 8 → 5, labels unchanged (1),
+  first call 7 → 5 (WP21's C had 5: within one-run noise), input tokens +15 % (longer decks, 7.7
+  vs 7.0 slides, and two more variety asks), output −18 %.
+- **Cost:** the Paintress description grows 4 712 → 5 390 chars and the schema 4 601 → 4 973
+  chars (≈ +300 tokens per model call); paid back on small by the saved rounds.
+- **Wording, before → after** (Paintress): `label ≈12 chars` → `label 1 word (≈12 chars)`;
+  `subtitle ≈32 chars` → `subtitle ≤4 words (≈32 chars)`; option `shorten items[1].label to
+  ≈12 chars` → `shorten items[1].label to 1 word (≈12 chars)`; hint `Room: ≈71 chars; cover ≈12
+  chars × 3 lines` → `Room: ≤10 words (≈71 chars); cover ≤3 words (≈12 chars × 3 lines)`.
+- **Generic rule checked on two templates and the synthetic test inventories:** Paintress and
+  the built-in deck read coherently (built-in: `title ≤8 words (≈56 chars)`, `items.number 1 word
+  (≈7 chars)`); `test_builtin_rooms_read_as_words_then_chars` checks every room of the built-in
+  description and schema leads with a budget within the rule. No template sample was usable as an
+  example (D22).
+- **Checks:** package `make code-quality` clean (pyright: the existing `builder_decks.py` `__all__`
+  warning only), `make test` 433 passed, 5 skipped.
+- **Recommendation: keep.** Clear gain on mistral-small (the admin default) on first-call success,
+  calls, fit problems and variety, neutral on mistral-medium, no rendering regression.
 
 ## Targets (WP11)
 
