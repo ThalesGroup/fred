@@ -316,6 +316,10 @@ class SlidePlan(BaseModel):
     ignored_fields: SkipJsonSchema[List[str]] = Field(default_factory=list)
     # The template slide the delivered deck shows it on: kept while it fits.
     built_on: SkipJsonSchema[Optional[str]] = None
+    # Set by a `like` change: the template slide asked for, and the slide whose
+    # design it is (file numbering); cleared once the deck is delivered.
+    asked_design: SkipJsonSchema[Optional[str]] = None
+    asked_from: SkipJsonSchema[Optional[int]] = None
 
     @model_validator(mode="before")
     @classmethod

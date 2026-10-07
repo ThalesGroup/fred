@@ -651,3 +651,180 @@ async def test_a_split_list_is_stored_as_the_delivered_deck(
     assert [s.title for s in edited.slides] == titles[:3] + ["Contacts"]
     assert [i.number for i in edited.slides[2].items] == ["3", "4"]
     assert _dumps(edited)[:3] == _dumps(rendered)[:3]
+
+
+# --- `like`: the design of another slide -------------------------------------------------
+
+PINNED = DeckPlan(
+    slides=[
+        s.model_copy(update={"built_on": f"slide:{n}"})
+        for n, s in enumerate(BASE.slides, start=1)
+    ]
+)
+
+
+def _like(*changes: Any) -> DeckPlan:
+    return apply_changes(PINNED, [SlideChange.model_validate(c) for c in changes])
+
+
+def test_like_asks_for_the_referenced_slides_delivered_design():
+    plan = _like(
+        {"op": "edit", "slide": 4, "field": "like", "value": 2},
+        # The referenced slide changed in the same call: its delivered design counts.
+        {"op": "replace", "slide": 2, "slides": [{"title": "New", "kind": "quote"}]},
+    )
+    assert (plan.slides[3].asked_design, plan.slides[3].asked_from) == ("slide:2", 2)
+    assert plan.slides[3].kind is None and plan.slides[3].title == "Thanks"
+    # The written shorthand, a kind set by the same call, and a replaced target.
+    plan = _like(
+        {"op": "edit", "slide": 4, "like": "2"},
+        {"op": "edit", "slide": 4, "field": "kind", "value": "bullets"},
+        {"op": "replace", "slide": 3, "slides": [{"title": "A"}, {"title": "B"}]},
+        {"op": "edit", "slide": 3, "field": "like", "value": 1},
+    )
+    assert [s.asked_design for s in plan.slides] == [
+        None,
+        None,
+        "slide:1",
+        None,
+        "slide:2",
+    ]
+    assert plan.slides[4].kind == "bullets"
+
+
+def test_bad_like_references_say_why_and_what_to_send():
+    assert _problems_on(
+        PINNED,
+        {"op": "edit", "slide": 4, "field": "like", "value": "the agenda"},
+        {"op": "edit", "slide": 4, "field": "like", "value": 9},
+        {"op": "edit", "slide": 2, "field": "like", "value": 2},
+        {"op": "remove", "slide": 3},
+        {"op": "edit", "slide": 3, "field": "like", "value": 1},
+        {"op": "edit", "slide": 1, "field": "like", "value": 2},
+        {"op": "edit", "slide": 1, "field": "like", "value": 4},
+    ) == [
+        "changes[0] (edit): `like` takes as `value` the number of the slide whose design "
+        "to use (e.g. 5), not 'the agenda'.",
+        "changes[1] (edit): `like` 9: slide 9 does not exist; the previous deck has 4 "
+        "slides. Use a number from 1 to 4.",
+        "changes[2] (edit): `like` 2 is slide 2 itself, which already has its design: give "
+        "the number of the slide whose design it should take.",
+        "changes[4] (edit): slide 3 is removed by changes[3].",
+        "changes[6] (edit): slide 1 already takes slide 2's design.",
+    ]
+    # A plan never delivered has no design to copy.
+    (problem,) = _problems_on(BASE, {"op": "edit", "slide": 4, "like": 2})
+    assert "slide 2 has no design yet" in problem and "build the deck first" in problem
+
+
+def _problems_on(base: DeckPlan, *changes: Any) -> List[str]:
+    with pytest.raises(ChangeError) as caught:
+        apply_changes(base, [SlideChange.model_validate(c) for c in changes])
+    return caught.value.problems
+
+
+def _bullets(n: int) -> dict:
+    return {"title": f"S{n}", "bullets": [f"Point {n}", "Detail"]}
+
+
+_SPREAD = [COVER] + [_bullets(n) for n in range(2, 8)]
+
+
+async def _delivered_patterns(monkeypatch, workspace, **kwargs) -> tuple:
+    used: List[List[str]] = []
+    real = tools_mod.render_deck
+
+    def recording(template, inventory, plan, patterns, images, numbers=None):
+        used.append([p.id for p in patterns])
+        return real(template, inventory, plan, patterns, images, numbers)
+
+    turn = _Turn(monkeypatch, workspace)
+    monkeypatch.setattr(tools_mod, "render_deck", recording)
+    text, result = await turn.build(**kwargs)
+    return text, result, used
+
+
+@pytest.mark.asyncio
+async def test_like_gives_a_slide_the_design_of_another(monkeypatch, deck_plan_store):
+    """Live: bullets slides spread over several template slides; "slide 7 like
+    slide 5" was sent as a no-op kind edit. `like` makes them share."""
+    workspace = FakeWorkspace()
+    text, result, used = await _delivered_patterns(
+        monkeypatch, workspace, slides=_SPREAD
+    )
+    assert not result.is_error, text
+    assert used[-1][4] != used[-1][6]
+    text, result, used = await _delivered_patterns(
+        monkeypatch,
+        workspace,
+        changes=[{"op": "edit", "slide": 7, "field": "like", "value": 5}],
+    )
+    assert not result.is_error and text.startswith(tools_mod._DELIVERED), text
+    assert used[-1][6] == used[-1][4]
+    stored = DeckPlan.model_validate_json(deck_plan_store.plans[("sess-9", "inst-7")])
+    assert stored.slides[6].built_on == stored.slides[4].built_on
+    assert stored.slides[6].asked_design is None and stored.slides[6].asked_from is None
+
+
+@pytest.mark.asyncio
+async def test_a_design_the_slide_cannot_take_is_a_revision(
+    monkeypatch, deck_plan_store
+):
+    workspace = FakeWorkspace()
+    text, result, _ = await _delivered_patterns(monkeypatch, workspace, slides=_SPREAD)
+    assert not result.is_error, text
+    items = [{"heading": "One"}, {"heading": "Two"}]
+    text, result, _ = await _delivered_patterns(
+        monkeypatch,
+        workspace,
+        changes=[
+            {
+                "op": "replace",
+                "slide": 7,
+                "slides": [{"title": "Plan", "items": items}],
+            },
+            {"op": "edit", "slide": 7, "field": "like", "value": 5},
+        ],
+    )
+    assert result.is_error and len(workspace.writes) == 1
+    (problem,) = _payload(text)["slides"]
+    assert problem["slide"] == 7
+    assert problem["problem"].startswith("the slide does not fit slide 5's design")
+    assert "items: this slide has no place for it" in problem["problem"]
+    assert "give the items as bullets" in problem["options"]
+    assert problem["options"][-1].startswith("or drop the `like` change")
+    # A kind the design does not hold, set in the same call.
+    text, _, _ = await _delivered_patterns(
+        monkeypatch,
+        workspace,
+        changes=[
+            {"op": "edit", "slide": 7, "field": "kind", "value": "quote"},
+            {"op": "edit", "slide": 7, "field": "like", "value": 5},
+        ],
+    )
+    (problem,) = _payload(text)["slides"]
+    assert (
+        "holds 'bullets' content, but the slide asks for kind 'quote'"
+        in (problem["problem"])
+    )
+    assert problem["options"][0].startswith("set its kind to 'bullets'")
+
+
+def test_a_design_asked_for_is_never_a_variety_ask():
+    from builder_decks import build_showcase_template
+    from fred_capability_ppt_filler.builder.analysis import analyze_template
+    from fred_capability_ppt_filler.builder.assign import assign
+
+    inventory = analyze_template(build_showcase_template()).inventory
+    assert inventory is not None
+    slides = [_bullets(n) for n in range(2, 7)]
+    plan = DeckPlan.model_validate(
+        {
+            "slides": [COVER]
+            + [{**s, "asked_design": "slide:266", "asked_from": 2} for s in slides]
+        }
+    )
+    assignment = assign(inventory, plan, "template_slide", max_uses=1)
+    assert not assignment.problems
+    assert [p.id for p in assignment.patterns if p][1:] == ["slide:266"] * 5
+    assert assignment.repeats == []

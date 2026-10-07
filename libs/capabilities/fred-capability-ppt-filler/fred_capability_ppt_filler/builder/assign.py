@@ -640,6 +640,59 @@ def _kept(
     return kept or candidates
 
 
+def _asked(slide: _Slide, has_cover: bool) -> Optional[SlideProblem]:
+    """A design the user asked for (`like`): that template slide alone, priced
+    as no reuse, or why the slide cannot take it."""
+    plan = slide.plan
+    whose = (
+        f"slide {plan.asked_from}'s design" if plan.asked_from else "the design asked"
+    )
+    drop = (
+        "or drop the `like` change: the tool then picks a template slide that holds it"
+    )
+    found = next((c for c in slide.checked if c[0].id == plan.asked_design), None)
+    if found is None:
+        return SlideProblem(
+            slide.index,
+            f"{whose} (template slide '{plan.asked_design}') is no longer in the template",
+            [drop.removeprefix("or ")],
+            plan.kind,
+        )
+    pattern, reasons, cost = found
+    named = f"{whose} (template slide '{pattern.label}', a '{pattern.kind}' slide)"
+    if plan.kind and plan.kind != pattern.kind:
+        return SlideProblem(
+            slide.index,
+            f"{named} holds '{pattern.kind}' content, but the slide asks for kind '{plan.kind}'",
+            [
+                f"set its kind to '{pattern.kind}' and shape its content for that slide",
+                f"or drop the `like` change to keep kind '{plan.kind}'",
+            ],
+            plan.kind,
+        )
+    if not _allowed(pattern, slide, has_cover):
+        why = (
+            f"{named} can only be the {'first' if pattern.kind == 'cover' else 'last'} slide"
+            if pattern.kind in ("cover", "closing")
+            else f"the first slide is always the template's cover, not {named}"
+        )
+        return SlideProblem(
+            slide.index,
+            why,
+            ["use the design of another slide", drop],
+            plan.kind,
+        )
+    if reasons:
+        return SlideProblem(
+            slide.index,
+            f"the slide does not fit {named}: " + "; ".join(m.text for m in reasons),
+            [m.option for m in reasons if m.option] + [drop],
+            plan.kind,
+        )
+    slide.candidates = [(pattern, cost)]
+    return None
+
+
 def _allowed(pattern: Pattern, slide: _Slide, has_cover: bool) -> bool:
     if pattern.kind == "cover":
         return slide.first
@@ -1270,7 +1323,8 @@ def _repeats(
     groups: Dict[Tuple[str, str], List[Tuple[_Slide, Pattern]]] = {}
     for slide in slides:
         pattern = chosen.get(slide.index)
-        if pattern is None or slide.part > 1:
+        # A design the user asked for is never a reason to ask for variety.
+        if pattern is None or slide.part > 1 or slide.plan.asked_design is not None:
             continue
         if not _content(slide, pattern):
             key = ("structural", pattern.id)
@@ -1402,6 +1456,11 @@ def assign(
             continue
         slide.tiers = _tiers(slide, has_cover)
         slide.checked = [(p, *misfit(p, slide.plan, size)) for p in pool]
+        if slide.plan.asked_design is not None:
+            asked = _asked(slide, has_cover)
+            if asked is not None:
+                problems.append(asked)
+            continue
         slide.candidates = _kept(slide, _candidates(slide, has_cover))
         own_kind = (
             bool(slide.candidates) and slide.candidates[0][0].kind in slide.tiers[0]

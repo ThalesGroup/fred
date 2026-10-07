@@ -35,6 +35,8 @@ _OP_ALIASES = {
     "modify": "edit",
 }
 _SLIDES_ALIASES = ("with", "new_slides", "new_slide", "content")
+# The edit field that gives a slide the template slide of another one.
+LIKE = "like"
 # Slide fields (and their aliases) a model may write in the change itself.
 _SLIDE_KEYS = frozenset(
     ("title", "subtitle", "bullets", "columns", "items", "image", "images", "table")
@@ -95,11 +97,17 @@ class SlideChange(BaseModel):
     )
     field: Optional[str] = Field(
         default=None,
-        description="edit: the field to set, e.g. 'title', 'bullets[1]', 'items[2].label' (indexes from 0).",
+        description=(
+            "edit: the field to set, e.g. 'title', 'bullets[1]', 'items[2].label' (indexes "
+            "from 0), or 'like' (a design)."
+        ),
     )
     value: Any = Field(
         default=None,
-        description="edit: the new value (text, list or object); null removes a list element.",
+        description=(
+            "edit: the new value (text, list or object); null removes a list element; "
+            "'like': a slide number."
+        ),
     )
 
     has_value: SkipJsonSchema[bool] = False
@@ -127,9 +135,12 @@ class SlideChange(BaseModel):
         if isinstance(slides, dict):
             slides = [slides]
         known = {"op", "operation", "action", "slide", "after", "slides", "field"}
-        known |= {"value", *_SLIDES_ALIASES}
+        known |= {"value", "like", *_SLIDES_ALIASES}
         if "has_value" in data:  # a validated change dumped and read again
             return {k: v for k, v in data.items() if k in cls.model_fields}
+        # `{"op": "edit", "slide": 7, "like": 5}` means the `like` field.
+        if "like" in data and not data.get("field") and "value" not in data:
+            data["field"], data["value"] = LIKE, data["like"]
         # A new slide written in the change itself, not under `slides`.
         flat = {k: v for k, v in data.items() if k in _SLIDE_KEYS}
         unknown = [_unknown(k, op) for k in data if k not in known | set(flat)]
@@ -311,6 +322,39 @@ def _check(change: SlideChange, n: int) -> List[str]:
     return issues
 
 
+def _like_problem(base: DeckPlan, number: int, value: Any) -> Optional[str]:
+    """Why slide ``number`` cannot take the design of the slide ``value`` names."""
+    n = len(base.slides)
+    ref = _number(value)
+    if ref is None:
+        return (
+            f"`like` takes as `value` the number of the slide whose design to use "
+            f"(e.g. 5), not '{str(value)[:20]}'"
+        )
+    if not 1 <= ref <= n:
+        return (
+            f"`like` {ref}: slide {ref} does not exist; the previous deck has {n} slides. "
+            f"Use a number from 1 to {n}"
+        )
+    if ref == number:
+        return (
+            f"`like` {ref} is slide {number} itself, which already has its design: give "
+            "the number of the slide whose design it should take"
+        )
+    if base.slides[ref - 1].built_on is None:
+        return (
+            f"slide {ref} has no design yet (it is not in the last delivered deck): build "
+            "the deck first, then ask for that slide's design"
+        )
+    return None
+
+
+def _asked(base: DeckPlan, ref: int) -> Dict[str, Any]:
+    """The design of slide ``ref`` as the delivered file shows it, whatever the
+    same call changes on that slide."""
+    return {"asked_design": base.slides[ref - 1].built_on, "asked_from": ref}
+
+
 def apply_changes(base: DeckPlan, changes: List[SlideChange]) -> DeckPlan:
     """The whole plan after ``changes``, all numbered on ``base``. Untouched
     slides stay the base's objects; raises :class:`ChangeError` listing every
@@ -323,6 +367,7 @@ def apply_changes(base: DeckPlan, changes: List[SlideChange]) -> DeckPlan:
     owner: Dict[int, int] = {}
     inserts: Dict[int, List[SlidePlan]] = {}
     edits: Dict[int, List[Tuple[int, SlideChange]]] = {}
+    likes: List[Tuple[int, SlideChange, int]] = []
 
     def report(k: int, change: SlideChange, why: str) -> None:
         problems.append(f"changes[{k}] ({change.op or '?'}): {why}.")
@@ -337,6 +382,13 @@ def apply_changes(base: DeckPlan, changes: List[SlideChange]) -> DeckPlan:
             inserts.setdefault(change.after or 0, []).extend(change.slides)
             continue
         number = change.slide or 0
+        if change.op == "edit" and change.field == LIKE:
+            why = _like_problem(base, number, change.value)
+            if why:
+                report(k, change, why)
+            else:
+                likes.append((k, change, _number(change.value) or 0))
+            continue
         whole = number in replaced or number in removed
         if change.op in ("replace", "remove"):
             if number in owner:
@@ -369,8 +421,28 @@ def apply_changes(base: DeckPlan, changes: List[SlideChange]) -> DeckPlan:
             continue
         edits.setdefault(number, []).append((k, change))
 
+    # Resolved once every replace and remove is known, whatever their order.
+    liked: Dict[int, int] = {}
+    for k, change, ref in likes:
+        number = change.slide or 0
+        if number in removed:
+            report(k, change, f"slide {number} is removed by changes[{owner[number]}]")
+        elif number in liked:
+            report(
+                k,
+                change,
+                f"slide {number} already takes slide {liked[number]}'s design",
+            )
+        elif number not in replaced and base.slides[number - 1].invalid_entry:
+            report(
+                k, change, f"slide {number} was not a slide object: replace it instead"
+            )
+        else:
+            liked[number] = ref
+
     edited: Dict[int, SlidePlan] = {}
-    for number, entries in edits.items():
+    for number in sorted(set(edits) | (set(liked) - set(replaced))):
+        entries = edits.get(number, [])
         dumped = base.slides[number - 1].model_dump()
         failed = False
         for k, change in entries:
@@ -378,6 +450,11 @@ def apply_changes(base: DeckPlan, changes: List[SlideChange]) -> DeckPlan:
             if why:
                 report(k, change, f"slide {number}: {why}")
                 failed = True
+        if number in liked:
+            dumped.update(_asked(base, liked[number]))
+            # The design decides the kind, unless this call sets one.
+            if not any(c.field == "kind" for _, c in entries):
+                dumped["kind"] = None
         if not failed:
             edited[number] = SlidePlan.model_validate(dumped)
     if problems:
@@ -389,6 +466,8 @@ def apply_changes(base: DeckPlan, changes: List[SlideChange]) -> DeckPlan:
             # The replacement keeps the replaced slide's design when it fits.
             new = replaced[number]
             first = new[0].model_copy(update={"built_on": slide.built_on})
+            if number in liked:
+                first = first.model_copy(update=_asked(base, liked[number]))
             slides.extend([first, *new[1:]] if new[0].built_on is None else new)
         elif number not in removed:
             slides.append(edited.get(number, slide))

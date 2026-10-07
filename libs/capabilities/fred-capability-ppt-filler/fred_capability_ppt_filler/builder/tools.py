@@ -786,6 +786,9 @@ def _description(
         '"value": ...}. The other slides stay exactly as they were and the whole deck is rebuilt. '
         "To change text inside a slide, use `edit`: the slide keeps its design; `replace` is for "
         "a different slide (one of the same kind keeps the replaced slide's design when it fits). "
+        'When the user wants a slide to look like another ("same layout/design as slide M"), send '
+        '{"op": "edit", "slide": N, "field": "like", "value": M}: slide N takes slide M\'s template slide; '
+        "editing `kind` or resending the same text never changes a design. "
         "For each slide write its content: title, subtitle, bullets (telegraphic, "
         "'- ' prefix for a sub-bullet, **bold** allowed), columns [{heading, bullets}], items [{number, "
         "heading, text, label, image}], image/images (document_ids from list_images_in_folder), "
@@ -973,7 +976,13 @@ def build_builder_tools(
         deck = deck.model_copy(
             update={
                 "slides": [
-                    s.model_copy(update={"built_on": p.id if p else None})
+                    s.model_copy(
+                        update={
+                            "built_on": p.id if p else None,
+                            "asked_design": None,
+                            "asked_from": None,
+                        }
+                    )
                     for s, p in zip(deck.slides, patterns)
                 ]
             }
