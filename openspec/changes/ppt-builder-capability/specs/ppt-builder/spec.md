@@ -725,6 +725,13 @@ The system SHALL let the user correct a deck in chat by regenerating from an ame
 - **AND** a `like` with no slide number, a number out of range, the slide itself, a slide removed by the same call, a second `like` on one slide, or a slide not yet in a delivered deck builds nothing, with what, why and the remedy
 - **AND** the tool description tells the model to use `like` when the user wants the layout or design of another slide
 
+#### Scenario: The delivery names each slide's design
+
+- **GIVEN** a deck delivered with bullets slides 5, 6 and 7 on three template slides and a process list split over slides 2 and 3
+- **WHEN** the model reads the success text
+- **THEN** one `Designs:` line names, per file slide number, the template slide's label as the review shows it (`2 'Process' · 3 'Process'`, three different names for slides 5 to 7), never a template id, and says that different names look different and that `like` gives slide N the design of slide M
+- **AND** two included template slides sharing a label read as distinct names (`'Free text'`, `'Free text #2'`), and a label longer than 28 chars is cut
+
 #### Scenario: Changes that change nothing
 
 - **GIVEN** a delivered deck

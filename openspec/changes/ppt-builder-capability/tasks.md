@@ -401,3 +401,12 @@ Owns: `changes.py` (`like` edit field, `unchanged`), `plan.py` (`asked_design`, 
 - [x] 36.2 Changes that leave a delivered deck's content and template slides as they are build nothing and return a "nothing changed" error with why and the remedies; a plan stored by `needs_revision` is never treated so. Tests: the live no-op (kind + same bullets), an identical replace, a `like` on the design already held; no render, write or store; a new file name still builds
 - [x] 36.3 Package `make code-quality` + `make test`; `verification.md`
 - Not covered: a live re-run of the session
+
+## WP37. Name each slide's design in the delivered message
+
+Owns: `tools.py` (delivered text), `design.md` D23, delta spec, tests, `verification.md`.
+
+- [x] 37.1 Both success texts carry one `Designs:` line: per file slide (a split list's parts included), the template slide's label as the review and summary show it, cut past 28 chars, suffixed `#2`, `#3`… when several included template slides share a label; then one sentence: different names look different, `like` gives slide N slide M's design. Tests: file numbers with a split process list, three bullets slides on three template slides read as three names, a shared label made distinct, a long name cut
+- [x] 37.2 Package `make code-quality` + `make test`; `verification.md`
+- Not covered: a live re-run of the session
+

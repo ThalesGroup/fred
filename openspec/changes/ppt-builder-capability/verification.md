@@ -1298,3 +1298,30 @@ chars with the `like` text.
 Not covered: a live re-run of the session with a real model (whether it picks `like` from the
 description); a `like` on a slide whose referenced design was removed from the template after
 delivery is handled (`needs_revision`) but untested.
+
+## Results: WP37 (designs named in the delivered message)
+
+Same session `a854d9b3-…`: asked "for slide 7, use the same layout as slide 5", the model saw two
+bullets slides and answered they were already the same, without a call. The success text now ends
+its first paragraph with one line; on the showcase template (cover, a 5-step process split 3 + 2,
+an agenda, three bullets slides):
+
+`Designs: 1 'Title Slide' · 2 'Process' · 3 'Process' · 4 'Agenda' · 5 'Title and Content (11)' ·
+6 'Silent notes' · 7 'Free text'. Slides with different names look different; to give slide N the
+design of slide M, send {"op": "edit", "slide": N, "field": "like", "value": M}.`
+
+**Unit evidence** (`tests/test_build_tool.py`):
+`test_the_delivered_text_names_each_file_slides_design` (file numbers with the split process list,
+three bullets slides on three template slides read as three names, the `like` sentence, no
+template id), `test_two_template_slides_sharing_a_label_get_distinct_names` (`slide:269` relabelled
+'Free text': `'Free text'` and `'Free text #2'`), `test_a_long_design_name_is_cut` (cut to 28 chars
+with "…"). The tool description is unchanged (its `like` guidance already fits); no size budget
+applies to the success text.
+
+`.venv/bin/pytest -q tests/test_build_tool.py tests/test_deck_changes.py tests/test_assign.py`:
+138 passed. Package `make code-quality` clean (existing `builder_decks.py` `__all__` warning),
+`make test` 490 passed, 5 skipped (487 before WP37).
+
+Not covered: a live re-run of the session with a real model (whether it now answers "same layout"
+with `like`); the `#2` suffix is shown to the model only, so the review and summary dialog still
+show two identical labels for those template slides.
