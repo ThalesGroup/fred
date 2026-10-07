@@ -290,10 +290,10 @@ def test_a_later_cover_is_built_from_its_content_and_the_swap_is_named():
     assignment = assign(INVENTORY, _plan(COVER, {"title": "Again", "kind": "cover"}))
     assert not assignment.problems
     assert [p.kind for p in assignment.patterns if p] == ["cover", "section"]
-    assert (
-        "instead of 'cover' (only the first slide can be the cover)"
-        in (assignment.notes[0])
-    )
+    assert assignment.notes == [
+        "Slide 2: built as 'section' instead of 'cover': only the first slide can be "
+        "the cover. Nothing to do."
+    ]
 
 
 def _with_closing() -> TemplateInventory:
@@ -330,10 +330,13 @@ def test_closing_is_used_at_most_once_and_only_last():
     )
     assert not assignment.problems
     assert assignment.patterns[1] and assignment.patterns[1].label != "Merci"
-    assert "a closing slide can only end the deck" in assignment.notes[0]
+    assert assignment.notes[0].endswith(
+        "a closing slide can only end the deck. To make it the closing slide, move it "
+        "to the end; otherwise nothing to do."
+    )
 
 
-def test_a_fixed_closing_slide_takes_no_content_so_the_content_decides():
+def test_a_fixed_closing_slide_takes_no_content_so_a_close_kind_holds_it():
     assignment = assign(
         _with_closing(),
         _plan(
@@ -341,8 +344,12 @@ def test_a_fixed_closing_slide_takes_no_content_so_the_content_decides():
         ),
     )
     assert not assignment.problems
-    assert assignment.patterns[1] and assignment.patterns[1].kind == "bullets"
-    assert "no 'closing' slide holds this content" in assignment.notes[0]
+    assert assignment.patterns[1] and assignment.patterns[1].kind == "section"
+    assert assignment.notes == [
+        "Slide 2: built as 'section' instead of 'closing': the 'closing' slide does not "
+        "fit (this slide is shown as is and takes no content). To get the 'closing' "
+        "slide, call again and send only the title 'Merci'; otherwise nothing to do."
+    ]
 
 
 def test_no_three_identical_slides_in_a_row_when_an_alternative_fits():
@@ -388,21 +395,121 @@ def test_items_over_capacity_are_a_problem_with_trim_and_split_options():
     )
     (problem,) = assignment.problems
     assert problem.as_dict()["slide"] == 2
-    assert (
-        problem.problem == "items: 7 given; the largest slide of this template holds 6"
-    )
-    assert problem.options[:2] == ["trim to 6 items", "split the items over two slides"]
+    # The team slide holds more, but it is not a close kind of 'process'.
+    assert problem.problem == "items: 7 given; the largest 'process' slide holds 3"
+    assert problem.options[:2] == ["trim to 3 items", "split the items over two slides"]
 
 
-def test_a_kind_the_template_lacks_is_replaced_by_the_content_shape():
+def test_a_kind_the_template_lacks_is_replaced_by_a_close_kind():
     slide = SlidePlan(title="Points", bullets=["a", "b"], kind="timeline")
     assignment = assign(INVENTORY, _plan(COVER, slide))
     assert not assignment.problems
     assert assignment.patterns[1] and assignment.patterns[1].kind == "bullets"
     assert assignment.notes == [
-        "Slide 2: built as 'bullets' instead of 'timeline' "
-        "(this template has no 'timeline' slide)."
+        "Slide 2: built as 'bullets' instead of 'timeline': this template has no "
+        "'timeline' slide. Nothing to do."
     ]
+
+
+def _items_pattern(pid: str, kind: Any, count: int, roles: List[Any]) -> Pattern:
+    """An example slide of ``count`` items, each with one zone per role."""
+    group = RepeatGroup(
+        key=f"g{pid}",
+        count=count,
+        item_zones=roles,
+        item_keys=[f"g{pid}/{i}" for i in range(count)],
+        items=[
+            [
+                Zone(
+                    key=f"g{pid}/{i}/{role}",
+                    role=role,
+                    box=Box(x=i * 100, y=300, w=90, h=200),
+                    font_pt=14.0,
+                    chars_per_line=20,
+                    max_lines=2,
+                )
+                for role in roles
+            ]
+            for i in range(count)
+        ],
+    )
+    return Pattern(
+        id=pid,
+        source="slide",
+        source_index=int(pid.split(":")[1]),
+        name=kind,
+        label=kind,
+        kind=kind,
+        zones=[_title_zone()],
+        groups=[group],
+    )
+
+
+_SOMMAIRE = SlidePlan(
+    title="Sommaire",
+    kind="agenda",
+    items=[PlanItem(number=f"0{i}", heading=f"Topic {i}") for i in range(1, 10)],
+)
+
+
+def test_an_agenda_too_long_is_never_built_on_an_unrelated_kind():
+    """Live Paintress case: 9 agenda items, an agenda slide of 8 and a team
+    slide of 15; the agenda was built on the team slide."""
+    inventory = _inventory(
+        _bullets("layout:1", "Text"),
+        _items_pattern("slide:2", "agenda", 8, ["number", "heading"]),
+        _items_pattern("slide:3", "team", 15, ["heading", "label"]),
+    )
+    assignment = assign(
+        inventory, _plan(SlidePlan(title="Intro", bullets=["a"]), _SOMMAIRE)
+    )
+    assert assignment.patterns == []
+    (problem,) = assignment.problems
+    assert problem.index == 2
+    assert problem.problem == "items: 9 given; the largest 'agenda' slide holds 8"
+    assert problem.options[:2] == ["trim to 8 items", "split the items over two slides"]
+    assert any(o.startswith("or rewrite it as kind 'bullets'") for o in problem.options)
+    assert not any("team" in o for o in problem.options)
+
+
+def test_an_agenda_too_long_goes_to_a_close_kind_that_holds_it():
+    inventory = _inventory(
+        _bullets("layout:1", "Text"),
+        _items_pattern("slide:2", "agenda", 8, ["number", "heading"]),
+        _items_pattern("slide:3", "team", 15, ["heading", "label"]),
+        _items_pattern("slide:4", "process", 10, ["number", "heading"]),
+    )
+    assignment = assign(
+        inventory, _plan(SlidePlan(title="Intro", bullets=["a"]), _SOMMAIRE)
+    )
+    assert not assignment.problems
+    assert assignment.patterns[1] and assignment.patterns[1].kind == "process"
+    assert assignment.notes == [
+        "Slide 2: built as 'process' instead of 'agenda': the 'agenda' slide does not "
+        "fit (items: 9 given, max 8). To get the 'agenda' slide, call again and trim "
+        "to 8 items or split them over two slides; otherwise nothing to do."
+    ]
+
+
+def test_an_agenda_written_as_bullets_goes_to_a_bullets_slide():
+    inventory = _inventory(
+        _bullets("layout:1", "Text"),
+        _items_pattern("slide:2", "agenda", 8, ["number", "heading"]),
+        _items_pattern("slide:3", "team", 15, ["heading", "label"]),
+    )
+    agenda = SlidePlan(
+        title="Sommaire", kind="agenda", bullets=[f"Topic {i}" for i in range(9)]
+    )
+    assignment = assign(
+        inventory, _plan(SlidePlan(title="Intro", bullets=["a"]), agenda)
+    )
+    assert not assignment.problems
+    assert assignment.patterns[1] and assignment.patterns[1].label == "Text"
+    assert assignment.notes[0] == (
+        "Slide 2: built as 'bullets' instead of 'agenda': the 'agenda' slide does not "
+        "fit (bullets: this slide has no place for it). To get the 'agenda' slide, "
+        "call again and give the bullets as items (at most 8); otherwise nothing to do."
+    )
 
 
 def test_a_requested_kind_that_fits_is_kept():

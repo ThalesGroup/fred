@@ -594,7 +594,8 @@ def _description(
         + ("table {header, rows} for tabular data, " if "table" in kinds else "")
         + "notes; then, "
         "optionally, its `kind` from the list below (left out, it is inferred from the content; a kind "
-        "the template cannot use there is replaced by one that holds the content). The tool picks the "
+        "the template cannot use there is replaced by a close kind that holds the content, never an "
+        "unrelated one). The tool picks the "
         "template slide for each entry."
         + rules
         + " A slide holds only the fields its kind lists below (no subtitle on a kind that lists "

@@ -366,7 +366,7 @@ async def test_a_slide_that_fits_nothing_builds_nothing_and_says_what_to_change(
     assert payload["status"] == "needs_revision"
     (problem,) = payload["slides"]
     assert problem["slide"] == 2 and problem["kind"] == "process"
-    assert "items: 7 given; the largest slide" in problem["problem"]
+    assert "items: 7 given; the largest 'process' slide holds 3" in problem["problem"]
     assert any(o.startswith("trim to ") for o in problem["options"])
     assert "split the items over two slides" in problem["options"]
     assert "repeated" not in problem

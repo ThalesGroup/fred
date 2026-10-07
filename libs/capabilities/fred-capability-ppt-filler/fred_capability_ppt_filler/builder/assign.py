@@ -14,10 +14,11 @@
 
 """Which template slide shows each entry of a plan, decided for the whole deck.
 
-A slide's candidates are the patterns that hold all of its content, of the
-requested kind first, then of the kinds its content suggests, then of any kind
-(each substitution is reported). A beam search picks one per slide under the
-deck rules, pricing every reuse of a template slide anywhere in the deck. A
+A slide's candidates are the patterns that hold all of its content: of the
+requested kind, then of the kinds close to it (never an unrelated one); with
+no kind, of the kinds its content suggests, then of any kind. Each
+substitution is reported with the edit that would give the requested kind.
+A beam search picks one per slide under the deck rules, pricing every reuse of a template slide anywhere in the deck. A
 slide that fits nothing is a problem the model must fix, named down to the
 element: never a silent fallback.
 """
@@ -99,6 +100,26 @@ SHAPE_HINTS: Dict[str, str] = {
     "team": "people",
 }
 _MAX_OTHER_KINDS = 5
+# Kinds a requested kind may be built as when none of its slides fits, closest
+# first: a list stays a list, a title slide a title slide. A kind absent here
+# ("other") keeps the content-based fallback. Rationale: design.md.
+CLOSE_KINDS: Dict[str, Tuple[SlideKind, ...]] = {
+    "cover": ("section",),
+    "agenda": ("bullets", "process", "timeline"),
+    "section": ("quote",),
+    "bullets": ("two_columns", "cards", "image_text"),
+    "two_columns": ("comparison", "table"),
+    "comparison": ("two_columns", "table"),
+    "table": ("comparison", "two_columns"),
+    "cards": ("bullets", "two_columns", "comparison", "process"),
+    "figures": ("cards", "bullets"),
+    "process": ("timeline", "bullets"),
+    "timeline": ("process", "bullets"),
+    "team": ("cards",),
+    "quote": ("section", "bullets"),
+    "image_text": ("bullets", "two_columns"),
+    "closing": ("section", "bullets"),
+}
 
 _MAX_KIND_OPTIONS = 3
 
@@ -344,8 +365,14 @@ def _check_zone(
     return _SHRUNK if scale is not None else 0.0
 
 
-def _no_place(what: str) -> Misfit:
-    return Misfit(f"{what}: this slide has no place for it", f"drop {what}")
+def _no_place(what: str, pattern: Pattern) -> Misfit:
+    option = f"drop {what}"
+    if what == "bullets" and pattern.groups:
+        most = max(g.count for g in pattern.groups)
+        option = f"give the bullets as items (at most {most})"
+    elif what == "items" and any(z.role in ("body", "caption") for z in pattern.zones):
+        option = "give the items as bullets"
+    return Misfit(f"{what}: this slide has no place for it", option)
 
 
 def misfit(
@@ -357,7 +384,12 @@ def misfit(
     if not pattern.fillable:
         if not has_content(slide) or _only_names_the_slide(slide, pattern):
             return [], 0.0
-        return [Misfit("this slide is shown as is and takes no content")], 0.0
+        return [
+            Misfit(
+                "this slide is shown as is and takes no content",
+                f"send only the title '{pattern.label}'",
+            )
+        ], 0.0
     reasons: List[Misfit] = []
     lost: List[str] = []
     text = _assign_text(pattern, slide, lost)
@@ -409,7 +441,7 @@ def misfit(
                 "give the content as `table`, or another kind",
             )
         )
-    reasons[:0] = [_no_place(what) for what in lost if what not in held]
+    reasons[:0] = [_no_place(what, pattern) for what in lost if what not in held]
 
     # A framed picture left empty shows its layout's frame.
     empty = _reading_order([z for z in pattern.zones if z.role == "image"])
@@ -572,16 +604,25 @@ def _allowed(pattern: Pattern, slide: _Slide, has_cover: bool) -> bool:
 
 
 def _tiers(slide: _Slide, has_cover: bool) -> List[List[SlideKind]]:
-    """The requested kind, then the kinds the content suggests, then any kind."""
+    """The requested kind, then its close kinds; with no kind (or one with no
+    close kinds), the kinds the content suggests, then any kind."""
     if slide.first and has_cover:
         return [["cover"]]
-    inferred = infer_kinds(slide.plan)
     asked = slide.plan.kind
+    if asked and asked in CLOSE_KINDS:
+        return [[asked], list(CLOSE_KINDS[asked])]
+    inferred = infer_kinds(slide.plan)
     tiers: List[List[SlideKind]] = [[asked]] if asked else []
     tiers.append([k for k in inferred if k != asked])
     seen = set(inferred) | {asked}
     tiers.append([k for k in SLIDE_KINDS if k not in seen])
     return tiers
+
+
+def _close(slide: _Slide) -> Optional[Tuple[SlideKind, ...]]:
+    """The close kinds of the requested kind; None when the fallback is open."""
+    asked = slide.plan.kind
+    return CLOSE_KINDS.get(asked) if asked else None
 
 
 def _candidates(slide: _Slide, has_cover: bool) -> List[Tuple[Pattern, float]]:
@@ -618,21 +659,34 @@ def _tableless(slide: _Slide) -> bool:
 def _closest(slide: _Slide, has_cover: bool) -> Optional[Tuple[Pattern, List[Misfit]]]:
     """The kind closest to the content, then fewest problems, then the roomiest;
     None when no slide can take the position or a table must be rewritten."""
-    # The asked and the inferred kinds rank together: the advice should be about
-    # the shape the content has, not about an unrelated kind that happens to fit.
+    # The asked kind (or, with none, the inferred kinds) ranks first: the advice
+    # should be about that shape, not about an unrelated kind that happens to fit.
     rank = {k: 0 for tier in slide.tiers[:-1] for k in tier}
     rank.update({k: 1 for k in slide.tiers[-1]})
     own = _own(slide, has_cover)
     if not own or _tableless(slide):
         return None
-    return min(
-        own,
-        key=lambda pr: (
-            rank[pr[0].kind],
-            len(pr[1]),
-            -sum((z.chars_per_line or 0) * (z.max_lines or 0) for z in pr[0].zones),
-        ),
-    )
+    return min(own, key=lambda pr: (rank[pr[0].kind], *_fewest(pr)))
+
+
+def _fewest(pair: Tuple[Pattern, List[Misfit]]) -> Tuple[int, int]:
+    """Fewest problems, then the roomiest."""
+    pattern, reasons = pair
+    room = sum((z.chars_per_line or 0) * (z.max_lines or 0) for z in pattern.zones)
+    return len(reasons), -room
+
+
+def _why_not(slide: _Slide, offered: set[str]) -> Optional[str]:
+    """Why the requested kind cannot be used at all here; None when only its
+    content keeps it out."""
+    asked = slide.plan.kind
+    if asked == "cover" and not slide.first:
+        return "only the first slide can be the cover"
+    if asked == "closing" and not slide.last:
+        return "a closing slide can only end the deck"
+    if asked and asked not in offered:
+        return f"this template has no '{asked}' slide"
+    return None
 
 
 def _once_fixed(slide: _Slide, has_cover: bool) -> List[Tuple[Pattern, float]]:
@@ -661,7 +715,7 @@ def _same_problem(slide: _Slide) -> set[str]:
     }
 
 
-def _problem(slide: _Slide, has_cover: bool) -> SlideProblem:
+def _problem(slide: _Slide, has_cover: bool, offered: set[str]) -> SlideProblem:
     """The closest pattern's misfits, named down to the element, with fixes."""
     own = _own(slide, has_cover)
     options: List[str] = []
@@ -675,23 +729,40 @@ def _problem(slide: _Slide, has_cover: bool) -> SlideProblem:
             ],
             slide.plan.kind,
         )
-    if slide.closest is None:
+    asked, close = slide.plan.kind, _close(slide)
+    if slide.closest is None and close is not None:
+        problem = (
+            f"this template has no '{asked}' slide and no close kind "
+            f"({', '.join(close)})"
+        )
+        options.append("leave `kind` out: the slide goes to the kind its content suits")
+    elif slide.closest is None:
         problem = "this template has no slide that can take this position"
+        options.append("merge this content into another slide, or remove it")
     else:
         closest, reasons = slide.closest
-        problem = f"closest fit, a '{closest.kind}' slide: " + "; ".join(
+        lead = ""
+        if close is not None and closest.kind != asked:
+            lead = f"{_why_not(slide, offered) or ''}; closest close kind, "
+        problem = f"{lead}closest fit, a '{closest.kind}' slide: " + "; ".join(
             r.text for r in reasons
         )
-        most = max((g.count for p, _ in own for g in p.groups), default=0)
+        # With a requested kind, the count that matters is its own slides'.
+        sized = [p for p, _ in own if close is None or p.kind == closest.kind]
+        where = "slide of this template" if close is None else f"'{closest.kind}' slide"
+        most = max((g.count for p in sized for g in p.groups), default=0)
         if slide.plan.items and most and len(slide.plan.items) > most:
-            problem = (
-                f"items: {len(slide.plan.items)} given; the largest slide of this "
-                f"template holds {most}"
+            reasons = [r for r in reasons if not r.text.startswith("items:")]
+            problem = "; ".join(
+                [
+                    f"items: {len(slide.plan.items)} given; the largest {where} holds {most}"
+                ]
+                + [r.text for r in reasons]
             )
             options += [f"trim to {most} items", "split the items over two slides"]
-            reasons = [r for r in reasons if not r.text.startswith("items:")]
         options += [r.option for r in reasons if r.option]
         options.append(f"a '{closest.kind}' slide takes: {zone_summary(closest)}")
+        options += _close_options(slide, own, closest.kind)
     if slide.first and has_cover:
         problem = "the first slide is always the template's cover; " + problem
         takes = f": {zone_summary(own[0][0])}" if own else ""
@@ -708,21 +779,57 @@ def _problem(slide: _Slide, has_cover: bool) -> SlideProblem:
     )
 
 
-def _substitution(slide: _Slide, chosen: Pattern, offered: set[str]) -> Optional[str]:
+def _close_options(
+    slide: _Slide, own: List[Tuple[Pattern, List[Misfit]]], named: str
+) -> List[str]:
+    """The close kinds the template offers here, each with what it takes."""
+    found = []
+    for kind in _close(slide) or ():
+        mine = [pr for pr in own if pr[0].kind == kind]
+        if kind != named and mine:
+            best = min(mine, key=_fewest)[0]
+            found.append(
+                f"or rewrite it as kind '{kind}', which takes: {zone_summary(best)}"
+            )
+    return found[:_MAX_KIND_OPTIONS]
+
+
+def _substitution(
+    slide: _Slide, chosen: Pattern, offered: set[str], has_cover: bool
+) -> Optional[str]:
+    """What was built instead of the requested kind, why, and the edit that
+    would give the requested kind."""
     asked = slide.plan.kind
     # The first slide is the cover by rule, and the description says so.
     if not asked or chosen.kind == asked or (slide.first and chosen.kind == "cover"):
         return None
-    if asked == "cover" and not slide.first:
-        why = "only the first slide can be the cover"
-    elif asked == "closing" and not slide.last:
-        why = "a closing slide can only end the deck"
-    elif asked not in offered:
-        why = f"this template has no '{asked}' slide"
-    else:
-        why = f"no '{asked}' slide holds this content"
+    head = f"Slide {slide.index}: built as '{chosen.kind}' instead of '{asked}'"
+    why = _why_not(slide, offered)
+    if why is not None:
+        remedy = (
+            "To make it the closing slide, move it to the end; otherwise nothing to do."
+            if asked == "closing" and not slide.last
+            else "Nothing to do."
+        )
+        return f"{head}: {why}. {remedy}"
+    mine = [
+        (p, r)
+        for p, r, _ in slide.checked
+        if p.kind == asked and _allowed(p, slide, has_cover)
+    ]
+    if not mine:  # pragma: no cover - _why_not covers every absent kind
+        return f"{head}. Nothing to do."
+    _, reasons = min(mine, key=_fewest)
+    fixes = list(dict.fromkeys(r.option for r in reasons if r.option))
+    remedy = (
+        f"To get the '{asked}' slide, call again and {'; '.join(fixes)}; "
+        "otherwise nothing to do."
+        if fixes
+        else "Nothing to do."
+    )
     return (
-        f"Slide {slide.index}: built as '{chosen.kind}' instead of '{asked}' ({why})."
+        f"{head}: the '{asked}' slide does not fit "
+        f"({'; '.join(r.text for r in reasons)}). {remedy}"
     )
 
 
@@ -1050,7 +1157,7 @@ def assign(
         slide.candidates = _candidates(slide, has_cover)
         if not slide.candidates:
             slide.closest = _closest(slide, has_cover)
-            problems.append(_problem(slide, has_cover))
+            problems.append(_problem(slide, has_cover, offered))
             # Counted for variety where it lands once fixed: the ask joins this round.
             slide.candidates = _once_fixed(slide, has_cover)
     if not slides:
@@ -1071,7 +1178,7 @@ def assign(
     notes = [
         note
         for slide, pattern in zip(slides, chosen)
-        if (note := _substitution(slide, pattern, offered))
+        if (note := _substitution(slide, pattern, offered, has_cover))
     ]
     notes += [
         f"Slides {slides[i - 2].index} to {slides[i].index} use the same template slide: "
