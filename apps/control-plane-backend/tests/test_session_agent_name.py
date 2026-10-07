@@ -65,7 +65,7 @@ def deps_for(engine: AsyncEngine) -> ProductServiceDependencies:
             team_dependencies=SimpleNamespace(),
             get_agent_instance_store=lambda: AgentInstanceStore(engine),
             get_session_metadata_store=lambda: SessionMetadataStore(engine),
-            get_kpi_writer=lambda: Mock(),
+            get_kpi_writer=Mock,
             configuration=SimpleNamespace(
                 platform=SimpleNamespace(runtime_catalog_sources=[])
             ),
@@ -98,7 +98,8 @@ async def test_renamed_agent_name_survives_deletion_and_session_projections(
         team_id=team, session_id="session-1", user_id="alice", deps=deps
     )
     assert live is not None and live.agent_display_name == "Latest name"
-    assert await agents.delete("agent-1", team)
+    removed = await agents.delete("agent-1", team)
+    assert removed
     deleted = await get_session(
         team_id=team, session_id="session-1", user_id="alice", deps=deps
     )
@@ -118,10 +119,10 @@ async def test_renamed_agent_name_survives_deletion_and_session_projections(
         user=user,
     )
     assert updated is not None and updated.agent_display_name == "Latest name"
-    assert not await agents.delete("agent-1", team)
-    assert (await list_sessions(team, deps, user_id="alice"))[
-        0
-    ].agent_display_name == "Latest name"
+    removed_again = await agents.delete("agent-1", team)
+    assert not removed_again
+    listed_after_retry = await list_sessions(team, deps, user_id="alice")
+    assert listed_after_retry[0].agent_display_name == "Latest name"
 
 
 @pytest.mark.asyncio
@@ -148,8 +149,10 @@ async def test_deletion_snapshots_only_its_team_and_agent_without_touching_activ
                 updated_at=old,
             )
         )
-    assert not await agents.delete("agent-1", TeamId("team-2"))
-    assert await agents.delete("agent-1", TeamId("team-1"))
+    removed_foreign = await agents.delete("agent-1", TeamId("team-2"))
+    assert not removed_foreign
+    removed_owned = await agents.delete("agent-1", TeamId("team-1"))
+    assert removed_owned
     for sid, expected in [
         ("owned", "Original name"),
         ("foreign", "Snapshot"),
@@ -180,14 +183,15 @@ async def test_name_snapshot_and_agent_deletion_roll_back_together(
             agent_display_name="Prior name",
         )
     )
-    with pytest.raises(RuntimeError, match="rollback"):
-        async with AsyncSession(control_plane_sql_engine) as transaction:
-            async with transaction.begin():
-                assert await agents.delete(
-                    "agent-1", TeamId("team-1"), session=transaction
-                )
-                raise RuntimeError("rollback")
-    assert await agents.get("agent-1") is not None
+    async with AsyncSession(control_plane_sql_engine) as transaction:
+        async with transaction.begin():
+            removed = await agents.delete(
+                "agent-1", TeamId("team-1"), session=transaction
+            )
+            await transaction.rollback()
+    assert removed
+    restored_agent = await agents.get("agent-1")
+    assert restored_agent is not None
     stored = await sessions.get("session-1")
     assert stored is not None and stored.agent_display_name == "Prior name"
 
@@ -258,7 +262,10 @@ async def test_session_creation_refuses_deleted_or_foreign_agents_without_saving
     deps = deps_for(control_plane_sql_engine)
     await deps.get_agent_instance_store().create(agent())
     if requested_team == "team-1":
-        assert await deps.get_agent_instance_store().delete("agent-1", TeamId("team-1"))
+        removed = await deps.get_agent_instance_store().delete(
+            "agent-1", TeamId("team-1")
+        )
+        assert removed
 
     async def allowed(_user, team, _deps):
         return team
@@ -272,4 +279,5 @@ async def test_session_creation_refuses_deleted_or_foreign_agents_without_saving
             user=cast(KeycloakUser, SimpleNamespace(uid="alice")),
         )
     assert refused.value.status_code == 404
-    assert await deps.get_session_metadata_store().get("late") is None
+    stored = await deps.get_session_metadata_store().get("late")
+    assert stored is None
