@@ -37,6 +37,7 @@ INSTANCE = "ab12"
 
 def _configuration(knowledge_flow_url: str) -> PodConfiguration:
     payload: dict[str, Any] = {
+        "app": {"runtime_id": "acme-kb"},
         "knowledge_base": {
             "prefix": "acme.kb",
             "control_plane_url": "http://example.invalid/control-plane/v1/",

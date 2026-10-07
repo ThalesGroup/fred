@@ -727,6 +727,7 @@ def test_task_queue_refuses_an_empty_name() -> None:
 def _valid_configuration() -> dict:
     """The smallest configuration a pod can start from, in Fred's own keys."""
     return {
+        "app": {"runtime_id": "acme-kb"},
         "knowledge_base": {
             "prefix": "acme.kb",
             "control_plane_url": "http://example.invalid/control-plane/v1/",
@@ -789,6 +790,29 @@ def test_a_configuration_without_credentials_is_refused_at_startup() -> None:
 
     with pytest.raises(ValidationError, match="security"):
         PodConfiguration.model_validate(without_security)
+
+
+def test_a_configuration_without_a_runtime_id_is_refused_naming_it() -> None:
+    """The pod's identity in metrics and logs is a deployment choice, never a guess."""
+    from fred_sdk.knowledge_base.configuration import PodConfiguration
+    from pydantic import ValidationError
+
+    payload = _valid_configuration()
+    del payload["app"]
+
+    with pytest.raises(ValidationError, match="app"):
+        PodConfiguration.model_validate(payload)
+
+
+def test_a_runtime_id_that_is_not_a_slug_is_refused() -> None:
+    from fred_sdk.knowledge_base.configuration import PodConfiguration
+    from pydantic import ValidationError
+
+    payload = _valid_configuration()
+    payload["app"]["runtime_id"] = "My KB"
+
+    with pytest.raises(ValidationError, match="runtime_id"):
+        PodConfiguration.model_validate(payload)
 
 
 @pytest.mark.parametrize("absent", ["realm_url", "client_id"])

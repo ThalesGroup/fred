@@ -15,9 +15,12 @@
 """
 What a Knowledge Base pod tells the people operating the platform.
 
-Operational metrics only — Stream 1 of OBSERVABILITY-AND-AUDIT.md. Every series
-is labelled by the Knowledge Base *definition* this pod serves, never by a team,
-an instance, a library or a run: "how is my folder doing" is a team's question,
+Operational metrics only — Stream 1 of OBSERVABILITY-AND-AUDIT.md. The series,
+their labels and their values are a contract shared with every other SDK
+implementation: openspec/specs/knowledge-base-pod-metrics/spec.md. Every series
+is labelled by the pod's `service` (its `app.runtime_id`, chosen at deployment,
+the same value its log records carry) and by the Knowledge Base *definition* it
+serves, never by a team, an instance, a library or a run: "how is my folder doing" is a team's question,
 answered inside Fred under Fred's own access control, and a scraped label is
 visible to everyone with Grafana. That is the whole reason no identifier of a
 run or of its owner is accepted here.
@@ -60,9 +63,17 @@ _CALL_BUCKETS = (0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 180)
 MAX_ISSUE_CODES = 100
 _OTHER_CODE = "other"
 
-# Until `bind` names the definition, which `serve` does before polling. A
-# series under this label is a call made outside a worker.
+# Until `bind` names the pod and its definition, which `serve` does before
+# polling. A series under this label is a call made outside a worker.
 _UNBOUND = "unbound"
+
+# The `sdk` label of `fred_kb_info`: which implementation of the contract this
+# is, since each numbers its own releases.
+SDK_NAME = "fred-sdk-python"
+
+
+class MetricsEndpointUnavailable(RuntimeError):
+    """The enabled metrics endpoint could not be opened — its port is taken."""
 
 
 class _Instruments:
@@ -71,11 +82,11 @@ class _Instruments:
     def __init__(self) -> None:
         from prometheus_client import Counter, Gauge, Histogram
 
-        kb = ("knowledge_base",)
+        kb = ("service", "knowledge_base")
         self.info = Gauge(
             "fred_kb_info",
             "The Knowledge Base definition this pod serves; always 1.",
-            [*kb, "version", "sdk_version"],
+            [*kb, "version", "sdk", "sdk_version"],
         )
         self.runs_in_progress = Gauge(
             "fred_kb_runs_in_progress",
@@ -138,6 +149,7 @@ class _Instruments:
 
 _instruments: _Instruments | None = None
 _available = True
+_service = _UNBOUND
 _knowledge_base = _UNBOUND
 _issue_codes: set[str] = set()
 
@@ -152,15 +164,25 @@ def _get() -> _Instruments | None:
     return _instruments
 
 
-def bind(knowledge_base: KnowledgeBase) -> None:
-    """Name the definition every later series is labelled with."""
-    global _knowledge_base
+def bind(knowledge_base: KnowledgeBase, runtime_id: str) -> None:
+    """Name the pod and the definition every later series is labelled with."""
+    global _service, _knowledge_base
+    _service = runtime_id
     _knowledge_base = knowledge_base.id
     instruments = _get()
     if instruments is not None:
         instruments.info.labels(
-            knowledge_base.id, knowledge_base.version, _sdk_version()
+            runtime_id,
+            knowledge_base.id,
+            knowledge_base.version,
+            SDK_NAME,
+            _sdk_version(),
         ).set(1)
+
+
+def _identity() -> tuple[str, str]:
+    """The two labels every series opens with, read once per observation."""
+    return _service, _knowledge_base
 
 
 def start_exporter(config: KpiPrometheusSinkConfig) -> bool:
@@ -175,7 +197,15 @@ def start_exporter(config: KpiPrometheusSinkConfig) -> bool:
         return False
     from prometheus_client import start_http_server
 
-    start_http_server(config.port, addr=config.address)
+    try:
+        start_http_server(config.port, addr=config.address)
+    except OSError as error:
+        # A deployment mistake, not a measurement one: say where, and stop the
+        # pod before it serves a run nobody can see.
+        raise MetricsEndpointUnavailable(
+            f"Cannot serve metrics on {config.address}:{config.port}: {error}. "
+            "Choose another observability.kpi.prometheus.port, or disable it."
+        ) from error
     logger.info("Knowledge Base metrics served at %s:%s", config.address, config.port)
     return True
 
@@ -201,9 +231,9 @@ def observing_run() -> Iterator[RunObservation]:
         yield observation
         return
 
-    kb = _knowledge_base
+    kb = _identity()
     started = time.monotonic()
-    instruments.runs_in_progress.labels(kb).inc()
+    instruments.runs_in_progress.labels(*kb).inc()
     outcome, reconciliation = "error", "none"
     try:
         yield observation
@@ -219,25 +249,29 @@ def observing_run() -> Iterator[RunObservation]:
         outcome = "interrupted"
         raise
     except BaseException as error:
-        instruments.run_errors.labels(kb, observation.stage, type(error).__name__).inc()
+        instruments.run_errors.labels(
+            *kb, observation.stage, type(error).__name__
+        ).inc()
         raise
     finally:
-        instruments.runs_in_progress.labels(kb).dec()
-        instruments.runs.labels(kb, outcome, reconciliation).inc()
-        instruments.run_duration.labels(kb, outcome).observe(time.monotonic() - started)
-        instruments.last_run.labels(kb, outcome).set_to_current_time()
+        instruments.runs_in_progress.labels(*kb).dec()
+        instruments.runs.labels(*kb, outcome, reconciliation).inc()
+        instruments.run_duration.labels(*kb, outcome).observe(
+            time.monotonic() - started
+        )
+        instruments.last_run.labels(*kb, outcome).set_to_current_time()
 
 
 def _count_result(
-    instruments: _Instruments, kb: str, result: KnowledgeBaseSyncResult
+    instruments: _Instruments, kb: tuple[str, str], result: KnowledgeBaseSyncResult
 ) -> None:
     for change in ("discovered", "created", "updated", "removed", "unchanged"):
         count = getattr(result, change)
         if count:
-            instruments.items.labels(kb, change).inc(count)
+            instruments.items.labels(*kb, change).inc(count)
     for severity, issues in (("warning", result.warnings), ("error", result.errors)):
         for issue in issues:
-            instruments.issues.labels(kb, severity, _bounded_code(issue.code)).inc()
+            instruments.issues.labels(*kb, severity, _bounded_code(issue.code)).inc()
 
 
 def _bounded_code(code: str) -> str:
@@ -262,7 +296,7 @@ def observing_request(target: str, operation: str) -> Iterator[Callable[[int], N
         yield lambda _status: None
         return
 
-    kb = _knowledge_base
+    kb = _identity()
     status = "error"
 
     def answered(code: int) -> None:
@@ -276,17 +310,17 @@ def observing_request(target: str, operation: str) -> Iterator[Callable[[int], N
         status = "transport_error"
         raise
     finally:
-        instruments.request_duration.labels(kb, target, operation).observe(
+        instruments.request_duration.labels(*kb, target, operation).observe(
             time.monotonic() - started
         )
-        instruments.requests.labels(kb, target, operation, status).inc()
+        instruments.requests.labels(*kb, target, operation, status).inc()
 
 
 def observe_ingestion_wait(state: str, seconds: float) -> None:
     """One document's wait for its ingestion, ended in `state` or `timeout`."""
     instruments = _get()
     if instruments is not None:
-        instruments.ingestion_wait.labels(_knowledge_base, state).observe(seconds)
+        instruments.ingestion_wait.labels(*_identity(), state).observe(seconds)
 
 
 def _sdk_version() -> str:

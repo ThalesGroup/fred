@@ -43,7 +43,7 @@ from fred_sdk.knowledge_base._workflow import (
     SynchronizeWorkflow,
 )
 from fred_sdk.knowledge_base.client import ControlPlaneClient
-from fred_sdk.knowledge_base.configuration import PodConfiguration, PodObservability
+from fred_sdk.knowledge_base.configuration import PodConfiguration
 from fred_sdk.knowledge_base.documents import declare_library_synchronized
 from fred_sdk.knowledge_base.knowledge_base import KnowledgeBase
 from fred_sdk.knowledge_base.routing import task_queue_for
@@ -69,15 +69,15 @@ def build_workflow_runner() -> SandboxedWorkflowRunner:
 
 
 def build_runtime(
-    knowledge_base: KnowledgeBase, observability: PodObservability
+    knowledge_base: KnowledgeBase, configuration: PodConfiguration
 ) -> Runtime | None:
     """The engine runtime, exporting its own metrics when configured to.
 
     None keeps the engine's default runtime, which exports nothing. Every
-    series is tagged with the definition, as the SDK's own are, so the two
-    endpoints join on one label.
+    series is tagged with the pod and the definition, as the SDK's own are, so
+    the two endpoints join on the same labels.
     """
-    exporter = observability.temporal.prometheus
+    exporter = configuration.observability.temporal.prometheus
     if not exporter.enabled:
         return None
     logger.info(
@@ -91,7 +91,10 @@ def build_runtime(
                 unit_suffix=True,
                 durations_as_seconds=True,
             ),
-            global_tags={"knowledge_base": knowledge_base.id},
+            global_tags={
+                "service": configuration.runtime_id,
+                "knowledge_base": knowledge_base.id,
+            },
         )
     )
 
@@ -135,12 +138,12 @@ def _build_activity(
 async def serve(knowledge_base: KnowledgeBase, configuration: PodConfiguration) -> None:
     """Poll this definition's queue until the process is stopped."""
     task_queue = task_queue_for(knowledge_base.id)
-    telemetry.bind(knowledge_base)
+    telemetry.bind(knowledge_base, configuration.runtime_id)
     telemetry.start_exporter(configuration.observability.kpi.prometheus)
     client = await Client.connect(
         configuration.temporal_host,
         namespace=configuration.temporal_namespace,
-        runtime=build_runtime(knowledge_base, configuration.observability),
+        runtime=build_runtime(knowledge_base, configuration),
     )
     control_plane = ControlPlaneClient(configuration)
     logger.info("Knowledge Base %s serving runs on %s", knowledge_base.id, task_queue)

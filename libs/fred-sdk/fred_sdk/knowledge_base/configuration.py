@@ -32,6 +32,7 @@ import logging
 
 from fred_pod.common import (
     ConfigFiles,
+    PodAppIdentity,
     TemporalSchedulerConfig,
     load_configuration_with_config_files,
     parse_yaml_mapping_file,
@@ -41,6 +42,8 @@ from fred_pod.security.backend_to_backend_auth import M2MAuthConfig, M2MTokenPro
 from fred_pod.security.oidc_endpoints import resolve_endpoints
 from fred_pod.security.structure import M2MSecurity
 from pydantic import BaseModel, Field, PrivateAttr, field_validator
+
+from fred_sdk.knowledge_base.logs import LogFormat
 
 logger = logging.getLogger(__name__)
 
@@ -135,16 +138,27 @@ class PodTemporalObservability(BaseModel):
     prometheus: TemporalMetricsConfig = Field(default_factory=TemporalMetricsConfig)
 
 
-class PodObservability(BaseModel):
-    """What this pod exposes to be scraped. Nothing listens unless enabled.
+class PodLogs(BaseModel):
+    """How this pod writes its log records to standard output.
 
-    The address defaults to loopback, as on every Fred backend: a deployment
-    that wants a pod scraped binds it outward explicitly, and the endpoint it
-    opens is read-only.
+    `json` for a deployed pod, whose log pipeline parses each line into fields;
+    `text` for a person reading a terminal. Both carry `app.runtime_id`.
+    """
+
+    format: LogFormat = "json"
+
+
+class PodObservability(BaseModel):
+    """What this pod exposes to be scraped, and how it writes its logs.
+
+    Both endpoints are enabled by default but bound to loopback, as on every
+    Fred backend: nothing is reachable from outside the pod until a deployment
+    binds it outward explicitly, and what it then opens is read-only.
     """
 
     kpi: PodKpi = Field(default_factory=PodKpi)
     temporal: PodTemporalObservability = Field(default_factory=PodTemporalObservability)
+    logs: PodLogs = Field(default_factory=PodLogs)
 
 
 class PodConfiguration(BaseModel):
@@ -152,12 +166,20 @@ class PodConfiguration(BaseModel):
 
     _token_provider: M2MTokenProvider | None = PrivateAttr(default=None)
 
+    # Required, with no default: a pod's identity in metrics and logs is chosen
+    # by whoever deploys it, and one that starts under a guessed name is the
+    # mistake this field exists to prevent.
+    app: PodAppIdentity
     knowledge_base: KnowledgeBaseSettings
     security: PodSecurity
     scheduler: PodScheduler = Field(default_factory=PodScheduler)
     observability: PodObservability = Field(default_factory=PodObservability)
 
     # ── the values the rest of the SDK reads ──────────────────────────────────
+
+    @property
+    def runtime_id(self) -> str:
+        return self.app.runtime_id
 
     @property
     def prefix(self) -> str:

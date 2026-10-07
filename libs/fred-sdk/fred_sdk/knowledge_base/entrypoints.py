@@ -32,8 +32,20 @@ from fred_sdk.knowledge_base.client import ControlPlaneClient
 from fred_sdk.knowledge_base.configuration import PodConfiguration
 from fred_sdk.knowledge_base.declaration import KnowledgeBaseDeclaration
 from fred_sdk.knowledge_base.knowledge_base import KnowledgeBase
+from fred_sdk.knowledge_base.logs import configure_logging
 
 logger = logging.getLogger(__name__)
+
+
+def _load(knowledge_base: KnowledgeBase) -> PodConfiguration:
+    """Read the configuration, then log as the pod it names from here on."""
+    configuration = PodConfiguration.load()
+    configure_logging(
+        service=configuration.runtime_id,
+        knowledge_base=knowledge_base.id,
+        log_format=configuration.observability.logs.format,
+    )
+    return configuration
 
 
 def publish_knowledge_base(knowledge_base: KnowledgeBase) -> None:
@@ -43,7 +55,7 @@ def publish_knowledge_base(knowledge_base: KnowledgeBase) -> None:
     stores stays what is deployed.
     """
     declaration = KnowledgeBaseDeclaration.of(knowledge_base)
-    configuration = PodConfiguration.load()
+    configuration = _load(knowledge_base)
 
     async def _publish() -> None:
         client = ControlPlaneClient(configuration)
@@ -67,7 +79,7 @@ def run_knowledge_base(knowledge_base: KnowledgeBase) -> None:
     authenticates as and what it connects to all come from the pod's
     configuration.
     """
-    configuration = PodConfiguration.load()
+    configuration = _load(knowledge_base)
     # Imported here so `publish` needs no workflow engine at all: serving runs
     # is the only thing that does, and it ships as the `knowledge-base` extra.
     try:

@@ -393,14 +393,26 @@ and a confidential client of its own. A pod started without its client secret an
 realm fails immediately, naming what it lacks. A stack running with authentication
 off cannot host one — including for local development.
 
+**Metrics and logs come with the SDK; you write no code for them.** Name the pod
+with `app.runtime_id` in its `configuration.yaml` (a lowercase slug, chosen by
+whoever deploys it — the pod refuses to start without one). Every run, every call
+to Fred and every ingestion wait is then measured as `fred_kb_*` series labelled
+`service=<runtime_id>`, served read-only on `observability.kpi.prometheus` (port
+9000, loopback until bound outward), and every log line is JSON on standard
+output carrying the same `service` (`observability.logs.format: text` for a
+terminal). To count something of your own, use `prometheus_client` as usual: the
+same endpoint serves it. Never label a series with a team, an instance or a
+document. The contract, and the questions it answers, are in
+[KNOWLEDGE-BASE.md §8](https://github.com/ThalesGroup/fred/blob/swift/docs/swift/design/KNOWLEDGE-BASE.md#8-operational-metrics).
+
 **This surface is beta: pin your `fred-sdk` version, as it may change between beta
 releases.** Known limits today:
 
 - Configuration fields are fixed once instances exist — there is no schema
   migration. Deleting a synchronized folder deletes its documents.
-- A run's fate is visible in the workflow engine only. Counters, summaries and
-  issues a handler returns are not stored or displayed, and Fred offers no run
-  history, manual trigger or worker-health check yet.
+- Fred's UI shows nothing of a run yet: counters, summaries and issues a handler
+  returns are exported as metrics only, not stored or displayed, and Fred offers
+  no run history or manual trigger yet.
 - A relative path is the document key, so a rename reads as a delete plus an add.
 - Cadences are hourly, daily or weekly, with no immediate first run.
 

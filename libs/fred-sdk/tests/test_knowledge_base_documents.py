@@ -54,6 +54,7 @@ ACCEPTED = {
 
 def _configuration() -> PodConfiguration:
     payload: dict[str, Any] = {
+        "app": {"runtime_id": "acme-kb"},
         "knowledge_base": {
             "prefix": "acme.kb",
             "control_plane_url": "http://example.invalid/control-plane/v1/",
@@ -505,7 +506,7 @@ def _waits(kb: str, state: str) -> float:
     return (
         REGISTRY.get_sample_value(
             "fred_kb_ingestion_wait_seconds_count",
-            {"knowledge_base": kb, "state": state},
+            {"service": "acme-kb", "knowledge_base": kb, "state": state},
         )
         or 0.0
     )
@@ -515,6 +516,7 @@ def test_a_wait_is_measured_by_how_the_ingestion_ended(monkeypatch):
     from fred_sdk.knowledge_base import telemetry
 
     kb = f"acme.kb.w{secrets.token_hex(4)}"
+    monkeypatch.setattr(telemetry, "_service", "acme-kb")
     monkeypatch.setattr(telemetry, "_knowledge_base", kb)
     fred = _Fred().answers(
         "GET",
@@ -532,6 +534,7 @@ def test_a_wait_that_runs_out_is_measured_as_a_timeout(monkeypatch):
     from fred_sdk.knowledge_base import telemetry
 
     kb = f"acme.kb.w{secrets.token_hex(4)}"
+    monkeypatch.setattr(telemetry, "_service", "acme-kb")
     monkeypatch.setattr(telemetry, "_knowledge_base", kb)
     fred = _Fred().answers("GET", (200, _summary("running")))
     publisher = _publisher(fred, monkeypatch)

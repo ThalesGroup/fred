@@ -16,7 +16,7 @@
 
 What matters most here: every run is counted exactly once whatever way it ends,
 a handler that raises is told apart from one that reported failure, no series
-carries anything more specific than the definition, and an author's issue codes
+carries anything more specific than the pod and its definition, and an author's issue codes
 cannot grow the series without bound.
 """
 
@@ -38,16 +38,22 @@ from fred_sdk.knowledge_base.models import (
 from prometheus_client import REGISTRY
 
 
+# The pod every test is bound as; the definition label alone keeps tests apart.
+SERVICE = "acme-kb"
+
+
 @pytest.fixture
 def kb(monkeypatch: pytest.MonkeyPatch) -> str:
     """A definition label of its own, so tests never read each other's counts."""
     name = f"acme.kb.t{secrets.token_hex(4)}"
+    monkeypatch.setattr(telemetry, "_service", SERVICE)
     monkeypatch.setattr(telemetry, "_knowledge_base", name)
     return name
 
 
 def _value(metric: str, **labels: str) -> float:
-    return REGISTRY.get_sample_value(metric, labels) or 0.0
+    """A sample under this pod's `service`, which every series carries."""
+    return REGISTRY.get_sample_value(metric, {"service": SERVICE, **labels}) or 0.0
 
 
 def _result(**fields: Any) -> KnowledgeBaseSyncResult:
@@ -291,7 +297,8 @@ def test_a_call_lost_on_the_network_is_a_transport_error(kb):
     )
 
 
-def test_bind_names_the_definition_and_its_version(monkeypatch):
+def test_bind_names_the_pod_the_definition_and_the_sdk(monkeypatch):
+    monkeypatch.setattr(telemetry, "_service", telemetry._UNBOUND)
     monkeypatch.setattr(telemetry, "_knowledge_base", telemetry._UNBOUND)
     definition = KnowledgeBase(
         id=f"acme.kb.b{secrets.token_hex(4)}",
@@ -300,8 +307,9 @@ def test_bind_names_the_definition_and_its_version(monkeypatch):
         description="A definition to bind",
     )
 
-    telemetry.bind(definition)
+    telemetry.bind(definition, "webdav-kb")
 
+    assert telemetry._service == "webdav-kb"
     assert telemetry._knowledge_base == definition.id
     samples = [
         sample
@@ -310,7 +318,11 @@ def test_bind_names_the_definition_and_its_version(monkeypatch):
         for sample in family.samples
         if sample.labels["knowledge_base"] == definition.id
     ]
-    assert [(s.labels["version"], s.value) for s in samples] == [("2.3.0", 1)]
+    assert [
+        (s.labels["service"], s.labels["version"], s.labels["sdk"], s.value)
+        for s in samples
+    ] == [("webdav-kb", "2.3.0", "fred-sdk-python", 1)]
+    assert samples[0].labels["sdk_version"] == telemetry._sdk_version()
 
 
 def test_without_prometheus_client_nothing_is_measured_and_nothing_breaks(
@@ -331,6 +343,7 @@ def test_without_prometheus_client_nothing_is_measured_and_nothing_breaks(
 
 def _pod_payload(**extra: Any) -> dict[str, Any]:
     return {
+        "app": {"runtime_id": "acme-kb"},
         "knowledge_base": {
             "prefix": "acme.kb",
             "control_plane_url": "http://example.invalid/control-plane/v1",
@@ -381,6 +394,65 @@ def test_the_engine_runtime_exports_only_when_enabled():
     )
     disabled = PodConfiguration.model_validate(
         _pod_payload(observability={"temporal": {"prometheus": {"enabled": False}}})
-    ).observability
+    )
 
     assert build_runtime(definition, disabled) is None
+
+
+def test_the_engine_series_carry_the_pod_and_the_definition(monkeypatch):
+    from fred_sdk.knowledge_base import worker
+
+    built: dict[str, Any] = {}
+    monkeypatch.setattr(worker, "Runtime", lambda **kwargs: built.update(kwargs))
+    definition = KnowledgeBase(
+        id="acme.kb.runtime", version="1.0.0", name="R", description="Runtime"
+    )
+
+    worker.build_runtime(definition, PodConfiguration.model_validate(_pod_payload()))
+
+    assert built["telemetry"].global_tags == {
+        "service": "acme-kb",
+        "knowledge_base": "acme.kb.runtime",
+    }
+
+
+def _free_port() -> int:
+    import socket
+
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        return probe.getsockname()[1]
+
+
+def test_an_authors_own_series_are_served_beside_the_sdks():
+    """No metrics API in the SDK: an author uses the library's default registry."""
+    from prometheus_client import Counter
+    from prometheus_client.core import REGISTRY as default_registry
+
+    name = f"acme_webdav_shares_scanned_{secrets.token_hex(3)}"
+    Counter(name, "Shares an author chose to count.", registry=default_registry).inc()
+    port = _free_port()
+    config = PodConfiguration.model_validate(
+        _pod_payload(observability={"kpi": {"prometheus": {"port": port}}})
+    ).observability.kpi.prometheus
+
+    assert telemetry.start_exporter(config) is True
+    body = httpx.get(f"http://127.0.0.1:{port}/metrics").text
+
+    assert f"{name}_total 1.0" in body
+    assert "fred_kb_info" in body
+
+
+def test_a_taken_metrics_port_stops_the_pod_naming_it():
+    import socket
+
+    with socket.socket() as taken:
+        taken.bind(("127.0.0.1", 0))
+        taken.listen()
+        port = taken.getsockname()[1]
+        config = PodConfiguration.model_validate(
+            _pod_payload(observability={"kpi": {"prometheus": {"port": port}}})
+        ).observability.kpi.prometheus
+
+        with pytest.raises(telemetry.MetricsEndpointUnavailable, match=f":{port}"):
+            telemetry.start_exporter(config)
