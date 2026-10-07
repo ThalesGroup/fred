@@ -132,7 +132,8 @@ describe("AnalyticsPage admin-only section (§2.4/§2.5)", () => {
     const html = render();
     expect(html).toContain("rework.analytics.sections.administration");
     expect(html).toContain("rework.analytics.sections.webResearch");
-    expect(html).toContain("rework.analytics.webResearch.costExplanation");
+    expect(html).toContain("rework.analytics.webResearch.searches");
+    expect(html).toContain("rework.analytics.webResearch.fetches");
     expect(html).toContain("/admin/features?kind=model");
   });
 

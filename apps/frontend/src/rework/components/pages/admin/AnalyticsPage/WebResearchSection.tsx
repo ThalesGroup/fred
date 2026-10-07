@@ -27,10 +27,12 @@ export default function WebResearchSection({ timeRange }: { timeRange: TimeRange
     { since: timeRange.since, until: timeRange.until },
     { refetchOnMountOrArgChange: 300 },
   );
-  const card = (key: string, value: number | null | undefined) => (
+  const card = (key: string, value: number | null | undefined, fractionDigits?: number) => (
     <KpiStatCard
       label={t(`rework.analytics.webResearch.${key}`)}
+      hint={t(`rework.analytics.webResearch.hints.${key}`)}
       value={value}
+      fractionDigits={fractionDigits}
       isLoading={isLoading}
       isError={isError}
     />
@@ -42,15 +44,11 @@ export default function WebResearchSection({ timeRange }: { timeRange: TimeRange
 
   return (
     <Disclosure title={t("rework.analytics.sections.webResearch")} defaultOpen>
-      <p className={styles.sectionDescription}>
-        {t("rework.analytics.webResearch.costExplanation", {
-          searches: data?.billable_searches ?? 0,
-          cost: (data?.estimated_cost_usd ?? 0).toFixed(2),
-        })}
-      </p>
       <div className={styles.kpiRow}>
-        {card("requests", data?.requests)}
-        {card("estimatedCost", data?.estimated_cost_usd)}
+        {card("toolCalls", data?.tool_calls)}
+        {card("searches", data?.searches)}
+        {card("fetches", data?.fetches)}
+        {card("estimatedCost", data?.estimated_cost_usd, 4)}
         {card("blocked", data?.blocked)}
         {card("saturated", data?.saturated)}
         {card("failed", data?.failed)}
@@ -65,7 +63,6 @@ export default function WebResearchSection({ timeRange }: { timeRange: TimeRange
           isLoading={isLoading}
           isError={isError}
         />
-        <p className={styles.sectionDescription}>{t("rework.analytics.webResearch.detailsHint")}</p>
       </div>
     </Disclosure>
   );

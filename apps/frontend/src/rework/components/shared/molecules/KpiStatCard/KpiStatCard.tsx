@@ -13,10 +13,16 @@
 // limitations under the License.
 
 import type { StatusBadgeTone } from "../../atoms/StatusBadge/StatusBadge.tsx";
+import Icon from "@shared/atoms/Icon/Icon";
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import styles from "./KpiStatCard.module.scss";
 
 export interface KpiStatCardProps {
   label: string;
+  /** Short definition shown in an info bubble beside the label. */
+  hint?: string;
+  /** Fixed number of decimals, e.g. 4 for a cost; locale default when unset. */
+  fractionDigits?: number;
   tone?: StatusBadgeTone;
   loadingLabel?: string;
   errorLabel?: string;
@@ -30,6 +36,8 @@ export interface KpiStatCardProps {
 
 export default function KpiStatCard({
   label,
+  hint,
+  fractionDigits,
   tone = "neutral",
   value,
   delta,
@@ -56,13 +64,27 @@ export default function KpiStatCard({
 
   return (
     <section className={styles.card} data-tone={tone}>
-      <span className={styles.label}>{label}</span>
+      <span className={styles.label}>
+        {label}
+        {hint && (
+          <Tooltip text={hint}>
+            <span className={styles.hint} tabIndex={0} aria-label={hint}>
+              <Icon category="outlined" type="info" />
+            </span>
+          </Tooltip>
+        )}
+      </span>
       {isLoading && <span className={styles.state}>{loadingLabel}</span>}
       {isError && <span className={styles.stateError}>{errorLabel}</span>}
       {isUnavailable && <span className={styles.state}>{noDataLabel}</span>}
       {hasValue && (
         <div className={styles.valueRow}>
-          <span className={styles.value}>{value!.toLocaleString()}</span>
+          <span className={styles.value}>
+            {value!.toLocaleString(undefined, {
+              minimumFractionDigits: fractionDigits,
+              maximumFractionDigits: fractionDigits,
+            })}
+          </span>
           {deltaLabel !== undefined && <span className={deltaClass}>{deltaLabel}</span>}
         </div>
       )}

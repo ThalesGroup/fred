@@ -1529,17 +1529,14 @@
         "valueLabel": "Conversations"
       },
       "webResearch": {
-        "requests": "Requests",
-        "estimatedCost": "Estimated provider cost (USD)",
+        "estimatedCost": "Estimated provider cost ($)",
         "blocked": "Blocked (security)",
         "saturated": "Rejected (saturation)",
         "failed": "Other failures",
         "p95": "p95 latency (ms)",
         "users": "Distinct users",
-        "costExplanation": "Estimated cost = successful searches ({{searches}}) × configured price per 1,000 searches (web_research.cost_per_1000_searches) ÷ 1,000 = ${{cost}}. Page reads (fetch_url) are not billed by the provider; retries, provider free tiers and LLM tokens (see “Token usage”) are excluded.",
         "reasonsTitle": "Rejected or failed requests by reason",
         "noRefusal": "No rejected or failed request in this period.",
-        "detailsHint": "Per-request details (user, query, URL) stay in the restricted activity API: GET /agents/web-research/activity.",
         "reasons": {
           "unsafe_destination": "Non-public address",
           "too_many_redirects": "Too many redirects",
@@ -1553,6 +1550,20 @@
           "rejected": "Rejected",
           "invalid_response": "Invalid response",
           "activity_unavailable": "Activity log unavailable"
+        },
+        "toolCalls": "Tool calls",
+        "searches": "Searches",
+        "fetches": "Page reads",
+        "hints": {
+          "toolCalls": "Searches + page reads. Counted since this version was deployed.",
+          "searches": "web_search calls to the search provider: the only ones it bills.",
+          "fetches": "fetch_url calls: read the site directly, not billed by the provider (costs LLM tokens).",
+          "estimatedCost": "Successful searches × cost_per_1000_searches ÷ 1,000. Excludes retries, free tiers and LLM tokens.",
+          "blocked": "Refused for security: non-public address, redirects, content or size. Details: restricted activity API.",
+          "saturated": "Refused for lack of capacity (busy): raise max_concurrency or replicas.",
+          "failed": "Provider, proxy or site failure, or timeout.",
+          "p95": "95% of calls finish faster than this.",
+          "users": "Users who made at least one call."
         }
       }
     },

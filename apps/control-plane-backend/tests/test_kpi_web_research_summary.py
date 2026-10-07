@@ -44,6 +44,12 @@ class _FakeClient:
                 "p95": {"values": {"95.0": 1834.6}},
                 "billable": {"doc_count": 100, "usd": {"value": 0.5}},
                 "errors": {"doc_count": 12},
+                "by_tool": {
+                    "buckets": [
+                        {"key": "web_search", "doc_count": 100},
+                        {"key": "fetch_url", "doc_count": 20},
+                    ]
+                },
                 "by_reason": {
                     "buckets": [
                         {"key": "unsafe_destination", "doc_count": 4},
@@ -68,7 +74,8 @@ async def test_summary_splits_blocked_saturated_and_failed_and_scopes_team() -> 
         request=cast(Any, None),
         team_id=cast(Any, "team-a"),
     )
-    assert (result.requests, result.billable_searches) == (120, 100)
+    assert (result.tool_calls, result.searches, result.fetches) == (120, 100, 20)
+    assert result.billable_searches == 100
     assert result.estimated_cost_usd == 0.5
     assert (result.blocked, result.saturated, result.failed) == (5, 3, 4)
     assert (result.unique_users, result.p95_ms) == (9, 1835)

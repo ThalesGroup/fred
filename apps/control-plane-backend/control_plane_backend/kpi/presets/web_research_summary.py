@@ -43,7 +43,9 @@ BLOCKED_CODES = frozenset(
 
 
 class WebResearchSummaryResponse(BaseModel):
-    requests: int
+    tool_calls: int
+    searches: int
+    fetches: int
     billable_searches: int
     estimated_cost_usd: float
     blocked: int
@@ -88,6 +90,7 @@ async def query_web_research_summary(
             },
             "errors": {"filter": {"term": {"dims.status": "error"}}},
             "by_reason": {"terms": {"field": "dims.error_code", "size": 20}},
+            "by_tool": {"terms": {"field": "dims.tool_name", "size": 5}},
         },
     }
     resp = store.client.search(index=store.index, body=body)
@@ -100,8 +103,13 @@ async def query_web_research_summary(
     saturated = sum(r.value for r in reasons if r.label == "busy")
     p95 = aggs.get("p95", {}).get("values", {}).get("95.0")
     billable = aggs.get("billable", {})
+    by_tool = {
+        b["key"]: b["doc_count"] for b in aggs.get("by_tool", {}).get("buckets", [])
+    }
     return WebResearchSummaryResponse(
-        requests=resp.get("hits", {}).get("total", {}).get("value", 0),
+        tool_calls=resp.get("hits", {}).get("total", {}).get("value", 0),
+        searches=by_tool.get("web_search", 0),
+        fetches=by_tool.get("fetch_url", 0),
         billable_searches=billable.get("doc_count", 0),
         estimated_cost_usd=round(billable.get("usd", {}).get("value") or 0.0, 4),
         blocked=blocked,

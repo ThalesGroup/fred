@@ -101,12 +101,13 @@ Reads require `CAN_MANAGE_PLATFORM`, erasure `CAN_ADMINISTER_USERS`.
 
 ## Validation
 
-Platform admins see a "Web research" section on the Analytics page: requests,
-estimated provider cost, blocked/saturated/failed requests by reason, p95 latency
+Platform admins see a "Web research" section on the Analytics page: tool calls
+split into searches (billed) and page reads (not billed), estimated provider cost, blocked/saturated/failed requests by reason, p95 latency
 and distinct users. Set `cost_per_1000_searches` to your provider contract price
 (default 0) for the estimate; it counts successful searches only and excludes
 retries, free tiers and LLM tokens. The section reads a content-free
-`web_research.request` KPI event, so it requires the OpenSearch KPI store.
+`web_research.request` KPI event, so it requires the OpenSearch KPI store and
+counts from the deployment of this version; restarts do not reset it.
 
 Use Fred's existing Prometheus exporter and runtime dashboard: operation counts,
 latency, failure/busy outcomes and activity-sink failures. Load the rules in

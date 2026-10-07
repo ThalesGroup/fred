@@ -4460,7 +4460,8 @@ web research execution and storage are owned by the runtime. See the
 ### 2026-10-07 — Web research analytics preset (#2980)
 
 `GET /kpi/presets/web_research_summary` (platform admin, team-scopable) returns
-web research volume, estimated provider cost, blocked/saturated/failed counts,
+web research tool calls split into searches (`web_search`, billed by the
+provider) and page reads (`fetch_url`, not billed), estimated provider cost, blocked/saturated/failed counts,
 reason breakdown, p95 latency and distinct users for a time range. It reads the
 content-free `web_research.request` KPI event emitted by Fred Agents; the cost
 is `cost.usd` = `web_research.cost_per_1000_searches` / 1000 per successful

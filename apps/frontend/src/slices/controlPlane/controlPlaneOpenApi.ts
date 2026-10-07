@@ -4329,7 +4329,9 @@ export type TeamStorageResponse = {
   until: string;
 };
 export type WebResearchSummaryResponse = {
-  requests: number;
+  tool_calls: number;
+  searches: number;
+  fetches: number;
   billable_searches: number;
   estimated_cost_usd: number;
   blocked: number;

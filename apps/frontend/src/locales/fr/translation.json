@@ -1529,17 +1529,14 @@
         "valueLabel": "Conversations"
       },
       "webResearch": {
-        "requests": "Requêtes",
-        "estimatedCost": "Coût moteur estimé (USD)",
+        "estimatedCost": "Coût moteur estimé ($)",
         "blocked": "Bloquées (sécurité)",
         "saturated": "Refusées (saturation)",
         "failed": "Autres échecs",
         "p95": "Latence p95 (ms)",
         "users": "Utilisateurs distincts",
-        "costExplanation": "Coût estimé = recherches réussies ({{searches}}) × prix pour 1 000 recherches configuré (web_research.cost_per_1000_searches) ÷ 1 000 = {{cost}} $. Les lectures de pages (fetch_url) ne sont pas facturées par le moteur ; les nouvelles tentatives, les offres gratuites du fournisseur et les tokens LLM (voir « Consommation de tokens ») ne sont pas inclus.",
         "reasonsTitle": "Requêtes refusées ou en échec, par motif",
         "noRefusal": "Aucune requête refusée ni en échec sur la période.",
-        "detailsHint": "Le détail par requête (utilisateur, requête, URL) reste réservé à l'API d'activité restreinte : GET /agents/web-research/activity.",
         "reasons": {
           "unsafe_destination": "Adresse non publique",
           "too_many_redirects": "Trop de redirections",
@@ -1553,6 +1550,20 @@
           "rejected": "Refusée",
           "invalid_response": "Réponse invalide",
           "activity_unavailable": "Journal d'activité indisponible"
+        },
+        "toolCalls": "Appels d'outil",
+        "searches": "Recherches",
+        "fetches": "Lectures de pages",
+        "hints": {
+          "toolCalls": "Recherches + lectures de pages. Compté depuis le déploiement de cette version.",
+          "searches": "Appels web_search au moteur de recherche : les seuls facturés par le fournisseur.",
+          "fetches": "Appels fetch_url : lecture directe du site, non facturée par le moteur (coûte des tokens LLM).",
+          "estimatedCost": "Recherches réussies × cost_per_1000_searches ÷ 1 000. Hors nouvelles tentatives, offres gratuites et tokens LLM.",
+          "blocked": "Refusées par sécurité : adresse non publique, redirections, contenu ou taille. Détail : API d'activité restreinte.",
+          "saturated": "Refusées faute de place (busy) : augmenter max_concurrency ou les réplicas.",
+          "failed": "Moteur, proxy ou site en échec, ou délai dépassé.",
+          "p95": "95 % des appels durent moins que cette valeur.",
+          "users": "Utilisateurs ayant lancé au moins un appel."
         }
       }
     },
