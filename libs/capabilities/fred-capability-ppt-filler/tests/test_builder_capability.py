@@ -47,6 +47,8 @@ from fred_sdk.contracts.capability import (
     EmptyModel,
     SaveContext,
     UploadedFile,
+    asset_keys,
+    reset_scope_private,
 )
 from fred_sdk.contracts.runtime import (
     CapabilityTeamAuthorizer,
@@ -167,6 +169,64 @@ async def test_a_revalidation_without_an_instance_has_no_side_effect(analysis_db
     )
     assert stored == config
     assert await get_analysis_store().get("inst-7") is None
+
+
+# --- Copy to another scope ---------------------------------------------------------
+
+
+def test_the_built_in_template_has_no_file_to_copy():
+    """A stale key never survives a return to the built-in template: a copy
+    would otherwise re-submit a file the agent no longer uses."""
+    config = PptBuilderConfig.model_validate(
+        {"template_key": PPT_BUILDER_TEMPLATE_KEY, "template_sha256": None}
+    )
+    assert config.template_key is None
+    assert asset_keys(reset_scope_private(config)) == {}
+    assert PptBuilderConfig.model_validate({"template_sha256": SHA}).template_key == (
+        PPT_BUILDER_TEMPLATE_KEY
+    )
+
+
+@pytest.mark.asyncio
+async def test_copy_to_another_scope_recreates_the_template_and_its_analysis(
+    analysis_db,
+):
+    """What the runtime's copy-config does: reset scope-private settings, fetch the
+    AssetKey files in the source, re-submit them to validate_config in the target."""
+    source_assets = FakeAssets()
+    stored = await PptBuilderCapability().validate_config(
+        PptBuilderConfig(use_vision=True, labelling_model="vision-profile"),
+        _uploads(TEMPLATE),
+        _save_ctx(source_assets),
+    )
+    await drain()
+    reset = reset_scope_private(stored)
+    assert reset.labelling_model == "vision-profile"
+    assert asset_keys(reset) == {TEMPLATE_SLOT: [PPT_BUILDER_TEMPLATE_KEY]}
+
+    target_assets = FakeAssets()
+    target = CapabilityIdentity(
+        user_id="u-2", team_id="team-99", agent_instance_id="inst-copy"
+    )
+    copied = await PptBuilderCapability().validate_config(
+        PptBuilderConfig.model_validate(reset.model_dump(mode="json")),
+        {
+            TEMPLATE_SLOT: [
+                UploadedFile(
+                    filename=PPT_BUILDER_TEMPLATE_KEY,
+                    content=await source_assets.fetch(PPT_BUILDER_TEMPLATE_KEY),
+                )
+            ]
+        },
+        _save_ctx(target_assets, identity=target),
+    )
+    await drain()
+
+    assert target_assets.blobs == {PPT_BUILDER_TEMPLATE_KEY: TEMPLATE}
+    assert copied.template_sha256 == SHA
+    record = await get_analysis_store().get("inst-copy")
+    assert record is not None and record.team_id == "team-99"
+    assert record.template_sha256 == SHA
 
 
 @pytest.mark.asyncio

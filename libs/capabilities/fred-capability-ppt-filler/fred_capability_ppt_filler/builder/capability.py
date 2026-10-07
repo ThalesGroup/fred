@@ -29,19 +29,21 @@ import io
 import logging
 from collections.abc import Awaitable, Callable, Mapping
 from pathlib import Path
-from typing import Any, List, Optional, get_args
+from typing import Annotated, Any, List, Optional, get_args
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from fred_core import convert_office_bytes_to_pdf
 from fred_sdk.contracts.capability import (
     AgentCapability,
+    AssetKey,
     AssetSlot,
     CapabilityContext,
     CapabilityIdentity,
     CapabilityManifest,
     CapabilityReadiness,
     EmptyModel,
+    Public,
     SaveContext,
     SidePanelSpec,
     UploadedFile,
@@ -56,7 +58,7 @@ from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.messages import SystemMessage
 from langchain_core.tools import BaseTool, StructuredTool
 from pptx import Presentation
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from fred_capability_ppt_filler.builder import analysis_job
 from fred_capability_ppt_filler.builder.analysis import (
@@ -127,14 +129,21 @@ class PptBuilderConfig(BaseModel):
     names the analysed template; ``None`` means the built-in template. The
     analysis itself lives in ``cap_ppt_builder_analysis``."""
 
-    template_key: str = PPT_BUILDER_TEMPLATE_KEY
+    # Set only for an uploaded template, so a copy re-submits that file alone.
+    template_key: Annotated[Optional[str], AssetKey(TEMPLATE_SLOT)] = None
     template_sha256: Optional[str] = None
     use_vision: bool = True
-    labelling_model: Optional[str] = None
+    # A catalogue profile: a team that may not use it falls back to rules.
+    labelling_model: Public[Optional[str]] = None
     overrides: List[PatternOverride] = []
     # Read by the build tool each turn, never by the analysis: no re-run.
     variety_check: VarietyCheck = "template_slide"
     variety_max_uses: int = Field(default=2, ge=1, le=5)
+
+    @model_validator(mode="after")
+    def _template_key_follows_sha(self) -> "PptBuilderConfig":
+        self.template_key = PPT_BUILDER_TEMPLATE_KEY if self.template_sha256 else None
+        return self
 
     def labelling_key(self) -> str:
         return labelling_key(self.use_vision, self.labelling_model)
@@ -359,7 +368,7 @@ class _PptBuilderMiddleware(AgentMiddleware):
             raise RuntimeError(
                 "ppt_builder: RuntimeServices.agent_assets is not available on this execution path."
             )
-        return await assets.fetch(self._ctx.config.template_key)
+        return await assets.fetch(PPT_BUILDER_TEMPLATE_KEY)
 
     async def _resolve(self) -> Optional[List[BaseTool]]:
         if self._resolved is not None or self._sha is None:
@@ -567,13 +576,15 @@ class PptBuilderCapability(
                 "ppt_builder: RuntimeServices.agent_assets is not available on this save path; the template cannot be stored."
             )
         await assets.store(
-            config.template_key,
+            PPT_BUILDER_TEMPLATE_KEY,
             content,
             content_type=_PPTX_CONTENT_TYPE,
-            filename=config.template_key,
+            filename=PPT_BUILDER_TEMPLATE_KEY,
         )
         sha = await self._launch(config, content, ctx)
-        return config.model_copy(update={"template_sha256": sha})
+        return config.model_copy(
+            update={"template_sha256": sha, "template_key": PPT_BUILDER_TEMPLATE_KEY}
+        )
 
     async def _start_from_assets(
         self, config: PptBuilderConfig, ctx: SaveContext
@@ -584,7 +595,7 @@ class PptBuilderCapability(
                 "ppt_builder: RuntimeServices.agent_assets is not available on this save path."
             )
         try:
-            content = await assets.fetch(config.template_key)
+            content = await assets.fetch(PPT_BUILDER_TEMPLATE_KEY)
         except Exception as exc:  # noqa: BLE001 - the author can upload it again
             raise ValueError(
                 "The stored template could not be read; upload it again."

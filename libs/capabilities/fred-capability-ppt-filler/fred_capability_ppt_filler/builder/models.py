@@ -23,6 +23,7 @@ from __future__ import annotations
 
 from typing import List, Literal, Optional, get_args
 
+from fred_sdk.contracts.capability import Public
 from pydantic import BaseModel, Field
 
 # `keep` is a shape-name annotation's "do not touch": the renderer never writes it.
@@ -232,7 +233,8 @@ class TemplateInventory(BaseModel):
 class PatternOverride(BaseModel):
     """The author's corrections for one pattern. Only set fields apply."""
 
-    pattern_id: str
+    # Names a slide of the template, which travels with the template on a copy.
+    pattern_id: Public[str]
     label: Optional[str] = None
     kind: Optional[SlideKind] = None
     included: Optional[bool] = None
