@@ -24,7 +24,7 @@ import type {
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import { AgentFormBody, type SectionKey } from "./AgentFormBody.tsx";
 import { TemplateBrowser } from "./TemplateBrowser/TemplateBrowser.tsx";
-import { documentAccessHasNoSource, normalizeDocumentAccessConfig } from "./toolPackLogic.ts";
+import { applyDocumentAccessConfigChange, normalizeDocumentAccessConfig } from "./toolPackLogic.ts";
 import { CAP_DOCUMENT_ACCESS } from "./toolPacks.ts";
 import { reservedTagInPromptField } from "@rework/utils/promptValidation";
 
@@ -222,16 +222,11 @@ export function extractCapabilityConfigValues(
   );
 }
 
-/** Save-blocking problems: those reported by config widgets, plus a document
- *  access left with no source. Only ACTIVE capabilities count. */
+/** Save-blocking problems reported by config widgets. Only ACTIVE capabilities count. */
 export function isCapabilityBlocked(
-  form: Pick<FormState, "selectedCapabilityIds" | "capabilityConfigValues" | "capabilityBlockingErrors">,
+  form: Pick<FormState, "selectedCapabilityIds" | "capabilityBlockingErrors">,
 ): boolean {
-  return form.selectedCapabilityIds.some(
-    (id) =>
-      !!form.capabilityBlockingErrors[id] ||
-      (id === CAP_DOCUMENT_ACCESS && documentAccessHasNoSource(form.capabilityConfigValues[id])),
-  );
+  return form.selectedCapabilityIds.some((id) => !!form.capabilityBlockingErrors[id]);
 }
 
 export default function AgentFormModal({
@@ -346,6 +341,10 @@ export default function AgentFormModal({
   };
 
   const handleCapabilityConfigChange = (capabilityId: string, key: string, value: unknown) => {
+    if (capabilityId === CAP_DOCUMENT_ACCESS) {
+      setForm((prev) => ({ ...prev, ...applyDocumentAccessConfigChange(prev, key, value) }));
+      return;
+    }
     setForm((prev) => ({
       ...prev,
       capabilityConfigValues: {

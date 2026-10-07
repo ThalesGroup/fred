@@ -147,17 +147,17 @@ Similarity search SHALL be granted only by the "Team documents" pack. The Simple
 
 ### Requirement: Advanced document choices stay independent
 
-Advanced SHALL let a member select document access and switch each source without implicitly enabling any other capability. The document access card SHALL show the "Attachments" and "Team documents" switches before its other settings. Scope pickers and library binding SHALL be shown only while "Team documents" is on. While document access is selected with both sources off, the card SHALL show a save-blocking error that asks the member to turn on a source or deselect the capability. Saving SHALL stay blocked until this is resolved. Stored selections SHALL NOT be rewritten on form load or on an unrelated save.
+Advanced SHALL let a member select document access and switch each source without implicitly enabling any other capability. The document access card SHALL show the "Attachments" and "Team documents" switches before its other settings. Scope pickers and library binding SHALL be shown only while "Team documents" is on. Turning off the last source on the card SHALL deselect document access, as the Simple view does, and SHALL reset both sources to on so that selecting the card again starts with both sources. Stored selections SHALL NOT be rewritten on form load or on an unrelated save.
 
 #### Scenario: Select attachments only in Advanced
 
 - **WHEN** a member turns off "Team documents" on the document access card in Advanced
 - **THEN** no capability is added or removed, the scope pickers and library binding are hidden, and the Simple "Team documents" pack reads off
 
-#### Scenario: Both sources off blocks saving
+#### Scenario: Turning off the last source deselects the card
 
-- **WHEN** a member turns off both sources on the Advanced document access card while the capability stays selected
-- **THEN** the card shows a save-blocking error asking the member to turn on a source or deselect the capability, and the form cannot be saved until one of these is done
+- **WHEN** a member turns off the remaining source on the Advanced document access card
+- **THEN** document access is deselected, no other capability changes, and selecting the card again shows both sources on
 
 #### Scenario: Existing corpus-only agent keeps its selection
 

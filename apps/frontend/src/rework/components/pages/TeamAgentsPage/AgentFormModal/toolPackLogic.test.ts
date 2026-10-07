@@ -16,7 +16,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyPackToggle,
   derivePackChecked,
-  documentAccessHasNoSource,
+  applyDocumentAccessConfigChange,
   includedCapabilityStatus,
   isPackSelectable,
   normalizeDocumentAccessConfig,
@@ -254,11 +254,37 @@ describe("normalizeDocumentAccessConfig", () => {
   });
 });
 
-describe("documentAccessHasNoSource", () => {
-  it("is true only when both sources are explicitly off", () => {
-    expect(documentAccessHasNoSource({ attachments: false, team_documents: false })).toBe(true);
-    expect(documentAccessHasNoSource({ attachments: false })).toBe(false);
-    expect(documentAccessHasNoSource(undefined)).toBe(false);
+describe("applyDocumentAccessConfigChange", () => {
+  const selected = (config: Record<string, unknown>) => ({
+    selectedCapabilityIds: [CAP_DOCUMENT_ACCESS, "other"],
+    capabilityConfigValues: { [CAP_DOCUMENT_ACCESS]: config },
+  });
+
+  it("keeps the capability while a source stays on", () => {
+    const next = applyDocumentAccessConfigChange(
+      selected({ attachments: true, team_documents: true }),
+      "attachments",
+      false,
+    );
+    expect(next.selectedCapabilityIds).toContain(CAP_DOCUMENT_ACCESS);
+    expect(next.capabilityConfigValues[CAP_DOCUMENT_ACCESS]).toMatchObject({
+      attachments: false,
+      team_documents: true,
+    });
+  });
+
+  it("deselects the capability when the last source goes off, and resets both sources", () => {
+    const next = applyDocumentAccessConfigChange(
+      selected({ attachments: false, team_documents: true, bind_libraries: true }),
+      "team_documents",
+      false,
+    );
+    expect(next.selectedCapabilityIds).toEqual(["other"]);
+    expect(next.capabilityConfigValues[CAP_DOCUMENT_ACCESS]).toEqual({
+      attachments: true,
+      team_documents: true,
+      bind_libraries: true,
+    });
   });
 });
 

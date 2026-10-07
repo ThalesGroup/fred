@@ -53,9 +53,28 @@ export function normalizeDocumentAccessConfig(config: Record<string, unknown>): 
   };
 }
 
-/** Both sources off is rejected by the backend, so the form blocks Save. */
-export function documentAccessHasNoSource(config: Record<string, unknown> | undefined): boolean {
-  return !sourceOn(config, DOC_ACCESS_ATTACHMENTS) && !sourceOn(config, DOC_ACCESS_TEAM_DOCUMENTS);
+/**
+ * Apply one `document_access` config edit. Turning off the last source
+ * deselects the capability instead (the backend rejects both off); the sources
+ * reset to their defaults so turning the card back on starts with both.
+ */
+export function applyDocumentAccessConfigChange(
+  state: Pick<CapabilitySelectionState, "selectedCapabilityIds" | "capabilityConfigValues">,
+  key: string,
+  value: unknown,
+): Pick<CapabilitySelectionState, "selectedCapabilityIds" | "capabilityConfigValues"> {
+  const next = { ...state.capabilityConfigValues[CAP_DOCUMENT_ACCESS], [key]: value };
+  const noSource = !sourceOn(next, DOC_ACCESS_ATTACHMENTS) && !sourceOn(next, DOC_ACCESS_TEAM_DOCUMENTS);
+  if (!noSource) {
+    return { ...state, capabilityConfigValues: { ...state.capabilityConfigValues, [CAP_DOCUMENT_ACCESS]: next } };
+  }
+  return {
+    selectedCapabilityIds: state.selectedCapabilityIds.filter((id) => id !== CAP_DOCUMENT_ACCESS),
+    capabilityConfigValues: {
+      ...state.capabilityConfigValues,
+      [CAP_DOCUMENT_ACCESS]: { ...next, [DOC_ACCESS_ATTACHMENTS]: true, [DOC_ACCESS_TEAM_DOCUMENTS]: true },
+    },
+  };
 }
 
 /** Hide a pack if its switch cannot enable anything for this team. */

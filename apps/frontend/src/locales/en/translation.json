@@ -119,7 +119,6 @@
     "document_access": {
       "name": "Documents",
       "description": "What the agent can read and search: attachments, team documents, or both.",
-      "noSourceError": "Turn on attachments or team documents, or turn off this capability.",
       "fields": {
         "attachments": {
           "title": "Attachments",

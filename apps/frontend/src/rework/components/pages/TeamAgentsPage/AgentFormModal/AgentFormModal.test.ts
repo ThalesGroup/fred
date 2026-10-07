@@ -22,7 +22,6 @@ import {
   defaultCapabilitySelection,
   defaultReasoningSelection,
   extractCapabilityConfigValues,
-  isCapabilityBlocked,
 } from "./AgentFormModal";
 
 function makeCapabilityTemplate(capabilityIds: string[]): AgentTemplateSummary {
@@ -319,22 +318,5 @@ describe("extractCapabilityConfigValues", () => {
       document_access: { attachments: true, team_documents: false, bind_libraries: false },
       other: { search_attachments_only: true },
     });
-  });
-});
-
-describe("isCapabilityBlocked", () => {
-  const form = (selectedCapabilityIds: string[], config: Record<string, unknown>) => ({
-    ...EMPTY_CAPABILITY_STATE,
-    selectedCapabilityIds,
-    capabilityConfigValues: { document_access: config },
-  });
-
-  it("blocks Save while selected document access has both sources off", () => {
-    expect(isCapabilityBlocked(form(["document_access"], { attachments: false, team_documents: false }))).toBe(true);
-  });
-
-  it("does not block once a source is on or the capability is deselected", () => {
-    expect(isCapabilityBlocked(form(["document_access"], { attachments: false, team_documents: true }))).toBe(false);
-    expect(isCapabilityBlocked(form([], { attachments: false, team_documents: false }))).toBe(false);
   });
 });

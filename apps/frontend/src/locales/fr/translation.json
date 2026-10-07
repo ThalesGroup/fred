@@ -119,7 +119,6 @@
     "document_access": {
       "name": "Documents",
       "description": "Ce que l'agent peut lire et rechercher : les pièces jointes, les documents de l'équipe, ou les deux.",
-      "noSourceError": "Activez les pièces jointes ou les documents de l'équipe, ou désactivez cette capacité.",
       "fields": {
         "attachments": {
           "title": "Pièces jointes",

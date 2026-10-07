@@ -38,13 +38,14 @@ Why not bump the version and override `upgrade_config`? That hook runs only on a
 A `model_validator(mode="after")` raises when both sources are off. Pod validation returns the existing `capability_config_invalid` error, so the save fails with 422. No legacy shape maps to both-off, so a stored agent cannot be suspended by this rule. The form never submits that state:
 
 - In the Simple view, turning off the last pack deselects `document_access` (spec "Turning off the last document pack deselects document access").
-- In the Advanced view, both-off raises a save-blocking error on the card. This reuses `capabilityBlockingErrors`, so no new widget hint is needed.
+- In the Advanced view, turning off the last source deselects the card too, and resets both sources to on so that selecting it again starts from the default. There is no save-blocking error to show.
 
 Alternatives rejected:
 
 - Silently treating both-off as both-on hides a member's choice.
 - Server-side deselection is not possible: config validation cannot change the capability selection.
 - A new "disable the last switch" UI hint would add SDK surface for one field.
+- A save-blocking error in Advanced (first implementation): the member had to fix a state the form could avoid on its own; replaced by deselection after developer review.
 
 ### D3. Replace the port's `attachments_only` with two ceilings
 
