@@ -75,9 +75,12 @@ The operator owns the proxy deployment, firewall, DNS and monitoring. In proxy
 mode, permit the Fred host only proxy connectivity for research egress. The proxy
 MUST reject private/non-global and metadata destinations at connection time,
 including mixed IPv4/IPv6 records, DNS rebinding and redirects. Fred resolves no
-names in this mode, so the Fred host needs no external DNS: it refuses only
-non-public IP literals locally and forwards names to the proxy, which therefore
-carries name-based SSRF protection. Test these controls on the actual DMZ.
+names in this mode, so the Fred host needs no external DNS: it refuses locally
+non-public IP literals, numeric hosts and local names (single-label,
+`localhost`, `.local`, `.internal`, `.svc`) and forwards other names to the
+proxy, which therefore carries name-based SSRF protection. A 403 answer to an
+HTTPS tunnel is reported as `proxy_refused` (counted as blocked); a 407 or 5xx
+answer stays `unavailable`. A refused `http://` page appears as `http_error`. Test these controls on the actual DMZ.
 No Fred-specific API or service executable belongs on the proxy host.
 
 ## Limitations

@@ -8,7 +8,7 @@
 
 - [x] 2.1 Remove dedicated service examples and dependencies; update migration guide, contracts, dashboard/alerts and package locks for normal Fred startup.
 - [x] 2.2 Verify direct native-tool execution, attribution/errors/cancellation, DNS/redirect safety, explicit proxy/no fallback, credential isolation and TLS with focused tests.
-- [ ] 2.3 Run affected root quality gates, independent read-only review and schema/migration/OpenSpec checks; reconcile this existing change and draft PR #2983.
+- [x] 2.3 Run affected root quality gates, independent read-only review and schema/migration/OpenSpec checks; reconcile this existing change and draft PR #2983.
 
 ## 3. Configurable search provider
 
@@ -43,6 +43,11 @@
 
 - [x] 9.1 Add the `fred.github.self_test_web` probe agent, its Self-test page section and scenario, and exempt its template from the capability gate; enable web research in the local developer configuration.
 
+## 10. Proxy without DNS and clearer errors
+
+- [x] 10.1 In proxy mode, vet only IP literals locally and forward names unresolved; keep direct mode unchanged.
+- [x] 10.2 Map proxy tunnel refusals to `proxy_refused`, add a model-facing instruction to each error code, clarify UI labels, count proxy refusals as blocked and accept them in self-test destination probes.
+
 ## Evidence
 
 Previous version: 67 focused tests and root quality gates passed; separate egress HTTPS topology was reviewed against implementation head `289b26e509aae586ae5b4b27fbc09a584cfcaf4a`. This is historical evidence, not verification of the revised transport. Current work reuses issue #2980 and branch `codex/add-governed-web-search`.
@@ -60,3 +65,7 @@ Engine in the runtime (2026-10-07): engine, providers and their tests moved with
 Long pages (2026-10-07): `offset`/`next_offset` engine test (three consecutive slices, last one not truncated) and tool-description test; runtime web-research suites 33 passed, capability 6 passed, ruff and basedpyright clean on the touched modules. Not yet observed on a live page.
 
 Admin web self-test (2026-10-07): the full probe battery passes against the live engine in about 8 s (44 probes); fred-agents self-test agent tests 9 passed; control-plane capability-gate tests 21 passed (new exemption test); frontend pipeline and Self-test page tests 100 passed, `tsc` and prettier clean. Developer ran the page end to end locally after the template exemption.
+
+Proxy without DNS and clearer errors (2026-10-07): DNS-less proxy tests with name lookups failing (fetch and search forward names unresolved; private, numeric and local hosts refused with no connection or lookup; direct mode unchanged), adapter mapping of proxy 403 to `proxy_refused` and 407/5xx to `unavailable`, model-facing error guidance, self-test acceptance of proxy refusals. Before the fix the DNS-less fetch and search tests failed (`unavailable`, 0 results). Runtime web-research suites 60 passed and `make test` 1875 passed; capability 6, fred-agents self-test agent 10, control-plane preset and frontend trace/pipeline/page tests (118) pass. Manual: local squid forward proxy in Docker blocking two sites, DNS disabled in-process: 0 local lookups, blocked sites refused by the proxy, private literals refused by Fred, self-test battery 42/44 passed (the two page-read probes target `example.com`, which that proxy blocked on purpose).
+
+Closing checks (2026-10-07): root `make code-quality` passes on every module (migration-guide tests, Python lint/format/bandit/detect-secrets/basedpyright, frontend `tsc`/prettier/eslint); runtime basedpyright keeps 5 pre-existing warnings in untouched files. `openspec validate --strict` passes. CodeQL substring-URL alerts in tests fixed; stale capability `uv.lock` files refreshed for the runtime extras. Independent read-only review (base `dd1121a7b`, head `9c20d62da` plus working tree) found no blocking issue in direct-mode SSRF; its findings were fixed (proxy 403-only refusal, local refusal of numeric and local hosts behind a proxy) or documented (refused `http://` pages surface as `http_error`, refused provider calls as `provider_failed`). Pre-existing nits left: `response_too_large` is never raised (pages are truncated) and `PublicTransport` replaces its default pool without closing it. Not claimed: live Brave calls, production DMZ/proxy validation, PostgreSQL load, container image build.

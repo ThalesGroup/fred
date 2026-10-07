@@ -47,7 +47,7 @@ Fred SHALL record each dispatched research request with opaque subject/correlati
 
 ### Requirement: Controlled external egress
 
-Fred SHALL execute research internally, directly or through an explicitly configured HTTP(S) forward proxy, with no proxy-to-direct fallback. It MUST reject unsafe URLs, redirects and excessive/non-text responses. Direct connections MUST pin public DNS results. Proxy deployments MUST enforce public-only final destinations at the proxy. Origin TLS MUST remain verified and proxy credentials MUST NOT reach origins.
+Fred SHALL execute research internally, directly or through an explicitly configured HTTP(S) forward proxy, with no proxy-to-direct fallback. It MUST reject unsafe URLs, redirects and excessive/non-text responses. Direct connections MUST pin public DNS results. In proxy mode Fred MUST NOT resolve names locally and the proxy MUST enforce public-only final destinations. Origin TLS MUST remain verified and proxy credentials MUST NOT reach origins.
 
 #### Scenario: Split-VM deployment
 - **WHEN** Fred runs on an application VM configured with a forward proxy on a DMZ VM
@@ -73,6 +73,20 @@ Fred SHALL execute research internally, directly or through an explicitly config
 #### Scenario: Proxy unavailable
 - **WHEN** the configured proxy is unavailable
 - **THEN** Fred returns a bounded error without opening a direct Internet connection
+
+#### Scenario: Network without external DNS
+- **WHEN** Fred runs behind a configured proxy on a network without external DNS
+- **THEN** fetches and search results with public host names go to the proxy unresolved
+- **AND** non-public IP literals, numeric hosts in any form and names that cannot be public (single-label, `localhost`, `.local`, `.internal`, `.svc`) are refused locally without any connection
+
+#### Scenario: Proxy refuses a destination
+- **WHEN** the proxy answers 403 to the tunnel for an HTTPS page
+- **THEN** the tool returns `proxy_refused`, distinct from `unavailable` (proxy unreachable, 407 or 5xx), with a short instruction telling the model not to retry that site, and analytics count it as blocked
+
+#### Scenario: Admin self-test
+- **WHEN** a platform administrator runs the web research self-test
+- **THEN** a deterministic agent exercises the real per-user port with a fixed probe battery and reports each protection as passed, failed or skipped
+- **AND** it fails first, probing nothing, when web research is not enabled or its activity store is not ready
 
 ### Requirement: Operational visibility
 
