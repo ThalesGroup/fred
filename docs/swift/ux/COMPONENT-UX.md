@@ -1159,7 +1159,9 @@ The name `small` is scoped to this component. On the shared scale, 24px is
 **Status:** `Functional`
 
 The `ppt_builder` capability's configuration surface: one widget
-(`PptBuilderConfigForm`) owns all four config fields and is rendered by the
+(`PptBuilderConfigForm`) owns all six config fields (`template_sha256`,
+`overrides`, `use_vision`, `labelling_model`, `variety_check`,
+`variety_max_uses`) and is rendered by the
 Advanced capability card and the Simple "Generate a presentation" pack alike.
 Nothing in it is mandatory — an agent without a template builds on the
 built-in template.
@@ -1169,7 +1171,8 @@ built-in template.
   configured", or "Built-in template" (`palette`). A staged file is only
   analysed after the save: the status line says so.
 - **Analysis status** (Body Small, `on-surface-retreat`), read from
-  `GET /analysis/{instance_id}` and polled every 3 s while pending/running:
+  `GET /analysis/{instance_id}` and polled every 3 s while pending/running
+  (a failed poll keeps the last answer on screen and polling goes on):
   spinner + "Reading the template…" while in progress; on failure or
   interruption an `error`-coloured line, the backend's message, and an
   outlined "Re-run analysis" button (`refresh`, `POST …/rerun`); an analysis
@@ -1185,19 +1188,32 @@ built-in template.
   for this agent; slides are labelled by rules". While on, an indented
   (`outline-muted` left rule) `Select` lists "The agent's model" plus the
   vision-capable profiles only.
+- **Variety row** (`PptBuilderVarietySettings`). One sentence in the same
+  setting-card style as the vision switch: "Enforce variety [By slide name | By
+  identified slide type] at most [1–5] times each", two compact small
+  `Select`s inline, with its switch at the end and a Body Small description
+  below. Off saves `variety_check: "off"` and leaves both selects in place,
+  disabled; on restores the last mode. The row is a `div`, not a `label`, so a
+  click on a select never toggles the switch.
 - **Review dialog** (central `Dialog`, `maxWidth` 1040, single "Done"
   action). A grid of cards (`surface-container`, `--radius-s`, 1px
   `outline-muted`): thumbnail (react-pdf page rendered at the box's width),
-  compact label `TextInput` (committed on blur) beside a small include
+  compact label `TextInput` (committed on every change, so closing with
+  Enter or Escape keeps a rename; emptying it falls back to the analysis
+  label) beside a small include
   `Switch` (header grid `minmax(0, 1fr) auto`, so the switch stays inside
   the card), kind `Select` (the closed `SlideKind` list), meta line (source,
-  "Named by rules" for a heuristic label, exclusion reason). Three sections
-  (Label Large, `on-surface-retreat`, separated by an `outline-muted` rule):
-  the template's slides, open; layouts ("Masques"), folded under a
-  `<details>` with a Body Small note that they are used only when no slide
-  fits; set-aside patterns, folded, with their count.
+  "Named by rules" for a heuristic label, exclusion reason). Three sections,
+  empty ones omitted (Label Large, `on-surface-retreat`, separated by an
+  `outline-muted` rule): "Slides (n)", the template's own included slides,
+  always open; "Layouts (n)", included layouts, folded under a `<details>`
+  with a Body Small note that they are used only when no slide fits; "Slides
+  set aside (n)", every excluded pattern whatever its source, folded. Toggling
+  include moves the card to the matching section; focus follows it to its
+  switch there, unfolding that section. Escape closes only the dialog, never
+  the agent form hosting it.
 - **Thumbnails** come from `GET /analysis/{instance_id}/patterns.pdf` or the
-  built-in `/theme/preview.pdf`; best effort, a `slideshow` placeholder
+  built-in `/builtin/patterns.pdf`; best effort, a `slideshow` placeholder
   otherwise.
 - Every correction is an override (`pattern_id`, `label`, `kind`,
   `included`) written to the `overrides` field; an override with nothing left
