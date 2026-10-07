@@ -298,14 +298,17 @@ async def delete_team(
     """
     rebac = deps.rebac
     await rebac.check_user_permission_or_raise(
-        user, OrganizationPermission.CAN_DELETE_TEAM, ORGANIZATION_ID
+        user,
+        OrganizationPermission.CAN_DELETE_TEAM,
+        ORGANIZATION_ID,
+        consistency_token=RebacEngine.HIGHER_CONSISTENCY,
     )
 
     from fred_core.security.platform_access.access_control import (
         platform_access_team_mutation,
     )
 
-    async with platform_access_team_mutation():
+    async with platform_access_team_mutation(user, team_id):
         store = deps.get_team_metadata_store()
         metadata = await store.get_by_team_id(team_id)
         if metadata is None:

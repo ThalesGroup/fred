@@ -58,3 +58,11 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
             and _DISPOSE_FIXTURE not in fixturenames
         ):
             fixturenames.append(_DISPOSE_FIXTURE)
+
+
+@pytest.fixture(autouse=True)
+def _restore_platform_access_globals(monkeypatch):
+    from fred_core.security.platform_access import access_control
+
+    monkeypatch.setattr(access_control, "_available", access_control._available)
+    monkeypatch.setattr(access_control, "_installed", access_control._installed)

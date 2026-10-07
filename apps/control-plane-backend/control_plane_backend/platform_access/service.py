@@ -3,6 +3,7 @@ import asyncio
 import hashlib
 import secrets
 from datetime import datetime, timezone
+from typing import Literal
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -14,16 +15,19 @@ from fred_core.security.platform_access.models import (
     PlatformAccessSettingsRow,
     PlatformAccessUserRow,
 )
-from fred_core.sql import use_session
+from fred_core.security.platform_access.rules import evaluate
 from fred_core.teams.team_metatada_models import TeamMetadataRow
 from fred_core.users.user_models import UserRow
-from fred_pod.security.structure import KeycloakUser
+from fred_pod.security.platform_access import PlatformAccessPolicy
+from fred_pod.security.structure import KeycloakUser, is_service_agent
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from control_plane_backend.platform_access.schemas import (
     AdmissionSource,
     FreeEnrollmentPreview,
+    PlatformAccessClaim,
+    PlatformAccessPolicyPreview,
     PlatformAccessState,
     PlatformAccessStatus,
     PlatformAccessTeam,
@@ -37,7 +41,10 @@ from control_plane_backend.teams.service import _add_team_member_relation
 
 def state_view(state: PlatformAccessSettingsRow) -> PlatformAccessState:
     return PlatformAccessState(
-        filtering_enabled=state.filtering_enabled, t0_completed_at=state.t0_completed_at
+        filtering_enabled=state.filtering_enabled,
+        t0_completed_at=state.t0_completed_at,
+        policy=PlatformAccess.policy(state),
+        revision=state.revision,
     )
 
 
@@ -65,9 +72,32 @@ async def set_filtering(
 ) -> PlatformAccessState:
     async with access.store.mutation() as session:
         state = await access.state(session)
+        from fred_core.security.whitelist_access_control.access_control import (
+            is_whitelist_active,
+        )
+
+        if enabled and is_whitelist_active():
+            raise HTTPException(409, "platform_access_legacy_gate_conflict")
+        if enabled and state.policy is None:
+            raise HTTPException(409, "platform_access_policy_required")
         state.filtering_enabled = enabled
         await preserve_actor(access, actor, session)
         return state_view(state)
+
+
+async def grant_users(
+    access: PlatformAccess, actor: KeycloakUser, user_ids: list[UUID]
+) -> None:
+    selected = set(user_ids)
+    async with access.store.mutation() as session:
+        await access.state(session)
+        existing = set(
+            await session.scalars(select(UserRow.id).where(UserRow.id.in_(selected)))
+        )
+        if existing != selected:
+            raise HTTPException(404, "user_not_found")
+        for uid in selected:
+            await access.store.add_exception(uid, actor.uid, "manual", session)
 
 
 async def set_user(
@@ -91,6 +121,7 @@ async def set_user(
 async def users_page(
     access: PlatformAccess, offset: int, limit: int, query: str
 ) -> PlatformAccessUsersPage:
+    policy = access.policy(await access.state())
     rows = await access.store.users(offset, limit, query)
     slots = asyncio.Semaphore(8)
 
@@ -98,7 +129,7 @@ async def users_page(
         async with slots:
             uid = str(row.id)
             sources: list[AdmissionSource] = []
-            if await asyncio.to_thread(access.observed_match, row):
+            if await asyncio.to_thread(access.observed_match, row, policy):
                 sources.append(AdmissionSource(kind="attribute"))
             exception = await access.store.exception(UUID(uid))
             if exception is not None:
@@ -135,24 +166,36 @@ async def users_page(
 async def t0(
     access: PlatformAccess, actor: KeycloakUser | None = None
 ) -> PlatformT0Preview:
+    async with access.store.read() as session:
+        state = await access.state(session)
+        rows = list((await session.scalars(select(UserRow))).all())
+    revision = state.revision
+    policy = access.policy(state)
+    matches = await asyncio.to_thread(
+        lambda: [access.observed_match(row, policy) for row in rows]
+    )
+    matching, candidates = sum(matches), len(rows) - sum(matches)
+    if actor is None:
+        return PlatformT0Preview(
+            candidates=candidates, matching=matching, completed_at=state.t0_completed_at
+        )
     async with access.store.mutation() as session:
         state = await access.state(session)
-        if (
-            actor is not None
-            and state.filtering_enabled
-            and state.t0_completed_at is None
-        ):
+        if state.t0_completed_at is not None:
+            return PlatformT0Preview(
+                candidates=candidates,
+                matching=matching,
+                completed_at=state.t0_completed_at,
+            )
+        if state.revision != revision:
+            raise HTTPException(409, "platform_access_t0_snapshot_changed")
+        if state.filtering_enabled and state.t0_completed_at is None:
             raise HTTPException(409, "t0_requires_inactive_filtering")
-        rows = list((await session.scalars(select(UserRow))).all())
-        matches = await asyncio.to_thread(
-            lambda: [access.observed_match(row) for row in rows]
-        )
-        matching = sum(matches)
-        candidates = len(rows) - matching
-        if actor is not None and state.t0_completed_at is None:
+        if state.t0_completed_at is None:
             existing = set(
                 (await session.scalars(select(PlatformAccessUserRow.user_id))).all()
             )
+            present = set((await session.scalars(select(UserRow.id))).all())
             now = datetime.now(timezone.utc)
             session.add_all(
                 [
@@ -162,8 +205,8 @@ async def t0(
                         granted_by=actor.uid,
                         granted_at=now,
                     )
-                    for row, matches_attribute in zip(rows, matches, strict=True)
-                    if not matches_attribute and row.id not in existing
+                    for row, matched in zip(rows, matches, strict=True)
+                    if not matched and row.id in present and row.id not in existing
                 ]
             )
             state.t0_completed_at = now
@@ -247,8 +290,8 @@ async def preview_link(
     access: PlatformAccess, user: KeycloakUser, token: str, version: str | None
 ) -> FreeEnrollmentPreview:
     await access.state()
-    await access.store.observe(user, access.path_fingerprint)
-    async with use_session(access.store.sessions) as session:
+    await access.observe(user)
+    async with access.store.read() as session:
         team = await require_link(access, token, session)
         return FreeEnrollmentPreview(
             team_name=team.name or team.id,
@@ -263,7 +306,7 @@ async def accept_cgu(
     version: str,
     current: str | None,
 ) -> None:
-    await access.store.observe(user, access.path_fingerprint)
+    await access.observe(user)
     async with access.store.mutation() as session:
         await access.state(session)
         await require_link(access, token, session)
@@ -278,7 +321,7 @@ async def accept_cgu(
 async def enroll(
     access: PlatformAccess, user: KeycloakUser, token: str, version: str | None
 ) -> PlatformAccessStatus:
-    await access.store.observe(user, access.path_fingerprint)
+    await access.observe(user)
     async with access.store.mutation() as session:
         await require_active_subject(user)
         await access.state(session)
@@ -291,3 +334,59 @@ async def enroll(
             )
     emit_audit_log("platform.access.free.enrolled", actor_uid=user.uid, team_id=team.id)
     return await self_status(access, user, version)
+
+
+async def claim_catalog(access: PlatformAccess) -> list[PlatformAccessClaim]:
+    await access.state()
+    kinds: tuple[Literal["string", "string_array"], ...] = ("string", "string_array")
+    return [
+        PlatformAccessClaim(
+            path=row.path,
+            types=[
+                kind
+                for kind, seen in zip(
+                    kinds, (row.string_seen, row.array_seen), strict=True
+                )
+                if seen
+            ],
+        )
+        for row in await access.store.claims()
+    ]
+
+
+async def preview_policy(
+    access: PlatformAccess, actor: KeycloakUser, policy: PlatformAccessPolicy
+) -> PlatformAccessPolicyPreview:
+    if (
+        not isinstance(actor, KeycloakUser)
+        or actor.service_account
+        or is_service_agent(actor)
+    ):
+        raise HTTPException(403, "requires_own_credential")
+    async with access.store.read() as session:
+        await access.state(session)
+        result = await asyncio.to_thread(
+            evaluate, policy, actor.admission_claims, actor.admission_invalid_claims
+        )
+        admitted = await access.eligible(
+            actor, session, policy=policy, use_current_policy=False
+        )
+        return PlatformAccessPolicyPreview(
+            matched=result.matched, admitted=admitted, conditions=result.reasons
+        )
+
+
+async def save_policy(
+    access: PlatformAccess,
+    actor: KeycloakUser,
+    policy: PlatformAccessPolicy,
+    expected_revision: int,
+) -> PlatformAccessState:
+    async with access.store.mutation() as session:
+        state = await access.state(session)
+        if state.revision != expected_revision:
+            raise HTTPException(409, "platform_access_policy_conflict")
+        state.policy = policy.model_dump()
+        state.revision += 1
+        await preserve_actor(access, actor, session)
+        return state_view(state)

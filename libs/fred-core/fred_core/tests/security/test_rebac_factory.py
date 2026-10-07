@@ -72,7 +72,7 @@ def test_delegation_with_both_halves_builds_the_enforcing_engine(
     assert engine.requires_active_accounts is True
 
 
-def test_without_delegation_the_engine_does_not_enforce_account_status(
+def test_without_delegation_the_engine_enforces_account_status(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv(
@@ -80,7 +80,7 @@ def test_without_delegation_the_engine_does_not_enforce_account_status(
     )  # pragma: allowlist secret
     engine = rebac_factory(_security(delegation=DelegationConfig()))
     assert isinstance(engine, OpenFgaRebacEngine)
-    assert engine.requires_active_accounts is False
+    assert engine.requires_active_accounts is True
 
 
 @pytest.mark.parametrize("provider", ["keycloak", "oidc"])
@@ -97,5 +97,20 @@ def test_local_directory_enforces_account_status_without_delegation(
 
     engine = rebac_factory(security)
 
+    assert isinstance(engine, OpenFgaRebacEngine)
+    assert engine.requires_active_accounts is True
+
+
+@pytest.mark.parametrize("directory", ["keycloak", "local"])
+def test_platform_admission_enforces_account_status_without_delegation(
+    monkeypatch: pytest.MonkeyPatch, directory: str
+) -> None:
+    monkeypatch.setenv(
+        "OPENFGA_API_TOKEN", "not-a-real-token"
+    )  # pragma: allowlist secret
+    security = _security(delegation=DelegationConfig()).model_copy(
+        update={"user_directory": directory}
+    )
+    engine = rebac_factory(security)
     assert isinstance(engine, OpenFgaRebacEngine)
     assert engine.requires_active_accounts is True

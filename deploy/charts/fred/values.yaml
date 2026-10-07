@@ -521,12 +521,6 @@ x-cp-storage: &cp-storage
 # ════════════════════════════════════════════════════════════════════
 # ── 2. Global settings ──────────────────────────────────────────────
 global:
-  # Private deployment overlays supply the actual attribute rule and support URL.
-  platformAccess:
-    enabled: false
-    jwt_claim: []
-    accepted_regex: null
-    supportLink: null
   kubeconfig: ""
   persistence:
     enabled: false # if true = Enable the creation of PVC when duckdb is used - Recommended TRUE

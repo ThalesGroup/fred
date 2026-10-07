@@ -288,9 +288,10 @@ def create_app() -> FastAPI:
         await enforce_account_status(container.get_rebac_engine())
         from fred_core.security.platform_access.access_control import (
             initialize_platform_access,
+            platform_access_available,
         )
 
-        if configuration.security.platform_access.enabled:
+        if platform_access_available(configuration.security):
             await initialize_platform_access(
                 configuration.security,
                 container.get_pg_async_engine(),

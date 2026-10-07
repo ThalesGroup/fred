@@ -2,7 +2,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Uuid, text
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Uuid, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from fred_core.models import Base
@@ -12,12 +12,28 @@ class PlatformAccessSettingsRow(Base):
     __tablename__ = "platform_access_settings"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    policy_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    policy: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    revision: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     filtering_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("false")
     )
     t0_completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
+    )
+
+
+class PlatformAccessClaimRow(Base):
+    __tablename__ = "platform_access_claims"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    path: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    string_seen: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    array_seen: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
     )
 
 

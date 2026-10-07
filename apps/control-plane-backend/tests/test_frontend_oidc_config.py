@@ -19,8 +19,6 @@ from unittest.mock import AsyncMock
 import pytest
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 from control_plane_backend.product.service import build_frontend_config
-from fred_pod.security.structure import PlatformAccessConfiguration
-from pydantic import AnyHttpUrl
 
 
 @pytest.mark.asyncio
@@ -38,7 +36,8 @@ async def test_frontend_config_exposes_public_oidc_settings() -> None:
         security=SimpleNamespace(
             user=user,
             user_directory="local",
-            platform_access=PlatformAccessConfiguration(),
+            m2m=SimpleNamespace(enabled=True),
+            rebac=SimpleNamespace(enabled=True),
         ),
         app=SimpleNamespace(gcu_version=None),
         platform=SimpleNamespace(frontend=SimpleNamespace(info_banner=None)),
@@ -53,8 +52,8 @@ async def test_frontend_config_exposes_public_oidc_settings() -> None:
 
     payload = await build_frontend_config(cast(ProductServiceDependencies, deps))
 
-    assert payload.platform_access_enabled is False
-    assert payload.supportLink is None
+    assert payload.platform_access_enabled is True
+    assert "supportLink" not in payload.model_dump()
 
     assert payload.user_auth.model_dump() == {
         "enabled": True,
@@ -67,12 +66,7 @@ async def test_frontend_config_exposes_public_oidc_settings() -> None:
         "roles_claim": ["roles"],
     }
 
-    configuration.security.platform_access = PlatformAccessConfiguration(
-        enabled=True,
-        jwt_claim=["profile", "unit"],
-        accepted_regex="accepted",
-        supportLink=AnyHttpUrl("https://support.example.org"),
-    )
+    configuration.security.user.enabled = False
     configured = await build_frontend_config(cast(ProductServiceDependencies, deps))
-    assert configured.platform_access_enabled is True
-    assert configured.supportLink == "https://support.example.org/"
+    assert configured.platform_access_enabled is False
+    assert "supportLink" not in configured.model_dump()

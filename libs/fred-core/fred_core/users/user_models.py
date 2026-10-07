@@ -51,8 +51,8 @@ class UserRow(Base):
     last_seen_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    admission_attribute: Mapped[str | list[str] | None] = mapped_column(
-        JSON, nullable=True
+    admission_attribute: Mapped[dict[str, str | list[str] | None] | None] = (
+        mapped_column(JSON, nullable=True)
     )
     admission_claim_path: Mapped[str | None] = mapped_column(String(64), nullable=True)
     admission_issued_at: Mapped[float | None] = mapped_column(Float, nullable=True)

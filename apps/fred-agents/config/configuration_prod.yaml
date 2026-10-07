@@ -17,11 +17,6 @@ app:
   openai_compat: false # Direct template execution is forbidden by the c3 profile.
 
 security:
-  platform_access:
-    enabled: false
-    jwt_claim: []
-    accepted_regex: null
-    supportLink: null
   profile: c3
   m2m:
     enabled: true

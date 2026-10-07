@@ -1,13 +1,17 @@
 # SPDX-License-Identifier: Apache-2.0
 from datetime import datetime
 from typing import Literal
+from uuid import UUID
 
+from fred_pod.security.platform_access import PlatformAccessPolicy
 from pydantic import BaseModel, ConfigDict, Field
 
 
 class PlatformAccessState(BaseModel):
     filtering_enabled: bool
     t0_completed_at: datetime | None
+    policy: PlatformAccessPolicy | None
+    revision: int
 
 
 class SetPlatformFiltering(BaseModel):
@@ -72,3 +76,27 @@ class FreeEnrollmentPreview(BaseModel):
 class AcceptFreeEnrollmentCgu(BaseModel):
     model_config = ConfigDict(extra="forbid")
     version: str = Field(min_length=1, max_length=64)
+
+
+class SetPlatformAccessPolicy(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_revision: int = Field(ge=0)
+    policy: PlatformAccessPolicy
+
+
+class PlatformAccessClaim(BaseModel):
+    path: list[str]
+    types: list[Literal["string", "string_array"]]
+
+
+class PlatformAccessPolicyPreview(BaseModel):
+    matched: bool
+    admitted: bool
+    conditions: list[
+        Literal["matched", "not_matching", "missing", "incompatible", "timeout"]
+    ]
+
+
+class GrantPlatformAccessUsers(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    user_ids: list[UUID] = Field(min_length=1, max_length=100)

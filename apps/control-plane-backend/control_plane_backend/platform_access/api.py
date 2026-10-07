@@ -14,6 +14,7 @@ from fred_core.security.rebac.rebac_engine import (
     ORGANIZATION_ID,
     OrganizationPermission,
 )
+from fred_pod.security.platform_access import PlatformAccessPolicy
 from fred_pod.security.structure import KeycloakUser
 
 from control_plane_backend.app.dependencies import get_application_configuration
@@ -22,12 +23,16 @@ from control_plane_backend.platform_access import service
 from control_plane_backend.platform_access.schemas import (
     AcceptFreeEnrollmentCgu,
     FreeEnrollmentPreview,
+    GrantPlatformAccessUsers,
+    PlatformAccessClaim,
+    PlatformAccessPolicyPreview,
     PlatformAccessState,
     PlatformAccessStatus,
     PlatformAccessTeam,
     PlatformAccessUsersPage,
     PlatformEnrollmentLink,
     PlatformT0Preview,
+    SetPlatformAccessPolicy,
     SetPlatformAccessTeam,
     SetPlatformFiltering,
 )
@@ -42,7 +47,10 @@ async def require_access_admin(
     access: Access, user: KeycloakUser = Depends(get_current_user)
 ) -> KeycloakUser:
     await access.rebac.check_user_permission_or_raise(
-        user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+        user,
+        OrganizationPermission.CAN_MANAGE_PLATFORM,
+        ORGANIZATION_ID,
+        consistency_token=access.rebac.HIGHER_CONSISTENCY,
     )
     return user
 
@@ -68,6 +76,35 @@ async def set_platform_access_filtering(
     return result
 
 
+@router.get("/admin/platform/access/claims", response_model=list[PlatformAccessClaim])
+async def list_platform_access_claims(
+    access: Access, user: Admin
+) -> list[PlatformAccessClaim]:
+    return await service.claim_catalog(access)
+
+
+@router.post(
+    "/admin/platform/access/policy-preview", response_model=PlatformAccessPolicyPreview
+)
+async def preview_platform_access_policy(
+    body: PlatformAccessPolicy, access: Access, user: Admin
+) -> PlatformAccessPolicyPreview:
+    return await service.preview_policy(access, user, body)
+
+
+@router.put("/admin/platform/access/policy", response_model=PlatformAccessState)
+async def save_platform_access_policy(
+    body: SetPlatformAccessPolicy, access: Access, user: Admin
+) -> PlatformAccessState:
+    result = await service.save_policy(
+        access, user, body.policy, body.expected_revision
+    )
+    emit_audit_log(
+        "platform.access.policy.updated", actor_uid=user.uid, revision=result.revision
+    )
+    return result
+
+
 @router.get("/admin/platform/access/users", response_model=PlatformAccessUsersPage)
 async def list_platform_access_users(
     access: Access,
@@ -78,6 +115,18 @@ async def list_platform_access_users(
 ) -> PlatformAccessUsersPage:
     await access.state()
     return await service.users_page(access, offset, limit, query)
+
+
+@router.post("/admin/platform/access/users", status_code=204)
+async def grant_platform_access_users(
+    body: GrantPlatformAccessUsers, access: Access, user: Admin
+) -> None:
+    await service.grant_users(access, user, body.user_ids)
+    emit_audit_log(
+        "platform.access.users.granted",
+        actor_uid=user.uid,
+        count=len(set(body.user_ids)),
+    )
 
 
 @router.put("/admin/platform/access/users/{user_id}", status_code=204)

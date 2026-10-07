@@ -8,24 +8,38 @@ import pytest
 import pytest_asyncio
 from control_plane_backend.app.dependencies import get_application_configuration
 from control_plane_backend.platform_access import api, service
+from control_plane_backend.teams.dependencies import TeamServiceDependencies
+from control_plane_backend.teams.schemas import UserTeamRelation
 from fastapi import FastAPI, HTTPException
+from fred_core.common import TeamId
 from fred_core.security.models import Resource
 from fred_core.security.platform_access.access_control import (
     PlatformAccess,
     get_platform_access,
 )
 from fred_core.security.platform_access.models import (
+    PlatformAccessClaimRow,
     PlatformAccessSettingsRow,
     PlatformAccessUserRow,
+)
+from fred_core.security.platform_access.rules import (
+    extract_claims,
+    path_key,
 )
 from fred_core.security.platform_access.store import PlatformAccessStore
 from fred_core.security.rebac.noop_engine import NoopRebacEngine
 from fred_core.security.rebac.rebac_engine import RebacReference, RelationType
 from fred_core.teams.team_metatada_models import TeamMetadataRow
 from fred_core.users.user_models import UserRow
-from fred_pod.security.structure import KeycloakUser, PlatformAccessConfiguration
+from fred_pod.security.platform_access import (
+    PlatformAccessCondition,
+    PlatformAccessPolicy,
+)
+from fred_pod.security.structure import (
+    KeycloakUser,
+    Principal,
+)
 from httpx import ASGITransport, AsyncClient
-from pydantic import AnyHttpUrl
 from sqlalchemy import Table
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -66,21 +80,20 @@ async def access(tmp_path):
         for model in (
             UserRow,
             TeamMetadataRow,
+            PlatformAccessClaimRow,
             PlatformAccessSettingsRow,
             PlatformAccessUserRow,
         ):
             await connection.run_sync(cast(Table, model.__table__).create)
-    config = PlatformAccessConfiguration(
-        enabled=True,
-        jwt_claim=["profile", "attribute"],
-        accepted_regex="accepted",
-        supportLink=AnyHttpUrl("https://support.example.org"),
-    )
-    value = PlatformAccess(config, PlatformAccessStore(engine), MembershipEngine())
+    value = PlatformAccess(PlatformAccessStore(engine), MembershipEngine())
+    initial = draft()
     async with value.store.mutation() as session:
         session.add(
             PlatformAccessSettingsRow(
-                id=1, policy_fingerprint=value.fingerprint, filtering_enabled=False
+                id=1,
+                policy=initial.model_dump(),
+                revision=1,
+                filtering_enabled=False,
             )
         )
         session.add(
@@ -100,7 +113,9 @@ def user(attribute="other"):
         uid=str(uuid4()),
         username="Person",
         roles=[],
-        admission_attribute=attribute,
+        admission_claims=extract_claims(
+            {"profile": {"attribute": attribute}, "attribute": attribute}
+        )[0],
         admission_issued_at=time.time() - 1,
         admission_expires_at=time.time() + 300,
     )
@@ -110,7 +125,7 @@ def user(attribute="other"):
 async def test_t0_once_and_deleted_entries_never_return(access):
     actor, existing, matching = user(), user(), user("accepted")
     for person in (actor, existing, matching):
-        await access.store.observe(person, access.path_fingerprint)
+        await access.observe(person)
     preview = await service.t0(access)
     assert (preview.candidates, preview.matching, preview.completed_at) == (2, 1, None)
     result = await service.t0(access, actor)
@@ -119,7 +134,7 @@ async def test_t0_once_and_deleted_entries_never_return(access):
     assert await access.store.exception(UUID(matching.uid)) is None
     await service.set_user(access, actor, UUID(existing.uid), False)
     later = user()
-    await access.store.observe(later, access.path_fingerprint)
+    await access.observe(later)
     again = await service.t0(access, actor)
     assert again.completed_at == result.completed_at.replace(tzinfo=None)
     assert await access.store.exception(UUID(existing.uid)) is None
@@ -129,7 +144,7 @@ async def test_t0_once_and_deleted_entries_never_return(access):
 @pytest.mark.asyncio
 async def test_filter_and_exception_mutations_preserve_acting_admin(access):
     actor = user()
-    await access.store.observe(actor, access.path_fingerprint)
+    await access.observe(actor)
     with pytest.raises(HTTPException, match="platform_access_actor_lockout"):
         await service.set_filtering(access, actor, True)
     assert not (await access.state()).filtering_enabled
@@ -145,7 +160,7 @@ async def test_filter_and_exception_mutations_preserve_acting_admin(access):
 @pytest.mark.asyncio
 async def test_own_eligible_team_cannot_be_revoked_by_access_policy_actor(access):
     actor = user()
-    await access.store.observe(actor, access.path_fingerprint)
+    await access.observe(actor)
     await service.set_team(access, actor, "demo", True, False)
     access.rebac.members[actor.uid] = {"demo"}
     await service.set_filtering(access, actor, True)
@@ -158,7 +173,7 @@ async def test_own_eligible_team_cannot_be_revoked_by_access_policy_actor(access
 @pytest.mark.parametrize("version", ["v1", "2026-10"])
 async def test_free_link_rotation_revocation_and_private_enrollment(access, version):
     actor, newcomer = user("accepted"), user()
-    await access.store.observe(actor, access.path_fingerprint)
+    await access.observe(actor)
     await service.set_team(access, actor, "demo", False, True)
     token = await service.generate_link(access, "demo")
     assert len(token) == 43
@@ -206,8 +221,9 @@ async def test_failed_membership_write_can_retry_without_granting_admin(access):
     await service.set_team(access, actor, "demo", False, True)
     token = await service.generate_link(access, "demo")
     access.rebac.write_failure = True
-    with pytest.raises(RuntimeError):
+    with pytest.raises(HTTPException) as unavailable:
         await service.enroll(access, newcomer, token, None)
+    assert unavailable.value.status_code == 503
     access.rebac.write_failure = False
     await service.enroll(access, newcomer, token, None)
     assert len(access.rebac.writes) == 1
@@ -262,6 +278,11 @@ async def test_admin_endpoints_reject_nonplatform_admins(access):
             )
         ).status_code == 403
         target = str(uuid4())
+        assert (
+            await client.post(
+                "/admin/platform/access/users", json={"user_ids": [target]}
+            )
+        ).status_code == 403
         assert (
             await client.put(f"/admin/platform/access/users/{target}")
         ).status_code == 403
@@ -324,24 +345,20 @@ async def pg_access(monkeypatch):
             for model in (
                 UserRow,
                 TeamMetadataRow,
+                PlatformAccessClaimRow,
                 PlatformAccessSettingsRow,
                 PlatformAccessUserRow,
             ):
                 await connection.run_sync(cast(Table, model.__table__).create)
-        value = PlatformAccess(
-            PlatformAccessConfiguration(
-                enabled=True,
-                jwt_claim=["attribute"],
-                accepted_regex="accepted",
-                supportLink=AnyHttpUrl("https://support.example.org"),
-            ),
-            PlatformAccessStore(engine),
-            MembershipEngine(),
-        )
+        value = PlatformAccess(PlatformAccessStore(engine), MembershipEngine())
+        initial = draft(claim=["attribute"])
         async with value.store.mutation() as session:
             session.add(
                 PlatformAccessSettingsRow(
-                    id=1, policy_fingerprint=value.fingerprint, filtering_enabled=False
+                    id=1,
+                    policy=initial.model_dump(),
+                    revision=1,
+                    filtering_enabled=False,
                 )
             )
             session.add(
@@ -360,14 +377,14 @@ async def test_concurrent_pg_t0_and_fixed_population(pg_access):
     import asyncio
 
     actor, existing = user("accepted"), user()
-    await pg_access.store.observe(existing, pg_access.path_fingerprint)
+    await pg_access.observe(existing)
     results = await asyncio.gather(
         service.t0(pg_access, actor), service.t0(pg_access, actor)
     )
     assert results[0].completed_at == results[1].completed_at
     await service.set_user(pg_access, actor, UUID(existing.uid), False)
     later = user()
-    await pg_access.store.observe(later, pg_access.path_fingerprint)
+    await pg_access.observe(later)
     await service.t0(pg_access, actor)
     assert await pg_access.store.exception(UUID(existing.uid)) is None
     assert await pg_access.store.exception(UUID(later.uid)) is None
@@ -399,7 +416,7 @@ async def test_pg_enrollment_serializes_free_revocation(pg_access, monkeypatch):
     release.set()
     await asyncio.gather(enrollment, revocation)
     second = PlatformAccess(
-        pg_access.config, PlatformAccessStore(pg_access.store.engine), pg_access.rebac
+        PlatformAccessStore(pg_access.store.engine), pg_access.rebac
     )
     assert not await second.admitted(newcomer)
     with pytest.raises(HTTPException):
@@ -412,7 +429,7 @@ async def test_pg_link_disabled_before_locked_enrollment_refuses(pg_access):
 
     token = await service.generate_link(pg_access, "demo")
     newcomer = user()
-    await pg_access.store.observe(newcomer, pg_access.path_fingerprint)
+    await pg_access.observe(newcomer)
     async with pg_access.store.mutation() as session:
         team = await pg_access.store.team("demo", session)
         team.platform_access_free = False
@@ -429,7 +446,7 @@ async def test_pg_link_disabled_before_locked_enrollment_refuses(pg_access):
 
 
 @pytest.mark.asyncio
-async def test_pg_startup_authority_missing_schema_and_policy_mismatch(
+async def test_pg_startup_empty_authority_saved_policy_and_missing_schema(
     pg_access, monkeypatch
 ):
     import sqlalchemy as sa
@@ -446,7 +463,25 @@ async def test_pg_startup_authority_missing_schema_and_policy_mismatch(
             return True
 
     monkeypatch.setattr(access_control, "_installed", None)
-    security = SecurityConfiguration.model_construct(platform_access=pg_access.config)
+    security = SecurityConfiguration.model_validate(
+        {
+            "user": {
+                "enabled": True,
+                "realm_url": "https://idp.example.org",
+                "client_id": "ui",
+            },
+            "m2m": {
+                "enabled": True,
+                "realm_url": "https://idp.example.org",
+                "client_id": "api",
+            },
+            "rebac": {
+                "type": "openfga",
+                "enabled": True,
+                "api_url": "https://fga.example.org",
+            },
+        }
+    )
     engine, rebac = pg_access.store.engine, EnforcedEngine()
     async with engine.begin() as connection:
         await connection.execute(sa.delete(PlatformAccessSettingsRow))
@@ -457,15 +492,490 @@ async def test_pg_startup_authority_missing_schema_and_policy_mismatch(
         security, engine, rebac, authority=True
     )
     assert not (await pg_access.state()).filtering_enabled
-    security.platform_access = pg_access.config.model_copy(
-        update={"accepted_regex": "different"}
+    state = await pg_access.state()
+    assert state.policy is None and state.revision == 0
+    actor = user("accepted")
+    await service.save_policy(pg_access, actor, draft(), 0)
+    await service.set_filtering(pg_access, actor, True)
+    await access_control.initialize_platform_access(security, engine, rebac)
+    await access_control.initialize_platform_access(
+        security, engine, rebac, authority=True
     )
-    with pytest.raises(HTTPException, match="platform_access_unavailable"):
-        await access_control.initialize_platform_access(security, engine, rebac)
-    assert (await pg_access.state()).policy_fingerprint == pg_access.fingerprint
+    state = await pg_access.state()
+    assert state.policy == draft().model_dump()
+    assert state.revision == 1 and state.filtering_enabled
     async with engine.begin() as connection:
         await connection.execute(sa.text("DROP TABLE platform_access_users"))
     with pytest.raises(RuntimeError, match="platform_access_users"):
         await access_control.initialize_platform_access(
             security, engine, rebac, authority=True
         )
+
+
+def draft(value="accepted", claim=None):
+    return PlatformAccessPolicy(
+        conditions=[
+            PlatformAccessCondition(
+                claim=claim or ["profile", "attribute"], operator="equals", value=value
+            )
+        ]
+    )
+
+
+@pytest.mark.asyncio
+async def test_policy_preview_is_side_effect_free_and_uses_enabled_filter_semantics(
+    access,
+):
+    actor = user("accepted")
+    actor.admission_claims[path_key(["new"])] = "secret"
+    await access.observe(actor)
+    before = (await access.store.user(UUID(actor.uid))).admission_attribute
+    result = await service.preview_policy(access, actor, draft("secret", ["new"]))
+    assert result.matched and result.admitted
+    denied = await service.preview_policy(access, actor, draft("absent"))
+    assert not denied.matched and not denied.admitted
+    assert (await access.store.user(UUID(actor.uid))).admission_attribute == before
+    assert (await access.state()).revision == 1
+    await service.set_user(access, actor, UUID(actor.uid), True)
+    assert (await service.preview_policy(access, actor, draft("absent"))).admitted
+
+
+@pytest.mark.asyncio
+async def test_policy_save_revision_and_atomic_self_lockout(access):
+    actor = user("accepted")
+    await access.observe(actor)
+    await service.set_filtering(access, actor, True)
+    with pytest.raises(HTTPException, match="platform_access_actor_lockout"):
+        await service.save_policy(access, actor, draft("denied"), 1)
+    assert (await access.state()).revision == 1
+    result = await service.save_policy(access, actor, draft("ACCEPTED"), 1)
+    assert result.revision == 2
+    with pytest.raises(HTTPException, match="platform_access_policy_conflict"):
+        await service.save_policy(access, actor, draft("different"), 1)
+    assert (await access.state()).policy == draft("ACCEPTED").model_dump()
+
+
+@pytest.mark.asyncio
+async def test_unseeded_policy_requires_explicit_rule_before_activation(access):
+    actor = user()
+    async with access.store.mutation() as session:
+        state = await access.store.settings(session)
+        state.policy, state.revision = None, 0
+    await access.observe(actor)
+    await service.set_user(access, actor, UUID(actor.uid), True)
+    with pytest.raises(HTTPException, match="platform_access_policy_required"):
+        await service.set_filtering(access, actor, True)
+    await service.save_policy(access, actor, draft(), 0)
+    await service.set_filtering(access, actor, True)
+    assert await access.admitted(actor)
+
+
+@pytest.mark.asyncio
+async def test_rule_endpoints_permissions_validation_and_names_only(access):
+    actor = user("accepted")
+    await access.observe(actor)
+    app = FastAPI()
+    app.include_router(api.router)
+    app.dependency_overrides[get_platform_access] = lambda: access
+    app.dependency_overrides[api.get_current_user] = lambda: actor
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        catalog = await client.get("/admin/platform/access/claims")
+        assert catalog.status_code == 200
+        assert all(set(item) == {"path", "types"} for item in catalog.json())
+        assert "accepted" not in catalog.text
+        assert (
+            await client.post(
+                "/admin/platform/access/policy-preview", json=draft().model_dump()
+            )
+        ).json()["matched"]
+        saved = await client.put(
+            "/admin/platform/access/policy",
+            json={"expected_revision": 1, "policy": draft().model_dump()},
+        )
+        assert saved.json()["revision"] == 2
+        assert (
+            await client.put(
+                "/admin/platform/access/policy",
+                json={"expected_revision": 1, "policy": draft().model_dump()},
+            )
+        ).status_code == 409
+        assert (
+            await client.post(
+                "/admin/platform/access/policy-preview",
+                json={
+                    "conditions": [{"claim": ["x"], "operator": "regex", "value": "["}]
+                },
+            )
+        ).status_code == 422
+        access.rebac.admin = False
+        assert (await client.get("/admin/platform/access/claims")).status_code == 403
+        assert (
+            await client.post(
+                "/admin/platform/access/policy-preview", json=draft().model_dump()
+            )
+        ).status_code == 403
+        assert (
+            await client.put(
+                "/admin/platform/access/policy",
+                json={"expected_revision": 2, "policy": draft().model_dump()},
+            )
+        ).status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_pg_concurrent_policy_saves_one_winner(pg_access):
+    import asyncio
+
+    actor = user("accepted")
+    results = await asyncio.gather(
+        service.save_policy(pg_access, actor, draft("accepted", ["attribute"]), 1),
+        service.save_policy(pg_access, actor, draft("other", ["attribute"]), 1),
+        return_exceptions=True,
+    )
+    assert (
+        sum(
+            isinstance(result, HTTPException)
+            and result.detail == "platform_access_policy_conflict"
+            for result in results
+        )
+        == 1
+    )
+    assert (await pg_access.state()).revision == 2
+
+
+@pytest.mark.asyncio
+async def test_preview_requires_verified_own_human_identity(access):
+    for actor in [
+        SimpleNamespace(uid=str(uuid4())),
+        user().model_copy(update={"service_account": True}),
+        user().model_copy(update={"roles": ["service_agent"]}),
+    ]:
+        with pytest.raises(HTTPException) as error:
+            await service.preview_policy(access, cast(KeycloakUser, actor), draft())
+        assert error.value.status_code == 403
+        assert error.value.detail == "requires_own_credential"
+
+
+@pytest.mark.asyncio
+async def test_pg_locked_authority_has_bounded_unavailable_response(pg_access):
+    import asyncio
+
+    import sqlalchemy as sa
+
+    async with pg_access.store.engine.begin() as connection:
+        await connection.execute(
+            sa.text("LOCK TABLE platform_access_settings IN ACCESS EXCLUSIVE MODE")
+        )
+        started = time.monotonic()
+        with pytest.raises(HTTPException) as error:
+            await asyncio.wait_for(pg_access.admitted(user("accepted")), timeout=7)
+        assert error.value.status_code == 503
+        assert error.value.detail == "platform_access_unavailable"
+        assert time.monotonic() - started < 7
+    assert await pg_access.admitted(user("accepted"))
+
+
+@pytest.mark.asyncio
+async def test_pg_t0_matching_does_not_hold_policy_lock(pg_access, monkeypatch):
+    import asyncio
+    import threading
+
+    actor = user("accepted")
+    await pg_access.observe(actor)
+    entered, release = threading.Event(), threading.Event()
+    original = pg_access.observed_match
+
+    def blocked_match(row, policy):
+        entered.set()
+        assert release.wait(timeout=4)
+        return original(row, policy)
+
+    monkeypatch.setattr(pg_access, "observed_match", blocked_match)
+    preview = asyncio.create_task(service.t0(pg_access))
+    assert await asyncio.to_thread(entered.wait, 2)
+    try:
+        changed = await asyncio.wait_for(
+            service.save_policy(pg_access, actor, draft("accepted", ["attribute"]), 1),
+            timeout=2,
+        )
+        assert changed.revision == 2
+    finally:
+        release.set()
+        await preview
+
+
+@pytest.mark.asyncio
+async def test_completed_t0_retry_reports_completion_despite_concurrent_rule_edit(
+    access, monkeypatch
+):
+    import asyncio
+    import threading
+
+    actor = user("accepted")
+    await access.observe(actor)
+    first = await service.t0(access, actor)
+    entered, release = threading.Event(), threading.Event()
+    original = access.observed_match
+
+    def blocked_match(row, policy):
+        entered.set()
+        assert release.wait(timeout=4)
+        return original(row, policy)
+
+    monkeypatch.setattr(access, "observed_match", blocked_match)
+    retry = asyncio.create_task(service.t0(access, actor))
+    assert await asyncio.to_thread(entered.wait, 2)
+    try:
+        await service.save_policy(access, actor, draft("accepted"), 1)
+    finally:
+        release.set()
+    assert first.completed_at is not None
+    assert (await retry).completed_at == first.completed_at.replace(tzinfo=None)
+
+
+@pytest.mark.asyncio
+async def test_pg_live_policy_and_free_journey_with_cached_human_facts(pg_access):
+    actor, newcomer = user("accepted"), user()
+    newcomer.admission_claims[path_key(["other", "unit"])] = "preview-only"
+    await pg_access.observe(actor)
+    await service.set_filtering(pg_access, actor, True)
+    second = PlatformAccess(
+        PlatformAccessStore(pg_access.store.engine), pg_access.rebac
+    )
+    assert not await second.admitted(newcomer)
+    await service.save_policy(pg_access, actor, draft("accepted", ["attribute"]), 1)
+    assert not await second.admitted(newcomer)
+    token = await service.generate_link(pg_access, "demo")
+    await service.accept_cgu(pg_access, newcomer, token, "v2", "v2")
+    assert (await service.enroll(pg_access, newcomer, token, "v2")).admitted
+    assert await second.admitted(cast(Principal, SimpleNamespace(uid=newcomer.uid)))
+    await service.set_team(pg_access, actor, "demo", False, False)
+    assert not await second.admitted(newcomer)
+    assert not await second.admitted(cast(Principal, SimpleNamespace(uid=newcomer.uid)))
+    await service.set_user(pg_access, actor, UUID(newcomer.uid), True)
+    assert await second.admitted(newcomer)
+    await service.set_user(pg_access, actor, UUID(newcomer.uid), False)
+    assert not await second.admitted(newcomer)
+    observed = await second.store.user(UUID(newcomer.uid))
+    assert observed is not None and observed.admission_attribute is not None
+    assert path_key(["other", "unit"]) not in observed.admission_attribute
+
+
+@pytest.mark.asyncio
+async def test_legacy_gate_blocks_activation_and_active_readers(access, monkeypatch):
+    from fred_core.security.whitelist_access_control import access_control as legacy
+
+    monkeypatch.setattr(legacy, "is_whitelist_active", lambda: True)
+    actor = user("accepted")
+    assert await access.admitted(actor)
+    with pytest.raises(HTTPException) as conflict:
+        await service.set_filtering(access, actor, True)
+    assert conflict.value.detail == "platform_access_legacy_gate_conflict"
+    assert not (await access.state()).filtering_enabled
+    async with access.store.mutation() as session:
+        state = await access.store.settings(session)
+        state.filtering_enabled = True
+    with pytest.raises(HTTPException) as unavailable:
+        await access.admitted(actor)
+    assert unavailable.value.status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_bulk_grants_are_atomic_preserve_provenance_and_revoke_independently(
+    access,
+):
+    actor, first, second = user("accepted"), user(), user()
+    await access.observe(first)
+    await access.observe(second)
+    async with access.store.mutation() as session:
+        await access.store.add_exception(UUID(first.uid), actor.uid, "t0", session)
+    await service.set_filtering(access, actor, True)
+    unknown = uuid4()
+    with pytest.raises(HTTPException) as missing:
+        await service.grant_users(access, actor, [UUID(second.uid), unknown])
+    assert missing.value.detail == "user_not_found"
+    assert await access.store.exception(UUID(second.uid)) is None
+    await service.grant_users(
+        access, actor, [UUID(first.uid), UUID(second.uid), UUID(second.uid)]
+    )
+    assert (await access.store.exception(UUID(first.uid))).source == "t0"
+    assert (await access.store.exception(UUID(second.uid))).source == "manual"
+    assert await access.admitted(first) and await access.admitted(second)
+    await service.set_user(access, actor, UUID(second.uid), False)
+    assert not await access.admitted(second)
+    assert await access.admitted(first)
+
+
+@pytest.mark.asyncio
+async def test_bulk_endpoint_bounds_unknown_users_and_fresh_admin_permission(access):
+    from unittest.mock import AsyncMock
+
+    actor, first, second = user("accepted"), user(), user()
+    await access.observe(first)
+    await access.observe(second)
+    gate = AsyncMock()
+    access.rebac.check_user_permission_or_raise = gate
+    app = FastAPI()
+    app.include_router(api.router)
+    app.dependency_overrides[get_platform_access] = lambda: access
+    app.dependency_overrides[api.get_current_user] = lambda: actor
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        for payload in ([], [first.uid] * 101, ["invalid"]):
+            assert (
+                await client.post(
+                    "/admin/platform/access/users", json={"user_ids": payload}
+                )
+            ).status_code == 422
+        assert (
+            await client.post(
+                "/admin/platform/access/users",
+                json={"user_ids": [first.uid, str(uuid4())]},
+            )
+        ).status_code == 404
+        assert await access.store.exception(UUID(first.uid)) is None
+        assert (
+            await client.post(
+                "/admin/platform/access/users",
+                json={"user_ids": [first.uid, second.uid]},
+            )
+        ).status_code == 204
+        assert (
+            gate.call_args.kwargs["consistency_token"]
+            == access.rebac.HIGHER_CONSISTENCY
+        )
+        gate.side_effect = HTTPException(403, "forbidden")
+        third = user()
+        await access.observe(third)
+        assert (
+            await client.post(
+                "/admin/platform/access/users", json={"user_ids": [third.uid]}
+            )
+        ).status_code == 403
+        assert await access.store.exception(UUID(third.uid)) is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("free", [True, False])
+async def test_member_removal_revokes_global_direct_cached_and_delegated_access(
+    access, free
+):
+    actor, member = user("accepted"), user()
+    await access.observe(member)
+    await service.set_team(access, actor, "demo", not free, free)
+    await service.set_filtering(access, actor, True)
+    access.rebac.members[member.uid] = {"demo"}
+    other_reader = PlatformAccess(
+        PlatformAccessStore(access.store.engine), access.rebac
+    )
+    delegated = cast(Principal, SimpleNamespace(uid=member.uid))
+    assert await access.admitted(member)
+    assert await other_reader.admitted(delegated)
+    access.rebac.members[member.uid].remove("demo")
+    assert not await other_reader.admitted(member)
+    assert not await access.admitted(delegated)
+    assert await access.store.exception(UUID(member.uid)) is None
+    await service.grant_users(access, actor, [UUID(member.uid)])
+    assert await other_reader.admitted(member)
+    assert await access.admitted(delegated)
+
+
+@pytest.mark.asyncio
+async def test_team_deletion_protects_admin_last_source_before_external_deletes(
+    access, monkeypatch
+):
+    from unittest.mock import AsyncMock
+
+    from control_plane_backend.teams.service import delete_team
+    from fred_core.security.platform_access import access_control
+
+    actor, accepted = user(), user("accepted")
+    await access.observe(actor)
+    access.rebac.members[actor.uid] = {"demo"}
+    await service.set_team(access, accepted, "demo", False, True)
+    await service.set_filtering(access, actor, True)
+    monkeypatch.setattr(access_control, "_available", True)
+    monkeypatch.setattr(access_control, "_installed", access)
+    remove_relations = AsyncMock()
+    access.rebac.delete_all_relations_of_reference = remove_relations
+    store = SimpleNamespace(
+        get_by_team_id=AsyncMock(return_value=object()), delete=AsyncMock()
+    )
+    deps = SimpleNamespace(rebac=access.rebac, get_team_metadata_store=lambda: store)
+    with pytest.raises(HTTPException) as lockout:
+        await delete_team(actor, TeamId("demo"), cast(TeamServiceDependencies, deps))
+    assert lockout.value.detail == "platform_access_actor_lockout"
+    remove_relations.assert_not_awaited()
+    store.delete.assert_not_awaited()
+    await service.grant_users(access, accepted, [UUID(actor.uid)])
+    await delete_team(actor, TeamId("demo"), cast(TeamServiceDependencies, deps))
+    remove_relations.assert_awaited_once()
+    store.delete.assert_awaited_once_with("demo")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("self_leave", [False, True])
+async def test_actual_full_member_removal_with_multiple_roles_revokes_other_reader(
+    access, self_leave
+):
+    from control_plane_backend.scheduler.policies.policy_models import (
+        ConversationPolicyCatalog,
+    )
+    from control_plane_backend.teams.service import remove_team_member
+    from fred_core.security.rebac.rebac_engine import RebacEngine
+    from tests.test_team_member_roles import _deps, _FakeRebac
+
+    class RoleEngine(_FakeRebac):
+        HIGHER_CONSISTENCY = RebacEngine.HIGHER_CONSISTENCY
+
+        async def _has_permission_raw(self, subject, permission, resource, **kwargs):
+            assert kwargs["consistency_token"] == self.HIGHER_CONSISTENCY
+            return resource.id == "fredlab" and bool(self.roles.get(subject.id))
+
+        async def has_team_memberships(self, uid, teams):
+            return await RebacEngine.has_team_memberships(
+                cast(RebacEngine, self), uid, teams
+            )
+
+    class EmptySessions:
+        async def get_for_user(self, *args):
+            return []
+
+    actor, member = user("accepted"), user()
+    rebac = RoleEngine(
+        roles={
+            actor.uid: {UserTeamRelation.TEAM_ADMIN},
+            member.uid: set(UserTeamRelation),
+        }
+    )
+    access.rebac = cast(RebacEngine, rebac)
+    async with access.store.mutation() as session:
+        session.add(
+            TeamMetadataRow(
+                id="fredlab", name="Free demonstration", platform_access_free=True
+            )
+        )
+    await service.set_filtering(access, actor, True)
+    other_reader = PlatformAccess(
+        PlatformAccessStore(access.store.engine), cast(RebacEngine, rebac)
+    )
+    delegated = cast(Principal, SimpleNamespace(uid=member.uid))
+    assert await access.admitted(member)
+    assert await other_reader.admitted(delegated)
+    deps = _deps(
+        rebac,
+        "fredlab",
+        get_session_store=EmptySessions,
+        get_purge_queue_store=object,
+        get_policy_catalog=ConversationPolicyCatalog,
+    )
+    await remove_team_member(
+        member if self_leave else actor, TeamId("fredlab"), member.uid, deps
+    )
+    assert not rebac.roles[member.uid]
+    assert not await other_reader.admitted(member)
+    assert not await access.admitted(delegated)
+    assert await access.store.exception(UUID(member.uid)) is None

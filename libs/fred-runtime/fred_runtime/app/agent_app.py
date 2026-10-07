@@ -6312,7 +6312,11 @@ def create_agent_app(
                 chat_factory = chat_factory.with_provider(model_provider)
             await container.initialize_filesystem()
             await container.initialize_sql()
-            if security is not None and security.platform_access.enabled:
+            if (
+                security is not None
+                and rebac_engine is not None
+                and rebac_engine.enabled
+            ):
                 from fred_core.security.platform_access.access_control import (
                     initialize_platform_access,
                 )

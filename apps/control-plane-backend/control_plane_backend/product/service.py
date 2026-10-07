@@ -46,6 +46,7 @@ from fred_core.security.backend_to_backend_auth import (
     RefreshableTokenProvider,
 )
 from fred_core.security.models import Resource
+from fred_core.security.platform_access.access_control import platform_access_available
 from fred_core.security.rebac.application_authz import (
     APPLICATION_CATALOG_NAMESPACE_PREFIX,
 )
@@ -489,10 +490,7 @@ async def build_frontend_config(deps: ProductServiceDependencies) -> FrontendCon
         else None
     )
     return FrontendConfig(
-        platform_access_enabled=deps.configuration.security.platform_access.enabled,
-        supportLink=str(deps.configuration.security.platform_access.supportLink)
-        if deps.configuration.security.platform_access.supportLink
-        else None,
+        platform_access_enabled=platform_access_available(deps.configuration.security),
         user_auth=user_auth,
         gcu_version=gcu_version,
         root_bootstrap_completed=root_bootstrap_completed,

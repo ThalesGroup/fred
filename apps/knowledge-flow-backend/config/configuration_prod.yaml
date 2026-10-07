@@ -242,11 +242,6 @@ processing:
 #   - suffix: ".csv"
 #     class_path: knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_csv_processor.FastLiteCsvProcessor
 security:
-  platform_access:
-    enabled: false
-    jwt_claim: []
-    accepted_regex: null
-    supportLink: null
   profile: c3
   m2m:
     enabled: true

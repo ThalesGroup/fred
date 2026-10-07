@@ -58,11 +58,23 @@ def upgrade() -> None:
     op.create_table(
         "platform_access_settings",
         sa.Column("id", sa.Integer(), primary_key=True),
-        sa.Column("policy_fingerprint", sa.String(64), nullable=False),
+        sa.Column("policy", sa.JSON(), nullable=True),
+        sa.Column("revision", sa.Integer(), server_default="0", nullable=False),
         sa.Column(
             "filtering_enabled", sa.Boolean(), server_default=sa.false(), nullable=False
         ),
         sa.Column("t0_completed_at", sa.DateTime(timezone=True), nullable=True),
+    )
+    op.create_table(
+        "platform_access_claims",
+        sa.Column("id", sa.String(64), primary_key=True),
+        sa.Column("path", sa.JSON(), nullable=False),
+        sa.Column(
+            "string_seen", sa.Boolean(), server_default=sa.false(), nullable=False
+        ),
+        sa.Column(
+            "array_seen", sa.Boolean(), server_default=sa.false(), nullable=False
+        ),
     )
     op.create_table(
         "platform_access_users",
@@ -80,6 +92,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_table("platform_access_users")
+    op.drop_table("platform_access_claims")
     op.drop_table("platform_access_settings")
     op.drop_index("ix_teammetadata_enrollment_token_hash", table_name="teammetadata")
     for name in (

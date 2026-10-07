@@ -61,6 +61,7 @@ def test_owned_set_covers_cp_tables_and_nothing_foreign() -> None:
         "session",
         "teammetadata",
         "platform_access_settings",
+        "platform_access_claims",
         "platform_access_users",
     }
     # Includes the evaluation_* tables: they sit on CP's own Base but are

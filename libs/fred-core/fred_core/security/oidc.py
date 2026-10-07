@@ -592,8 +592,7 @@ def decode_jwt(token: str) -> KeycloakUser:
     logger.debug("[AUTH] JWT token decoded")
 
     from fred_core.security.platform_access.access_control import (
-        normalize_attribute,
-        platform_access_configuration,
+        platform_access_available,
         token_time,
     )
 
@@ -636,16 +635,21 @@ def decode_jwt(token: str) -> KeycloakUser:
         token_type=payload.get("typ"),
         caller_roles=caller_roles,
         service_account=service_account,
-        admission_attribute=normalize_attribute(
-            _claim_path(payload, platform_access_configuration().jwt_claim)
-        ),
         admission_issued_at=token_time(payload.get("iat"))
-        if platform_access_configuration().enabled
+        if platform_access_available()
         else None,
         admission_expires_at=token_time(payload.get("exp"))
-        if platform_access_configuration().enabled
+        if platform_access_available()
         else None,
     )
+    if (
+        platform_access_available()
+        and not user.service_account
+        and not is_service_agent(user)
+    ):
+        from fred_core.security.platform_access.rules import extract_claims
+
+        user.admission_claims, user.admission_invalid_claims = extract_claims(payload)
     logger.debug("[AUTH] Authenticated principal built")
     _cache_user(token, payload, user)
     return user
@@ -813,10 +817,10 @@ async def get_current_user_without_gcu(
     caller = decode_jwt(token)
     subject = await resolve_request_principal(request, caller)
     from fred_core.security.platform_access.access_control import (
-        platform_access_configuration,
+        platform_access_available,
     )
 
-    if not platform_access_configuration().enabled:
+    if not platform_access_available():
         await require_active_subject(subject)
     return subject
 
@@ -831,11 +835,17 @@ async def resolve_request_principal(
     subject = asserted or caller
     from fred_core.security.platform_access.access_control import (
         enforce_platform_access,
-        platform_access_configuration,
+        platform_access_available,
     )
 
-    if platform_access_configuration().enabled:
-        await require_active_subject(subject)
+    if platform_access_available():
+        pure_workload_mount = (
+            query_only
+            and asserted is None
+            and (caller.service_account or is_service_agent(caller))
+        )
+        if not pure_workload_mount:
+            await require_active_subject(subject)
         await enforce_platform_access(subject)
     if is_whitelist_active() and not is_principal_whitelisted(subject):
         logger.warning("[AUTH] Request subject is not in the whitelist")

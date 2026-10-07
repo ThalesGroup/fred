@@ -247,8 +247,8 @@ async def rebac_sdk_factory(
 
     First-party application backends are ReBAC readers, never schema or store
     owners. They must use the hardened C3 profile and supply their process KPI
-    writer so every OpenFGA call remains observable. With a delegation switch on,
-    the engine also serves the account status check of each authenticated request.
+    writer so every OpenFGA call remains observable. The shared platform database
+    supplies admission state; account status is enforced in both directory modes.
     """
 
     writer = _require_kpi_writer(kpi_writer)
@@ -283,16 +283,15 @@ async def rebac_sdk_factory(
     sdk = _RebacSdk(engine)
     await _cast(_InitializableRebacEngine, engine).get_client()
     await _enforce_account_status(engine)
-    if security_config.platform_access.enabled:
-        if platform_engine is None:
-            raise ValueError(
-                "Platform access requires the shared PostgreSQL platform_engine"
-            )
-        from fred_core.security.platform_access.access_control import (
-            initialize_platform_access,
+    if platform_engine is None:
+        raise ValueError(
+            "The first-party ReBAC SDK requires the shared PostgreSQL platform_engine"
         )
+    from fred_core.security.platform_access.access_control import (
+        initialize_platform_access,
+    )
 
-        await initialize_platform_access(security_config, platform_engine, engine)
+    await initialize_platform_access(security_config, platform_engine, engine)
     return sdk
 
 

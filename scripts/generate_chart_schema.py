@@ -490,12 +490,6 @@ def _cp_worker_app(cp_config: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 _GLOBAL = _obj({
-    "platformAccess": _obj({
-        "enabled": _BOOL,
-        "jwt_claim": {"type": "array", "items": {"type": "string", "minLength": 1, "maxLength": 256}, "maxItems": 16},
-        "accepted_regex": {"type": ["string", "null"], "maxLength": 2048},
-        "supportLink": {"type": ["string", "null"], "format": "uri"},
-    }),
     "kubeconfig": _STRING,
     "persistence": _obj({
         "enabled": _BOOL,
