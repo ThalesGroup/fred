@@ -487,6 +487,18 @@ async def test_the_first_deck_is_asked_to_vary_once_and_a_resend_is_built(monkey
     assert "Slides 2, 3, 4, 5 all use the template slide 'Process'" in text
 
 
+@pytest.mark.asyncio
+async def test_a_malformed_first_call_does_not_use_up_the_variety_ask(monkeypatch):
+    workspace = FakeWorkspace()
+    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
+    config, assets = _configured()
+    build = _tools(_ctx(config, assets=assets, workspace=workspace))[BUILD_TOOL_NAME]
+    text, result = await build.coroutine(slides=[{"kind": "bullets"}])
+    assert result.is_error and "every slide of the plan is empty" in text
+    text, result = await build.coroutine(slides=_REPEATED)
+    assert result.is_error and '"variety": [' in text
+
+
 _TOO_MANY = {
     "title": "Method",
     "kind": "process",

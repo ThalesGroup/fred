@@ -877,7 +877,8 @@ def build_builder_tools(
     identity = ctx.identity
     args_schema = _args_schema(inventory)
     previous_problems: _Previous = {}
-    # Variety is asked on the first call of the turn (one tool instance) only.
+    # Variety is asked on the turn's first evaluated plan (one tool instance)
+    # only: a call refused before evaluation does not use the ask up.
     called = False
     variety = ctx.config.variety_check
     max_uses = ctx.config.variety_max_uses
@@ -910,7 +911,6 @@ def build_builder_tools(
 
     async def _build_plan(**kwargs: object) -> tuple[str, ToolInvocationResult]:
         nonlocal called
-        first, called = not called, True
         try:
             validated: Any = args_schema(**kwargs)
             plan = _to_plan(validated)
@@ -983,6 +983,7 @@ def build_builder_tools(
         assignment, plan, bad = await asyncio.to_thread(
             _assign_loadable, inventory, plan, prefetched, variety, max_uses
         )
+        first, called = not called, True
         unloadable = [
             f"image '{uid}' is not a usable image document and was left out: use a "
             "document_id from list_images_in_folder."
