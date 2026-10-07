@@ -8,7 +8,7 @@ no_action_reason: "Existing storage and APIs remain compatible; telemetry is emi
 ---
 ## Applicability
 
-Fred runtimes using the shared ReAct/Deep model middleware, including native Deep children.
+Fred runtimes using the shared ReAct/Deep model middleware, including native Deep children. The accompanying event-loop hardening also covers cloud filesystem listings and SDK authored tools.
 
 ## Prerequisites
 
@@ -33,3 +33,12 @@ Use the normal code/dashboard rollback procedure. This change introduces no data
 ## Limitations
 
 The measurements cannot identify a failing network hop without gateway/provider evidence. Callback chunks are not tokens or raw wire events. Independent summarization, Graph and capability-internal LLM calls outside the shared middleware are not covered. Request IDs are absent when delegation is enabled or the upstream does not supply a permitted identifier. Abrupt process termination can prevent terminal records.
+
+Cloud listing conversion now stays in the existing worker, and synchronous SDK
+tool handlers use LangChain's context-preserving executor. Authors whose handlers
+need the runtime event loop must use `async def`, as in the SDK examples. A running
+synchronous handler cannot be forcibly stopped on cancellation. The model factory
+also installs the narrow fragment-parser guard described in
+[model configuration](../../platform/MODEL_CONFIGURATION.md#diagnosing-streaming-deadlines).
+Console transport and audit retention policy are unchanged; no production
+backpressure or incident root cause has been established by the local probes.

@@ -2,7 +2,7 @@
 
 ### Requirement: Shared runtime work preserves concurrent streaming progress
 
-Cloud conversation-file listings and supported synchronous authored tools SHALL perform their blocking work outside the event loop used by concurrent model calls. Results, caller context and asynchronous tool execution SHALL remain compatible. Cancellation SHALL NOT automatically replay an already-started synchronous tool. Runtime diagnostics MUST NOT equate absence of observed chunks with proof of upstream silence.
+Cloud conversation-file listings and supported synchronous authored tools SHALL perform their blocking work outside the event loop used by concurrent model calls. Results, caller context and asynchronous tool execution SHALL remain compatible. Cancellation SHALL NOT automatically replay an already-started synchronous tool. Runtime diagnostics MUST NOT equate absence of observed chunks with proof of upstream silence. Tool-argument fragment optimizations SHALL preserve raw fragments, invalid-call metadata and completed arguments.
 
 #### Scenario: Cloud listing during another model call
 - **WHEN** a conversation lists many files and inferred directories while another model call is active
@@ -15,3 +15,7 @@ Cloud conversation-file listings and supported synchronous authored tools SHALL 
 #### Scenario: Asynchronous authored tool
 - **WHEN** an asynchronous tool or callable needs the owner event loop
 - **THEN** it continues executing on that loop with unchanged return and error behavior
+
+#### Scenario: Tool arguments span streaming chunks
+- **WHEN** an object argument arrives as multiple fragments, including a fragment that is not independently an object
+- **THEN** the completed tool call has unchanged arguments and metadata, and malformed calls retain the same invalid-call classification
