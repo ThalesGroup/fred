@@ -20,12 +20,9 @@ from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 from typing import Any
 
-from fred_core import KeycloakUser
 from fred_core.documents.document_structures import DocumentMetadata, ProcessingStage, ProcessingStatus
-from pydantic import BaseModel
 from temporalio import activity, exceptions
 
-from knowledge_flow_backend.common.structures import IngestionProcessingProfile
 from knowledge_flow_backend.features.scheduler.activity_utils import raise_if_document_deleted, to_thread_with_heartbeat
 from knowledge_flow_backend.features.scheduler.kpi_utils import (
     emit_temporal_activity_result_kpis,
@@ -40,8 +37,7 @@ async def output_process(file: FileToProcess, metadata: DocumentMetadata, accept
     """Normal per-document ingestion output stage — persists metadata through
     the permission-checked `save_metadata` (the calling user must hold
     `TagPermission.UPDATE` on every tag the document carries). Used by the
-    ordinary `OutputProcess` workflow. For the corpus-revectorize migration
-    path, see `output_process_trusted` below."""
+    ordinary `OutputProcess` workflow."""
     from knowledge_flow_backend.features.ingestion.ingestion_service import get_ingestion_service
 
     ingestion_service = get_ingestion_service()
@@ -51,33 +47,6 @@ async def output_process(file: FileToProcess, metadata: DocumentMetadata, accept
         accept_memory_storage,
         ingestion_service=ingestion_service,
         persist_progress=ingestion_service.persist_progress,
-    )
-
-
-@activity.defn(name="output_process_trusted")
-async def output_process_trusted(file: FileToProcess, metadata: DocumentMetadata, accept_memory_storage: bool = False) -> DocumentMetadata:
-    """Same as `output_process`, but persists metadata through the trusted,
-    permission-check-free `save_metadata_trusted` path.
-
-    Used only by the corpus-revectorize migration workflow
-    (`RevectorizeDocument` in `workflow.py`), whose scope was already
-    authorized once, at the platform level, before the workflow started
-    (`corpus_manager_controller._authorize_scope`) — see
-    `MetadataService.save_document_metadata_trusted` for the full rationale.
-    A distinct activity name (not a bool flag on `output_process`) so a
-    workflow author cannot accidentally get the trust level wrong via a
-    default argument — the ordinary `OutputProcess` ingestion workflow always
-    calls `output_process` above, never this one.
-    """
-    from knowledge_flow_backend.features.ingestion.ingestion_service import get_ingestion_service
-
-    ingestion_service = get_ingestion_service()
-    return await _output_process_impl(
-        file,
-        metadata,
-        accept_memory_storage,
-        ingestion_service=ingestion_service,
-        persist_progress=ingestion_service.persist_progress_trusted,
     )
 
 
@@ -333,179 +302,3 @@ async def fast_delete_vectors(payload: dict) -> dict:
     vector_store.delete_vectors_for_document(document_uid=document_uid)
     activity.logger.info("[SCHEDULER][ACTIVITY][FAST_DELETE_VECTORS] Deleted vectors for %s", document_uid)
     return {"status": "ok", "document_uid": document_uid}
-
-
-# ── MIGR-07: corpus re-vectorization ──────────────────────────────────────────
-# Thin activities over the existing ingestion/vector-store building blocks
-# (RFC docs/swift/rfc/CORPUS-REVECTORIZE-RFC.md §2-3). No new business logic:
-# these only resolve scope, read chunk counts, delete vectors, and assemble the
-# `FileToProcess`/`DocumentMetadata` pair that `output_process` already knows how
-# to re-vectorize from stored content.
-
-
-class RevectorizePreparedFile(BaseModel):
-    """Bundle handed from `prepare_revectorize_file` to the `output_process` activity."""
-
-    file: FileToProcess
-    metadata: DocumentMetadata
-
-
-@activity.defn
-async def list_documents_in_scope(scope: dict) -> list[str]:
-    """
-    Resolve a `CorpusScopeV1`-shaped dict (as produced by `.model_dump()`) to the
-    document_uids it covers.
-
-    `document_uids` wins outright (already a concrete list). Otherwise resolves via
-    `tag_ids` / `source_tag` against the raw metadata store — intentionally NOT via
-    `MetadataService`'s per-user READ filtering: the scope was already authorized at
-    the platform/team level in `corpus_manager_controller._authorize_scope`
-    (CAN_MANAGE_PLATFORM for a `source_tag`-only scope, per-tag/per-document ReBAC
-    checks otherwise), so re-filtering by the caller's individual grants here would
-    incorrectly narrow a platform-wide scope back down to "documents I can read".
-    """
-    document_uids = list(scope.get("document_uids") or [])
-    if document_uids:
-        return list(dict.fromkeys(document_uids))
-
-    filters: dict = {}
-    tag_ids = scope.get("tag_ids") or []
-    if tag_ids:
-        filters["tag_ids"] = list(tag_ids)
-    source_tag = scope.get("source_tag")
-    if source_tag:
-        filters["source_tag"] = source_tag
-
-    if not filters:
-        raise ValueError("Revectorize scope must resolve to document_uids, tag_ids, or source_tag.")
-
-    from knowledge_flow_backend.application_context import ApplicationContext
-
-    metadata_store = ApplicationContext.get_instance().get_metadata_store()
-    docs = await metadata_store.get_all_metadata(filters)
-    activity.logger.info("[SCHEDULER][ACTIVITY][LIST_DOCUMENTS_IN_SCOPE] resolved %d document(s) for filters=%s", len(docs), filters)
-    return [d.document_uid for d in docs]
-
-
-@activity.defn
-async def get_chunk_count(document_uid: str) -> int:
-    """Return the vector chunk count for one document.
-
-    `get_document_chunk_count` is a blocking, synchronous call on the
-    OpenSearch client (no async client exists in this adapter) — run it in a
-    worker thread so it never blocks the Temporal worker's event loop, the
-    same pattern already used for the other blocking calls in this module
-    (`ingestion_service.get_local_copy`/`process_output` in `output_process`).
-
-    Returns 0 only when the configured vector store genuinely has no
-    chunk-count capability. Any other failure (OpenSearch timeout, index/auth
-    misconfiguration) is left to propagate so this activity's retry policy
-    (`RevectorizeDocument`, `features/scheduler/workflow.py`) actually retries
-    it, and so a document whose count check fails is reported as a real
-    failure instead of being silently treated as "0 chunks" — which used to
-    make `_wf_should_skip_revectorize` fall through to a real, unnecessary
-    re-embed for a document that was never actually empty (#2234).
-    """
-    from knowledge_flow_backend.application_context import ApplicationContext
-
-    context = ApplicationContext.get_instance()
-    embedder = context.get_embedder()
-    vector_store = context.get_create_vector_store(embedder)
-    if not hasattr(vector_store, "get_document_chunk_count"):
-        return 0
-    return int(await asyncio.to_thread(vector_store.get_document_chunk_count, document_uid=document_uid))  # type: ignore[attr-defined]
-
-
-@activity.defn
-async def delete_vectors(document_uid: str) -> None:
-    """Delete all vector chunks for one document ahead of a full re-vectorize.
-
-    `delete_vectors_for_document` is a blocking, synchronous OpenSearch call —
-    see `get_chunk_count` above for why this runs in a worker thread.
-    """
-    from knowledge_flow_backend.application_context import ApplicationContext
-
-    context = ApplicationContext.get_instance()
-    embedder = context.get_embedder()
-    vector_store = context.get_create_vector_store(embedder)
-    await asyncio.to_thread(vector_store.delete_vectors_for_document, document_uid=document_uid)
-    activity.logger.info("[SCHEDULER][ACTIVITY][DELETE_VECTORS] Deleted vectors for %s", document_uid)
-
-
-@activity.defn
-async def mark_document_vectorized(document_uid: str) -> None:
-    """Mark VECTORIZED done for a document whose vectors were left untouched.
-
-    Companion to the revectorize workflow's incremental skip
-    (`_wf_should_skip_revectorize`): skipping re-embedding never called
-    `output_process`, so the metadata's `VECTORIZED` stage stayed whatever the
-    kea-import stage reset (`_reset_transported_stages`) left it at —
-    `NOT_STARTED`, even though `get_chunk_count` just proved vectors exist.
-    Best-effort: a document that vanished between the count check and this
-    call is not this activity's problem to raise about.
-
-    Reads and writes through the raw metadata store, not `ingestion_service`'s
-    per-user-ReBAC-checked `get_metadata`/`save_metadata` — same reasoning as
-    `list_documents_in_scope`: the migration-default `source_tag` scope spans
-    arbitrary teams and is authorized once, at the platform level
-    (`CAN_MANAGE_PLATFORM`), by the controller before this workflow starts.
-    Re-applying a per-document `DocumentPermission.READ` check for the calling
-    user here would reject every document outside that user's own teams —
-    confirmed live against this session's own test data (an OpenFGA `read`
-    check for the calling platform-admin on a team-owned, non-member document
-    returned `allowed: false`).
-    """
-    from knowledge_flow_backend.application_context import ApplicationContext
-
-    metadata_store = ApplicationContext.get_instance().get_metadata_store()
-    metadata = await metadata_store.get_metadata_by_uid(document_uid)
-    if metadata is None:
-        activity.logger.warning("[SCHEDULER][ACTIVITY][MARK_DOCUMENT_VECTORIZED] %s not found, nothing to mark", document_uid)
-        return
-    metadata.mark_stage_done(ProcessingStage.VECTORIZED)
-    await metadata_store.save_metadata(metadata)
-    activity.logger.info("[SCHEDULER][ACTIVITY][MARK_DOCUMENT_VECTORIZED] %s marked VECTORIZED (vectors pre-existed)", document_uid)
-
-
-@activity.defn
-async def prepare_revectorize_file(document_uid: str, user: dict) -> RevectorizePreparedFile:
-    """
-    Assemble the `(FileToProcess, DocumentMetadata)` pair `output_process_trusted`
-    needs, from a document_uid alone — pure assembly, no new business logic.
-
-    Reads through the raw metadata store, not `ingestion_service.get_metadata`'s
-    per-user-ReBAC-checked path — same reasoning as `list_documents_in_scope`/
-    `mark_document_vectorized`: the migration-default `source_tag` scope spans
-    arbitrary teams and is authorized once, at the platform level
-    (`CAN_MANAGE_PLATFORM`), by `corpus_manager_controller._authorize_scope`
-    before this workflow starts. Re-applying a per-document
-    `DocumentPermission.READ` check for the calling user here would reject
-    every document outside that user's own teams.
-
-    The original ingestion profile isn't recorded on `DocumentMetadata`, so this
-    defaults to `IngestionProcessingProfile.medium` (the platform default).
-    """
-    from knowledge_flow_backend.application_context import ApplicationContext
-
-    keycloak_user = KeycloakUser.model_validate(user)
-    metadata_store = ApplicationContext.get_instance().get_metadata_store()
-    metadata = await metadata_store.get_metadata_by_uid(document_uid)
-    if metadata is None:
-        raise exceptions.ApplicationError(
-            f"Document '{document_uid}' not found for revectorize.",
-            non_retryable=True,
-        )
-    if not metadata.source.source_tag:
-        raise exceptions.ApplicationError(
-            f"Document '{document_uid}' has no source_tag recorded; cannot re-vectorize.",
-            non_retryable=True,
-        )
-
-    file = FileToProcess(
-        source_tag=metadata.source.source_tag,
-        document_uid=document_uid,
-        display_name=metadata.document_name,
-        profile=IngestionProcessingProfile.medium,
-        processed_by=keycloak_user,
-    )
-    return RevectorizePreparedFile(file=file, metadata=metadata)

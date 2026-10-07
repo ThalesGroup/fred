@@ -670,16 +670,16 @@ OpenAI-style markdown-first message bodies.
 Do not introduce structured `code` or `diagram` parts unless a concrete UI
 need proves markdown is insufficient and the contract is extended by RFC.
 
-**2026-06-18 — MCP filesystem-first file exchange (AGENT-FILESYSTEM):**
-`ArtifactPublisherPort` and `ResourceReaderPort` in `RuntimeServices`, and the
-associated SDK types (`ArtifactPublishRequest`, `PublishedArtifact`,
-`ResourceFetchRequest`, `FetchedResource`, `ArtifactScope`, `ResourceScope`) are
-removed or no longer exported in the fresh Swift target. Agents and graph nodes use
-the authenticated Knowledge Flow MCP filesystem through SDK `ctx.fs` / `context.fs`
-helpers or direct MCP tools. Generated files are written to filesystem paths and
-returned to chat as safe Fred/Knowledge Flow `LinkPart` download references. The
-`LinkPart` / `ui_parts` SSE contract is unchanged; runtime history must persist those
-parts so live streaming and replay match. See `docs/swift/design/FILESYSTEM.md`.
+**2026-06-18 — historical file-exchange decision, retired by #2984/#2986:**
+The MCP filesystem and generic SDK `ctx.fs` / `context.fs` helpers described in
+the original decision are no longer available. The retained PPT Filler path uses
+`RuntimeServices.workspace_fs.write` for generated files and
+`RuntimeServices.agent_assets` for its configured template; the authenticated
+Knowledge Flow binary `/fs` transport supplies its download link. The
+`LinkPart` / `ui_parts` SSE contract is unchanged, and runtime history persists
+those parts so live streaming and replay match. Corpus documents, attachments,
+Deep conversation files, Wiki and writable documents use their separate
+contracts. See `docs/swift/design/FILESYSTEM.md`.
 
 ---
 
@@ -899,7 +899,10 @@ The Rico system prompt (`basic_react_rag_expert_system_prompt.md`) was also
 rewritten to add explicit `[N]` citation format rules, inline placement
 requirements, and a "never reproduce URLs" guardrail.
 
-### 8.8 ✅ `artifacts.publish_text` — `key` arg removed — FILES-04 (June 2026)
+### 8.8 Historical: `artifacts.publish_text` — retired by #2986
+
+The whole legacy tool was subsequently removed. The note below records its
+June 2026 schema correction and does not describe a current agent tool.
 
 **Was**: `ArtifactPublishTextToolArgs` (`fred-sdk` builtin catalog) exposed an
 optional `key` "logical storage key" field with the promise *"leave empty to let
@@ -3571,9 +3574,8 @@ route, no plumbing duplication.
 
 **Bounded context.** `CorpusTreeService` is a read-only projection over the
 already-ingested corpus — it stores no bytes, accepts no writes, and is
-intentionally distinct from the future `WorkspaceService` (mutable,
-persistent user/agent files, currently implemented under `/fs`). See
-`FILESYSTEM.md` "Business labels vs. scope tags".
+intentionally distinct from the retired general-purpose user/agent filesystem.
+See `FILESYSTEM.md` "Business labels vs. scope tags".
 
 Tests: `test_corpus_tree_builder.py` (renderer invariant),
 `test_corpus_tree_service.py`, `test_metadata_service_labels.py` +
@@ -4954,6 +4956,10 @@ inspection.
 
 ### 8.69 ✅ MCP tool descriptions stop carrying response schemas — issue #2412 item 2 (2026-08-28)
 
+This section records the August 2026 measurements. The filesystem and corpus
+MCP mounts, and later the corpus-manager HTTP API, were retired by #2984;
+the corresponding follow-up findings below are historical.
+
 **What changed.** No MCP tool description carries response documentation any
 more. Two steps, landed together in knowledge-flow's `main.py`:
 
@@ -5077,12 +5083,8 @@ consolidation phase's scope-discipline rule — each is its own change):
    `corpus_manager_controller`'s `corpus_repair_vector_metadata` exist in
    code but not in the committed spec. Runtime is unaffected (`FastApiMCP`
    reads the live app), but the committed spec feeds frontend codegen.
-7. **`mcp-web-github-readonly` is `enabled: true` but inert**: catalog
-   declares `transport: inprocess, provider: web_github_readonly`, while
-   `build_inprocess_toolkit` (`inprocess_toolkit_registry.py`) only knows
-   `kf_vector_search`. It logs "no toolkit built for provider=..." and
-   contributes zero tools. No prompt pollution — `build_runtime_tool_prompt_suffix`
-   already skips empty groups — but it is a dead entry in the capability picker.
+7. **Resolved 2026-09-30:** the unimplemented GitHub catalog entry was removed
+   with the legacy local MCP transport (see §8.104).
 
 ---
 
@@ -6353,7 +6355,6 @@ Tool-name collision checks, authorization, audit and HITL are unchanged.
 Identity, services and typed capability options already use one assembly path;
 model middleware and MCP prompt injection remain specific to ReAct/Deep.
 
-
 ### 8.98 Prompt command descriptor on a user turn (2026-09-28)
 
 `RuntimeContext` gains an optional `command` — the prompt command a turn was
@@ -6493,6 +6494,43 @@ future kinds of scope. `FieldSpec` gains the optional `scope_private`. Authoring
 `capabilities/AUTHORING.md` "Scope-private settings". Acceptance:
 `openspec/changes/copy-agent-across-teams/`.
 
-### 8.103 Shared platform admission (2026-10-05)
+### 8.103 MCP catalog packages use SDK capability primitives (2026-09-29)
+
+`McpCapability`, its prompt/configuration types and builders now live in
+`fred_sdk.contracts.capability.mcp`; runtime imports remain compatibility aliases.
+`fred_sdk.resources.mcp` owns YAML validation and instruction resource loading.
+Pods discover installed `fred.mcp_catalogs` providers when no whole-catalog
+replacement is selected. An optional `mcp_catalog_external.yaml` adds
+deployment-owned servers to those providers; duplicate IDs fail startup.
+`fred-capability-mcp` supplies only Fred's internal servers and prompt files;
+transport and capability registration consume the same resolved server list.
+See `openspec/specs/mcp-capabilities/spec.md` for precedence and failure behavior.
+Server IDs, team policies, composer controls, prompt rendering and API payloads
+are unchanged; live MCP clients remain runtime-owned.
+
+`fred_sdk.contracts.services` defines typed Fred service identifiers and the
+`ServiceEndpointsPort` address contract. Runtime `ConfiguredServiceEndpoints`
+implements it from existing pod configuration and supplies it to catalog loaders
+at boot. Internal HTTP entries declare `service` + `path`; their resolved URLs
+preserve the configured port and API prefix. Service references are catalog-only metadata,
+absent from capability payloads; concrete deployment-owned URLs remain supported.
+
+### 8.104 Retire local MCP transport and duplicate document search (2026-09-30)
+
+MCP configuration no longer accepts `inprocess` or exposes a `provider` field;
+local toolkit factories and lifecycle support have been removed. Native capability
+invokers remain available. The old document-search MCP and unimplemented GitHub
+entry are absent from packaged and Helm catalogs. ReAct RAG, Mindmap and Comparison
+keep their template IDs and now default to `document_access`.
+
+Control-plane revision `ba2c3c7fd0c1` removes legacy RAG and GitHub selections
+and configuration from stored tuning, including their historical `mcp:`-prefixed
+forms; it does not select a replacement or change grants/suspensions. A revision
+already applied before this combined cleanup must be reapplied as described in
+the operator migration note.
+See the migration note at `docs/swift/ops/migrations/extract-mcp-agent-instructions.md`
+and `openspec/specs/mcp-capabilities/spec.md` for the current contract.
+
+### 8.105 Shared platform admission (2026-10-05)
 
 When deployment configuration enables `security.platform_access`, HTTP principal resolution checks suspension then live platform admission before legal/resource gates. This also covers runtime query-token resolution and cached verified JWTs. Pure service operations retain their existing checks; delegated people use their own live sources or compatible unexpired verified human evidence. Runtime startup requires the control-plane-owned migrated PostgreSQL authority and an identical configured policy. Missing or inconsistent authority fails closed with 503. See `openspec/specs/platform-access-control/spec.md` and the platform-access migration note for current contracts and rollout.

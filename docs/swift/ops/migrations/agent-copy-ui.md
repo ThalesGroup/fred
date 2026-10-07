@@ -18,10 +18,9 @@ copy endpoints and the pods' `copy-config` operation.
 
 ## Configuration
 
-No change is required. Deployments that maintain their own MCP catalog should
-make sure `chat_options.bound_library_ids` fields carry `scope_private: true`, as
-the bundled catalog does. Without it, an agent copied to another team keeps the
-origin team's library ids for that MCP server, which point to nothing there.
+The bundled catalog needs no change. Custom catalog field preparation is
+described once in the [configuration-copy note](capability-config-copy.md) and
+the coordinated MCP procedure.
 
 ## Upgrade
 

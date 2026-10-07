@@ -72,14 +72,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.content {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-height: 0;
-}
-
-.tree,
 /* A row, not a column: the workspace holds the left and the import rail keeps
    the right, widening in place when it is opened. */
 .panel {

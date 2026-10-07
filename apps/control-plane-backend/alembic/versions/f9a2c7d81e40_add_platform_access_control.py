@@ -2,14 +2,14 @@
 """Add platform admission state.
 
 Revision ID: f9a2c7d81e40
-Revises: b4e8d2a9c613
+Revises: aac66348e27b
 """
 
 import sqlalchemy as sa
 from alembic import op
 
 revision = "f9a2c7d81e40"  # pragma: allowlist secret
-down_revision = "b4e8d2a9c613"  # pragma: allowlist secret
+down_revision = "aac66348e27b"  # pragma: allowlist secret
 branch_labels = None
 depends_on = None
 

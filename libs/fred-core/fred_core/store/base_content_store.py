@@ -67,3 +67,9 @@ class ContentStore(Protocol):
         """
 
         ...
+
+    def delete_object(self, key: str) -> None:
+        """Remove object `key`. Idempotent: a missing object is a no-op.
+
+        Callers can delete a replaced object without checking it still exists.
+        """

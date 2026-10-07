@@ -33,7 +33,7 @@ First-party backends using the shared ReBAC SDK can supply the equivalent JSON b
 
 ## Upgrade
 
-1. Back up the shared database and apply control-plane Alembic head. This PR adds one revision, `f9a2c7d81e40`, following the parent's `b4e8d2a9c613`. It adds internal identity evidence, settings, individual exceptions and team enrollment state.
+1. Back up the shared database and apply control-plane Alembic head. This PR adds one revision, `f9a2c7d81e40`, following `aac66348e27b`. It adds internal identity evidence, settings, individual exceptions and team enrollment state.
 2. Deploy control plane with the configured policy first; it initializes the authority with filtering inactive. Deploy runtime and Knowledge Flow with the identical policy/database. Old or mismatched enabled readers fail closed with 503 until reconciled.
 3. In **Platform access**, explicitly import existing users (T0). Unknown existing classifications receive removable exceptions. This import completes once; retries never restore removed entries or include subsequent registrations.
 4. Add independent user/team exceptions as needed, then enable filtering. The acting administrator must retain a valid source; activation and access-policy self-lockout are refused.

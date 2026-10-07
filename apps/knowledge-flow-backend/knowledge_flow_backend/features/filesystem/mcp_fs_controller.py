@@ -16,59 +16,17 @@ import logging
 import mimetypes
 from typing import Annotated, NoReturn
 
-from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, Request, Response, UploadFile
-from fred_core import AuthorizationError, FilesystemResourceInfoResult, KeycloakUser, get_current_user
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Response, UploadFile
+from fred_core import AuthorizationError, KeycloakUser, get_current_user
 
-from knowledge_flow_backend.features.filesystem.download_token import (
-    DEFAULT_DOWNLOAD_TTL_SECONDS,
-    make_download_token,
-    verify_download_token,
-)
 from knowledge_flow_backend.features.filesystem.mcp_fs_service import McpFilesystemService
 from knowledge_flow_backend.features.filesystem.virtual_fs_contract import (
     FileReadPage,
     absolute_virtual_path,
     normalize_virtual_path,
 )
-from knowledge_flow_backend.features.tag.structure import ResourceTypeStatsEntry, ResourceTypeStatsResponse
 
 logger = logging.getLogger(__name__)
-
-
-class ShareFileResponse(BaseModel):
-    """
-    A signed, short-TTL download link for an existing workspace file (FILES-04, RFC §7.4).
-
-    Returned by `share_file` so an agent can hand a file back to the user as a clickable link.
-    The file also remains in the user's space, so an expired link is never a dead end.
-    """
-
-    download_url: str
-    file_name: str
-    size: int | None = None
-    mime: str | None = None
-
-
-class EditFileRequest(BaseModel):
-    """
-    Exact text replacement request for the virtual filesystem.
-
-    Why this exists:
-    - standard coding-oriented filesystem tools need one compact edit payload
-    - using a small request model keeps the HTTP route explicit and easy to consume
-
-    How to use:
-    - pass the exact `old_string` to replace plus the `new_string`
-    - set `replace_all=true` only when all matches should be replaced
-
-    Example:
-    - `{"old_string": "draft", "new_string": "final", "replace_all": false}`
-    """
-
-    old_string: str
-    new_string: str
-    replace_all: bool = False
 
 
 class McpFilesystemController:
@@ -174,31 +132,12 @@ class McpFilesystemController:
             except Exception as e:
                 return self._handle_exception(e, "ReadFilePage")
 
-        @router.post("/fs/write/{path:path}", tags=["Filesystem"], summary="Write a file", operation_id="write_file")
-        async def write(path: str, data: str = Body(..., embed=True), user: KeycloakUser = Depends(get_current_user)):
-            try:
-                return await self.service.write(user, path, data)
-            except Exception as e:
-                return self._handle_exception(e, "Write")
-
         @router.delete("/fs/delete/{path:path}", tags=["Filesystem"], summary="Delete a file", operation_id="delete_file")
         async def delete(path: str, user: KeycloakUser = Depends(get_current_user)):
             try:
                 return await self.service.delete(user, path)
             except Exception as e:
                 return self._handle_exception(e, "Delete")
-
-        @router.post(
-            "/fs/copy-to-shared/{path:path}",
-            tags=["Filesystem"],
-            summary="Copy a file into the team shared space (human share-by-copy)",
-            operation_id="copy_to_shared",
-        )
-        async def copy_to_shared(path: str, user: KeycloakUser = Depends(get_current_user)):
-            try:
-                return await self.service.copy_to_shared(user, path)
-            except Exception as e:
-                return self._handle_exception(e, "CopyToShared")
 
         @router.post("/fs/upload/{path:path}", tags=["Filesystem"], summary="Upload a binary file", operation_id="upload_file")
         async def upload(
@@ -222,67 +161,14 @@ class McpFilesystemController:
         @router.get("/fs/download/{path:path}", tags=["Filesystem"], summary="Download a binary file", operation_id="download_file")
         async def download(
             path: str,
-            token: str | None = Query(None, description="Optional signed link token (see share_file)."),
             user: KeycloakUser = Depends(get_current_user),
         ):
-            # A signed link is short-lived: reject an expired or tampered token. Direct API
-            # access without a token stays governed by the session + ReBAC below.
-            if token is not None and not verify_download_token(token, normalize_virtual_path(path), user.uid):
-                raise HTTPException(403, "Invalid or expired download token")
             try:
                 data = await self.service.read_bytes(user, path)
                 media_type = mimetypes.guess_type(path)[0] or "application/octet-stream"
                 return Response(content=data, media_type=media_type)
             except Exception as e:
                 return self._handle_exception(e, "Download")
-
-        @router.get(
-            "/fs/share/{path:path}",
-            tags=["Filesystem"],
-            summary="Get a signed download link for an existing file",
-            operation_id="share_file",
-            response_model=ShareFileResponse,
-        )
-        async def share_file(
-            path: str,
-            request: Request,
-            user: KeycloakUser = Depends(get_current_user),
-        ):
-            try:
-                info = await self.service.stat(user, path)
-                if info.is_dir():
-                    raise HTTPException(400, "Cannot share a directory")
-                normalized = normalize_virtual_path(path)
-                token = make_download_token(normalized, user.uid, ttl_seconds=DEFAULT_DOWNLOAD_TTL_SECONDS)
-                href = self._download_href(request, path)
-                separator = "&" if "?" in href else "?"
-                return ShareFileResponse(
-                    download_url=f"{href}{separator}token={token}",
-                    file_name=normalized.rsplit("/", 1)[-1],
-                    size=info.size,
-                    mime=mimetypes.guess_type(path)[0],
-                )
-            except HTTPException:
-                raise
-            except Exception as e:
-                return self._handle_exception(e, "Share")
-
-        @router.post("/fs/edit/{path:path}", tags=["Filesystem"], summary="Edit a file", operation_id="edit_file")
-        async def edit(
-            path: str,
-            payload: EditFileRequest,
-            user: KeycloakUser = Depends(get_current_user),
-        ):
-            try:
-                return await self.service.edit_file(
-                    user,
-                    path,
-                    old_string=payload.old_string,
-                    new_string=payload.new_string,
-                    replace_all=payload.replace_all,
-                )
-            except Exception as e:
-                return self._handle_exception(e, "Edit")
 
         @router.get("/fs/glob", tags=["Filesystem"], summary="Find files matching a glob", operation_id="glob")
         async def glob(pattern: str, path: str = "/", user: KeycloakUser = Depends(get_current_user)):
@@ -297,37 +183,3 @@ class McpFilesystemController:
                 return await self.service.grep(user, pattern, path)
             except Exception as e:
                 return self._handle_exception(e, "Grep")
-
-        @router.post("/fs/mkdir/{path:path}", tags=["Filesystem"], summary="Create a directory/folder", operation_id="mkdir")
-        async def mkdir(path: str, user: KeycloakUser = Depends(get_current_user)):
-            try:
-                return await self.service.mkdir(user, path)
-            except Exception as e:
-                return self._handle_exception(e, "Mkdir")
-
-        @router.post(
-            "/fs/rename/{path:path}",
-            tags=["Filesystem"],
-            summary="Rename a file or folder in place",
-            operation_id="rename",
-            response_model=FilesystemResourceInfoResult,
-        )
-        async def rename(path: str, new_name: str = Body(..., embed=True), user: KeycloakUser = Depends(get_current_user)):
-            try:
-                return await self.service.rename(user, path, new_name)
-            except Exception as e:
-                return self._handle_exception(e, "Rename")
-
-        @router.get(
-            "/fs/stats/{path:path}",
-            tags=["Filesystem"],
-            summary="Usage by file type, recursively, under one writable path",
-            response_model=ResourceTypeStatsResponse,
-            operation_id="filesystem_type_stats",
-        )
-        async def type_stats(path: str, user: KeycloakUser = Depends(get_current_user)):
-            try:
-                stats = await self.service.type_stats(user, path)
-                return ResourceTypeStatsResponse(entries=[ResourceTypeStatsEntry(bucket=bucket.value, count=count, size_bytes=size) for bucket, (count, size) in stats.items()])
-            except Exception as e:
-                return self._handle_exception(e, "TypeStats")

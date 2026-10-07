@@ -1663,9 +1663,7 @@ Renders agent-produced downloadable artifacts (`LinkPart` ui_parts on the final 
 chips below an assistant reply. The `/fs/download` route is session-authenticated, so a chip click
 runs an **authenticated fetch (live Bearer) → blob → save** via the shared `downloadAuthed` util —
 the same proxy-through-KF mechanism as the Resources file browser. A plain markdown anchor would
-navigate without a token and fail ("No authentication token provided"). Signed share links
-(`/fs/share` token-in-URL) are intentionally **not** used here — reserved for explicit external
-sharing — to avoid credential leakage, link rot, and stale-authorization bypass of live ReBAC.
+navigate without a token and fail ("No authentication token provided").
 
 #### Open UX issues
 
@@ -3608,6 +3606,12 @@ a Markdown WYSIWYG editor (`@mdxeditor/editor`) where the user and the agent co-
 documents. Tab strip when the session has several documents; editor remounts on agent
 writes (keyed `${document_id}:${updated_at}`) but never while the user types; 800 ms
 debounced autosave with a "Saving…" indicator; export menu (Word `.docx` / Markdown).
+Once per document/version import, a Markdown compatibility sanitizer escapes
+literal `<` in text and converts angle-bracket autolinks to explicit links. Code, supported
+HTML tags/attributes and link labels/destinations are preserved, including literal
+comparisons inside supported HTML blocks. The pane ignores the editor's initial
+normalization callback, so opening a document does not save a reformatted copy;
+only user edits use the existing autosave path.
 Restored behind the conversation (2026-09-11): the chat page holds a panel-open
 request until the thread has something on screen (messages rendered, or history
 settled with none), then applies it. Mounting the editor is one long synchronous
@@ -3773,9 +3777,10 @@ Toggling a capability no longer changes the name's font size
 Active emphasis is now weight + `--primary` color at identical metrics; only
 the config sub-form still expands, which is expected.
 
-### `FilesystemWorkspace` / `AgentsWorkspace` (Resources tabs — Mon espace/Espace d'équipe/Agents)
+### Historical: `FilesystemWorkspace` / `AgentsWorkspace` (removed in #2985)
 
-Expanding an empty folder now shows the same explanatory hint pattern as the
+These Resources tabs were removed in #2985. Previously, expanding an empty
+folder showed the same explanatory hint pattern as the
 corpus workspace (`.hint`, `--on-surface-muted`, body-small) instead of an
 empty dropdown: generic `rework.resources.empty.folder` for folders, dedicated
 `empty.agentFiles` inside an agent's space, and `empty.agents` when no agent
@@ -3813,7 +3818,7 @@ on its binding toggle, via `ui.widget` / `ui.visible_when` hints in the pod's
 
 ### Resources table — columns beside the import panel (2026-10-01)
 
-In the Documents, Filesystem and Agents workspaces the name column is
+In the Documents workspace the name column is
 `minmax(8rem, 2fr)`, the actions column keeps its fixed width, and the columns
 between them (size, created, author, status) are `minmax(0, <usual width>)`. They
 keep their usual width while there is room and are the ones that shrink, truncated,
@@ -5124,6 +5129,28 @@ happened and other executions must have stopped before resuming.
 
 Choices and explanation are localized in EN/FR. Safe external replay remains the
 agent author's responsibility; a generic confirmation cannot make an unsafe call safe.
+
+### `AvatarUploadCard` and `UserAvatar` image mode (2026-10-06)
+
+**Location:** `shared/molecules/AvatarUploadCard/`, `shared/atoms/UserAvatar/`
+
+**Status:** `Functional`
+
+`AvatarUploadCard` is the team avatar card moved out of `TeamSettingsParameters`:
+title, Import button, hint, 96px square preview, the client-side checks
+(JPEG/PNG/WebP, 5 MB) and the `AvatarCropEditor` mount. A text `error` Delete
+button sits under Import only when the caller passes `onDelete` and an image is
+set; team settings pass none, user settings pass one behind the critical
+`ConfirmationDialog`. Styles are unchanged from the team card. The card hands
+`onUpload` a ready `File` named and typed after the crop output: WebP, or PNG
+where the browser cannot encode WebP (Safari). A refused pick (type, size) or
+a failed upload shows an error toast (`useToast` / `useApiErrorToast`); user
+settings report a failed delete the same way.
+
+`UserAvatar` takes an optional `imageUrl`: a round `<img>` with intrinsic size
+and `decoding="async"`, initials when absent or when the image fails to load,
+retried when the URL changes. Used for the nav-rail profile, user settings,
+personal-space header, home team list and team-card / admin-teams admins.
 
 ## Shared hosted-application UI components
 

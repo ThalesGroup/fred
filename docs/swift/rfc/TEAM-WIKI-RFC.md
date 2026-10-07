@@ -16,8 +16,8 @@ carries every slice and closes them on merge
 capability package; `platform_postgres` / `document_access` as the reference for
 a capability reaching an external service through a typed port;
 `capabilities/AUTHORING.md`; `platform/REBAC.md` (team roles);
-`design/FILESYSTEM.md` and `AGENT-FILESYSTEM-HARDENING-RFC.md` §9 (why the team
-file space is **not** the storage — §5.2)
+`design/FILESYSTEM.md` (current file-storage boundaries); §5.2 explains why
+the Wiki has its own storage
 
 ---
 
@@ -159,23 +159,13 @@ rejected.
 **Decision.** The wiki does not use `/teams/{t}/shared` or the `/fs` routes.
 Nothing in this feature touches the team file space.
 
-**Why.** `FILESYSTEM.md` states outright that agents should not write there, and
-explains why: the Knowledge Flow `/fs` boundary only ever sees the authenticated
-*user*, never "which agent instance is calling", so it cannot tell Alice's
-browser from Alice's agent. That is issue #2113 — an agent listing `teams/`
-today sees **every team the human can read platform-wide**, not the one team the
-conversation belongs to. The fix is the scoped `WorkspaceService` (#2498), whose
-*contract* was merged as PR #2501 but whose implementation does not exist (there
-is no `workspace/` feature directory in knowledge-flow), and which is itself
-gated behind #2113.
+**Why.** The historical general-purpose team file space was retired by
+#2984/#2986. The retained Knowledge Flow `/fs` transport serves technical PPT
+assets and outputs, not the team's shared written memory. Independently, a
+file store has no Wiki revision model, hierarchy metadata or page identity.
 
-Building the wiki on that boundary would mean inheriting an open critical
-isolation gap, and blocking on a chantier we do not control. Beyond timing, the
-file space also offers no revisions, no hierarchy metadata and no page identity.
-
-**Reversing this** stays blocked on #2113/#2498, and even once they ship it
-would be a rewrite rather than a substitution: a file store has no equivalent
-of the revision model in §6.
+**Reversing this** would require a new product and storage design; the former
+`WorkspaceService` proposal is not an implemented dependency of the Wiki.
 
 ### 5.3 One table for all teams, never one table per team
 
@@ -195,8 +185,8 @@ because it is the whole of the tenant boundary:
 > context. It is never read from a caller-supplied parameter, and it is never
 > assembled by a client.
 
-This is the same lesson `AGENT-FILESYSTEM-HARDENING-RFC.md` §9 draws for the
-Workspace namespace, applied one layer up.
+The former Workspace proposal also discussed server-derived scope, but it was
+superseded by #2984/#2986 and is not a current Wiki dependency.
 
 **Reversing this** has no reasonable path back to per-team tables; if row-level
 isolation is ever judged insufficient, the escalation is Postgres row-level
@@ -303,11 +293,10 @@ capability code and never by the model.
 bearer, exactly as the pod already does to resolve an agent instance
 (`{control_plane_url}/teams/{team_id}/agent-instances/{id}/runtime`). This is
 the right identity here, and a pleasant simplification: the write is authorised
-*as the user*, which is precisely the enforcement model §5.4 requires. It avoids
-the machine-identity machinery `WorkspaceService` needs, because that contract
-must distinguish an agent from a human at a shared file boundary, whereas here
-we deliberately want the user to be the authority and the HITL gate to be what
-makes the act deliberate.
+*as the user*, which is precisely the enforcement model §5.4 requires. The
+retired general-purpose Workspace proposal distinguished agent and human file
+access; the Wiki instead uses the user as the authority and the HITL gate to
+make the act deliberate.
 
 ### 7.2 The capability package
 
@@ -472,8 +461,8 @@ codebase has already learned that a hidden field is not a disabled field.
    that a write came from an agent. Someone holding a user's token could claim
    `human` for an agent write. Severity is low — with that token they could use
    the UI directly — and the gain is limited to muddying the audit trail. The
-   hardening path, if it ever matters, is the machine-identity model of
-   `AGENT-FILESYSTEM-HARDENING-RFC.md` §9.1.
+   hardening path, if it ever matters, needs a separate identity design; the
+   old general-filesystem RFC does not provide a shipped model.
 3. **A page can hold anything a member can type.** There is no secret detection
    and no classification. The wiki is exactly as sensitive as the team it
    belongs to.

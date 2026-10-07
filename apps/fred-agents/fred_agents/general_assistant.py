@@ -135,14 +135,6 @@ class GeneralAssistantDefinition(ReActAgentDefinition):
     # new instances pre-ticked, which made carrying any at all a decision to
     # take deliberately rather than by inheritance.
     #
-    # If you re-add one, mind two constraints that outlive this list:
-    # - `document_access` (native, #1906) and the legacy inprocess
-    #   `mcp-knowledge-flow-mcp-text` must never be selected together on one
-    #   instance - duplicate vector-search tool, see
-    #   `document_access/capability.py`'s module docstring.
-    # - Filesystem (`mcp-knowledge-flow-fs`) stays out until the /fs boundary
-    #   is agent/team-scoped (AGENT-FILESYSTEM-HARDENING-RFC F1, #2334) - same
-    #   stance as `deep_assistant`.
     default_mcp_servers: tuple[MCPServerRef, ...] = ()
 
     fields: tuple[FieldSpec, ...] = (

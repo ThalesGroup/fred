@@ -55,24 +55,18 @@ from .api import (
 )
 from .inspection import inspect_agent
 from .knowledge_flow_mcp import (
-    MCP_SERVER_KNOWLEDGE_FLOW_CORPUS,
-    MCP_SERVER_KNOWLEDGE_FLOW_FS,
     MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS,
     MCP_SERVER_KNOWLEDGE_FLOW_PROMETHEUS_OPS,
     MCP_SERVER_KNOWLEDGE_FLOW_TABULAR,
-    MCP_SERVER_KNOWLEDGE_FLOW_TEXT,
     MCPServerRef,
 )
 
 __all__ = [
     "MCPServerRef",
     "ModelInvocationError",
-    "MCP_SERVER_KNOWLEDGE_FLOW_CORPUS",
-    "MCP_SERVER_KNOWLEDGE_FLOW_FS",
     "MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS",
     "MCP_SERVER_KNOWLEDGE_FLOW_PROMETHEUS_OPS",
     "MCP_SERVER_KNOWLEDGE_FLOW_TABULAR",
-    "MCP_SERVER_KNOWLEDGE_FLOW_TEXT",
     "ReActAgent",
     "ToolContext",
     "ToolInvocationError",

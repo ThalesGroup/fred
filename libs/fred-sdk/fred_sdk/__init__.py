@@ -40,7 +40,7 @@ Capabilities (modular agent features)
 
 MCP server references
 ---------------------
-    from fred_sdk import MCPServerRef, MCP_SERVER_KNOWLEDGE_FLOW_CORPUS
+    from fred_sdk import MCPServerRef, MCP_SERVER_KNOWLEDGE_FLOW_TABULAR
 
 What is NOT exported here (execution engine, lives in fred-runtime):
     - ReActRuntime, GraphRuntime, DeepAgentRuntime  → fred_runtime.react / .graph / .deep
@@ -73,12 +73,9 @@ if TYPE_CHECKING:
     # MCP server references
     # ---------------------------------------------------------------------------
     from fred_sdk.authoring.knowledge_flow_mcp import (
-        MCP_SERVER_KNOWLEDGE_FLOW_CORPUS,
-        MCP_SERVER_KNOWLEDGE_FLOW_FS,
         MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS,
         MCP_SERVER_KNOWLEDGE_FLOW_PROMETHEUS_OPS,
         MCP_SERVER_KNOWLEDGE_FLOW_TABULAR,
-        MCP_SERVER_KNOWLEDGE_FLOW_TEXT,
         MCPServerRef,
     )
     from fred_sdk.contracts.capability import (
@@ -99,7 +96,6 @@ if TYPE_CHECKING:
     )
     from fred_sdk.contracts.context import (
         AgentInvocationResult,
-        FsEntry,
         InvocationScope,
         PublishedArtifact,
         RuntimeContext,
@@ -127,7 +123,6 @@ if TYPE_CHECKING:
         ThoughtEndEvent,
         ThoughtKind,
         ThoughtStartEvent,
-        WorkspaceFileNotFound,
         WorkspaceFsPort,
     )
 
@@ -181,10 +176,8 @@ if TYPE_CHECKING:
     # Built-in tool references
     # ---------------------------------------------------------------------------
     from fred_sdk.support.builtins import (
-        TOOL_REF_ARTIFACTS_PUBLISH_TEXT,
         TOOL_REF_GEO_RENDER_POINTS,
         TOOL_REF_KNOWLEDGE_SEARCH,
-        TOOL_REF_RESOURCES_FETCH_TEXT,
         TOOL_REF_SIMILARITY_SEARCH,
         TOOL_REF_TRACES_SUMMARIZE_CONVERSATION,
     )
@@ -205,12 +198,9 @@ _LAZY: dict[str, str] = {
     "ui_field": "fred_sdk.authoring.api",
     "inspect_agent": "fred_sdk.authoring.inspection",
     # MCP server references
-    "MCP_SERVER_KNOWLEDGE_FLOW_CORPUS": "fred_sdk.authoring.knowledge_flow_mcp",
-    "MCP_SERVER_KNOWLEDGE_FLOW_FS": "fred_sdk.authoring.knowledge_flow_mcp",
     "MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS": "fred_sdk.authoring.knowledge_flow_mcp",
     "MCP_SERVER_KNOWLEDGE_FLOW_PROMETHEUS_OPS": "fred_sdk.authoring.knowledge_flow_mcp",
     "MCP_SERVER_KNOWLEDGE_FLOW_TABULAR": "fred_sdk.authoring.knowledge_flow_mcp",
-    "MCP_SERVER_KNOWLEDGE_FLOW_TEXT": "fred_sdk.authoring.knowledge_flow_mcp",
     "MCPServerRef": "fred_sdk.authoring.knowledge_flow_mcp",
     # Capability authoring
     "AgentCapability": "fred_sdk.contracts.capability",
@@ -229,7 +219,6 @@ _LAZY: dict[str, str] = {
     "chat_part_kind": "fred_sdk.contracts.capability",
     # Request context and shared tool/agent result types
     "AgentInvocationResult": "fred_sdk.contracts.context",
-    "FsEntry": "fred_sdk.contracts.context",
     "InvocationScope": "fred_sdk.contracts.context",
     "PublishedArtifact": "fred_sdk.contracts.context",
     "RuntimeContext": "fred_sdk.contracts.context",
@@ -257,7 +246,6 @@ _LAZY: dict[str, str] = {
     "ThoughtEndEvent": "fred_sdk.contracts.runtime",
     "ThoughtKind": "fred_sdk.contracts.runtime",
     "ThoughtStartEvent": "fred_sdk.contracts.runtime",
-    "WorkspaceFileNotFound": "fred_sdk.contracts.runtime",
     "WorkspaceFsPort": "fred_sdk.contracts.runtime",
     # Graph agent authoring
     "GraphAgent": "fred_sdk.graph.authoring.api",
@@ -286,10 +274,8 @@ _LAZY: dict[str, str] = {
     "load_agent_prompt_markdown": "fred_sdk.resources",
     "load_packaged_markdown": "fred_sdk.resources",
     # Built-in tool references
-    "TOOL_REF_ARTIFACTS_PUBLISH_TEXT": "fred_sdk.support.builtins",
     "TOOL_REF_GEO_RENDER_POINTS": "fred_sdk.support.builtins",
     "TOOL_REF_KNOWLEDGE_SEARCH": "fred_sdk.support.builtins",
-    "TOOL_REF_RESOURCES_FETCH_TEXT": "fred_sdk.support.builtins",
     "TOOL_REF_SIMILARITY_SEARCH": "fred_sdk.support.builtins",
     "TOOL_REF_TRACES_SUMMARIZE_CONVERSATION": "fred_sdk.support.builtins",
 }
@@ -325,12 +311,9 @@ __all__ = [
     "inspect_agent",
     # MCP server references
     "MCPServerRef",
-    "MCP_SERVER_KNOWLEDGE_FLOW_CORPUS",
-    "MCP_SERVER_KNOWLEDGE_FLOW_FS",
     "MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS",
     "MCP_SERVER_KNOWLEDGE_FLOW_PROMETHEUS_OPS",
     "MCP_SERVER_KNOWLEDGE_FLOW_TABULAR",
-    "MCP_SERVER_KNOWLEDGE_FLOW_TEXT",
     # Graph authoring
     "GraphAgent",
     "GraphWorkflow",
@@ -354,11 +337,9 @@ __all__ = [
     "GraphNodeContext",
     "GraphNodeResult",
     "AgentInvocationResult",
-    "FsEntry",
     "InvocationScope",
     "PublishedArtifact",
     "WorkspaceFsPort",
-    "WorkspaceFileNotFound",
     "HumanInputRequest",
     "HumanInputAnswer",
     "HumanChoiceOption",
@@ -404,10 +385,8 @@ __all__ = [
     "load_agent_prompt_markdown",
     "load_packaged_markdown",
     # Built-in tool references
-    "TOOL_REF_ARTIFACTS_PUBLISH_TEXT",
     "TOOL_REF_GEO_RENDER_POINTS",
     "TOOL_REF_KNOWLEDGE_SEARCH",
-    "TOOL_REF_RESOURCES_FETCH_TEXT",
     "TOOL_REF_SIMILARITY_SEARCH",
     "TOOL_REF_TRACES_SUMMARIZE_CONVERSATION",
 ]

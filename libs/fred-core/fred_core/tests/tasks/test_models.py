@@ -82,6 +82,24 @@ def test_ingestion_task_event_round_trips() -> None:
     assert parsed.state.is_terminal
 
 
+def test_historical_repair_detail_remains_readable() -> None:
+    """Persisted repair tasks may outlive the retired maintenance workflow."""
+    detail = IngestionDetail.model_validate(
+        {
+            "processed": 1,
+            "total": 1,
+            "failed": 0,
+            "preview": 0,
+            "vectorized": 1,
+            "sql_indexed": 0,
+            "result": {"source_tag": "old-pull", "repaired": 1},
+        }
+    )
+
+    assert detail.processed == 1
+    assert "result" not in detail.model_dump()
+
+
 def test_log_task_event_round_trips() -> None:
     event = TaskLogEvent(
         task_id="abc",

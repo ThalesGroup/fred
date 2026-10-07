@@ -32,11 +32,10 @@ Scenario routing (handled by dispatch_step):
   "markdown"    → dispatch routes "markdown"     → markdown_step    → finalize
   "mermaid"     → dispatch routes "mermaid"      → mermaid_step     → finalize
   "long"        → dispatch routes "long"         → long_step        → finalize
-  "files"       → dispatch routes "files"        → files_step       → finalize
   "geo"         → dispatch routes "geo"          → geo_step         → finalize
   "document"    → dispatch routes "document"    → document_step    → finalize
   "assist"      → assist_route → [assist_search] → assist_draft → assist_review
-                  (HITL) → assist_confirm (HITL) → [assist_commit] → finalize
+                  (HITL) → finalize
   "delegate"    → dispatch routes "delegate"     → delegate_step    → finalize
   "crash"       → dispatch routes "crash"        → crash_step (raises, no on_error)
   "graph check" → dispatch routes "graph_check"  → graph_check_step → finalize
@@ -172,7 +171,6 @@ async def dispatch_step(
       "markdown"    → markdown_step
       "mermaid"     → mermaid_step
       "long"        → long_step
-      "files"       → files_step
       "geo"         → geo_step
       "document"    → document_step
       "assist"      → assist_route_step
@@ -215,8 +213,6 @@ async def dispatch_step(
         scenario = "mermaid"
     elif text.startswith("long"):
         scenario = "long"
-    elif text.startswith("files"):
-        scenario = "files"
     elif text.startswith("geo"):
         scenario = "geo"
     elif text.startswith("document"):
@@ -1444,132 +1440,6 @@ async def think_step(
     )
 
 
-# ── Step: files ───────────────────────────────────────────────────────────────
-
-_FILES_PATH = "outputs/sample.txt"
-
-_FILES_SAMPLE = """\
-Hello from the Test Assistant.
-
-This file was written to your personal workspace through the unified /fs
-filesystem. Send "files <your own text>" to store your own content instead.
-"""
-
-
-@typed_node(TestState)
-async def files_step(
-    state: TestState,
-    context: GraphNodeContext,
-) -> StepResult:
-    """
-    Round-trip a small text file through the unified team-rooted /fs workspace.
-
-    Writes a file into the agent's own workspace (the Agents space — bare paths route
-    to teams/{team}/agents/{instance}/users/{uid}/...), reads it back to prove the
-    round-trip, then lists the directory. Exercises the workspace API
-    (`write` / `read` / `ls`) — i.e. the FILES-04 unified filesystem.
-
-    The artifact is surfaced as a `LinkPart` ui_part (not a markdown link): the
-    `/fs/download` route is session-authenticated, so the chat renders the link as
-    a download chip that fetches it with the live Bearer token. A plain anchor to
-    the raw URL would fail with "No authentication token provided".
-
-    Content: the text after the `files` keyword, or a built-in sample when the
-    user supplies none.
-
-    SSE events exercised: status (x3), assistant_delta, final (with ui_parts).
-
-    This branch needs a Knowledge Flow workspace backend. When none is wired it
-    degrades to an explanatory message instead of failing, preserving the test
-    assistant's "runs anywhere" promise for the other scenarios.
-    """
-    delay = _delay_seconds(context)
-
-    # Everything after the "files" keyword is the user-provided content.
-    remainder = state.latest_user_text.strip()[len("files") :].strip()
-    content = remainder or _FILES_SAMPLE
-    source = "your message" if remainder else "the built-in sample"
-
-    context.emit_status("files", f"Writing {_FILES_PATH} from {source}.")
-    await asyncio.sleep(0.05 + delay)
-
-    # Write first. The download chip is built from this artifact and is ALWAYS returned
-    # when the write succeeds — even if the read-back/listing below hiccups — so the user
-    # can fetch the generated file straight from the conversation, not only via the Files UI.
-    try:
-        artifact = await context.write(
-            _FILES_PATH,
-            content,
-            content_type="text/plain; charset=utf-8",
-            title="Test Assistant sample",
-        )
-    except Exception as exc:  # noqa: BLE001 — nothing was written, so there is no link
-        context.emit_status("files", "Workspace backend unavailable.")
-        reply = (
-            "**Filesystem test could not run.**\n\n"
-            "This scenario writes and reads a file through the unified `/fs` "
-            "workspace, which needs a Knowledge Flow backend wired into the pod "
-            f"(`RuntimeServices.workspace_fs`).\n\nError: `{type(exc).__name__}: {exc}`"
-        )
-        return StepResult(
-            state_update={"final_text": reply, "done_reason": "files_unavailable"}
-        )
-
-    link_parts = [artifact.to_link_part().model_dump(mode="json")]
-
-    # Best-effort verification (read-back + listing). Any failure here is reported but
-    # must NOT drop the download link, since the file was already written.
-    readback: str | None = None
-    listing = ""
-    verify_error: str | None = None
-    try:
-        context.emit_status("files", "Reading the file back to verify the round-trip.")
-        await asyncio.sleep(0.05 + delay)
-        readback = await context.read(_FILES_PATH)
-
-        context.emit_status("files", "Listing the workspace directory.")
-        entries = await context.ls("outputs")
-        listing = "\n".join(
-            f"- `{entry.path}` ({'dir' if entry.is_dir else f'{entry.size} bytes'})"
-            for entry in entries
-        )
-    except Exception as exc:  # noqa: BLE001 — keep the link; just note the check failed
-        verify_error = f"{type(exc).__name__}: {exc}"
-
-    if verify_error is None:
-        reply = (
-            "**Filesystem round-trip complete.**\n\n"
-            f"Wrote {source} to this agent's workspace (Agents space) and read it straight back. "
-            "Use the download chip below to fetch it.\n\n"
-            f"| Step | Result |\n|---|---|\n"
-            f"| Write | {artifact.file_name} ({artifact.size} bytes) |\n"
-            f"| Read back | {'matches' if readback == content else 'differs'} |\n\n"
-            "**Content read back:**\n\n```\n"
-            f"{readback}\n```\n\n"
-            "**Directory listing (`outputs/`):**\n\n"
-            f"{listing or '_empty_'}"
-        )
-    else:
-        reply = (
-            "**File generated.**\n\n"
-            f"Wrote {source} to this agent's workspace (Agents space) as "
-            f"`{artifact.file_name}` ({artifact.size} bytes). Use the download chip below to fetch it.\n\n"
-            f"_The read-back/listing check did not complete (`{verify_error}`), "
-            "but the file was written._"
-        )
-    context.emit_assistant_delta(reply)
-
-    # Surface the artifact as a LinkPart ui_part; build_output forwards it on the
-    # FinalRuntimeEvent so the chat renders an authenticated download chip.
-    return StepResult(
-        state_update={
-            "final_text": reply,
-            "done_reason": "files_complete",
-            "link_parts": link_parts,
-        }
-    )
-
-
 # ── Step: geo ──────────────────────────────────────────────────────────────────
 
 _GEO_SAMPLE = {
@@ -1779,11 +1649,10 @@ async def document_step(
 # ── Scenario: assist ──────────────────────────────────────────────────────────
 #
 # The shape of a real business graph agent, in one branch: a structured routing
-# decision, a declared platform tool, a streamed model answer, two HITL gates
-# in successive nodes, and a side effect that must run only once.
+# decision, a declared platform tool, a streamed model answer, and one HITL
+# review gate.
 
 _ASSIST_DEFAULT_QUESTION = "What is Fred?"
-_ASSIST_OUTPUT_PATH = "outputs/test_assistant_answer.md"
 
 _ASSIST_ROUTE_PROMPT = """\
 Decide how to answer the user's request:
@@ -1900,7 +1769,7 @@ async def assist_review_step(
     state: TestState,
     context: GraphNodeContext,
 ) -> StepResult:
-    """HITL gate #1: approve or discard the draft. Nothing runs before the pause."""
+    """HITL gate: approve or discard the draft. Nothing runs before the pause."""
     choice_id = await choice_step(
         context,
         stage="assist_review",
@@ -1914,84 +1783,18 @@ async def assist_review_step(
     if choice_id != "approve":
         return StepResult(
             state_update={
-                "final_text": "Draft discarded. Nothing was published.",
+                "final_text": "Draft discarded.",
                 "done_reason": "assist_discarded",
             },
             route_key="discarded",
         )
-    return StepResult(route_key="approved")
-
-
-@typed_node(TestState)
-async def assist_confirm_step(
-    state: TestState,
-    context: GraphNodeContext,
-) -> StepResult:
-    """HITL gate #2: publish the approved draft as a file, or keep it in the chat."""
-    choice_id = await choice_step(
-        context,
-        stage="assist_confirm",
-        title="Publish the answer",
-        question=f"Publish the approved answer to `{_ASSIST_OUTPUT_PATH}`?",
-        choices=[
-            HumanChoiceOption(id="publish", label="Publish as a file"),
-            HumanChoiceOption(id="keep", label="Keep it in the chat only"),
-        ],
-    )
-    if choice_id != "publish":
-        return StepResult(
-            state_update={
-                "final_text": state.assist_draft,
-                "sources_data": state.assist_hits,
-                "done_reason": "assist_kept",
-            },
-            route_key="keep",
-        )
-    return StepResult(route_key="publish")
-
-
-@typed_node(TestState)
-async def assist_commit_step(
-    state: TestState,
-    context: GraphNodeContext,
-) -> StepResult:
-    """The side effect, once, after both gates; then a model call on the resumed
-    turn (it must use the session's model). Degrades without a workspace."""
-    context.emit_status("assist_commit", f"Publishing {_ASSIST_OUTPUT_PATH}.")
-    try:
-        artifact = await context.write(
-            _ASSIST_OUTPUT_PATH,
-            state.assist_draft,
-            content_type="text/markdown; charset=utf-8",
-            title="Test Assistant answer",
-        )
-    except Exception as exc:  # noqa: BLE001 — degrade like files_step
-        return StepResult(
-            state_update={
-                "final_text": (
-                    f"{state.assist_draft}\n\n_Not published: workspace backend "
-                    f"unavailable ({type(exc).__name__})._"
-                ),
-                "sources_data": state.assist_hits,
-                "done_reason": "assist_publish_unavailable",
-            }
-        )
-    note = await model_text_step(
-        context,
-        system_prompt="Confirm the publication in one short sentence.",
-        user_prompt=f"Published: {artifact.file_name}",
-        fallback_text="",
-    )
     return StepResult(
         state_update={
-            "final_text": (
-                f"{state.assist_draft}\n\n_Published as `{artifact.file_name}`._"
-                + (f" {note}" if note else "")
-            ),
+            "final_text": state.assist_draft,
             "sources_data": state.assist_hits,
-            "link_parts": [artifact.to_link_part().model_dump(mode="json")],
-            "done_reason": "assist_published",
-        }
+            "done_reason": "assist_approved",
+        },
+        route_key="approved",
     )
 
 
@@ -2089,7 +1892,7 @@ async def graph_check_step(
             }
         )
 
-    pod = load_agent_pod_config()
+    pod = await asyncio.to_thread(load_agent_pod_config)
     control_plane_url = pod.platform.control_plane_url
     if not control_plane_url:
         return StepResult(
@@ -2175,11 +1978,10 @@ _SCENARIO_TABLE = """\
 | `markdown` | All rich content types: code block, Mermaid, GFM table, GeoJSON, math (inline + block), details collapsible |
 | `mermaid` | Deliberately malformed Mermaid: validates the frontend sanitizer fallback ,repairs it instead of showing a parse error |
 | `long` | 30-sentence word-by-word streaming reply |
-| `files` | Unified `/fs` round-trip: write to the agent's space → read back → list directory |
 | `geo` | Sample GeoJSON `FeatureCollection` rendered as a `GeoPart` ui_part (feature-count summary chip) |
 | `document` | `document_access` capability tool call via `invoke_runtime_tool` + HITL confirm/discard gate on the top hit |
 | `document summarize <question>` | Tool approval on `summarize_document` when its capability is selected and confirmation enabled; requires documents and a model for the summary |
-| `assist` | Real-agent shape: structured routing → `knowledge.search` → streamed model draft → two HITL gates → file publish (`assist direct …` skips the search) |
+| `assist` | Real-agent shape: structured routing → `knowledge.search` → streamed model draft → HITL review (`assist direct …` skips the search) |
 | `delegate` | `invoke_agent` on this same agent (`delegate model hi` makes the sub-agent call the model) |
 | `crash` | Node error with no `on_error` route → the turn fails cleanly |
 | `graph check` | Runs every graph conformance check live, through this pod's HTTP API (HITL included) |"""

@@ -16,7 +16,7 @@ from fred_core.security.platform_access.models import (
 )
 from fred_core.sql import use_session
 from fred_core.teams.team_metatada_models import TeamMetadataRow
-from fred_core.users.user_models import GcuVersionsType, UserRow
+from fred_core.users.user_models import UserRow
 from fred_pod.security.structure import KeycloakUser
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -230,7 +230,7 @@ async def cgu_required(
     return version is not None and (
         row is None
         or row.gcuVersionAccepted is None
-        or row.gcuVersionAccepted.value != version
+        or row.gcuVersionAccepted != version
     )
 
 
@@ -271,7 +271,7 @@ async def accept_cgu(
             raise HTTPException(409, "gcu_version_changed")
         row = await access.store.user(UUID(user.uid), session)
         assert row is not None
-        row.gcuVersionAccepted = GcuVersionsType(version)
+        row.gcuVersionAccepted = version
         row.gcuAcceptedAt = datetime.now(timezone.utc)
 
 

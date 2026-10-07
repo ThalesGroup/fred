@@ -393,7 +393,7 @@ async def build_frontend_bootstrap(
     Example:
     - `payload = await build_frontend_bootstrap(user, deps)`
     """
-    active_team, available_teams, permissions = await asyncio.gather(
+    active_team, available_teams, permissions, current_user = await asyncio.gather(
         get_team_by_id_from_service(
             user,
             personal_team_id(user.uid),
@@ -401,9 +401,12 @@ async def build_frontend_bootstrap(
         ),
         list_teams_from_service(user, deps.team_dependencies),
         _build_permission_summary(user, deps.team_dependencies.rebac),
+        deps.team_dependencies.attach_avatar_urls(
+            {user.uid: UserSummary.from_keycloak_user(user)}
+        ),
     )
     return FrontendBootstrap(
-        current_user=UserSummary.from_keycloak_user(user),
+        current_user=current_user[user.uid],
         active_team=active_team,
         available_teams=available_teams,
         gcu_version=deps.configuration.app.gcu_version,

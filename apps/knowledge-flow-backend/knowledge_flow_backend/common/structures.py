@@ -631,10 +631,6 @@ class MCPConfig(BaseModel):
         default=False,
         description="Expose Prometheus operational endpoints and the corresponding MCP server.",
     )
-    filesystem_enabled: bool = Field(
-        default=False,
-        description="Expose agent filesystem utils endpoints and the corresponding MCP server.",
-    )
     filesystem_read_default_limit: int = Field(
         default=100,
         ge=1,

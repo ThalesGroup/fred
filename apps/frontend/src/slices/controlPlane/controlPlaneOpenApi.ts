@@ -201,6 +201,22 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/control-plane/v1/users/${queryArg.userId}`, method: "DELETE" }),
     }),
+    uploadMyAvatarControlPlaneV1UsersMeAvatarPost: build.mutation<
+      UploadMyAvatarControlPlaneV1UsersMeAvatarPostApiResponse,
+      UploadMyAvatarControlPlaneV1UsersMeAvatarPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/users/me/avatar`,
+        method: "POST",
+        body: queryArg.bodyUploadMyAvatarControlPlaneV1UsersMeAvatarPost,
+      }),
+    }),
+    deleteMyAvatarControlPlaneV1UsersMeAvatarDelete: build.mutation<
+      DeleteMyAvatarControlPlaneV1UsersMeAvatarDeleteApiResponse,
+      DeleteMyAvatarControlPlaneV1UsersMeAvatarDeleteApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/users/me/avatar`, method: "DELETE" }),
+    }),
     getUserDetailsControlPlaneV1UserGet: build.query<
       GetUserDetailsControlPlaneV1UserGetApiResponse,
       GetUserDetailsControlPlaneV1UserGetApiArg
@@ -1823,6 +1839,12 @@ export type DeleteUserControlPlaneV1UsersUserIdDeleteApiResponse = unknown;
 export type DeleteUserControlPlaneV1UsersUserIdDeleteApiArg = {
   userId: string;
 };
+export type UploadMyAvatarControlPlaneV1UsersMeAvatarPostApiResponse = unknown;
+export type UploadMyAvatarControlPlaneV1UsersMeAvatarPostApiArg = {
+  bodyUploadMyAvatarControlPlaneV1UsersMeAvatarPost: BodyUploadMyAvatarControlPlaneV1UsersMeAvatarPost;
+};
+export type DeleteMyAvatarControlPlaneV1UsersMeAvatarDeleteApiResponse = unknown;
+export type DeleteMyAvatarControlPlaneV1UsersMeAvatarDeleteApiArg = void;
 export type GetUserDetailsControlPlaneV1UserGetApiResponse = /** status 200 Successful Response */ UserDetails;
 export type GetUserDetailsControlPlaneV1UserGetApiArg = void;
 export type ValidateGcuControlPlaneV1GcuPostApiResponse = /** status 200 Successful Response */ any;
@@ -2963,6 +2985,7 @@ export type UserSummary = {
   last_name?: string | null;
   username?: string | null;
   email?: string | null;
+  avatar_image_url?: string | null;
 };
 export type CreateUserRequest = {
   username: string;
@@ -2990,7 +3013,10 @@ export type PlatformRolesResponse = {
 export type GrantPlatformRoleRequest = {
   relation: PlatformRoleRelation;
 };
-export type GcuVersionsType = "v1";
+export type BodyUploadMyAvatarControlPlaneV1UsersMeAvatarPost = {
+  /** Profile picture file (max 5MB, JPEG/PNG/WebP) */
+  file: string;
+};
 export type UserTeamRelation = "team_admin" | "pending_team_admin" | "team_editor" | "team_analyst" | "team_member";
 export type JoiningMode = "open" | "invite_only";
 export type TeamVisibility = "public" | "private";
@@ -3040,7 +3066,7 @@ export type TeamWithPermissions = {
   retention?: TeamRetentionView | null;
 };
 export type UserDetails = {
-  cguValidated: GcuVersionsType | null;
+  cguValidated: string | null;
   personalTeam: TeamWithPermissions;
   currentUser?: UserSummary | null;
 };
@@ -3132,8 +3158,6 @@ export type ApplicationList = {
 export type FrontendFeatureFlags = {
   /** Enable Fred's integrated Apps surface deployment-wide. When false, application discovery, application catalog administration, and the frontend Apps experience stay disabled. */
   enableApplications?: boolean;
-  /** Show Mon espace/Espace d'équipe/Agents tabs on the Resources page, not just Corpus d'équipe. */
-  enableAllResourceSpaces?: boolean;
   /** Reserved for the standalone rags-services admin UI; unused now that its temporary in-repo copy is gone. */
   enableInformationSystems?: boolean;
 };
@@ -4322,18 +4346,6 @@ export type TaskTarget = {
   id: string;
   label: string;
 };
-export type RepairVectorMetadataResult = {
-  source_tag: string;
-  metadata_documents?: number;
-  already_done?: number;
-  eligible_with_vectors_and_content?: number;
-  repaired?: number;
-  missing_vectors?: number;
-  missing_content?: number;
-  tabular_excluded?: number;
-  failed_or_running_excluded?: number;
-  errors?: number;
-};
 export type IngestionDetail = {
   processed: number;
   total: number;
@@ -4341,7 +4353,6 @@ export type IngestionDetail = {
   preview: number;
   vectorized: number;
   sql_indexed: number;
-  result?: RepairVectorMetadataResult | null;
 };
 export type EvaluationDetail = {
   campaign_id: string;
@@ -4671,6 +4682,8 @@ export const {
   useGrantPlatformRoleControlPlaneV1UsersUserIdPlatformRolesPostMutation,
   useRevokePlatformRoleControlPlaneV1UsersUserIdPlatformRolesRelationDeleteMutation,
   useDeleteUserControlPlaneV1UsersUserIdDeleteMutation,
+  useUploadMyAvatarControlPlaneV1UsersMeAvatarPostMutation,
+  useDeleteMyAvatarControlPlaneV1UsersMeAvatarDeleteMutation,
   useGetUserDetailsControlPlaneV1UserGetQuery,
   useLazyGetUserDetailsControlPlaneV1UserGetQuery,
   useValidateGcuControlPlaneV1GcuPostMutation,

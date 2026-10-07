@@ -20,10 +20,10 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     DateTime,
-    Enum,
     Float,
     Index,
     String,
+    Text,
     Uuid,
     text,
 )
@@ -60,12 +60,11 @@ class UserRow(Base):
     admission_conflicted: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("false")
     )
-    gcuVersionAccepted: Mapped[GcuVersionsType | None] = mapped_column(
-        Enum(GcuVersionsType, name="gcu_version_type"), nullable=True
-    )
+    gcuVersionAccepted: Mapped[str | None] = mapped_column(Text(), nullable=True)
     gcuAcceptedAt: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
     current_resources_storage_size: Mapped[int | None] = mapped_column(
         BigInteger, nullable=False, default=0
     )
+    avatar_object_storage_key: Mapped[str | None] = mapped_column(String, nullable=True)

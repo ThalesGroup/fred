@@ -17,12 +17,21 @@ import uuid as _uuid_mod
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, FastAPI, Path, Query, Request, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    FastAPI,
+    File,
+    Path,
+    Query,
+    Request,
+    UploadFile,
+    status,
+)
 from fastapi.responses import JSONResponse
 from fred_core import (
     ORGANIZATION_ID,
     BaseUserStore,
-    GcuVersionsType,
     KeycloakUser,
     OrganizationPermission,
     RebacEngine,
@@ -80,7 +89,9 @@ from control_plane_backend.users.schemas import (
 from control_plane_backend.users.service import (
     _get_keycloak_admin_for_user_operations,
     find_user_details_by_id,
+    remove_user_avatar,
     update_gcu_validation,
+    upload_user_avatar,
 )
 from control_plane_backend.users.service import (
     create_user as create_user_from_service,
@@ -426,11 +437,41 @@ async def delete_user(
         await rebac.suspend_account(user_id)
     # Before the account, so a failure here is retried rather than orphaned.
     await prompt_store.delete_favorites_for_user(user_id)
+    await remove_user_avatar(user_id, deps)
     await delete_user_from_service(admin, user_id)
 
 
+@router.post(
+    "/users/me/avatar",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Upload the caller's profile picture.",
+)
+async def upload_my_avatar(
+    deps: UserDependencies,
+    file: UploadFile = File(
+        ..., description="Profile picture file (max 5MB, JPEG/PNG/WebP)"
+    ),
+    user: KeycloakUser = Depends(get_current_user),
+) -> None:
+    """Replace the caller's profile picture; the target is always the caller."""
+    await upload_user_avatar(user, file, deps)
+
+
+@router.delete(
+    "/users/me/avatar",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete the caller's profile picture.",
+)
+async def delete_my_avatar(
+    deps: UserDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> None:
+    """Remove the caller's profile picture; succeeds when there is none."""
+    await remove_user_avatar(user.uid, deps)
+
+
 class UserDetails(BaseModel):
-    cguValidated: GcuVersionsType | None
+    cguValidated: str | None
     personalTeam: TeamWithPermissions
     currentUser: UserSummary | None = None
 

@@ -21,9 +21,7 @@ from typing import List
 from fred_core import (
     AuthorizationError,
     FilesystemResourceInfoResult,
-    FileTypeBucket,
     KeycloakUser,
-    file_type_bucket,
 )
 
 from knowledge_flow_backend.application_context import ApplicationContext
@@ -31,14 +29,13 @@ from knowledge_flow_backend.features.content.content_service import ContentServi
 from knowledge_flow_backend.features.filesystem.corpus_virtual_filesystem import (
     CorpusVirtualFilesystem,
 )
-from knowledge_flow_backend.features.filesystem.provenance import SHARED_COPY_SUBDIR, derive_provenance
+from knowledge_flow_backend.features.filesystem.provenance import derive_provenance
 from knowledge_flow_backend.features.filesystem.scoped_area_filesystem import (
     ScopedAreaFilesystem,
 )
 from knowledge_flow_backend.features.filesystem.virtual_fs_contract import (
     AREA_CORPUS,
     AREA_TEAMS,
-    SUBAREA_SHARED,
     FileReadPage,
     VirtualArea,
     absolute_virtual_path,
@@ -114,24 +111,12 @@ class FilesystemReadBounds:
         return effective_limit, effective_max_chars
 
 
-def _unique_name(name: str, existing: set[str]) -> str:
-    """Return `name`, or `stem (2).ext`, `stem (3).ext`, … if it collides (G5 no-clobber)."""
-    if name not in existing:
-        return name
-    dot = name.rfind(".")
-    stem, ext = (name[:dot], name[dot:]) if dot > 0 else (name, "")
-    index = 2
-    while f"{stem} ({index}){ext}" in existing:
-        index += 1
-    return f"{stem} ({index}){ext}"
-
-
 class McpFilesystemService:
     """
     Routed virtual filesystem for MCP tools.
 
     Areas (unified layout — FILES-04):
-    - `/teams/{team_id}/...` : team box — `users/{uid}`, `shared`, `agents/{id}/users/{uid}`
+    - `/teams/{team_id}/...` : team box — `shared`, `agents/{id}/users/{uid}`
     - `/corpus/...`          : read-only corpus virtual tree
 
     There is no implicit/default area and no legacy alias: an unknown top-level
@@ -358,46 +343,6 @@ class McpFilesystemService:
                 matches.append(entry.path)
         return matches
 
-    async def edit_file(
-        self,
-        user: KeycloakUser,
-        path: str,
-        *,
-        old_string: str,
-        new_string: str,
-        replace_all: bool = False,
-    ) -> dict[str, int | str]:
-        """
-        Apply one exact string replacement to an existing writable file.
-
-        Why this exists:
-        - standard agent file workflows rely on edit-in-place, not only full rewrites
-        - exact replacement keeps the first Fred implementation intentionally small
-
-        How to use:
-        - pass a visible writable file path plus the exact text to replace
-        - when `replace_all` is false, the old string must occur exactly once
-
-        Example:
-        - `await edit_file(user, "/workspace/note.md", old_string="draft", new_string="final")`
-        """
-
-        if not old_string:
-            raise ValueError("old_string cannot be empty")
-        if old_string == new_string:
-            raise ValueError("new_string must differ from old_string")
-
-        original = await self.cat(user, path)
-        occurrences = original.count(old_string)
-        if occurrences == 0:
-            raise ValueError("old_string was not found in the target file")
-        if not replace_all and occurrences != 1:
-            raise ValueError("old_string must occur exactly once unless replace_all=true")
-
-        updated = original.replace(old_string, new_string) if replace_all else original.replace(old_string, new_string, 1)
-        await self.write(user, path, updated)
-        return {"path": absolute_virtual_path(path), "occurrences": occurrences}
-
     async def list(
         self,
         user: KeycloakUser,
@@ -557,7 +502,7 @@ class McpFilesystemService:
         Write one writable-area file from raw bytes (binary-safe upload).
 
         Example:
-        - `await write_bytes(user, "/teams/acme/users/u-1/outputs/q3.pptx", deck_bytes)`
+        - `await write_bytes(user, "/teams/acme/agents/inst-7/users/u-1/outputs/q3.pptx", deck_bytes)`
         """
 
         try:
@@ -571,68 +516,6 @@ class McpFilesystemService:
             raise
         except Exception:
             logger.exception("Failed to write bytes %s", path)
-            raise
-
-    async def copy_to_shared(self, user: KeycloakUser, source_path: str) -> FilesystemResourceInfoResult:
-        """
-        Human share-by-copy: copy a readable file into the team's Espace d'equipe (G5).
-
-        Why this exists:
-        - Sharing to the team is an explicit human action — never automatic, never an
-          agent capability (FILES-04). The original is left untouched.
-
-        How it works:
-        - Reads the source (enforces the caller's read access), then writes a copy under
-          `teams/{team}/shared/files/` (the team-shared write enforces
-          `CAN_UPDATE_RESOURCES`). The `shared/files/` location makes the copy read back
-          as `shared_copy` (partagé). Name collisions get a deterministic ` (2)` suffix.
-        - This method is exposed over HTTP only; it is not an MCP tool, so agents cannot
-          invoke it.
-        """
-        data = await self.read_bytes(user, source_path)
-        resolved = resolve_virtual_path(source_path)
-        if resolved.area != VirtualArea.TEAMS or not resolved.segments:
-            raise PermissionError("Only team-scoped files can be shared")
-        team = resolved.segments[0]
-        basename = normalize_virtual_path(source_path).split("/")[-1]
-        if not basename:
-            raise ValueError("Cannot share a directory")
-
-        shared_dir = f"{AREA_TEAMS}/{team}/{SUBAREA_SHARED}/{SHARED_COPY_SUBDIR}"
-        # Ensure the destination folder exists (GCS/MinIO require a parent prefix); this
-        # write also asserts the caller's CAN_UPDATE_RESOURCES on the team.
-        await self.mkdir(user, shared_dir)
-        existing = {entry.path for entry in await self.list(user, shared_dir)}
-        dest = f"{shared_dir}/{_unique_name(basename, existing)}"
-        await self.write_bytes(user, dest, data)
-        return await self.stat(user, dest)
-
-    async def write(self, user: KeycloakUser, path: str, data: str) -> None:
-        """
-        Write one visible virtual file.
-
-        Why this exists:
-        - writable areas share one public filesystem contract
-        - corpus stays read-only even though it is part of the same visible tree
-
-        How to use:
-        - pass a visible writable path plus the text content to store
-
-        Example:
-        - `await write(user, "/workspace/notes.md", "hello")`
-        """
-
-        try:
-            resolved = resolve_virtual_path(path)
-            if resolved.area == VirtualArea.ROOT:
-                raise PermissionError("Cannot write at filesystem root")
-            if resolved.area == VirtualArea.CORPUS:
-                raise PermissionError("Corpus area is read-only")
-            await self.scoped_areas.write_area(user, resolved.segments, data)
-        except AuthorizationError:
-            raise
-        except Exception:
-            logger.exception("Failed to write %s", path)
             raise
 
     async def delete(self, user: KeycloakUser, path: str) -> None:
@@ -661,63 +544,6 @@ class McpFilesystemService:
             raise
         except Exception:
             logger.exception("Failed to delete %s", path)
-            raise
-
-    async def type_stats(self, user: KeycloakUser, path: str) -> dict[FileTypeBucket, tuple[int, int]]:
-        """
-        Aggregate file counts and total size per `FileTypeBucket`, recursively, under one
-        visible writable path (Espace perso / Espace partagé / Agents usage cards,
-        FRONT-09.I). Corpus stats are served separately by `GET /tags/stats`, which
-        aggregates ingested `DocumentMetadata` rather than raw filesystem entries.
-
-        Example:
-        - `await type_stats(user, "/team/team-1/shared")`
-        """
-
-        try:
-            resolved = resolve_virtual_path(path)
-            if resolved.area in (VirtualArea.ROOT, VirtualArea.CORPUS):
-                raise PermissionError("Use GET /tags/stats for corpus usage stats")
-            entries = await self.scoped_areas.list_recursive_files_area(user, resolved.segments)
-            totals: dict[FileTypeBucket, list[int]] = {}
-            for entry in entries:
-                bucket = file_type_bucket(entry.path)
-                bucket_totals = totals.setdefault(bucket, [0, 0])
-                bucket_totals[0] += 1
-                bucket_totals[1] += entry.size or 0
-            return {bucket: (count, size) for bucket, (count, size) in totals.items()}
-        except AuthorizationError:
-            raise
-        except Exception:
-            logger.exception("Failed to compute type stats for %s", path)
-            raise
-
-    async def rename(self, user: KeycloakUser, path: str, new_name: str) -> FilesystemResourceInfoResult:
-        """
-        Rename one visible virtual file or folder in place (same parent).
-
-        Why this exists:
-        - writable areas share one public rename contract
-        - corpus stays read-only even though it is part of the same visible tree
-
-        How to use:
-        - pass one visible writable path plus the new leaf name (no slashes)
-
-        Example:
-        - `await rename(user, "/workspace/notes.md", "meeting-notes.md")`
-        """
-
-        try:
-            resolved = resolve_virtual_path(path)
-            if resolved.area == VirtualArea.ROOT:
-                raise PermissionError("Cannot rename root")
-            if resolved.area == VirtualArea.CORPUS:
-                raise PermissionError("Corpus area is read-only")
-            return await self.scoped_areas.rename_area(user, resolved.segments, new_name)
-        except AuthorizationError:
-            raise
-        except Exception:
-            logger.exception("Failed to rename %s", path)
             raise
 
     async def grep(self, user: KeycloakUser, pattern: str, prefix: str = "") -> List[str]:
@@ -760,32 +586,4 @@ class McpFilesystemService:
             raise
         except Exception:
             logger.exception("Grep failed for pattern '%s' with prefix '%s'", pattern, prefix)
-            raise
-
-    async def mkdir(self, user: KeycloakUser, path: str) -> None:
-        """
-        Create one visible virtual directory.
-
-        Why this exists:
-        - writable areas share one public directory-creation contract
-        - corpus stays read-only even though it is part of the same visible tree
-
-        How to use:
-        - pass one visible writable directory path
-
-        Example:
-        - `await mkdir(user, "/workspace/reports")`
-        """
-
-        try:
-            resolved = resolve_virtual_path(path)
-            if resolved.area == VirtualArea.ROOT:
-                raise PermissionError("Cannot create root")
-            if resolved.area == VirtualArea.CORPUS:
-                raise PermissionError("Corpus area is read-only")
-            await self.scoped_areas.mkdir_area(user, resolved.segments)
-        except AuthorizationError:
-            raise
-        except Exception:
-            logger.exception("Failed to create directory %s", path)
             raise

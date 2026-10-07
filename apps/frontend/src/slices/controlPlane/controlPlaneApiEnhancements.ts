@@ -16,6 +16,7 @@
 import {
   controlPlaneApi as api,
   UploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostApiArg,
+  UploadMyAvatarControlPlaneV1UsersMeAvatarPostApiArg,
 } from "./controlPlaneOpenApi";
 
 type FavoriteArg = { teamId: string; promptId: string };
@@ -204,6 +205,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
               })),
               { type: "ControlPlaneTeam" as const, id: result.active_team.id },
               { type: "ControlPlaneTeam" as const, id: "LIST" },
+              { type: "ControlPlaneUser" as const, id: "ME" },
             ]
           : [{ type: "ControlPlaneTeam" as const, id: "LIST" }],
     },
@@ -309,6 +311,27 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     },
     listUsersControlPlaneV1UsersGet: {
       providesTags: [{ type: "ControlPlaneUser", id: "LIST" }],
+    },
+    getUsersByIdsControlPlaneV1UsersByIdsGet: {
+      providesTags: (result) => (result ?? []).map((user) => ({ type: "ControlPlaneUser" as const, id: user.id })),
+    },
+    // The caller's id is not in the mutation args, so every user entry is read
+    // again; team lists carry admin pictures too.
+    uploadMyAvatarControlPlaneV1UsersMeAvatarPost: {
+      query: (queryArg: UploadMyAvatarControlPlaneV1UsersMeAvatarPostApiArg) => {
+        const formData = new FormData();
+        formData.append("file", queryArg.bodyUploadMyAvatarControlPlaneV1UsersMeAvatarPost.file);
+
+        return {
+          url: `/control-plane/v1/users/me/avatar`,
+          method: "POST",
+          body: formData,
+        };
+      },
+      invalidatesTags: ["ControlPlaneUser", { type: "ControlPlaneTeam", id: "LIST" }],
+    },
+    deleteMyAvatarControlPlaneV1UsersMeAvatarDelete: {
+      invalidatesTags: ["ControlPlaneUser", { type: "ControlPlaneTeam", id: "LIST" }],
     },
     // Platform-role management (PLATFORM-ADMIN-DELEGATION-RFC.md, #2405). The
     // holders table is one aggregate, so a single LIST tag: every grant/revoke
@@ -692,6 +715,8 @@ export const {
   useUpdateTeamControlPlaneV1TeamsTeamIdPatchMutation: useUpdateTeamMutation,
   useJoinTeamControlPlaneV1TeamsTeamIdJoinPostMutation: useJoinTeamMutation,
   useUploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostMutation: useUploadTeamAvatarMutation,
+  useUploadMyAvatarControlPlaneV1UsersMeAvatarPostMutation: useUploadUserAvatarMutation,
+  useDeleteMyAvatarControlPlaneV1UsersMeAvatarDeleteMutation: useDeleteUserAvatarMutation,
   useListTeamMembersControlPlaneV1TeamsTeamIdMembersGetQuery: useListTeamMembersQuery,
   useAddTeamMemberControlPlaneV1TeamsTeamIdMembersPostMutation: useAddTeamMemberMutation,
   useSearchCandidateTeamAdminsControlPlaneV1TeamsCandidateAdminsGetQuery: useSearchCandidateTeamAdminsQuery,

@@ -1119,14 +1119,12 @@ export type McpServerConfiguration = {
   name: string;
   /** Short, plain-English phrase completing 'Tools for {title}:' in the ReAct system prompt's grouped tool list (e.g. 'tabular action', 'document search'). Unlike `name`/`description`, this is NOT an i18n key — it is rendered directly into the model-facing system prompt, never through the frontend. Falls back to the raw catalog `id` when unset. */
   prompt_group_title?: string | null;
-  /** Local provider key when transport=inprocess. */
-  provider?: string | null;
   /** How long (in seconds) the client will wait for a new event before disconnecting */
   sse_read_timeout?: number | null;
   /** Team scoping of the capability this server becomes (#1988): admin_gated (default) requires a platform admin to enable the server per team; default_on makes it usable by every team. */
   team_scope?: TeamScopePolicy;
-  /** MCP server transport. Can be sse, stdio, websocket, streamable_http, or inprocess (local toolkit provider exposed in the MCP catalog). */
-  transport?: string | null;
+  /** MCP server transport: sse, stdio, websocket or streamable_http. */
+  transport?: ("sse" | "stdio" | "websocket" | "streamable_http") | null;
   /** URL and endpoint of the MCP server */
   url?: string | null;
 };

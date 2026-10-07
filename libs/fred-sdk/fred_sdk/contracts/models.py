@@ -234,16 +234,9 @@ class MCPServerConfiguration(BaseModel):
     description: Optional[str] = Field(
         None, description="react-i18next key for the description of the MCP server."
     )
-    transport: Optional[str] = Field(
+    transport: Literal["sse", "stdio", "websocket", "streamable_http"] | None = Field(
         "sse",
-        description=(
-            "MCP server transport. Can be sse, stdio, websocket, streamable_http, "
-            "or inprocess (local toolkit provider exposed in the MCP catalog)."
-        ),
-    )
-    provider: Optional[str] = Field(
-        None,
-        description="Local provider key when transport=inprocess.",
+        description="MCP server transport: sse, stdio, websocket or streamable_http.",
     )
     url: Optional[str] = Field(None, description="URL and endpoint of the MCP server")
     sse_read_timeout: Optional[int] = Field(
@@ -318,7 +311,7 @@ class MCPServerRef(BaseModel):
       `fred_sdk.support.builtins` instead of repeating raw string ids
 
     Example:
-    - `MCPServerRef(id="mcp-knowledge-flow-fs")`
+    - `MCPServerRef(id="mcp-knowledge-flow-mcp-tabular")`
     """
 
     id: str = Field(..., validation_alias=AliasChoices("id", "name"))
@@ -531,8 +524,6 @@ class ToolRefRequirement(FrozenModel):
         TOOL_REF_KNOWLEDGE_SEARCH          — search document libraries
         TOOL_REF_SIMILARITY_SEARCH         — compare an anchor passage against
                                               explicit target documents
-        TOOL_REF_ARTIFACTS_PUBLISH_TEXT    — publish a markdown report
-        TOOL_REF_RESOURCES_FETCH_TEXT      — read a config or template file
         TOOL_REF_TRACES_SUMMARIZE_CONVERSATION — summarise an execution trace
 
     The description field is what the model reads to decide when to call the
@@ -542,17 +533,12 @@ class ToolRefRequirement(FrozenModel):
     ```python
     from fred_sdk.support.builtins import (
         TOOL_REF_KNOWLEDGE_SEARCH,
-        TOOL_REF_ARTIFACTS_PUBLISH_TEXT,
     )
 
     declared_tool_refs = (
         ToolRefRequirement(
             tool_ref=TOOL_REF_KNOWLEDGE_SEARCH,
             description="Search the selected document libraries for relevant evidence.",
-        ),
-        ToolRefRequirement(
-            tool_ref=TOOL_REF_ARTIFACTS_PUBLISH_TEXT,
-            description="Publish the final report as a markdown artifact for the user.",
         ),
     )
     ```

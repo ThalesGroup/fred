@@ -29,7 +29,7 @@ from fred_core.security.platform_access.store import PlatformAccessStore
 from fred_core.security.rebac.noop_engine import NoopRebacEngine
 from fred_core.security.rebac.rebac_engine import RebacEngine, RebacReference
 from fred_core.teams.team_metatada_models import TeamMetadataRow
-from fred_core.users.user_models import GcuVersionsType, UserRow
+from fred_core.users.user_models import UserRow
 
 
 def policy(**kwargs) -> PlatformAccessConfiguration:
@@ -200,7 +200,7 @@ async def test_observation_is_monotonic_and_preserves_identity_cgu(access):
     await access.store.observe(user, access.path_fingerprint)
     async with access.store.mutation() as session:
         row = await access.store.user(UUID(user.uid), session)
-        row.gcuVersionAccepted = GcuVersionsType.V1
+        row.gcuVersionAccepted = "2026-10"
         row.current_resources_storage_size = 42
     newer = user.model_copy(
         update={"admission_issued_at": 200, "admission_attribute": "other"}
@@ -208,7 +208,7 @@ async def test_observation_is_monotonic_and_preserves_identity_cgu(access):
     await access.store.observe(newer, access.path_fingerprint)
     row = await access.store.observe(user, access.path_fingerprint)
     assert row.admission_attribute == "other"
-    assert row.gcuVersionAccepted == GcuVersionsType.V1
+    assert row.gcuVersionAccepted == "2026-10"
     assert row.current_resources_storage_size == 42
     asserted = SimpleNamespace(uid=user.uid)
     assert not await access.eligible(asserted)

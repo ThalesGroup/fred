@@ -38,6 +38,7 @@ const h = vi.hoisted(() => ({
   wikiEnabled: undefined as boolean | undefined,
   defaultTeamAvatarFile: "",
   teamAvatarImageUrl: undefined as string | undefined,
+  userPictureUrl: undefined as string | undefined,
 }));
 
 vi.mock("react-i18next", () => ({
@@ -80,7 +81,13 @@ vi.mock("@hooks/useTeamCapabilities.ts", () => ({
 }));
 vi.mock("../../../../../../hooks/useFrontendBootstrap.ts", () => ({
   useFrontendBootstrap: () => ({
-    bootstrap: h.charterEnabled === undefined ? undefined : { team_admin_charter_enabled: h.charterEnabled },
+    bootstrap:
+      h.charterEnabled === undefined && h.userPictureUrl === undefined
+        ? undefined
+        : {
+            team_admin_charter_enabled: h.charterEnabled,
+            current_user: { id: "u-1", avatar_image_url: h.userPictureUrl },
+          },
   }),
 }));
 vi.mock("@hooks/useFrontendFeatureFlag.ts", () => ({
@@ -195,6 +202,7 @@ describe("TeamContentNavbar — the team avatar", () => {
     h.isPersonalTeam = false;
     h.defaultTeamAvatarFile = "";
     h.teamAvatarImageUrl = undefined;
+    h.userPictureUrl = undefined;
   });
 
   it("falls back to the deployment default when the team has no image of its own", () => {
@@ -223,6 +231,12 @@ describe("TeamContentNavbar — the team avatar", () => {
     h.isPersonalTeam = true;
     h.defaultTeamAvatarFile = "acme-team-avatar.svg";
     expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain("acme-team-avatar.svg");
+  });
+
+  it("shows the user's profile picture in the personal space", () => {
+    h.isPersonalTeam = true;
+    h.userPictureUrl = "https://store.example/me.webp";
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).toContain('src="https://store.example/me.webp"');
   });
 });
 

@@ -26,7 +26,7 @@ export const FOLDER_ICON: RowIconSpec = { type: "folder", color: "var(--folder)"
 // Autres), including the legacy/OpenDocument extensions that bucket covers
 // (doc/odt alongside docx; odp alongside ppt/pptx; xls/ods alongside xlsx) —
 // Corpus documents' `file.file_type` is normalized to fred-core's `FileType`
-// enum and never produces those, but the raw `/fs` tabs (Mon espace/Espace
+// enum and never produces those, but the raw `/fs` tabs (Espace
 // d'équipe/Agents) pass a real file extension straight from the file name,
 // where they do occur. PPT uses --warning (mustard/orange) since that's the
 // closest existing semantic token to PowerPoint's own brand color and no

@@ -15,6 +15,8 @@
 
 // The theme picker lists only the themes the platform offers, and disappears
 // when there is nothing to choose; the light/dark/system choice always stays.
+// The profile picture card uploads the crop and deletes only after confirmation,
+// each confirmed by a toast; a failed delete is reported to the user.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -48,6 +50,63 @@ vi.mock("@shared/molecules/Select/Select.tsx", () => ({
         <option key={o.value} value={o.value} />
       ))}
     </select>
+  ),
+}));
+
+const picture = vi.hoisted(() => ({
+  url: undefined as string | undefined,
+  upload: vi.fn(),
+  remove: vi.fn(),
+  confirm: vi.fn(),
+  notifyApiError: vi.fn(),
+  showSuccess: vi.fn(),
+}));
+
+vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
+  useToast: () => ({ showSuccess: picture.showSuccess }),
+}));
+
+vi.mock("@core/hooks/useApiErrorToast.ts", () => ({
+  useApiErrorToast: () => ({ notifyApiError: picture.notifyApiError }),
+}));
+
+vi.mock("../../../../hooks/useFrontendBootstrap.ts", () => ({
+  useFrontendBootstrap: () => ({ bootstrap: { current_user: { id: "u-1", avatar_image_url: picture.url } } }),
+}));
+
+vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements.ts", () => ({
+  useUploadUserAvatarMutation: () => [
+    (arg: unknown) => ({ unwrap: () => Promise.resolve(picture.upload(arg)) }),
+    { isLoading: false },
+  ],
+  useDeleteUserAvatarMutation: () => [
+    () => ({ unwrap: () => Promise.resolve().then(() => picture.remove()) }),
+    { isLoading: false },
+  ],
+}));
+
+vi.mock("@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider", () => ({
+  useConfirmationDialog: () => ({ showConfirmationDialog: picture.confirm }),
+}));
+
+// The card's own file/crop behaviour is covered by AvatarUploadCard.test.tsx.
+vi.mock("@shared/molecules/AvatarUploadCard/AvatarUploadCard.tsx", () => ({
+  default: ({
+    onUpload,
+    onDelete,
+    imageUrl,
+  }: {
+    onUpload: (file: File) => Promise<void>;
+    onDelete?: () => void;
+    imageUrl?: string;
+  }) => (
+    <div data-testid="picture-card" data-image={imageUrl ?? ""}>
+      <button
+        data-testid="picture-upload"
+        onClick={() => onUpload(new File(["x"], "avatar.webp", { type: "image/webp" })).catch(() => undefined)}
+      />
+      {onDelete && <button data-testid="picture-delete" onClick={onDelete} />}
+    </div>
   ),
 }));
 
@@ -89,6 +148,12 @@ const themePicker = () => container.querySelector('select[aria-label="rework.use
 const modeGroup = () => container.querySelector('[aria-label="rework.userSettings.app.themeAria"]');
 
 beforeEach(() => {
+  picture.url = undefined;
+  picture.upload.mockReset();
+  picture.remove.mockReset();
+  picture.confirm.mockReset();
+  picture.notifyApiError.mockReset();
+  picture.showSuccess.mockReset();
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -110,5 +175,83 @@ describe("UserSettingsPage theme picker", () => {
     render(["cobalt"]);
     expect(themePicker()).toBeNull();
     expect(modeGroup()).not.toBeNull();
+  });
+});
+
+describe("UserSettingsPage profile picture", () => {
+  const click = (testId: string) =>
+    act(async () => {
+      (container.querySelector(`[data-testid="${testId}"]`) as HTMLButtonElement).click();
+    });
+
+  it("shows the current picture and sends the file the card hands over", async () => {
+    picture.url = "https://objects.test/me.webp";
+    render(["cobalt"]);
+    expect(container.querySelector('[data-testid="picture-card"]')!.getAttribute("data-image")).toBe(
+      "https://objects.test/me.webp",
+    );
+
+    await click("picture-upload");
+
+    const arg = picture.upload.mock.calls[0][0] as {
+      bodyUploadMyAvatarControlPlaneV1UsersMeAvatarPost: { file: File };
+    };
+    expect(arg.bodyUploadMyAvatarControlPlaneV1UsersMeAvatarPost.file.type).toBe("image/webp");
+    expect(picture.showSuccess).toHaveBeenCalledWith({ summary: "rework.userSettings.picture.uploaded" });
+  });
+
+  it("confirms nothing when the upload fails", async () => {
+    picture.upload.mockImplementation(() => {
+      throw { status: 400 };
+    });
+    render(["cobalt"]);
+
+    await click("picture-upload");
+
+    expect(picture.showSuccess).not.toHaveBeenCalled();
+  });
+
+  it("deletes the picture only once the confirmation is accepted", async () => {
+    picture.url = "https://objects.test/me.webp";
+    render(["cobalt"]);
+
+    await click("picture-delete");
+
+    expect(picture.remove).not.toHaveBeenCalled();
+    const options = picture.confirm.mock.calls[0][0] as { criticalAction: boolean; onConfirm: () => void };
+    expect(options.criticalAction).toBe(true);
+    await act(async () => options.onConfirm());
+    expect(picture.remove).toHaveBeenCalledTimes(1);
+    expect(picture.showSuccess).toHaveBeenCalledWith({ summary: "rework.userSettings.picture.deleted" });
+  });
+
+  it("tells the user when the delete fails", async () => {
+    picture.url = "https://objects.test/me.webp";
+    picture.remove.mockImplementation(() => {
+      throw { status: 500 };
+    });
+    render(["cobalt"]);
+
+    await click("picture-delete");
+    const options = picture.confirm.mock.calls[0][0] as { onConfirm: () => void };
+    await act(async () => options.onConfirm());
+
+    expect(picture.notifyApiError).toHaveBeenCalledWith(
+      { status: 500 },
+      expect.objectContaining({ summary: "rework.userSettings.picture.deleteFailed" }),
+    );
+    expect(picture.showSuccess).not.toHaveBeenCalled();
+  });
+
+  it("keeps the picture when the confirmation is cancelled", async () => {
+    picture.url = "https://objects.test/me.webp";
+    render(["cobalt"]);
+
+    await click("picture-delete");
+    const options = picture.confirm.mock.calls[0][0] as { onCancel?: () => void };
+    options.onCancel?.();
+
+    expect(picture.remove).not.toHaveBeenCalled();
+    expect(picture.showSuccess).not.toHaveBeenCalled();
   });
 });

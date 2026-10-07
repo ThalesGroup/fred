@@ -101,9 +101,9 @@ async def test_direct_api_call_is_never_affected(harness, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_indexing_hook_excludes_trusted_maintenance(harness):
+async def test_indexing_hook_excludes_other_activities(harness):
     harness.arm(stage="indexing")
-    harness.info.activity_type = "output_process_trusted"
+    harness.info.activity_type = "other_activity"
     await inject(stage="indexing")
     harness.sleep.assert_not_called()
     harness.info.activity_type = "output_process"

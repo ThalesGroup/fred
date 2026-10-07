@@ -32,11 +32,12 @@ import {
   InsertCodeBlock,
   markdownShortcutPlugin,
   MDXEditor,
+  type MDXEditorProps,
   Separator,
   toolbarPlugin,
 } from "@mdxeditor/editor";
 import "@mdxeditor/editor/style.css";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
@@ -44,11 +45,18 @@ import IconButton from "@shared/atoms/IconButton/IconButton";
 import { ProseToolbarButtons, proseMdxPlugins } from "@shared/organisms/ProseMdxEditor/ProseMdxEditor";
 import type { CapabilitySidePanelProps } from "../types";
 import { useWritableDocuments } from "./useWritableDocuments";
+import { sanitizeEditorMarkdown } from "./sanitizeEditorMarkdown";
 import WritableDocumentDownloadButton from "./WritableDocumentDownloadButton";
 import styles from "./WritableDocumentPane.module.css";
 
 const isDarkTheme = () =>
   typeof document !== "undefined" && document.documentElement.getAttribute("data-theme") === "dark";
+
+function WritableDocumentEditor(props: MDXEditorProps) {
+  // MDX imports once per document/version; optimistic edits keep this mount.
+  const [markdown] = useState(() => sanitizeEditorMarkdown(props.markdown));
+  return <MDXEditor {...props} markdown={markdown} />;
+}
 
 export function WritableDocumentPane({ onClose }: CapabilitySidePanelProps) {
   const { t } = useTranslation();
@@ -117,10 +125,12 @@ export function WritableDocumentPane({ onClose }: CapabilitySidePanelProps) {
 
       {selected && (
         <div className={styles.editorArea}>
-          <MDXEditor
+          <WritableDocumentEditor
             key={`${selected.document_id}:${selected.updated_at ?? ""}`}
-            markdown={selected.content_md ?? ""}
-            onChange={(md) => onEditDocument(selected.document_id, md)}
+            markdown={selected.content_md}
+            onChange={(md, initialMarkdownNormalize) => {
+              if (!initialMarkdownNormalize) onEditDocument(selected.document_id, md);
+            }}
             className={isDarkTheme() ? "dark-theme dark-editor" : undefined}
             contentEditableClassName="fred-writable-document"
             plugins={[

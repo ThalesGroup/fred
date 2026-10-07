@@ -69,7 +69,7 @@ Queue names below assume `scheduler.temporal.task_queue: ingestion`.
 
 | Role | Queue | What it executes | Initial activity slots per process/pod |
 | --- | --- | --- | ---: |
-| Common | `ingestion` | All workflows; metadata, progress, indexing, revectorization, repair, PDF-render expiry | 3 |
+| Common | `ingestion` | Ingestion workflows; metadata, progress, indexing, PDF-render expiry | 3 |
 | Fast | `ingestion-fast` | Fast extraction only | 4 |
 | Medium | `ingestion-medium` | Medium extraction only | 2 |
 | Rich | `ingestion-rich` | Rich extraction only | 1 |

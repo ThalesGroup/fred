@@ -155,7 +155,8 @@ async def test_own_eligible_team_cannot_be_revoked_by_access_policy_actor(access
 
 
 @pytest.mark.asyncio
-async def test_free_link_rotation_revocation_and_private_enrollment(access):
+@pytest.mark.parametrize("version", ["v1", "2026-10"])
+async def test_free_link_rotation_revocation_and_private_enrollment(access, version):
     actor, newcomer = user("accepted"), user()
     await access.store.observe(actor, access.path_fingerprint)
     await service.set_team(access, actor, "demo", False, True)
@@ -163,15 +164,21 @@ async def test_free_link_rotation_revocation_and_private_enrollment(access):
     assert len(token) == 43
     team = (await access.store.teams())[0]
     assert token != team.enrollment_token_hash
-    assert (await service.preview_link(access, newcomer, token, "v1")).cgu_required
+    assert (await service.preview_link(access, newcomer, token, version)).cgu_required
     with pytest.raises(HTTPException, match="user_not_accept_gcu"):
-        await service.enroll(access, newcomer, token, "v1")
+        await service.enroll(access, newcomer, token, version)
     assert access.rebac.writes == []
-    await service.accept_cgu(access, newcomer, token, "v1", "v1")
+    with pytest.raises(HTTPException, match="gcu_version_changed"):
+        await service.accept_cgu(access, newcomer, token, "outdated", version)
+    await service.accept_cgu(access, newcomer, token, version, version)
+    assert not (
+        await service.preview_link(access, newcomer, token, version)
+    ).cgu_required
+    assert (await service.preview_link(access, newcomer, token, "next")).cgu_required
     await service.set_filtering(access, actor, True)
-    assert (await service.enroll(access, newcomer, token, "v1")).admitted
+    assert (await service.enroll(access, newcomer, token, version)).admitted
     assert access.rebac.writes[0].relation == RelationType.TEAM_MEMBER
-    await service.enroll(access, newcomer, token, "v1")
+    await service.enroll(access, newcomer, token, version)
     assert len(access.rebac.writes) == 1
     sources = (await service.users_page(access, 0, 25, "")).items
     assert any(
