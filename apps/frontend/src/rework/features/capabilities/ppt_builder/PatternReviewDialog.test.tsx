@@ -139,6 +139,14 @@ function renderDialog(onOverride = vi.fn(), readOnly = false) {
   return onOverride;
 }
 
+// React listens to `input` events and tracks the value through the native setter.
+function type(element: HTMLInputElement, value: string) {
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(element, value);
+    element.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
 function input(label: string): HTMLInputElement {
   const element = container.querySelector(`[aria-label="${label}"]`);
   if (!element) throw new Error(`no control ${label}`);
@@ -202,13 +210,18 @@ describe("PatternReviewDialog", () => {
     });
     expect(onOverride).toHaveBeenLastCalledWith("layout:0", { kind: "section" });
 
-    const label = input("capability.ppt_builder.review.labelFor:Cover");
-    act(() => {
-      label.focus();
-      label.value = "Front page";
-      label.blur();
-    });
+    type(input("capability.ppt_builder.review.labelFor:Cover"), "Front page");
     expect(onOverride).toHaveBeenLastCalledWith("layout:0", { label: "Front page" });
+  });
+
+  it("commits a rename on every keystroke, trimmed, and clears it when emptied", () => {
+    const onOverride = renderDialog();
+    const label = input("capability.ppt_builder.review.labelFor:Cover");
+    type(label, "Front page ");
+    expect(onOverride).toHaveBeenLastCalledWith("layout:0", { label: "Front page" });
+    type(label, "");
+    expect(onOverride).toHaveBeenLastCalledWith("layout:0", { label: null });
+    expect(label.value).toBe("");
   });
 
   it("has no zone-role editing any more", () => {

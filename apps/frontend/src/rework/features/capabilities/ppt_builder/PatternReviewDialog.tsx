@@ -149,6 +149,9 @@ interface CardProps {
 export function PatternCard({ pattern, page, hasPdf, readOnly, kindOptions, onOverride }: CardProps) {
   const { t } = useTranslation();
   const isIncluded = pattern.included !== false;
+  // Committed on every change, so a close by Enter or Escape keeps it. The draft
+  // is local: an emptied field falls back to the analysis label without snapping.
+  const [labelDraft, setLabelDraft] = useState(pattern.label);
   // The page is rendered at the thumbnail box's own width, so it fills it at any grid size.
   const thumbnailRef = useRef<HTMLDivElement>(null);
   const [pageWidth, setPageWidth] = useState(0);
@@ -180,15 +183,14 @@ export function PatternCard({ pattern, page, hasPdf, readOnly, kindOptions, onOv
       </div>
       <div className={styles.cardBody}>
         <div className={styles.cardHeader}>
-          {/* Committed on blur: an emptied field would otherwise snap back to the analysis label mid-typing. */}
           <TextInput
-            key={pattern.label}
             size="xs"
             compact
-            defaultValue={pattern.label}
+            value={labelDraft}
             disabled={readOnly}
             aria-label={t("capability.ppt_builder.review.labelFor", { label: pattern.label })}
-            onBlur={(event) => {
+            onChange={(event) => {
+              setLabelDraft(event.target.value);
               const label = event.target.value.trim();
               if (label !== pattern.label) onOverride(pattern.id, { label: label || null });
             }}
