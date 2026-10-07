@@ -43,6 +43,11 @@ class MetricNames:
     VS_SIZE_MB = "vectorstore.index.size_mb"  # gauge
 
     # LLM
+    LLM_CALLS = "llm.calls_total"
+    LLM_ACTIVE_CALLS = "llm.active_calls"
+    LLM_FIRST_CHUNK_MS = "llm.first_chunk_ms"
+    LLM_MAX_CHUNK_GAP_MS = "llm.max_chunk_gap_ms"
+    LLM_TERMINAL_SILENCE_MS = "llm.terminal_silence_ms"
     LLM_LAT_MS = "llm.request_latency_ms"  # timer
     LLM_RATE_LIMITS = "llm.rate_limit_events_total"  # counter
 

@@ -371,3 +371,34 @@ Provider support implemented in `fred-core/fred_core/model/factory.py`:
 - Knowledge Flow's `embedding_model` is direct service configuration. It is
   not selected by the current agent chat-routing policy.
 - Use environment-specific files only for active runtime values and deployment-specific overrides.
+
+### Diagnosing streaming deadlines
+
+For OpenAI-compatible chat wrappers, `stream_chunk_timeout` bounds each wait for
+an SDK streaming chunk after response setup. This is separate from HTTPX
+connect/read/write/pool timeouts and from any gateway idle/absolute deadline.
+A stream may have produced substantial output before its chunk deadline fires.
+Increasing the HTTP read timeout alone does not change the chunk watchdog.
+
+Fred's factory defaults remain connect/read/write/pool = 10/120/30/5 seconds,
+with SDK `max_retries=0`; deployments can override these settings. The constructed
+wrapper's effective settings appear in `llm_model_configuration` and model-call
+start logs. Shared HTTP pool tuning remains first-initialization-wins, with
+mismatches logged; a requested second pool configuration is not applied. The
+wrapper may separately apply an explicit per-request timeout. No new setting or
+changed default is introduced by the diagnostics.
+
+Use [LLM incident diagnosis](OBSERVABILITY-AND-AUDIT.md#llm-streaming-incident-diagnosis)
+to compare effective settings, streaming progress and process pressure before
+changing deadlines or adding retries. Replaying a partially completed agent turn
+can repeat tool effects; the diagnostic change adds no such replay.
+
+
+The factory installs a narrow compatibility guard for LangChain's eager tool-call
+fragment parsing. It skips JSON repair when a fragment cannot start an object;
+raw fragments and final argument reconstruction remain intact. The guard targets
+LangChain's internal `AIMessageChunk` parser reference, leaving its public JSON
+utility unchanged. Recheck the equivalence/stream tests on dependency upgrades
+and remove the guard when upstream resolves this cost. Object-prefixed malformed
+fragments and large valid JSON still use upstream parsing and can consume CPU;
+this is not a general event-loop latency bound.

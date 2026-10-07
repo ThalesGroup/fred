@@ -9,6 +9,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from fred_runtime.execution_errors import UserFacingExecutionError
+from fred_runtime.runtime_support.llm_diagnostics import failed_calls
 
 
 def report_execution_error(logger: logging.Logger, exc: Exception, phase: str) -> str:
@@ -45,11 +46,19 @@ def report_execution_error(logger: logging.Logger, exc: Exception, phase: str) -
             pending.append(cause)
         if isinstance(current, BaseExceptionGroup):
             pending.extend(current.exceptions[:8])
+    calls, calls_truncated = failed_calls(exc)
     logger.error(
-        "event=execution_error outcome=failed error_ref=%s phase=%s diagnostics=%s",
+        "event=execution_error outcome=failed error_ref=%s phase=%s diagnostics=%s llm_failures=%s truncated=%s",
         reference,
         phase,
         " | ".join(diagnostics),
+        calls,
+        calls_truncated,
+        extra={
+            "error_ref": reference,
+            "llm_failures": calls,
+            "llm_failures_truncated": calls_truncated,
+        },
     )
     descriptions = {
         "capability_setup": "The agent could not prepare its capabilities.",

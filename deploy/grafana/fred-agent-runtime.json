@@ -12,7 +12,7 @@
   "annotations": {
     "list": []
   },
-  "description": "Operational health of Fred agent model calls, tool calls, and Mistral tool-call recovery.",
+  "description": "Operational health of Fred ReAct/Deep model streams, tool calls and recovery; includes native Deep children.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -446,6 +446,374 @@
           "refId": "A"
         }
       ]
+    },
+    {
+      "id": 11,
+      "type": "text",
+      "title": "LLM stream diagnostics",
+      "gridPos": {
+        "x": 0,
+        "y": 30,
+        "w": 24,
+        "h": 4
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "These panels cover the shared ReAct/Deep model boundary, including native children; independent summarization, Graph and capability-internal calls are excluded. Observed chunks are LangChain callbacks, not tokens or network packets. A missing timing series means no observation, not zero latency. A blank panel means no matching observations or no scrape. Failures after HTTP 200 are possible. Compare gaps with event-loop lag and process load before attributing a failure to a gateway/provider. Active calls are per-process gauges; do not sum across time."
+      }
+    },
+    {
+      "id": 12,
+      "title": "LLM terminal outcomes / second",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 34,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "expr": "sum by (model_name, llm_role, status, error_code) (rate(llm_calls_total{service=~\"${service:regex}\"}[$__rate_interval]))",
+          "legendFormat": "{{model_name}} {{llm_role}} {{status}} {{error_code}}",
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "title": "LLM error rate (%)",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 12,
+        "y": 34,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "expr": "100 * sum by (model_name, llm_role) (rate(llm_calls_total{service=~\"${service:regex}\",status=\"error\"}[$__rate_interval])) / clamp_min(sum by (model_name, llm_role) (rate(llm_calls_total{service=~\"${service:regex}\"}[$__rate_interval])), 1e-9)",
+          "legendFormat": "{{model_name}} {{llm_role}}",
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "title": "First observed chunk \u00b7 p95",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 42,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le, model_name, llm_role, status) (rate(llm_first_chunk_ms_bucket{service=~\"${service:regex}\"}[$__rate_interval])))",
+          "legendFormat": "{{model_name}} {{llm_role}} {{status}}",
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "title": "Maximum observed chunk gap \u00b7 p95",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 12,
+        "y": 42,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le, model_name, llm_role, status) (rate(llm_max_chunk_gap_ms_bucket{service=~\"${service:regex}\"}[$__rate_interval])))",
+          "legendFormat": "{{model_name}} {{llm_role}} {{status}}",
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "title": "Terminal silence \u00b7 p95",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 50,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le, model_name, llm_role, status) (rate(llm_terminal_silence_ms_bucket{service=~\"${service:regex}\"}[$__rate_interval])))",
+          "legendFormat": "{{model_name}} {{llm_role}} {{status}}",
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 17,
+      "title": "Active model calls",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 12,
+        "y": 50,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "expr": "sum by (model_name, llm_role) (llm_active_calls{service=~\"${service:regex}\"})",
+          "legendFormat": "{{model_name}} {{llm_role}}",
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 18,
+      "title": "Event-loop lag \u00b7 worst process",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 58,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "expr": "max(event_loop_lag_ms{service=~\"${service:regex}\"})",
+          "legendFormat": "worst process",
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 19,
+      "title": "Process CPU \u00b7 worst process",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 12,
+        "y": 58,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "expr": "100 * max(rate(process_cpu_seconds_total[$__rate_interval]) and on(job, instance) llm_calls_total{service=~\"${service:regex}\"})",
+          "legendFormat": "worst process",
+          "range": true
+        }
+      ],
+      "description": "Native Prometheus process collector, joined to the selected Fred targets by scrape job/instance. 100% is one CPU core."
+    },
+    {
+      "id": 20,
+      "title": "Resident memory \u00b7 all selected processes",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 66,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "expr": "sum(process_resident_memory_bytes and on(job, instance) llm_calls_total{service=~\"${service:regex}\"})",
+          "legendFormat": "total",
+          "range": true
+        }
+      ],
+      "description": "Native process collector, restricted to targets with calls for the selected Fred service."
     }
   ],
   "refresh": "1m",

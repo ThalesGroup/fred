@@ -348,3 +348,45 @@ def test_prometheus_store_never_promotes_any_identity_label() -> None:
     assert label_names.isdisjoint(forbidden)
     assert "runtime_stage" in label_names
     assert "rebac_operation" in label_names
+
+
+def test_llm_diagnostics_export_fixed_labels_and_long_buckets(monkeypatch):
+    from prometheus_client import CollectorRegistry, generate_latest
+
+    from fred_core.kpi import prometheus_kpi_store as module
+
+    registry = CollectorRegistry()
+    monkeypatch.setattr(module, "REGISTRY", registry)
+    store = PrometheusKPIStore()
+    for status, error in [("ok", "none"), ("error", "stream_idle_timeout")]:
+        dims: dict[str, str | None] = {
+            "model_name": "synthetic-model",
+            "llm_role": "child",
+            "status": status,
+            "error_code": error,
+            "llm_call_id": "private-call",
+            "x_request_id": "private-upstream",
+            "parent_run_id": "private-parent",
+        }
+        store.index_event(
+            KPIEvent(
+                metric=Metric(name="llm.calls_total", type="counter", value=1),
+                dims=dims,
+            )
+        )
+        store.index_event(
+            KPIEvent(
+                metric=Metric(
+                    name="llm.first_chunk_ms", type="timer", value=180000, unit="ms"
+                ),
+                dims=dims,
+            )
+        )
+    text = generate_latest(registry).decode()
+    assert (
+        'llm_calls_total{error_code="stream_idle_timeout",llm_role="child",model_name="synthetic-model",status="error"} 1.0'
+        in text
+    )
+    assert 'le="300000.0"' in text
+    assert "private-" not in text
+    assert "llm_first_chunk_ms_sum" in text
