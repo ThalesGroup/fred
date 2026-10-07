@@ -653,6 +653,25 @@ mean 54 chars with 5/11 rebuilds (E), 83 chars with 5/13 rebuilds (F).
 
 ## Checks
 
+- WP26 (variety ask counts misfit slides by their closest fit): package `make code-quality`
+  passed (basedpyright 0 errors, the 1 warning in `tests/builder_decks.py` untouched);
+  `make test` 425 passed, 5 skipped (the reference-template tests). Added
+  `test_slides_that_fit_nothing_repeat_on_their_closest_fit` (the live Paintress shape: a
+  `label` on the items of two cards slides, max 1 → both problems and a `variety` entry for
+  slides 2, 4; a timeline slide without a label zone not offered) and
+  `test_slides_to_fix_that_repeat_are_asked_to_vary_in_the_same_round` (built-in template,
+  max 1: labelled process slides → `slides` [2, 3] and `variety` [2, 3]; the fixed plan with
+  kinds unchanged is built, the repeat only noted). Changed: the slide to fix now joins its
+  closest fit's group in `test_repeats_are_found_beside_slides_that_fit_nothing` ([1, 2, 3, 4])
+  and `test_a_first_call_with_fit_problems_carries_the_variety_ask` ([2, 3, 4, 5, 6]);
+  `test_no_variety_ask_after_a_fit_repair` unchanged and green (no repeat detectable on its
+  first call, so the repaired deck is built with the note). No LLM call, KPI or shared state
+  touched: the closest fit was already computed for the problem text; the stand-in
+  candidates add one beam pass entry per slide to fix, on a call that builds nothing.
+  Not proven: the live mistral-small session re-run.
+- PowerPoint (developer check, 2026-10-07): a deck delivered by the build tool opens in
+  PowerPoint without a repair prompt, verifying the sections fix (`d1deb28ed`, 24.1).
+
 - WP25 (platform review fixes): `make code-quality` passed in fred-sdk, fred-runtime,
   control-plane-backend, fred-capability-ppt-filler and fred-agents (basedpyright 0 errors;
   fred-runtime's 5 and ppt-filler's 1 warnings are in files this change does not touch).
@@ -727,8 +746,8 @@ mean 54 chars with 5/11 rebuilds (E), 83 chars with 5/13 rebuilds (F).
   `test_a_kind_declared_by_a_shape_name_outranks_vision`,
   `test_an_image_id_that_does_not_load_leaves_a_framed_picture_empty`. The analysis tests now
   save with a model port (labelling faked), since a save without one stores `rules`.
-  Not proven: PowerPoint itself opening a rendered deck without a repair prompt (checked on
-  the XML only); no `ANALYSIS_VERSION` bump, so analyses already labelled by vision keep a
+  Not proven at the time: PowerPoint itself opening a rendered deck without a repair prompt
+  (checked on the XML only; since verified in PowerPoint, see the 2026-10-07 entry); no `ANALYSIS_VERSION` bump, so analyses already labelled by vision keep a
   vision kind over a shape-name declaration until their next re-run.
 - WP24 `fred-performance-reviewer` (turn path: 24.3, 24.4, 24.6, 24.9): no blocking finding.
   No LLM call site, KPI or Prometheus label touched. 24.3: the build's template is now an
