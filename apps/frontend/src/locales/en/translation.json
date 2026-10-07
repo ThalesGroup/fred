@@ -142,7 +142,7 @@
         },
         "search_attachments_only": {
           "title": "Search in attachments only",
-          "description": "Restrict the agent's document search to the files attached to the conversation — the corpus is never searched."
+          "description": "Restrict the agent's document search to the files attached to the conversation - the corpus is never searched."
         },
         "default_top_k": {
           "title": "Default results",
@@ -204,7 +204,7 @@
       "fields": {
         "require_confirmation": {
           "title": "Require confirmation",
-          "description": "Pause for your proceed/cancel approval before each extraction. On by default — this capability is token-intensive; turn it off only for an agent whose usage you already trust."
+          "description": "Pause for your proceed/cancel approval before each extraction. On by default - this capability is token-intensive; turn it off only for an agent whose usage you already trust."
         }
       }
     },
@@ -240,11 +240,11 @@
         }
       },
       "untitled": "Document",
-      "saving": "Saving…",
+      "saving": "Saving...",
       "close": "Close panel",
       "download": "Download",
       "downloadError": "Download failed",
-      "noSession": "No session — open a chat to see its documents.",
+      "noSession": "No session - open a chat to see its documents.",
       "empty": "No document yet. Ask the agent to draft one.",
       "card": {
         "aria": "Generate a text document (Word)",
@@ -306,13 +306,13 @@
         "currentTemplate": "A template is configured for this agent.",
         "templateRequired": "The PowerPoint generator requires a PowerPoint template. Upload a .pptx file.",
         "templateInvalid": "Fix the template errors below before saving.",
-        "analyzing": "Analyzing the template…",
+        "analyzing": "Analyzing the template...",
         "analyzeFailed": "The template could not be analyzed. Check the file and try again.",
         "uploadSuccessToast": "PowerPoint template validated.",
         "schemaTitle": "Fields the agent will fill",
         "learnMore": "How does this work? What should I upload?",
         "slide": "Slide {{number}}",
-        "imageBadge": "image · {{folder}}",
+        "imageBadge": "image - {{folder}}",
         "noDescription": "No description"
       },
       "errors": {
@@ -337,7 +337,7 @@
         "downloadError": "Download failed",
         "close": "Close preview",
         "loadError": "Failed to load preview.",
-        "loading": "Loading preview…",
+        "loading": "Loading preview...",
         "empty": "No preview yet. Ask the assistant to fill a deck."
       },
       "panel": {
@@ -353,7 +353,7 @@
       "fields": {
         "statement_timeout_s": {
           "title": "Statement timeout (seconds)",
-          "description": "Maximum time a single SQL statement may run before the server cancels it (1–120 seconds)."
+          "description": "Maximum time a single SQL statement may run before the server cancels it (1-120 seconds)."
         }
       }
     },
@@ -371,7 +371,7 @@
       "fields": {
         "mode": {
           "title": "What the agent may do",
-          "description": "Read lets the agent consult the wiki. Read and propose also lets it suggest pages and edits — you are always asked to approve them before anything is written. No mode can delete, rename or move a page.",
+          "description": "Read lets the agent consult the wiki. Read and propose also lets it suggest pages and edits - you are always asked to approve them before anything is written. No mode can delete, rename or move a page.",
           "options": {
             "read": "Read only",
             "read_write": "Read and propose"
@@ -389,7 +389,7 @@
     },
     "commandTurn": {
       "open": "Open the prompt behind the /{{command}} command",
-      "openWithText": "Open the prompt behind the /{{command}} command, followed by “{{appended}}”",
+      "openWithText": "Open the prompt behind the /{{command}} command, followed by \"{{appended}}\"",
       "panelTitle": "Command prompt"
     },
     "commandMenu": {
@@ -437,7 +437,7 @@
       "hideRestatements": "Hide restatements"
     },
     "debugRaw": {
-      "title": "Debug — raw messages",
+      "title": "Debug - raw messages",
       "scopeAria": "Message scope",
       "scope": {
         "lastExchange": "Last exchange",
@@ -503,7 +503,7 @@
       "reasoningOnMenu": "High (Reasoning)",
       "reasoningHint": "Turns on reasoning for in-depth questions (increases response time and token usage).",
       "selectLibraryFirst": "Select a library first.",
-      "modelNotEnabledForTeam": "This model is not enabled for this team — the message will fail. Ask a platform administrator to enable it."
+      "modelNotEnabledForTeam": "This model is not enabled for this team - the message will fail. Ask a platform administrator to enable it."
     },
     "characterCounter": "{{used}} / {{limit}} characters",
     "conversationAriaLabel": "Conversation",
@@ -519,7 +519,7 @@
       "sessionSaveFailedSummary": "Conversation not saved",
       "sessionSaveFailedDetail": "Could not save this conversation. Please try again.",
       "contextPromptSaveFailedSummary": "Prompt selection not saved",
-      "contextPromptSaveFailedDetail": "Could not save the selected prompts — reverted to the last saved selection. Please try again.",
+      "contextPromptSaveFailedDetail": "Could not save the selected prompts - reverted to the last saved selection. Please try again.",
       "attachmentDeleteFailedSummary": "File not deleted",
       "attachmentDeleteFailedDetail": "Could not delete this file. Please try again.",
       "attachmentDeleteForbiddenDetail": "You don't have permission to delete this file.",
@@ -535,7 +535,7 @@
     "hitlQuestionTabFallback": "Question",
     "hitlWaitingAria": "Agent is waiting for your input",
     "interruptedRun": {
-      "title": "The previous execution is unfinished at “{{step}}”.",
+      "title": "The previous execution is unfinished at \"{{step}}\".",
       "question": "An external operation may already have happened. Resume only after other executions have stopped. Restart does not undo previous effects.",
       "continue": "Continue",
       "restart": "Restart",
@@ -642,7 +642,7 @@
     "searchPlaceholder": "Search documents...",
     "showSection": "Show",
     "sortLabel": "Sort by",
-    "sortName": "Name (A–Z)",
+    "sortName": "Name (A-Z)",
     "sortRowsAsc": "Rows (low to high)",
     "sortRowsDesc": "Rows (high to low)",
     "sortVectorsAsc": "Vectors (low to high)",
@@ -695,11 +695,11 @@
     "clearSearch": "Clear search",
     "clearSelection": "Clear selection",
     "confirmBulkRemoveTitle": "Remove selection?",
-    "confirmDeleteFolderMessage": "Delete empty folder « {{name}} »?",
+    "confirmDeleteFolderMessage": "Delete empty folder \" {{name}} \"?",
     "confirmDeleteFolderTitle": "Delete folder?",
-    "confirmRemoveMessage": "Remove « {{doc}} » from « {{folder}} »?",
+    "confirmRemoveMessage": "Remove \" {{doc}} \" from \" {{folder}} \"?",
     "confirmRemoveTitle": "Remove from library?",
-    "conflictDecisionFor": "What to do with “{{name}}”",
+    "conflictDecisionFor": "What to do with \"{{name}}\"",
     "conflictReplace": "Replace",
     "conflictReplaceAll": "Replace all",
     "conflictSkip": "Skip",
@@ -715,7 +715,7 @@
     "downloadStarting": "Getting ready to start downloading...",
     "dropFiles": "Drop your files here",
     "excessSize": "Excess: ",
-    "folderRequired": "Only files inside a folder can be added here — loose files were skipped.",
+    "folderRequired": "Only files inside a folder can be added here - loose files were skipped.",
     "folders": "Folders",
     "ingestionMode": "Ingestion mode",
     "keywords": "Keywords",
@@ -988,12 +988,12 @@
       "stats": {
         "docs": "Documents scanned",
         "ownerRelations": "Owner relations created",
-        "parentRelations": "Tag→doc relations created",
+        "parentRelations": "Tag->doc relations created",
         "tags": "Tags processed"
       },
       "subtitle": "Rebuild owner and tag-to-document relations after enabling ReBAC.",
       "success": {
-        "detail": "{{owners}} owner relations and {{parents}} tag→doc relations created.",
+        "detail": "{{owners}} owner relations and {{parents}} tag->doc relations created.",
         "title": "ReBAC relations rebuilt"
       },
       "title": "ReBAC Backfill"
@@ -1021,7 +1021,7 @@
     "clearSelection": "Clear selection",
     "collapseAll": "Collapse all",
     "confirmBulkRemoveTitle": "Remove selection?",
-    "confirmRemoveMessage": "Remove « {{res}} » from « {{folder}} »?",
+    "confirmRemoveMessage": "Remove \" {{res}} \" from \" {{folder}} \"?",
     "confirmRemoveTitle": "Remove from library?",
     "createDetail": "{{typeOne, capitalize}} added to the folder.",
     "createLibrary": "Create folder",
@@ -1034,8 +1034,8 @@
     "emptyLibrariesDescription": "Create your first folder to organize your {{typePlural}}.",
     "emptyLibrariesTitle": "No folder yet",
     "expandAll": "Expand all",
-    "folderDeleteDetail": "The folder « {{name}} » has been deleted.",
-    "folderDeleteForbiddenDetail": "Only a library owner can delete the « {{name}} » library.",
+    "folderDeleteDetail": "The folder \" {{name}} \" has been deleted.",
+    "folderDeleteForbiddenDetail": "Only a library owner can delete the \" {{name}} \" library.",
     "folderDeleteForbiddenSummary": "Not allowed",
     "folderDeleteSuccess": "Folder deleted",
     "folders": "Folders",
@@ -1050,7 +1050,7 @@
     "noFiles": "No {{typeOne}} found",
     "preview": "Preview",
     "removeDetail": "{{typeOne, capitalize}} removed from the folder.",
-    "removeForbiddenDetail": "Only library owners can remove items from the « {{folder}} » folder.",
+    "removeForbiddenDetail": "Only library owners can remove items from the \" {{folder}} \" folder.",
     "removeForbiddenSummary": "Not allowed",
     "removeSuccess": "Removed",
     "searchPlaceholder": "Search a {{typeOne}}",
@@ -1064,7 +1064,7 @@
       "capabilities": {
         "title": "Features",
         "subtitle": "Platform feature catalog: per-team enablement, platform defaults, and health.",
-        "loading": "Loading features…",
+        "loading": "Loading features...",
         "loadError": "Could not load the feature catalog.",
         "empty": "No features are advertised by any runtime pod yet.",
         "manageTeams": "Manage by team",
@@ -1105,13 +1105,13 @@
           "healthy": "OK"
         },
         "suspendedDrawer": {
-          "title": "{{name}} — suspended agents",
+          "title": "{{name}} - suspended agents",
           "subtitle": "Agents this feature breaks right now, grouped by team. Restore each team's access from Manage by team to revive them.",
           "teamCount": "{{count}} agent(s)"
         },
         "defaultOnToast": "Default-on enabled platform-wide.",
         "defaultOffToast": "Default-on disabled platform-wide.",
-        "defaultOffSuspendedToast": "Default-on disabled — {{count}} dependent instance(s) suspended.",
+        "defaultOffSuspendedToast": "Default-on disabled - {{count}} dependent instance(s) suspended.",
         "defaultToggleError": "Could not change the default-on setting.",
         "defaultOffConfirm": {
           "appTitle": "Disable application by default?",
@@ -1120,7 +1120,7 @@
           "cancel": "Cancel",
           "impact": "This will suspend {{count}} agent(s) that currently work.",
           "impactNone": "No running agents will be affected.",
-          "impactUnknown": "{{count}} agent(s) could not be checked — their pod was unreachable, so the impact is unknown.",
+          "impactUnknown": "{{count}} agent(s) could not be checked - their pod was unreachable, so the impact is unknown.",
           "showAffected": "Show affected agents",
           "hideAffected": "Hide affected agents",
           "affectedAgent": "{{name}} (team {{team}})",
@@ -1130,11 +1130,11 @@
           "knowledgeBaseMessage": "Turning off default-on removes inherited Knowledge Base access from every team. Explicit team grants remain unchanged."
         },
         "matrix": {
-          "title": "{{name}} — team access",
+          "title": "{{name}} - team access",
           "subtitle": "Set each team's access: enable with settings, disable explicitly, or leave it on the platform default. Dimmed teams cannot use this feature right now.",
           "searchPlaceholder": "Search teams...",
           "clearSearch": "Clear search",
-          "teamsLoading": "Loading teams…",
+          "teamsLoading": "Loading teams...",
           "teamsError": "Could not load the team registry.",
           "noTeams": "No teams exist in the registry yet.",
           "searchEmpty": "No team matches your search.",
@@ -1145,25 +1145,25 @@
           "enabledToast": "Feature enabled for {{team}}.",
           "enableError": "Could not enable the feature.",
           "disabledToast": "Feature disabled for {{team}}.",
-          "disabledSuspendedToast": "Disabled for {{team}} — {{count}} instance(s) suspended.",
+          "disabledSuspendedToast": "Disabled for {{team}} - {{count}} instance(s) suspended.",
           "disableError": "Could not disable the feature.",
           "default": "Default",
           "defaultToast": "{{team}} now follows the platform default.",
-          "defaultSuspendedToast": "{{team}} now follows the platform default — {{count}} instance(s) suspended.",
+          "defaultSuspendedToast": "{{team}} now follows the platform default - {{count}} instance(s) suspended.",
           "defaultError": "Could not reset the feature to the platform default.",
           "rowControlAria": "Access for {{team}}",
           "dependencyHint": "Requires {{deps}} to be enabled for this team first.",
           "dependencyConflict": "This agent needs {{deps}} enabled for this team first.",
           "personal": {
             "label": "All personal spaces",
-            "hint": "Applies to every user's personal space at once — past, future, and users who never log in.",
+            "hint": "Applies to every user's personal space at once - past, future, and users who never log in.",
             "enabledToast": "Enabled for all personal spaces.",
             "enableError": "Could not enable the feature for personal spaces.",
             "disabledToast": "Disabled for all personal spaces.",
-            "disabledSuspendedToast": "Disabled for all personal spaces — {{count}} instance(s) suspended.",
+            "disabledSuspendedToast": "Disabled for all personal spaces - {{count}} instance(s) suspended.",
             "disableError": "Could not disable the feature for personal spaces.",
             "defaultToast": "Personal spaces now follow the platform default.",
-            "defaultSuspendedToast": "Personal spaces now follow the platform default — {{count}} instance(s) suspended.",
+            "defaultSuspendedToast": "Personal spaces now follow the platform default - {{count}} instance(s) suspended.",
             "defaultError": "Could not reset the personal-space default.",
             "dependencyHint": "Requires {{deps}} to be enabled for all personal spaces (or on by default) first.",
             "dependencyConflict": "This agent needs {{deps}} enabled for all personal spaces (or on by default) first."
@@ -1172,7 +1172,7 @@
         "defaultOnRequiresSettingsHint": "This feature has required team settings, so it cannot be on by default - enable it team by team instead.",
         "defaultOnConflict": "This feature has required team settings, so it cannot be on by default. Enable it team by team instead.",
         "defaultOffReasoningToast": "Reasoning was switched off with the model. Re-enable the model, then reasoning, to bring it back.",
-        "reasoningHint": "Whether this model runs with reasoning enabled, for every team. Separate from access: enabling a model does not enable its reasoning — but disabling the model switches its reasoning off.",
+        "reasoningHint": "Whether this model runs with reasoning enabled, for every team. Separate from access: enabling a model does not enable its reasoning - but disabling the model switches its reasoning off.",
         "reasoningOffToast": "Reasoning disabled for this model.",
         "reasoningOnToast": "Reasoning enabled for this model.",
         "reasoningToggleError": "Could not change this model's reasoning setting.",
@@ -1183,8 +1183,8 @@
           "messagePlatform": "{{agent}} needs {{deps}} to work. It is not on by default, so every team would inherit an agent it cannot use.",
           "confirm": "Enable all",
           "cancel": "Cancel",
-          "depFailed": "Could not enable {{dep}} — {{agent}} was left unchanged.",
-          "depNeedsSettings": "{{dep}} needs its own settings for this team — enable it from its own row first.",
+          "depFailed": "Could not enable {{dep}} - {{agent}} was left unchanged.",
+          "depNeedsSettings": "{{dep}} needs its own settings for this team - enable it from its own row first.",
           "thenSettingsForm": "You will then be asked to fill in {{agent}}'s settings before it is enabled."
         },
         "emptyKnowledgeBases": "No Knowledge Base definition has been published into this deployment yet."
@@ -1192,8 +1192,8 @@
       "platformModelBindings": {
         "openButton": "Platform model binding",
         "title": "Platform chat model binding",
-        "subtitle": "Assert one concrete (provider, name) chat model across every runtime pod — overrides each pod's own catalog default. Leave unset to keep today's per-pod behavior.",
-        "loading": "Loading the platform chat model binding…",
+        "subtitle": "Assert one concrete (provider, name) chat model across every runtime pod - overrides each pod's own catalog default. Leave unset to keep today's per-pod behavior.",
+        "loading": "Loading the platform chat model binding...",
         "loadError": "Could not load the platform chat model binding.",
         "capability": {
           "chat": "Chat"
@@ -1210,7 +1210,7 @@
           "provider": "Provider",
           "name": "Model name",
           "settingsTitle": "Settings (JSON)",
-          "settingsHint": "A JSON object of provider settings, e.g. {\"temperature\": 0.2}. Unknown keys are rejected — there is no headers, cookies, or auth field here, so never put a credential in a value.",
+          "settingsHint": "A JSON object of provider settings, e.g. {\"temperature\": 0.2}. Unknown keys are rejected - there is no headers, cookies, or auth field here, so never put a credential in a value.",
           "settingsInvalidJson": "Enter a valid JSON object.",
           "save": "Save",
           "cancel": "Cancel"
@@ -1219,17 +1219,17 @@
       "corpusAudit": {
         "title": "Corpus audit",
         "subtitle": "Compares each document's processing-stage record against what is actually present in the content store and vector store, and lets you clean up orphan data.",
-        "loading": "Loading the corpus audit…",
+        "loading": "Loading the corpus audit...",
         "loadError": "Could not load the corpus audit.",
         "refresh": "Refresh",
         "fix": "Repair documents",
-        "fixing": "Repairing…",
+        "fixing": "Repairing...",
         "empty": "No anomalies to show.",
-        "noAnomalies": "No anomalies found — the content store, vector store, and metadata are in sync.",
+        "noAnomalies": "No anomalies found - the content store, vector store, and metadata are in sync.",
         "anomaliesFound_one": "{{count}} anomaly found.",
         "anomaliesFound_other": "{{count}} anomalies found.",
-        "fixSuccess_one": "Repair complete — {{count}} document's processing status was reset. Nothing was deleted.",
-        "fixSuccess_other": "Repair complete — {{count}} documents' processing status was reset. Nothing was deleted.",
+        "fixSuccess_one": "Repair complete - {{count}} document's processing status was reset. Nothing was deleted.",
+        "fixSuccess_other": "Repair complete - {{count}} documents' processing status was reset. Nothing was deleted.",
         "fixError": "Could not repair the documents.",
         "stats": {
           "metadata": "Metadata records",
@@ -1247,7 +1247,7 @@
         },
         "fixConfirm": {
           "title": "Repair documents with a stale processing status?",
-          "message": "Resets the processing stage of documents whose status claims done when the content or vector store disagrees, so they become honestly re-processable. Nothing is deleted — orphan vector/content-store records with no matching document are left as-is for you to review or remove by hand.",
+          "message": "Resets the processing stage of documents whose status claims done when the content or vector store disagrees, so they become honestly re-processable. Nothing is deleted - orphan vector/content-store records with no matching document are left as-is for you to review or remove by hand.",
           "confirm": "Repair documents",
           "cancel": "Cancel"
         }
@@ -1255,20 +1255,20 @@
     },
     "agentCard": {
       "activate": "Activate",
-      "catalogWarning": "MCP configuration drift — recreate to resolve",
+      "catalogWarning": "MCP configuration drift - recreate to resolve",
       "chat": "Chat",
       "deactivate": "Deactivate",
       "edit": "Edit",
       "noDescription": "No description yet.",
-      "suspended": "Suspended — a capability this agent uses is broken or unavailable. Edit the agent to fix it.",
+      "suspended": "Suspended - a capability this agent uses is broken or unavailable. Edit the agent to fix it.",
       "suspendedToggleLocked": "Suspended",
       "duplicate": "Duplicate",
-      "copyTo": "Copy to…",
+      "copyTo": "Copy to...",
       "copyDialog": {
         "title": "Copy {{name}} to another team",
         "subtitle": "Select the spaces to copy this agent into.",
         "confirm": "Copy",
-        "noEditableTeams": "You are not an editor of any team. Only an editor can copy an agent into one — ask a team administrator for that role.",
+        "noEditableTeams": "You are not an editor of any team. Only an editor can copy an agent into one - ask a team administrator for that role.",
         "templateDisabled": "Agent template not enabled",
         "missingCapabilities_one": "{{count}} missing capability",
         "missingCapabilities_other": "{{count}} missing capabilities",
@@ -1396,7 +1396,7 @@
           "title": "Conversations per user over time",
           "valueLabel": "Median conversations per user ({{window}})"
         },
-        "description": "Covers only users active over the selected period — anyone who started at least one conversation. Inactive users are not counted.",
+        "description": "Covers only users active over the selected period - anyone who started at least one conversation. Inactive users are not counted.",
         "trendTitleWithWindow": "{{title}} ({{window}})",
         "trendWindow": {
           "day_one": "trailing {{count}} day",
@@ -1523,13 +1523,13 @@
       },
       "stepper": {
         "label": "Import progress",
-        "waiting": "Waiting…",
+        "waiting": "Waiting...",
         "hint": {
           "upload": "The file leaves your computer for its destination. This is the only phase that depends on your connection.",
           "uploading": "The kind of document is worked out, and what it takes to process it is set aside.",
           "processing": "The text is pulled out of the document, page by page, so it can be used.",
           "done": "The document is ready. Agents can now find it and quote it.",
-          "doneUpload": "The file has arrived. It was not analysed — this mode only sends it.",
+          "doneUpload": "The file has arrived. It was not analysed - this mode only sends it.",
           "indexing": "The content is filed away so agents can find it and quote it in their answers.",
           "waiting": "The file has arrived. Its analysis starts as soon as a slot frees up."
         }
@@ -1551,7 +1551,7 @@
     "tokenUsageImpact": {
       "costTitle": "Estimated cost",
       "costValue": "${{cost}} (estimated)",
-      "summary": "≈ {{co2e}} g CO₂e · {{kwh}} kWh (estimated)"
+      "summary": "~ {{co2e}} g CO2e - {{kwh}} kWh (estimated)"
     },
     "teamUsage": {
       "title": "My token usage",
@@ -1623,13 +1623,13 @@
     "cancel": "Cancel",
     "chatTrace": {
       "ariaLabel": "Agent reasoning trace",
-      "awaitingConfirmation": "awaiting confirmation…",
+      "awaitingConfirmation": "awaiting confirmation...",
       "cancelledByUser": "cancelled by the user",
       "details": "Details",
       "documents_one": "{{count}} document",
       "documents_other": "{{count}} documents",
       "executionTime": "Execution time: {{duration}}",
-      "turnFailed": "The turn failed — open for details",
+      "turnFailed": "The turn failed - open for details",
       "hide": "Hide the agent's reasoning and tool calls",
       "matches_one": "{{count}} match",
       "matches_other": "{{count}} matches",
@@ -1637,7 +1637,7 @@
       "restatedReasoning": "Restates the earlier reasoning",
       "rows_one": "{{count}} row",
       "rows_other": "{{count}} rows",
-      "running": "running…",
+      "running": "running...",
       "show": "Show the agent's reasoning and tool calls",
       "sqlQuery": "Query:",
       "sqlResponse": "Response:",
@@ -1648,9 +1648,9 @@
       "summaryReasoning": "Reasoning {{duration}}",
       "summaryTools_one": "{{count}} tool",
       "summaryTools_other": "{{count}} tools",
-      "thinking": "Thinking…",
+      "thinking": "Thinking...",
       "tabular": {
-        "catalogForDocument": "Reading the summary of document “{{name}}”.",
+        "catalogForDocument": "Reading the summary of document \"{{name}}\".",
         "catalogForWorkbook": "Reading the workbook summary.",
         "catalogComplete": "Full summary: {{total}} lines.",
         "catalogPreview": "Summary: the first {{shown}} of {{total}} lines.",
@@ -1741,15 +1741,15 @@
         "emptySearch": "No prompt matches this search.",
         "import": {
           "title": "Import this prompt into a team",
-          "subtitle": "Select the spaces to import “{{name}}” into.",
+          "subtitle": "Select the spaces to import \"{{name}}\" into.",
           "confirm": "Import",
-          "noEditableTeams": "You are not an editor of any team. Only an editor can import a prompt into one — ask a team administrator for that role.",
+          "noEditableTeams": "You are not an editor of any team. Only an editor can import a prompt into one - ask a team administrator for that role.",
           "successToast": "Prompt imported ({{count}})",
           "errorToast": "Import failed ({{count}})"
         },
         "unpublish": {
           "title": "Remove this prompt from the marketplace?",
-          "message": "“{{name}}” will disappear from the marketplace and will no longer be available to other users.",
+          "message": "\"{{name}}\" will disappear from the marketplace and will no longer be available to other users.",
           "confirm": "Remove",
           "successToast": "Prompt removed from the marketplace",
           "errorToast": "Failed to remove prompt"
@@ -1763,9 +1763,9 @@
       "copyPageLink": "Copy the page link",
       "copyHeadingLink": "Copy the link to this paragraph",
       "missingPage": "This page doesn't exist yet.",
-      "externalDocsLink": "Technical documentation ↗",
+      "externalDocsLink": "Technical documentation ->",
       "search": {
-        "placeholder": "Search the help…",
+        "placeholder": "Search the help...",
         "ariaLabel": "Search the Help Center",
         "clearAriaLabel": "Clear search",
         "resultsAria": "Search results",
@@ -1815,8 +1815,8 @@
         "footprintInfo": {
           "aria": "How is this estimate calculated?",
           "title": "Where does this estimate come from?",
-          "how": "We estimate the energy and CO₂ of your exchanges with the AI from the amount of text processed (what we call “tokens”). The more text you exchange with the AI, the higher the estimated consumption.",
-          "convert": "That energy is then converted into CO₂ based on the electricity used to run the AI.",
+          "how": "We estimate the energy and CO2 of your exchanges with the AI from the amount of text processed (what we call \"tokens\"). The more text you exchange with the AI, the higher the estimated consumption.",
+          "convert": "That energy is then converted into CO2 based on the electricity used to run the AI.",
           "limitsTitle": "Good to keep in mind",
           "limit1": "It's an estimate, not an exact measurement.",
           "limit2": "Actual consumption depends on the servers, the AI model and the region where it runs.",
@@ -1832,16 +1832,16 @@
         },
         "cleanupConversations": {
           "title": "Clean up inactive conversations",
-          "subtitle": "These conversations have had no activity for more than 5 days. Everything is selected — untick whatever you want to keep.",
+          "subtitle": "These conversations have had no activity for more than 5 days. Everything is selected - untick whatever you want to keep.",
           "empty": "No inactive conversation to clean up."
         }
       },
       "topPrompts": {
-        "title": "Marketplace · Top 8 most-used prompts",
+        "title": "Marketplace - Top 8 most-used prompts",
         "uses": "uses",
-        "weekDelta": "▲ {{count}} · 7d",
+        "weekDelta": "^ {{count}} - 7d",
         "empty": "No prompt has been published to the marketplace yet.",
-        "periodDelta": "▲ {{count}} · {{days}}d"
+        "periodDelta": "^ {{count}} - {{days}}d"
       },
       "period": {
         "label": "Period",
@@ -1851,7 +1851,7 @@
         "d90": "Last 90 days"
       },
       "search": {
-        "placeholder": "Search agents, teams, prompts…",
+        "placeholder": "Search agents, teams, prompts...",
         "empty": "No results.",
         "groups": {
           "agents": "Agents",
@@ -1884,8 +1884,8 @@
         "conversations": "New conversations",
         "messages": "Messages sent",
         "agents": "Agents used",
-        "deltaUp": "▲ {{pct}}% ({{abs}})",
-        "deltaDown": "▼ {{pct}}% ({{abs}})",
+        "deltaUp": "^ {{pct}}% ({{abs}})",
+        "deltaDown": "v {{pct}}% ({{abs}})",
         "deltaFlat": "flat",
         "vsPrevious": "vs previous period",
         "periodCaption": "over the last {{count}} days"
@@ -1941,8 +1941,8 @@
       "roots": {
         "resources": "Team corpus",
         "indexed": "indexed corpus",
-        "private": "private · in {{team}}",
-        "privatePersonal": "private · personal",
+        "private": "private - in {{team}}",
+        "privatePersonal": "private - personal",
         "fileCount": "{{count}} files",
         "empty": "empty"
       },
@@ -1972,9 +1972,9 @@
       "dropAtRoot": "Drop a folder to create it here with its structure",
       "rootDrop": {
         "rejectedTitle": "Drop a folder",
-        "rejectedDetail": "Loose files can't land at the top level — drop a folder (it becomes a library), or drop the files into an existing folder.",
-        "skippedDetail_one": "{{count}} loose file was skipped — only the dropped folders' content was kept.",
-        "skippedDetail_other": "{{count}} loose files were skipped — only the dropped folders' content was kept."
+        "rejectedDetail": "Loose files can't land at the top level - drop a folder (it becomes a library), or drop the files into an existing folder.",
+        "skippedDetail_one": "{{count}} loose file was skipped - only the dropped folders' content was kept.",
+        "skippedDetail_other": "{{count}} loose files were skipped - only the dropped folders' content was kept."
       },
       "action": {
         "addFile": "Add files",
@@ -2053,7 +2053,7 @@
       "labelsModal": {
         "title": "Manage labels",
         "currentEmpty": "No labels yet",
-        "addPlaceholder": "Add a label…",
+        "addPlaceholder": "Add a label...",
         "add": "Add",
         "createNew": "Create label",
         "addFieldLabel": "Add a label",
@@ -2068,7 +2068,7 @@
           "file": "File",
           "raw": "Raw"
         },
-        "loading": "Loading…",
+        "loading": "Loading...",
         "markdownUnavailable": "No Markdown version was generated for this document.",
         "pdf": {
           "loadFailed": "Failed to load PDF document.",
@@ -2225,23 +2225,23 @@
       },
       "report": {
         "verified": "Verified",
-        "partial": "Partial — no failures",
-        "running": "Running…",
+        "partial": "Partial - no failures",
+        "running": "Running...",
         "empty": "No run yet.",
-        "counts": "{{passed}} passed · {{failed}} failed · {{skipped}} skipped · {{total}} steps",
+        "counts": "{{passed}} passed - {{failed}} failed - {{skipped}} skipped - {{total}} steps",
         "copy": "Copy report",
         "copied": "Copied"
       },
       "functional": {
         "title": "Functional self-test",
-        "subtitle": "Create two folders in your personal space, ingest a marker document into one and a plain document into the other, then ask the real self-test agent a question scoped to each — the marker must come back from the first and be absent from the second. Everything is cleaned up at the end.",
+        "subtitle": "Create two folders in your personal space, ingest a marker document into one and a plain document into the other, then ask the real self-test agent a question scoped to each - the marker must come back from the first and be absent from the second. Everything is cleaned up at the end.",
         "run": "Run campaign"
       },
       "authz": {
         "identityTitle": "JWT authentication self-test",
         "identityDescription": "Checks authenticated access to the three APIs, rejection of missing or invalid tokens, public routes and personal-space identity. Checks that do not apply to this provider are skipped with a reason.",
         "title": "Authorization self-test",
-        "subtitle": "Proves the live API honors the authorization model: platform-admin flags match real endpoint access, and nobody — not even a platform admin — gets implicit access to a team they don't belong to.",
+        "subtitle": "Proves the live API honors the authorization model: platform-admin flags match real endpoint access, and nobody - not even a platform admin - gets implicit access to a team they don't belong to.",
         "runSelf": "Run for myself",
         "expiry": {
           "title": "Agent access after your session expires",
@@ -2252,7 +2252,7 @@
             "messageUnknownWait": "This check waits for your current sign-in credential to expire, so it runs for several minutes. Keep this page open until it ends. If you close the tab or reload before it finishes, the run leaves one temporary agent behind, to delete from your personal agents.",
             "confirm": "Start and keep the page open"
           },
-          "caption": "Uses your current SSO session. The agent checks authenticated metadata access, waits past the captured token's expiry, then repeats the check. No password, Keycloak configuration change, document, or library is needed. Only a temporary agent instance is created and removed; closing the tab mid-run leaves it behind, to delete from your personal agents. Browser refresh stays enabled. The wait is the token's remaining lifetime plus a short margin — from under a minute to several — so keep this page open until it ends; a wait longer than {{maxMinutes}} minutes is skipped."
+          "caption": "Uses your current SSO session. The agent checks authenticated metadata access, waits past the captured token's expiry, then repeats the check. No password, Keycloak configuration change, document, or library is needed. Only a temporary agent instance is created and removed; closing the tab mid-run leaves it behind, to delete from your personal agents. Browser refresh stays enabled. The wait is the token's remaining lifetime plus a short margin - from under a minute to several - so keep this page open until it ends; a wait longer than {{maxMinutes}} minutes is skipped."
         },
         "testProfile": {
           "title": "Test another profile",
@@ -2260,15 +2260,15 @@
           "usernamePlaceholder": "Select an account",
           "passwordLabel": "Password",
           "run": "Run",
-          "caption": "Requires that account's own password and Keycloak direct-grant login enabled for this realm — already on in local/demo realms, test/dev-only by design. This does not grant any new access — it reports what that account can already do.",
-          "disabledInsecure": "Not available in this deployment — there is no real Keycloak realm to authenticate against."
+          "caption": "Requires that account's own password and Keycloak direct-grant login enabled for this realm - already on in local/demo realms, test/dev-only by design. This does not grant any new access - it reports what that account can already do.",
+          "disabledInsecure": "Not available in this deployment - there is no real Keycloak realm to authenticate against."
         },
         "identityRun": "Run checks"
       }
     },
     "tasks": {
       "indicator": {
-        "details": "{{label}} — click for details"
+        "details": "{{label}} - click for details"
       },
       "kind": {
         "default": "Task",
@@ -2292,11 +2292,11 @@
           "title": "Export",
           "description": "Download a .zip snapshot of this platform's agents, tags, and document metadata.",
           "launch": "Export",
-          "launching": "Exporting…"
+          "launching": "Exporting..."
         },
         "reset": {
           "launch": "Reset platform",
-          "running": "Resetting…",
+          "running": "Resetting...",
           "taskLabel": "Platform reset",
           "confirmTitle": "Reset the platform?",
           "confirmMessage": "Permanently deletes all agents, tags, and document metadata. Files (S3), vectors (OpenSearch), users (Keycloak), and permissions (OpenFGA) are not affected.",
@@ -2351,7 +2351,7 @@
         "copyError": "Copy error",
         "errorCopied": "Error copied",
         "startedAgo": "started {{time}}",
-        "title": "Details — {{label}}"
+        "title": "Details - {{label}}"
       },
       "state": {
         "cancelled": "Cancelled",
@@ -2385,7 +2385,7 @@
       "holders": {
         "title": "Current role holders",
         "empty": "No platform roles granted yet.",
-        "loading": "Loading platform roles…",
+        "loading": "Loading platform roles...",
         "error": "Platform roles could not be loaded.",
         "rootBadge": "Primary admin",
         "table": {
@@ -2430,7 +2430,7 @@
         "errors": {
           "summary": "Could not revoke the role",
           "fallbackDetail": "An unexpected error occurred while revoking the role.",
-          "forbiddenDetail": "This role is protected — only the primary admin can revoke platform admins, and the primary admin itself is unrevocable."
+          "forbiddenDetail": "This role is protected - only the primary admin can revoke platform admins, and the primary admin itself is unrevocable."
         }
       }
     },
@@ -2605,7 +2605,7 @@
         "teamAvatar": {
           "title": "Team avatar",
           "import": "Import",
-          "hint": "JPEG, PNG, or WebP · 5 MB maximum",
+          "hint": "JPEG, PNG, or WebP - 5 MB maximum",
           "noAvatar": "No avatar selected"
         },
         "teamPrompt": {
@@ -2631,7 +2631,7 @@
         "title": "Leave this team?",
         "message": "You will lose access to \"{{teamName}}\" and its conversations will be handled per the team's retention policy, exactly as if an admin had removed you.",
         "confirmLabel": "Leave",
-        "lastAdminTooltip": "You are the only admin of this team — promote another admin before leaving.",
+        "lastAdminTooltip": "You are the only admin of this team - promote another admin before leaving.",
         "errors": {
           "summary": "Failed to leave team",
           "fallbackDetail": "Could not leave the team."
@@ -2664,7 +2664,7 @@
         "advancedSettings": "Advanced settings",
         "capabilitiesInfo": {
           "title": "What are these capabilities for?",
-          "body": "Capabilities are the tools your agent can use during a conversation — for example searching your documents, summarizing a file, or generating a presentation. Turn on only the ones your agent needs, then adjust their settings if required. You can always change this selection after the agent is created.\nFor most of them, using them is as simple as asking your agent in plain language (e.g. \"Summarize the document attached to this conversation.\")."
+          "body": "Capabilities are the tools your agent can use during a conversation - for example searching your documents, summarizing a file, or generating a presentation. Turn on only the ones your agent needs, then adjust their settings if required. You can always change this selection after the agent is created.\nFor most of them, using them is as simple as asking your agent in plain language (e.g. \"Summarize the document attached to this conversation.\")."
         },
         "capabilities": {
           "header": "Select your agent's capabilities",
@@ -2743,7 +2743,7 @@
             "hint": "Every new conversation with this agent starts with the composer's deep reasoning toggle already on. Users can still switch it off per question. Deep reasoning is slower and, on agents that call tools, can make the model repeat calls."
           }
         },
-        "noTemplates": "No agent templates available — ask a platform admin to enable an agent capability, or check the agent runtime.",
+        "noTemplates": "No agent templates available - ask a platform admin to enable an agent capability, or check the agent runtime.",
         "templateBrowser": {
           "title": "Select an agent template",
           "subtitle": "Each template is designed and optimized to create an agent for a specific mission."
@@ -2770,8 +2770,8 @@
           "configInvalid": "The parameters of a capability it uses are no longer valid. Reset them and re-save the agent to fix it, or contact a platform administrator."
         },
         "subtitle": "Team: {{team}}",
-        "subtitleWithTemplate": "Team: {{team}} · Template: {{template}}",
-        "templateUnavailable": "Template unavailable — field definitions may be incomplete.",
+        "subtitleWithTemplate": "Team: {{team}} - Template: {{template}}",
+        "templateUnavailable": "Template unavailable - field definitions may be incomplete.",
         "titleCreate": "Create a new {{agentsNicknameSingular}}",
         "titleEdit": "Edit {{agent}}",
         "validation": {
@@ -2879,7 +2879,7 @@
       "picture": {
         "title": "Profile picture",
         "import": "Import",
-        "hint": "JPEG, PNG or WebP · 5 MB maximum",
+        "hint": "JPEG, PNG or WebP - 5 MB maximum",
         "empty": "No picture",
         "delete": "Delete",
         "deleteTitle": "Delete your profile picture?",
@@ -2896,7 +2896,7 @@
     "taskActivity": {
       "title": "Activity",
       "subtitle": "Scheduled, running and completed tasks.",
-      "loading": "Loading activity…",
+      "loading": "Loading activity...",
       "loadError": "Could not load activity.",
       "empty": "No scheduled or running tasks. Tasks (erasures, imports) appear here until they complete.",
       "scheduled": "Scheduled",
@@ -2910,7 +2910,7 @@
       "stalled": "Stalled",
       "stalledHint": "Still retrying, but this task has failed repeatedly and needs attention.",
       "withWarnings": "With warnings",
-      "withWarningsHint": "This task completed, but part of it was skipped or could not be fully reconciled — see details.",
+      "withWarningsHint": "This task completed, but part of it was skipped or could not be fully reconciled - see details.",
       "acknowledge": "Dismiss",
       "migration": {
         "detailsTitle": "Import details",
@@ -2973,16 +2973,16 @@
         "title": "Platform operating instructions",
         "badge": "Read-only",
         "subtitle": "Shipped with the platform and sent first, for every agent. They state which block wins when instructions conflict, and can only change with a deployment.",
-        "note": "These instructions belong to the platform itself: they are what keeps every agent behaving consistently — using the tools it was actually given, never inventing a result, recovering from a failed call. They are shipped with the platform and cannot be edited by anyone, so that a change to one team's prompt can never weaken how the whole platform behaves. Use the global prompt, alongside, to give your platform its personality and its own standards.",
+        "note": "These instructions belong to the platform itself: they are what keeps every agent behaving consistently - using the tools it was actually given, never inventing a result, recovering from a failed call. They are shipped with the platform and cannot be edited by anyone, so that a change to one team's prompt can never weaken how the whole platform behaves. Use the global prompt, alongside, to give your platform its personality and its own standards.",
         "unavailable": "No agent pod could be reached to read these instructions. They still apply to agents; it is only this display that is unavailable."
       },
-      "sourceUnavailable": "No agent pod could be reached to read the default prompt. What you see here is not what agents receive — don't save anything until a pod answers."
+      "sourceUnavailable": "No agent pod could be reached to read the default prompt. What you see here is not what agents receive - don't save anything until a pod answers."
     },
     "wiki": {
       "title": "Wiki",
       "betaBadge": {
         "label": "Beta",
-        "tooltip": "This is a proposal, not a finished feature. We're collecting feedback before committing to its design — tell us what works and what doesn't."
+        "tooltip": "This is a proposal, not a finished feature. We're collecting feedback before committing to its design - tell us what works and what doesn't."
       },
       "resizeRail": "Resize the page list",
       "newPage": "New page",
@@ -3022,9 +3022,9 @@
       "editor": {
         "save": "Save",
         "cancel": "Cancel",
-        "conflict": "Someone else saved this page while you were writing. Your text is still here — load their version to start again from it, or save to keep yours.",
+        "conflict": "Someone else saved this page while you were writing. Your text is still here - load their version to start again from it, or save to keep yours.",
         "loadCurrent": "Load their version",
-        "tooLong": "This page is too long. Keep it under {{max}} characters — a wiki page is a summary, not a document."
+        "tooLong": "This page is too long. Keep it under {{max}} characters - a wiki page is a summary, not a document."
       },
       "history": {
         "title": "Version history",
@@ -3050,16 +3050,16 @@
         "templateHint": "This page starts from an outline. Fill in the empty sections and delete the ones you do not need: every agent reads this text on every question, so keep it short and imperative, and spell out what a new colleague would have guessed on their own."
       },
       "proposal": {
-        "newPage": "This agent proposes a new page “{{title}}” ({{added}} lines).",
-        "edit": "This agent proposes changing “{{title}}”: {{added}} lines added, {{removed}} removed.",
+        "newPage": "This agent proposes a new page \"{{title}}\" ({{added}} lines).",
+        "edit": "This agent proposes changing \"{{title}}\": {{added}} lines added, {{removed}} removed.",
         "seeChanges": "See the changes",
-        "dialogTitle": "Proposed changes — {{title}}",
+        "dialogTitle": "Proposed changes - {{title}}",
         "close": "Close",
         "unavailable": "This proposal is no longer available."
       },
       "newPageDialog": {
         "title": "New wiki page",
-        "childTitle": "New page under “{{parent}}”",
+        "childTitle": "New page under \"{{parent}}\"",
         "label": "Page title",
         "confirm": "Create page"
       },
@@ -3067,12 +3067,12 @@
         "title": "Title and location",
         "label": "Page title",
         "parentLabel": "Parent page",
-        "root": "None — top level",
+        "root": "None - top level",
         "confirm": "Save"
       },
       "leaveDialog": {
         "title": "Discard your changes?",
-        "message": "You are editing “{{title}}”. Opening another page will lose the text you have not saved.",
+        "message": "You are editing \"{{title}}\". Opening another page will lose the text you have not saved.",
         "confirm": "Discard changes",
         "cancel": "Keep writing"
       },
@@ -3084,7 +3084,7 @@
       "errors": {
         "save": "Could not save this page",
         "create": "Could not create the page",
-        "rename": "Could not save the page’s title or location",
+        "rename": "Could not save the page's title or location",
         "delete": "Could not delete the page",
         "duplicateTitle": "A page with this title already exists at the same level. Pick another one.",
         "review": "Could not save the review mark",
@@ -3100,7 +3100,7 @@
     },
     "knowledgeBases": {
       "title": "Knowledge Bases",
-      "loading": "Loading the knowledge bases…",
+      "loading": "Loading the knowledge bases...",
       "empty": "No knowledge base yet",
       "deleted": "{{name}} deleted",
       "deleteFailed": "Could not delete {{name}}",
@@ -3149,7 +3149,7 @@
         "synchronizedBy": "Synchronized by",
         "pickOne": "Choose a source",
         "noDefinitions": "No knowledge base is enabled for this team",
-        "definitionsLoading": "Loading…",
+        "definitionsLoading": "Loading...",
         "definitionsFailed": "Could not load the list",
         "zoneFred": "How often it runs",
         "scheduleExplanation": "Each run checks the source for changes. Document processing may continue after synchronization.",
@@ -3211,7 +3211,7 @@
         "title": "Title",
         "titleRequired": "Give the announcement a title in at least one language.",
         "descriptionShort": "Short description",
-        "descriptionShortHint": "Shown in the banner itself. Keep it to a line or two — bold, italic and links only.",
+        "descriptionShortHint": "Shown in the banner itself. Keep it to a line or two - bold, italic and links only.",
         "shortRequired": "Write a short description in at least one language.",
         "descriptionLong": "Long description (optional)",
         "descriptionLongHint": "Shown in the More info dialog. Leave empty and the banner shows no More info button.",
@@ -3299,7 +3299,7 @@
     "semantic": "Semantic",
     "semanticDescription": "Semantic search uses embeddings to retrieve passages that are conceptually similar to your question, even if they don't share the same words. This usually finds the most relevant context for broad or exploratory questions, but it can sometimes include loosely related results when your query is very short or ambiguous.",
     "strict": "Strict",
-    "strictDescription": "Strict search prioritizes precision over coverage. It applies tighter constraints (e.g., stronger keyword/metadata matching and/or higher similarity thresholds) so only highly confident results are retrieved. Use this when you want to avoid ‘maybe relevant' documents, or when your corpus is large and you prefer fewer, more exact sources. If nothing matches strongly, results may be sparse."
+    "strictDescription": "Strict search prioritizes precision over coverage. It applies tighter constraints (e.g., stronger keyword/metadata matching and/or higher similarity thresholds) so only highly confident results are retrieved. Use this when you want to avoid 'maybe relevant' documents, or when your corpus is large and you prefer fewer, more exact sources. If nothing matches strongly, results may be sparse."
   },
   "settings": {
     "chatContextPreviewTitle": "Chat context preview"
@@ -3309,13 +3309,13 @@
     "headerSubtitle": "Team's apps",
     "title": "Applications",
     "subtitle": "Applications available to this team.",
-    "loading": "Loading applications…",
+    "loading": "Loading applications...",
     "loadError": "Applications could not be loaded.",
     "noAppDescription": "No applications are available for this team.",
     "noAppTitle": "No app",
     "host": {
-      "catalog-loading": "Loading application…",
-      "connecting": "Connecting to the application…",
+      "catalog-loading": "Loading application...",
+      "connecting": "Connecting to the application...",
       "unavailable": "This application is unavailable.",
       "protocol-mismatch": "This application speaks a Fred application protocol this deployment does not support.",
       "unreachable": "The application did not respond. It may be starting up or misconfigured.",

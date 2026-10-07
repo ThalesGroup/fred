@@ -142,7 +142,7 @@
         },
         "search_attachments_only": {
           "title": "Rechercher uniquement dans les pièces jointes",
-          "description": "Restreindre la recherche documentaire de l'agent aux fichiers joints à la conversation — le corpus n'est jamais interrogé."
+          "description": "Restreindre la recherche documentaire de l'agent aux fichiers joints à la conversation - le corpus n'est jamais interrogé."
         },
         "default_top_k": {
           "title": "Résultats par défaut",
@@ -204,7 +204,7 @@
       "fields": {
         "require_confirmation": {
           "title": "Confirmation requise",
-          "description": "Met en pause avant chaque extraction pour recueillir votre approbation (continuer/annuler). Activé par défaut — cette capacité consomme beaucoup de tokens ; à désactiver uniquement pour un agent dont l'usage est déjà éprouvé."
+          "description": "Met en pause avant chaque extraction pour recueillir votre approbation (continuer/annuler). Activé par défaut - cette capacité consomme beaucoup de tokens ; à désactiver uniquement pour un agent dont l'usage est déjà éprouvé."
         }
       }
     },
@@ -222,13 +222,13 @@
         },
         "min_score": {
           "title": "Pertinence minimale",
-          "description": "Écarte les correspondances sous ce seuil de pertinence (0 à 1). Laisser vide pour renvoyer toutes les correspondances, même faibles - utile quand « rien ne correspond » est justement la réponse."
+          "description": "Écarte les correspondances sous ce seuil de pertinence (0 à 1). Laisser vide pour renvoyer toutes les correspondances, même faibles - utile quand \" rien ne correspond \" est justement la réponse."
         }
       }
     },
     "open_writable_document": {
-      "name": "Ouvrir un document de l’espace de travail",
-      "description": "Démo : copier un fichier Markdown de l’espace de travail d’un agent Deep dans l’éditeur de documents. Activez aussi Documents éditables."
+      "name": "Ouvrir un document de l'espace de travail",
+      "description": "Démo : copier un fichier Markdown de l'espace de travail d'un agent Deep dans l'éditeur de documents. Activez aussi Documents éditables."
     },
     "writable_document": {
       "name": "Générer un document texte (Word)",
@@ -240,11 +240,11 @@
         }
       },
       "untitled": "Document",
-      "saving": "Enregistrement…",
+      "saving": "Enregistrement...",
       "close": "Fermer le panneau",
       "download": "Télécharger",
       "downloadError": "Échec du téléchargement",
-      "noSession": "Aucune session — ouvrez une conversation pour voir ses documents.",
+      "noSession": "Aucune session - ouvrez une conversation pour voir ses documents.",
       "empty": "Aucun document pour l'instant. Demandez à l'agent d'en rédiger un.",
       "card": {
         "aria": "Générer un document texte (Word)",
@@ -306,13 +306,13 @@
         "currentTemplate": "Un modèle est configuré pour cet agent.",
         "templateRequired": "Le générateur PowerPoint nécessite un modèle PowerPoint. Téléversez un fichier .pptx.",
         "templateInvalid": "Corrigez les erreurs du modèle ci-dessous avant d'enregistrer.",
-        "analyzing": "Analyse du modèle…",
+        "analyzing": "Analyse du modèle...",
         "analyzeFailed": "Le modèle n'a pas pu être analysé. Vérifiez le fichier et réessayez.",
         "uploadSuccessToast": "Modèle PowerPoint validé.",
         "schemaTitle": "Champs que l'agent remplira",
         "learnMore": "Comment ça marche ? Que dois-je uploader ?",
         "slide": "Diapositive {{number}}",
-        "imageBadge": "image · {{folder}}",
+        "imageBadge": "image - {{folder}}",
         "noDescription": "Pas de description"
       },
       "errors": {
@@ -337,7 +337,7 @@
         "downloadError": "Échec du téléchargement",
         "close": "Fermer l'aperçu",
         "loadError": "Impossible de charger l'aperçu.",
-        "loading": "Chargement de l'aperçu…",
+        "loading": "Chargement de l'aperçu...",
         "empty": "Pas encore d'aperçu. Demandez à l'assistant de remplir une présentation."
       },
       "panel": {
@@ -371,7 +371,7 @@
       "fields": {
         "mode": {
           "title": "Ce que l'agent peut faire",
-          "description": "En lecture, l'agent consulte le wiki. En lecture et proposition, il peut aussi proposer des pages et des modifications — vous serez toujours invité à les approuver avant qu'elles ne soient écrites. Aucun mode ne permet de supprimer, renommer ou déplacer une page.",
+          "description": "En lecture, l'agent consulte le wiki. En lecture et proposition, il peut aussi proposer des pages et des modifications - vous serez toujours invité à les approuver avant qu'elles ne soient écrites. Aucun mode ne permet de supprimer, renommer ou déplacer une page.",
           "options": {
             "read": "Lecture seule",
             "read_write": "Lecture et proposition"
@@ -389,7 +389,7 @@
     },
     "commandTurn": {
       "open": "Ouvrir le prompt de la commande /{{command}}",
-      "openWithText": "Ouvrir le prompt de la commande /{{command}}, suivie de « {{appended}} »",
+      "openWithText": "Ouvrir le prompt de la commande /{{command}}, suivie de \" {{appended}} \"",
       "panelTitle": "Prompt de la commande"
     },
     "commandMenu": {
@@ -437,7 +437,7 @@
       "hideRestatements": "Masquer les reformulations"
     },
     "debugRaw": {
-      "title": "Débogage — messages bruts",
+      "title": "Débogage - messages bruts",
       "scopeAria": "Portée des messages",
       "scope": {
         "lastExchange": "Dernier échange",
@@ -470,8 +470,8 @@
       "resetTooltip": "Réinitialiser"
     },
     "composerSettings": {
-      "askUserLabel": "Autoriser les questions de l’agent",
-      "askUserTitle": "Questions de l’agent",
+      "askUserLabel": "Autoriser les questions de l'agent",
+      "askUserTitle": "Questions de l'agent",
       "askUserOn": "Activées",
       "askUserOff": "Désactivées",
       "attachFile": "Joindre un fichier",
@@ -503,7 +503,7 @@
       "reasoningOnMenu": "Élevé (Raisonnement)",
       "reasoningHint": "Active le raisonnement pour les questions approfondies (augmente le temps de réponse et la consommation de tokens).",
       "selectLibraryFirst": "Sélectionnez d'abord une bibliothèque.",
-      "modelNotEnabledForTeam": "Ce modèle n'est pas activé pour cette équipe — le message échouera. Demandez à un administrateur de la plateforme de l'activer."
+      "modelNotEnabledForTeam": "Ce modèle n'est pas activé pour cette équipe - le message échouera. Demandez à un administrateur de la plateforme de l'activer."
     },
     "characterCounter": "{{used}} / {{limit}} caractères",
     "conversationAriaLabel": "Conversation",
@@ -519,7 +519,7 @@
       "sessionSaveFailedSummary": "Conversation non enregistrée",
       "sessionSaveFailedDetail": "Impossible d'enregistrer cette conversation. Veuillez réessayer.",
       "contextPromptSaveFailedSummary": "Sélection de prompts non enregistrée",
-      "contextPromptSaveFailedDetail": "Impossible d'enregistrer les prompts sélectionnés — la dernière sélection enregistrée a été restaurée. Veuillez réessayer.",
+      "contextPromptSaveFailedDetail": "Impossible d'enregistrer les prompts sélectionnés - la dernière sélection enregistrée a été restaurée. Veuillez réessayer.",
       "attachmentDeleteFailedSummary": "Fichier non supprimé",
       "attachmentDeleteFailedDetail": "Impossible de supprimer ce fichier. Veuillez réessayer.",
       "attachmentDeleteForbiddenDetail": "Vous n'avez pas la permission de supprimer ce fichier.",
@@ -535,8 +535,8 @@
     "hitlQuestionTabFallback": "Question",
     "hitlWaitingAria": "L'agent attend votre réponse",
     "interruptedRun": {
-      "title": "L’exécution précédente reste inachevée à l’étape « {{step}} ».",
-      "question": "Une opération externe a peut-être déjà eu lieu. Reprenez uniquement après l’arrêt des autres exécutions. Recommencer n’annule pas les effets précédents.",
+      "title": "L'exécution précédente reste inachevée à l'étape \" {{step}} \".",
+      "question": "Une opération externe a peut-être déjà eu lieu. Reprenez uniquement après l'arrêt des autres exécutions. Recommencer n'annule pas les effets précédents.",
       "continue": "Continuer",
       "restart": "Recommencer",
       "later": "Plus tard"
@@ -642,7 +642,7 @@
     "searchPlaceholder": "Rechercher des documents...",
     "showSection": "Afficher",
     "sortLabel": "Trier par",
-    "sortName": "Nom (A–Z)",
+    "sortName": "Nom (A-Z)",
     "sortRowsAsc": "Lignes (du plus petit au plus grand)",
     "sortRowsDesc": "Lignes (du plus grand au plus petit)",
     "sortVectorsAsc": "Vecteurs (du plus petit au plus grand)",
@@ -695,11 +695,11 @@
     "clearSearch": "Effacer la recherche",
     "clearSelection": "Effacer la sélection",
     "confirmBulkRemoveTitle": "Supprimer la sélection ?",
-    "confirmDeleteFolderMessage": "Supprimer le dossier vide « {{name}} » ?",
+    "confirmDeleteFolderMessage": "Supprimer le dossier vide \" {{name}} \" ?",
     "confirmDeleteFolderTitle": "Supprimer le dossier ?",
-    "confirmRemoveMessage": "Supprimer « {{doc}} » de « {{folder}} » ?",
+    "confirmRemoveMessage": "Supprimer \" {{doc}} \" de \" {{folder}} \" ?",
     "confirmRemoveTitle": "Supprimer de la bibliothèque ?",
-    "conflictDecisionFor": "Que faire de « {{name}} »",
+    "conflictDecisionFor": "Que faire de \" {{name}} \"",
     "conflictReplace": "Remplacer",
     "conflictReplaceAll": "Tout remplacer",
     "conflictSkip": "Ignorer",
@@ -715,7 +715,7 @@
     "downloadStarting": "Préparation du téléchargement...",
     "dropFiles": "Déposez vos fichiers ici",
     "excessSize": "Dépassement : ",
-    "folderRequired": "Seuls les fichiers contenus dans un dossier peuvent être ajoutés ici — les fichiers seuls ont été ignorés.",
+    "folderRequired": "Seuls les fichiers contenus dans un dossier peuvent être ajoutés ici - les fichiers seuls ont été ignorés.",
     "folders": "Dossiers",
     "ingestionMode": "Mode d'ingestion",
     "keywords": "Mots-clés",
@@ -742,7 +742,7 @@
     "profileMediumDesc": "Équilibre qualité / vitesse",
     "profileRich": "Riche",
     "profileRichDesc": "Extraction approfondie, OCR, tableaux",
-    "removeForbiddenDetail": "Vous n'êtes pas autorisé à supprimer des éléments de la bibliothèque « {{folder}} ».",
+    "removeForbiddenDetail": "Vous n'êtes pas autorisé à supprimer des éléments de la bibliothèque \" {{folder}} \".",
     "removeForbiddenSummary": "Non autorisé",
     "removeFromLibrary": "Supprimer de la bibliothèque",
     "removeSuccess": "Documents supprimés",
@@ -792,7 +792,7 @@
     "searchPlaceholder": "Rechercher des utilisateurs ou des groupes...",
     "shareButton": "Partager",
     "shareError": "Impossible d'appliquer les paramètres de partage. Veuillez réessayer.",
-    "shareForbidden": "Vous n'êtes pas autorisé à partager la bibliothèque « {{name}} ».",
+    "shareForbidden": "Vous n'êtes pas autorisé à partager la bibliothèque \" {{name}} \".",
     "subtitle": "Ajoutez des utilisateurs ou des groupes et gérez les permissions d'accès pour cette bibliothèque.",
     "usersSectionTitle": "Utilisateurs"
   },
@@ -845,7 +845,7 @@
     "libraryCreatedDetail": "Le dossier \"{{name}}\" a été créée avec succès",
     "libraryDescription": "Description",
     "libraryName": "Nom",
-    "nameNoSlash": "Le nom ne peut pas contenir « / ». Utilisez le sélecteur de dossier pour définir l'emplacement.",
+    "nameNoSlash": "Le nom ne peut pas contenir \" / \". Utilisez le sélecteur de dossier pour définir l'emplacement.",
     "nameRequired": "Le nom du dossier est obligatoire",
     "save": "Créer",
     "saving": "Création en cours...",
@@ -1021,7 +1021,7 @@
     "clearSelection": "Effacer la sélection",
     "collapseAll": "Tout réduire",
     "confirmBulkRemoveTitle": "Supprimer la sélection ?",
-    "confirmRemoveMessage": "Supprimer « {{res}} » de « {{folder}} » ?",
+    "confirmRemoveMessage": "Supprimer \" {{res}} \" de \" {{folder}} \" ?",
     "confirmRemoveTitle": "Supprimer de la bibliothèque ?",
     "createDetail": "{{typeOne, capitalize}} ajouté au dossier.",
     "createLibrary": "Créer un dossier",
@@ -1034,8 +1034,8 @@
     "emptyLibrariesDescription": "Créez votre premier dossier pour organiser vos {{typePlural}}.",
     "emptyLibrariesTitle": "Aucun dossier pour le moment",
     "expandAll": "Tout développer",
-    "folderDeleteDetail": "Le dossier « {{name}} » a été supprimé.",
-    "folderDeleteForbiddenDetail": "Seul les propriétaires peuvent supprimer la bibliothèque « {{name}} ».",
+    "folderDeleteDetail": "Le dossier \" {{name}} \" a été supprimé.",
+    "folderDeleteForbiddenDetail": "Seul les propriétaires peuvent supprimer la bibliothèque \" {{name}} \".",
     "folderDeleteForbiddenSummary": "Non autorisé",
     "folderDeleteSuccess": "Dossier supprimé",
     "folders": "Dossiers",
@@ -1050,7 +1050,7 @@
     "noFiles": "Aucun(e) {{typeOne}} trouvé(e)",
     "preview": "Aperçu",
     "removeDetail": "{{typeOne, capitalize}} supprimé du dossier.",
-    "removeForbiddenDetail": "Seul les propriétaires peuvent supprimer des éléments du dossier « {{folder}} ».",
+    "removeForbiddenDetail": "Seul les propriétaires peuvent supprimer des éléments du dossier \" {{folder}} \".",
     "removeForbiddenSummary": "Non autorisé",
     "removeSuccess": "Supprimé",
     "searchPlaceholder": "Rechercher un(e) {{typeOne}}",
@@ -1064,7 +1064,7 @@
       "capabilities": {
         "title": "Fonctionnalités",
         "subtitle": "Catalogue des fonctionnalités de la plateforme : activation par équipe, valeurs par défaut et état.",
-        "loading": "Chargement des fonctionnalités…",
+        "loading": "Chargement des fonctionnalités...",
         "loadError": "Impossible de charger le catalogue des fonctionnalités.",
         "empty": "Aucune fonctionnalité n'est encore publiée par un pod runtime.",
         "manageTeams": "Gérer par équipe",
@@ -1105,13 +1105,13 @@
           "healthy": "OK"
         },
         "suspendedDrawer": {
-          "title": "{{name}} — agents suspendus",
+          "title": "{{name}} - agents suspendus",
           "subtitle": "Agents que cette fonctionnalité bloque actuellement, groupés par équipe. Rétablissez l'accès de chaque équipe depuis Gérer par équipe pour les réactiver.",
           "teamCount": "{{count}} agent(s)"
         },
         "defaultOnToast": "Activation par défaut appliquée à toute la plateforme.",
         "defaultOffToast": "Activation par défaut désactivée sur toute la plateforme.",
-        "defaultOffSuspendedToast": "Activation par défaut désactivée — {{count}} instance(s) dépendante(s) suspendue(s).",
+        "defaultOffSuspendedToast": "Activation par défaut désactivée - {{count}} instance(s) dépendante(s) suspendue(s).",
         "defaultToggleError": "Impossible de modifier le réglage d'activation par défaut.",
         "defaultOffConfirm": {
           "appTitle": "Désactiver l'application par défaut ?",
@@ -1120,7 +1120,7 @@
           "cancel": "Annuler",
           "impact": "Cela suspendra {{count}} agent(s) actuellement fonctionnel(s).",
           "impactNone": "Aucun agent en cours d'exécution ne sera affecté.",
-          "impactUnknown": "{{count}} agent(s) n'ont pas pu être vérifiés — leur pod était injoignable, l'impact est donc inconnu.",
+          "impactUnknown": "{{count}} agent(s) n'ont pas pu être vérifiés - leur pod était injoignable, l'impact est donc inconnu.",
           "showAffected": "Afficher les agents concernés",
           "hideAffected": "Masquer les agents concernés",
           "affectedAgent": "{{name}} (équipe {{team}})",
@@ -1130,11 +1130,11 @@
           "knowledgeBaseMessage": "La désactivation du mode par défaut retire l'accès hérité à toutes les équipes. Les accès accordés explicitement restent inchangés."
         },
         "matrix": {
-          "title": "{{name}} — accès des équipes",
+          "title": "{{name}} - accès des équipes",
           "subtitle": "Définissez l'accès de chaque équipe : activer avec réglages, désactiver explicitement, ou laisser le défaut de la plateforme. Les équipes estompées ne peuvent pas utiliser cette fonctionnalité actuellement.",
           "searchPlaceholder": "Rechercher une équipe...",
           "clearSearch": "Effacer la recherche",
-          "teamsLoading": "Chargement des équipes…",
+          "teamsLoading": "Chargement des équipes...",
           "teamsError": "Impossible de charger le registre des équipes.",
           "noTeams": "Aucune équipe n'existe encore dans le registre.",
           "searchEmpty": "Aucune équipe ne correspond à votre recherche.",
@@ -1145,25 +1145,25 @@
           "enabledToast": "Fonctionnalité activée pour {{team}}.",
           "enableError": "Impossible d'activer la fonctionnalité.",
           "disabledToast": "Fonctionnalité désactivée pour {{team}}.",
-          "disabledSuspendedToast": "Désactivée pour {{team}} — {{count}} instance(s) suspendue(s).",
+          "disabledSuspendedToast": "Désactivée pour {{team}} - {{count}} instance(s) suspendue(s).",
           "disableError": "Impossible de désactiver la fonctionnalité.",
           "default": "Défaut",
           "defaultToast": "{{team}} suit désormais le défaut de la plateforme.",
-          "defaultSuspendedToast": "{{team}} suit désormais le défaut de la plateforme — {{count}} instance(s) suspendue(s).",
+          "defaultSuspendedToast": "{{team}} suit désormais le défaut de la plateforme - {{count}} instance(s) suspendue(s).",
           "defaultError": "Impossible de remettre la fonctionnalité au défaut de la plateforme.",
           "rowControlAria": "Accès pour {{team}}",
           "dependencyHint": "Nécessite d'abord l'activation de {{deps}} pour cette équipe.",
           "dependencyConflict": "Cet agent nécessite d'abord l'activation de {{deps}} pour cette équipe.",
           "personal": {
             "label": "Tous les espaces personnels",
-            "hint": "S'applique d'un coup à l'espace personnel de chaque utilisateur — passés, futurs, et ceux qui ne se connectent jamais.",
+            "hint": "S'applique d'un coup à l'espace personnel de chaque utilisateur - passés, futurs, et ceux qui ne se connectent jamais.",
             "enabledToast": "Activée pour tous les espaces personnels.",
             "enableError": "Impossible d'activer la fonctionnalité pour les espaces personnels.",
             "disabledToast": "Désactivée pour tous les espaces personnels.",
-            "disabledSuspendedToast": "Désactivée pour tous les espaces personnels — {{count}} instance(s) suspendue(s).",
+            "disabledSuspendedToast": "Désactivée pour tous les espaces personnels - {{count}} instance(s) suspendue(s).",
             "disableError": "Impossible de désactiver la fonctionnalité pour les espaces personnels.",
             "defaultToast": "Les espaces personnels suivent désormais le défaut de la plateforme.",
-            "defaultSuspendedToast": "Les espaces personnels suivent désormais le défaut de la plateforme — {{count}} instance(s) suspendue(s).",
+            "defaultSuspendedToast": "Les espaces personnels suivent désormais le défaut de la plateforme - {{count}} instance(s) suspendue(s).",
             "defaultError": "Impossible de remettre le défaut des espaces personnels.",
             "dependencyHint": "Nécessite d'abord l'activation de {{deps}} pour tous les espaces personnels (ou par défaut).",
             "dependencyConflict": "Cet agent nécessite d'abord l'activation de {{deps}} pour tous les espaces personnels (ou par défaut)."
@@ -1172,7 +1172,7 @@
         "defaultOnRequiresSettingsHint": "Cette fonctionnalité a des réglages d'équipe obligatoires : elle ne peut pas être activée par défaut. Activez-la équipe par équipe.",
         "defaultOnConflict": "Cette fonctionnalité a des réglages d'équipe obligatoires : elle ne peut pas être activée par défaut. Activez-la équipe par équipe.",
         "defaultOffReasoningToast": "Le raisonnement a été désactivé avec le modèle. Réactivez le modèle, puis le raisonnement, pour le rétablir.",
-        "reasoningHint": "Indique si ce modèle s'exécute avec le raisonnement activé, pour toutes les équipes. Indépendant de l'accès : activer un modèle n'active pas son raisonnement — mais désactiver le modèle éteint son raisonnement.",
+        "reasoningHint": "Indique si ce modèle s'exécute avec le raisonnement activé, pour toutes les équipes. Indépendant de l'accès : activer un modèle n'active pas son raisonnement - mais désactiver le modèle éteint son raisonnement.",
         "reasoningOffToast": "Raisonnement désactivé pour ce modèle.",
         "reasoningOnToast": "Raisonnement activé pour ce modèle.",
         "reasoningToggleError": "Impossible de modifier le réglage de raisonnement de ce modèle.",
@@ -1183,8 +1183,8 @@
           "messagePlatform": "{{agent}} a besoin de {{deps}} pour fonctionner. Cette fonctionnalité n'est pas activée par défaut : chaque équipe hériterait donc d'un agent inutilisable.",
           "confirm": "Tout activer",
           "cancel": "Annuler",
-          "depFailed": "Impossible d'activer {{dep}} — {{agent}} n'a pas été modifié.",
-          "depNeedsSettings": "{{dep}} nécessite ses propres paramètres pour cette équipe — activez-la d'abord depuis sa propre ligne.",
+          "depFailed": "Impossible d'activer {{dep}} - {{agent}} n'a pas été modifié.",
+          "depNeedsSettings": "{{dep}} nécessite ses propres paramètres pour cette équipe - activez-la d'abord depuis sa propre ligne.",
           "thenSettingsForm": "Il vous sera ensuite demandé de renseigner les paramètres de {{agent}} avant son activation."
         },
         "emptyKnowledgeBases": "Aucune définition de base de connaissances n'a encore été publiée dans ce déploiement."
@@ -1192,8 +1192,8 @@
       "platformModelBindings": {
         "openButton": "Liaison de modèle plateforme",
         "title": "Liaison de modèle de discussion plateforme",
-        "subtitle": "Impose un modèle de discussion concret (fournisseur, nom) sur tous les pods d'exécution — remplace le modèle par défaut de chaque pod. Laissez non défini pour conserver le comportement actuel par pod.",
-        "loading": "Chargement de la liaison de modèle de discussion plateforme…",
+        "subtitle": "Impose un modèle de discussion concret (fournisseur, nom) sur tous les pods d'exécution - remplace le modèle par défaut de chaque pod. Laissez non défini pour conserver le comportement actuel par pod.",
+        "loading": "Chargement de la liaison de modèle de discussion plateforme...",
         "loadError": "Impossible de charger la liaison de modèle de discussion plateforme.",
         "capability": {
           "chat": "Discussion"
@@ -1210,7 +1210,7 @@
           "provider": "Fournisseur",
           "name": "Nom du modèle",
           "settingsTitle": "Paramètres (JSON)",
-          "settingsHint": "Un objet JSON de paramètres du fournisseur, ex. {\"temperature\": 0.2}. Les clés inconnues sont rejetées — il n'y a ici aucun champ d'en-têtes, de cookies ou d'authentification : n'y placez jamais d'identifiant.",
+          "settingsHint": "Un objet JSON de paramètres du fournisseur, ex. {\"temperature\": 0.2}. Les clés inconnues sont rejetées - il n'y a ici aucun champ d'en-têtes, de cookies ou d'authentification : n'y placez jamais d'identifiant.",
           "settingsInvalidJson": "Saisissez un objet JSON valide.",
           "save": "Enregistrer",
           "cancel": "Annuler"
@@ -1219,17 +1219,17 @@
       "corpusAudit": {
         "title": "Audit du corpus",
         "subtitle": "Compare l'état de traitement de chaque document en base à ce qui est réellement présent dans le magasin de contenu et le magasin vectoriel, et permet de nettoyer les données orphelines.",
-        "loading": "Chargement de l'audit du corpus…",
+        "loading": "Chargement de l'audit du corpus...",
         "loadError": "Impossible de charger l'audit du corpus.",
         "refresh": "Actualiser",
         "fix": "Réparer les documents",
-        "fixing": "Réparation…",
+        "fixing": "Réparation...",
         "empty": "Aucune anomalie à afficher.",
-        "noAnomalies": "Aucune anomalie détectée — le magasin de contenu, le magasin vectoriel et les métadonnées sont synchronisés.",
+        "noAnomalies": "Aucune anomalie détectée - le magasin de contenu, le magasin vectoriel et les métadonnées sont synchronisés.",
         "anomaliesFound_one": "{{count}} anomalie détectée.",
         "anomaliesFound_other": "{{count}} anomalies détectées.",
-        "fixSuccess_one": "Réparation terminée — le statut de {{count}} document a été réinitialisé. Rien n'a été supprimé.",
-        "fixSuccess_other": "Réparation terminée — le statut de {{count}} documents a été réinitialisé. Rien n'a été supprimé.",
+        "fixSuccess_one": "Réparation terminée - le statut de {{count}} document a été réinitialisé. Rien n'a été supprimé.",
+        "fixSuccess_other": "Réparation terminée - le statut de {{count}} documents a été réinitialisé. Rien n'a été supprimé.",
         "fixError": "Impossible de réparer les documents.",
         "stats": {
           "metadata": "Enregistrements de métadonnées",
@@ -1247,7 +1247,7 @@
         },
         "fixConfirm": {
           "title": "Réparer les documents au statut erroné ?",
-          "message": "Réinitialise le statut de traitement des documents dont l'état affiché ne correspond pas à ce qui est réellement présent dans le magasin de contenu ou vectoriel, pour qu'ils redeviennent honnêtement re-traitables. Rien n'est supprimé — les enregistrements orphelins du magasin vectoriel/contenu sans document correspondant restent en l'état, à examiner ou supprimer à la main.",
+          "message": "Réinitialise le statut de traitement des documents dont l'état affiché ne correspond pas à ce qui est réellement présent dans le magasin de contenu ou vectoriel, pour qu'ils redeviennent honnêtement re-traitables. Rien n'est supprimé - les enregistrements orphelins du magasin vectoriel/contenu sans document correspondant restent en l'état, à examiner ou supprimer à la main.",
           "confirm": "Réparer les documents",
           "cancel": "Annuler"
         }
@@ -1255,20 +1255,20 @@
     },
     "agentCard": {
       "activate": "Activer",
-      "catalogWarning": "Dérive de configuration MCP — recréer pour résoudre",
+      "catalogWarning": "Dérive de configuration MCP - recréer pour résoudre",
       "chat": "Discuter",
       "deactivate": "Désactiver",
       "edit": "Modifier",
       "noDescription": "Pas encore de description.",
-      "suspended": "Suspendu — une capacité utilisée par cet agent est défectueuse ou indisponible. Modifiez l'agent pour corriger le problème.",
+      "suspended": "Suspendu - une capacité utilisée par cet agent est défectueuse ou indisponible. Modifiez l'agent pour corriger le problème.",
       "suspendedToggleLocked": "Suspendu",
       "duplicate": "Dupliquer",
-      "copyTo": "Copier dans…",
+      "copyTo": "Copier dans...",
       "copyDialog": {
         "title": "Copier {{name}} dans une autre équipe",
         "subtitle": "Sélectionnez les espaces où copier cet agent.",
         "confirm": "Copier",
-        "noEditableTeams": "Vous n'êtes éditeur d'aucune équipe. Seul un éditeur peut y copier un agent — demandez ce rôle à un administrateur de l'équipe.",
+        "noEditableTeams": "Vous n'êtes éditeur d'aucune équipe. Seul un éditeur peut y copier un agent - demandez ce rôle à un administrateur de l'équipe.",
         "templateDisabled": "Template d'agent non activé",
         "missingCapabilities_one": "{{count}} capacité manquante",
         "missingCapabilities_other": "{{count}} capacités manquantes",
@@ -1309,7 +1309,7 @@
       },
       "deleteDialog": {
         "title": "Supprimer cet agent ?",
-        "message": "« {{name}} » sera définitivement supprimé de cette équipe. Cette action est irréversible.",
+        "message": "\" {{name}} \" sera définitivement supprimé de cette équipe. Cette action est irréversible.",
         "confirm": "Supprimer",
         "cancel": "Annuler"
       },
@@ -1396,7 +1396,7 @@
           "title": "Conversations par utilisateur dans le temps",
           "valueLabel": "Médiane de conversations par utilisateur ({{window}})"
         },
-        "description": "Ne couvre que les utilisateurs actifs sur la période sélectionnée — ceux ayant démarré au moins une conversation. Les utilisateurs inactifs ne sont pas comptés.",
+        "description": "Ne couvre que les utilisateurs actifs sur la période sélectionnée - ceux ayant démarré au moins une conversation. Les utilisateurs inactifs ne sont pas comptés.",
         "trendTitleWithWindow": "{{title}} ({{window}})",
         "trendWindow": {
           "day_one": "{{count}} jour glissant",
@@ -1523,7 +1523,7 @@
       },
       "stepper": {
         "label": "Progression de l'import",
-        "waiting": "En attente…",
+        "waiting": "En attente...",
         "hint": {
           "upload": "Le fichier quitte votre ordinateur pour rejoindre sa destination. C'est la seule étape qui dépend de votre connexion.",
           "uploading": "Le type de document est reconnu, et tout ce qu'il faudra pour le traiter est mis de côté.",
@@ -1551,7 +1551,7 @@
     "tokenUsageImpact": {
       "costTitle": "Coût estimé",
       "costValue": "{{cost}} $ (estimé)",
-      "summary": "≈ {{co2e}} g CO₂e · {{kwh}} kWh (estimé)"
+      "summary": "~ {{co2e}} g CO2e - {{kwh}} kWh (estimé)"
     },
     "teamUsage": {
       "title": "Ma consommation de tokens",
@@ -1623,13 +1623,13 @@
     "cancel": "Annuler",
     "chatTrace": {
       "ariaLabel": "Trace de raisonnement de l'agent",
-      "awaitingConfirmation": "en attente de confirmation…",
+      "awaitingConfirmation": "en attente de confirmation...",
       "cancelledByUser": "annulé par l'utilisateur",
       "details": "Détails",
       "documents_one": "{{count}} document",
       "documents_other": "{{count}} documents",
       "executionTime": "Temps d'exécution : {{duration}}",
-      "turnFailed": "Le tour a échoué — ouvrir pour le détail",
+      "turnFailed": "Le tour a échoué - ouvrir pour le détail",
       "hide": "Masquer le raisonnement et les appels d'outils",
       "matches_one": "{{count}} correspondance",
       "matches_other": "{{count}} correspondances",
@@ -1637,7 +1637,7 @@
       "restatedReasoning": "Reprise du raisonnement précédent",
       "rows_one": "{{count}} ligne",
       "rows_other": "{{count}} lignes",
-      "running": "en cours…",
+      "running": "en cours...",
       "show": "Afficher le raisonnement et les appels d'outils",
       "sqlQuery": "Requête :",
       "sqlResponse": "Réponse :",
@@ -1648,9 +1648,9 @@
       "summaryReasoning": "Réflexion {{duration}}",
       "summaryTools_one": "{{count}} outil",
       "summaryTools_other": "{{count}} outils",
-      "thinking": "Réflexion en cours…",
+      "thinking": "Réflexion en cours...",
       "tabular": {
-        "catalogForDocument": "Lecture du sommaire du document « {{name}} ».",
+        "catalogForDocument": "Lecture du sommaire du document \" {{name}} \".",
         "catalogForWorkbook": "Lecture du sommaire du classeur.",
         "catalogComplete": "Sommaire complet : {{total}} lignes.",
         "catalogPreview": "Sommaire : les {{shown}} premières lignes sur {{total}}.",
@@ -1741,15 +1741,15 @@
         "emptySearch": "Aucun prompt ne correspond à cette recherche.",
         "import": {
           "title": "Importer ce prompt dans une équipe",
-          "subtitle": "Sélectionnez les espaces où importer « {{name}} ».",
+          "subtitle": "Sélectionnez les espaces où importer \" {{name}} \".",
           "confirm": "Importer",
-          "noEditableTeams": "Vous n'êtes éditeur d'aucune équipe. Seul un éditeur peut y importer un prompt — demandez ce rôle à un administrateur de l'équipe.",
+          "noEditableTeams": "Vous n'êtes éditeur d'aucune équipe. Seul un éditeur peut y importer un prompt - demandez ce rôle à un administrateur de l'équipe.",
           "successToast": "Prompt importé ({{count}})",
           "errorToast": "Échec de l'import ({{count}})"
         },
         "unpublish": {
           "title": "Retirer ce prompt de la marketplace ?",
-          "message": "« {{name}} » disparaîtra de la marketplace et ne sera plus accessible aux autres utilisateurs.",
+          "message": "\" {{name}} \" disparaîtra de la marketplace et ne sera plus accessible aux autres utilisateurs.",
           "confirm": "Retirer",
           "successToast": "Prompt retiré de la marketplace",
           "errorToast": "Échec du retrait"
@@ -1763,9 +1763,9 @@
       "copyPageLink": "Copier le lien de la page",
       "copyHeadingLink": "Copier le lien de ce paragraphe",
       "missingPage": "Cette page n'existe pas encore.",
-      "externalDocsLink": "Documentation technique ↗",
+      "externalDocsLink": "Documentation technique ->",
       "search": {
-        "placeholder": "Rechercher dans l'aide…",
+        "placeholder": "Rechercher dans l'aide...",
         "ariaLabel": "Rechercher dans le centre d'aide",
         "clearAriaLabel": "Effacer la recherche",
         "resultsAria": "Résultats de recherche",
@@ -1815,8 +1815,8 @@
         "footprintInfo": {
           "aria": "Comment est calculée cette estimation ?",
           "title": "D'où vient cette estimation ?",
-          "how": "Nous estimons l'énergie et le CO₂ de vos échanges avec l'IA à partir de la quantité de texte traité (ce qu'on appelle les « tokens »). Plus vous échangez de texte avec l'IA, plus la consommation estimée augmente.",
-          "convert": "Cette énergie est ensuite convertie en CO₂ selon l'électricité utilisée pour faire fonctionner l'IA.",
+          "how": "Nous estimons l'énergie et le CO2 de vos échanges avec l'IA à partir de la quantité de texte traité (ce qu'on appelle les \" tokens \"). Plus vous échangez de texte avec l'IA, plus la consommation estimée augmente.",
+          "convert": "Cette énergie est ensuite convertie en CO2 selon l'électricité utilisée pour faire fonctionner l'IA.",
           "limitsTitle": "Ce qu'il faut garder en tête",
           "limit1": "C'est une estimation, pas une mesure exacte.",
           "limit2": "La consommation réelle dépend des serveurs, du modèle d'IA et de la région où il fonctionne.",
@@ -1832,16 +1832,16 @@
         },
         "cleanupConversations": {
           "title": "Nettoyer les conversations inactives",
-          "subtitle": "Ces conversations n'ont plus d'activité depuis plus de 5 jours. Tout est sélectionné — décochez ce que vous souhaitez conserver.",
+          "subtitle": "Ces conversations n'ont plus d'activité depuis plus de 5 jours. Tout est sélectionné - décochez ce que vous souhaitez conserver.",
           "empty": "Aucune conversation inactive à nettoyer."
         }
       },
       "topPrompts": {
-        "title": "Marketplace · Top 8 des prompts les plus utilisés",
+        "title": "Marketplace - Top 8 des prompts les plus utilisés",
         "uses": "usages",
-        "weekDelta": "▲ {{count}} · 7 j",
+        "weekDelta": "^ {{count}} - 7 j",
         "empty": "Aucun prompt n'a encore été publié dans la marketplace.",
-        "periodDelta": "▲ {{count}} · {{days}} j"
+        "periodDelta": "^ {{count}} - {{days}} j"
       },
       "period": {
         "label": "Période",
@@ -1851,7 +1851,7 @@
         "d90": "90 derniers jours"
       },
       "search": {
-        "placeholder": "Rechercher un agent, une équipe, un prompt…",
+        "placeholder": "Rechercher un agent, une équipe, un prompt...",
         "empty": "Aucun résultat.",
         "groups": {
           "agents": "Agents",
@@ -1884,8 +1884,8 @@
         "conversations": "Nouvelles conversations",
         "messages": "Messages envoyés",
         "agents": "Agents utilisés",
-        "deltaUp": "▲ {{pct}} % ({{abs}})",
-        "deltaDown": "▼ {{pct}} % ({{abs}})",
+        "deltaUp": "^ {{pct}} % ({{abs}})",
+        "deltaDown": "v {{pct}} % ({{abs}})",
         "deltaFlat": "stable",
         "vsPrevious": "vs période précédente",
         "periodCaption": "sur les {{count}} derniers jours"
@@ -1928,7 +1928,7 @@
     "releaseNotes": {
       "baseRelease": "Version de base Fred",
       "brandRelease": "Version {{brand}}",
-      "copied": "Copié !",
+      "copied": "Copié !",
       "copy": "Copier",
       "empty": "Aucune note de version disponible.",
       "versionsAria": "Versions des notes de version"
@@ -1941,8 +1941,8 @@
       "roots": {
         "resources": "Corpus d'équipe",
         "indexed": "corpus indexé",
-        "private": "privé · dans {{team}}",
-        "privatePersonal": "privé · personnel",
+        "private": "privé - dans {{team}}",
+        "privatePersonal": "privé - personnel",
         "fileCount": "{{count}} fichiers",
         "empty": "vide"
       },
@@ -1968,26 +1968,26 @@
         "author": "Ajouté par"
       },
       "embeddedTitleHint": "Titre intégré au fichier : {{title}}",
-      "dropInFolder": "Déposez vos fichiers pour les ajouter à « {{folder}} »",
+      "dropInFolder": "Déposez vos fichiers pour les ajouter à \" {{folder}} \"",
       "dropAtRoot": "Déposez un dossier pour le créer ici avec son arborescence",
       "rootDrop": {
         "rejectedTitle": "Déposez un dossier",
-        "rejectedDetail": "Les fichiers seuls ne peuvent pas être déposés à la racine — déposez un dossier (il deviendra une bibliothèque), ou déposez les fichiers dans un dossier existant.",
-        "skippedDetail_one": "{{count}} fichier seul a été ignoré — seul le contenu des dossiers déposés a été conservé.",
-        "skippedDetail_other": "{{count}} fichiers seuls ont été ignorés — seul le contenu des dossiers déposés a été conservé."
+        "rejectedDetail": "Les fichiers seuls ne peuvent pas être déposés à la racine - déposez un dossier (il deviendra une bibliothèque), ou déposez les fichiers dans un dossier existant.",
+        "skippedDetail_one": "{{count}} fichier seul a été ignoré - seul le contenu des dossiers déposés a été conservé.",
+        "skippedDetail_other": "{{count}} fichiers seuls ont été ignorés - seul le contenu des dossiers déposés a été conservé."
       },
       "action": {
         "addFile": "Ajouter des fichiers",
         "addFileHint": "Sélectionnez d'abord un dossier",
         "back": "Revenir au dossier précédent",
         "delete": "Supprimer",
-        "deleteDisabledWhileProcessing": "Indisponible tant que l’ingestion est en attente ou en cours",
+        "deleteDisabledWhileProcessing": "Indisponible tant que l'ingestion est en attente ou en cours",
         "download": "Télécharger",
         "includeInSearch": "Inclure à la recherche",
         "manageLabels": "Gérer les labels",
         "more": "Plus d'actions",
         "newFolder": "Nouveau dossier",
-        "newSubfolder": "Nouveau sous-dossier dans « {{name}} »",
+        "newSubfolder": "Nouveau sous-dossier dans \" {{name}} \"",
         "preview": "Aperçu",
         "process": "Traiter",
         "refresh": "Rafraîchir cette vue",
@@ -1996,16 +1996,16 @@
         "searchable": "Exclure de la recherche"
       },
       "confirm": {
-        "deleteMessage": "Retirer « {{name}} » de ce dossier ?",
+        "deleteMessage": "Retirer \" {{name}} \" de ce dossier ?",
         "deleteBulkMessage": "Retirer {{count}} documents de ce dossier ?",
         "deleteTitle": "Retirer le document",
-        "deleteFolderMessageEmpty": "Supprimer le dossier vide « {{name}} » ?",
-        "deleteFolderMessageUnknownCount": "Supprimer « {{name}} » et tout son contenu ? Cette action est irréversible.",
-        "deleteFolderMessageWithDocs": "Supprimer « {{name}} » et ses {{count}} document(s) ? Cette action est irréversible.",
+        "deleteFolderMessageEmpty": "Supprimer le dossier vide \" {{name}} \" ?",
+        "deleteFolderMessageUnknownCount": "Supprimer \" {{name}} \" et tout son contenu ? Cette action est irréversible.",
+        "deleteFolderMessageWithDocs": "Supprimer \" {{name}} \" et ses {{count}} document(s) ? Cette action est irréversible.",
         "deleteFoldersMessage": "Supprimer {{count}} dossier(s) et tout leur contenu ? Cette action est irréversible.",
         "deleteMixedMessage": "Supprimer {{folderCount}} dossier(s) avec tout leur contenu et retirer {{docCount}} document(s) ? Cette action est irréversible.",
         "deleteFolderTitle": "Supprimer le dossier",
-        "shareMessage": "Copier « {{name}} » dans l'espace d'équipe ? L'original reste à sa place.",
+        "shareMessage": "Copier \" {{name}} \" dans l'espace d'équipe ? L'original reste à sa place.",
         "shareTitle": "Copier dans l'espace d'équipe"
       },
       "errorTooltip": {
@@ -2040,7 +2040,7 @@
         "inFolder": "Dans",
         "nameLabel": "Nom",
         "namePlaceholder": "ex. Rapports 2026",
-        "nameNoSlash": "Un nom de dossier ne peut pas contenir « / » ni « \\ ».",
+        "nameNoSlash": "Un nom de dossier ne peut pas contenir \" / \" ni \" \\ \".",
         "title": "Nouveau dossier",
         "tooDeep": "Ce dossier est déjà à {{max}} niveaux de profondeur, ce qui est le maximum. Créez le nouveau dossier plus haut dans l'arborescence."
       },
@@ -2053,11 +2053,11 @@
       "labelsModal": {
         "title": "Gérer les labels",
         "currentEmpty": "Aucun label pour l'instant",
-        "addPlaceholder": "Ajouter un label…",
+        "addPlaceholder": "Ajouter un label...",
         "add": "Ajouter",
         "createNew": "Créer le label",
         "addFieldLabel": "Ajouter un label",
-        "removeAriaLabel": "Retirer le label « {{label}} »",
+        "removeAriaLabel": "Retirer le label \" {{label}} \"",
         "close": "Fermer"
       },
       "loading": "Chargement des ressources...",
@@ -2068,7 +2068,7 @@
           "file": "Fichier",
           "raw": "Raw"
         },
-        "loading": "Chargement…",
+        "loading": "Chargement...",
         "markdownUnavailable": "Aucune version Markdown n'a été générée pour ce document.",
         "pdf": {
           "loadFailed": "Impossible de charger le document PDF.",
@@ -2149,8 +2149,8 @@
       },
       "pageTitlePersonal": "Vos ressources personnelles",
       "pageSubtitlePersonal": "Gérez vos ressources locales, manuellement ajoutée à votre espace personnel.",
-      "relaunchProfileHelp": "Choisissez un profil pour les documents dont le profil d’ingestion initial est inconnu. Les autres conservent leur profil initial.",
-      "relaunchProfileLabel": "Profil d’ingestion"
+      "relaunchProfileHelp": "Choisissez un profil pour les documents dont le profil d'ingestion initial est inconnu. Les autres conservent leur profil initial.",
+      "relaunchProfileLabel": "Profil d'ingestion"
     },
     "save": "Sauvegarder",
     "serviceNotice": {
@@ -2190,7 +2190,7 @@
       "chatList": {
         "deleteDialog": {
           "title": "Supprimer cette conversation ?",
-          "message": "« {{name}} » sera définitivement supprimée. Cette action est irréversible.",
+          "message": "\" {{name}} \" sera définitivement supprimée. Cette action est irréversible.",
           "confirm": "Supprimer",
           "cancel": "Annuler"
         },
@@ -2225,24 +2225,24 @@
       },
       "report": {
         "verified": "Vérifié",
-        "partial": "Partiel — aucun échec",
-        "running": "En cours…",
+        "partial": "Partiel - aucun échec",
+        "running": "En cours...",
         "empty": "Aucune exécution.",
-        "counts": "{{passed}} réussis · {{failed}} échoués · {{skipped}} ignorés · {{total}} étapes",
+        "counts": "{{passed}} réussis - {{failed}} échoués - {{skipped}} ignorés - {{total}} étapes",
         "copy": "Copier le rapport",
         "copied": "Copié"
       },
       "functional": {
         "title": "Auto-test fonctionnel",
-        "subtitle": "Crée deux dossiers dans votre espace personnel, ingère un document marqueur dans l'un et un document neutre dans l'autre, puis interroge le vrai agent d'auto-test sur chacun — le marqueur doit revenir du premier et être absent du second. Tout est nettoyé à la fin.",
+        "subtitle": "Crée deux dossiers dans votre espace personnel, ingère un document marqueur dans l'un et un document neutre dans l'autre, puis interroge le vrai agent d'auto-test sur chacun - le marqueur doit revenir du premier et être absent du second. Tout est nettoyé à la fin.",
         "run": "Lancer la campagne"
       },
       "authz": {
-        "identityTitle": "Auto-test d’authentification JWT",
-        "identityDescription": "Vérifie l’accès aux trois API, le refus des jetons absents ou invalides, les routes publiques et l’identité de l’espace personnel. Les contrôles non applicables au fournisseur sont ignorés avec une explication.",
+        "identityTitle": "Auto-test d'authentification JWT",
+        "identityDescription": "Vérifie l'accès aux trois API, le refus des jetons absents ou invalides, les routes publiques et l'identité de l'espace personnel. Les contrôles non applicables au fournisseur sont ignorés avec une explication.",
         "identityRun": "Lancer les contrôles",
         "title": "Auto-test d'autorisation",
-        "subtitle": "Prouve que l'API réelle respecte le modèle d'autorisation : les drapeaux platform-admin correspondent aux accès réels des endpoints, et personne — pas même un platform_admin — n'a d'accès implicite à une équipe dont il n'est pas membre.",
+        "subtitle": "Prouve que l'API réelle respecte le modèle d'autorisation : les drapeaux platform-admin correspondent aux accès réels des endpoints, et personne - pas même un platform_admin - n'a d'accès implicite à une équipe dont il n'est pas membre.",
         "runSelf": "Lancer pour moi-même",
         "expiry": {
           "title": "Accès de l'agent après l'expiration de votre session",
@@ -2253,7 +2253,7 @@
             "messageUnknownWait": "Ce test attend l'expiration de vos identifiants de connexion actuels : il dure donc plusieurs minutes. Gardez cette page ouverte jusqu'à la fin. Si vous fermez l'onglet ou rechargez la page avant la fin, l'exécution laisse un agent temporaire à supprimer depuis vos agents personnels.",
             "confirm": "Lancer et garder la page ouverte"
           },
-          "caption": "Utilise votre session SSO actuelle. L'agent vérifie l'accès authentifié aux métadonnées, attend au-delà de l'expiration du jeton capturé, puis répète la vérification. Aucun mot de passe, changement Keycloak, document ou bibliothèque n'est nécessaire. Seule une instance d'agent temporaire est créée puis supprimée ; fermer l'onglet pendant l'exécution la laisse en place, à supprimer depuis vos agents personnels. Le renouvellement du navigateur reste actif. L'attente correspond à la durée de vie restante du jeton plus une courte marge — de moins d'une minute à plusieurs — gardez donc cette page ouverte jusqu'à la fin ; une attente supérieure à {{maxMinutes}} minutes est ignorée."
+          "caption": "Utilise votre session SSO actuelle. L'agent vérifie l'accès authentifié aux métadonnées, attend au-delà de l'expiration du jeton capturé, puis répète la vérification. Aucun mot de passe, changement Keycloak, document ou bibliothèque n'est nécessaire. Seule une instance d'agent temporaire est créée puis supprimée ; fermer l'onglet pendant l'exécution la laisse en place, à supprimer depuis vos agents personnels. Le renouvellement du navigateur reste actif. L'attente correspond à la durée de vie restante du jeton plus une courte marge - de moins d'une minute à plusieurs - gardez donc cette page ouverte jusqu'à la fin ; une attente supérieure à {{maxMinutes}} minutes est ignorée."
         },
         "testProfile": {
           "title": "Tester un autre profil",
@@ -2261,14 +2261,14 @@
           "usernamePlaceholder": "Choisir un compte",
           "passwordLabel": "Mot de passe",
           "run": "Lancer",
-          "caption": "Nécessite le mot de passe réel de ce compte et l'accès direct (direct-grant) Keycloak activé sur ce realm — déjà actif sur les realms locaux/démo, conçu comme test/dev uniquement. Ceci n'accorde aucun accès nouveau — ça rapporte simplement ce que ce compte peut déjà faire.",
-          "disabledInsecure": "Non disponible sur ce déploiement — aucun vrai realm Keycloak à interroger."
+          "caption": "Nécessite le mot de passe réel de ce compte et l'accès direct (direct-grant) Keycloak activé sur ce realm - déjà actif sur les realms locaux/démo, conçu comme test/dev uniquement. Ceci n'accorde aucun accès nouveau - ça rapporte simplement ce que ce compte peut déjà faire.",
+          "disabledInsecure": "Non disponible sur ce déploiement - aucun vrai realm Keycloak à interroger."
         }
       }
     },
     "tasks": {
       "indicator": {
-        "details": "{{label}} — cliquer pour les détails"
+        "details": "{{label}} - cliquer pour les détails"
       },
       "kind": {
         "default": "Tâche",
@@ -2292,11 +2292,11 @@
           "title": "Exporter",
           "description": "Télécharge un instantané .zip des agents, tags et métadonnées de documents de cette plateforme.",
           "launch": "Exporter",
-          "launching": "Export…"
+          "launching": "Export..."
         },
         "reset": {
           "launch": "Réinitialiser la plateforme",
-          "running": "Réinitialisation…",
+          "running": "Réinitialisation...",
           "taskLabel": "Réinitialisation plateforme",
           "confirmTitle": "Réinitialiser la plateforme ?",
           "confirmMessage": "Supprime définitivement tous les agents, tags et métadonnées de documents. Les fichiers (S3), vecteurs (OpenSearch), utilisateurs (Keycloak) et permissions (OpenFGA) ne sont pas affectés.",
@@ -2351,7 +2351,7 @@
         "copyError": "Copier l'erreur",
         "errorCopied": "Erreur copiée",
         "startedAgo": "démarré {{time}}",
-        "title": "Détails — {{label}}"
+        "title": "Détails - {{label}}"
       },
       "state": {
         "cancelled": "Annulé",
@@ -2385,7 +2385,7 @@
       "holders": {
         "title": "Détenteurs actuels",
         "empty": "Aucun rôle plateforme attribué pour le moment.",
-        "loading": "Chargement des rôles plateforme…",
+        "loading": "Chargement des rôles plateforme...",
         "error": "Impossible de charger les rôles plateforme.",
         "rootBadge": "Admin principal",
         "table": {
@@ -2430,7 +2430,7 @@
         "errors": {
           "summary": "Impossible de révoquer le rôle",
           "fallbackDetail": "Une erreur inattendue est survenue lors de la révocation du rôle.",
-          "forbiddenDetail": "Rôle protégé — seul l'admin principal peut révoquer les admins plateforme, et l'admin principal lui-même est irrévocable."
+          "forbiddenDetail": "Rôle protégé - seul l'admin principal peut révoquer les admins plateforme, et l'admin principal lui-même est irrévocable."
         }
       }
     },
@@ -2605,7 +2605,7 @@
         "teamAvatar": {
           "title": "Avatar de l'équipe",
           "import": "Importer",
-          "hint": "JPEG, PNG ou WebP · 5 Mo maximum",
+          "hint": "JPEG, PNG ou WebP - 5 Mo maximum",
           "noAvatar": "Aucun avatar sélectionné"
         },
         "teamPrompt": {
@@ -2629,9 +2629,9 @@
       },
       "leaveTeam": {
         "title": "Quitter cette équipe ?",
-        "message": "Vous perdrez l'accès à « {{teamName}} » et ses conversations seront traitées selon la politique de rétention de l'équipe, exactement comme si un administrateur vous avait retiré.",
+        "message": "Vous perdrez l'accès à \" {{teamName}} \" et ses conversations seront traitées selon la politique de rétention de l'équipe, exactement comme si un administrateur vous avait retiré.",
         "confirmLabel": "Quitter",
-        "lastAdminTooltip": "Vous êtes le seul administrateur de cette équipe — désignez un autre administrateur avant de la quitter.",
+        "lastAdminTooltip": "Vous êtes le seul administrateur de cette équipe - désignez un autre administrateur avant de la quitter.",
         "errors": {
           "summary": "Échec pour quitter l'équipe",
           "fallbackDetail": "Impossible de quitter l'équipe."
@@ -2743,7 +2743,7 @@
             "hint": "Chaque nouvelle conversation avec cet agent démarre avec le bouton de raisonnement approfondi déjà activé. Les utilisateurs peuvent toujours le désactiver question par question. Le raisonnement approfondi est plus lent et, sur les agents qui appellent des outils, peut amener le modèle à répéter des appels."
           }
         },
-        "noTemplates": "Aucun modèle d'agent disponible — demandez à un administrateur d'activer une capability d'agent, ou vérifiez le runtime d'agents.",
+        "noTemplates": "Aucun modèle d'agent disponible - demandez à un administrateur d'activer une capability d'agent, ou vérifiez le runtime d'agents.",
         "templateBrowser": {
           "title": "Sélectionner un template d'agent",
           "subtitle": "Chaque template permet de créer un agent pensé et optimisé pour une mission spécifique."
@@ -2770,8 +2770,8 @@
           "configInvalid": "Les paramètres d'une capacité qu'il utilise ne sont plus valides. Réinitialisez-les et réenregistrez l'agent pour corriger le problème, ou contactez un administrateur de la plateforme."
         },
         "subtitle": "Équipe : {{team}}",
-        "subtitleWithTemplate": "Équipe : {{team}} · Template : {{template}}",
-        "templateUnavailable": "Modèle indisponible — les définitions de champs peuvent être incomplètes.",
+        "subtitleWithTemplate": "Équipe : {{team}} - Template : {{template}}",
+        "templateUnavailable": "Modèle indisponible - les définitions de champs peuvent être incomplètes.",
         "titleCreate": "Créer un nouveau {{agentsNicknameSingular}}",
         "titleEdit": "Editer {{agent}}",
         "validation": {
@@ -2879,7 +2879,7 @@
       "picture": {
         "title": "Photo de profil",
         "import": "Importer",
-        "hint": "JPEG, PNG ou WebP · 5 Mo maximum",
+        "hint": "JPEG, PNG ou WebP - 5 Mo maximum",
         "empty": "Aucune photo",
         "delete": "Supprimer",
         "deleteTitle": "Supprimer votre photo de profil ?",
@@ -2896,7 +2896,7 @@
     "taskActivity": {
       "title": "Activité",
       "subtitle": "Tâches planifiées, en cours et terminées.",
-      "loading": "Chargement de l'activité…",
+      "loading": "Chargement de l'activité...",
       "loadError": "Impossible de charger l'activité.",
       "empty": "Aucune tâche planifiée ou en cours. Les tâches (effacements, imports) apparaissent ici jusqu'à leur achèvement.",
       "scheduled": "Planifiées",
@@ -2910,7 +2910,7 @@
       "stalled": "Bloqué",
       "stalledHint": "Toujours en cours de nouvelle tentative, mais cette tâche a échoué plusieurs fois et nécessite une intervention.",
       "withWarnings": "Avec avertissements",
-      "withWarningsHint": "Cette tâche s'est terminée, mais une partie a été ignorée ou n'a pas pu être totalement réconciliée — voir le détail.",
+      "withWarningsHint": "Cette tâche s'est terminée, mais une partie a été ignorée ou n'a pas pu être totalement réconciliée - voir le détail.",
       "acknowledge": "Ignorer",
       "migration": {
         "detailsTitle": "Détail de l'import",
@@ -2973,16 +2973,16 @@
         "title": "Instructions globales de la plateforme",
         "badge": "Lecture seule",
         "subtitle": "Livrées avec la plateforme et envoyées en premier, pour tous les agents. Elles disent quel bloc l'emporte en cas d'instructions contradictoires, et ne changent qu'avec un déploiement.",
-        "note": "Ces instructions appartiennent à la plateforme elle-même : ce sont elles qui garantissent que tous les agents se comportent de la même façon — utiliser les outils réellement mis à leur disposition, ne jamais inventer un résultat, réagir correctement à un appel en échec. Elles sont livrées avec la plateforme et personne ne peut les modifier, afin qu'une modification de prompt ne puisse jamais affaiblir le fonctionnement de l'ensemble. Utilisez le prompt global, à côté, pour donner à votre plateforme sa personnalité et ses règles propres.",
+        "note": "Ces instructions appartiennent à la plateforme elle-même : ce sont elles qui garantissent que tous les agents se comportent de la même façon - utiliser les outils réellement mis à leur disposition, ne jamais inventer un résultat, réagir correctement à un appel en échec. Elles sont livrées avec la plateforme et personne ne peut les modifier, afin qu'une modification de prompt ne puisse jamais affaiblir le fonctionnement de l'ensemble. Utilisez le prompt global, à côté, pour donner à votre plateforme sa personnalité et ses règles propres.",
         "unavailable": "Impossible de joindre un pod agent pour lire ces instructions. Elles s'appliquent toujours aux agents ; c'est leur affichage ici qui est indisponible."
       },
-      "sourceUnavailable": "Impossible de joindre un pod agent pour lire le prompt par défaut. Ce qui s'affiche ici n'est pas ce que reçoivent les agents — n'enregistrez rien tant que le pod n'a pas répondu."
+      "sourceUnavailable": "Impossible de joindre un pod agent pour lire le prompt par défaut. Ce qui s'affiche ici n'est pas ce que reçoivent les agents - n'enregistrez rien tant que le pod n'a pas répondu."
     },
     "wiki": {
       "title": "Wiki",
       "betaBadge": {
         "label": "Beta",
-        "tooltip": "Ceci est une proposition, pas encore une fonctionnalité figée. Nous recueillons vos retours avant de nous engager sur sa conception — dites-nous ce qui fonctionne ou pas."
+        "tooltip": "Ceci est une proposition, pas encore une fonctionnalité figée. Nous recueillons vos retours avant de nous engager sur sa conception - dites-nous ce qui fonctionne ou pas."
       },
       "resizeRail": "Redimensionner la liste des pages",
       "newPage": "Nouvelle page",
@@ -3005,7 +3005,7 @@
         "addChildTooltip": "Ajouter une sous-page"
       },
       "article": {
-        "breadcrumb": "Fil d’Ariane",
+        "breadcrumb": "Fil d'Ariane",
         "edit": "Modifier",
         "rename": "Renommer ou déplacer cette page",
         "delete": "Supprimer cette page",
@@ -3022,9 +3022,9 @@
       "editor": {
         "save": "Enregistrer",
         "cancel": "Annuler",
-        "conflict": "Quelqu'un a enregistré cette page pendant que vous écriviez. Votre texte est toujours là — chargez sa version pour repartir de celle-ci, ou enregistrez pour garder la vôtre.",
+        "conflict": "Quelqu'un a enregistré cette page pendant que vous écriviez. Votre texte est toujours là - chargez sa version pour repartir de celle-ci, ou enregistrez pour garder la vôtre.",
         "loadCurrent": "Charger sa version",
-        "tooLong": "Cette page est trop longue. Restez sous {{max}} caractères — une page de wiki est une synthèse, pas un document."
+        "tooLong": "Cette page est trop longue. Restez sous {{max}} caractères - une page de wiki est une synthèse, pas un document."
       },
       "history": {
         "title": "Historique des versions",
@@ -3050,16 +3050,16 @@
         "templateHint": "Cette page démarre sur une trame. Remplissez les sections vides, supprimez celles qui ne servent pas : chaque agent lit ce texte à chaque question, alors écrivez court, à l'impératif, et dites ce qu'un nouveau collègue devinerait sans qu'on le lui dise."
       },
       "proposal": {
-        "newPage": "Cet agent propose une nouvelle page « {{title}} » ({{added}} lignes).",
-        "edit": "Cet agent propose de modifier « {{title}} » : {{added}} lignes ajoutées, {{removed}} retirées.",
+        "newPage": "Cet agent propose une nouvelle page \" {{title}} \" ({{added}} lignes).",
+        "edit": "Cet agent propose de modifier \" {{title}} \" : {{added}} lignes ajoutées, {{removed}} retirées.",
         "seeChanges": "Voir les modifications",
-        "dialogTitle": "Modifications proposées — {{title}}",
+        "dialogTitle": "Modifications proposées - {{title}}",
         "close": "Fermer",
-        "unavailable": "Cette proposition n’est plus disponible."
+        "unavailable": "Cette proposition n'est plus disponible."
       },
       "newPageDialog": {
         "title": "Nouvelle page de wiki",
-        "childTitle": "Nouvelle page sous « {{parent}} »",
+        "childTitle": "Nouvelle page sous \" {{parent}} \"",
         "label": "Titre de la page",
         "confirm": "Créer la page"
       },
@@ -3067,24 +3067,24 @@
         "title": "Titre et emplacement",
         "label": "Titre de la page",
         "parentLabel": "Page parente",
-        "root": "Aucune — premier niveau",
+        "root": "Aucune - premier niveau",
         "confirm": "Enregistrer"
       },
       "leaveDialog": {
         "title": "Abandonner vos modifications ?",
-        "message": "Vous êtes en train de modifier « {{title}} ». Si vous ouvrez une autre page, le texte que vous n’avez pas enregistré sera perdu.",
+        "message": "Vous êtes en train de modifier \" {{title}} \". Si vous ouvrez une autre page, le texte que vous n'avez pas enregistré sera perdu.",
         "confirm": "Abandonner les modifications",
         "cancel": "Continuer à écrire"
       },
       "deleteDialog": {
         "title": "Supprimer cette page ?",
-        "message": "« {{title}} » et toutes ses versions seront supprimées définitivement. Cette action est irréversible.",
+        "message": "\" {{title}} \" et toutes ses versions seront supprimées définitivement. Cette action est irréversible.",
         "confirm": "Supprimer la page"
       },
       "errors": {
         "save": "Impossible d'enregistrer cette page",
         "create": "Impossible de créer la page",
-        "rename": "Impossible d’enregistrer le titre ou l’emplacement de la page",
+        "rename": "Impossible d'enregistrer le titre ou l'emplacement de la page",
         "delete": "Impossible de supprimer la page",
         "duplicateTitle": "Une page portant ce titre existe déjà au même niveau. Choisissez-en un autre.",
         "review": "Impossible d'enregistrer la marque de revue",
@@ -3100,7 +3100,7 @@
     },
     "knowledgeBases": {
       "title": "Bases de connaissance",
-      "loading": "Chargement des bases de connaissance…",
+      "loading": "Chargement des bases de connaissance...",
       "empty": "Aucune base de connaissance",
       "deleted": "{{name}} supprimée",
       "deleteFailed": "Impossible de supprimer {{name}}",
@@ -3149,7 +3149,7 @@
         "synchronizedBy": "Synchronisée par",
         "pickOne": "Choisissez une source",
         "noDefinitions": "Aucune base de connaissance activée pour cette équipe",
-        "definitionsLoading": "Chargement…",
+        "definitionsLoading": "Chargement...",
         "definitionsFailed": "Impossible de charger la liste",
         "zoneFred": "Fréquence d'exécution",
         "scheduleExplanation": "Chaque exécution recherche les changements dans la source. Le traitement des documents peut se poursuivre après la synchronisation.",
@@ -3211,10 +3211,10 @@
         "title": "Titre",
         "titleRequired": "Donnez un titre à l'annonce dans au moins une langue.",
         "descriptionShort": "Description courte",
-        "descriptionShortHint": "Affichée dans le bandeau. Tenez-vous à une ou deux lignes — gras, italique et liens uniquement.",
+        "descriptionShortHint": "Affichée dans le bandeau. Tenez-vous à une ou deux lignes - gras, italique et liens uniquement.",
         "shortRequired": "Rédigez une description courte dans au moins une langue.",
         "descriptionLong": "Description longue (facultative)",
-        "descriptionLongHint": "Affichée dans la boîte de dialogue « Plus d'info ». Laissez vide et le bandeau n'affichera pas le bouton.",
+        "descriptionLongHint": "Affichée dans la boîte de dialogue \" Plus d'info \". Laissez vide et le bandeau n'affichera pas le bouton.",
         "dismissible": "Peut être fermé",
         "severityGroup": "Sévérité de l'annonce",
         "localeGroup": "Langue en cours d'édition"
@@ -3226,7 +3226,7 @@
       "deleteFailed": "L'annonce n'a pas été supprimée.",
       "delete": {
         "title": "Supprimer cette annonce ?",
-        "message": "« {{title}} » sera définitivement supprimée. Les utilisateurs qui la voient cesseront de la voir."
+        "message": "\" {{title}} \" sera définitivement supprimée. Les utilisateurs qui la voient cesseront de la voir."
       }
     },
     "copyToTeams": {
@@ -3239,49 +3239,49 @@
     },
     "platformAccess": {
       "title": "Accès plateforme",
-      "description": "Contrôlez l’accès avec l’attribut d’identité configuré, les exceptions individuelles et l’appartenance aux équipes.",
+      "description": "Contrôlez l'accès avec l'attribut d'identité configuré, les exceptions individuelles et l'appartenance aux équipes.",
       "disabled": "Le contrôle des accès est désactivé dans la configuration du déploiement.",
       "filter": "Activer le filtrage",
-      "t0Hint": "Importez une fois les utilisateurs existants avant d’activer le filtrage. Les entrées individuelles restent supprimables.",
+      "t0Hint": "Importez une fois les utilisateurs existants avant d'activer le filtrage. Les entrées individuelles restent supprimables.",
       "t0Preview": "{{count}} utilisateurs à importer ; {{matching}} attributs actuellement acceptés.",
       "t0Done": "Import initial terminé",
       "t0Import": "Importer les utilisateurs existants (T0)",
       "users": "Utilisateurs",
       "search": "Rechercher dans les utilisateurs locaux",
       "user": "Utilisateur",
-      "sources": "Sources d’autorisation",
+      "sources": "Sources d'autorisation",
       "exception": "Exception individuelle",
-      "remove": "Retirer l’exception",
-      "allow": "Autoriser l’utilisateur",
+      "remove": "Retirer l'exception",
+      "allow": "Autoriser l'utilisateur",
       "teams": "Équipes",
       "team": "Équipe",
       "allowTeam": "Autoriser les membres",
       "free": "Inscription Free",
-      "freeHint": "Les équipes Free autorisent leurs membres. Le lien inscrit uniquement la personne connectée comme membre. Retirer Free invalide le lien et retire cette source d’accès.",
-      "link": "Lien d’inscription",
+      "freeHint": "Les équipes Free autorisent leurs membres. Le lien inscrit uniquement la personne connectée comme membre. Retirer Free invalide le lien et retire cette source d'accès.",
+      "link": "Lien d'inscription",
       "rotateLink": "Remplacer le lien",
       "createLink": "Créer un lien",
       "copyLink": "Copiez ce lien - il est affiché uniquement maintenant",
-      "failed": "L’opération n’a pas abouti. Vérifiez votre accès et réessayez.",
+      "failed": "L'opération n'a pas abouti. Vérifiez votre accès et réessayez.",
       "deniedTitle": "Accès non autorisé",
-      "deniedMessage": "Vous n’êtes pas autorisé à accéder à cette plateforme. Contactez le support pour demander un accès.",
+      "deniedMessage": "Vous n'êtes pas autorisé à accéder à cette plateforme. Contactez le support pour demander un accès.",
       "support": "Contacter le support",
       "retry": "Réessayer",
       "signOut": "Se déconnecter",
       "joinTitle": "Rejoindre une équipe Free",
-      "joinTeam": "Vous pouvez rejoindre l’équipe {{team}}.",
+      "joinTeam": "Vous pouvez rejoindre l'équipe {{team}}.",
       "join": "Rejoindre cette équipe",
       "invalidLink": "Ce lien ne peut pas être utilisé. Il a pu être remplacé ou désactivé, ou le service est indisponible.",
       "loading": "Chargement...",
-      "acceptCgu": "J’ai lu et j’accepte les conditions générales d’utilisation.",
+      "acceptCgu": "J'ai lu et j'accepte les conditions générales d'utilisation.",
       "source": {
-        "attribute": "Attribut d’identité",
+        "attribute": "Attribut d'identité",
         "manual": "Exception manuelle",
         "t0": "Import initial",
         "team": "Équipe autorisée",
         "free": "Équipe Free"
       },
-      "actorLockout": "Accordez-vous d’abord une autre source d’accès avant d’activer le filtrage ou de retirer votre dernière autorisation."
+      "actorLockout": "Accordez-vous d'abord une autre source d'accès avant d'activer le filtrage ou de retirer votre dernière autorisation."
     }
   },
   "runtime": {
@@ -3299,7 +3299,7 @@
     "semantic": "Sémantique",
     "semanticDescription": "La recherche sémantique utilise des embeddings pour retrouver des documents ou passages dont le sens est proche de votre question, même s'ils n'emploient pas les mêmes mots. Elle est particulièrement efficace pour les questions ouvertes ou exploratoires, mais peut parfois inclure des résultats plus larges ou indirects lorsque la requête est courte ou ambiguë",
     "strict": "Strict",
-    "strictDescription": "La recherche stricte privilégie la précision plutôt que la couverture. Elle applique des contraintes plus fortes (par exemple des correspondances lexicales ou de métadonnées plus exigeantes et/ou des seuils de similarité plus élevés), afin de ne retenir que les documents les plus clairement pertinents. Ce mode est adapté lorsque vous souhaitez éviter les résultats “approximatifs”, notamment sur de grands corpus, quitte à obtenir moins de résultats."
+    "strictDescription": "La recherche stricte privilégie la précision plutôt que la couverture. Elle applique des contraintes plus fortes (par exemple des correspondances lexicales ou de métadonnées plus exigeantes et/ou des seuils de similarité plus élevés), afin de ne retenir que les documents les plus clairement pertinents. Ce mode est adapté lorsque vous souhaitez éviter les résultats \"approximatifs\", notamment sur de grands corpus, quitte à obtenir moins de résultats."
   },
   "settings": {
     "chatContextPreviewTitle": "Aperçu du contexte de conversation"
@@ -3309,13 +3309,13 @@
     "headerSubtitle": "Apps de l'équipe",
     "title": "Applications",
     "subtitle": "Applications disponibles pour cette équipe.",
-    "loading": "Chargement des applications…",
+    "loading": "Chargement des applications...",
     "loadError": "Impossible de charger les applications.",
     "noAppDescription": "Aucune application n'est disponible pour cette équipe.",
     "noAppTitle": "Aucune app",
     "host": {
-      "catalog-loading": "Chargement de l'application…",
-      "connecting": "Connexion à l'application…",
+      "catalog-loading": "Chargement de l'application...",
+      "connecting": "Connexion à l'application...",
       "unavailable": "Cette application n'est pas disponible.",
       "protocol-mismatch": "Cette application utilise une version du protocole applicatif Fred non prise en charge par ce déploiement.",
       "unreachable": "L'application n'a pas répondu. Elle est peut-être en cours de démarrage ou mal configurée.",
