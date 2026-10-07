@@ -492,3 +492,16 @@ async def test_null_slides_and_a_single_change_object_are_read(monkeypatch):
     )
     assert not result.is_error, text
     assert turn.rendered[-1].slides[1].title == "Plan"
+
+
+def test_change_slides_do_not_repeat_the_slide_schema():
+    """Every model call pays for the tool schema: `changes` names the slide
+    fields once, through `slides`, not a second time."""
+    from langchain_core.utils.function_calling import convert_to_openai_tool
+
+    config, _ = _configured()
+    tool = _tools(_ctx(config))[BUILD_TOOL_NAME]
+    params = convert_to_openai_tool(tool)["function"]["parameters"]
+    changes = json.dumps(params["properties"]["changes"])
+    assert "Room:" in json.dumps(params["properties"]["slides"])
+    assert "Room:" not in changes and len(changes) < 1600

@@ -268,11 +268,13 @@ def _schema_for(
             ),
         ),
     )
+    # Plain objects here: the slide schema repeated under `changes` doubled the
+    # tool schema every model call pays for; they are validated as slides below.
     change = create_model(
         "BuildChange",
         __base__=SlideChange,
         slides=(
-            List[slide_model],  # type: ignore[valid-type]
+            List[Dict[str, Any]],
             Field(
                 default_factory=list,
                 description="replace, insert: the new slides, written as in `slides`.",
@@ -336,12 +338,16 @@ def _to_plan(validated: Any) -> DeckPlan:
     )
 
 
+def _plain_slide(slide: Any) -> Any:
+    return slide.model_dump() if isinstance(slide, BaseModel) else slide
+
+
 def _to_changes(validated: Any) -> List[SlideChange]:
     return [
         change.model_copy(
             update={
                 "slides": [
-                    SlidePlan.model_validate(s.model_dump()) for s in change.slides
+                    SlidePlan.model_validate(_plain_slide(s)) for s in change.slides
                 ]
             }
         )
