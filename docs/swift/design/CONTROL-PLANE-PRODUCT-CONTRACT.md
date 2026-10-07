@@ -3195,7 +3195,7 @@ exact audience in that backend's `security.user.client_id`. That resource-server
 client is distinct from both the backend's outbound `security.m2m` identity and
 its OpenFGA token.
 
-`await rebac_sdk_factory(security_config, *, kpi_writer)` is the supported
+`await rebac_sdk_factory(security_config, *, kpi_writer, platform_engine)` is the supported
 first-party construction path. It fails startup unless the `c3` profile, user
 and M2M authentication, and OpenFGA ReBAC are enabled, and unless
 `create_store_if_needed` and `sync_schema_on_init` are both `false`, and the
@@ -3203,10 +3203,11 @@ OpenFGA timeout is between 1 ms and 30 seconds. The control plane remains the
 store and authorization-model owner. The async factory also initializes
 fred-core's process-local user JWT verifier from `security.user`, requires the
 backend's process-level KPI writer, creates one private OpenFGA engine, and
-resolves the configured store before startup completes. With a delegation switch
-on, it installs that engine for the account status check of each request
-authenticated through fred-core's user dependency; without it, or while OpenFGA
-cannot answer, those requests return 503 `account_status_unavailable`. A backend reuses that
+resolves the configured store before startup completes. The factory installs the account-status engine in either directory mode,
+including without delegation, and initializes a reader on the shared platform
+PostgreSQL authority. Missing or incompatible admission state fails startup;
+unavailable request authority returns 503. Account-status failures return
+503 `account_status_unavailable`. A backend reuses that
 facade for requests and awaits `close()` during shutdown (or uses its async
 context manager); it never constructs a client per request.
 
@@ -4392,8 +4393,24 @@ remains for its other consumers. Current behaviour:
 
 ### Platform admission control (2026-10-05)
 
-Public `/frontend/config` now includes `platform_access_enabled` and `supportLink`; the latter also drives the existing support menu. Platform admission remains independent of resource permissions and is disabled by default.
+Public `/frontend/config` includes `platform_access_enabled`, indicating admission administration availability in authenticated deployments with enforced ReBAC, independently of the SQL filtering switch. Support destinations reuse static frontend `contactSupportLink` before protected bootstrap; there is no admission-specific support override. Platform admission remains independent of resource permissions and starts with filtering inactive. Administrators save and activate the shared SQL policy in the UI without deployment settings.
 
-`/admin/platform/access` exposes persisted filtering under `CAN_MANAGE_PLATFORM`. Its `users`, `teams`, `t0-preview` and `t0-import` subresources manage individual exceptions, team flags and an explicit one-time existing-user snapshot. Only the dedicated enrollment-link mutation returns a plaintext token; database and ordinary projections contain no reusable link.
+`/admin/platform/access` exposes persisted filtering and versioned all/any rules under `CAN_MANAGE_PLATFORM`. `claims` exposes bounded observed human claim paths/types; `policy-preview` tests the actor's own verified human token without saving or observing draft-only values; `policy` saves with an expected revision, conflict detection and the active-filter actor safeguard. Its `users`, `teams`, `t0-preview` and `t0-import` subresources manage individual exceptions, team flags and an explicit one-time existing-user snapshot. Only the dedicated enrollment-link mutation returns a plaintext token; database and ordinary projections contain no reusable link.
 
 The own-credential `/platform-access/status` endpoint exposes only admission and legal status. `/platform-access/free/{token}` provides a bounded preview, legal acceptance and caller-only member enrollment, without `/user` personal-team provisioning or normal `/gcu` default-team side effects. Normal pre-CGU endpoints stay admission-gated. Current behavioral requirements: `openspec/specs/platform-access-control/spec.md`. Deployment ordering and rollback: [migration note](../ops/migrations/2965-platform-access-planning.md).
+
+Platform admission administration also accepts an atomic manual grant of one to
+100 existing Fred user UUIDs through `POST /admin/platform/access/users`.
+Unknown identities reject the whole request; duplicate IDs do not duplicate
+exceptions and existing manual/T0 provenance is preserved. The UI retains its
+selection across searches and pages. Every admission administrator check uses
+higher-consistency OpenFGA authorization so revoking administrator authority
+withdraws these mutations on subsequent requests.
+
+Authorizing a team or marking it Free derives admission from current
+higher-consistency membership without copying members into permanent user
+exceptions. Full member removal or leaving the team removes that global source
+on the next direct or delegated request, including with a cached human JWT and
+on another reader. Other valid sources remain independent. Deleting a team
+through registry administration refuses the acting administrator's last-source
+lockout before deleting relationships or metadata.

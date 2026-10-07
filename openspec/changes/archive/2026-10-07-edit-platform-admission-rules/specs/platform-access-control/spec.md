@@ -1,30 +1,35 @@
 ## MODIFIED Requirements
 
-### Requirement: Admission policy is deployment-configured and opt-in
+### Requirement: Admission policy is managed and activated by administrators
 
-Deployment configuration SHALL opt into admission and optionally supply an initial claim path and acceptance regex. The initial pair SHALL be complete and valid when supplied, address nested keys unambiguously, and preserve case-sensitive whole-value string/string-array semantics. The active policy SHALL then be owned by platform administration and shared durable state. Deployment restarts or changed seed settings SHALL NOT overwrite an initialized administrator policy. Feature enablement without a seed SHALL expose administration with filtering initially inactive; filtering activation SHALL require a configured rule. Omitted enablement SHALL preserve existing deployment behavior. Support destinations SHALL use existing frontend `contactSupportLink` configuration and SHALL NOT be required by backend admission configuration.
+Admission administration SHALL be available in authenticated Fred deployments with enforced ReBAC after the required shared SQL migration. Its policy and activation SHALL be controlled exclusively by versioned durable administrator state. There SHALL be no admission-specific YAML, Helm, SDK environment or Pydantic configuration model, and no deployment seed. An absent authority SHALL initialize with no policy, revision zero and filtering inactive. Restarts SHALL preserve administrator state. Authentication-disabled development SHALL retain its existing behavior. Support destinations SHALL reuse frontend `contactSupportLink`.
 
 #### Scenario: Configured nested attribute matches
 
-- **WHEN** an uninitialized deployment supplies a complete nested claim/regex pair and filtering is subsequently activated
-- **THEN** a verified human token matching the entire initial regex SHALL establish rule-derived admission
+- **WHEN** an administrator saves a nested claim condition and explicitly activates filtering
+- **THEN** a verified human token satisfying the condition SHALL establish rule-derived admission
 
 #### Scenario: Attribute does not establish eligibility
 
 - **WHEN** a selected claim is absent, empty, incompatible or fails its predicate
-- **THEN** that condition SHALL NOT establish eligibility, including when its operator is negative
+- **THEN** that condition SHALL NOT establish eligibility, including for negative operators
 
 #### Scenario: Configuration omitted or invalid
 
-- **WHEN** enablement is omitted
-- **THEN** admission filtering SHALL NOT change existing behavior
-- **WHEN** an initial claim/regex pair is supplied incompletely or its regex is invalid
-- **THEN** startup SHALL fail explicitly
+- **WHEN** an authenticated deployment starts without any admission configuration
+- **THEN** administration SHALL be available and an absent SQL authority SHALL begin with filtering inactive
+- **WHEN** an administrator submits an invalid rule
+- **THEN** the API SHALL reject it without changing policy or filtering
 
 #### Scenario: UI policy survives restart
 
-- **WHEN** an administrator saves a policy and services restart with the original or a changed deployment seed
-- **THEN** the saved policy and filtering state SHALL remain authoritative
+- **WHEN** services restart after an administrator saves policy or filtering state
+- **THEN** all participating services SHALL continue using the saved SQL authority
+
+#### Scenario: Keycloak directory remains authoritative
+
+- **WHEN** admission is used with `user_directory: keycloak` or `local`
+- **THEN** the directory SHALL retain profile/provisioning authority and verified human observations SHALL supply Fred admission evidence
 
 ### Requirement: Platform administrators manage live exceptions
 
@@ -34,6 +39,19 @@ Only people holding the existing platform-management permission SHALL read or mo
 
 - **WHEN** an administrator adds an existing Fred user or authorizes an existing team
 - **THEN** eligible users SHALL be admitted on their next request without restart or JWT renewal
+
+#### Scenario: Administrator authorizes a selected user list
+
+- **WHEN** a platform administrator selects one to 100 existing Fred users and grants admission
+- **THEN** the operation SHALL atomically add removable manual exceptions without overwriting existing sources
+- **WHEN** the list includes an unknown user, exceeds the bound or is submitted by a non-platform administrator
+- **THEN** no exceptions SHALL be granted
+
+#### Scenario: Leaving an allowed or Free team revokes its global source
+
+- **WHEN** a person leaves or is removed from an allowed or Free team
+- **THEN** the next direct, cached-token or delegated request on any participating reader SHALL no longer use that team for platform admission
+- **AND** the person SHALL be refused when no independent source remains, while other grants and ordinary membership of other teams remain unchanged
 
 #### Scenario: Unauthorized administrative call
 
@@ -110,11 +128,11 @@ The frontend SHALL display a standalone localized refusal page for `platform_acc
 
 ### Requirement: Activation and migration are explicit
 
-Feature enablement SHALL expose administration while leaving filtering inactive until explicit activation. Activation SHALL require a valid nonempty rule and SHALL be refused if the acting administrator would lose their last admission source. Saving a policy or changing access exceptions while filtering is active SHALL apply the same actor safeguard atomically. Existing root bootstrap safeguards SHALL remain intact. Concurrent legacy-file filtering SHALL be rejected. Policy, imported entries and membership SHALL survive restarts and temporary filtering disablement.
+An absent admission authority SHALL initialize with filtering inactive until explicit administrator activation. Activation SHALL require a valid nonempty rule and SHALL be refused if the acting administrator would lose their last admission source. Saving a policy or changing access exceptions while filtering is active SHALL apply the same actor safeguard atomically. Existing root bootstrap safeguards SHALL remain intact. Activation concurrent with a nonempty legacy-file gate SHALL be rejected; readers SHALL refuse an active conflicting gate. Policy, imported entries and membership SHALL survive restarts and temporary filtering disablement.
 
 #### Scenario: Upgrade does not silently activate filtering
 
-- **WHEN** operators enable the feature with empty admission state
+- **WHEN** operators deploy the required migration with empty admission state
 - **THEN** filtering SHALL remain inactive until a rule is prepared and an administrator explicitly activates it
 
 #### Scenario: Administrator would lock themselves out
@@ -129,8 +147,8 @@ Feature enablement SHALL expose administration while leaving filtering inactive 
 
 #### Scenario: Conflicting whitelist modes
 
-- **WHEN** the feature and a nonempty legacy file gate are enabled together
-- **THEN** startup SHALL explicitly refuse the conflicting configuration
+- **WHEN** an administrator attempts activation while a nonempty legacy file gate is active
+- **THEN** activation SHALL be refused without changing state, and readers SHALL fail closed if conflicting active state exists
 
 ## ADDED Requirements
 
@@ -183,3 +201,8 @@ The system SHALL discover bounded nested string/string-array claim paths from ve
 
 - **WHEN** an administrator enters a valid path absent from the observed catalog
 - **THEN** it SHALL be usable in a draft and a saved rule, while tokens lacking it SHALL fail that condition
+
+## RENAMED Requirements
+
+- FROM: `### Requirement: Admission policy is deployment-configured and opt-in`
+- TO: `### Requirement: Admission policy is managed and activated by administrators`

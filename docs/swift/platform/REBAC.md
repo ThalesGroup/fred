@@ -496,21 +496,22 @@ as people included, has an active account; nothing is stored for them.
 Fred operation that suspends an account: it writes `suspended` before deleting the
 identity-provider account and leaves the person's other relations in place (see
 [`CONTROL-PLANE-PRODUCT-CONTRACT.md`](../design/CONTROL-PLANE-PRODUCT-CONTRACT.md#deleting-a-person-suspends-their-account-first-2026-09-23)).
-With the Keycloak directory and delegation off, it writes no ban; the deleted
-person has no identity-provider account left. With the local directory, deletion
+Authenticated deployments with enforced ReBAC write the ban in either directory
+mode, including Keycloak without delegation. With the local directory, deletion
 requires enforced account status even with delegation off, retains the provider
 account and returns 403 `account_suspension_disabled` when enforcement is disabled.
 Generic writes and deletes of `suspended` are refused, and user tokens and
 delegation grants never write it, so a caller cannot lift its own suspension.
 
-**Enforcement.** Delegation or an enforced local-directory engine turns the check
-on, with no separate switch. Under delegation, a service whose relationship engine
+**Enforcement.** Authenticated user/workload deployments with enabled OpenFGA turn the check
+on in both directory modes, with no separate switch. Under delegation, a service whose relationship engine
 would not enforce - no OpenFGA, or either OIDC half disabled - does not start.
 When account status is enforced, the shared user dependency
 checks once per authenticated request, where the subject is set and before the
 route runs, that the subject is not `suspended`: a signed-in person, a person
-named by a grant or a service identity, with no exemption. A tool mount only
-authenticates; the route serving a tool call makes that call's check.
+named by a grant or a service identity, with no exemption. A pure-workload tool mount only
+authenticates; the route serving a tool call makes that call's check. Human
+and delegated mounts check account status and admission before listing tools.
 Checks, batch checks and lookups do not repeat it and keep their caller's
 consistency. A delegated run also checks the person's account status before
 every tool call, in every team.
@@ -526,12 +527,11 @@ expires; delegated agents continue until the person is deleted in Fred.
 **Activation and rollback.** Account status needs OpenFGA 1.10 or later: a retried
 delete rewrites the ban, relying on the server ignoring duplicate writes. Publish
 and select a model carrying `suspended` on every participating reader and writer
-before enabling delegation or local-directory enforcement. Every enforcing service
+before deploying authenticated admission readers. Every enforcing service
 validates the selected model at startup, refuses an incompatible one and installs
-its engine for the request check; services start in any order. Local-directory
-enforcement remains active with delegation off. Rollback: restore the Keycloak
-directory and disable delegation before selecting an older model. Suspensions
-may stay; in that configuration no decision consults them.
+its engine for the request check; services start in any order. Enforcement remains active with delegation off in either directory mode.
+Changing directories or disabling delegation does not make an older model
+compatible; retain the suspended-account model when rolling back filtering.
 
 ## Configuration
 
@@ -608,17 +608,18 @@ initializes fred-core's process-local JWT verifier from `security.user`, so the
 C3 issuer and audience checks guard the user dependency that supplies `user`.
 The async factory resolves the configured store before startup completes;
 invalid credentials, an absent store, or an unavailable OpenFGA endpoint do
-not wait for the first request. With a delegation switch on, the factory also
-installs its engine for the account status check of each request authenticated
-through fred-core's user dependency; without it, or while OpenFGA cannot answer,
-those requests return 503 `account_status_unavailable`. Build the facade once with the process-level
+not wait for the first request. The factory installs the account-status engine in either directory mode,
+including without delegation, and initializes a reader on the shared platform
+PostgreSQL authority. Missing or incompatible admission state fails startup;
+unavailable request authority returns 503. Account-status failures return
+503 `account_status_unavailable`. Build the facade once with the process-level
 writer, reuse it across requests, and close it during shutdown:
 
 ```python
 from fred_core.security.rebac.rebac_sdk import rebac_sdk_factory
 
 # Application startup: initialize once and retain on process state.
-sdk = await rebac_sdk_factory(configuration.security, kpi_writer=kpi_writer)
+sdk = await rebac_sdk_factory(configuration.security, kpi_writer=kpi_writer, platform_engine=platform_engine)
 
 # Request handling: reuse the retained facade.
 await sdk.check_application_access(user, team_id=team_id, app_id=app_id)
