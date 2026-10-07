@@ -345,13 +345,14 @@ async def run_one(
     profile: Profile,
     variety: VarietyCheck,
     max_uses: int,
+    agent_prompt: str = _BASE_PROMPT,
 ) -> RunResult:
     _renders.set([])
     workspace = MemoryWorkspace()
     tool = _build_tool(variant, workspace, variety, max_uses)
     model = profile.model.bind_tools([tool])
     messages: List[BaseMessage] = [
-        SystemMessage(content=f"{_BASE_PROMPT}\n\n{_BUILD_INSTRUCTIONS}"),
+        SystemMessage(content=f"{agent_prompt}\n\n{_BUILD_INSTRUCTIONS}"),
         HumanMessage(content=PROMPTS[prompt_id]),
     ]
     run = RunResult(variant.template, variant.mode, prompt_id)
@@ -409,7 +410,7 @@ async def run_one(
     if last_args is not None:
         run.plan = last_args
     if run.success and last_args is not None:
-        _measure(run, variant, last_args, workspace, _renders.get())
+        _measure(run, variant, last_args, workspace, _renders.get(), variety, max_uses)
     return run
 
 
@@ -458,12 +459,15 @@ def _measure(
     args: Dict[str, Any],
     workspace: MemoryWorkspace,
     renders: List[RenderResult],
+    variety: VarietyCheck,
+    max_uses: int,
 ) -> None:
     inventory = variant.inventory
     schema = tools_mod._args_schema(inventory)
     plan: DeckPlan = tools_mod._to_plan(schema(**args))
-    # Deterministic: the same assignment the tool rendered.
-    chosen = [p for p in assign(inventory, plan).patterns if p is not None]
+    # Deterministic: the same assignment, with the run's settings, the tool rendered.
+    assigned = assign(inventory, plan, variety, max_uses).patterns
+    chosen = [p for p in assigned if p is not None]
     slides = [s for s in plan.slides if s.invalid_entry is None]
     run.slides = len(chosen)
     run.patterns = [p.id for p in chosen]
@@ -491,7 +495,6 @@ def _measure(
     if deck is not None:
         run.leftovers = _leftovers(variant, slides, chosen, deck)
         _tables(run, slides, chosen, deck)
-        assigned = assign(inventory, plan).patterns
         run.lost_texts = _lost_texts(args, assigned, deck)
         run.lost = len(run.lost_texts)
 
@@ -747,7 +750,18 @@ async def main() -> None:
         "--variety", choices=get_args(VarietyCheck), default="template_slide"
     )
     parser.add_argument("--max-uses", type=int, choices=range(1, 6), default=2)
+    parser.add_argument(
+        "--agent-prompt",
+        type=Path,
+        help="The agent author's prompt, in place of the short stand-in "
+        "(e.g. eval/agent_prompts/agent_prompt_fr.txt).",
+    )
     args = parser.parse_args()
+    agent_prompt = (
+        args.agent_prompt.read_text(encoding="utf-8").strip()
+        if args.agent_prompt
+        else _BASE_PROMPT
+    )
 
     rebuild_ui_part_union([PptPreviewPart])
     _load_secrets(args.env_file)
@@ -759,7 +773,8 @@ async def main() -> None:
     args.out.mkdir(parents=True, exist_ok=True)
     print(
         f"agent model {agent.profile_id}, vision model {vision.profile_id}, "
-        f"variety check {args.variety}, max uses {args.max_uses}"
+        f"variety check {args.variety}, max uses {args.max_uses}, "
+        f"agent prompt {args.agent_prompt or 'stand-in'}"
     )
 
     variants: List[Variant] = []
@@ -784,7 +799,7 @@ async def main() -> None:
     async def bounded(variant: Variant, prompt_id: str) -> RunResult:
         async with semaphore:
             result = await run_one(
-                variant, prompt_id, agent, args.variety, args.max_uses
+                variant, prompt_id, agent, args.variety, args.max_uses, agent_prompt
             )
         print(
             f"{variant.template}/{variant.mode}/{prompt_id}: "
