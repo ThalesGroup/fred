@@ -45,6 +45,7 @@ from fred_capability_ppt_filler.builder.preview import (
     numbered_slots,
 )
 from fred_capability_ppt_filler.pptx_archive import open_presentation
+from fred_capability_ppt_filler.traversal import walk_shapes
 
 logger = logging.getLogger(__name__)
 
@@ -143,8 +144,8 @@ def _messages(pattern: Pattern, png: bytes) -> List[SystemMessage | HumanMessage
 
 
 def _annotated(template_bytes: bytes) -> Dict[str, Tuple[bool, bool]]:
-    """Per slide pattern id: whether its notes declare a (kind, label), which
-    outrank the vision answer as they outrank the heuristics."""
+    """Per slide pattern id: whether its notes or a shape name declare its
+    kind, and its notes a label; these outrank vision as they outrank rules."""
     declared: Dict[str, Tuple[bool, bool]] = {}
     for slide in open_presentation(template_bytes).slides:
         frame = slide.notes_slide.notes_text_frame if slide.has_notes_slide else None
@@ -152,8 +153,13 @@ def _annotated(template_bytes: bytes) -> Dict[str, Tuple[bool, bool]]:
         match = lexicon.KIND_NOTE.search(notes)
         kind = match.group(1).lower() if match else ""
         kind = lexicon.LEGACY_KINDS.get(kind, kind)
+        named = any(
+            not lexicon.is_auto_name(placed.shape.name)
+            and lexicon.kind_from_name(placed.shape.name) is not None
+            for placed in walk_shapes(slide.shapes)
+        )
         declared[f"slide:{slide.slide_id}"] = (
-            kind in SLIDE_KINDS,
+            kind in SLIDE_KINDS or named,
             lexicon.LABEL_NOTE.search(notes) is not None,
         )
     return declared

@@ -38,6 +38,7 @@ from fred_sdk.contracts.runtime import (
 )
 from langchain_core.messages import AIMessage, BaseMessage
 from PIL import Image
+from pptx import Presentation
 
 Responder = Callable[[Sequence[BaseMessage]], AIMessage]
 
@@ -323,3 +324,34 @@ def test_the_compatibility_table_reads_the_slots(inventory: TemplateInventory) -
     assert labelling.kind_fits_slots("closing", bullets)
     assert not bullets.groups and not labelling.kind_fits_slots("cards", bullets)
     assert labelling.kind_fits_slots("process", by_kind["process"])
+
+
+@pytest.mark.asyncio
+async def test_a_kind_declared_by_a_shape_name_outranks_vision(
+    template: bytes, inventory: TemplateInventory, patterns_pdf: bytes
+) -> None:
+    """A shape named 'Roadmap' states the slide's kind, as a `kind:` note does."""
+    declared = labelling._annotated(template)
+    target = next(
+        p
+        for p in inventory.patterns
+        if p.id in _targets(inventory)
+        and not declared[p.id][0]
+        and p.kind != "quote"
+        and labelling.kind_fits_slots("quote", p)
+    )
+    presentation = Presentation(io.BytesIO(template))
+    slide = next(s for s in presentation.slides if f"slide:{s.slide_id}" == target.id)
+    next(iter(slide.shapes)).name = "Roadmap"
+    buffer = io.BytesIO()
+    presentation.save(buffer)
+    named = buffer.getvalue()
+    analysed = analyze_template(named).inventory
+    assert analysed is not None
+    kind = next(p.kind for p in analysed.patterns if p.id == target.id)
+
+    labelled = await label_inventory(
+        analysed, named, patterns_pdf, FakeModelPort(_answer)
+    )
+    after = next(p for p in labelled.patterns if p.id == target.id)
+    assert after.labelled_by == "vision" and after.kind == kind != "quote"
