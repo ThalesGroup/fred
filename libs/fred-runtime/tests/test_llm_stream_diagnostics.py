@@ -529,3 +529,83 @@ async def test_guarded_tool_fragments_through_real_stream_and_middleware(monkeyp
         ]
         assert message.invalid_tool_calls == []
         assert len(requests) == 1
+
+
+@pytest.mark.parametrize("outcome", ["ok", "error", "cancelled"])
+async def test_timings_exclude_telemetry_outside_handler(outcome, monkeypatch, caplog):
+    from fred_core.model import diagnostics as http_diagnostics
+    from fred_runtime.react.middleware import tracing_kpi
+    from fred_runtime.runtime_support import llm_diagnostics
+    from langchain_core.language_models.fake_chat_models import FakeListChatModel
+    from langchain_core.messages import AIMessage
+
+    caplog.set_level(logging.INFO)
+    clock = SimpleNamespace(now=100.0)
+    time_source = SimpleNamespace(monotonic=lambda: clock.now)
+    for module in (http_diagnostics, llm_diagnostics, tracing_kpi):
+        monkeypatch.setattr(module, "time", time_source)
+    observation = LlmObservation(model="test", role="root", streaming=True)
+    observation.http.started = clock.now
+    monkeypatch.setattr(tracing_kpi, "LlmObservation", lambda **kwargs: observation)
+
+    def slow_sizing(*args, **kwargs):
+        clock.now += 100
+        return {}
+
+    def slow_response_log(*args):
+        clock.now += 1000
+
+    original_classify = tracing_kpi.classify_error
+
+    def slow_classify(exc):
+        clock.now += 1000
+        return original_classify(exc)
+
+    monkeypatch.setattr(tracing_kpi, "model_request_char_sizes", slow_sizing)
+    monkeypatch.setattr(tracing_kpi, "classify_error", slow_classify)
+    kpi = Mock(spec=BaseKPIWriter)
+    telemetry = middleware(kpi)
+    monkeypatch.setattr(telemetry, "_log_model_response", slow_response_log)
+    request = ModelRequest(
+        model=FakeListChatModel(responses=["ok"]), messages=[], state={"messages": []}
+    )
+    failure = (
+        ValueError("synthetic") if outcome == "error" else asyncio.CancelledError()
+    )
+
+    async def handler(req):
+        clock.now += 2
+        http_diagnostics.observe_model_response(httpx.Response(200))
+        clock.now += 1
+        observation.chunk()
+        clock.now += 4
+        observation.chunk()
+        clock.now += 2
+        if outcome != "ok":
+            raise failure
+        return ModelResponse(result=[AIMessage(content="ok")])
+
+    if outcome == "ok":
+        await telemetry.awrap_model_call(request, handler)
+    else:
+        with pytest.raises(type(failure)):
+            await telemetry.awrap_model_call(request, handler)
+        snapshots, _ = failed_calls(failure)
+        assert snapshots[0]["elapsed_ms"] == 9000
+        assert snapshots[0]["terminal_silence_ms"] == 2000
+    terminal = terminal_records(caplog)[0]
+    assert terminal.status == outcome
+    assert terminal.elapsed_ms == 9000
+    assert terminal.response_headers_ms == 2000
+    assert terminal.first_chunk_ms == 3000
+    assert terminal.max_chunk_gap_ms == 4000
+    assert terminal.terminal_silence_ms == 2000
+    measurements = {
+        c.kwargs["name"]: c.kwargs["value"] for c in kpi.emit.call_args_list
+    }
+    assert measurements == {
+        "llm.call_latency_ms": 9000,
+        "llm.first_chunk_ms": 3000,
+        "llm.max_chunk_gap_ms": 4000,
+        "llm.terminal_silence_ms": 2000,
+    }

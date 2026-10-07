@@ -433,6 +433,11 @@ missing observations remain missing, not zero. Diagnostic records also contain
 request message/tool/character counts, available provider usage, elapsed time,
 response-header arrival time/status and bounded timeout attributes.
 
+Call and chunk timings use the model handler's entry and exit timestamps,
+excluding this middleware's sizing, logging and trace setup/teardown. This remains
+a client-side handler measurement, including SDK processing and downstream
+middleware, rather than a measurement of provider compute time alone.
+
 `observed_chunks` counts callbacks, including empty, tool and reasoning deltas
 and library-generated final markers. It is neither a token count nor a count of
 network packets. `sdk_chunks_received` is a separate exception-provided count.

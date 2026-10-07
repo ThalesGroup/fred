@@ -140,8 +140,8 @@ class LlmObservation:
         self.last = now
         self.chunks += 1
 
-    def fields(self) -> dict[str, Scalar]:
-        now = time.monotonic()
+    def fields(self, *, at: float | None = None) -> dict[str, Scalar]:
+        now = time.monotonic() if at is None else at
         fields: dict[str, Scalar] = {
             "llm_call_id": self.call_id,
             "model_name": self.model,

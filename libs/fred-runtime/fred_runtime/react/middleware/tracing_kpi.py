@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
 
@@ -103,6 +104,7 @@ class TracingKpiMiddleware(AgentMiddleware):
         error_fields: dict[str, Scalar] = {"error_code": "none"}
         response_fields: dict[str, Scalar] = {}
         response_model_name: str | None = None
+        handler_ended: float | None = None
         dims: Dims = {"model_name": model_name, "llm_role": self._role}
         active = change_active(model_name, self._role, 1)
         try:
@@ -166,7 +168,13 @@ class TracingKpiMiddleware(AgentMiddleware):
             )
 
             async def invoke_model() -> ModelResponse:
-                return await handler(request)
+                nonlocal handler_ended
+                # Exclude telemetry setup/teardown from model boundary timings.
+                observation.http.started = time.monotonic()
+                try:
+                    return await handler(request)
+                finally:
+                    handler_ended = time.monotonic()
 
             with set_config_context(config) as context:
                 response = await asyncio.create_task(invoke_model(), context=context)
@@ -200,14 +208,19 @@ class TracingKpiMiddleware(AgentMiddleware):
                 observation.streaming = True
             with suppress(Exception):
                 attach_failure(
-                    exc, {**observation.fields(), "status": outcome, **error_fields}
+                    exc,
+                    {
+                        **observation.fields(at=handler_ended),
+                        "status": outcome,
+                        **error_fields,
+                    },
                 )
             raise
         finally:
             active_model_http.reset(token)
             active = change_active(model_name, self._role, -1)
             fields = {
-                **observation.fields(),
+                **observation.fields(at=handler_ended),
                 **response_fields,
                 "status": outcome,
                 **error_fields,
