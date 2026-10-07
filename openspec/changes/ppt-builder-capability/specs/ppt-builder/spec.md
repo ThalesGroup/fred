@@ -344,9 +344,10 @@ The system SHALL accept from the model a plan of slides carrying content only â€
 
 #### Scenario: Max uses never demands the impossible
 
-- **GIVEN** `variety_max_uses` 1 and more content slides of one kind than the template has variants of it (or, in `kind` mode, more content slides than the template has content kinds)
+- **GIVEN** `variety_max_uses` 1 and more content slides in the deck than the template has content template slides (or, in `kind` mode, content kinds)
 - **WHEN** the deck is assessed
-- **THEN** the maximum applied is raised to the slides divided by the variants (rounded up), so a deck within that is neither re-priced nor asked; cover, agenda, section and closing slides never count
+- **THEN** the maximum applied, one for the whole deck, is raised to the content slides divided by those template slides (or kinds), rounded up, so a deck within that is neither re-priced nor asked; cover, agenda, section and closing slides never count
+- **AND** a kind with fewer variants than its slides gets no higher maximum of its own: while the deck as a whole fits, its extra slides are priced and asked to recast
 
 #### Scenario: Variety row in the agent form
 

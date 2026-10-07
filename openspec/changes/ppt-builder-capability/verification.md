@@ -653,6 +653,11 @@ mean 54 chars with 5/11 rebuilds (E), 83 chars with 5/13 rebuilds (F).
 
 ## Checks
 
+- WP23.3 (D19 cap): documentation only. `_caps` in `assign.py` computes one cap per mode from
+  the deck's content slides and the pool's content template slides (or kinds) since it was
+  introduced (`8a2ddfa9e`); `test_assign.py::test_max_uses_is_raised_to_what_the_template_allows`
+  already pins that behaviour ("four content slides on three template slides: one is used twice
+  anyway"). D19 and the spec scenario now say so; no test added (behaviour unchanged).
 - WP23.2 (outdated analysis refresh): package `make code-quality` passed; `make test` 407
   passed, 5 skipped. New in `test_analysis_job.py`: an analysis one `ANALYSIS_VERSION` behind
   stays `ready` under two concurrent readiness checks and a turn's read, exactly one job starts,
