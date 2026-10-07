@@ -243,8 +243,19 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     getTeamSessionsControlPlaneV1TeamsTeamIdSessionsGet: {
       providesTags: (_, __, arg) => [{ type: "ControlPlaneSession" as const, id: `LIST-${arg.teamId}` }],
     },
+    getTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGet: {
+      providesTags: (result, _error, arg) => [
+        { type: "ControlPlaneSession", id: arg.sessionId },
+        ...(result?.agent_instance_id
+          ? [{ type: "ControlPlaneAgentInstance" as const, id: result.agent_instance_id }]
+          : []),
+      ],
+    },
     postTeamSessionControlPlaneV1TeamsTeamIdSessionsPost: {
-      invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneSession", id: `LIST-${arg.teamId}` }],
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneSession", id: `LIST-${arg.teamId}` },
+        { type: "ControlPlaneSession", id: arg.createSessionRequest.session_id },
+      ],
     },
     deleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDelete: {
       invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneSession", id: `LIST-${arg.teamId}` }],

@@ -26,6 +26,7 @@ import { ChatListItem } from "./ChatListItem/ChatListItem.tsx";
 import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
 import styles from "./ChatList.module.scss";
 import { KeyCloakService } from "../../../../../security/KeycloakService";
+import { crossSessionRefreshOptions, useRefetchOnWindowFocus } from "@core/hooks/crossSessionRefresh";
 import { clearToolApprovalGrants } from "@core/utils/toolApprovalGrants";
 
 type Session = NonNullable<
@@ -59,13 +60,26 @@ export default function ChatList({ teamId }: ChatListProps) {
     { teamId: teamId! },
     { skip: !teamId, pollingInterval: 30_000 },
   );
-  const { data: agentInstances } = useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery(
+  const {
+    currentData: agentInstances,
+    isSuccess: agentsResolved,
+    isError: agentsError,
+    refetch: refetchAgents,
+  } = useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery(
     { teamId: teamId! },
-    { skip: !teamId },
+    crossSessionRefreshOptions(!teamId),
   );
+  useRefetchOnWindowFocus(refetchAgents, !teamId);
   const agentNameByInstanceId = new Map(
     agentInstances?.map((instance) => [instance.agent_instance_id, instance.display_name]),
   );
+
+  const agentName = (id: string) => {
+    const name = agentNameByInstanceId.get(id) ?? t("rework.sidebar.chatList.unknownAgent");
+    return agentsResolved && !agentsError && agentInstances && !agentNameByInstanceId.has(id)
+      ? `${name} (deleted)`
+      : name;
+  };
 
   const [deleteSession] = useDeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteMutation();
 
@@ -108,7 +122,7 @@ export default function ChatList({ teamId }: ChatListProps) {
         sessionId={session.session_id}
         href={href}
         label={label}
-        agentName={showAgentName ? agentNameByInstanceId.get(session.agent_instance_id) : undefined}
+        agentName={showAgentName ? agentName(session.agent_instance_id) : undefined}
         dateLabel={formatSessionDate(session.updated_at)}
         onDelete={handleDelete(session.session_id, session.agent_instance_id, href, label)}
       />
@@ -119,9 +133,8 @@ export default function ChatList({ teamId }: ChatListProps) {
     ? Array.from(
         managedSessions
           .reduce((byAgent, session) => {
-            const agentName =
-              agentNameByInstanceId.get(session.agent_instance_id) ?? t("rework.sidebar.chatList.unknownAgent");
-            (byAgent.get(agentName) ?? byAgent.set(agentName, []).get(agentName)!).push(session);
+            const name = agentName(session.agent_instance_id);
+            (byAgent.get(name) ?? byAgent.set(name, []).get(name)!).push(session);
             return byAgent;
           }, new Map<string, (Session & { agent_instance_id: string })[]>())
           .entries(),

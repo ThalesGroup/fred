@@ -15,13 +15,11 @@
 import { useEffect, useRef, useState } from "react";
 import { KeyCloakService } from "../../../../security/KeycloakService";
 import type { ChatMessage } from "../../../../slices/runtime/runtimeOpenApi";
-import { usePrepareAgentExecutionMutation } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { getCachedSessionHistory, setCachedSessionHistory } from "./sessionHistoryCache";
 
 interface UseSessionHistoryArgs {
   sessionId: string | null;
-  teamId: string | undefined;
-  agentInstanceId: string | undefined;
+  messagesUrl: string | null | undefined;
   onLoaded: (messages: ChatMessage[]) => void;
   // True while a streamed turn is in progress. A history response — cached or
   // fetched — must never replace a live turn: history necessarily lacks the
@@ -29,18 +27,10 @@ interface UseSessionHistoryArgs {
   isTurnActive: () => boolean;
 }
 
-function expandMessagesUrl(template: string, sessionId: string): string {
-  return template.replace("{session_id}", encodeURIComponent(sessionId));
-}
-
-export function useSessionHistory({
-  sessionId,
-  teamId,
-  agentInstanceId,
-  onLoaded,
-  isTurnActive,
-}: UseSessionHistoryArgs) {
+export function useSessionHistory({ sessionId, messagesUrl, onLoaded, isTurnActive }: UseSessionHistoryArgs) {
   const [isLoading, setIsLoading] = useState(false);
+  const [unavailableFor, setUnavailableFor] = useState<string | null>(null);
+  const requestVersionRef = useRef(0);
   // The session this hook has finished answering for — "nothing more is
   // coming", which `isLoading` cannot say (it is also false before a load
   // starts). Callers sequencing work behind the thread need that difference.
@@ -56,12 +46,6 @@ export function useSessionHistory({
   const activeSessionIdRef = useRef(sessionId);
   activeSessionIdRef.current = sessionId;
 
-  // Deliberately session-less: history needs only `messages_url_template`,
-  // which does not depend on the session — and asking for a session the caller
-  // has only just minted (the URL is bound before the row is written) would be
-  // refused, costing the thread its history.
-  const [prepareExecution] = usePrepareAgentExecutionMutation();
-
   // The conversation this effect last saw. `startedForRef` suppresses a re-fire
   // WITHIN a visit; leaving and coming back is a NEW visit and must load again,
   // or a conversation left mid-load never revalidates and never settles.
@@ -71,18 +55,39 @@ export function useSessionHistory({
     if (visitingRef.current !== sessionId) {
       visitingRef.current = sessionId;
       startedForRef.current = null;
+      requestVersionRef.current += 1;
+      setUnavailableFor(null);
+      setSettledFor(null);
     }
-    if (!sessionId || !teamId || !agentInstanceId) return;
+    if (!sessionId) {
+      setIsLoading(false);
+      return;
+    }
 
-    // #2239 instant switch: a previously opened conversation renders straight
-    // from the cache — synchronously, no spinner, composer stays enabled —
-    // while the fetch below revalidates against the runtime (the source of
-    // truth) in the background and swaps in the fresh history when it lands.
+    // Cached history remains readable while session routing is resolved.
     const cached = getCachedSessionHistory(sessionId);
     if (cached !== undefined && cached.length > 0 && !isTurnActive()) onLoaded(cached);
 
-    if (startedForRef.current === sessionId) return;
-    startedForRef.current = sessionId;
+    if (messagesUrl === undefined) {
+      requestVersionRef.current += 1;
+      startedForRef.current = null;
+      setIsLoading(cached === undefined);
+      return;
+    }
+    if (messagesUrl === null) {
+      requestVersionRef.current += 1;
+      startedForRef.current = null;
+      setIsLoading(false);
+      setUnavailableFor(sessionId);
+      setSettledFor(sessionId);
+      return;
+    }
+    const requestKey = JSON.stringify([sessionId, messagesUrl]);
+    if (startedForRef.current === requestKey) return;
+    startedForRef.current = requestKey;
+    const requestVersion = ++requestVersionRef.current;
+    const isCurrent = () => activeSessionIdRef.current === sessionId && requestVersionRef.current === requestVersion;
+    setUnavailableFor(null);
     // This session's own load is what settles it. Without clearing, an A→B→A
     // round trip where B never settled comes back to A still flagged settled
     // from its first visit, while the load that would say so is in flight.
@@ -94,17 +99,12 @@ export function useSessionHistory({
       // already-rendered thread.
       if (cached === undefined) setIsLoading(true);
       try {
-        // Started before the token refresh so the two overlap instead of
-        // queueing. Claimed right away so a rejection while we are suspended is
-        // not seen as unhandled; the await below still throws into this try.
-        const preparation = prepareExecution({ teamId, agentInstanceId }).unwrap();
-        preparation.catch(() => {});
         await KeyCloakService.ensureFreshToken(30);
         const token = KeyCloakService.GetToken() ?? "";
-        const prep = await preparation;
-        const url = new URL(expandMessagesUrl(prep.messages_url_template, sessionId), window.location.origin);
+        if (!isCurrent()) return;
+        const url = new URL(messagesUrl, window.location.origin);
         const resp = await fetch(url.toString(), { headers: { Authorization: `Bearer ${token}` } });
-        if (!resp.ok) return;
+        if (!resp.ok) throw new Error("History unavailable");
         const msgs: ChatMessage[] = await resp.json();
         // Guards, in order:
         // - stale response: the user switched sessions while this fetch was
@@ -114,27 +114,29 @@ export function useSessionHistory({
         // - empty history: a brand-new session bound at send time has no
         //   persisted history yet — applying [] would wipe the optimistic
         //   first message.
-        if (activeSessionIdRef.current !== sessionId) return;
+        if (!isCurrent()) return;
         if (isTurnActive()) return;
         if (msgs.length === 0) return;
         setCachedSessionHistory(sessionId, msgs);
         onLoaded(msgs);
       } catch {
-        // History load failure is non-fatal — user continues with the cached
-        // (or empty) view.
+        if (isCurrent()) setUnavailableFor(sessionId);
       } finally {
-        setIsLoading(false);
-        // Only for the session still on screen: a slow answer for one the user
-        // has left would otherwise report ITS completion as the current
-        // conversation's.
-        if (activeSessionIdRef.current === sessionId) setSettledFor(sessionId);
+        if (isCurrent()) {
+          setIsLoading(false);
+          setSettledFor(sessionId);
+        }
       }
     };
 
     void load();
-  }, [sessionId, teamId, agentInstanceId, prepareExecution, onLoaded, isTurnActive]);
+  }, [sessionId, messagesUrl, onLoaded, isTurnActive]);
 
   // No session is not "waiting": a fresh chat has no history to resolve, and
   // the marker left by the conversation just left says nothing about it.
-  return { isLoading, isSettled: sessionId === null || settledFor === sessionId };
+  return {
+    isLoading,
+    isSettled: sessionId === null || settledFor === sessionId,
+    isUnavailable: sessionId !== null && unavailableFor === sessionId,
+  };
 }

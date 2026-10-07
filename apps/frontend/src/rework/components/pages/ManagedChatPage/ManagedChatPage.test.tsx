@@ -71,12 +71,14 @@ vi.mock("./ConversationThread/ConversationThread", () => ({
     hitlFreeText: string;
     onHitlFreeTextChange: unknown;
     isLoading?: boolean;
+    readOnly?: boolean;
   }) => (
     <div
       data-testid="thread"
       data-character-limit={props.maxChatInputChars}
       data-hitl-draft={props.hitlFreeText}
       data-has-hitl-change-handler={typeof props.onHitlFreeTextChange === "function"}
+      data-readonly={props.readOnly}
       data-loading={props.isLoading}
     />
   ),
@@ -367,6 +369,31 @@ describe("ManagedChatPage agent todo panel", () => {
     const html = renderToStaticMarkup(<ManagedChatPage />);
     expect(html).not.toContain('data-testid="agent-todo-panel"');
     expect(html).toContain("rework.agentTodoPanel.announcementComplete");
+  });
+});
+
+describe("ManagedChatPage deleted agent", () => {
+  it("shows the deleted label and notice, freezes the thread, and disables composer controls", () => {
+    chatValue = {
+      ...baseChatValue([]),
+      executionDisabled: true,
+      isReadOnly: true,
+      agentDisplayName: "Agent (deleted)",
+      isHistorySettled: true,
+    };
+    const html = renderToStaticMarkup(<ManagedChatPage />);
+    expect(html).toContain("Agent (deleted)");
+    expect(html).toContain("chatbot.deletedAgentReadOnly");
+    expect(html).toContain('data-composer-disabled="true"');
+    expect(html).toContain('data-send-disabled="true"');
+    expect(html).toContain('data-readonly="true"');
+    expect(html).not.toContain('aria-label="chatbot.newConversation"');
+  });
+  it("shows history failure without labeling a live agent as deleted", () => {
+    chatValue = { ...baseChatValue([]), historyUnavailable: true, isReadOnly: false, isHistorySettled: true };
+    const html = renderToStaticMarkup(<ManagedChatPage />);
+    expect(html).toContain("chatbot.historyUnavailable");
+    expect(html).not.toContain("chatbot.deletedAgentReadOnly");
   });
 });
 

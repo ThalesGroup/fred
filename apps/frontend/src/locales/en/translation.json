@@ -598,7 +598,9 @@
       "empty": "No prompts in this space.",
       "emptyFilters": "No prompts match these filters.",
       "categoryLabel": "Category"
-    }
+    },
+    "deletedAgentReadOnly": "This agent has been deleted. This conversation is read-only.",
+    "historyUnavailable": "Conversation history is unavailable. Please try again later."
   },
   "comingSoon": {
     "description": "Empowering your daily work through this innovation platform: gain clarity and make smarter decisions. A new service tailored to support your daily tasks and address your operational needs.",

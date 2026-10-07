@@ -13,9 +13,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Coverage for the #2239 session-history cache: switching back to a
+// Coverage for the session-history cache: switching back to a
 // previously opened conversation renders instantly from the in-memory cache
-// (no spinner) while the runtime is revalidated in the background — and the
+// (no spinner) while the runtime is revalidated in the background - and the
 // guards that keep that safe:
 //
 // - a response that lands after the user switched sessions is neither
@@ -49,26 +49,12 @@ vi.mock("../../../../security/KeycloakService", () => ({
   },
 }));
 
-// History prepares WITHOUT a session id on purpose (it needs only the messages
-// URL template): asking for a session the caller has only just minted would be
-// refused and cost the thread its history.
-const prepareExecutionCalls: Record<string, unknown>[] = [];
-vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
-  usePrepareAgentExecutionMutation: () => [
-    (args: Record<string, unknown>) => {
-      prepareExecutionCalls.push(args);
-      return {
-        unwrap: async () => ({ messages_url_template: "/runtime/sessions/{session_id}/messages" }),
-      };
-    },
-  ],
-}));
-
 import { useSessionHistory } from "./useSessionHistory";
 
 const msg = (id: string): ChatMessage => ({ id }) as unknown as ChatMessage;
 
 // Per-test fetch behavior, keyed on the session id present in the URL.
+let routeOverride: string | null | undefined = "default";
 let fetchImpl: (url: string) => Promise<{ ok: boolean; json: () => Promise<ChatMessage[]> }>;
 const okResponse = (msgs: ChatMessage[]) => ({ ok: true, json: async () => msgs });
 
@@ -91,12 +77,17 @@ function TestHost({
   isTurnActive: () => boolean;
   onRender: (hook: ReturnType<typeof useSessionHistory>) => void;
 }) {
-  const hook = useSessionHistory({ sessionId, teamId: "team-1", agentInstanceId: "agent-1", onLoaded, isTurnActive });
+  const hook = useSessionHistory({
+    sessionId,
+    messagesUrl: routeOverride === "default" ? `/runtime/sessions/${sessionId}/messages` : routeOverride,
+    onLoaded,
+    isTurnActive,
+  });
   onRender(hook);
   return null;
 }
 
-describe("useSessionHistory — #2239 serve-then-revalidate cache", () => {
+describe("useSessionHistory serve-then-revalidate cache", () => {
   let container: HTMLDivElement;
   let root: Root;
   let latest: ReturnType<typeof useSessionHistory>;
@@ -134,10 +125,13 @@ describe("useSessionHistory — #2239 serve-then-revalidate cache", () => {
   beforeEach(() => {
     clearSessionHistoryCache();
     onLoaded.mockClear();
-    prepareExecutionCalls.length = 0;
+    routeOverride = "default";
     turnActive = false;
     fetchImpl = async () => okResponse([]);
-    vi.stubGlobal("fetch", (url: string) => fetchImpl(String(url)));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) => fetchImpl(String(url))),
+    );
   });
 
   afterEach(async () => {
@@ -163,7 +157,9 @@ describe("useSessionHistory — #2239 serve-then-revalidate cache", () => {
     expect(latest.isLoading).toBe(false);
     expect(onLoaded).toHaveBeenCalledWith(history);
     expect(getCachedSessionHistory("session-a")).toEqual(history);
-    expect(prepareExecutionCalls).toEqual([{ teamId: "team-1", agentInstanceId: "agent-1" }]);
+    expect(fetch).toHaveBeenCalledWith("http://localhost:3000/runtime/sessions/session-a/messages", {
+      headers: { Authorization: "Bearer test-token" },
+    });
   });
 
   it("cache hit: renders synchronously with no loading state, then revalidates in the background", async () => {
@@ -197,7 +193,7 @@ describe("useSessionHistory — #2239 serve-then-revalidate cache", () => {
     expect(onLoaded).toHaveBeenLastCalledWith(bHistory);
     onLoaded.mockClear();
 
-    // Session A's slow response finally lands — after the user moved to B.
+    // Session A's slow response finally lands - after the user moved to B.
     aResponse.resolve(okResponse([msg("a1")]));
     await settle();
 
@@ -210,8 +206,8 @@ describe("useSessionHistory — #2239 serve-then-revalidate cache", () => {
   });
 
   // A chat with no session id yet has no history to resolve. Reporting it as
-  // unsettled would put callers that sequence work behind the thread — the
-  // welcome stage, the capability panel — into a wait that never ends.
+  // unsettled would put callers that sequence work behind the thread - the
+  // welcome stage, the capability panel - into a wait that never ends.
   it("is settled with no session, even after leaving one that had settled", async () => {
     mount("session-a");
     await settle();
@@ -240,7 +236,7 @@ describe("useSessionHistory — #2239 serve-then-revalidate cache", () => {
   });
 
   // Leaving mid-load discards the answer (the stale guard) and caches nothing.
-  // Coming back therefore has to load again — a visit suppressed as if it were
+  // Coming back therefore has to load again - a visit suppressed as if it were
   // a re-render would never settle, and callers waiting on that wait forever.
   it("loads again on re-entry after leaving mid-load", async () => {
     const slowA = deferred<{ ok: boolean; json: () => Promise<ChatMessage[]> }>();
@@ -260,7 +256,7 @@ describe("useSessionHistory — #2239 serve-then-revalidate cache", () => {
     expect(onLoaded).toHaveBeenLastCalledWith([msg("a1")]);
   });
 
-  it("an empty response is not applied — a brand-new session's optimistic first message survives", async () => {
+  it("an empty response is not applied - a brand-new session's optimistic first message survives", async () => {
     fetchImpl = async () => okResponse([]);
     mount("session-new");
     await settle();
@@ -286,15 +282,53 @@ describe("useSessionHistory — #2239 serve-then-revalidate cache", () => {
     fetchImpl = async () => okResponse([msg("m1")]);
     mount("session-a");
     await settle();
-    expect(prepareExecutionCalls).toHaveLength(1);
+    expect(fetch).toHaveBeenCalledTimes(1);
 
     render("session-a");
     await settle();
-    expect(prepareExecutionCalls).toHaveLength(1); // still one fetch round-trip
+    expect(fetch).toHaveBeenCalledTimes(1); // still one fetch round-trip
+  });
+  it("waits for routing, preserves cached history, and settles unavailable legacy sessions", async () => {
+    const history = [msg("cached")];
+    setCachedSessionHistory("legacy", history);
+    routeOverride = undefined;
+    mount("legacy");
+    await settle();
+    expect(onLoaded).toHaveBeenCalledWith(history);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(latest.isUnavailable).toBe(false);
+    routeOverride = null;
+    render("legacy");
+    await settle();
+    expect(latest.isUnavailable).toBe(true);
+    expect(latest.isSettled).toBe(true);
+    expect(getCachedSessionHistory("legacy")).toEqual(history);
+  });
+
+  it("shows an unavailable state for failed history reads", async () => {
+    fetchImpl = async () => ({ ok: false, json: async () => [] });
+    mount("missing");
+    await settle();
+    expect(latest.isUnavailable).toBe(true);
+    expect(latest.isSettled).toBe(true);
+    expect(onLoaded).not.toHaveBeenCalled();
+  });
+
+  it("discards a history request when its route becomes unavailable", async () => {
+    const response = deferred<ReturnType<typeof okResponse>>();
+    fetchImpl = () => response.promise;
+    mount("legacy");
+    await settle();
+    routeOverride = null;
+    render("legacy");
+    response.resolve(okResponse([msg("stale")]));
+    await settle();
+    expect(onLoaded).not.toHaveBeenCalled();
+    expect(latest.isUnavailable).toBe(true);
   });
 });
 
-describe("sessionHistoryCache — bounded LRU", () => {
+describe("sessionHistoryCache - bounded LRU", () => {
   beforeEach(() => clearSessionHistoryCache());
 
   it("evicts the least-recently-used entry beyond the cap", () => {
@@ -313,7 +347,7 @@ describe("sessionHistoryCache — bounded LRU", () => {
   });
 });
 
-describe("sessionHistoryCache — per-tab persistence across a page refresh", () => {
+describe("sessionHistoryCache - per-tab persistence across a page refresh", () => {
   beforeEach(() => clearSessionHistoryCache());
   afterEach(() => vi.restoreAllMocks());
 
@@ -323,7 +357,7 @@ describe("sessionHistoryCache — per-tab persistence across a page refresh", ()
     expect(getCachedSessionHistory("session-a")).toEqual([msg("m1")]);
   });
 
-  it("eviction removes the persisted copy too — the cap holds across reloads", () => {
+  it("eviction removes the persisted copy too - the cap holds across reloads", () => {
     for (let i = 0; i < 21; i++) setCachedSessionHistory(`session-${i}`, [msg(`m${i}`)]);
     dropInMemorySessionHistoryForTests();
     expect(getCachedSessionHistory("session-0")).toBeUndefined(); // evicted from storage as well
@@ -334,7 +368,7 @@ describe("sessionHistoryCache — per-tab persistence across a page refresh", ()
     // Replace the WHOLE global with a delegating fake. Patching the instance
     // (Object.defineProperty) or Storage.prototype no longer intercepts:
     // vitest's happy-dom serves sessionStorage through a proxy whose method
-    // lookup ignores outside-defined own properties — defineProperty reports
+    // lookup ignores outside-defined own properties - defineProperty reports
     // success, the real setItem still runs, and this test silently asserted
     // nothing (the entry WAS persisted).
     const real = sessionStorage;

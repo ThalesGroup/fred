@@ -64,12 +64,20 @@ afterEach(() => {
   container.remove();
 });
 
-function renderDrawer(onDelete = vi.fn()) {
+function renderDrawer(onDelete = vi.fn(), readOnly = false) {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
   act(() => {
-    root.render(<SessionAttachmentsDrawer open onClose={() => {}} attachments={[attachment]} onDelete={onDelete} />);
+    root.render(
+      <SessionAttachmentsDrawer
+        readOnly={readOnly}
+        open
+        onClose={() => {}}
+        attachments={[attachment]}
+        onDelete={onDelete}
+      />,
+    );
   });
   return onDelete;
 }
@@ -107,5 +115,12 @@ describe("SessionAttachmentsDrawer - attachment row markup", () => {
 
     expect(onDelete).toHaveBeenCalledWith("att-1");
     expect(previewOpen()).toBe("false");
+  });
+  it("keeps the preview accessible without a delete action in a read-only conversation", () => {
+    const onDelete = renderDrawer(vi.fn(), true);
+    expect(container.querySelector('button[aria-label="chatbot.sessionAttachments.deleteAria"]')).toBeNull();
+    click(container.querySelector("button"));
+    expect(previewOpen()).toBe("true");
+    expect(onDelete).not.toHaveBeenCalled();
   });
 });
