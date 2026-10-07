@@ -7178,7 +7178,7 @@ revoked model. A platform binding is never accepted on this user-reachable reque
 save path routes to catalogue profiles only.
 
 `ModelProfile.supports_vision` (default false) declares image input in
-`models_catalog.yaml`. `UIHints.widget` documents the stock id `model_profile`.
+`models_catalog.yaml`.
 
 Capability routers can depend on `fred_sdk.contracts.runtime.capability_team_authorizer`.
 The pod binds it before every capability route. `require_agent_editor(team_id)` returns

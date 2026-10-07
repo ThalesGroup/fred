@@ -28,7 +28,7 @@ Owns: `components.py`, `compose.py`, `composed_render.py`, `layout.py`, `design_
 Owns: `libs/fred-sdk/fred_sdk/contracts/runtime.py`, `libs/fred-runtime/fred_runtime/model_routing/{contracts,provider}.py`, `libs/fred-runtime/fred_runtime/app/agent_app.py` (`_build_capability_save_services` only), a new runtime adapter module, `apps/fred-agents/config/models_catalog.yaml`, `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md` §8, `docs/swift/capabilities/AUTHORING.md`.
 
 - [x] 1.1 `CapabilityModelPort` (`ainvoke(messages, *, profile_id, require_vision)`) appended to `RuntimeServices` as optional; resolves the saved agent's default routed model, `profile_id` overrides when usable
-- [x] 1.1b Save binding carries the routing fields control-plane sends with validate-config (WP10.0); stock `model_profile` widget id in `UIHints`
+- [x] 1.1b Save binding carries the routing fields control-plane sends with validate-config (WP10.0)
 - [x] 1.2 Optional `ModelProfile.supports_vision`; flag the multimodal profiles in the catalogue
 - [x] 1.3 Runtime adapter over `chat_model_factory.build_for_chat` with a synthetic `capability:<id>` definition and the save binding; fails closed without vision; injected in `_build_capability_save_services`
 - [x] 1.4 Capability-router dependency checking `TeamPermission.CAN_UPDATE_AGENTS` on a team via the pod's `rebac_engine`
@@ -97,7 +97,7 @@ Owns: `apps/frontend/src/rework/features/capabilities/ppt_builder/**`, `apps/fro
 
 - [x] 8.1 Regenerate the API slice; analysis status hook polling `/analysis/{instance}` while pending/running; "analysis in progress / interrupted" states
 - [x] 8.1b Failed/interrupted state with error text and "re-run analysis" action
-- [x] 8.1c "Use a vision model" toggle (default on), disabled and forced off with the explanatory message when no vision-capable model is available; `model_profile` selector shown only while on, listing only vision-capable profiles
+- [x] 8.1c "Use a vision model" toggle (default on), disabled and forced off with the explanatory message when no vision-capable model is available; model selector (inside the capability's own form widget) shown only while on, listing only vision-capable profiles
 - [x] 8.2 Review dialog: thumbnail + label + kind `Select` + include `Switch`; delete zone-role editing and the outline detail; built-in template from `/builtin` (served by `/theme` until WP7 renames it)
 - [x] 8.3 vitest for status states and override serialisation; `make code-quality` + `make test` in `apps/frontend` (run as tsc/prettier/eslint/scoped vitest while a dev server used the worktree; the full make targets run in 9.3)
 
