@@ -911,6 +911,15 @@ def test_a_long_design_name_is_cut():
     names = tools_mod._design_names(inventory)
     assert names["slide:260"] == "A very long name for a temp…"
     assert len(names["slide:260"]) <= tools_mod._DESIGN_NAME_CHARS
+    # Two labels cut to the same text are still two designs.
+    inventory = _relabel(**{"slide:269": "A very long name for a template layout"})(
+        inventory
+    )
+    names = tools_mod._design_names(inventory)
+    assert {names["slide:260"], names["slide:269"]} == {
+        "A very long name for a temp…",
+        "A very long name for a temp… #2",
+    }
 
 
 @pytest.mark.asyncio

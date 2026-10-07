@@ -434,19 +434,19 @@ _DESIGN_NAME_CHARS = 28
 
 def _design_names(inventory: TemplateInventory) -> Dict[str, str]:
     """Each template slide's name as the user sees it, numbered when several
-    share one label: the model must never read two designs as the same."""
-    patterns = [p for p in inventory.patterns if p.included]
-    counts = Counter(p.label for p in patterns)
+    share one shown (cut) label: the model must never read two designs as one."""
+    shown = {
+        p.id: p.label
+        if len(p.label) <= _DESIGN_NAME_CHARS
+        else p.label[: _DESIGN_NAME_CHARS - 1].rstrip() + "…"
+        for p in inventory.patterns
+        if p.included
+    }
     seen: Counter = Counter()
     names: Dict[str, str] = {}
-    for pattern in patterns:
-        label = pattern.label
-        if len(label) > _DESIGN_NAME_CHARS:
-            label = label[: _DESIGN_NAME_CHARS - 1].rstrip() + "…"
-        seen[pattern.label] += 1
-        if counts[pattern.label] > 1 and seen[pattern.label] > 1:
-            label += f" #{seen[pattern.label]}"
-        names[pattern.id] = label
+    for pid, label in shown.items():
+        seen[label] += 1
+        names[pid] = label + (f" #{seen[label]}" if seen[label] > 1 else "")
     return names
 
 
