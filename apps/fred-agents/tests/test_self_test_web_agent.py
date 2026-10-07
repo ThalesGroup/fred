@@ -225,3 +225,21 @@ async def test_an_engine_weakening_safesearch_fails() -> None:
 def test_harness_is_registered_and_hidden() -> None:
     assert build_registry()["fred.github.self_test_web"] is WEB_SELF_TEST_AGENT
     assert WEB_SELF_TEST_AGENT.public is False
+
+
+class _BehindProxy(_ProtectiveEngine):
+    """Fred resolves no names behind a proxy: the proxy refuses internal targets."""
+
+    async def execute(self, request: WebResearchRequest) -> WebResearchResult:
+        if isinstance(request, FetchRequest) and (
+            urlsplit(request.url).hostname or ""
+        ).endswith("nip.io"):
+            raise WebResearchError("proxy_refused")
+        return await super().execute(request)
+
+
+@pytest.mark.asyncio
+async def test_a_proxy_refusal_holds_the_destination_policy() -> None:
+    reports = {r.id: r for r in await run_probes(_BehindProxy())}
+    assert reports["dns_to_loopback"].verdict == "passed"
+    assert reports["dns_to_loopback"].observed == "proxy_refused"

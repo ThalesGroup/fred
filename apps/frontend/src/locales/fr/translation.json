@@ -1546,6 +1546,7 @@
           "timed_out": "Délai dépassé",
           "provider_failed": "Moteur en échec",
           "http_error": "Erreur du site",
+          "proxy_refused": "Refusée par le proxy",
           "unavailable": "Indisponible",
           "rejected": "Refusée",
           "invalid_response": "Réponse invalide",
@@ -1799,18 +1800,19 @@
         "extractedText_other": "Texte extrait ({{count}} caractères)",
         "truncated": "tronqué",
         "errors": {
-          "unavailable": "La recherche web est indisponible.",
+          "unavailable": "Site ou Internet injoignable (réseau, DNS ou proxy).",
           "timed_out": "La requête a expiré.",
           "rejected": "La requête a été refusée.",
           "invalid_response": "La réponse est illisible.",
           "activity_unavailable": "La recherche web est indisponible : son journal d'activité ne peut pas être écrit.",
-          "unsafe_destination": "Cette adresse n'est pas publique et a été bloquée.",
+          "unsafe_destination": "Adresse interne ou non publique : bloquée par Fred.",
           "too_many_redirects": "Trop de redirections.",
-          "unsupported_content": "Ce type de contenu n'est pas pris en charge.",
+          "unsupported_content": "Ce n'est pas une page texte lisible (fichier binaire ou compressé).",
           "response_too_large": "La page est trop volumineuse.",
-          "provider_failed": "Le moteur de recherche a échoué.",
+          "provider_failed": "Le moteur de recherche n'a pas répondu correctement.",
           "busy": "La recherche web est saturée, réessayez dans un instant.",
-          "http_error": "Le site a renvoyé une erreur."
+          "http_error": "Le site a renvoyé une erreur HTTP (page absente ou accès refusé).",
+          "proxy_refused": "Le proxy réseau a refusé ce site (bloqué par la politique de sécurité)."
         }
       }
     },

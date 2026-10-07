@@ -129,7 +129,7 @@ SCHEMA_PROBES: tuple[tuple[str, str, str], ...] = (
     (
         "credentials_in_url",
         "URL carrying credentials refused",
-        "https://user:secret@example.com/",
+        "https://user:secret@example.com/",  # pragma: allowlist secret
     ),
     ("port_alternate", "Non-web port refused", "http://example.com:8080/"),
     (
@@ -184,7 +184,7 @@ BYPASS_PROBES: tuple[tuple[str, str, str], ...] = (
     (
         "engine_credentials",
         "Engine refuses URL credentials on its own",
-        "https://user:secret@example.com/",
+        "https://user:secret@example.com/",  # pragma: allowlist secret
     ),
     (
         "engine_port",
@@ -319,7 +319,7 @@ async def run_probes(
         (
             "dns_to_loopback",
             "Public name resolving to 127.0.0.1",
-            "http://127.0.0.1.nip.io/",
+            "https://127.0.0.1.nip.io/",
             "unsafe_destination",
         ),
         (
@@ -367,11 +367,11 @@ async def run_probes(
                 )
             )
             continue
-        await add(
-            _report(
-                probe_id, "remote", title, outcome.code == expected, expected, outcome
-            )
+        # Behind a proxy, Fred resolves no names: the proxy refuses instead.
+        held = outcome.code == expected or (
+            expected == "unsafe_destination" and outcome.code == "proxy_refused"
         )
+        await add(_report(probe_id, "remote", title, held, expected, outcome))
 
     # ── Search works, and SafeSearch only ever tightens ─────────────────────
     effective: dict[str, str] = {}

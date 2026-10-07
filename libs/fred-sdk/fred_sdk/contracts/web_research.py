@@ -137,6 +137,7 @@ class WebResearchError(RuntimeError):
             "provider_failed",
             "busy",
             "http_error",
+            "proxy_refused",
         }
         self.code = code if code in allowed else "unavailable"
         super().__init__(self.code)

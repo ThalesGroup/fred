@@ -130,6 +130,10 @@ class WebResearchAdapter(WebResearchPort):
                     result = await service.research.execute(request)
         except (TimeoutError, httpx.TimeoutException):
             error = WebResearchError("timed_out")
+        except httpx.ProxyError as exc:
+            # Only a 403 tunnel answer is a policy refusal; 407 and 5xx are outages.
+            refused = str(exc).startswith("403")
+            error = WebResearchError("proxy_refused" if refused else "unavailable")
         except httpx.HTTPError:
             error = WebResearchError("unavailable")
         except WebResearchError as exc:

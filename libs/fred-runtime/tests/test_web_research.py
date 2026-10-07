@@ -164,6 +164,28 @@ async def test_busy_call_is_recorded_without_dispatch(service):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("answer", "code"),
+    [
+        ("403 Forbidden", "proxy_refused"),
+        ("407 Proxy Authentication Required", "unavailable"),
+        ("502 Bad Gateway", "unavailable"),
+    ],
+)
+async def test_only_a_proxy_403_is_a_refusal(service, monkeypatch, answer, code):
+    backend, _ = service
+
+    async def tunnel(request):
+        raise httpx.ProxyError(answer)
+
+    monkeypatch.setattr(backend.research, "execute", tunnel)
+    with pytest.raises(WebResearchError, match=code):
+        await backend.bind(binding()).execute(WebSearchRequest(query="query"))
+    rows = await backend.store.list(user_id="user", limit=10)
+    assert rows[0].error_code == code
+
+
+@pytest.mark.asyncio
 async def test_admin_kpi_event_is_content_free_and_costs_only_searches(
     service, monkeypatch
 ):

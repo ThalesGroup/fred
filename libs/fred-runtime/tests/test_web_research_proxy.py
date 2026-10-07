@@ -199,6 +199,13 @@ async def test_proxy_forwards_names_and_public_literals_without_dns(
         "http://[::1]/",
         "http://[fd00::1]/",
         "http://[::ffff:10.0.0.1]/",
+        "http://2130706433/",
+        "http://0x7f.0.0.1/",
+        "http://127.1/",
+        "http://localhost/",
+        "http://keycloak/",
+        "https://kubernetes.default.svc/",
+        "http://printer.local./",
     ],
 )
 async def test_proxy_refuses_private_literals_locally(no_dns, connections, url):

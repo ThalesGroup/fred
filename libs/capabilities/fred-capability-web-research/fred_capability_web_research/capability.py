@@ -35,6 +35,23 @@ from pydantic import BaseModel
 
 from fred_capability_web_research.citations import citation_parts
 
+# What each refusal means and what the model should do next.
+ERROR_GUIDANCE = {
+    "unsafe_destination": "This address is not public and was blocked; do not retry it.",
+    "proxy_refused": "The network proxy refused this site (blocked by policy); do not retry it, use another source.",
+    "http_error": "The site returned an HTTP error (missing page or access denied); try another source.",
+    "unsupported_content": "This is not a readable text page (binary or compressed); use another source.",
+    "response_too_large": "The page is too large to read; use another source.",
+    "too_many_redirects": "The page redirects too many times; use another source.",
+    "timed_out": "The request timed out; retry at most once.",
+    "busy": "Web research is saturated; retry shortly or answer without it.",
+    "provider_failed": "The search engine failed; retry later or answer without web search and say so.",
+    "unavailable": "The site or the Internet could not be reached (network, DNS or proxy); answer without it and say so.",
+    "activity_unavailable": "Web research is suspended because its activity log cannot be written; answer without it.",
+    "rejected": "The request was rejected; do not retry it.",
+    "invalid_response": "The response could not be read; try another source.",
+}
+
 
 def _port(port: WebResearchPort | None) -> WebResearchPort:
     if port is None:
@@ -75,7 +92,12 @@ class WebResearchCapability(AgentCapability[EmptyModel, EmptyModel, EmptyModel])
             try:
                 result = await port.execute(request)
             except WebResearchError as exc:
-                content = json.dumps({"error_code": exc.code})
+                content = json.dumps(
+                    {
+                        "error_code": exc.code,
+                        "message": ERROR_GUIDANCE.get(exc.code, ""),
+                    }
+                )
                 return content, ToolInvocationResult(
                     tool_ref=f"web_research.{request.operation}",
                     is_error=True,

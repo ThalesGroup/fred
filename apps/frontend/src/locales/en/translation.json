@@ -1546,6 +1546,7 @@
           "timed_out": "Timed out",
           "provider_failed": "Provider failed",
           "http_error": "Site error",
+          "proxy_refused": "Refused by the proxy",
           "unavailable": "Unavailable",
           "rejected": "Rejected",
           "invalid_response": "Invalid response",
@@ -1799,18 +1800,19 @@
         "extractedText_other": "Extracted text ({{count}} characters)",
         "truncated": "truncated",
         "errors": {
-          "unavailable": "Web research is unavailable.",
+          "unavailable": "The site or the Internet could not be reached (network, DNS or proxy).",
           "timed_out": "The request timed out.",
           "rejected": "The request was rejected.",
           "invalid_response": "The response could not be read.",
           "activity_unavailable": "Web research is unavailable: its activity log cannot be written.",
-          "unsafe_destination": "This address is not public and was blocked.",
+          "unsafe_destination": "Internal or non-public address: blocked by Fred.",
           "too_many_redirects": "Too many redirects.",
-          "unsupported_content": "This content type is not supported.",
+          "unsupported_content": "Not a readable text page (binary or compressed file).",
           "response_too_large": "The page is too large.",
-          "provider_failed": "The search provider failed.",
+          "provider_failed": "The search engine did not answer correctly.",
           "busy": "Web research is busy, try again shortly.",
-          "http_error": "The site returned an error."
+          "http_error": "The site returned an HTTP error (missing page or access denied).",
+          "proxy_refused": "The network proxy refused this site (blocked by security policy)."
         }
       }
     },

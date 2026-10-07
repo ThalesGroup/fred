@@ -105,7 +105,10 @@ async def test_tool_result_has_sources_and_shared_error_signal():
         }
     )
     assert result.artifact.is_error
-    assert json.loads(result.content) == {"error_code": "timed_out"}
+    assert json.loads(result.content) == {
+        "error_code": "timed_out",
+        "message": "The request timed out; retry at most once.",
+    }
     assert result.artifact.ui_parts == ()
 
 

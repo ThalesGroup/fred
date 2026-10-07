@@ -70,11 +70,25 @@ async def resolve_public(host: str, port: int) -> str:
     return addresses[0]
 
 
+# Names that never designate a public site, judged without DNS.
+_LOCAL_SUFFIXES = (".localhost", ".local", ".internal", ".home.arpa", ".svc")
+_NUMERIC_LABEL = re.compile(r"0x[0-9a-f]*|[0-9]+")
+
+
 def check_literal(host: str) -> None:
-    """Refuse a non-public IP literal without DNS; names are left to the proxy."""
+    """Refuse without DNS what cannot be public; other names are left to the proxy."""
+    name = host.strip("[]").rstrip(".").lower()
     try:
-        address = ipaddress.ip_address(host.strip("[]"))
+        address = ipaddress.ip_address(name)
     except ValueError:
+        labels = name.split(".")
+        # inet_aton (glibc, squid) reads 2130706433, 127.1 or 0x7f.0.0.1 as loopback.
+        if (
+            len(labels) < 2
+            or name.endswith(_LOCAL_SUFFIXES)
+            or all(_NUMERIC_LABEL.fullmatch(label) for label in labels)
+        ):
+            raise WebResearchError("unsafe_destination") from None
         return
     if not is_public(str(address)):
         raise WebResearchError("unsafe_destination")

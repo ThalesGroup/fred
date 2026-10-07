@@ -35,6 +35,7 @@ from control_plane_backend.kpi.presets.common import LabelValuePoint
 BLOCKED_CODES = frozenset(
     {
         "unsafe_destination",
+        "proxy_refused",
         "too_many_redirects",
         "unsupported_content",
         "response_too_large",
