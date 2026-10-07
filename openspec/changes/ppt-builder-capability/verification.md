@@ -653,6 +653,64 @@ mean 54 chars with 5/11 rebuilds (E), 83 chars with 5/13 rebuilds (F).
 
 ## Checks
 
+- WP25 (platform review fixes): `make code-quality` passed in fred-sdk, fred-runtime,
+  control-plane-backend, fred-capability-ppt-filler and fred-agents (basedpyright 0 errors;
+  fred-runtime's 5 and ppt-filler's 1 warnings are in files this change does not touch).
+  `make test`, one project at a time: fred-sdk 563 passed, 3 skipped; fred-runtime 1817
+  passed, 11 skipped; control-plane 1587 passed; ppt-filler 423 passed, 5 skipped;
+  fred-agents 121 passed, 6 xfailed. `alembic heads`: one head, `b8e1f4a2c6d9`. Frontend
+  after regenerating the control-plane and runtime clients (`make generate-openapi` in each
+  backend, then `npx @rtk-query/codegen-openapi` on `controlPlaneOpenApiConfig.json` and
+  `runtimeOpenApiConfig.json`; only the `UIHints.widget` description changed):
+  `npx tsc --noEmit -p .` clean, `npx vitest run` 3416 passed, 7 skipped (301 files).
+  Tests added or changed: control-plane `test_suspension_detail_migration.py` (downgrade
+  lifts pending rows only, drops the column); `test_capability_readiness.py`: older pod (404)
+  reads as ready, 503 gives no verdict, a stale pending read never clears a revocation (fake
+  store and a real SQLite `AgentInstanceStore`, `updated_at` unchanged), save with no verdict
+  → pending without detail, config-invalid → pending in a single write, save answered ready
+  clears pending, listing skips a failed preparation, listing rotates over the cap on one
+  shared client; `test_agent_copy.py`: copy pending while preparing, caller's token used,
+  destination routing sent; `test_product_api_authz.py`: readiness-check needs
+  `CAN_UPDATE_AGENTS` and `require_own_credential`. fred-runtime
+  `test_capability_route_team_authz.py`: 403 for a non-member on validate-config, readiness
+  and copy-config, a member passes with `CAN_UPDATE_AGENTS` (save, both copy teams) and
+  `CAN_USE_TEAM_AGENTS` (readiness), a secured save without `team_id` is 422;
+  `test_capability_readiness_endpoint.py`: a raising hook is `pending`, an unreadable slice
+  omitted; `test_capability_copy_config.py`: routing reaches the target save only;
+  `test_capability_platform_ports.py`: a revoked model is used until the 30 s TTL, then
+  not, one ReBAC query within it. fred-sdk: no module-level fastapi import outside the lazily
+  loaded `_capability_route_deps.py`; ppt-filler's router tests pass on the lazy path.
+  Not proven: against a real pod and Postgres (the compare-and-set is one conditional
+  `UPDATE`, checked on SQLite); the readiness route does not bind `agent_instance_id` to the
+  named team (the pod has no instance-to-team mapping), so a member of one team can learn
+  another team's instance readiness state by id; the sweep calls the pod without a token, so
+  on a secured pod its config-health and readiness checks get no verdict (unchanged, the
+  sweep has no production host).
+- WP25 `fred-performance-reviewer` (25.3, 25.4, 25.6): no blocking finding. No LLM call
+  site, KPI or Prometheus label added. 25.4: listing readiness calls now share the
+  control-plane runtime client (`app/context.py` `get_runtime_http_client`, httpx default
+  pool of 100) instead of one `AsyncClient` per check, each still bounded at 2 s total,
+  pool wait included (`asyncio.timeout` in `_fetch_capability_readiness`); failed rows are
+  no longer re-checked, so a team with a failed analysis stops paying the 2 s worst case on
+  every listing; over the cap a `SystemRandom` sample (stateless, replica-safe). Needs a load
+  test: many concurrent listings with slow pods could fill the shared pool and delay session
+  erasure calls on the same client by up to 2 s (bounded). 25.3: a capability save makes
+  the same single readiness call as before (5 s bound) and now one conditional `UPDATE`
+  instead of a clear plus a suspend; a copy adds that call per destination, inside its
+  4-destination semaphore. 25.6: at most one ReBAC lookup per port every 30 s (a 20-slide
+  vision analysis adds 2-4), serialized by the port's existing lock only while refreshing.
+  Minor: readiness latency and no-verdict counts are logged, not metered.
+
+- WP24-frontend (review fixes, committed before WP25): `a0cbeb10a` a nested Dialog owns
+  Escape over its FullPageModal; `7fbd33d27` a pattern rename is kept when the review dialog
+  closes on Enter or Escape; `d46137705` a running analysis keeps being polled after a failed
+  poll; `6d2579c2b` the agent-list poll for a preparing agent backs off and stops;
+  `b6b6f61da` a literal NUL in the part identity key replaced by an escape; `2a9b38202`
+  keyboard focus stays on a pattern after toggling its inclusion; `6ef46ff47` a side panel
+  shared by two capabilities is offered once; `5edf97cb7` COMPONENT-UX record corrected.
+  Full `npx vitest run` 3416 passed (re-run green after WP25's client regeneration). Not
+  proven: the keyboard and focus behaviour in a real browser.
+
 - WP24 (review fixes): package `make code-quality` passed (ruff, import order, format,
   bandit, detect-secrets, basedpyright 0 errors); `make test` 423 passed, 5 skipped (the
   reference-template tests). 15 tests added, each checked to fail without its fix (24.9's

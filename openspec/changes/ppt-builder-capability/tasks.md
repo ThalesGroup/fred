@@ -285,3 +285,24 @@ Owns: `render.py` (sections), `pptx_archive.py` + every `.pptx` opened from byte
 - [x] 24.12 Comment blocks over 3 lines shortened (`plan.py`, `render.py` ×2, `tools.py`); `design.md Dn` references in code, tests and eval replaced by a short reason
 - [x] 24.13 Package `make code-quality` + `make test`; `fred-performance-reviewer` on the turn path (24.3, 24.4, 24.6, 24.9); `verification.md`
 - Deferred (recorded in design D4): analysis rows are never deleted with the instance (no SDK delete hook); the analysis routes answer 404 before the authorisation check
+
+## WP24-frontend. Review fixes: agent form and chat UI
+
+Owns: `apps/frontend/src/rework/` (Dialog, FullPageModal, PatternReviewDialog, usePptBuilderAnalysis, useTeamAgentInstances, part registry, side-panel registry), `COMPONENT-UX.md`, `verification.md`.
+
+- [x] 24f.1 Review fixes committed (`a0cbeb10a` nested Dialog owns Escape over its FullPageModal, `7fbd33d27` rename kept on Enter/Escape, `d46137705` analysis polling survives a failed poll, `6d2579c2b` agent-list polling backs off and stops, `b6b6f61da` NUL byte in the part key, `2a9b38202` focus kept after toggling inclusion, `6ef46ff47` shared side panel offered once, `5edf97cb7` COMPONENT-UX); full vitest 3416 passed
+
+## WP25. Platform review fixes (fred-sdk, fred-runtime, control-plane, docs)
+
+Owns: control-plane `agent_instances/` + `product/service.py` + `product/agent_copy.py` + Alembic `b8e1f4a2c6d9`, fred-runtime `agent_app.py` + `platform_ports.py`, fred-sdk `contracts/runtime.py` + `models.py`, k3d values, contract docs, AUTHORING.md, migration note, `design.md` D3/D5/Migration, delta spec, `verification.md`.
+
+- [x] 25.1 Schema downgrade lifts `capability_pending` suspensions; migration note: rollback = control-plane `alembic downgrade` first. Test: downgrade clears pending rows only, drops the column
+- [x] 25.2 Copy asks readiness after create with the caller's token and sends the destination team's routing to `copy-config`, which hands it to the target save. Tests: copy pending while preparing, routing forwarded (control-plane and pod)
+- [x] 25.3 Readiness verdicts alone set/clear `capability_pending`: a save/enrol/copy settles in one write (none when ready, else pending; no verdict → pending), 404 reads as ready; a raising hook is `pending`. Tests: save + no verdict, config-invalid → pending in one write, ready clears, raising hook pending, unreadable slice omitted
+- [x] 25.4 Listing re-check skips failed preparations, samples over the cap, shares the runtime HTTP client; §8.106/§60 say a hook may start background work and must return quickly. Tests: failed skipped, rotation and one client
+- [x] 25.5 Pod capability routes check the named team: validate-config and copy-config (both teams) `CAN_UPDATE_AGENTS`, readiness `CAN_USE_TEAM_AGENTS`; no `team_id` on a secured pod → 422. Tests: 403 for a non-member on each route, member passes with the right permission
+- [x] 25.6 Model port re-reads the team's usable models every 30 s. Test: revoked model unused after the TTL, one ReBAC query within it
+- [x] 25.7 Readiness writes are compare-and-set on the reason read before the pod call (store-level conditional `UPDATE`, `updated_at` untouched). Tests: stale pending read does not clear a revocation (fake and SQLite store)
+- [x] 25.8 Small fixes: (a) `capability_team_authorizer` loaded lazily so fred-sdk has no module-level fastapi import (same public path); (b) k3d values flag Mistral Medium/Small `supports_vision`, note says roll fred-agents first; (c) AUTHORING.md reformatting reverted; (d) `(#1975, …)` dropped from the rewritten `set_suspension` docstring; (e) `model_profile` stock-widget claim removed, clients regenerated, D3 and 1.1b/8.1c corrected; (f) tests: readiness-check permission wiring, copy + readiness, save + no verdict
+- [x] 25.9 Verification: `make code-quality` + `make test` in fred-sdk, fred-runtime, control-plane, ppt-filler, fred-agents; frontend tsc + full vitest; single Alembic head; `fred-performance-reviewer` on 25.3, 25.4, 25.6
+

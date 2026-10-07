@@ -98,6 +98,11 @@ The system SHALL render each example slide to an image with its slots numbered a
 - **WHEN** the model's kind needs slots the slide does not have (for example `bullets` without a body slot, `cover` without a title slot, `cards` without a repeated group)
 - **THEN** the slide keeps its heuristic kind, takes the model's label and slot purposes, and the rejection is logged and shown as a pattern warning
 
+#### Scenario: Labelling model revoked during an analysis
+
+- **WHEN** the team loses access to the labelling model while an analysis runs
+- **THEN** the analysis stops using that model within 30 seconds
+
 #### Scenario: Vision toggle off
 
 - **WHEN** the author turns "Use a vision model" off
@@ -168,6 +173,28 @@ The system SHALL complete the agent save without waiting for the template analys
 
 - **WHEN** the analysis succeeds while nobody has the agent form open
 - **THEN** the next listing of the team's agents re-checks the agent and shows it available, and a pod that does not answer in time leaves it unavailable without delaying the listing
+- **AND** a failed analysis is not re-checked by the listing; it changes on a save, a re-run or the form's re-check
+- **AND** with more than ten preparing agents, each listing checks ten of them, so every one gets its turn
+
+#### Scenario: No readiness answer after a save
+
+- **WHEN** an agent with a capability is saved, created or copied and the pod gives no readiness answer (timeout, error, unreachable)
+- **THEN** the agent is unavailable until a listing, re-check or sweep gets an answer; a save never makes a preparing agent available, even briefly
+
+#### Scenario: Readiness hook fails
+
+- **WHEN** a capability's readiness check raises an error
+- **THEN** the capability is reported as still preparing and the agent stays unavailable
+
+#### Scenario: A slow check never undoes a newer suspension
+
+- **WHEN** an agent is suspended for another reason while a readiness check is in flight
+- **THEN** the check's answer does not clear or replace that suspension
+
+#### Scenario: Copied agent waits for its analysis
+
+- **WHEN** an agent with a custom template is copied to a team
+- **THEN** the copy's analysis runs with the destination team's model routing, and the copy is unavailable until it succeeds
 
 #### Scenario: Failed or interrupted analysis
 
@@ -184,6 +211,11 @@ The system SHALL complete the agent save without waiting for the template analys
 - **GIVEN** a save that stored a new template while a turn still runs on the previous config
 - **WHEN** that turn builds a deck
 - **THEN** the deck is rendered on the template its analysis was made from, or the tool refuses; it never renders the newer file with the older inventory
+
+#### Scenario: Only team members reach a team's capability services
+
+- **WHEN** a user saves or copies a capability config for a team whose agents they cannot edit, or checks readiness for a team whose agents they cannot use
+- **THEN** the pod refuses the request before building any service scoped to that team, including its models
 
 #### Scenario: Only agent editors see the analysis
 
