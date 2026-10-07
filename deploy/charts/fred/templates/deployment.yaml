@@ -24,7 +24,9 @@ metadata:
   labels:
     app: {{ .app.applicationName }}
 spec:
+  {{- if not (and .app.autoscaling .app.autoscaling.enabled) }}
   replicas: {{ $replicaCount }}
+  {{- end }}
   strategy:
     type: RollingUpdate
     rollingUpdate:

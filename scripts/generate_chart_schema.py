@@ -116,6 +116,40 @@ _ROLLING_UPDATE = _obj({
     "maxUnavailable": {"anyOf": [_INT, _STRING]},
 })
 
+_HPA_METRIC = _obj({
+    "type": {"const": "Resource"},
+    "resource": _obj({
+        "name": {"enum": ["cpu", "memory"]},
+        "target": _obj({
+            "type": {"const": "Utilization"},
+            "averageUtilization": {"type": "integer", "minimum": 1},
+        }, required=["type", "averageUtilization"]),
+    }, required=["name", "target"]),
+}, required=["type", "resource"])
+
+_HPA_POLICY = _obj({
+    "type": {"enum": ["Pods", "Percent"]},
+    "value": {"type": "integer", "minimum": 1},
+    "periodSeconds": {"type": "integer", "minimum": 1, "maximum": 1800},
+}, required=["type", "value", "periodSeconds"])
+
+_HPA_BEHAVIOR_RULE = _obj({
+    "stabilizationWindowSeconds": {"type": "integer", "minimum": 0, "maximum": 3600},
+    "selectPolicy": {"enum": ["Max", "Min", "Disabled"]},
+    "policies": _arr(_HPA_POLICY),
+})
+
+_AUTOSCALING = _obj({
+    "enabled": _BOOL,
+    "minReplicas": {"type": "integer", "minimum": 1},
+    "maxReplicas": {"type": "integer", "minimum": 1},
+    "metrics": {"type": "array", "items": _HPA_METRIC, "minItems": 1},
+    "behavior": _obj({
+        "scaleUp": _HPA_BEHAVIOR_RULE,
+        "scaleDown": _HPA_BEHAVIOR_RULE,
+    }),
+}, required=["enabled", "minReplicas", "maxReplicas", "metrics"])
+
 _PORT_DEF = _obj({
     "name": _STRING,
     "containerPort": _INT,
@@ -316,6 +350,7 @@ def _base_app_props(extra: dict | None = None) -> dict:
         "configurationFileName": _STRING,
         "deployment": _obj({"enabled": _BOOL}),
         "replicaCount": _INT,
+        "autoscaling": _AUTOSCALING,
         # Name of another application this one deep-merges itself over, resolved by
         # templates/_apps.tpl at render time so a -f override of the base also
         # reaches it — which a YAML anchor in values.yaml cannot do.
