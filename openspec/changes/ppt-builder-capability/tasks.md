@@ -312,3 +312,9 @@ Owns: `assign.py` (closest fit, repeat count, options), `tools.py` (ask wording)
 
 - [x] 26.1 Variety ask counts misfit slides by their closest fit: on a call with fit problems, a slide that fits nothing is placed for the repeat count on its closest fit or a variant of that kind with no other problem (same caps, structural and revisable rules), so the ask joins its fit problems in the same round; still first call only, never a round of its own. Options and suggestions skip template slides sharing its fit problem (group options: shared by every slide of the group). Tests: repeated slides that each have a fit problem → `slides` and `variety` together, fixed plan with kinds unchanged built with the note; a timeline lacking the same label zone not offered; the existing merged-ask tests now count the slide to fix
 - [x] 26.2 Package `make code-quality` + `make test`; `verification.md` (with the PowerPoint check of 24.1)
+
+## WP27. Parallel copies of a build call
+
+Owns: `tools.py` (build entry)
+
+- [x] 27.1 One build at a time per answer; a copy of a call still running (same arguments) is answered "Ignored: …" without a second build, and a different plan sent in parallel waits its turn. Seen live: mistral-small sent the same two-slide call twice in parallel and both built the same file. Test: two identical parallel calls → one write, one "Ignored"; two different parallel plans → both built. Package `make code-quality` + `make test` (426 passed, 5 skipped)

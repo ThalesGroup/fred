@@ -612,6 +612,11 @@ The system SHALL write the generated deck to the conversation's agent workspace,
 - **WHEN** the agent builds the deck several times before answering
 - **THEN** the answer shows a single preview card, for the last build
 
+#### Scenario: Same call sent twice in parallel
+
+- **WHEN** the model sends the same build call twice at the same time
+- **THEN** one deck is built, the copy is answered as ignored without building, and a different plan sent in parallel is built after the first
+
 #### Scenario: Preview unavailable
 
 - **WHEN** PDF conversion fails or is unavailable

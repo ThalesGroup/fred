@@ -137,6 +137,16 @@ _BUSY_MESSAGE = (
 # --- catalogue --------------------------------------------------------------------------
 
 
+_DUPLICATE = (
+    "Ignored: the same build_presentation call is already being built in this answer. "
+    "Wait for its result; do not describe this call as a separate deck."
+)
+
+
+def _jsonable(value: Any) -> Any:
+    return value.model_dump() if isinstance(value, BaseModel) else str(value)
+
+
 def _error(message: str) -> tuple[str, ToolInvocationResult]:
     """An error result whose text is Fred-owned, so the runtime shows it."""
     return message, ToolInvocationResult(
@@ -622,7 +632,26 @@ def build_builder_tools(
     variety = ctx.config.variety_check
     max_uses = ctx.config.variety_max_uses
 
+    # Models sometimes send the same call twice in parallel: one build at a time,
+    # and a copy of a call still running is answered without a second build.
+    build_lock = asyncio.Lock()
+    in_flight: set[str] = set()
+
     async def _build(**kwargs: object) -> tuple[str, ToolInvocationResult]:
+        key = json.dumps(kwargs, sort_keys=True, default=_jsonable)
+        if key in in_flight:
+            return _DUPLICATE, ToolInvocationResult(
+                tool_ref=_TOOL_REF,
+                blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=_DUPLICATE),),
+            )
+        in_flight.add(key)
+        try:
+            async with build_lock:
+                return await _build_plan(**kwargs)
+        finally:
+            in_flight.discard(key)
+
+    async def _build_plan(**kwargs: object) -> tuple[str, ToolInvocationResult]:
         nonlocal called
         first, called = not called, True
         try:

@@ -18,6 +18,7 @@ repair loop."""
 
 from __future__ import annotations
 
+import asyncio
 import io
 import json
 from typing import Any, cast
@@ -405,6 +406,27 @@ async def test_the_corrected_plan_is_built_as_a_whole(monkeypatch):
     assert not second.is_error, text
     deck = Presentation(io.BytesIO(workspace.writes[-1]["content"]))
     assert len(deck.slides) == 3
+
+
+@pytest.mark.asyncio
+async def test_a_parallel_copy_of_a_call_is_not_built_twice(monkeypatch):
+    workspace = FakeWorkspace()
+    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
+    config, assets = _configured()
+    build = _tools(_ctx(config, assets=assets, workspace=workspace))[BUILD_TOOL_NAME]
+    plan = [COVER, {"title": "Agenda", "bullets": ["One", "Two"]}]
+    (text_a, a), (text_b, b) = await asyncio.gather(
+        build.coroutine(slides=plan), build.coroutine(slides=plan)
+    )
+    assert not a.is_error and not b.is_error
+    ignored = [text_a.startswith("Ignored:"), text_b.startswith("Ignored:")]
+    assert sorted(ignored) == [False, True]
+    assert len(workspace.writes) == 1
+    # A different plan sent in parallel is built too, one after the other.
+    (_, c), (_, d) = await asyncio.gather(
+        build.coroutine(slides=plan), build.coroutine(slides=[COVER])
+    )
+    assert not c.is_error and not d.is_error and len(workspace.writes) == 3
 
 
 # --- variety, asked once on the first deck --------------------------------------------------
