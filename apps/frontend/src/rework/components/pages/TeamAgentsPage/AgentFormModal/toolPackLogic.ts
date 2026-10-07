@@ -127,7 +127,8 @@ export function applyPackToggle(
 /**
  * A document pack sets its own source. Shared members stay while the other pack
  * is on; turning off the last pack deselects document access rather than
- * saving both sources off. The stored config (library binding) is kept.
+ * saving both sources off, and resets both sources like the Advanced view.
+ * The rest of the stored config (library binding) is kept.
  */
 function applyDocumentPackToggle(
   pack: ToolPack,
@@ -161,7 +162,7 @@ function applyDocumentPackToggle(
     return withConfig({ ...config, [source]: false });
   }
   for (const id of DOCUMENT_PACKS.flatMap((documentPack) => documentPack.enablesCapabilityIds)) ids.delete(id);
-  return { ...state, selectedCapabilityIds: [...ids] };
+  return withConfig({ ...config, [DOC_ACCESS_ATTACHMENTS]: true, [DOC_ACCESS_TEAM_DOCUMENTS]: true });
 }
 
 /** Tri-state of an included capability, driving its badge in the pack card. */

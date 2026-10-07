@@ -152,8 +152,9 @@ describe("document packs", () => {
     expect(state.selectedCapabilityIds).toEqual([CAP_TEAM_WIKI]);
     expect(state.reasoningEnabled).toBe(true);
     expect(state.capabilityConfigValues[CAP_TEAM_WIKI]).toEqual({ mode: "read" });
-    // No both-off config: the capability is deselected and its library scope kept.
+    // No both-off config: the capability is deselected, both sources reset, library scope kept.
     expect(state.capabilityConfigValues[CAP_DOCUMENT_ACCESS]).toMatchObject({
+      attachments: true,
       team_documents: true,
       library_tag_ids: ["lib-1"],
     });

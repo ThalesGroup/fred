@@ -234,9 +234,7 @@ export function withReasoning(
 }
 
 /** Save-blocking problems reported by config widgets. Only ACTIVE capabilities count. */
-export function isCapabilityBlocked(
-  form: Pick<FormState, "selectedCapabilityIds" | "capabilityBlockingErrors">,
-): boolean {
+function isCapabilityBlocked(form: Pick<FormState, "selectedCapabilityIds" | "capabilityBlockingErrors">): boolean {
   return form.selectedCapabilityIds.some((id) => !!form.capabilityBlockingErrors[id]);
 }
 

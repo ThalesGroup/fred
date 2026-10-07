@@ -87,7 +87,13 @@ describe("ToolPackCard compact header", () => {
     expect(html).not.toContain("cap.ppt");
   });
 
-  it("flags a capability the admin has not enabled in the header", () => {
-    expect(html).toContain('aria-label="rework.teams.formAgent.capabilities.included.missing"');
+  it("flags a capability the admin has not enabled as a description of the switch", () => {
+    expect(html).toMatch(/role="switch"[^>]*aria-describedby=/);
+    expect(html).toContain("rework.teams.formAgent.capabilities.included.missing");
+    expect(html).not.toContain('aria-label="rework.teams.formAgent.capabilities.included.missing"');
+  });
+
+  it("names the expand button after its pack", () => {
+    expect(html).toContain('aria-label="rework.teams.formAgent.capabilities.included.expandLabel"');
   });
 });

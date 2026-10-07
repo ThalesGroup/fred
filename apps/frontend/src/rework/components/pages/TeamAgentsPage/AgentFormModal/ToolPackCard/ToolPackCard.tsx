@@ -15,7 +15,7 @@
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import type { IconType } from "@shared/utils/Type.ts";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { includedCapabilityStatus, type IncludedCapabilityStatus } from "../toolPackLogic.ts";
 import type { ToolPack } from "../toolPacks.ts";
@@ -80,8 +80,8 @@ const STATUS_TOOLTIP_KEY: Record<IncludedCapabilityStatus, string> = {
 };
 
 /**
- * One "capability pack" card for the agent form's Simple capabilities view
- * (#2220), kept compact for small screens: the card body (32px icon, title,
+ * One "capability pack" card for the agent form's Simple capabilities view,
+ * kept compact for small screens: the card body (32px icon, title,
  * description) is the activation switch, and an end segment expands the
  * capabilities the pack bundles, each showing whether the admin enabled it.
  */
@@ -96,6 +96,8 @@ export function ToolPackCard({
 }: ToolPackCardProps) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
+  const includedId = useId();
+  const missingId = useId();
   const hasIncluded = pack.includes.length > 0;
   const includedStatuses = pack.includes.map((entry) => ({
     entry,
@@ -105,6 +107,7 @@ export function ToolPackCard({
   // with whatever IS available; we just flag it (never disable the pack).
   const hasMissing = includedStatuses.some(({ status }) => status === "unavailable");
 
+  const title = t(pack.titleKey);
   const includedLabel = t("rework.teams.formAgent.capabilities.included.label");
   const missingLabel = t("rework.teams.formAgent.capabilities.included.missing");
 
@@ -117,6 +120,7 @@ export function ToolPackCard({
           type="button"
           role="switch"
           aria-checked={checked}
+          aria-describedby={hasMissing ? missingId : undefined}
           className={styles.toggleArea}
           disabled={disabled}
           onClick={() => onToggle(!checked)}
@@ -126,24 +130,31 @@ export function ToolPackCard({
           </span>
           <span className={styles.meta}>
             <span className={styles.titleRow}>
-              <span className={styles.title}>{t(pack.titleKey)}</span>
+              <span className={styles.title}>{title}</span>
+              {/* Described, not named, and inert on click: tapping it shows the tooltip without toggling. */}
               {hasMissing && (
                 <Tooltip text={missingLabel}>
-                  <span className={styles.missing} role="img" aria-label={missingLabel}>
+                  <span className={styles.missing} aria-hidden onClick={(e) => e.stopPropagation()}>
                     <Icon category="outlined" type="error_outline" />
                   </span>
                 </Tooltip>
               )}
             </span>
             <span className={styles.description}>{t(pack.descriptionKey)}</span>
+            {hasMissing && (
+              <span id={missingId} hidden>
+                {missingLabel}
+              </span>
+            )}
           </span>
         </button>
         {hasIncluded && (
           <button
             type="button"
             className={styles.expand}
-            aria-label={includedLabel}
+            aria-label={t("rework.teams.formAgent.capabilities.included.expandLabel", { pack: title })}
             aria-expanded={expanded}
+            aria-controls={expanded ? includedId : undefined}
             onClick={() => setExpanded((o) => !o)}
           >
             <Icon category="outlined" type={expanded ? "expand_less" : "expand_more"} />
@@ -153,30 +164,26 @@ export function ToolPackCard({
 
       {checked && options && <PackOptionsReveal>{options}</PackOptionsReveal>}
 
-      {hasIncluded && (
-        <>
-          {expanded && (
-            <ul className={styles.included} aria-label={includedLabel}>
-              {includedStatuses.map(({ entry, status }) => {
-                const tooltip = t(STATUS_TOOLTIP_KEY[status]);
-                return (
-                  <li key={entry.capabilityId} className={styles.includedRow}>
-                    <Tooltip text={tooltip}>
-                      <span
-                        className={`${styles.statusIcon} ${styles[`status_${status}`]}`}
-                        role="img"
-                        aria-label={tooltip}
-                      >
-                        <Icon category="outlined" type={STATUS_ICON[status]} />
-                      </span>
-                    </Tooltip>
-                    <span className={styles.includedLabel}>{t(entry.labelKey, { defaultValue: entry.labelKey })}</span>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </>
+      {hasIncluded && expanded && (
+        <ul id={includedId} className={styles.included} aria-label={includedLabel}>
+          {includedStatuses.map(({ entry, status }) => {
+            const tooltip = t(STATUS_TOOLTIP_KEY[status]);
+            return (
+              <li key={entry.capabilityId} className={styles.includedRow}>
+                <Tooltip text={tooltip}>
+                  <span
+                    className={`${styles.statusIcon} ${styles[`status_${status}`]}`}
+                    role="img"
+                    aria-label={tooltip}
+                  >
+                    <Icon category="outlined" type={STATUS_ICON[status]} />
+                  </span>
+                </Tooltip>
+                <span className={styles.includedLabel}>{t(entry.labelKey, { defaultValue: entry.labelKey })}</span>
+              </li>
+            );
+          })}
+        </ul>
       )}
     </li>
   );

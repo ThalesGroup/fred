@@ -2671,6 +2671,7 @@
           },
           "included": {
             "label": "Included capabilities",
+            "expandLabel": "Included capabilities: {{pack}}",
             "missing": "Missing capabilities",
             "activeTooltip": "Active on this agent.",
             "inactiveTooltip": "Available, but not active on this agent.",
