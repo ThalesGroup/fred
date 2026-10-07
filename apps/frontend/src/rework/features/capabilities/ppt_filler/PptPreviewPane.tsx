@@ -222,7 +222,11 @@ export function PptPreviewPane({ onClose }: CapabilitySidePanelProps) {
                 renderAnnotationLayer={false}
                 renderTextLayer={false}
                 className={styles.page}
-              />
+              >
+                <span className={styles.pageNumber} aria-hidden="true">
+                  {i + 1}
+                </span>
+              </Page>
             ))}
           </Document>
         )}
