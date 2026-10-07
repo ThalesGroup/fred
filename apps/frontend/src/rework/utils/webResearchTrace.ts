@@ -15,7 +15,7 @@
 // Native web research tools (fred-capability-web-research). Their query and
 // public URL are user-facing by design, so the trace may show them.
 
-export type WebResearchToolKind = "webSearch" | "fetchUrl" | "searchAndFetch";
+export type WebResearchToolKind = "webSearch" | "fetchUrl";
 
 export type WebResearchPage = {
   url: string;
@@ -31,7 +31,6 @@ export type WebResearchTraceResult = { kind: "pages"; pages: WebResearchPage[] }
 const TOOL_KINDS: Record<string, WebResearchToolKind> = {
   web_search: "webSearch",
   fetch_url: "fetchUrl",
-  search_and_fetch: "searchAndFetch",
 };
 
 export function webResearchToolKind(name: string): WebResearchToolKind | null {

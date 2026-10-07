@@ -254,7 +254,6 @@ def test_deployment_ceilings_bound_every_operation():
     from fred_capability_web_research.research import ResearchEngine
     from fred_sdk.contracts.web_research import (
         FetchRequest,
-        SearchAndFetchRequest,
         WebSearchRequest,
     )
 
@@ -264,11 +263,7 @@ def test_deployment_ceilings_bound_every_operation():
     engine = ResearchEngine(config, Provider(), httpx.AsyncClient())
     search = engine.capped(WebSearchRequest(query="q", max_results=30))
     fetch = engine.capped(FetchRequest(url="https://example.com", max_chars=50_000))
-    combined = engine.capped(
-        SearchAndFetchRequest(query="q", max_results=10, max_chars_per_page=9000)
-    )
     small = engine.capped(WebSearchRequest(query="q", max_results=1))
     assert search.max_results == 2
     assert fetch.max_chars == 1000
-    assert (combined.max_results, combined.max_chars_per_page) == (2, 1000)
     assert small.max_results == 1

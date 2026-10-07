@@ -64,7 +64,6 @@ def test_registered_capability_is_native_and_execution_agnostic():
     assert {tool.name for tool in tools} == {
         "web_search",
         "fetch_url",
-        "search_and_fetch",
     }
     for tool in tools:
         properties = cast(type[BaseModel], tool.args_schema).model_json_schema()[
@@ -172,7 +171,6 @@ async def test_graph_uses_same_native_tools_and_error_artifacts():
     assert {tool.name for tool in carrier[0].tools} == {
         "web_search",
         "fetch_url",
-        "search_and_fetch",
     }
 
 

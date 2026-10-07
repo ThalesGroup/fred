@@ -1778,8 +1778,7 @@
         "descriptions": "Reading tabular documents",
         "search": "Searching tabular values",
         "webSearch": "Searching the web",
-        "fetchUrl": "Reading a web page",
-        "searchAndFetch": "Searching and reading the web"
+        "fetchUrl": "Reading a web page"
       },
       "webResearch": {
         "query": "Search:",

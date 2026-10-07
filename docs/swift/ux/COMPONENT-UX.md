@@ -798,8 +798,8 @@ how `ThoughtTrace` trims the rail when a reasoning row opens or closes the seque
 
 - **Close affordance** — `InlineDrawer` already uses the `Icon`-atom close button.
 
-- **Native web research view (2026-10-06)** — `web_search`, `fetch_url` and
-  `search_and_fetch` get their own label, show the query or public URL on the row with
+- **Native web research view (2026-10-06)** — `web_search` and `fetch_url`
+  get their own label, show the query or public URL on the row with
   an `N sources` chip, and open `WebResearchToolDetail`: each page as an external
   http(s)-only link with host, snippet, collapsible extracted text and localized per-page
   or tool error codes. Query and URL are the step's user-facing subject, so they are the

@@ -8,7 +8,7 @@ configuration_reason: "Adds default-off internal web_research, optional forward-
 
 ## Applicability
 
-Native `web_search`, `fetch_url` and `search_and_fetch` for ReAct, Deep and Graph.
+Native `web_search` and `fetch_url` for ReAct, Deep and Graph.
 The engine runs inside Fred Agents. No additional Fred process, MCP server,
 listening port, local TLS certificate or egress service token is required.
 

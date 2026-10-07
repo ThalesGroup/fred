@@ -1778,8 +1778,7 @@
         "descriptions": "Lecture des documents tabulaires",
         "search": "Recherche d'une valeur tabulaire",
         "webSearch": "Recherche sur le web",
-        "fetchUrl": "Lecture d'une page web",
-        "searchAndFetch": "Recherche et lecture sur le web"
+        "fetchUrl": "Lecture d'une page web"
       },
       "webResearch": {
         "query": "Recherche :",

@@ -20,7 +20,6 @@ import httpx
 from fred_sdk.contracts.web_research import (
     FetchArguments,
     FetchRequest,
-    SearchAndFetchRequest,
     WebPage,
     WebResearchDeploymentConfig,
     WebResearchError,
@@ -276,61 +275,17 @@ class ResearchEngine:
 
     def capped(self, request: WebResearchRequest) -> WebResearchRequest:
         """Apply deployment ceilings so tool arguments cannot inflate model context."""
-        chars = self.config.max_chars_per_page
         if isinstance(request, FetchRequest):
-            return request.model_copy(
-                update={"max_chars": min(request.max_chars, chars)}
-            )
-        update: dict[str, int] = {
-            "max_results": min(request.max_results, self.config.max_results)
-        }
-        if isinstance(request, SearchAndFetchRequest):
-            update["max_chars_per_page"] = min(request.max_chars_per_page, chars)
-        return request.model_copy(update=update)
+            limit = min(request.max_chars, self.config.max_chars_per_page)
+            return request.model_copy(update={"max_chars": limit})
+        limit = min(request.max_results, self.config.max_results)
+        return request.model_copy(update={"max_results": limit})
 
     async def execute(self, request: WebResearchRequest) -> WebResearchResult:
         request = self.capped(request)
         if isinstance(request, FetchRequest):
             return WebResearchResult(results=[await self.fetch(request)])
-        if isinstance(request, WebSearchRequest):
-            return await self.search(request)
-        found = await self.search(
-            WebSearchRequest.model_validate(
-                request.model_dump(
-                    exclude={"operation", "max_passages", "max_chars_per_page"}
-                )
-            )
-        )
-
-        async def one(page: WebPage) -> WebPage:
-            try:
-                fetched = await self.fetch(
-                    FetchRequest(
-                        url=page.url,
-                        focus=request.query,
-                        max_passages=request.max_passages,
-                        max_chars=request.max_chars_per_page,
-                    )
-                )
-                return fetched.model_copy(
-                    update={
-                        "snippet": page.snippet,
-                        "title": fetched.title or page.title,
-                    }
-                )
-            except (WebResearchError, httpx.HTTPError) as exc:
-                return page.model_copy(
-                    update={
-                        "error_code": exc.code
-                        if isinstance(exc, WebResearchError)
-                        else "unavailable"
-                    }
-                )
-
-        return WebResearchResult(
-            results=list(await asyncio.gather(*(one(page) for page in found.results))),
-            safesearch=found.safesearch,
-        )
+        return await self.search(request)
 
 
 def select_passages(content: str, focus: str, count: int) -> str:

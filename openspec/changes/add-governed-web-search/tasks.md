@@ -23,6 +23,10 @@
 - [x] 4.2 Add a `web_research_summary` control-plane KPI preset: requests, estimated cost, blocked/busy/failed counts, p95 latency, unique users, outcome breakdown.
 - [x] 4.3 Render an admin "Web research" section on the Analytics page with the cost explanation; regenerate the control-plane client.
 
+## 5. Remove the combined tool
+
+- [x] 5.1 Remove `search_and_fetch` (SDK request, engine branch, tool, frontend label, docs): the model chains `web_search` and `fetch_url` itself and reads only useful pages.
+
 ## Evidence
 
 Previous version: 67 focused tests and root quality gates passed; separate egress HTTPS topology was reviewed against implementation head `289b26e509aae586ae5b4b27fbc09a584cfcaf4a`. This is historical evidence, not verification of the revised transport. Current work reuses issue #2980 and branch `codex/add-governed-web-search`.

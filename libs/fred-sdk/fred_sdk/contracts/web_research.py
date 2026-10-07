@@ -56,12 +56,6 @@ class FetchArguments(BaseModel):
         return value
 
 
-class SearchAndFetchArguments(WebSearchArguments):
-    max_results: int = Field(default=3, ge=1, le=10)
-    max_passages: int = Field(default=5, ge=1, le=20)
-    max_chars_per_page: int = Field(default=4000, ge=500, le=50_000)
-
-
 class WebSearchRequest(WebSearchArguments):
     operation: Literal["web_search"] = "web_search"
 
@@ -70,12 +64,8 @@ class FetchRequest(FetchArguments):
     operation: Literal["fetch_url"] = "fetch_url"
 
 
-class SearchAndFetchRequest(SearchAndFetchArguments):
-    operation: Literal["search_and_fetch"] = "search_and_fetch"
-
-
 WebResearchRequest = Annotated[
-    WebSearchRequest | FetchRequest | SearchAndFetchRequest,
+    WebSearchRequest | FetchRequest,
     Field(discriminator="operation"),
 ]
 

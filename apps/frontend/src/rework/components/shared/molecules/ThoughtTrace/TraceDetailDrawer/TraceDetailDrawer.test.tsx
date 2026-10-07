@@ -613,7 +613,7 @@ function webEntry(name: string, args: Record<string, unknown>, content: unknown,
 describe("TraceDetailDrawer web research", () => {
   it("shows the query and each page as a safe external link with its extract", () => {
     const entry = webEntry(
-      "search_and_fetch",
+      "web_search",
       { query: "python release" },
       {
         results: [
@@ -631,7 +631,7 @@ describe("TraceDetailDrawer web research", () => {
       },
     );
     const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
-    expect(html).toContain("rework.chatTrace.toolLabels.searchAndFetch");
+    expect(html).toContain("rework.chatTrace.toolLabels.webSearch");
     expect(html).toContain("python release");
     expect(html).toContain('href="https://www.python.org/"');
     expect(html).toContain('rel="noopener noreferrer"');

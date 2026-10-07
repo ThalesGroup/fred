@@ -8,7 +8,7 @@ Provide native, governed web research for Fred agents through internal direct or
 
 ### Requirement: Governed web research tools
 
-Fred SHALL expose bounded `web_search`, `fetch_url`, and `search_and_fetch` tools only to agents for which the web research capability is enabled and authorized. Search SHALL support result count, SafeSearch, region and freshness; fetch SHALL return bounded main text and source metadata, with optional focus. The same behavior SHALL work across supported agent execution models.
+Fred SHALL expose bounded `web_search` and `fetch_url` tools only to agents for which the web research capability is enabled and authorized. Search SHALL support result count, SafeSearch, region and freshness; fetch SHALL return bounded main text and source metadata, with optional focus. The same behavior SHALL work across supported agent execution models.
 
 #### Scenario: Authorized search
 - **WHEN** an authorized agent invokes `web_search` with a query and valid filters
