@@ -29,7 +29,6 @@ Trigger keywords (case-insensitive prefix match):
   trace         → status events + streamed analytical text + mock sources
   error         → node_error path to test UI error rendering
   long          → ~30 short sentences streamed word-by-word
-  files         → unified /fs round-trip: write to the agent's space, read back, list
   geo           → renders a sample GeoJSON FeatureCollection as a GeoPart ui_part
   document      → search via the document_access capability's tool
                   (context.invoke_runtime_tool), then a HITL confirm/discard
@@ -80,9 +79,6 @@ class TestState(ConversationalState, BaseModel):
     # Sources written by trace_step (mock) or document_step (real capability
     # hit, only on confirm); consumed by build_output override
     sources_data: list[dict[str, object]] = Field(default_factory=list)
-
-    # LinkPart ui_parts written by files_step; consumed by build_output override
-    link_parts: list[dict[str, object]] = Field(default_factory=list)
 
     # GeoPart ui_parts written by geo_step; consumed by build_output override
     geo_parts: list[dict[str, object]] = Field(default_factory=list)

@@ -33,7 +33,6 @@ How to use:
 
 Example:
 - `binding.portable_context.session_id`
-- `await services.workspace_fs.read_text("shared/templates/template.md")`
 """
 
 from __future__ import annotations
@@ -917,19 +916,6 @@ class PublishedArtifact(FrozenModel):
             document_uid=self.document_uid,
             file_name=self.file_name,
         )
-
-
-class FsEntry(FrozenModel):
-    """
-    One entry returned when listing a team-rooted filesystem directory.
-
-    Paths are author-relative (e.g. ``templates/deck.pptx`` or ``shared/...``); the team and
-    user prefixes are injected by the runtime and never appear here.
-    """
-
-    path: str = Field(..., min_length=1)
-    size: int | None = None
-    is_dir: bool = False
 
 
 class BoundRuntimeContext(FrozenModel):

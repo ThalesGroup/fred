@@ -41,8 +41,6 @@ from typing import cast
 
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
-    ToolContentBlock,
-    ToolContentKind,
     ToolInvocationRequest,
     ToolInvocationResult,
 )
@@ -399,83 +397,6 @@ class ReActRuntimeToolResolver:
                 tool_name=tool_name,
                 description=description,
                 args_schema=builtin_spec.args_schema,
-            )
-
-        if backend == BuiltinToolBackend.WORKSPACE_WRITE:
-            workspace_fs = self._services.workspace_fs
-            if workspace_fs is None:
-                raise RuntimeError(
-                    "ReActRuntime requires RuntimeServices.workspace_fs for artifacts.publish_text."
-                )
-
-            async def _invoke(
-                payload: dict[str, object],
-            ) -> tuple[str, ToolInvocationResult]:
-                file_name = str(payload["file_name"])
-                artifact = await workspace_fs.write(
-                    file_name,
-                    str(payload["content"]).encode("utf-8"),
-                    content_type=str(
-                        payload.get("content_type") or "text/plain; charset=utf-8"
-                    ),
-                    title=self._optional_str(payload.get("title")),
-                )
-                result = ToolInvocationResult(
-                    tool_ref=requirement.tool_ref,
-                    blocks=(
-                        ToolContentBlock(
-                            kind=ToolContentKind.TEXT,
-                            text=f"Published {artifact.file_name} for the user.",
-                        ),
-                    ),
-                    ui_parts=(artifact.to_link_part(),),
-                )
-                return (render_tool_result(result), result)
-
-            return FredRuntimeToolSpec(
-                runtime_name=tool_name,
-                description=description,
-                args_schema=builtin_spec.args_schema,
-                tool_ref=requirement.tool_ref,
-                invoke=_invoke,
-                trace_span_name="artifact.publish",
-                build_trace_attributes=lambda payload: {
-                    "artifact_file_name": str(payload.get("file_name") or ""),
-                },
-            )
-
-        if backend == BuiltinToolBackend.WORKSPACE_READ:
-            workspace_fs = self._services.workspace_fs
-            if workspace_fs is None:
-                raise RuntimeError(
-                    "ReActRuntime requires RuntimeServices.workspace_fs for resources.fetch_text."
-                )
-
-            async def _invoke(
-                payload: dict[str, object],
-            ) -> tuple[str, ToolInvocationResult]:
-                text = await workspace_fs.read_text(str(payload["path"]))
-                result = ToolInvocationResult(
-                    tool_ref=requirement.tool_ref,
-                    blocks=(
-                        ToolContentBlock(
-                            kind=ToolContentKind.TEXT,
-                            text=text,
-                        ),
-                    ),
-                )
-                return (render_tool_result(result), result)
-
-            return FredRuntimeToolSpec(
-                runtime_name=tool_name,
-                description=description,
-                args_schema=builtin_spec.args_schema,
-                tool_ref=requirement.tool_ref,
-                invoke=_invoke,
-                trace_span_name="resource.fetch",
-                build_trace_attributes=lambda payload: {
-                    "resource_path": str(payload.get("path") or ""),
-                },
             )
 
         raise RuntimeError(

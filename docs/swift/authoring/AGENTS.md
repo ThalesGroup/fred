@@ -322,16 +322,14 @@ Import from `fred_sdk`:
 | ----------------------------------------- | -------------------------------------------------------- |
 | `TOOL_REF_KNOWLEDGE_SEARCH`               | Search document libraries and return grounded snippets   |
 | `TOOL_REF_SIMILARITY_SEARCH`              | Compare an anchor passage against explicit target documents |
-| `TOOL_REF_ARTIFACTS_PUBLISH_TEXT`         | Publish a markdown file artifact for the user             |
-| `TOOL_REF_RESOURCES_FETCH_TEXT`           | Read a config or template file                            |
 | `TOOL_REF_GEO_RENDER_POINTS`              | Render geographic points on a map                         |
 | `TOOL_REF_TRACES_SUMMARIZE_CONVERSATION`  | Summarise an execution trace                               |
 
 ```python
-from fred_sdk import TOOL_REF_KNOWLEDGE_SEARCH, TOOL_REF_ARTIFACTS_PUBLISH_TEXT
+from fred_sdk import TOOL_REF_KNOWLEDGE_SEARCH
 
 class MyAgent(ReActAgentDefinition):
-    declared_tool_refs = (TOOL_REF_KNOWLEDGE_SEARCH, TOOL_REF_ARTIFACTS_PUBLISH_TEXT)
+    declared_tool_refs = (TOOL_REF_KNOWLEDGE_SEARCH,)
 ```
 
 ## Available MCP server groups

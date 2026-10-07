@@ -26,8 +26,7 @@ Current scope:
   v2 `ChatModelFactoryPort`.
 - `InProcessToolInvoker` lets developers run new v2 agents locally or in tests
   before a full transport-backed tool invoker is wired.
-- `FredWorkspaceFs` exposes the team-rooted virtual filesystem so agents read and
-  write files by path rather than through raw workspace plumbing.
+- `FredWorkspaceFs` writes technical capability outputs under the verified agent path.
 """
 
 from __future__ import annotations
@@ -59,7 +58,6 @@ from fred_core.security.oidc import get_keycloak_client_id, get_token_endpoint
 from fred_core.store.vector_search import VectorSearchHit, select_citable_sources
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
-    FsEntry,
     GeoPart,
     JsonScalar,
     PortableContext,
@@ -102,7 +100,6 @@ from fred_sdk.contracts.runtime import (
     WikiPageContent,
     WikiPageRef,
     WikiProposalRef,
-    WorkspaceFileNotFound,
     WorkspaceFsPort,
     unwrap_run_stop_error,
 )
@@ -2132,8 +2129,7 @@ class FredWorkspaceFs(WorkspaceFsPort):
     Knowledge Flow over the unified ``/fs`` routes:
 
     - a bare path        -> ``teams/{team}/agents/{agent}/users/{uid}/...``
-    - a leading ``shared/`` -> ``teams/{team}/shared/...``    (team-shared)
-    - an absolute ``/teams/{t}/...`` is accepted only when ``t`` is the session team (§7.1)
+    - an absolute ``/teams/{t}/...`` is accepted only for the session team
     """
 
     def __init__(
@@ -2186,20 +2182,8 @@ class FredWorkspaceFs(WorkspaceFsPort):
             )
         return str(aid)
 
-    async def _token(self) -> str | None:
-        # Under delegation there is no person token to pass down, and asking for
-        # one would be the fallback the once-only rule forbids: the client's own
-        # provider supplies the call's credentials instead.
-        provider = resolve_credential_provider(explicit=self._credentials)
-        if provider.delegated:
-            return None
-        if self._credentials is not None:
-            authorization = (await provider.credentials()).authorization
-            return authorization.removeprefix("Bearer ") if authorization else None
-        return await _workspace_access_token(self._binding.runtime_context)
-
     # ---- path relativization (§7.1 security rule) ----
-    def _resolve(self, path: str, *, allow_root: bool = False) -> str:
+    def _resolve(self, path: str) -> str:
         team = self._session_team()
         # Bare agent paths resolve to the running agent's own per-user space
         # (FILES-04 / docs/swift/design/FILESYSTEM.md).
@@ -2211,8 +2195,6 @@ class FredWorkspaceFs(WorkspaceFsPort):
         if ".." in parts:
             raise ValueError("Path cannot contain parent path segments")
         if not parts:
-            if allow_root:
-                return agent_root
             raise ValueError("Path cannot be empty")
         head = parts[0]
         if head == "teams":
@@ -2224,9 +2206,7 @@ class FredWorkspaceFs(WorkspaceFsPort):
                 )
             return "/".join(parts)
         if head == "shared":
-            # Team-shared reads (e.g. resolve_template's team step) stay addressable;
-            # write/delete into shared is rejected separately (agents never share).
-            return f"teams/{team}/" + "/".join(parts)
+            raise PermissionError("The team-shared area is retired")
         return f"{agent_root}/" + "/".join(parts)
 
     def _agent_root(self) -> str:
@@ -2237,12 +2217,7 @@ class FredWorkspaceFs(WorkspaceFsPort):
 
     def _resolve_owned(self, path: str) -> str:
         """
-        Resolve a path the agent must own — used for write and delete.
-
-        Agents read team-shared files and their own space, but may only *mutate*
-        inside their own agents subtree. A path resolving outside it — into
-        ``shared/`` (G3: agents never share) or a sibling agent's
-        subtree (G2) — is a hard ``PermissionError`` (FILES-04).
+        Resolve an output path inside the current agent and user subtree.
         """
         resolved = self._resolve(path)
         root = self._agent_root()
@@ -2251,39 +2226,6 @@ class FredWorkspaceFs(WorkspaceFsPort):
                 f"Agents may only write inside their own space; '{path}' resolves outside it."
             )
         return resolved
-
-    def _clean_parts(self, path: str) -> list[str]:
-        parts = [p for p in (path or "").strip().replace("\\", "/").split("/") if p]
-        if ".." in parts:
-            raise ValueError("Path cannot contain parent path segments")
-        return parts
-
-    def _resolve_team(self, path: str) -> str:
-        # Explicit read of the team's Espace d'equipe; governed by the user's team read.
-        return f"teams/{self._session_team()}/shared/" + "/".join(
-            self._clean_parts(path)
-        )
-
-    # ---- operations ----
-    async def _download(self, resolved: str, original: str) -> bytes:
-        try:
-            blob = await self._workspace_client.fs_download_blob(
-                resolved, await self._token()
-            )
-        except WorkspaceRetrievalError as e:
-            if e.status_code == 404:
-                raise WorkspaceFileNotFound(original) from e
-            raise
-        return blob.bytes
-
-    async def read_bytes(self, path: str) -> bytes:
-        return await self._download(self._resolve(path), path)
-
-    async def read_text(self, path: str) -> str:
-        return (await self.read_bytes(path)).decode("utf-8")
-
-    async def read_team_bytes(self, path: str) -> bytes:
-        return await self._download(self._resolve_team(path), path)
 
     async def write(
         self,
@@ -2306,33 +2248,6 @@ class FredWorkspaceFs(WorkspaceFsPort):
             document_uid=_coerce_optional_string(result.document_uid),
             mime=content_type,
             title=title or file_name,
-        )
-
-    async def ls(self, path: str = "") -> list[FsEntry]:
-        entries = await self._workspace_client.fs_list(
-            self._resolve(path, allow_root=True), await self._token()
-        )
-        return [
-            FsEntry(path=entry.path, size=entry.size, is_dir=entry.is_directory())
-            for entry in entries
-        ]
-
-    async def delete(self, path: str) -> None:
-        await self._workspace_client.fs_delete(
-            self._resolve_owned(path), await self._token()
-        )
-
-    async def link_for(self, path: str) -> PublishedArtifact:
-        resolved = self._resolve(path)
-        link = await self._workspace_client.fs_share(resolved, await self._token())
-        file_name = link.file_name or resolved.rsplit("/", 1)[-1]
-        return PublishedArtifact(
-            key=resolved,
-            file_name=file_name,
-            size=link.size or 0,
-            href=link.download_url,
-            mime=link.mime,
-            title=file_name,
         )
 
 
