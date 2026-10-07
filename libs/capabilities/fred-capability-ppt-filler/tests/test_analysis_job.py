@@ -20,10 +20,12 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import threading
 
 import pytest
 from analysis_db import age_row, drain
 from builder_decks import build_showcase_template
+from fred_capability_ppt_filler import concurrency
 from fred_capability_ppt_filler.builder import analysis_job
 from fred_capability_ppt_filler.builder.analysis import ANALYSIS_VERSION
 from fred_capability_ppt_filler.builder.analysis_job import (
@@ -498,3 +500,28 @@ async def test_a_forced_refresh_without_the_port_is_not_mistaken_for_vision(
     await drain()
     record = await store.get(INSTANCE)
     assert record is not None and record.labelling_key == "vision:agent-default"
+
+
+@pytest.mark.asyncio
+async def test_a_cancelled_job_keeps_its_slot_until_its_thread_ends():
+    """Cancelling (timeout, superseded job) cannot stop the worker thread: its
+    heavy-job slot stays taken until the thread is really done."""
+    started, release = threading.Event(), threading.Event()
+
+    def _blocking() -> None:
+        started.set()
+        release.wait(5)
+
+    assert concurrency._active_jobs == 0
+    job = asyncio.ensure_future(analysis_job._cpu(_blocking))
+    await asyncio.to_thread(started.wait, 5)
+    job.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await job
+    assert concurrency._active_jobs == 1
+    release.set()
+    for _ in range(500):
+        if concurrency._active_jobs == 0:
+            break
+        await asyncio.sleep(0.01)
+    assert concurrency._active_jobs == 0

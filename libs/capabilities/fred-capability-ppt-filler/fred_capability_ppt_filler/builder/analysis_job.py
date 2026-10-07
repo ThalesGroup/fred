@@ -603,10 +603,16 @@ async def _cpu(fn: Callable[..., Any], *args: Any) -> Any:
     # nobody waits on it, and its lease stays alive meanwhile.
     while not acquire_heavy_job_slot():
         await asyncio.sleep(_SLOT_POLL_SECONDS)
-    try:
-        return await asyncio.to_thread(fn, *args)
-    finally:
-        release_heavy_job_slot()
+    work = asyncio.ensure_future(asyncio.to_thread(fn, *args))
+    # A cancelled job's thread runs on: the slot is freed when it really ends.
+    work.add_done_callback(_thread_ended)
+    return await asyncio.shield(work)
+
+
+def _thread_ended(work: asyncio.Future[Any]) -> None:
+    release_heavy_job_slot()
+    if not work.cancelled():
+        work.exception()  # retrieved: an abandoned thread's error is not re-logged
 
 
 async def _analyse(
