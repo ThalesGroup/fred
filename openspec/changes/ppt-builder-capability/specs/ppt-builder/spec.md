@@ -325,10 +325,17 @@ The system SHALL accept from the model a plan of slides carrying content only â€
 - **WHEN** a list needs more than two slides of its kind (17 items where the kind's largest slide holds 8) and no close kind holds it whole
 - **THEN** no deck is written and `needs_revision` names the slide, the kind's capacity over two slides, and the options to trim to what two slides hold or move the rest to slides of the model's own
 
-#### Scenario: Model's numbering after a split
+#### Scenario: One numbering after a split
 
-- **WHEN** slide 2 of a plan is split over two slides and slide 5 has a review note
-- **THEN** every message names slides by the plan's numbers (the note says slide 5, not 6), the stored base plan is the plan as sent, so a later `changes` call numbers on it, and an agenda split over two slides announces its items once, the slides that follow being counted after its last part
+- **WHEN** slide 2 of a plan is split over two slides and slide 5 of the plan has a review note
+- **THEN** the deck is delivered with the message naming that slide 6, its place in the file, the delivery says later `changes` use the file's slide numbers, and the stored base plan is the deck as delivered (each part a slide with its rendered title, entries and kind), so a later `changes` call numbers on the file
+- **AND** an agenda split over two slides announces its items once, the slides that follow being counted after its last part
+
+#### Scenario: Stored split rebuilt as it is
+
+- **GIVEN** a stored deck whose slides 2 and 3 are `Offers (1/2)` and `Offers (2/2)` from an earlier split
+- **WHEN** a later `changes` call rebuilds the deck
+- **THEN** the two slides are neither split nor suffixed again, stay on one template slide, and count as one slide for variety, even at a max of one use
 
 #### Scenario: Fit check
 
@@ -372,8 +379,8 @@ The system SHALL accept from the model a plan of slides carrying content only â€
 
 - **GIVEN** the messages sent to the model in the current turn
 - **WHEN** they hold an earlier `build_presentation` result that delivered a deck
-- **THEN** the conversation has a deck and no variety ask is returned
-- **AND** when its only `build_presentation` results are `needs_revision` or errors, the conversation still has no deck and the first call of the turn may ask
+- **THEN** the conversation has a deck and no variety ask is returned, also when the platform has cleared the messages' names (the result is matched by its tool call id) or the result's content is a list of text blocks
+- **AND** when its only `build_presentation` results are `needs_revision` or errors, or another tool's text reads like a delivery, the conversation still has no deck and the first call of the turn may ask
 
 #### Scenario: Choice guide in the description
 
@@ -686,7 +693,7 @@ The system SHALL write the generated deck to the conversation's agent workspace,
 #### Scenario: What was built
 
 - **WHEN** a deck is delivered with a preview
-- **THEN** the preview part carries, per rendered slide, its plan number, its part of a split list, its title, kind and template slide, and note codes for what was cut, left out, continued or built as another kind, taken from the render and not from the model's reply; the card and pane show an info button opening that account in the user's language, and a `ppt_filler` deck (no summary) shows no button
+- **THEN** the preview part carries, per rendered slide, its place in the deck, its part of a split list, its title, kind and template slide, and note codes for what was cut, left out, continued or built as another kind, taken from the render and not from the model's reply; the card and pane show an info button opening that account in the user's language, and a `ppt_filler` deck (no summary) shows no button
 
 #### Scenario: Preview unavailable
 
@@ -701,6 +708,19 @@ The system SHALL let the user correct a deck in chat by regenerating from an ame
 
 - **WHEN** a deck was delivered in an earlier turn and the user asks to put a phone number on the last slide, and the model sends only `changes` editing that slide
 - **THEN** the whole deck is rebuilt from the stored plan with that one change, every other slide of the plan is identical to the delivered plan's, and the result is a normal delivery
+
+#### Scenario: Replace that only changes text keeps the design
+
+- **GIVEN** a delivered deck whose closing slide was built on one of two closing template slides
+- **WHEN** a `changes` call replaces it with a closing slide whose text differs and that still fits that template slide
+- **THEN** the rebuilt closing slide is on the same template slide; a replacement of another kind, or one that no longer fits there, is assigned as any slide
+- **AND** the tool description tells the model to change text inside a slide with `edit`, which keeps the slide's design, and to use `replace` for a different slide
+
+#### Scenario: New slide written in the change itself
+
+- **WHEN** a `replace` or `insert` change carries slide fields (`title`, `items`, `kind`â€¦) beside `op` and no `slides`
+- **THEN** those fields are read as its one new slide
+- **AND** slide fields beside a non-empty `slides`, or on an `edit` or `remove`, build nothing and the result says which fields, why they cannot be read, and where to put them
 
 #### Scenario: Bad change
 

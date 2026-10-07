@@ -1229,3 +1229,39 @@ passed; `npx tsc --noEmit -p .` clean; `prettier --check` and `eslint` clean on 
 History replay: the summary is a field of the persisted part, read by the same card on replay.
 
 Not covered: a manual check in the running app (the dialog was exercised in happy-dom only).
+
+## Results: WP35 (live-session fixes)
+
+Found in live session `2a1d9857-…`: the variety ask came back on turn 3 for slides delivered on
+turn 1; a split made the file 14 slides for a 13-slide stored plan, so `changes` on the file's
+numbers missed; a `replace` meant only to change the closing slide's text moved it to another
+template slide; a `replace` arrived with its slide fields beside `op`.
+
+**Root cause of the re-ask.** `CheckpointHygieneMiddleware` (first middleware of the platform
+frame) passes the model request through `strip_message_names`, so every `ToolMessage` a capability
+middleware sees has `name=None`; `deck_delivered` required `name == "build_presentation"` and never
+matched, in any turn. Turn 2 escaped only because its first call failed on a slide number before
+the assignment. Now matched by the `tool_call_id` of the `AIMessage` call naming the tool.
+
+**Unit evidence:** `test_build_tool.py::test_a_deck_delivered_in_an_earlier_turn_is_seen_with_names_stripped`
+(names cleared and block content, through the middleware: built, no ask; another tool's text: no
+deck), `test_notes_after_a_split_name_the_files_slide_numbers` (agenda gap on slide 4 of the file),
+`test_the_delivered_part_summarises_what_was_built` (numbers 1..5 with parts (2, 1, 2), (3, 2, 2)),
+the description's `edit` sentence; `test_deck_changes.py::test_a_split_list_is_stored_as_the_delivered_deck`
+(stored deck equals the rendered one, kinds set, a later edit of slide 4 neither splits nor
+suffixes, parts identical), `test_a_text_replace_keeps_the_replaced_slides_design` (pinned section
+variant kept on a text replace, a `quote` replacement reassigned),
+`test_a_replacement_inherits_the_replaced_slides_template_slide`,
+`test_a_new_slide_written_in_the_change_itself_is_read_as_its_slide`,
+`test_slide_fields_beside_slides_or_on_another_op_say_where_they_go`,
+`test_a_flattened_replace_is_built_as_its_slide`; `test_assign.py::test_a_delivered_split_rebuilds_as_it_was_and_still_counts_once`,
+`test_a_delivered_slide_keeps_its_template_slide_while_it_fits_its_kind`,
+`test_delivered_notes_name_the_files_slide_numbers`.
+
+`.venv/bin/pytest -q tests/test_build_tool.py tests/test_deck_changes.py tests/test_assign.py`:
+129 passed. Package `make code-quality` clean (existing `builder_decks.py` `__all__` warning),
+`make test` 481 passed, 5 skipped (472 before WP35).
+
+Not covered: a live re-run of the session's three turns; the frontend `types.ts` change is a doc
+comment only (no frontend check run). A rebuilt stored split reports its parts as 1/1 in the
+summary (no `list_continued` note on later builds).
