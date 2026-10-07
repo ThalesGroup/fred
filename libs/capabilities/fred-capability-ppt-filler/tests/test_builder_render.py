@@ -353,6 +353,30 @@ def test_image_zone_filled_from_prepared_bytes_or_removed_when_empty():
     assert _pictures(deck.slides[0]) == 1  # the template's own picture stays
 
 
+def test_the_user_summary_records_each_rendered_slide_and_what_changed():
+    """Codes, not prose: the chat dialog words them in the user's language."""
+    very_long = ["word " * 200] * 40
+    result, _ = _render(
+        _on(_pattern("Title and Content"), title="**Very** long", bullets=very_long),
+        _on(_pattern("Photo"), title="Site", image="doc-missing", kind="image_text"),
+        images={},
+    )
+    first, photo = result.report.built
+    assert (first.number, first.part, first.parts) == (1, 1, 1)
+    assert first.title == "Very long"  # inline Markdown stripped
+    assert first.template == _pattern("Title and Content").label
+    assert [n.code for n in first.notes] == ["text_shortened"]
+    assert [(n.code, n.count) for n in photo.notes] == [("image_unusable", 1)]
+    assert photo.kind == _pattern("Photo").kind
+
+    grouped = next(p for p in INVENTORY.patterns if p.groups and p.reusable)
+    room = grouped.groups[0].count
+    steps = [{"heading": f"Step {i}"} for i in range(room + 2)]
+    result, _ = _render(_on(grouped, title="Steps", items=steps))
+    (built,) = result.report.built
+    assert ("items_left_out", 2) in [(n.code, n.count) for n in built.notes]
+
+
 def test_non_slide_entries_are_skipped_and_an_all_invalid_plan_is_an_error():
     result, deck = _render(
         _on(_pattern("Title and Content"), title="Kept"),

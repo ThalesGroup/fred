@@ -124,6 +124,41 @@ _TEXT_FORMATTING_HINT = (
 )
 
 
+BuildNoteCode = Literal[
+    "text_shortened",
+    "content_left_out",
+    "items_left_out",
+    "image_unusable",
+    "table_left_out",
+    "table_text_smaller",
+    "text_overflows",
+    "left_empty",
+    "fixed_slide",
+    "list_continued",
+    "other_kind",
+]
+
+
+class BuildNote(BaseModel):
+    """What happened to one slide, as a code the frontend words for the user."""
+
+    code: BuildNoteCode
+    count: Optional[int] = None
+    kind: Optional[str] = None  # the requested kind, for `other_kind`
+
+
+class BuiltSlide(BaseModel):
+    """One rendered slide as the user sees it; ``number`` is the plan's."""
+
+    number: int
+    part: int = 1
+    parts: int = 1
+    title: str = ""
+    kind: str
+    template: str
+    notes: List[BuildNote] = Field(default_factory=list)
+
+
 class PptPreviewPart(BaseModel):
     """
     Contributed ``ppt_preview`` chat part (#1903, preview-pane extension).
@@ -156,6 +191,8 @@ class PptPreviewPart(BaseModel):
     # Both capabilities of this package deliver this part; the card opens the
     # preview pane of the one that produced it, the only one the agent may have.
     capability_id: str = "ppt_filler"
+    # ppt_builder only: what each rendered slide holds and what was changed.
+    summary: Optional[List[BuiltSlide]] = None
 
 
 def _slide_field_name(slide_number: int) -> str:

@@ -106,6 +106,8 @@ from fred_capability_ppt_filler.concurrency import (
     release_heavy_job_slot,
 )
 from fred_capability_ppt_filler.fill import (
+    BuildNote,
+    BuiltSlide,
     PptPreviewPart,
     _pdf_key_for,
     _prefetch_image_bytes,
@@ -402,6 +404,28 @@ def _without(slide: SlidePlan, bad: set[str]) -> SlidePlan:
             "items": items,
         }
     )
+
+
+def _summary(
+    built: List[BuiltSlide], sent: DeckPlan, bad: List[str]
+) -> List[BuiltSlide]:
+    """The render's per-slide record, with the pictures that did not load
+    before the assignment noted on the first part of the slide naming them."""
+    unusable = set(bad)
+    noted: set[int] = set()
+    for slide in built:
+        if not unusable or slide.number in noted:
+            continue
+        noted.add(slide.number)
+        source = sent.slides[slide.number - 1]
+        named = [source.image, *source.images, *(i.image for i in source.items)]
+        count = len({uid for uid in named if uid in unusable})
+        same = next((n for n in slide.notes if n.code == "image_unusable"), None)
+        if same is not None:
+            same.count = (same.count or 0) + count
+        elif count:
+            slide.notes.append(BuildNote(code="image_unusable", count=count))
+    return built
 
 
 def _image_ids(plan: DeckPlan) -> set[str]:
@@ -875,6 +899,7 @@ def build_builder_tools(
         prefetched = (
             await _prefetch_image_bytes(image_ids, services) if image_ids else {}
         )
+        sent = plan
         assignment, plan, bad = await asyncio.to_thread(
             _assign_loadable, inventory, plan, prefetched, variety, max_uses
         )
@@ -1010,6 +1035,7 @@ def build_builder_tools(
                 # the model chose.
                 file_name=file_name,
                 capability_id=PPT_BUILDER_CAPABILITY_ID,
+                summary=_summary(result.report.built, sent, bad),
             )
             return (
                 f"Delivered: '{file_name}', {result.slide_count} slides. This replaces any deck built earlier "

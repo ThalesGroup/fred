@@ -822,6 +822,53 @@ async def test_notes_after_a_split_name_the_plans_slide_numbers(monkeypatch):
     )
 
 
+@pytest.mark.asyncio
+async def test_the_delivered_part_summarises_what_was_built(monkeypatch, preview_union):
+    """The dialog beside the download reads the tool's record, not the reply:
+    a split list, a close-kind fallback and a picture that did not load."""
+    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _pdf)
+    config, assets = _configured()
+    docs = FakeDocs({"txt-1": (b"hello", "text/plain")})
+    tools = _tools(_ctx(config, assets=assets, docs=docs))
+    points = {"title": "Points", "bullets": ["a", "b"], "kind": "timeline"}
+    site = {"title": "Site", "image": "txt-1"}
+    text, result = await tools[BUILD_TOOL_NAME].coroutine(
+        slides=[COVER, _agenda(6), points, site]
+    )
+    assert not result.is_error, text
+    (part,) = result.ui_parts
+    summary = part.summary
+    assert [(s.number, s.part, s.parts) for s in summary] == [
+        (1, 1, 1),
+        (2, 1, 2),
+        (2, 2, 2),
+        (3, 1, 1),
+        (4, 1, 1),
+    ]
+    cover, first, second, fallback, picture = summary
+    assert (cover.title, cover.kind, cover.notes) == ("Kick-off", "cover", [])
+    assert first.title == "Agenda (1/2)" and second.title == "Agenda (2/2)"
+    assert first.kind == second.kind == "agenda"
+    assert (
+        [n.code for n in first.notes]
+        == [n.code for n in second.notes]
+        == ["list_continued"]
+    )
+    assert fallback.kind == "bullets"
+    assert [(n.code, n.kind) for n in fallback.notes] == [("other_kind", "timeline")]
+    assert [(n.code, n.count) for n in picture.notes] == [("image_unusable", 1)]
+    # Codes and counts only: no English prose reaches the user.
+    dumped = json.dumps(part.model_dump(mode="json")["summary"])
+    assert "Nothing to do" not in dumped and "call again" not in dumped
+    # ppt_filler delivers the same part without one: no button there.
+    assert (
+        PptPreviewPart(
+            preview_id="k", title="t", pdf_download_url="/p", version="v"
+        ).summary
+        is None
+    )
+
+
 # --- images -----------------------------------------------------------------------------------
 
 

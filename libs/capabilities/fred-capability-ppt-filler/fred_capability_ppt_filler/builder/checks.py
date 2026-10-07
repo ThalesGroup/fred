@@ -21,10 +21,11 @@ place; :func:`remove_leftovers` adds the example text it had to sweep away.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Collection, Dict, Iterable, List, cast
+from typing import Any, Collection, Dict, Iterable, List, Optional, cast
 
 from pptx.oxml.ns import qn
 
+from fred_capability_ppt_filler.fill import BuildNote, BuildNoteCode, BuiltSlide
 from fred_capability_ppt_filler.traversal import walk_shapes
 
 # Placeholders the template means to keep on every slide.
@@ -53,9 +54,22 @@ class DeckReport:
     slides: Dict[int, SlideReport] = field(default_factory=dict)
     # Other findings for the agent, each a full line with its remedy.
     notes: List[str] = field(default_factory=list)
+    # Per rendered slide, for the user: what it holds and what was changed.
+    built: List[BuiltSlide] = field(default_factory=list)
 
     def slide(self, position: int) -> SlideReport:
         return self.slides.setdefault(position, SlideReport(position))
+
+    def note(self, code: BuildNoteCode, count: Optional[int] = None, **kw: Any) -> None:
+        """A note on the slide being rendered; a repeated code adds its count."""
+        if not self.built:
+            return
+        notes = self.built[-1].notes
+        same = next((n for n in notes if n.code == code), None)
+        if same is None:
+            notes.append(BuildNote(code=code, count=count, **kw))
+        elif count is not None:
+            same.count = (same.count or 0) + count
 
     def issues(self) -> List[SlideReport]:
         """Slides with something to report, in deck order."""

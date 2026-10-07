@@ -30,6 +30,7 @@ import copy
 import io
 import math
 import re
+from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, cast
 
@@ -58,6 +59,7 @@ from fred_capability_ppt_filler.builder.plan import (
     SlidePlan,
     has_content,
 )
+from fred_capability_ppt_filler.fill import BuiltSlide
 from fred_capability_ppt_filler.images import fit_inside_box
 from fred_capability_ppt_filler.inline_markdown import parse_inline_markdown
 from fred_capability_ppt_filler.pptx_archive import open_presentation
@@ -74,6 +76,8 @@ _NO_WRAP_MARGIN = 1.06
 _R_NS = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
 _MEDIA_RELS = ("/image", "/media", "/video", "/audio", "/hdphoto")
 _HYPERLINK_REL = "/hyperlink"
+# A title in the user-facing summary: enough to recognise the slide.
+_SUMMARY_TITLE_CHARS = 120
 _SECTIONS_EXT_URI = "{521415D9-36F7-43E2-AB2F-B90AF26B5E84}"
 # Elements meaningless without their uncopied target (a link to another slide).
 _DROPPED_LINKS = frozenset(
@@ -1156,6 +1160,8 @@ class _Renderer:
         # announcing more topics than it has slides left is one the agent meant to
         # write and did not. The parts of a split agenda are one agenda.
         announced: List[List[int]] = []
+        parts_of = Counter(numbers or [])
+        seen: Counter = Counter()
         for at, slide_plan in enumerate(plan.slides, start=1):
             # Messages name the model's slide: a split list's parts share its number.
             position = numbers[at - 1] if numbers else at
@@ -1179,6 +1185,15 @@ class _Renderer:
                 else:
                     announced.append([position, rendered, len(slide_plan.items)])
             slide, pattern = self._create(pattern)
+            seen[position] += 1
+            self._record(
+                slide_plan,
+                pattern,
+                position,
+                seen[position],
+                parts_of[position] or 1,
+                rendered,
+            )
             # Nothing to say on it (a "Thank you" slide): keep the template's text.
             if pattern.reusable and pattern.fillable and has_content(slide_plan):
                 self._fill(slide, pattern, slide_plan, position)
@@ -1187,6 +1202,7 @@ class _Renderer:
             elif has_content(slide_plan) and not _only_names_the_slide(
                 slide_plan, pattern
             ):
+                self.report.note("fixed_slide")
                 self._tell(
                     f"Slide {position}: '{pattern.label}' is a fixed slide shown as is, so its "
                     "content was left out. If it matters, move it to another slide; otherwise "
@@ -1231,6 +1247,42 @@ class _Renderer:
             preview_pptx=preview.getvalue(),
             report=self.report,
         )
+
+    def _record(
+        self,
+        slide_plan: SlidePlan,
+        pattern: Pattern,
+        number: int,
+        part: int,
+        parts: int,
+        rendered: int,
+    ) -> None:
+        """Open the user-facing record of the slide about to be rendered."""
+        shown = pattern.reusable and pattern.fillable and has_content(slide_plan)
+        title = slide_plan.title if shown and slide_plan.title else ""
+        title = (
+            "".join(span.text for span in parse_inline_markdown(title)) if title else ""
+        )
+        self.report.built.append(
+            BuiltSlide(
+                number=number,
+                part=part,
+                parts=parts,
+                title=title[:_SUMMARY_TITLE_CHARS],
+                kind=pattern.kind,
+                template=pattern.label,
+            )
+        )
+        if parts > 1:
+            self.report.note("list_continued")
+        asked = slide_plan.kind
+        # The first slide is the cover by rule: not a substitution.
+        if (
+            asked
+            and asked != pattern.kind
+            and not (rendered == 1 and pattern.kind == "cover")
+        ):
+            self.report.note("other_kind", kind=asked)
 
     def _tell(self, note: str) -> None:
         """A finding the after-check report does not carry: logged and sent to the agent."""
@@ -1322,6 +1374,7 @@ class _Renderer:
                     f"{len(plan.items) - group.count} were dropped."
                 )
                 report.lost.append(f"{len(plan.items) - group.count} item(s)")
+                self.report.note("items_left_out", len(plan.items) - group.count)
             items = _item_shapes(group, index)
             kept, dropped = items[:used], [i for i in items[used:] if i]
             if dropped and kept:
@@ -1329,6 +1382,7 @@ class _Renderer:
             elif dropped:
                 # Nothing was kept, so nothing anchors the decoration: sweeping
                 # by overlap here takes the slide's own background with it.
+                self.report.note("left_empty")
                 self._tell(
                     f"Slide {position}: '{pattern.label}' shows its content as items and none "
                     f"were given, so it stays empty. Give that content as `items` (up to "
@@ -1341,6 +1395,7 @@ class _Renderer:
             self._even_out_item_widths(group, index)
         report.lost.extend(lost)
         if lost:
+            self.report.note("content_left_out")
             self.warnings.append(
                 f"Slide {position}: '{pattern.label}' has no place for {', '.join(lost)}; "
                 "that content is not in the deck."
@@ -1413,12 +1468,14 @@ class _Renderer:
                 (shape, zone, 1.0 if scale is None else scale)
             )
             if one_line_room is not None:
+                self.report.note("text_overflows")
                 self._tell(
                     f"Slide {position}: the {zone.role} '{lines[0].text}' is too long for one line "
                     f"and runs into the text below. Shorten it to under {one_line_room} characters."
                 )
             if truncated:
                 report.truncated.append(zone.role)
+                self.report.note("text_shortened")
                 self.warnings.append(
                     f"Slide {position}: text for the {zone.role} zone of '{pattern.label}' was too long "
                     f"and got truncated (about {zone.chars_per_line} characters × {zone.max_lines} lines fit)."
@@ -1462,6 +1519,7 @@ class _Renderer:
                     f"Slide {position}: image '{image_id}' is not a usable image document and was left out."
                 )
                 report.lost.append(f"image '{image_id}'")
+                self.report.note("image_unusable", 1)
                 if cast(Any, placed.shape).is_placeholder:
                     _remove(placed)
                 continue
@@ -1479,6 +1537,7 @@ class _Renderer:
         fit = fit_table(zone, table)
         if fit.problem is not None:
             # Its own line: "not placed: table" would name the wrong remedy.
+            self.report.note("table_left_out")
             self._tell(
                 f"Slide {position}: the table was left out "
                 f"({fit.problem[0].removeprefix('table: ')}). To show it, "
@@ -1491,8 +1550,10 @@ class _Renderer:
             report.removed.extend(removed)
         if fit.scale is not None:
             report.shrunk.append(f"table text at {round(fit.scale * 100)} % to fit")
+            self.report.note("table_text_smaller")
         if placed.top + frame.height > self.height:
             report.lost.append("table rows below the slide")
+            self.report.note("content_left_out")
             self.warnings.append(
                 f"Slide {position}: the table of '{label}' runs off the slide."
             )
