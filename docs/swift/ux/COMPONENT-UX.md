@@ -1229,6 +1229,28 @@ only, the stored value is left as is.
 
 ---
 
+### `DeckSummaryButton` — "What was built" (2026-10-07)
+
+**Location:** `src/rework/features/capabilities/ppt_filler/DeckSummaryButton.tsx`
+
+**Status:** `Functional`
+
+An `info` `IconButton` (`size="medium"`, default `on-surface-retreat`, tooltip
+and accessible name "What was built", `aria-haspopup="dialog"`) placed just
+before the `.pptx` download, on the `ppt_preview` chat card and in the preview
+pane header. Rendered only when the part carries a `summary` (ppt_builder
+decks); ppt_filler decks and older parts show nothing. It opens the central
+`Dialog` (`maxWidth` 480, single "Close" action): a Body Medium line "This
+presentation has N slides.", then an ordered list, one row per slide separated
+by an `outline-muted` rule: the slide number (Label Large, `on-surface-muted`),
+the title (Body Medium emphasized; the template slide's label when the slide
+has no title), the kind label (`capability.ppt_builder.kinds.*`, Body Small,
+`on-surface-retreat`) and, when any, a bulleted list of plain notes (Body Small,
+`on-surface-retreat`) worded from the tool's note codes. An unknown code is
+skipped, never shown raw. The content is fluid (`width: 100%`).
+
+---
+
 ### Package-foundation component corrections (2026-09-09)
 
 **Location:** `src/rework/components/shared/atoms/{Button,Icon,IconButton,TextInput,Spinner}/`

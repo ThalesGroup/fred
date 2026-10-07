@@ -120,7 +120,9 @@ each month from the period's documents.
 request, on your company template or, without one, on a built-in template. It
 picks, for each slide, the template slide that fits the content best and fills
 it. The deck appears in a preview beside the conversation and downloads as
-`.pptx`.
+`.pptx`. The info button next to the download shows **What was built**: each
+slide, its kind, and what was shortened, left out or continued on another
+slide.
 
 **How to set it up** — upload a `.pptx` template on the agent and save. The
 template is then read in the background: meanwhile the agent shows
