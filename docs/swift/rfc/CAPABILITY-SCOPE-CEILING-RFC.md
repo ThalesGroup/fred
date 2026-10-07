@@ -1,6 +1,6 @@
 # RFC: Capability scope as an authorization ceiling (agent-scope-first authorization)
 
-**Status:** proposed — open design question; no implementation approved by this RFC alone
+**Status:** proposed — open design question; no implementation approved by this RFC alone. Document search ceilings shipped separately (§8 item 2).
 **Author:** Maxime Daragon
 **Date:** 2026-08-05
 **ID:** CAPAB-SCOPE-01
@@ -239,12 +239,12 @@ Enforcement is staged between the trusted pod and the service boundary.
    today's shape and shippable fast — or a richer descriptor (specific
    libraries/document sets) from day one? Recommendation: start with the enum
    that already exists implicitly, design the descriptor to grow.
-2. **Fate of `document_access.search_attachments_only` / `show_attach_files_control`.**
-   If the ceiling is derived from capability selection, these per-capability
-   toggles are re-expressed as ceiling inputs. Migration story for already-stored
-   agent configs is required (cf. the copy/rename work already in flight on
-   `#2220`, and the separate question of splitting attach-files into its own
-   capability).
+2. **Settled for document search (2026-10-07, OpenSpec change
+   `split-attachments-and-team-documents`).** `document_access` now declares
+   two positive sources, `attachments` and `team_documents`, passed to
+   `DocumentSearchPort.search` as ceilings the per-turn scope can only narrow;
+   legacy keys are read through a before-validator. Still open: the same
+   ceiling for summarize and the other document ports.
 3. **Tier boundary.** Approve Tier 1 alone now (pod-enforced, no wire change),
    with Tier 2 as a separately scoped follow-up?
    Recommendation: yes.
