@@ -400,9 +400,15 @@ logs, Prometheus labels and security audit remain content-free. Platform operato
 (`CAN_MANAGE_PLATFORM`) can read unexpired records; user administrators
 (`CAN_ADMINISTER_USERS`) can erase them. The default retention is 30 days,
 configurable from 1 to 365; reads exclude expired rows and a periodic worker
-physically purges them even after feature disablement. Erasure fences later writes
-across replicas, using a durable subject hash without raw identity or query.
-Account deletion propagates erasure to all configured enabled runtime sources
-before deleting the identity-provider account; unavailable sources block completion.
+physically purges them even after feature disablement.
+
+Deleting or suspending an account does not erase this activity: it stays a
+security trace until expiry, like conversation history. Erasure is an explicit
+administrator action for a right-to-erasure request:
+`DELETE /agents/web-research/activity/users/{user_id}` on Fred Agents
+(`CAN_ADMINISTER_USERS`) deletes every record of that user and returns
+`{"deleted": <count>}`; the call is itself audited (`web_research.activity.erased`).
+It does not block later use: an operation running during the call, or a later
+one by the same user, is recorded normally and expires with the retention.
 Activation requires the activity store and operator approval of query collection.
 See [deployment and migration instructions](../ops/migrations/2980-native-web-research.md).

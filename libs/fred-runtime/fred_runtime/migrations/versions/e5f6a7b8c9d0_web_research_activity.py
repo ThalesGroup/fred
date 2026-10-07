@@ -13,11 +13,6 @@ depends_on = None
 
 def upgrade() -> None:
     op.create_table(
-        "runtime_web_research_activity_gate",
-        sa.Column("subject_hash", sa.String(64), primary_key=True),
-        sa.Column("erased", sa.Boolean(), nullable=False),
-    )
-    op.create_table(
         "runtime_web_research_activity",
         sa.Column("request_id", sa.String(36), primary_key=True),
         sa.Column("user_id", sa.String(128), nullable=False),
@@ -50,4 +45,3 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_table("runtime_web_research_activity")
-    op.drop_table("runtime_web_research_activity_gate")

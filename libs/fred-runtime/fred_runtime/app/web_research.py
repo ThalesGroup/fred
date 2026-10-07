@@ -114,8 +114,6 @@ class WebResearchAdapter(WebResearchPort):
                     query=getattr(request, "query", None),
                     url=activity_url(getattr(request, "url", None)),
                 )
-        except WebResearchError:
-            raise
         except Exception:
             ACTIVITY_FAILURES.labels(
                 service=self._service.service_name, stage="begin"

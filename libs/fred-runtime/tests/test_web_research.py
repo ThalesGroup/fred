@@ -154,35 +154,6 @@ def test_proxy_configuration_rejects_embedded_credentials_and_old_service_fields
 
 
 @pytest.mark.asyncio
-async def test_erasure_fences_late_begin_and_is_shared_by_new_store(service):
-    from fred_runtime.app.web_research_activity import WebResearchActivityStore
-
-    backend, engine = service
-    await backend.store.erase_user("user")
-    other_replica = WebResearchActivityStore(engine, 30)
-    with pytest.raises(WebResearchError, match="rejected"):
-        await other_replica.begin(
-            request_id="late",
-            user_id="user",
-            correlation_id="corr",
-            operation="web_search",
-            query="LATE-QUERY",
-        )
-    assert await other_replica.list(user_id="user", limit=10) == []
-    with pytest.raises(WebResearchError, match="rejected"):
-        await backend.bind(binding()).execute(WebSearchRequest(query="LATE-QUERY"))
-    # Other subjects retain independent access.
-    await other_replica.begin(
-        request_id="other",
-        user_id="other",
-        correlation_id="corr",
-        operation="web_search",
-        query="public",
-    )
-    assert len(await other_replica.list(user_id="other", limit=10)) == 1
-
-
-@pytest.mark.asyncio
 async def test_busy_call_is_recorded_without_dispatch(service):
     backend, _ = service
     backend._slots = asyncio.Semaphore(0)

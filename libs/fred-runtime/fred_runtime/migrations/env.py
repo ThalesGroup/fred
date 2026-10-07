@@ -24,7 +24,6 @@ from sqlalchemy import MetaData, Table
 
 from fred_runtime.app.config_loader import load_agent_pod_config
 from fred_runtime.app.web_research_activity import (
-    WebResearchActivityGate,
     WebResearchActivityRow,
 )
 
@@ -42,7 +41,6 @@ if config.config_file_name is not None:
 _runtime_metadata = MetaData()
 cast(Table, SessionHistoryRow.__table__).to_metadata(_runtime_metadata)
 cast(Table, WebResearchActivityRow.__table__).to_metadata(_runtime_metadata)
-cast(Table, WebResearchActivityGate.__table__).to_metadata(_runtime_metadata)
 
 run_migrations_offline, run_migrations_online = make_alembic_env(
     target_metadata=_runtime_metadata,

@@ -22,7 +22,7 @@ None.
 
 ## Impact
 
-Reuse the current capability package and runtime adapter. Rename the egress implementation to an internal research engine and delete its server-specific code. Update SDK deployment configuration, schemas, package extras/locks, Helm values, operator guide and dashboard/alerts. Keep activity SQL and account erasure unchanged. No Knowledge Flow API, new migration, new deployment, or new user flow.
+Reuse the current capability package and runtime adapter. Rename the egress implementation to an internal research engine and delete its server-specific code. Update SDK deployment configuration, schemas, package extras/locks, Helm values, operator guide and dashboard/alerts. Keep activity SQL; account deletion keeps activity until expiry, and erasure is an explicit admin action. No Knowledge Flow API, new migration, new deployment, or new user flow.
 
 ## Out of Scope
 

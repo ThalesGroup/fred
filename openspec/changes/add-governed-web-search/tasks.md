@@ -27,6 +27,10 @@
 
 - [x] 5.1 Remove `search_and_fetch` (SDK request, engine branch, tool, frontend label, docs): the model chains `web_search` and `fetch_url` itself and reads only useful pages.
 
+## 6. Explicit erasure only
+
+- [x] 6.1 Remove account-deletion erasure fan-out and the per-user erasure fence (store, model, migration, tests); keep the explicit admin erasure endpoint; document it.
+
 ## Evidence
 
 Previous version: 67 focused tests and root quality gates passed; separate egress HTTPS topology was reviewed against implementation head `289b26e509aae586ae5b4b27fbc09a584cfcaf4a`. This is historical evidence, not verification of the revised transport. Current work reuses issue #2980 and branch `codex/add-governed-web-search`.
@@ -36,3 +40,5 @@ Proxy assumption: operator-owned HTTP(S) forward proxy with CONNECT and final DN
 Provider selection (2026-10-07): 40 capability tests (8 new shared provider contract/selection tests with mocked transports, no live Brave call), 7 runtime web-research tests, ruff and basedpyright clean, `make generate-config-schema`, `make check-config-files` and `helm lint` pass. Local Fred Agents reloaded on the default keyless provider.
 
 Admin view (2026-10-07): runtime KPI emission test (content-free, cost only on successful searches), control-plane preset test (blocked/saturated/failed split, team scope, admin-only), Analytics page tests; full frontend suite 3388 passed, `tsc`/prettier/eslint clean, basedpyright clean on the preset, `check-config-files` and `helm lint` pass. Not verified against a live OpenSearch index.
+
+Explicit erasure (2026-10-07): control-plane erasure fan-out, its test and the runtime per-user fence (model, migration table, store locking, test) removed; 10 runtime web-research/migration tests and 216 control-plane user/delete tests pass (one unrelated Postgres-5433 integration test needs a database not running locally); ruff and basedpyright clean.

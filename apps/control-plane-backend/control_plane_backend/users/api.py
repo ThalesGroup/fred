@@ -406,7 +406,6 @@ async def create_user(
 )
 async def delete_user(
     user_id: Annotated[str, Path(min_length=1)],
-    request: Request,
     deps: UserDependencies,
     rebac: Annotated[RebacEngine, Depends(_get_rebac_engine)],
     bootstrap_store: Annotated[
@@ -428,21 +427,6 @@ async def delete_user(
         if not rebac.requires_active_accounts:
             raise AccountSuspensionDisabledError()
         await rebac.suspend_account(user_id)
-        from control_plane_backend.users.web_research_erasure import (
-            erase_web_research_activity,
-        )
-
-        await erase_web_research_activity(
-            deps.configuration,
-            get_application_container(request).get_runtime_http_client()
-            if any(
-                source.enabled
-                for source in deps.configuration.platform.runtime_catalog_sources
-            )
-            else None,
-            user_id,
-            request.headers.get("authorization", ""),
-        )
         return
 
     admin = _get_keycloak_admin_for_user_operations(deps)
@@ -454,21 +438,6 @@ async def delete_user(
     # Before the account, so a failure here is retried rather than orphaned.
     await prompt_store.delete_favorites_for_user(user_id)
     await remove_user_avatar(user_id, deps)
-    from control_plane_backend.users.web_research_erasure import (
-        erase_web_research_activity,
-    )
-
-    await erase_web_research_activity(
-        deps.configuration,
-        get_application_container(request).get_runtime_http_client()
-        if any(
-            source.enabled
-            for source in deps.configuration.platform.runtime_catalog_sources
-        )
-        else None,
-        user_id,
-        request.headers.get("authorization", ""),
-    )
     await delete_user_from_service(admin, user_id)
 
 

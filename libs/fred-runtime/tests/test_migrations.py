@@ -69,9 +69,6 @@ def test_upgrade_sqlite_database_applies_packaged_migrations(tmp_path: Path) -> 
         assert connection.execute(
             "PRAGMA table_info(runtime_web_research_activity)"
         ).fetchall()
-        assert connection.execute(
-            "PRAGMA table_info(runtime_web_research_activity_gate)"
-        ).fetchall()
         revision = connection.execute(
             "SELECT version_num FROM alembic_version_runtime"
         ).fetchone()

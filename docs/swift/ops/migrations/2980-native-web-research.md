@@ -31,7 +31,7 @@ web_research:
 
 Start the usual local infrastructure and run Fred normally (`make run` from the
 repository root). Fred Agents startup applies the existing runtime migration,
-including restricted activity and erasure-fence tables. Its process must have
+including the restricted activity table. Its process must have
 working DNS and public HTTP(S) access. Enable Web research for the team and select
 it on the agent through the existing capability controls. Ask the agent to search
 for a public topic and to read `https://www.python.org/`.
@@ -97,7 +97,11 @@ Before production enablement, approve raw-query storage and the chosen search
 provider under deployment policy; DuckDuckGo HTML has no availability SLA and is
 not intended for production load.
 The restricted SQL sink must exist and SQL statement logging must be disabled.
-Reads require `CAN_MANAGE_PLATFORM`, erasure `CAN_ADMINISTER_USERS`.
+Reads require `CAN_MANAGE_PLATFORM`. Account deletion keeps the activity until
+expiry; to honour a right-to-erasure request, a user administrator
+(`CAN_ADMINISTER_USERS`) calls
+`DELETE /agents/web-research/activity/users/<opaque-id>` on Fred Agents, which
+returns the number of deleted records.
 
 ## Validation
 
@@ -117,7 +121,7 @@ public Internet probe runs; provider/proxy outages appear on attempted operation
 
 Using an authorized operator credential, inspect
 `GET /agents/web-research/activity?user_id=<opaque-id>` after successful and failed
-research. Check attribution/outcome, expiry and user deletion; no page bodies,
+research. Check attribution/outcome, expiry and explicit erasure; no page bodies,
 snippets, secrets or URL query/fragment are retained. Refuse private/metadata URLs
 and redirects in both modes. Verify unavailable proxy returns a bounded failure
 and there are no direct connections. Verify wrong HTTPS proxy trust is rejected.
@@ -135,6 +139,4 @@ no further SQL migration is required.
 Disable `enabled` and deselect the capability before rollback. Keep the current
 runtime available for purge/erasure until records expire, or erase them first.
 Expiry is immediate for reads and physical deletion occurs on the next sweep.
-User erasure persists a SHA-256 subject fence against late writes across replicas.
-Account deletion is blocked for retry if an enabled runtime cannot erase its data.
 Conversation-history retention remains governed by its existing separate policy.

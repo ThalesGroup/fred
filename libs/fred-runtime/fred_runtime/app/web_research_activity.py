@@ -5,15 +5,13 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from hashlib import sha256
 from typing import Any, cast
 from urllib.parse import urlsplit, urlunsplit
 
-from fred_sdk.contracts.web_research import WebResearchError
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import Boolean, DateTime, Integer, String, Text, delete, select, update
+from sqlalchemy import DateTime, Integer, String, Text, delete, select, update
 from sqlalchemy.engine import CursorResult
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -31,14 +29,6 @@ def activity_url(value: str | None) -> str | None:
 
 class WebResearchActivityBase(DeclarativeBase):
     pass
-
-
-class WebResearchActivityGate(WebResearchActivityBase):
-    """Durable erasure fence shared by replicas; retains no raw identity/query."""
-
-    __tablename__ = "runtime_web_research_activity_gate"
-    subject_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
-    erased: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class WebResearchActivityRow(WebResearchActivityBase):
@@ -92,40 +82,10 @@ class WebResearchActivityStore:
     async def check_ready(self) -> None:
         async with self._sessions() as session:
             await session.execute(select(WebResearchActivityRow.request_id).limit(1))
-            await session.execute(select(WebResearchActivityGate.subject_hash).limit(1))
-
-    async def _lock_subject(
-        self, session: AsyncSession, user_id: str
-    ) -> WebResearchActivityGate:
-        from sqlalchemy.dialects.postgresql import insert as pg_insert
-        from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-
-        insert = pg_insert if self._dialect == "postgresql" else sqlite_insert
-        subject_hash = sha256(user_id.encode()).hexdigest()
-        await session.execute(
-            insert(WebResearchActivityGate)
-            .values(
-                subject_hash=subject_hash,
-                erased=False,
-            )
-            .on_conflict_do_nothing(index_elements=["subject_hash"])
-        )
-        return (
-            await session.execute(
-                select(WebResearchActivityGate)
-                .where(
-                    WebResearchActivityGate.subject_hash == subject_hash,
-                )
-                .with_for_update()
-            )
-        ).scalar_one()
 
     async def begin(self, **fields: object) -> None:
         now = utcnow()
         async with self._sessions.begin() as session:
-            gate = await self._lock_subject(session, str(fields["user_id"]))
-            if gate.erased:
-                raise WebResearchError("rejected")
             session.add(
                 WebResearchActivityRow(
                     **fields,
@@ -167,8 +127,6 @@ class WebResearchActivityStore:
 
     async def erase_user(self, user_id: str) -> int:
         async with self._sessions.begin() as session:
-            gate = await self._lock_subject(session, user_id)
-            gate.erased = True
             result = await session.execute(
                 delete(WebResearchActivityRow).where(
                     WebResearchActivityRow.user_id == user_id

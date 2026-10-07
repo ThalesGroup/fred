@@ -22,6 +22,29 @@ Fred SHALL select the web search provider from deployment configuration among a 
 
 ## MODIFIED Requirements
 
+### Requirement: Attributed, retained search activity
+
+Fred SHALL record each dispatched research request with opaque subject/correlation IDs, query or public URL, timing and outcome. Records SHALL exclude page bodies, snippets and credentials. Access SHALL be restricted to platform operators and records SHALL expire after a configurable 30-day default. Deleting an account SHALL NOT erase its activity, which remains a security trace until expiry; an administrator SHALL be able to erase one user's activity explicitly. A compliant activity sink SHALL be required for enablement.
+
+#### Scenario: Successful and failed research
+- **WHEN** a user triggers a search that succeeds or fails
+- **THEN** an authorized investigator can attribute the request and outcome to that user using the restricted activity store
+- **AND** team, session and agent identifiers, duration and result count are available where applicable
+- **AND** generic logs, metrics and standard tool audit contain no query text
+
+#### Scenario: Retention expiry
+- **WHEN** a record exceeds the configured retention
+- **THEN** the activity store deletes it and no search activity view returns it
+
+#### Scenario: Account deletion keeps the security trace
+- **WHEN** an administrator deletes or suspends an account
+- **THEN** that user's activity stays available to investigators until retention expiry
+
+#### Scenario: Explicit administrator erasure
+- **WHEN** an administrator with user administration rights erases one user's activity
+- **THEN** every stored record of that user is deleted and no search activity view returns it
+
+
 ### Requirement: Controlled external egress
 
 Fred SHALL execute research internally, directly or through an explicitly configured HTTP(S) forward proxy, with no proxy-to-direct fallback. It MUST reject unsafe URLs, redirects and excessive/non-text responses. Direct connections MUST pin public DNS results. Proxy deployments MUST enforce public-only final destinations at the proxy. Origin TLS MUST remain verified and proxy credentials MUST NOT reach origins.
