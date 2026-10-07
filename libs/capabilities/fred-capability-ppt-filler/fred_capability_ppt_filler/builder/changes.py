@@ -24,7 +24,7 @@ from typing import Any, Dict, List, Mapping, Optional, Tuple, Union
 from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic.json_schema import SkipJsonSchema
 
-from fred_capability_ppt_filler.builder.plan import DeckPlan, SlidePlan
+from fred_capability_ppt_filler.builder.plan import HIDDEN_FIELDS, DeckPlan, SlidePlan
 
 _OPS: Tuple[str, ...] = ("replace", "insert", "remove", "edit")
 _OP_ALIASES = {
@@ -355,14 +355,11 @@ def _asked(base: DeckPlan, ref: int) -> Dict[str, Any]:
     return {"asked_design": base.slides[ref - 1].built_on, "asked_from": ref}
 
 
-_HIDDEN = {"built_on", "asked_design", "asked_from"}
-
-
 def _shown(slide: SlidePlan, kinds: Mapping[str, str]) -> Tuple[Dict[str, Any], Any]:
     """What a slide shows: its content and template slide, a kind left out
     being its template slide's."""
     design = slide.asked_design or slide.built_on
-    content = slide.model_dump(exclude=_HIDDEN)
+    content = slide.model_dump(exclude=set(HIDDEN_FIELDS))
     content["kind"] = slide.kind or kinds.get(design or "")
     return content, design
 
@@ -489,7 +486,7 @@ def apply_changes(base: DeckPlan, changes: List[SlideChange]) -> DeckPlan:
             first = new[0].model_copy(update={"built_on": slide.built_on})
             if number in liked:
                 first = first.model_copy(update=_asked(base, liked[number]))
-            slides.extend([first, *new[1:]] if new[0].built_on is None else new)
+            slides.extend([first, *new[1:]])
         elif number not in removed:
             slides.append(edited.get(number, slide))
         slides.extend(inserts.get(number, []))

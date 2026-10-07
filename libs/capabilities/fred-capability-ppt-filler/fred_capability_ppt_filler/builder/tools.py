@@ -93,6 +93,7 @@ from fred_capability_ppt_filler.builder.models import (
     TemplateInventory,
 )
 from fred_capability_ppt_filler.builder.plan import (
+    HIDDEN_FIELDS,
     DeckPlan,
     PlanColumn,
     PlanItem,
@@ -340,28 +341,25 @@ def _listed(value: Any, info: ValidationInfo) -> Any:
     return [value] if isinstance(value, dict) else value
 
 
+def _sent(slide: Any) -> SlidePlan:
+    """A slide as the model wrote it: a design pin it sent would bypass the
+    fit and variety checks, so the fields only the tool sets are dropped."""
+    plain = slide.model_dump() if isinstance(slide, BaseModel) else slide
+    return SlidePlan.model_validate(plain).model_copy(
+        update=dict.fromkeys(HIDDEN_FIELDS)
+    )
+
+
 def _to_plan(validated: Any) -> DeckPlan:
     return DeckPlan(
-        slides=[
-            SlidePlan.model_validate(slide.model_dump()) for slide in validated.slides
-        ],
+        slides=[_sent(slide) for slide in validated.slides],
         file_name=validated.file_name,
     )
 
 
-def _plain_slide(slide: Any) -> Any:
-    return slide.model_dump() if isinstance(slide, BaseModel) else slide
-
-
 def _to_changes(validated: Any) -> List[SlideChange]:
     return [
-        change.model_copy(
-            update={
-                "slides": [
-                    SlidePlan.model_validate(_plain_slide(s)) for s in change.slides
-                ]
-            }
-        )
+        change.model_copy(update={"slides": [_sent(s) for s in change.slides]})
         for change in validated.changes or []
     ]
 

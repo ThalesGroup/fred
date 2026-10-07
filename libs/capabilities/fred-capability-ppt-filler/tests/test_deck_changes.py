@@ -869,6 +869,29 @@ def test_a_design_asked_for_is_never_a_variety_ask():
     assert assignment.repeats == []
 
 
+@pytest.mark.asyncio
+async def test_design_fields_sent_by_the_model_are_ignored(
+    monkeypatch, deck_plan_store
+):
+    """`built_on` and `asked_*` are the tool's own: written by a model, they
+    would pin a slide on a template slide the checks never chose."""
+    workspace = FakeWorkspace()
+    pin = {"built_on": "layout:5", "asked_design": "layout:5", "asked_from": 1}
+    text, result, used = await _delivered_patterns(
+        monkeypatch, workspace, slides=[COVER, {**_bullets(2), **pin}]
+    )
+    assert not result.is_error, text
+    assert used[-1][1] != "layout:5"
+    replace = {"op": "replace", "slide": 2, "slides": [{**_bullets(3), **pin}]}
+    text, result, used = await _delivered_patterns(
+        monkeypatch, workspace, changes=[replace]
+    )
+    assert not result.is_error, text
+    assert used[-1][1] != "layout:5"
+    stored = DeckPlan.model_validate_json(deck_plan_store.plans[("sess-9", "inst-7")])
+    assert stored.slides[1].built_on == used[-1][1]
+
+
 # --- changes that change nothing ---------------------------------------------------------
 
 

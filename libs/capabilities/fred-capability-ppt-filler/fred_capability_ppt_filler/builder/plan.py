@@ -358,6 +358,10 @@ class SlidePlan(BaseModel):
         return [value]
 
 
+# Set by delivery and `like` only: never read from the model's call.
+HIDDEN_FIELDS = ("built_on", "asked_design", "asked_from")
+
+
 class DeckPlan(BaseModel):
     slides: List[SlidePlan]
     file_name: Optional[str] = Field(
