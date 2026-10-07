@@ -39,7 +39,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, cast, get_args
 
 import yaml
 from dotenv import dotenv_values
-from fred_capability_ppt_filler.builder import analysis_job, checks
+from fred_capability_ppt_filler.builder import analysis_job, checks, deck_plans
 from fred_capability_ppt_filler.builder import tools as tools_mod
 from fred_capability_ppt_filler.builder.analysis import analyze_template
 from fred_capability_ppt_filler.builder.assign import (
@@ -85,7 +85,7 @@ from pptx import Presentation
 from pptx.oxml.ns import qn
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from prompts import PROMPTS  # noqa: E402
+from prompts import EDITS, PROMPTS  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[4]
 DEFAULT_ENV = REPO / "apps/fred-agents/config/.env"
@@ -245,6 +245,8 @@ class MemoryWorkspace:
 
 
 _renders: contextvars.ContextVar[List[RenderResult]] = contextvars.ContextVar("renders")
+# The whole plan each render was given: a `changes` call's arguments are not one.
+_plans: contextvars.ContextVar[List[DeckPlan]] = contextvars.ContextVar("plans")
 _real_render = tools_mod.render_deck
 
 
@@ -252,6 +254,7 @@ def _recording_render(*args: Any, **kwargs: Any) -> RenderResult:
     # Observes only: the worker thread inherits the run's context.
     result = _real_render(*args, **kwargs)
     _renders.get().append(result)
+    _plans.get().append(args[2])
     return result
 
 
@@ -266,6 +269,27 @@ class Attempt:
     message: str
     slides: int = 0
     problems: List[Dict[str, Any]] = field(default_factory=list)
+    # The call sent `changes` rather than the whole deck.
+    changes: bool = False
+
+
+@dataclass
+class EditResult:
+    """The second user turn: a change to the delivered deck."""
+
+    request: str
+    success: bool = False
+    failure: Optional[str] = None
+    calls: int = 0
+    calls_with_changes: int = 0
+    first_call: bool = False
+    input_tokens: int = 0
+    output_tokens: int = 0
+    slides_before: int = 0
+    slides_after: int = 0
+    # Slides of the first deck found unchanged in the edited one.
+    kept: int = 0
+    attempts: List[Attempt] = field(default_factory=list)
 
 
 @dataclass
@@ -315,16 +339,22 @@ class RunResult:
     reply_tool_call: bool = False
     attempts: List[Attempt] = field(default_factory=list)
     plan: Optional[Dict[str, Any]] = None
+    edit: Optional[EditResult] = None
 
 
 def _build_tool(
-    variant: Variant, workspace: MemoryWorkspace, variety: VarietyCheck, max_uses: int
+    variant: Variant,
+    workspace: MemoryWorkspace,
+    variety: VarietyCheck,
+    max_uses: int,
+    session: str = "eval",
+    history: Any = None,
 ) -> BaseTool:
     """The tool the capability's middleware registers once the analysis is in
-    the pod's cache, with the template read from memory."""
+    the pod's cache, with the template read from memory; one per turn."""
     ctx = CapabilityContext(
         identity=CapabilityIdentity(
-            user_id="eval", session_id="eval", agent_instance_id="eval-instance"
+            user_id="eval", session_id=session, agent_instance_id="eval-instance"
         ),
         config=PptBuilderConfig(
             template_sha256="eval", variety_check=variety, variety_max_uses=max_uses
@@ -337,7 +367,20 @@ def _build_tool(
     async def load() -> bytes:
         return content
 
-    return tools_mod.build_builder_tools(ctx, load, variant.inventory)[0]
+    if history is None:
+        return tools_mod.build_builder_tools(ctx, load, variant.inventory)[0]
+    return tools_mod.build_builder_tools(ctx, load, variant.inventory, history)[0]
+
+
+def _whole(plan: DeckPlan) -> Dict[str, Any]:
+    """A rendered plan as the arguments of a full call, for the metrics."""
+    return {
+        "slides": [
+            s.model_dump(exclude={"ignored_fields", "invalid_entry"})
+            for s in plan.slides
+        ],
+        "file_name": plan.file_name,
+    }
 
 
 async def run_one(
@@ -347,15 +390,18 @@ async def run_one(
     variety: VarietyCheck,
     max_uses: int,
     agent_prompt: str = _BASE_PROMPT,
+    edit_turn: bool = False,
 ) -> RunResult:
     _renders.set([])
+    _plans.set([])
     workspace = MemoryWorkspace()
-    tool = _build_tool(variant, workspace, variety, max_uses)
-    model = profile.model.bind_tools([tool])
+    session = f"eval-{variant.template}-{variant.mode}-{prompt_id}"
     messages: List[BaseMessage] = [
         SystemMessage(content=f"{agent_prompt}\n\n{_BUILD_INSTRUCTIONS}"),
         HumanMessage(content=PROMPTS[prompt_id]),
     ]
+    tool = _build_tool(variant, workspace, variety, max_uses, session, lambda: messages)
+    model = profile.model.bind_tools([tool])
     run = RunResult(variant.template, variant.mode, prompt_id)
     started = time.monotonic()
     last_args: Optional[Dict[str, Any]] = None
@@ -396,10 +442,14 @@ async def run_one(
                         status,
                         text[:2000],
                         problems=_problems(text),
+                        changes=bool(call["args"].get("changes")),
                     )
                 )
             if status == "delivered":
                 run.success = True
+                # A `changes` call's arguments are not the deck: measure what was rendered.
+                if last_args is not None and last_args.get("changes") and _plans.get():
+                    last_args = _whole(_plans.get()[-1])
                 await _reply(run, model, messages)
                 break
         run.repairs = max(0, tool_rounds - 1)
@@ -413,7 +463,98 @@ async def run_one(
         run.plan = last_args
     if run.success and last_args is not None:
         _measure(run, variant, last_args, workspace, _renders.get(), variety, max_uses)
+        if edit_turn and _plans.get():
+            run.edit = await _edit_turn(
+                variant,
+                prompt_id,
+                model,
+                profile,
+                messages,
+                run,
+                variety,
+                max_uses,
+                session,
+            )
     return run
+
+
+async def _edit_turn(
+    variant: Variant,
+    prompt_id: str,
+    bound: Any,
+    profile: Profile,
+    messages: List[BaseMessage],
+    run: RunResult,
+    variety: VarietyCheck,
+    max_uses: int,
+    session: str,
+) -> EditResult:
+    """The user's next turn asks to change the deck: a new tool instance on the
+    same conversation and base-plan store, as on another pod."""
+    before = _plans.get()[-1]
+    edit = EditResult(EDITS[prompt_id], slides_before=len(before.slides))
+    messages.append(AIMessage(content=run.reply or "Done."))
+    messages.append(HumanMessage(content=EDITS[prompt_id]))
+    workspace = MemoryWorkspace()
+    tool = _build_tool(variant, workspace, variety, max_uses, session, lambda: messages)
+    model = profile.model.bind_tools([tool])
+    rendered = len(_plans.get())
+    try:
+        for _round in range(MAX_REPAIRS + 1):
+            t0 = time.monotonic()
+            answer = await model.ainvoke(messages)
+            assert isinstance(answer, AIMessage)
+            messages.append(answer)
+            usage = answer.usage_metadata or {}
+            edit.input_tokens += usage.get("input_tokens", 0)
+            edit.output_tokens += usage.get("output_tokens", 0)
+            calls = [c for c in answer.tool_calls if c["name"] == tool.name]
+            if not calls:
+                edit.attempts.append(
+                    Attempt(time.monotonic() - t0, False, "no_tool_call", _text(answer))
+                )
+                break
+            status = ""
+            for call in answer.tool_calls:
+                if call["name"] != tool.name:
+                    messages.append(
+                        ToolMessage(content="Unknown tool.", tool_call_id=call["id"])
+                    )
+                    continue
+                edit.calls += 1
+                edit.calls_with_changes += bool(call["args"].get("changes"))
+                result = await tool.ainvoke({**call, "type": "tool_call"})
+                messages.append(result)
+                text = str(result.content)
+                status = _status(text)
+                edit.attempts.append(
+                    Attempt(
+                        time.monotonic() - t0,
+                        True,
+                        status,
+                        text[:2000],
+                        problems=_problems(text),
+                        changes=bool(call["args"].get("changes")),
+                    )
+                )
+            if status == "delivered":
+                edit.success = True
+                break
+        if not edit.success:
+            edit.failure = edit.attempts[-1].status if edit.attempts else "no_attempt"
+    except Exception as exc:  # noqa: BLE001 - recorded as a failed edit
+        edit.failure = f"exception: {type(exc).__name__}: {exc}"[:300]
+    edit.first_call = edit.success and edit.calls == 1
+    if edit.success and len(_plans.get()) > rendered:
+        after = _plans.get()[-1]
+        edit.slides_after = len(after.slides)
+        left = [s.model_dump_json() for s in after.slides]
+        for slide in before.slides:
+            dumped = slide.model_dump_json()
+            if dumped in left:
+                left.remove(dumped)
+                edit.kept += 1
+    return edit
 
 
 async def _reply(run: RunResult, model: Any, messages: List[BaseMessage]) -> None:
@@ -698,6 +839,36 @@ def _summary(results: List[RunResult], variants: List[Variant]) -> str:
         lines.append(
             f"| {v.template} | {v.mode} | {v.analysis_seconds:.0f} | {v.labelled} |"
         )
+    revisions = [a for r in results for a in r.attempts[1:] if a.tool_called]
+    lines += [
+        "",
+        f"Revision calls with `changes`: {sum(a.changes for a in revisions)}/{len(revisions)}",
+    ]
+    edits = [r for r in results if r.edit is not None]
+    if edits:
+        lines += [
+            "",
+            "| edit turn | runs | success | first call | calls | calls with changes "
+            "| slides kept identical / before | tokens in / out (k) |",
+            "|---|---|---|---|---|---|---|---|",
+        ]
+        done = [r.edit for r in edits if r.edit is not None]
+        lines.append(
+            f"| all | {len(done)} | {sum(e.success for e in done)} "
+            f"| {sum(e.first_call for e in done)} | {sum(e.calls for e in done)} "
+            f"| {sum(e.calls_with_changes for e in done)} "
+            f"| {sum(e.kept for e in done if e.success)} / "
+            f"{sum(e.slides_before for e in done if e.success)} "
+            f"| {sum(e.input_tokens for e in done) / 1000:.0f} / "
+            f"{sum(e.output_tokens for e in done) / 1000:.0f} |"
+        )
+        lines += [
+            f"- {r.prompt}: {'ok' if r.edit and r.edit.success else r.edit and r.edit.failure} "
+            f"calls={r.edit.calls if r.edit else 0} changes={r.edit.calls_with_changes if r.edit else 0} "
+            f"kept={r.edit.kept if r.edit else 0}/{r.edit.slides_before if r.edit else 0} "
+            f"slides {r.edit.slides_before if r.edit else 0}→{r.edit.slides_after if r.edit else 0}"
+            for r in edits
+        ]
     failures = [r for r in results if not r.success]
     if failures:
         lines += ["", "Failures:"]
@@ -772,6 +943,11 @@ async def main() -> None:
         help="The agent author's prompt, in place of the short stand-in "
         "(e.g. eval/agent_prompts/agent_prompt_fr.txt).",
     )
+    parser.add_argument(
+        "--edit-turn",
+        action="store_true",
+        help="After a delivered deck, a second user turn asks to change it (prompts.EDITS).",
+    )
     args = parser.parse_args()
     agent_prompt = (
         args.agent_prompt.read_text(encoding="utf-8").strip()
@@ -780,6 +956,9 @@ async def main() -> None:
     )
 
     rebuild_ui_part_union([PptPreviewPart])
+    # Base plans in memory: each run is its own conversation (session id).
+    plan_store = deck_plans.MemoryDeckPlanStore()
+    deck_plans.set_deck_plan_store_provider(lambda: plan_store)
     _load_secrets(args.env_file)
     agent = load_profile(args.catalog, args.profile)
     vision = load_profile(args.catalog, args.vision_profile or agent.profile_id)
@@ -815,7 +994,13 @@ async def main() -> None:
     async def bounded(variant: Variant, prompt_id: str) -> RunResult:
         async with semaphore:
             result = await run_one(
-                variant, prompt_id, agent, args.variety, args.max_uses, agent_prompt
+                variant,
+                prompt_id,
+                agent,
+                args.variety,
+                args.max_uses,
+                agent_prompt,
+                args.edit_turn,
             )
         print(
             f"{variant.template}/{variant.mode}/{prompt_id}: "
@@ -859,8 +1044,11 @@ async def _sheets(
         workspace = MemoryWorkspace()
         # The run's settings, so the assigner picks the same slides; a first
         # call may be a variety ask, and the resend is built as sent.
-        tool = _build_tool(variant, workspace, variety, max_uses)
+        tool = _build_tool(
+            variant, workspace, variety, max_uses, "sheets-" + result.prompt
+        )
         _renders.set([])
+        _plans.set([])
         await tool.ainvoke(result.plan)
         if not workspace.files:
             await tool.ainvoke(result.plan)

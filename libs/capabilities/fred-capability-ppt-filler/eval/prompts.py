@@ -95,3 +95,45 @@ PROMPTS: dict[str, str] = {
         "formateur, lieu) que tu inventes de façon réaliste, puis une slide sur la logistique."
     ),
 }
+
+# A second user turn per prompt, asking to change the delivered deck: an
+# insert, a field on the last slide, a removal or a title.
+EDITS: dict[str, str] = {
+    "cyber_2027": (
+        "Ajoute une slide de chiffres clés juste après la couverture, avec trois chiffres sur la menace."
+    ),
+    "quarterly_review": (
+        "Put our contact on the last slide: finance@acme.com, +33 1 23 45 67 89."
+    ),
+    "kickoff": (
+        "Ajoute sur la dernière slide le contact du chef de projet : hugo.lefevre@acme.fr, 06 12 34 56 78."
+    ),
+    "options_comparison": (
+        "Add a slide with the key figures of each option (cost, months to deploy) just before the "
+        "recommendation."
+    ),
+    "committee_agenda": (
+        "Le point « questions diverses » est annulé : retire-le de l'ordre du jour et supprime sa slide."
+    ),
+    "pitch_4": "Add our contact on the last slide: sales@acme.com, +33 1 98 76 54 32.",
+    "training_12": (
+        "Change le titre de la première slide en « Cybersécurité : les bons réflexes »."
+    ),
+    "many_items": (
+        "Add a key-figures slide right after the cover: total headcount, number of sites, largest site."
+    ),
+    "process_onboarding": "Ajoute à la fin une slide contact RH : rh@acme.fr, poste 4521.",
+    "esg_report": (
+        "Add a slide right after the cover with three key figures: -18% CO2, 220 audits, 95% compliant."
+    ),
+    "country_comparison": (
+        "Ajoute une slide de chiffres clés pour chaque pays, juste après la section de ce pays."
+    ),
+    "thales_spain_italy": "Ajoute une slide de chiffres clés par pays.",
+    "offers_table": (
+        "Put this contact on the last slide: cloud-team@acme.com, +33 1 11 22 33 44."
+    ),
+    "schedule_table": (
+        "Mets ce contact sur la dernière slide : formation@acme.fr, 01 44 55 66 77."
+    ),
+}
