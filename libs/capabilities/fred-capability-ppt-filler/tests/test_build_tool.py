@@ -860,6 +860,59 @@ async def test_notes_after_a_split_name_the_files_slide_numbers(monkeypatch):
     )
 
 
+def _relabel(**labels: str):
+    def extend(inventory):
+        patterns = [
+            p.model_copy(update={"label": labels[p.id]}) if p.id in labels else p
+            for p in inventory.patterns
+        ]
+        return inventory.model_copy(update={"patterns": patterns})
+
+    return extend
+
+
+@pytest.mark.asyncio
+async def test_the_delivered_text_names_each_file_slides_design(monkeypatch):
+    """A "same layout as slide 5" request is about the template slide, not the kind: the
+    model reads which design each file slide has, a split list's parts included."""
+    steps = [{"heading": f"Step {i}", "text": "x"} for i in range(5)]
+    method = {"title": "Method", "kind": "process", "items": steps}
+    text, result = await _build(
+        monkeypatch, slides=[COVER, method, _agenda(4), *_points(3)]
+    )
+    assert not result.is_error, text
+    (designs,) = [line for line in text.splitlines() if line.startswith("Designs: ")]
+    assert designs.startswith(
+        "Designs: 1 'Title Slide' · 2 'Process' · 3 'Process' · 4 'Agenda' · "
+    )
+    # Three bullets slides on three template slides: three names.
+    names = designs.split(". Slides")[0].split(" · ")[4:]
+    assert [n.split(" ", 1)[0] for n in names] == ["5", "6", "7"]
+    assert len({n.split(" ", 1)[1] for n in names}) == 3
+    assert '"field": "like", "value": M}' in designs
+    assert "slide:" not in designs and "layout:" not in designs
+
+
+@pytest.mark.asyncio
+async def test_two_template_slides_sharing_a_label_get_distinct_names(monkeypatch):
+    extend = _relabel(**{"slide:269": "Free text"})
+    text, result = await _build(monkeypatch, extend=extend, slides=[COVER, *_points(3)])
+    assert not result.is_error, text
+    (designs,) = [line for line in text.splitlines() if line.startswith("Designs: ")]
+    assert "'Free text'" in designs and "'Free text #2'" in designs
+
+
+def test_a_long_design_name_is_cut():
+    inventory = analyze_template(TEMPLATE).inventory
+    assert inventory is not None
+    inventory = _relabel(**{"slide:260": "A very long name for a template slide"})(
+        inventory
+    )
+    names = tools_mod._design_names(inventory)
+    assert names["slide:260"] == "A very long name for a temp…"
+    assert len(names["slide:260"]) <= tools_mod._DESIGN_NAME_CHARS
+
+
 @pytest.mark.asyncio
 async def test_the_delivered_part_summarises_what_was_built(monkeypatch, preview_union):
     """The dialog beside the download reads the tool's record, not the reply:

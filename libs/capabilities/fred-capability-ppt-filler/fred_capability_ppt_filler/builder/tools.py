@@ -34,6 +34,7 @@ import io
 import json
 import logging
 import time
+from collections import Counter
 from functools import lru_cache
 from typing import (
     TYPE_CHECKING,
@@ -428,6 +429,42 @@ def _summary(
         elif count:
             slide.notes.append(BuildNote(code="image_unusable", count=count))
     return built
+
+
+_DESIGN_NAME_CHARS = 28
+
+
+def _design_names(inventory: TemplateInventory) -> Dict[str, str]:
+    """Each template slide's name as the user sees it, numbered when several
+    share one label: the model must never read two designs as the same."""
+    patterns = [p for p in inventory.patterns if p.included]
+    counts = Counter(p.label for p in patterns)
+    seen: Counter = Counter()
+    names: Dict[str, str] = {}
+    for pattern in patterns:
+        label = pattern.label
+        if len(label) > _DESIGN_NAME_CHARS:
+            label = label[: _DESIGN_NAME_CHARS - 1].rstrip() + "…"
+        seen[pattern.label] += 1
+        if counts[pattern.label] > 1 and seen[pattern.label] > 1:
+            label += f" #{seen[pattern.label]}"
+        names[pattern.id] = label
+    return names
+
+
+def _designs_line(inventory: TemplateInventory, patterns: Sequence[Any]) -> str:
+    """One line naming each file slide's template slide, so a request like
+    "same layout as slide M" is answered with `like`, not by comparing kinds."""
+    names = _design_names(inventory)
+    listed = " · ".join(
+        f"{number} '{names.get(p.id) or p.label}'"
+        for number, p in enumerate(patterns, start=1)
+        if p is not None
+    )
+    return (
+        f"\nDesigns: {listed}. Slides with different names look different; to give slide N "
+        'the design of slide M, send {"op": "edit", "slide": N, "field": "like", "value": M}.'
+    )
 
 
 def _kinds(inventory: TemplateInventory) -> Dict[str, str]:
@@ -1065,6 +1102,7 @@ def build_builder_tools(
             result.report.issues(),
             result.report.notes + unloadable + assignment.notes,
         )
+        notes = _designs_line(inventory, patterns) + notes
 
         pdf_bytes = await convert_office_bytes_to_pdf(
             result.preview_pptx or result.pptx, suffix=".pptx"
