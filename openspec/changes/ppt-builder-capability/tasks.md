@@ -363,3 +363,12 @@ Owns: `builder/changes.py` (new: operations and their errors), `builder/deck_pla
 - [x] 32.5 Eval: `--edit-turn` adds a second user turn with an edit request per prompt (new tool instance, same conversation and base store); metrics: revision calls using `changes`, edit success, edit calls with `changes`, previous slides kept identical, edit tokens. Run small then medium (stand-in prompt, WP29 settings, strictly one at a time; stop on quota); compare with WP29 "words"
 - [x] 32.6 Package `make code-quality` + `make test`; migration note (second table); `verification.md` with the benchmark and a keep/revert recommendation
 - Deferred: `cap_ppt_builder_deck_plan` rows are never deleted with their conversation (per-instance data cleanup: issue #2990)
+
+## WP33. A list too long for its kind continues on a slide of the same kind (D24)
+
+Owns: `assign.py` (split, beam, variety counts, notes, cap problem), `render.py` (model numbering, agenda gap, consecutive numbers), `tools.py` (render the parts), `design.md` D21/D24, delta spec, tests, `verification.md`.
+
+- [ ] 33.1 Items or table rows over the kind's largest slide continue on parts of the same kind (balanced, at most 2 parts, `(k/n)` title marker, numbering continued), tried before the close kinds; beyond the cap, close kinds then `needs_revision` with the cap options. Tests: 9 agenda items over 8 → 5 + 4 with titles and numbers, explicit numbers kept, a table split with its header, 17 items over 8 → close kind or `needs_revision` with the cap text, bullets never split, a text too long never split
+- [ ] 33.2 Variety: continuation parts out of the use counts, caps, groups, asks and the three-in-a-row note; the continuation prefers its first part's template slide. Tests: a split list alone never asked, another slide on the same template slide still counted
+- [ ] 33.3 Messages and stored plan on the model's numbering: render receives the expanded plan with model numbers; the stored base plan is the model's; the agenda gap counts a split agenda once. Tests: split note text, a later slide's note keeps its plan number, `changes` on the stored plan after a split delivery, agenda gap not raised by a split agenda
+- [ ] 33.4 Package `make code-quality` + `make test`; quick benchmark (mistral-small, WP32 settings, `--edit-turn`), compared with WP32 small run 3; `verification.md`

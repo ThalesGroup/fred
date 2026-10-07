@@ -293,13 +293,42 @@ The system SHALL accept from the model a plan of slides carrying content only â€
 
 #### Scenario: Semantic fallback
 
-- **WHEN** a slide asks for `agenda` with 9 items, the agenda slide holds 8 items and a process slide holds 10
-- **THEN** the slide is built on the process slide, never on a team, figures, cards or other unrelated slide, and the note reads "built as 'process' instead of 'agenda': the 'agenda' slide does not fit (items: 9 given, max 8). To get the 'agenda' slide, call again and trim to 8 items or split them over two slides; otherwise nothing to do."
+- **WHEN** a slide asks for `agenda` with 17 items, the agenda slide holds 8 items (two slides hold 16) and a process slide holds 20
+- **THEN** the slide is built on the process slide, never on a team, figures, cards or other unrelated slide, and the note reads "built as 'process' instead of 'agenda': the 'agenda' slide does not fit (items: 17 given, max 8). To get the 'agenda' slide, call again and trim to 8 items or split them over two slides; otherwise nothing to do."
 
 #### Scenario: No absurd substitution
 
-- **WHEN** a slide asks for `agenda` with 9 items, the agenda slide holds 8 items, a team slide holds 15 and no close kind (bullets, process, timeline) holds the content
-- **THEN** no deck is written and `needs_revision` names the slide with `items: 9 given; the largest 'agenda' slide holds 8`, the options `trim to 8 items` and `split the items over two slides`, and what each close kind the template offers takes; the team slide is never offered
+- **WHEN** a slide asks for `agenda` with 17 items, the agenda slide holds 8 items, a team slide holds 30 and no close kind (bullets, process, timeline) holds the content
+- **THEN** no deck is written and `needs_revision` names the slide with `items: 17 given; the largest 'agenda' slide holds 8, two slides hold 16`, the options `trim to 16 items (beyond 8 they continue on a second slide)` and `or keep 8 here and move the rest to slides of your own`, and what each close kind the template offers takes; the team slide is never offered
+
+#### Scenario: Overflowing list continues on a same-kind slide
+
+- **WHEN** a slide asks for `agenda` (or, with no kind, its content suits `agenda` first) with 9 items, the agenda slide holds 8, and each half fits it
+- **THEN** the deck holds two agenda slides of 5 and 4 items, titled with ` (1/2)` and ` (2/2)` after the slide's title, preferably on the same template slide, before any close-kind fallback
+- **AND** the delivery note reads `Slide 2: its 9 items continue on a second 'agenda' slide (5 + 4, titles marked (1/2) and (2/2)): the largest 'agenda' slide holds 8. Nothing to do; to keep one slide, send at most 8 items.`
+- **AND** a table whose rows overflow every table slide of its kind is split the same way, its header repeated on each part
+- **AND** bullets, columns and a single field too long are never split
+
+#### Scenario: Numbering kept across the split
+
+- **WHEN** a list of 9 items is split over two slides
+- **THEN** items numbered by the model keep their numbers (6 to 9 on the second slide), and items without numbers on a slide that shows numbers continue the count (06 to 09) instead of restarting at 01
+
+#### Scenario: Variety not triggered by a split list
+
+- **GIVEN** a first deck of the conversation and a variety check that is not `off`
+- **WHEN** one slide's list is split over two slides of the same template slide
+- **THEN** the two parts count as one slide: no variety ask, repeat note or "same template slide" note names them, while another slide using that template slide still counts normally
+
+#### Scenario: Split cap reached
+
+- **WHEN** a list needs more than two slides of its kind (17 items where the kind's largest slide holds 8) and no close kind holds it whole
+- **THEN** no deck is written and `needs_revision` names the slide, the kind's capacity over two slides, and the options to trim to what two slides hold or move the rest to slides of the model's own
+
+#### Scenario: Model's numbering after a split
+
+- **WHEN** slide 2 of a plan is split over two slides and slide 5 has a review note
+- **THEN** every message names slides by the plan's numbers (the note says slide 5, not 6), the stored base plan is the plan as sent, so a later `changes` call numbers on it, and an agenda split over two slides announces its items once, the slides that follow being counted after its last part
 
 #### Scenario: Fit check
 
