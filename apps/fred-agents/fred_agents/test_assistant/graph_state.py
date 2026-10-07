@@ -35,7 +35,7 @@ Trigger keywords (case-insensitive prefix match):
                   gate on the top hit — degrades to a helpful message when the
                   capability isn't selected on this agent instance
   assist        → a real agent's shape: structured routing, knowledge search,
-                  streamed model draft, two HITL gates, then a side effect
+                  streamed model draft, then one HITL review gate
   delegate      → invoke another agent (this one) through invoke_agent
   crash         → a node error with no on_error route (turn-level failure)
   (anything else) → fallback with scenario list

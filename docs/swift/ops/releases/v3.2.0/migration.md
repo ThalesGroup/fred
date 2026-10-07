@@ -482,7 +482,7 @@ configuration support; this change does not implement those connection paths.
 
 ## Retire the legacy corpus and general-purpose filesystem surfaces
 
-Impact: **major** · [MCP and corpus migration](https://github.com/ThalesGroup/fred/blob/code/v3.2.0/docs/swift/ops/migrations/retire-corpus-filesystem-mcp.md) · [file-area migration](https://github.com/ThalesGroup/fred/blob/code/v3.2.0/docs/swift/ops/migrations/retire-mon-espace.md)
+Impact: **minor** · [MCP and corpus migration](https://github.com/ThalesGroup/fred/blob/code/v3.2.0/docs/swift/ops/migrations/retire-corpus-filesystem-mcp.md) · [file-area migration](https://github.com/ThalesGroup/fred/blob/code/v3.2.0/docs/swift/ops/migrations/retire-mon-espace.md)
 
 Before upgrading, export needed personal or team-shared files, remove the retired
 corpus/filesystem MCP selections and `mcp.filesystem_enabled`, and migrate

@@ -64,8 +64,7 @@ Workflow overview (keyword-routed by dispatch_step):
      ├─ document    ──► document_step     ──► finalize
      ├─ assist      ──► assist_route ─┬─ search ─► assist_search ─► assist_draft
      │                                └─ direct ─────────────────► assist_draft
-     │                  assist_draft ─► assist_review [HITL] ─► assist_confirm [HITL]
-     │                  ─► assist_commit ─► finalize  (discard / keep ─► finalize)
+     │                  assist_draft ─► assist_review [HITL] ─► finalize
      ├─ delegate    ──► delegate_step     ──► finalize
      ├─ crash       ──► crash_step  (raises, no on_error: the turn fails)
      ├─ graph check ──► graph_check_step ──► finalize  (live conformance run)
@@ -440,8 +439,7 @@ class TestAssistantGraphAgent(GraphAgent):
     def build_output(self, state: BaseModel) -> BaseModel:
         """
         Override to attach mock VectorSearchHit sources and token_usage when the
-        trace scenario ran (SourcesPanel + token badge), ui_parts when
-        the files scenario ran (download chip rendering), and GeoPart ui_parts
+        trace scenario ran (SourcesPanel + token badge), and GeoPart ui_parts
         when the geo scenario ran (feature-count summary chip rendering — the
         interactive Leaflet map was removed from the frontend, PR #2067).
         """

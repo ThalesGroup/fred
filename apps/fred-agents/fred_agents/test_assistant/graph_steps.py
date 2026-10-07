@@ -35,7 +35,7 @@ Scenario routing (handled by dispatch_step):
   "geo"         → dispatch routes "geo"          → geo_step         → finalize
   "document"    → dispatch routes "document"    → document_step    → finalize
   "assist"      → assist_route → [assist_search] → assist_draft → assist_review
-                  (HITL) → assist_confirm (HITL) → [assist_commit] → finalize
+                  (HITL) → finalize
   "delegate"    → dispatch routes "delegate"     → delegate_step    → finalize
   "crash"       → dispatch routes "crash"        → crash_step (raises, no on_error)
   "graph check" → dispatch routes "graph_check"  → graph_check_step → finalize
@@ -1649,8 +1649,8 @@ async def document_step(
 # ── Scenario: assist ──────────────────────────────────────────────────────────
 #
 # The shape of a real business graph agent, in one branch: a structured routing
-# decision, a declared platform tool, a streamed model answer, two HITL gates
-# in successive nodes, and a side effect that must run only once.
+# decision, a declared platform tool, a streamed model answer, and one HITL
+# review gate.
 
 _ASSIST_DEFAULT_QUESTION = "What is Fred?"
 
@@ -1769,7 +1769,7 @@ async def assist_review_step(
     state: TestState,
     context: GraphNodeContext,
 ) -> StepResult:
-    """HITL gate #1: approve or discard the draft. Nothing runs before the pause."""
+    """HITL gate: approve or discard the draft. Nothing runs before the pause."""
     choice_id = await choice_step(
         context,
         stage="assist_review",
@@ -1978,11 +1978,10 @@ _SCENARIO_TABLE = """\
 | `markdown` | All rich content types: code block, Mermaid, GFM table, GeoJSON, math (inline + block), details collapsible |
 | `mermaid` | Deliberately malformed Mermaid: validates the frontend sanitizer fallback ,repairs it instead of showing a parse error |
 | `long` | 30-sentence word-by-word streaming reply |
-| `files` | Unified `/fs` round-trip: write to the agent's space → read back → list directory |
 | `geo` | Sample GeoJSON `FeatureCollection` rendered as a `GeoPart` ui_part (feature-count summary chip) |
 | `document` | `document_access` capability tool call via `invoke_runtime_tool` + HITL confirm/discard gate on the top hit |
 | `document summarize <question>` | Tool approval on `summarize_document` when its capability is selected and confirmation enabled; requires documents and a model for the summary |
-| `assist` | Real-agent shape: structured routing → `knowledge.search` → streamed model draft → two HITL gates → file publish (`assist direct …` skips the search) |
+| `assist` | Real-agent shape: structured routing → `knowledge.search` → streamed model draft → HITL review (`assist direct …` skips the search) |
 | `delegate` | `invoke_agent` on this same agent (`delegate model hi` makes the sub-agent call the model) |
 | `crash` | Node error with no `on_error` route → the turn fails cleanly |
 | `graph check` | Runs every graph conformance check live, through this pod's HTTP API (HITL included) |"""

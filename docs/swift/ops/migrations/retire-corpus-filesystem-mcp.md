@@ -1,9 +1,9 @@
 ---
 schema: 1
 title: "Retire the corpus manager API and unused corpus and filesystem MCP servers"
-impact: major
+impact: minor
 configuration: production
-configuration_reason: "Knowledge Flow no longer accepts mcp.filesystem_enabled; the chart defaults, sample configurations, and generated schemas remove it."
+configuration_reason: "Knowledge Flow no longer accepts mcp.filesystem_enabled; operators must remove the key from private overlays before the coordinated upgrade. No stored corpus data is migrated or deleted."
 ---
 ## Applicability
 

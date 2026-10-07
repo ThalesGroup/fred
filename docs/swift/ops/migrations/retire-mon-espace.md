@@ -1,9 +1,9 @@
 ---
 schema: 1
 title: "Retire general-purpose personal, team-shared, and agent file areas"
-impact: major
+impact: minor
 configuration: production
-configuration_reason: "The enableAllResourceSpaces frontend flag and the general-purpose resource tabs are removed."
+configuration_reason: "Operators must remove enableAllResourceSpaces from private overlays and export any needed files before the coordinated upgrade. Stored objects are not migrated or deleted."
 ---
 
 ## Applicability

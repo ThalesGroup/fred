@@ -233,7 +233,7 @@ async def _assist(driver: Driver, session: str) -> list[str]:
     expect.that(
         _tool_calls(first, "knowledge.search") == 1, "knowledge.search not called once"
     )
-    review = expect.paused(first, "assist_review", "gate 1")
+    review = expect.paused(first, "assist_review", "review gate")
     if review is None:
         return expect.failures
     second = await driver.resume(session, review, "approve")
