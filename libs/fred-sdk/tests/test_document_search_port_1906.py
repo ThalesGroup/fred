@@ -26,13 +26,16 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import inspect
+import logging
 
+import fred_sdk.contracts.runtime as runtime_contract
 import pytest
 from fred_core.store.vector_search import VectorSearchHit
 from fred_sdk.contracts.runtime import (
     DocumentSearchPort,
     DocumentSearchResult,
     RuntimeServices,
+    resolve_search_sources,
 )
 
 
@@ -54,7 +57,9 @@ class _FakePort(DocumentSearchPort):
         library_tag_ids=None,
         document_uids=None,
         search_policy=None,
-        attachments_only: bool = False,
+        include_attachments: bool = True,
+        include_team_documents: bool = True,
+        attachments_only: bool | None = None,
     ) -> DocumentSearchResult:
         self.calls.append(
             {
@@ -63,7 +68,8 @@ class _FakePort(DocumentSearchPort):
                 "library_tag_ids": library_tag_ids,
                 "document_uids": document_uids,
                 "search_policy": search_policy,
-                "attachments_only": attachments_only,
+                "include_attachments": include_attachments,
+                "include_team_documents": include_team_documents,
             }
         )
         return DocumentSearchResult(hits=(_hit("d1"),))
@@ -77,9 +83,17 @@ def test_port_is_abstract() -> None:
 def test_search_signature_takes_scope_params_not_identity() -> None:
     sig = inspect.signature(DocumentSearchPort.search)
     params = set(sig.parameters)
-    assert {"query", "top_k", "library_tag_ids", "document_uids", "search_policy"} <= (
-        params
-    )
+    assert {
+        "query",
+        "top_k",
+        "library_tag_ids",
+        "document_uids",
+        "search_policy",
+        "include_attachments",
+        "include_team_documents",
+    } <= params
+    assert sig.parameters["include_attachments"].default is True
+    assert sig.parameters["include_team_documents"].default is True
     # No context/identity/token parameter may leak into the capability-facing
     # surface (RFC §10 doctrine).
     assert not ({"context", "identity", "token", "access_token", "binding"} & params)
@@ -101,3 +115,25 @@ def test_runtime_services_carries_a_concrete_port() -> None:
     assert isinstance(result, DocumentSearchResult)
     assert result.hits[0].uid == "d1"
     assert port.calls[0]["library_tag_ids"] == ["a"]
+
+
+def test_deprecated_attachments_only_alias_maps_onto_the_ceilings(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setattr(runtime_contract, "_attachments_only_warned", False)
+    unchanged = resolve_search_sources(
+        include_attachments=False, include_team_documents=True, attachments_only=None
+    )
+    assert unchanged == (False, True)
+    with caplog.at_level(logging.WARNING, logger=runtime_contract.__name__):
+        pinned = resolve_search_sources(
+            include_attachments=True, include_team_documents=True, attachments_only=True
+        )
+        off = resolve_search_sources(
+            include_attachments=True,
+            include_team_documents=True,
+            attachments_only=False,
+        )
+    assert pinned == (True, False)
+    assert off == (True, True)
+    assert len([r for r in caplog.records if "deprecated" in r.getMessage()]) == 1

@@ -27,6 +27,7 @@ implementations execute it.
 
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Mapping, Sequence
 from dataclasses import dataclass
@@ -61,6 +62,8 @@ from .context import (
     UiPart,
 )
 from .models import AgentDefinition
+
+logger = logging.getLogger(__name__)
 
 ChatModelHandle: TypeAlias = object
 RuntimeToolHandle: TypeAlias = object
@@ -852,7 +855,9 @@ class DocumentSearchPort(ABC):
         library_tag_ids: Sequence[str] | None = None,
         document_uids: Sequence[str] | None = None,
         search_policy: str | None = None,
-        attachments_only: bool = False,
+        include_attachments: bool = True,
+        include_team_documents: bool = True,
+        attachments_only: bool | None = None,
     ) -> DocumentSearchResult:
         """
         Run one scoped vector search and return typed hits.
@@ -860,10 +865,37 @@ class DocumentSearchPort(ABC):
         `library_tag_ids` / `document_uids` are the capability's already-narrowed
         scope (None = "no capability-side narrowing at this level"); the adapter
         further bounds them by the session binding. `search_policy` overrides the
-        binding's default policy when provided. `attachments_only=True` restricts
-        the search to the conversation's session-scoped documents (attached
-        files) and excludes the corpus entirely.
+        binding's default policy when provided. `include_attachments` /
+        `include_team_documents` are ceilings on the conversation's attached
+        files and the team corpus: the per-turn RAG scope can only narrow them.
+        `attachments_only` is a deprecated alias, see `resolve_search_sources`.
         """
+
+
+_attachments_only_warned = False
+
+
+def resolve_search_sources(
+    *,
+    include_attachments: bool,
+    include_team_documents: bool,
+    attachments_only: bool | None,
+) -> tuple[bool, bool]:
+    """Fold the deprecated `attachments_only` keyword into the two source
+    ceilings (`True` = attachments only), warning once per process."""
+
+    global _attachments_only_warned
+    if attachments_only is None:
+        return include_attachments, include_team_documents
+    if not _attachments_only_warned:
+        _attachments_only_warned = True
+        logger.warning(
+            "DocumentSearchPort.search(attachments_only=...) is deprecated; "
+            "pass include_attachments / include_team_documents instead."
+        )
+    if attachments_only:
+        return True, False
+    return include_attachments, include_team_documents
 
 
 class DocumentSimilarityPort(ABC):
