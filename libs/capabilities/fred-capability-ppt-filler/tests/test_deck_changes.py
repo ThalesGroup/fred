@@ -971,3 +971,63 @@ async def test_changes_that_leave_the_deck_as_is_build_nothing(
         file_name="Renamed",
     )
     assert not result.is_error, text
+
+
+# --- a kind edit, dropping a field, an identical resend -------------------------------------
+
+_COUNTRIES = [
+    {"heading": "Espagne", "bullets": ["Partenariats locaux", "R&D à Madrid"]},
+    {"heading": "Italie", "bullets": ["Spatial", "1,5 Md€ CA", "Cyber"]},
+]
+_PERSPECTIVES = {
+    "title": "Perspectives 2025",
+    "bullets": ["Espagne : partenariats", "Italie : spatial"],
+    "kind": "bullets",
+}
+# The live session's call: the kind and the columns sent, the bullets left as they were.
+_TO_TWO_COLUMNS = [
+    {"op": "edit", "field": "kind", "slide": 2, "value": "two_columns"},
+    {"op": "edit", "field": "title", "slide": 2, "value": "Perspectives 2025 par pays"},
+    {"op": "edit", "field": "columns", "slide": 2, "value": _COUNTRIES},
+]
+
+
+@pytest.mark.asyncio
+async def test_a_kind_edit_clears_the_fields_the_new_kind_cannot_hold(
+    monkeypatch, deck_plan_store
+):
+    """Live: the old bullets stayed on a slide edited to two_columns, and the
+    model resent the same call until the turn's tool-call cap."""
+    workspace = FakeWorkspace()
+    deck = [COVER, _PERSPECTIVES, {"title": "Merci"}]
+    text, result = await _Turn(monkeypatch, workspace).build(slides=deck)
+    assert not result.is_error, text
+    turn = _Turn(monkeypatch, workspace)
+    text, result = await turn.build(changes=_TO_TWO_COLUMNS)
+    assert not result.is_error, text
+    slide = turn.rendered[-1].slides[1]
+    assert (slide.kind, slide.bullets, slide.title) == (
+        "two_columns",
+        [],
+        "Perspectives 2025 par pays",
+    )
+    assert "Slide 2: bullets cleared, as kind 'two_columns' has no place for it" in text
+
+
+def test_a_kind_edit_keeps_what_the_same_call_sets_and_what_the_kind_holds():
+    def unplaced(slide: Any) -> List[str]:
+        return ["bullets"]
+
+    base = DeckPlan.model_validate({"slides": [COVER, _PERSPECTIVES]})
+    sent = [SlideChange.model_validate(c) for c in _TO_TWO_COLUMNS[::2]]
+    cleared: dict = {}
+    plan = apply_changes(base, sent, unplaced, cleared)
+    assert plan.slides[1].bullets == [] and plan.slides[1].title == "Perspectives 2025"
+    assert cleared == {2: ["bullets"]}
+    # Bullets sent by the same call stay; the same kind resent clears nothing.
+    bullets = {"op": "edit", "field": "bullets", "slide": 2, "value": ["a"]}
+    plan = apply_changes(base, sent + [SlideChange.model_validate(bullets)], unplaced)
+    assert plan.slides[1].bullets == ["a"]
+    same = [SlideChange.model_validate({**_TO_TWO_COLUMNS[0], "value": "bullets"})]
+    plan = apply_changes(base, same, unplaced)
+    assert plan.slides[1].bullets == _PERSPECTIVES["bullets"]

@@ -19,7 +19,7 @@ assigns and renders it as any full call, so quality never depends on the mode.""
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Mapping, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple, Union
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic.json_schema import SkipJsonSchema
@@ -373,10 +373,47 @@ def unchanged(base: DeckPlan, changed: DeckPlan, kinds: Mapping[str, str]) -> bo
     )
 
 
-def apply_changes(base: DeckPlan, changes: List[SlideChange]) -> DeckPlan:
+# Content a slide can lose when its kind changes; notes always stay.
+CLEARABLE = (
+    "title",
+    "subtitle",
+    "bullets",
+    "columns",
+    "items",
+    "image",
+    "images",
+    "table",
+)
+
+
+def _clear_for_kind(
+    before: SlidePlan,
+    dumped: Dict[str, Any],
+    entries: List[Tuple[int, SlideChange]],
+    unplaced: Callable[[SlidePlan], List[str]],
+) -> List[str]:
+    """A kind edit moves the slide to another shape: the old content the new kind
+    has no place for goes, unless this call sets it. Returns what went."""
+    slide = SlidePlan.model_validate(dumped)
+    if slide.kind is None or slide.kind == before.kind:
+        return []
+    sent = {(c.field or "").split("[")[0].split(".")[0] for _, c in entries}
+    gone = [f for f in unplaced(slide) if f in CLEARABLE and f not in sent]
+    for name in gone:
+        dumped[name] = None
+    return gone
+
+
+def apply_changes(
+    base: DeckPlan,
+    changes: List[SlideChange],
+    unplaced: Optional[Callable[[SlidePlan], List[str]]] = None,
+    cleared: Optional[Dict[int, List[str]]] = None,
+) -> DeckPlan:
     """The whole plan after ``changes``, all numbered on ``base``. Untouched
     slides stay the base's objects; raises :class:`ChangeError` listing every
-    bad change, so nothing is built from half of them."""
+    bad change, so nothing is built from half of them. With ``unplaced``, a kind
+    edit clears the fields it names; ``cleared`` gets them per resulting slide."""
     n = len(base.slides)
     problems: List[str] = []
     replaced: Dict[int, List[SlidePlan]] = {}
@@ -459,6 +496,7 @@ def apply_changes(base: DeckPlan, changes: List[SlideChange]) -> DeckPlan:
             liked[number] = ref
 
     edited: Dict[int, SlidePlan] = {}
+    gone: Dict[int, List[str]] = {}
     for number in sorted(set(edits) | (set(liked) - set(replaced))):
         entries = edits.get(number, [])
         dumped = base.slides[number - 1].model_dump()
@@ -473,6 +511,9 @@ def apply_changes(base: DeckPlan, changes: List[SlideChange]) -> DeckPlan:
             # The design decides the kind, unless this call sets one.
             if not any(c.field == "kind" for _, c in entries):
                 dumped["kind"] = None
+        if not failed and unplaced is not None and number not in liked:
+            before = base.slides[number - 1]
+            gone[number] = _clear_for_kind(before, dumped, entries, unplaced)
         if not failed:
             edited[number] = SlidePlan.model_validate(dumped)
     if problems:
@@ -489,5 +530,7 @@ def apply_changes(base: DeckPlan, changes: List[SlideChange]) -> DeckPlan:
             slides.extend([first, *new[1:]])
         elif number not in removed:
             slides.append(edited.get(number, slide))
+            if gone.get(number) and cleared is not None:
+                cleared[len(slides)] = gone[number]
         slides.extend(inserts.get(number, []))
     return DeckPlan(slides=slides, file_name=base.file_name)

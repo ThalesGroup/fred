@@ -396,6 +396,9 @@ def _check_zone(
     return _SHRUNK if scale is not None else 0.0
 
 
+_NO_PLACE = ": this slide has no place for it"
+
+
 def _no_place(what: str, pattern: Pattern) -> Misfit:
     option = f"drop {what}"
     if what == "bullets" and pattern.groups:
@@ -403,7 +406,27 @@ def _no_place(what: str, pattern: Pattern) -> Misfit:
         option = f"give the bullets as items (at most {most})"
     elif what == "items" and any(z.role in ("body", "caption") for z in pattern.zones):
         option = "give the items as bullets"
-    return Misfit(f"{what}: this slide has no place for it", option)
+    return Misfit(what + _NO_PLACE, option)
+
+
+def unplaced(
+    inventory: TemplateInventory, slide: SlidePlan, kind: Optional[str]
+) -> List[str]:
+    """The slide's fields that no template slide of ``kind`` has a place for,
+    beside the rest of its content; none when the template has no such slide."""
+    size = (inventory.slide_width, inventory.slide_height)
+    found: Optional[set[str]] = None
+    for pattern in assignable(inventory):
+        if pattern.kind != kind:
+            continue
+        reasons, _ = misfit(pattern, slide, size)
+        lost = {
+            r.text.removesuffix(_NO_PLACE)
+            for r in reasons
+            if r.text.endswith(_NO_PLACE)
+        }
+        found = lost if found is None else found & lost
+    return sorted(found or ())
 
 
 def misfit(

@@ -77,6 +77,7 @@ from fred_capability_ppt_filler.builder.assign import (
     VarietyCheck,
     assign,
     assignable,
+    unplaced,
 )
 from fred_capability_ppt_filler.builder.changes import (
     ChangeError,
@@ -481,6 +482,21 @@ def _image_ids(plan: DeckPlan) -> set[str]:
 
 # Per slide index: (problem, the slide as sent) of the previous needs_revision.
 _Previous = Dict[int, Tuple[str, str]]
+
+
+def _cleared_lines(
+    cleared: Mapping[int, List[str]],
+    plan: DeckPlan,
+    numbers: Optional[List[int]] = None,
+) -> List[str]:
+    """What a kind edit cleared, numbered on the file when it was built."""
+    return [
+        f"Slide {numbers.index(n) + 1 if numbers else n}: {', '.join(fields)} cleared, "
+        f"as kind '{plan.slides[n - 1].kind}' has no place for "
+        f"{'them' if len(fields) > 1 else 'it'} beside the rest (to keep "
+        "that text, put it in a field this kind shows)."
+        for n, fields in sorted(cleared.items())
+    ]
 
 
 def _needs_revision(
@@ -927,6 +943,7 @@ def build_builder_tools(
             )
         shape: Any = None
         base: Optional[DeckPlan] = None
+        cleared: Dict[int, List[str]] = {}
         if changes is not None and (changes or not plan.slides):
             if plan.slides:
                 return _error(_BOTH_MODES)
@@ -944,7 +961,12 @@ def build_builder_tools(
             if turn_parent and shape == turn_shape[0]:
                 base = turn_parent[0]
             try:
-                changed = apply_changes(base, changes)
+                changed = apply_changes(
+                    base,
+                    changes,
+                    lambda slide: unplaced(inventory, slide, slide.kind),
+                    cleared,
+                )
             except ChangeError as exc:
                 return _error(
                     "No deck was built: some changes cannot be applied to the previous "
@@ -1007,7 +1029,7 @@ def build_builder_tools(
                 plan,
                 previous_problems,
                 repeats,
-                unloadable,
+                unloadable + _cleared_lines(cleared, plan),
                 base is not None,
             )
         previous_problems.clear()
@@ -1107,7 +1129,10 @@ def build_builder_tools(
         notes = _build_notes(
             plan,
             result.report.issues(),
-            result.report.notes + unloadable + assignment.notes,
+            result.report.notes
+            + unloadable
+            + assignment.notes
+            + _cleared_lines(cleared, plan, numbers),
         )
         notes = _designs_line(inventory, patterns) + notes
 
