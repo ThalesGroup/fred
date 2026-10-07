@@ -92,6 +92,8 @@ export interface PptBuilderAnalysis {
   /** The analysis error, or the interruption notice, as the backend words it. */
   error: string | null;
   canRerun: boolean;
+  /** Outdated and labelled by a vision model: only a save refreshes it with that model. */
+  outdatedVision: boolean;
   isRerunning: boolean;
   rerun: () => Promise<void>;
   /** The inventory with the overrides applied (what the agent will see). */
@@ -181,6 +183,7 @@ export function usePptBuilderAnalysis({
     hasPersistedTemplate: templateSha !== null,
     error: phase === "failed" || phase === "interrupted" ? (status?.error ?? null) : null,
     canRerun: Boolean(agentInstanceId) && canRerun(phase, status),
+    outdatedVision: phase === "succeeded" && status?.current === false && status.labelling_key.startsWith("vision:"),
     isRerunning,
     rerun,
     effective,

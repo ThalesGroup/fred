@@ -697,12 +697,20 @@ async def refresh_outdated(
 ) -> bool:
     """Re-run an analysis made by older rules from its stored template, its
     result staying in use meanwhile. One replica wins the claim; a failure is
-    not retried unless ``force`` (an author's action)."""
+    not retried unless ``force`` (an author's action). A vision-labelled one is
+    refreshed automatically only where the save left its model port."""
     if not record.outdated() or record.refreshing(_utcnow()):
         return False
+    instance_id = record.agent_instance_id
     if not force and record.attempts >= MAX_ATTEMPTS:
         return False  # checked before the claim: no write on every turn
-    instance_id = record.agent_instance_id
+    # Without this pod's vision port the re-run would label by rules: keep the old one.
+    if (
+        not force
+        and record.labelling_key != RULES_KEY
+        and _ports.get(instance_id) is None
+    ):
+        return False
     job_id = await store.claim_refresh(instance_id, force=force)
     if job_id is None:
         return False

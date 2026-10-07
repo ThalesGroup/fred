@@ -681,6 +681,15 @@ mean 54 chars with 5/11 rebuilds (E), 83 chars with 5/13 rebuilds (F).
   frontend change: the existing "outdated" message and re-run button now show only after a
   failed refresh. Not proven: several real replicas racing on Postgres (the claim is one
   conditional `UPDATE`, as `claim_interrupted`).
+- WP23.2 follow-up (vision-labelled refresh only with its model port): `make code-quality`
+  passed; `make test` 408 passed, 5 skipped. New in `test_analysis_job.py`: a vision-keyed
+  outdated row on a pod without a remembered port starts no job on readiness or a turn read,
+  stays ready and reports `current: false`; once the port is remembered, one job starts with
+  that port and stores the current version. Frontend: `analysis.outdatedVision` (fr/en) shown
+  for an outdated vision-labelled analysis, re-run button unchanged; `npx tsc --noEmit` clean
+  apart from the worktree's missing `oidc-client-ts` module (pre-existing, `src/security/`),
+  prettier clean on the touched files. Not run: vitest (the worktree's `node_modules` lacks
+  `oidc-client-ts`; the new `PptBuilderTemplatePanel.test.tsx` case is unverified).
 - WP23.1 (first deck from the history): package `make code-quality` passed; `make test` 405
   passed, 5 skipped. `test_build_tool.py`: the two listing tests deleted with `_deck_delivered`
   and the `FsEntry`/`ls` fakes (tests and eval); new: a delivered deck's real text in the

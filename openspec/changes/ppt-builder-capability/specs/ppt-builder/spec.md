@@ -180,6 +180,13 @@ The system SHALL complete the agent save without waiting for the template analys
 - **AND** concurrent checks on any replica start no second re-run while one is running, and the agent form shows the analysis as current meanwhile
 - **AND** once the re-run succeeds its result is used; when it fails, the stored analysis stays in use, no re-run starts automatically again, and the form offers the re-run action, which re-runs it the same way
 
+#### Scenario: Vision-labelled analysis refreshed only with its model
+
+- **GIVEN** an outdated succeeded analysis labelled by a vision model
+- **WHEN** its readiness is checked or a turn reads it on a replica that holds no model port remembered from the agent's last save
+- **THEN** no re-run starts, the agent stays available on the stored analysis, and the agent form shows it as outdated with the hint that saving the agent re-reads it with its vision model
+- **AND** on a replica holding that port, one re-run starts as for a rules-labelled analysis, and a save always starts one with the port it remembers
+
 ### Requirement: Author review
 
 The system SHALL let the author review the analysis — a thumbnail, label and kind per pattern — and change a pattern's label or kind or exclude/include it. Overrides SHALL be the only author input persisted besides the template, SHALL survive an ordinary save, and SHALL never be required.

@@ -92,6 +92,7 @@ function analysis(phase: AnalysisPhase, overrides: Partial<PptBuilderAnalysis> =
     hasPersistedTemplate: true,
     error: null,
     canRerun: false,
+    outdatedVision: false,
     isRerunning: false,
     rerun: vi.fn(async () => {}),
     effective: null,
@@ -151,6 +152,16 @@ describe("AnalysisStatus", () => {
     expect(button.textContent).toContain("capability.ppt_builder.analysis.rerun");
     act(() => button.click());
     expect(rerun).toHaveBeenCalled();
+  });
+
+  it("tells the author a save refreshes a vision-labelled outdated analysis", () => {
+    render(<AnalysisStatus analysis={analysis("succeeded", { canRerun: true })} disabled={false} />);
+    expect(container.textContent).toContain("capability.ppt_builder.analysis.outdated");
+    render(
+      <AnalysisStatus analysis={analysis("succeeded", { canRerun: true, outdatedVision: true })} disabled={false} />,
+    );
+    expect(container.textContent).toContain("capability.ppt_builder.analysis.outdatedVision");
+    expect(container.querySelector("button")?.textContent).toContain("capability.ppt_builder.analysis.rerun");
   });
 
   it("names an interruption", () => {

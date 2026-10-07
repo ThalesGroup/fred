@@ -174,7 +174,9 @@ export function AnalysisStatus({ analysis, disabled }: { analysis: PptBuilderAna
       ? t("capability.ppt_builder.analysis.failed")
       : phase === "interrupted"
         ? t("capability.ppt_builder.analysis.interrupted")
-        : t("capability.ppt_builder.analysis.outdated");
+        : analysis.outdatedVision
+          ? t("capability.ppt_builder.analysis.outdatedVision")
+          : t("capability.ppt_builder.analysis.outdated");
   return (
     <div className={styles.failure} role={phase === "succeeded" ? undefined : "alert"}>
       <p className={phase === "succeeded" ? styles.status : styles.error}>{message}</p>

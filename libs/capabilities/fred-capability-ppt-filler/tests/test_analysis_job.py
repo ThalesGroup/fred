@@ -341,3 +341,42 @@ async def test_a_failed_refresh_keeps_the_old_analysis_and_is_not_retried(
     assert (await capability.readiness(stored, IDENTITY)).state == "ready"
     await drain()
     assert len(jobs) == 2
+
+
+@pytest.mark.asyncio
+async def test_a_vision_analysis_is_refreshed_only_where_its_model_port_is(
+    analysis_db, monkeypatch
+):
+    async def _labels(inventory, template, pdf, port, *, profile_id, use_vision):
+        return inventory
+
+    monkeypatch.setattr(analysis_job, "label_inventory", _labels)
+    stored = await _save(PptBuilderConfig(), _uploads())
+    await drain()
+    await age_row(analysis_db, INSTANCE, analysis_version=ANALYSIS_VERSION - 1)
+    analysis_job.clear_caches()  # a pod that did not take the save: no port
+    jobs: list = []
+    original = analysis_job.run_analysis
+
+    async def _recording(store, instance_id, job_id, template, port, key):
+        jobs.append(port)
+        await original(store, instance_id, job_id, template, port, key)
+
+    monkeypatch.setattr(analysis_job, "run_analysis", _recording)
+    capability = PptBuilderCapability()
+    store = get_analysis_store()
+    key = stored.labelling_key()
+    assert (await capability.readiness(stored, IDENTITY)).state == "ready"
+    assert await ready_inventory(store, INSTANCE, SHA, key) is not None
+    await drain()
+    assert jobs == []
+    record = await store.get(INSTANCE)
+    assert record is not None and not status_response(record).current
+
+    port = object()
+    analysis_job.remember_port(INSTANCE, port)  # type: ignore[arg-type]
+    assert (await capability.readiness(stored, IDENTITY)).state == "ready"
+    await drain()
+    assert jobs == [port]
+    record = await store.get(INSTANCE)
+    assert record is not None and record.analysis_version == ANALYSIS_VERSION

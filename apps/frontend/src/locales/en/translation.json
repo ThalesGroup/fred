@@ -439,6 +439,7 @@
         "failed": "The template could not be read. The agent stays unavailable until it is.",
         "interrupted": "Reading the template was interrupted. The agent stays unavailable until it is read again.",
         "outdated": "This template was read with an older version. Read it again to benefit from the latest improvements.",
+        "outdatedVision": "This template was read with an older version. The agent keeps using it; save the agent to read it again with its vision model and benefit from the latest improvements.",
         "rerun": "Re-run analysis"
       },
       "review": {
