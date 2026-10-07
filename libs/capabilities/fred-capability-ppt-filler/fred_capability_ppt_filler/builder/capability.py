@@ -545,7 +545,7 @@ class PptBuilderCapability(
         key = config.labelling_key()
         if record is None or record.template_sha256 != config.template_sha256:
             await self._start_from_assets(config, ctx)
-        elif self._needs_rerun(record, key):
+        elif self._needs_rerun(record, key, ctx.services.capability_model is not None):
             analysis_job.remember_port(instance, ctx.services.capability_model)
             await restart_from_stored(store, record, labelling_key=key)
         else:
@@ -565,9 +565,13 @@ class PptBuilderCapability(
         return config
 
     @staticmethod
-    def _needs_rerun(record: AnalysisRecord, key: str) -> bool:
+    def _needs_rerun(record: AnalysisRecord, key: str, has_port: bool) -> bool:
+        # A rules row serves a vision config: re-run it only where vision can run.
+        relabel = record.labelling_key != key and (
+            has_port or record.labelling_key != analysis_job.RULES_KEY
+        )
         return (
-            record.labelling_key != key
+            relabel
             or record.status == "failed"
             or record.interrupted(analysis_job._utcnow())
         )

@@ -177,7 +177,9 @@ class AnalysisRecord:
     inventory_json: Optional[str] = None
 
     def matches(self, sha: str, key: str) -> bool:
-        return self.template_sha256 == sha and self.labelling_key == key
+        # A vision run without the model port labels and stores `rules`: it
+        # serves a vision config until a save with the port re-runs it.
+        return self.template_sha256 == sha and self.labelling_key in (key, RULES_KEY)
 
     def interrupted(self, now: datetime) -> bool:
         return self.status in ("pending", "running") and self.lease_until < now
@@ -257,7 +259,9 @@ class AnalysisStore(ABC):
         job_id: str,
         inventory: TemplateInventory,
         patterns_pdf: Optional[bytes],
-    ) -> bool: ...
+        labelling_key: Optional[str] = None,
+    ) -> bool:
+        """Store the result; ``labelling_key``, when given, is the one used."""
 
     @abstractmethod
     async def fail(self, instance_id: str, job_id: str, error: str) -> bool: ...
@@ -441,10 +445,13 @@ class SqlAnalysisStore(AnalysisStore):
         job_id: str,
         inventory: TemplateInventory,
         patterns_pdf: Optional[bytes],
+        labelling_key: Optional[str] = None,
     ) -> bool:
+        key = {} if labelling_key is None else {"labelling_key": labelling_key}
         return await self._update(
             instance_id,
             AnalysisRow.job_id == job_id,
+            **key,
             status="succeeded",
             analysis_version=ANALYSIS_VERSION,
             inventory_json=inventory.model_dump_json(),
@@ -636,6 +643,8 @@ async def run_analysis(
     started = time.monotonic()
     if not await store.heartbeat(instance_id, job_id):
         return  # superseded before it started
+    if port is None:
+        key = RULES_KEY  # what the labels really are: a save with the port re-runs
     work = asyncio.ensure_future(_analyse(template, port, key))
     try:
         while True:
@@ -675,7 +684,7 @@ async def run_analysis(
     finally:
         if not work.done():
             work.cancel()
-    if await store.finish(instance_id, job_id, inventory, pdf):
+    if await store.finish(instance_id, job_id, inventory, pdf, key):
         _forget_inventories(instance_id)
         logger.info(
             "Template analysis of %s done in %.0fs",

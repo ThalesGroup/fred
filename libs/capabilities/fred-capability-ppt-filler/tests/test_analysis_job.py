@@ -48,7 +48,7 @@ from fred_sdk.contracts.capability import (
     SaveContext,
     UploadedFile,
 )
-from fred_sdk.contracts.runtime import RuntimeServices
+from fred_sdk.contracts.runtime import CapabilityModelPort, RuntimeServices
 from port_fakes import FakeAssets
 
 TEMPLATE = build_showcase_template()
@@ -59,10 +59,22 @@ IDENTITY = CapabilityIdentity(
 )
 
 
-def _save_ctx(assets: FakeAssets | None = None) -> SaveContext:
+class _Port(CapabilityModelPort):
+    """A save's model port; labelling itself is replaced in these tests."""
+
+    async def ainvoke(self, messages, *, profile_id=None, require_vision=False):
+        raise AssertionError("label_inventory is faked here")
+
+
+PORT = _Port()
+
+
+def _save_ctx(assets: FakeAssets | None = None, port=PORT) -> SaveContext:
     return SaveContext(
         identity=IDENTITY,
-        services=RuntimeServices(agent_assets=assets or FakeAssets()),
+        services=RuntimeServices(
+            agent_assets=assets or FakeAssets(), capability_model=port
+        ),
     )
 
 
@@ -75,12 +87,16 @@ def offline_conversion(monkeypatch):
     async def _pdf(_bytes: bytes, *, suffix: str, timeout_seconds: float = 0):
         return b"%PDF-thumbs"
 
+    async def _labels(inventory, template, pdf, port, *, profile_id, use_vision):
+        return inventory
+
     monkeypatch.setattr(analysis_job, "convert_office_bytes_to_pdf", _pdf)
+    monkeypatch.setattr(analysis_job, "label_inventory", _labels)
 
 
-async def _save(config: PptBuilderConfig, uploads=None, assets=None):
+async def _save(config: PptBuilderConfig, uploads=None, assets=None, port=PORT):
     return await PptBuilderCapability().validate_config(
-        config, uploads or {}, _save_ctx(assets)
+        config, uploads or {}, _save_ctx(assets, port)
     )
 
 
@@ -428,3 +444,57 @@ async def test_a_refresh_that_lands_here_replaces_the_cached_outdated_inventory(
     assert await ready_inventory(store, INSTANCE, SHA, key) is not None
     record = await store.get(INSTANCE)
     assert record is not None and not record.outdated()
+
+
+@pytest.mark.asyncio
+async def test_a_recovery_without_the_port_stores_rules_and_a_save_relabels(
+    analysis_db,
+):
+    """An interrupted vision analysis recovered on a pod without the model port
+    labels by rules: the row says so, the agent stays ready, and the next save
+    that brings the port re-runs it with vision."""
+    stored = await _save(PptBuilderConfig(), _uploads())
+    await drain()
+    await age_row(analysis_db, INSTANCE, status="running", inventory_json=None)
+    analysis_job.clear_caches()  # another pod: no port
+    store = get_analysis_store()
+    assert (
+        await analysis_readiness(store, INSTANCE, SHA, "vision:agent-default")
+    ).state == "pending"
+    await drain()
+    record = await store.get(INSTANCE)
+    assert record is not None and record.status == "succeeded"
+    assert record.labelling_key == "rules"
+    assert (await PptBuilderCapability().readiness(stored, IDENTITY)).state == "ready"
+    assert await ready_inventory(store, INSTANCE, SHA, stored.labelling_key())
+
+    await _save(stored, port=None)  # still no port: nothing to gain, no job
+    await drain()
+    record = await store.get(INSTANCE)
+    assert record is not None and record.labelling_key == "rules"
+    await _save(stored)
+    await drain()
+    record = await store.get(INSTANCE)
+    assert record is not None and record.labelling_key == "vision:agent-default"
+
+
+@pytest.mark.asyncio
+async def test_a_forced_refresh_without_the_port_is_not_mistaken_for_vision(
+    analysis_db,
+):
+    stored = await _save(PptBuilderConfig(), _uploads())
+    await drain()
+    await age_row(analysis_db, INSTANCE, analysis_version=ANALYSIS_VERSION - 1)
+    analysis_job.clear_caches()
+    store = get_analysis_store()
+    record = await store.get(INSTANCE)
+    assert record is not None
+    assert await analysis_job.refresh_outdated(store, record, force=True)
+    await drain()
+    record = await store.get(INSTANCE)
+    assert record is not None and record.analysis_version == ANALYSIS_VERSION
+    assert record.labelling_key == "rules"
+    await _save(stored)
+    await drain()
+    record = await store.get(INSTANCE)
+    assert record is not None and record.labelling_key == "vision:agent-default"
