@@ -217,3 +217,32 @@ async def test_native_tool_calls_internal_engine(service):
     assert "PAGE-CONTENT" in str(result)
     rows = await backend.store.list(user_id="user", limit=10)
     assert len(rows) == 1 and rows[0].outcome == "succeeded"
+
+
+@pytest.mark.asyncio
+async def test_admin_kpi_event_is_content_free_and_costs_only_searches(
+    service, monkeypatch
+):
+    backend, _ = service
+    backend.config = backend.config.model_copy(update={"cost_per_1000_searches": 5.0})
+    events = []
+
+    class Writer:
+        def emit(self, **event):
+            events.append(event)
+
+    class Runtime:
+        def get_kpi_writer(self):
+            return Writer()
+
+    monkeypatch.setattr(
+        "fred_runtime.app.web_research.get_runtime_context_or_none", Runtime
+    )
+    await backend.bind(binding()).execute(WebSearchRequest(query="PRIVATE-QUERY"))
+    (event,) = events
+    assert event["name"] == "web_research.request"
+    assert event["dims"]["tool_name"] == "web_search"
+    assert event["dims"]["status"] == "ok"
+    assert event["cost"] == {"usd": 0.005}
+    assert event["actor"].user_id == "user"
+    assert "PRIVATE-QUERY" not in repr(event) and "example.com" not in repr(event)

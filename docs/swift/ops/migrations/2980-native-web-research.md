@@ -48,6 +48,7 @@ web_research:
   proxy_url: https://proxy.dmz.example:3128
   proxy_auth_env: WEB_RESEARCH_PROXY_AUTH # Optional Basic username:password secret
   proxy_ca_file: /run/secrets/proxy-ca.crt # Optional private HTTPS proxy CA
+  cost_per_1000_searches: 5 # Contract price for the admin cost estimate
   max_results: 5 # Results sent to the model per search
   max_chars_per_page: 6000 # Text sent to the model per read page
   activity_retention_days: 30
@@ -99,6 +100,13 @@ The restricted SQL sink must exist and SQL statement logging must be disabled.
 Reads require `CAN_MANAGE_PLATFORM`, erasure `CAN_ADMINISTER_USERS`.
 
 ## Validation
+
+Platform admins see a "Web research" section on the Analytics page: requests,
+estimated provider cost, blocked/saturated/failed requests by reason, p95 latency
+and distinct users. Set `cost_per_1000_searches` to your provider contract price
+(default 0) for the estimate; it counts successful searches only and excludes
+retries, free tiers and LLM tokens. The section reads a content-free
+`web_research.request` KPI event, so it requires the OpenSearch KPI store.
 
 Use Fred's existing Prometheus exporter and runtime dashboard: operation counts,
 latency, failure/busy outcomes and activity-sink failures. Load the rules in

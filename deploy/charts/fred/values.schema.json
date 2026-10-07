@@ -2148,6 +2148,13 @@
                       "default": null,
                       "title": "Fixture File"
                     },
+                    "cost_per_1000_searches": {
+                      "default": 0.0,
+                      "maximum": 1000,
+                      "minimum": 0,
+                      "title": "Cost Per 1000 Searches",
+                      "type": "number"
+                    },
                     "proxy_url": {
                       "anyOf": [
                         {

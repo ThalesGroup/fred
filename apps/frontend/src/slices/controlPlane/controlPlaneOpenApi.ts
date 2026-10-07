@@ -1546,6 +1546,19 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    handlerControlPlaneV1KpiPresetsWebResearchSummaryGet: build.query<
+      HandlerControlPlaneV1KpiPresetsWebResearchSummaryGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsWebResearchSummaryGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/web_research_summary`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
     createCampaignControlPlaneV1EvaluationCampaignsPost: build.mutation<
       CreateCampaignControlPlaneV1EvaluationCampaignsPostApiResponse,
       CreateCampaignControlPlaneV1EvaluationCampaignsPostApiArg
@@ -2635,6 +2648,16 @@ export type HandlerControlPlaneV1KpiPresetsTokenUsageByModelGetApiArg = {
 export type HandlerControlPlaneV1KpiPresetsStorageByTeamGetApiResponse =
   /** status 200 Successful Response */ TeamStorageResponse;
 export type HandlerControlPlaneV1KpiPresetsStorageByTeamGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsWebResearchSummaryGetApiResponse =
+  /** status 200 Successful Response */ WebResearchSummaryResponse;
+export type HandlerControlPlaneV1KpiPresetsWebResearchSummaryGetApiArg = {
   /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
@@ -4305,6 +4328,19 @@ export type TeamStorageResponse = {
   since: string;
   until: string;
 };
+export type WebResearchSummaryResponse = {
+  requests: number;
+  billable_searches: number;
+  estimated_cost_usd: number;
+  blocked: number;
+  saturated: number;
+  failed: number;
+  unique_users: number;
+  p95_ms: number | null;
+  by_reason: LabelValuePoint[];
+  since: string;
+  until: string;
+};
 export type CampaignCreatedResponse = {
   campaign_id: string;
   task_id: string | null;
@@ -4686,6 +4722,8 @@ export const {
   useLazyHandlerControlPlaneV1KpiPresetsTokenUsageByModelGetQuery,
   useHandlerControlPlaneV1KpiPresetsStorageByTeamGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsStorageByTeamGetQuery,
+  useHandlerControlPlaneV1KpiPresetsWebResearchSummaryGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsWebResearchSummaryGetQuery,
   useCreateCampaignControlPlaneV1EvaluationCampaignsPostMutation,
   useListCampaignsControlPlaneV1EvaluationCampaignsGetQuery,
   useLazyListCampaignsControlPlaneV1EvaluationCampaignsGetQuery,

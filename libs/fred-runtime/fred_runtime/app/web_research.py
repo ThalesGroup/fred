@@ -10,6 +10,7 @@ import time
 from uuid import uuid4
 
 import httpx
+from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_sdk.contracts.context import BoundRuntimeContext
 from fred_sdk.contracts.web_research import (
     WebResearchDeploymentConfig,
@@ -21,6 +22,7 @@ from fred_sdk.contracts.web_research import (
 from prometheus_client import Counter, Histogram
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from fred_runtime.runtime_context import get_runtime_context_or_none
 from fred_runtime.app.web_research_activity import (
     WebResearchActivityStore,
     activity_url,
@@ -184,6 +186,26 @@ class WebResearchAdapter(WebResearchPort):
         DURATION.labels(
             service=service.service_name, operation=request.operation
         ).observe(time.monotonic() - started)
+        # Content-free admin analytics: no query, URL or page text in the KPI index.
+        billable = request.operation != "fetch_url" and result is not None
+        runtime = get_runtime_context_or_none()
+        if runtime is not None:
+            runtime.get_kpi_writer().emit(
+                name="web_research.request",
+                type="timer",
+                value=(time.monotonic() - started) * 1000,
+                unit="ms",
+                dims={
+                    "tool_name": request.operation,
+                    "status": "cancelled" if cancelled else "error" if error else "ok",
+                    "error_code": error.code if error else None,
+                    "team_id": portable.team_id,
+                },
+                cost={"usd": service.config.cost_per_1000_searches / 1000}
+                if billable
+                else None,
+                actor=KPIActor(type="human", user_id=portable.user_id),
+            )
         if cancelled:
             raise asyncio.CancelledError()
         if error is not None:

@@ -1487,7 +1487,8 @@
         "overview": "Usage overview",
         "resources": "Resources",
         "tokenUsage": "Token usage",
-        "users": "Users"
+        "users": "Users",
+        "webResearch": "Web research"
       },
       "administration": {
         "modelsGovernanceLink": "Manage models",
@@ -1526,6 +1527,33 @@
         "empty": "No team conversations in this period.",
         "title": "Teams with most conversations",
         "valueLabel": "Conversations"
+      },
+      "webResearch": {
+        "requests": "Requests",
+        "estimatedCost": "Estimated provider cost (USD)",
+        "blocked": "Blocked (security)",
+        "saturated": "Rejected (saturation)",
+        "failed": "Other failures",
+        "p95": "p95 latency (ms)",
+        "users": "Distinct users",
+        "costExplanation": "Estimated cost = successful searches ({{searches}}) × configured price per 1,000 searches (web_research.cost_per_1000_searches) ÷ 1,000 = ${{cost}}. Page reads (fetch_url) are not billed by the provider; retries, provider free tiers and LLM tokens (see “Token usage”) are excluded.",
+        "reasonsTitle": "Rejected or failed requests by reason",
+        "noRefusal": "No rejected or failed request in this period.",
+        "detailsHint": "Per-request details (user, query, URL) stay in the restricted activity API: GET /agents/web-research/activity.",
+        "reasons": {
+          "unsafe_destination": "Non-public address",
+          "too_many_redirects": "Too many redirects",
+          "unsupported_content": "Unsupported content",
+          "response_too_large": "Page too large",
+          "busy": "Saturation",
+          "timed_out": "Timed out",
+          "provider_failed": "Provider failed",
+          "http_error": "Site error",
+          "unavailable": "Unavailable",
+          "rejected": "Rejected",
+          "invalid_response": "Invalid response",
+          "activity_unavailable": "Activity log unavailable"
+        }
       }
     },
     "imports": {

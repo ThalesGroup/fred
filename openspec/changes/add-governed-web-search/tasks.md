@@ -17,6 +17,12 @@
 - [x] 3.3 Shared provider contract tests (shape, ceilings, errors, key isolation) plus selection/startup tests.
 - [x] 3.4 Update migration guide, `.env.template` and Helm values.
 
+## 4. Admin cost and monitoring view
+
+- [x] 4.1 Emit one content-free `web_research.request` KPI event per completed operation (operation, status, error code, team, user, duration, estimated `cost.usd` from `cost_per_1000_searches`).
+- [x] 4.2 Add a `web_research_summary` control-plane KPI preset: requests, estimated cost, blocked/busy/failed counts, p95 latency, unique users, outcome breakdown.
+- [x] 4.3 Render an admin "Web research" section on the Analytics page with the cost explanation; regenerate the control-plane client.
+
 ## Evidence
 
 Previous version: 67 focused tests and root quality gates passed; separate egress HTTPS topology was reviewed against implementation head `289b26e509aae586ae5b4b27fbc09a584cfcaf4a`. This is historical evidence, not verification of the revised transport. Current work reuses issue #2980 and branch `codex/add-governed-web-search`.
@@ -24,3 +30,5 @@ Previous version: 67 focused tests and root quality gates passed; separate egres
 Proxy assumption: operator-owned HTTP(S) forward proxy with CONNECT and final DNS/destination enforcement, configured explicitly; proxy deployment is outside this change. No public-provider or production proxy validation is claimed.
 
 Provider selection (2026-10-07): 40 capability tests (8 new shared provider contract/selection tests with mocked transports, no live Brave call), 7 runtime web-research tests, ruff and basedpyright clean, `make generate-config-schema`, `make check-config-files` and `helm lint` pass. Local Fred Agents reloaded on the default keyless provider.
+
+Admin view (2026-10-07): runtime KPI emission test (content-free, cost only on successful searches), control-plane preset test (blocked/saturated/failed split, team scope, admin-only), Analytics page tests; full frontend suite 3388 passed, `tsc`/prettier/eslint clean, basedpyright clean on the preset, `check-config-files` and `helm lint` pass. Not verified against a live OpenSearch index.

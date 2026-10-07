@@ -55,6 +55,10 @@ Fred SHALL execute research internally, directly or through an explicitly config
 
 Fred SHALL provide content-free counts, latency, failure and saturation signals for web research through its existing metrics and document alerts for research failures and activity-sink failures. Monitoring SHALL work for local, Docker/Podman, VM and Kubernetes deployments without a dedicated research server or user text in metric labels.
 
+#### Scenario: Admin cost and blocking view
+- **WHEN** a platform observer opens analytics for a time range
+- **THEN** Fred shows web research volume, estimated provider cost with its formula, blocked, saturated and failed requests by reason, latency and distinct users, without queries, URLs or page content
+
 #### Scenario: DMZ outage
 - **WHEN** the configured proxy is unreachable
 - **THEN** an operator sees research failure signals and can correlate them with failed tool requests

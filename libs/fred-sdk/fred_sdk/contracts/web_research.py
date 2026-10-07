@@ -144,6 +144,8 @@ class WebResearchDeploymentConfig(BaseModel):
     provider: SearchProviderName = "duckduckgo"
     provider_key_env: str | None = Field(default=None, pattern=r"^[A-Z][A-Z0-9_]+$")
     fixture_file: str | None = None
+    # Contract price used only for the admin cost estimate; 0 for keyless providers.
+    cost_per_1000_searches: float = Field(default=0.0, ge=0, le=1000)
     proxy_url: str | None = None
     proxy_auth_env: str | None = Field(default=None, pattern=r"^[A-Z][A-Z0-9_]+$")
     proxy_ca_file: str | None = None

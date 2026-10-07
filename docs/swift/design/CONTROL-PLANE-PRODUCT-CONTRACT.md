@@ -4456,3 +4456,13 @@ runtime catalog source before identity-provider deletion. A failed runtime call
 blocks completion so an administrator can retry. This remains product cleanup;
 web research execution and storage are owned by the runtime. See the
 [activity contract](../platform/OBSERVABILITY-AND-AUDIT.md#restricted-web-research-activity).
+
+### 2026-10-07 — Web research analytics preset (#2980)
+
+`GET /kpi/presets/web_research_summary` (platform admin, team-scopable) returns
+web research volume, estimated provider cost, blocked/saturated/failed counts,
+reason breakdown, p95 latency and distinct users for a time range. It reads the
+content-free `web_research.request` KPI event emitted by Fred Agents; the cost
+is `cost.usd` = `web_research.cost_per_1000_searches` / 1000 per successful
+search. Queries, URLs and per-user details stay in the restricted runtime
+activity API.

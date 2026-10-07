@@ -18,6 +18,8 @@ The existing package has a reusable asynchronous DuckDuckGo/extraction engine wr
 
 6. **Search provider.** `provider` selects one `SearchProvider` behind the unchanged engine: `duckduckgo` (SDK default, keyless, local use), `fixture` (operator-supplied JSON or built-in results, no network, results not DNS-vetted because they are not untrusted input) and `brave` (JSON API, key read from `provider_key_env`, sent only to its fixed endpoint, never logged). The Helm default is `brave` so a production enablement without a key fails at startup instead of silently using an SLA-free provider. Providers never fall back to each other: failures stay `provider_failed`. All providers pass one shared contract test suite. Internal/self-hosted providers (SearXNG, private index) are out of scope: they would need a client exempt from public-only routing.
 
+7. **Admin view.** Reuse the KPI pipeline instead of a runtime admin API: each completed operation emits a `web_research.request` timer event with existing mapped dims (`tool_name`=operation, `status`, `error_code`, `team_id`, `user_id`) and `cost.usd` = `cost_per_1000_searches`/1000 for successful searches only. No query, URL or content enters the KPI index. One control-plane preset aggregates it; the Analytics page shows it to admins. Blocked = `unsafe_destination`, `too_many_redirects`, `unsupported_content`, `response_too_large`; saturated = `busy`. Per-request details stay in the restricted activity API. Cost is an estimate: retries, provider-side free tiers and LLM tokens are excluded.
+
 ## Risks / Trade-offs
 
 - Brave availability, quotas and pricing are commercial prerequisites; no live Brave call is claimed by mocked-transport tests.

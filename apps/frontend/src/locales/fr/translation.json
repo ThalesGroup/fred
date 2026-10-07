@@ -1487,7 +1487,8 @@
         "overview": "Vue d'ensemble",
         "resources": "Ressources",
         "tokenUsage": "Consommation de tokens",
-        "users": "Utilisateurs"
+        "users": "Utilisateurs",
+        "webResearch": "Recherche web"
       },
       "administration": {
         "modelsGovernanceLink": "Gérer les modèles",
@@ -1526,6 +1527,33 @@
         "empty": "Aucune conversation d'équipe sur cette période.",
         "title": "Équipes avec le plus de conversations",
         "valueLabel": "Conversations"
+      },
+      "webResearch": {
+        "requests": "Requêtes",
+        "estimatedCost": "Coût moteur estimé (USD)",
+        "blocked": "Bloquées (sécurité)",
+        "saturated": "Refusées (saturation)",
+        "failed": "Autres échecs",
+        "p95": "Latence p95 (ms)",
+        "users": "Utilisateurs distincts",
+        "costExplanation": "Coût estimé = recherches réussies ({{searches}}) × prix pour 1 000 recherches configuré (web_research.cost_per_1000_searches) ÷ 1 000 = {{cost}} $. Les lectures de pages (fetch_url) ne sont pas facturées par le moteur ; les nouvelles tentatives, les offres gratuites du fournisseur et les tokens LLM (voir « Consommation de tokens ») ne sont pas inclus.",
+        "reasonsTitle": "Requêtes refusées ou en échec, par motif",
+        "noRefusal": "Aucune requête refusée ni en échec sur la période.",
+        "detailsHint": "Le détail par requête (utilisateur, requête, URL) reste réservé à l'API d'activité restreinte : GET /agents/web-research/activity.",
+        "reasons": {
+          "unsafe_destination": "Adresse non publique",
+          "too_many_redirects": "Trop de redirections",
+          "unsupported_content": "Contenu non pris en charge",
+          "response_too_large": "Page trop volumineuse",
+          "busy": "Saturation",
+          "timed_out": "Délai dépassé",
+          "provider_failed": "Moteur en échec",
+          "http_error": "Erreur du site",
+          "unavailable": "Indisponible",
+          "rejected": "Refusée",
+          "invalid_response": "Réponse invalide",
+          "activity_unavailable": "Journal d'activité indisponible"
+        }
       }
     },
     "imports": {
