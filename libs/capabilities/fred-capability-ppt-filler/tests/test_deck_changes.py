@@ -222,9 +222,9 @@ class _Turn:
         self.rendered: List[DeckPlan] = []
         real = tools_mod.render_deck
 
-        def recording(template, inventory, plan, patterns, images):
+        def recording(template, inventory, plan, patterns, images, numbers=None):
             self.rendered.append(plan)
-            return real(template, inventory, plan, patterns, images)
+            return real(template, inventory, plan, patterns, images, numbers)
 
         monkeypatch.setattr(tools_mod, "render_deck", recording)
         monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
@@ -505,3 +505,40 @@ def test_change_slides_do_not_repeat_the_slide_schema():
     changes = json.dumps(params["properties"]["changes"])
     assert "Room:" in json.dumps(params["properties"]["slides"])
     assert "Room:" not in changes and len(changes) < 1600
+
+
+@pytest.mark.asyncio
+async def test_a_split_list_keeps_the_models_plan_as_the_base(
+    monkeypatch, deck_plan_store
+):
+    """Five steps over two process slides: the stored plan is the one sent, so
+    a later change numbers on it, not on the rendered deck."""
+    workspace = FakeWorkspace()
+    first = _Turn(monkeypatch, workspace)
+    method = {"title": "Method", "kind": "process", "items": _STEPS[:5]}
+    deck = [COVER, method, {"title": "Contact", "bullets": ["a"]}]
+    text, result = await first.build(slides=deck)
+    assert not result.is_error, text
+    (rendered,) = first.rendered
+    assert [s.title for s in rendered.slides] == [
+        "Kick-off",
+        "Method (1/2)",
+        "Method (2/2)",
+        "Contact",
+    ]
+    stored = DeckPlan.model_validate_json(deck_plan_store.plans[("sess-9", "inst-7")])
+    assert [s.title for s in stored.slides] == ["Kick-off", "Method", "Contact"]
+
+    second = _Turn(monkeypatch, workspace)
+    text, result = await second.build(
+        changes=[{"op": "edit", "slide": 3, "field": "title", "value": "Contacts"}]
+    )
+    assert not result.is_error, text
+    (edited,) = second.rendered
+    assert [s.title for s in edited.slides] == [
+        "Kick-off",
+        "Method (1/2)",
+        "Method (2/2)",
+        "Contacts",
+    ]
+    assert [i.number for i in edited.slides[2].items] == ["3", "4"]

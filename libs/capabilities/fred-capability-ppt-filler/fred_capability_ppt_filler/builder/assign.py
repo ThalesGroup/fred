@@ -18,9 +18,11 @@ A slide's candidates are the patterns that hold all of its content: of the
 requested kind, then of the kinds close to it (never an unrelated one); with
 no kind, of the kinds its content suggests, then of any kind. Each
 substitution is reported with the edit that would give the requested kind.
-A beam search picks one per slide under the deck rules, pricing every reuse of a template slide anywhere in the deck. A
-slide that fits nothing is a problem the model must fix, named down to the
-element: never a silent fallback.
+A list longer than its kind's slides hold first continues on a second slide
+of the same kind. A beam search picks one per slide under the deck rules,
+pricing every reuse of a template slide anywhere in the deck. A slide that
+fits nothing is a problem the model must fix, named down to the element:
+never a silent fallback.
 """
 
 from __future__ import annotations
@@ -43,6 +45,7 @@ from fred_capability_ppt_filler.builder.plan import (
     SLIDE_FIELDS,
     DeckPlan,
     PlanItem,
+    PlanTable,
     SlidePlan,
     _limit,
     capacity_text,
@@ -53,6 +56,7 @@ from fred_capability_ppt_filler.builder.plan import (
 from fred_capability_ppt_filler.builder.render import (
     _assign_group,
     _assign_text,
+    _auto_number,
     _fit,
     _Line,
     _only_names_the_slide,
@@ -122,6 +126,10 @@ CLOSE_KINDS: Dict[str, Tuple[SlideKind, ...]] = {
 }
 
 _MAX_KIND_OPTIONS = 3
+# Slides one list may take: longer, it is a document the model must restructure.
+_MAX_PARTS = 2
+# A continuation on another template slide than its first part's.
+_SPLIT_SWITCH = _KIND_STEP
 
 
 @dataclass
@@ -184,6 +192,25 @@ class Assignment:
     # Substitutions and repetitions the agent should hear about.
     notes: List[str] = field(default_factory=list)
     repeats: List[Repeat] = field(default_factory=list)
+    # Per 1-based plan index of a split slide: its parts and their patterns.
+    parts: Dict[int, List[Tuple[SlidePlan, Pattern]]] = field(default_factory=dict)
+
+    def deck(
+        self, plan: DeckPlan
+    ) -> Tuple[DeckPlan, List[Optional[Pattern]], List[int]]:
+        """The plan to render, a split slide as its parts, with each rendered
+        slide's number in ``plan``: messages always name the model's slides."""
+        slides: List[SlidePlan] = []
+        patterns: List[Optional[Pattern]] = []
+        numbers: List[int] = []
+        for number, (slide, pattern) in enumerate(
+            zip(plan.slides, self.patterns), start=1
+        ):
+            for part, chosen in self.parts.get(number, [(slide, pattern)]):
+                slides.append(part)
+                patterns.append(chosen)
+                numbers.append(number)
+        return plan.model_copy(update={"slides": slides}), patterns, numbers
 
 
 def assignable(inventory: TemplateInventory) -> List[Pattern]:
@@ -591,6 +618,10 @@ class _Slide:
     candidates: List[Tuple[Pattern, float]] = field(default_factory=list)
     # A slide that fits nothing: the pattern closest to holding it, its misfits.
     closest: Optional[Tuple[Pattern, List[Misfit]]] = None
+    # Part k of n of a split list, and the entries before it.
+    part: int = 1
+    parts: int = 1
+    start: int = 0
 
 
 def _allowed(pattern: Pattern, slide: _Slide, has_cover: bool) -> bool:
@@ -635,6 +666,165 @@ def _candidates(slide: _Slide, has_cover: bool) -> List[Tuple[Pattern, float]]:
         if found:
             return found
     return []
+
+
+# --- a list continued on a second slide ---------------------------------------------------
+
+
+@dataclass
+class _Split:
+    kind: SlideKind
+    what: str  # "items" or "rows"
+    entries: int
+    most: int  # the kind's largest slide, in items; 0 for a table
+    slides: List[_Slide]
+
+
+def _table(slide: SlidePlan) -> Optional[PlanTable]:
+    table = slide.table
+    return table if table is not None and table.has_content() else None
+
+
+def _entries(slide: SlidePlan) -> int:
+    """The entries of the slide's list: items, else table rows."""
+    table = _table(slide)
+    return len(slide.items) or (len(table.rows) if table is not None else 0)
+
+
+def _too_tall(reasons: List[Misfit]) -> bool:
+    """Only the table's height keeps it out: fewer rows would fit."""
+    return bool(reasons) and all(
+        r.text.startswith("table: ") and " rows need " in r.text for r in reasons
+    )
+
+
+def _sizes(entries: int, count: int) -> List[int]:
+    """Balanced, the first parts one longer: 9 over 2 → 5 + 4."""
+    base, extra = divmod(entries, count)
+    return [base + (1 if k < extra else 0) for k in range(count)]
+
+
+def _parts(slide: _Slide, count: int) -> List[_Slide]:
+    plan, table = slide.plan, _table(slide.plan)
+    rows = table.rows if table is not None else []
+    found: List[_Slide] = []
+    start = 0
+    for k, size in enumerate(_sizes(_entries(plan), count), start=1):
+        update: Dict[str, Any] = {
+            "title": f"{plan.title} ({k}/{count})" if plan.title else plan.title,
+            "notes": plan.notes if k == 1 else None,
+        }
+        if plan.items:
+            update["items"] = plan.items[start : start + size]
+        elif table is not None:
+            update["table"] = PlanTable(
+                header=table.header, rows=rows[start : start + size]
+            )
+        found.append(
+            _Slide(
+                slide.index,
+                plan.model_copy(update=update),
+                first=slide.first and k == 1,
+                last=slide.last and k == count,
+                part=k,
+                parts=count,
+                start=start,
+            )
+        )
+        start += size
+    return found
+
+
+def _split(
+    slide: _Slide, pool: List[Pattern], size: Tuple[int, int], has_cover: bool
+) -> Optional[_Split]:
+    """The slide's list over at most ``_MAX_PARTS`` slides of its own kind (the
+    requested one, or the first inferred one that holds it), when its entry
+    count alone keeps it off that kind; None otherwise. Bullets never split."""
+    plan, entries = slide.plan, _entries(slide.plan)
+    if entries < 2 or (slide.first and has_cover):
+        return None
+    for kind in slide.tiers[0]:
+        mine = [p for p in pool if p.kind == kind]
+        most = max((g.count for p in mine for g in p.groups), default=0)
+        if plan.items:
+            if not most or entries <= most:
+                continue
+            count = math.ceil(entries / most)
+        else:
+            tables = [
+                r
+                for p, r, _ in slide.checked
+                if p.kind == kind and any(z.role == "table" for z in p.zones)
+            ]
+            if not tables or not all(_too_tall(r) for r in tables):
+                continue
+            count = _MAX_PARTS
+        if count > _MAX_PARTS:
+            continue
+        parts = _parts(slide, count)
+        for part in parts:
+            part.tiers = [[kind]]
+            part.checked = [(p, *misfit(p, part.plan, size)) for p in mine]
+            part.candidates = [
+                (p, cost)
+                for p, reasons, cost in part.checked
+                if not reasons and _allowed(p, part, has_cover)
+            ]
+        if all(part.candidates for part in parts):
+            what = "items" if plan.items else "rows"
+            return _Split(kind, what, entries, most if plan.items else 0, parts)
+    return None
+
+
+def _split_note(split: _Split) -> str:
+    first = split.slides[0]
+    sizes = " + ".join(str(_entries(s.plan)) for s in split.slides)
+    more = "a second" if len(split.slides) == 2 else f"{len(split.slides) - 1} more"
+    marked = (
+        ", titles marked " + " and ".join(f"({s.part}/{s.parts})" for s in split.slides)
+        if first.plan.title
+        else ""
+    )
+    header = ", header repeated" if split.what == "rows" else ""
+    if split.most:
+        why = f"the largest '{split.kind}' slide holds {split.most}"
+        remedy = f"send at most {split.most} {split.what}"
+    else:
+        why = f"they do not fit one '{split.kind}' slide"
+        remedy = "send fewer rows or shorter cells"
+    return (
+        f"Slide {first.index}: its {split.entries} {split.what} continue on {more} "
+        f"'{split.kind}' slide ({sizes}{header}{marked}): {why}. Nothing to do; to "
+        f"keep one slide, {remedy}."
+    )
+
+
+def _numbered(slide: _Slide, pattern: Pattern) -> SlidePlan:
+    """A continuation's items without numbers carry on the count of its first
+    part, in the template's style, instead of restarting at 01."""
+    plan = slide.plan
+    if slide.part == 1 or not plan.items or any(i.number for i in plan.items):
+        return plan
+    sample = next(
+        (
+            z.sample
+            for g in pattern.groups
+            for item in g.items[:1]
+            for z in item
+            if z.role == "number"
+        ),
+        None,
+    )
+    if sample is None:
+        return plan
+    items = [
+        item.model_copy(
+            update={"number": _auto_number(sample, slide.start + n) or None}
+        )
+        for n, item in enumerate(plan.items)
+    ]
+    return plan.model_copy(update={"items": items})
 
 
 def _own(slide: _Slide, has_cover: bool) -> List[Tuple[Pattern, List[Misfit]]]:
@@ -754,15 +944,21 @@ def _problem(slide: _Slide, has_cover: bool, offered: set[str]) -> SlideProblem:
         sized = [p for p, _ in own if close is None or p.kind == closest.kind]
         where = "slide of this template" if close is None else f"'{closest.kind}' slide"
         most = max((g.count for p in sized for g in p.groups), default=0)
-        if slide.plan.items and most and len(slide.plan.items) > most:
+        given = len(slide.plan.items)
+        if slide.plan.items and most and given > most:
             reasons = [r for r in reasons if not r.text.startswith("items:")]
-            problem = "; ".join(
-                [
-                    f"items: {len(slide.plan.items)} given; the largest {where} holds {most}"
+            count = f"items: {given} given; the largest {where} holds {most}"
+            if given > most * _MAX_PARTS:
+                # Over what a continuation slide adds: the model restructures it.
+                count += f", {_MAX_PARTS} slides hold {most * _MAX_PARTS}"
+                options += [
+                    f"trim to {most * _MAX_PARTS} items (beyond {most} they continue "
+                    "on a second slide)",
+                    f"or keep {most} here and move the rest to slides of your own",
                 ]
-                + [r.text for r in reasons]
-            )
-            options += [f"trim to {most} items", "split the items over two slides"]
+            else:
+                options += [f"trim to {most} items", "split the items over two slides"]
+            problem = "; ".join([count] + [r.text for r in reasons])
         options += [r.option for r in reasons if r.option]
         options.append(f"a '{closest.kind}' slide takes: {zone_summary(closest)}")
         options += _close_options(slide, own, closest.kind)
@@ -851,7 +1047,7 @@ def _content(slide: _Slide, pattern: Optional[Pattern] = None) -> bool:
 
 
 def _caps(slides: List[_Slide], pool: List[Pattern], max_uses: int) -> _Caps:
-    content = sum(1 for s in slides if s.candidates and _content(s))
+    content = sum(1 for s in slides if s.candidates and _content(s) and s.part == 1)
     variants = [p.kind for p in pool if p.kind not in _STRUCTURAL]
 
     def cap(distinct: int) -> int:
@@ -880,10 +1076,17 @@ def _beam(slides: List[_Slide], caps: Optional[_Caps] = None) -> List[Pattern]:
             before = slides[i - 2].candidates[path.chosen[-2]][0].id if i >= 2 else None
             for c, (pattern, cost) in enumerate(slide.candidates):
                 step = path.cost + cost + _REUSE * path.uses.get(pattern.id, 0)
-                if pattern.id == last:
+                if slide.part > 1:
+                    # A list's continuation: its first part's slide again is free.
+                    if pattern.id != last:
+                        step += _SPLIT_SWITCH
+                    else:
+                        step = path.cost + cost
+                elif pattern.id == last:
                     step += _REPEAT + (_TRIPLE if pattern.id == before else 0.0)
                 if (
                     caps is not None
+                    and slide.part == 1
                     and _content(slide, pattern)
                     and path.content.get(pattern.id, 0) >= caps.slide
                 ):
@@ -896,9 +1099,11 @@ def _beam(slides: List[_Slide], caps: Optional[_Caps] = None) -> List[Pattern]:
             path = paths[n]
             pattern = slide.candidates[c][0]
             uses = dict(path.uses)
-            uses[pattern.id] = uses.get(pattern.id, 0) + 1
             content = dict(path.content)
-            if _content(slide, pattern):
+            # A split list counts as one slide.
+            if slide.part == 1:
+                uses[pattern.id] = uses.get(pattern.id, 0) + 1
+            if slide.part == 1 and _content(slide, pattern):
                 content[pattern.id] = content.get(pattern.id, 0) + 1
             state = (
                 path.chosen[-1:],
@@ -1040,6 +1245,8 @@ def _repeats(
         variants.setdefault(p.kind, set()).add(zone_summary(p))
     budget = {k: len(v) for k, v in variants.items()}
     for slide in slides:
+        if slide.part > 1:
+            continue
         k = chosen[slide.index].kind if slide.index in chosen else _wanted(slide)
         if k in budget:
             budget[k] -= 1
@@ -1047,7 +1254,7 @@ def _repeats(
     groups: Dict[Tuple[str, str], List[Tuple[_Slide, Pattern]]] = {}
     for slide in slides:
         pattern = chosen.get(slide.index)
-        if pattern is None:
+        if pattern is None or slide.part > 1:
             continue
         if not _content(slide, pattern):
             key = ("structural", pattern.id)
@@ -1146,6 +1353,7 @@ def assign(
         for n, (index, slide) in enumerate(usable)
     ]
     problems: List[SlideProblem] = []
+    splits: Dict[int, _Split] = {}
     for slide in slides:
         dropped = _dropped_text(slide.index, slide.plan)
         if dropped is not None:
@@ -1164,26 +1372,44 @@ def assign(
         slide.tiers = _tiers(slide, has_cover)
         slide.checked = [(p, *misfit(p, slide.plan, size)) for p in pool]
         slide.candidates = _candidates(slide, has_cover)
-        if not slide.candidates:
+        own_kind = (
+            bool(slide.candidates) and slide.candidates[0][0].kind in slide.tiers[0]
+        )
+        # Its own kind over two slides before a close kind, before a revision.
+        split = None if own_kind else _split(slide, pool, size, has_cover)
+        if split is not None:
+            splits[slide.index] = split
+        elif not slide.candidates:
             slide.closest = _closest(slide, has_cover)
             problems.append(_problem(slide, has_cover, offered))
             # Counted for variety where it lands once fixed: the ask joins this round.
             slide.candidates = _once_fixed(slide, has_cover)
     if not slides:
         return Assignment(problems=problems)
+    slides = [
+        part
+        for slide in slides
+        for part in (splits[slide.index].slides if slide.index in splits else [slide])
+    ]
     by_kind = variety != "template_slide"
     caps = None if variety == "off" else _caps(slides, pool, max_uses)
     if problems:
         placed = [s for s in slides if s.candidates]
-        found = {s.index: p for s, p in zip(placed, _beam(placed, caps))}
+        found = {s.index: p for s, p in zip(placed, _beam(placed, caps)) if s.part == 1}
         return Assignment(
             problems=problems, repeats=_repeats(slides, found, pool, by_kind, caps)
         )
 
     chosen = _beam(slides, caps)
     patterns: List[Optional[Pattern]] = [None] * len(plan.slides)
+    parts: Dict[int, List[Tuple[SlidePlan, Pattern]]] = {}
     for slide, pattern in zip(slides, chosen):
-        patterns[slide.index - 1] = pattern
+        if slide.part == 1:
+            patterns[slide.index - 1] = pattern
+        if slide.parts > 1:
+            parts.setdefault(slide.index, []).append(
+                (_numbered(slide, pattern), pattern)
+            )
     notes = [
         note
         for slide, pattern in zip(slides, chosen)
@@ -1195,8 +1421,10 @@ def assign(
         "then give one of them another content shape."
         for i in range(2, len(chosen))
         if chosen[i].id == chosen[i - 1].id == chosen[i - 2].id
+        and slides[i].part == slides[i - 1].part == 1
     ]
-    found = {s.index: p for s, p in zip(slides, chosen)}
+    notes += [_split_note(split) for split in splits.values()]
+    found = {s.index: p for s, p in zip(slides, chosen) if s.part == 1}
     repeats = _repeats(slides, found, pool, by_kind, caps)
     notes += [_repeat_note(r) for r in repeats]
-    return Assignment(patterns=patterns, notes=notes, repeats=repeats)
+    return Assignment(patterns=patterns, notes=notes, repeats=repeats, parts=parts)

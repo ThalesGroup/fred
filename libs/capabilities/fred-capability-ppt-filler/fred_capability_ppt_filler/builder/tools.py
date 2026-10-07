@@ -584,6 +584,7 @@ def _prepare_and_render(
     plan: DeckPlan,
     patterns: List[Any],
     prefetched: Dict[str, object],
+    numbers: Optional[List[int]] = None,
 ):
     """Picture validation/transcoding and the render, together in one worker
     thread: Pillow decoding a large WEBP is hundreds of milliseconds of CPU.
@@ -596,7 +597,7 @@ def _prepare_and_render(
             images[document_id] = prepare_picture(raw)  # type: ignore[arg-type]
         except NotAnImageError:
             continue
-    return render_deck(template_bytes, inventory, plan, patterns, images)
+    return render_deck(template_bytes, inventory, plan, patterns, images, numbers)
 
 
 # --- the base of a `changes` call ----------------------------------------------------------
@@ -920,14 +921,17 @@ def build_builder_tools(
 
         if not acquire_heavy_job_slot():
             return _error(_BUSY_MESSAGE)
+        # Split lists render as their parts; the stored plan stays the model's.
+        deck, patterns, numbers = assignment.deck(plan)
         try:
             result = await asyncio.to_thread(
                 _prepare_and_render,
                 template_bytes,
                 inventory,
-                plan,
-                assignment.patterns,
+                deck,
+                patterns,
                 prefetched,
+                numbers,
             )
         except RenderError as exc:
             return _error(f"No deck was built: {exc}")

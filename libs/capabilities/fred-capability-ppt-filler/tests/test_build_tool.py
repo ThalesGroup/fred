@@ -377,7 +377,9 @@ async def test_a_slide_that_fits_nothing_builds_nothing_and_says_what_to_change(
     assert problem["slide"] == 2 and problem["kind"] == "process"
     assert "items: 7 given; the largest 'process' slide holds 3" in problem["problem"]
     assert any(o.startswith("trim to ") for o in problem["options"])
-    assert "split the items over two slides" in problem["options"]
+    assert (
+        "or keep 3 here and move the rest to slides of your own" in problem["options"]
+    )
     assert "repeated" not in problem
 
     # The same plan again is flagged as resent, not answered word for word.
@@ -774,6 +776,50 @@ async def test_a_renderer_finding_reaches_the_model_in_the_review_notes(monkeypa
         "Slide 2: the agenda announces 4 parts but only 0 slide(s) follow it. Add the "
         "missing slides or remove those parts from the agenda; otherwise nothing to do."
     ) in review
+
+
+def _points(n: int) -> list:
+    return [{"title": f"Point {i}", "bullets": ["a", "b"]} for i in range(n)]
+
+
+def _agenda(n: int) -> dict:
+    return {
+        "title": "Agenda",
+        "kind": "agenda",
+        "items": [{"heading": f"Part {i}"} for i in range(n)],
+    }
+
+
+@pytest.mark.asyncio
+async def test_a_split_agenda_is_one_agenda_for_the_gap_check(monkeypatch):
+    """Six parts over two agenda slides of 3: the slides that follow are
+    counted after the second part, the parts announced once."""
+    text, result = await _build(monkeypatch, slides=[COVER, _agenda(6), *_points(2)])
+    assert not result.is_error, text
+    review = text[text.index("\nTo review") :]
+    assert "Slide 2: its 6 items continue on a second 'agenda' slide (3 + 3" in review
+    assert (
+        "Slide 2: the agenda announces 6 parts but only 2 slide(s) follow it." in review
+    )
+    text, _ = await _build(monkeypatch, slides=[COVER, _agenda(6), *_points(3)])
+    assert "announces" not in text
+
+
+@pytest.mark.asyncio
+async def test_notes_after_a_split_name_the_plans_slide_numbers(monkeypatch):
+    """The process list of slide 2 takes two slides; the agenda after it is
+    still slide 3 in every note."""
+    steps = [{"heading": f"Step {i}", "text": "x"} for i in range(5)]
+    method = {"title": "Method", "kind": "process", "items": steps}
+    text, result = await _build(
+        monkeypatch, slides=[COVER, method, _agenda(4), *_points(1)]
+    )
+    assert not result.is_error, text
+    assert "(5 slides)" in text
+    assert "Slide 2: its 5 items continue on a second 'process' slide (3 + 2" in text
+    assert (
+        "Slide 3: the agenda announces 4 parts but only 1 slide(s) follow it." in text
+    )
 
 
 # --- images -----------------------------------------------------------------------------------

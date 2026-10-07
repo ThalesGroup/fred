@@ -1020,9 +1020,12 @@ def _unused_item_fields(
     roles = {role for group in groups for role in group.item_zones}
     lost: Dict[str, None] = {}
     numbers = [i.number.strip().rstrip(".") for i in plan.items if i.number]
-    # Step numbers 1, 2, 3… say what the item order already shows.
+    # Step numbers 1, 2, 3… (or 6, 7, 8… on a list's continuation slide) say what
+    # the item order already shows; years are never step numbers.
+    start = int(numbers[0]) if numbers and numbers[0].isdigit() else 1
+    start = start if start < 100 else 1
     counting = len(numbers) == len(plan.items) and numbers == [
-        f"{n:0{len(numbers[0])}d}" for n in range(1, len(numbers) + 1)
+        f"{n:0{len(numbers[0])}d}" for n in range(start, start + len(numbers))
     ]
     for index, item in enumerate(
         plan.items[: max((g.count for g in groups), default=0)]
@@ -1142,21 +1145,27 @@ class _Renderer:
         self._originals: Dict[int, Dict[str, str]] = {}
 
     def render(
-        self, plan: DeckPlan, patterns: Sequence[Optional[Pattern]]
+        self,
+        plan: DeckPlan,
+        patterns: Sequence[Optional[Pattern]],
+        numbers: Optional[Sequence[int]] = None,
     ) -> RenderResult:
         original_ids = list(self.slides_by_id)
         rendered = 0
-        # (position, rendered index, topics) of each agenda: a deck announcing more
-        # topics than it has slides left is one the agent meant to write and did not.
-        announced: List[Tuple[int, int, int]] = []
-        for position, slide_plan in enumerate(plan.slides, start=1):
+        # [number, rendered index of its last part, topics] of each agenda: a deck
+        # announcing more topics than it has slides left is one the agent meant to
+        # write and did not. The parts of a split agenda are one agenda.
+        announced: List[List[int]] = []
+        for at, slide_plan in enumerate(plan.slides, start=1):
+            # Messages name the model's slide: a split list's parts share its number.
+            position = numbers[at - 1] if numbers else at
             if slide_plan.invalid_entry is not None:
                 self.warnings.append(
                     f"Entry {position} of 'slides' was not a slide object and was skipped "
                     f"({slide_plan.invalid_entry!r})."
                 )
                 continue
-            pattern = patterns[position - 1]
+            pattern = patterns[at - 1]
             if pattern is None:
                 raise RenderError(
                     f"slide {position} has no template slide (internal). Call again with "
@@ -1164,7 +1173,11 @@ class _Renderer:
                 )
             rendered += 1
             if pattern.kind == "agenda" and slide_plan.items:
-                announced.append((position, rendered, len(slide_plan.items)))
+                if announced and announced[-1][0] == position:
+                    announced[-1][1] = rendered
+                    announced[-1][2] += len(slide_plan.items)
+                else:
+                    announced.append([position, rendered, len(slide_plan.items)])
             slide, pattern = self._create(pattern)
             # Nothing to say on it (a "Thank you" slide): keep the template's text.
             if pattern.reusable and pattern.fillable and has_content(slide_plan):
@@ -1743,16 +1756,20 @@ def render_deck(
     plan: DeckPlan,
     patterns: Sequence[Optional[Pattern]],
     images: Optional[Mapping[str, PreparedImage]] = None,
+    numbers: Optional[Sequence[int]] = None,
 ) -> RenderResult:
     """Render ``plan`` on the template, slide ``i`` on ``patterns[i]`` as
     chosen by :func:`assign.assign` (CPU-bound; call off the event loop).
+    ``numbers`` gives each slide's number in the model's plan, for messages.
 
     Raises :class:`RenderError` for a pattern the template no longer holds;
     anything else propagates.
     """
     presentation = open_presentation(template_bytes)
     try:
-        return _Renderer(presentation, inventory, images or {}).render(plan, patterns)
+        return _Renderer(presentation, inventory, images or {}).render(
+            plan, patterns, numbers
+        )
     except ValueError as exc:
         raise RenderError(
             f"the template could not be filled ({exc}). Call again with a simpler plan; "

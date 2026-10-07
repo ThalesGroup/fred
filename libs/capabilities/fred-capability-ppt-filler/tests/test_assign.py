@@ -390,7 +390,7 @@ def test_invalid_entries_get_no_pattern_and_do_not_shift_the_rules():
 # --- no silent fallback -----------------------------------------------------------------------
 
 
-def test_items_over_capacity_are_a_problem_with_trim_and_split_options():
+def test_items_beyond_two_slides_are_a_problem_with_trim_options():
     steps = [PlanItem(number=str(i), heading=f"S{i}", text="x") for i in range(7)]
     assignment = assign(
         INVENTORY, _plan(COVER, SlidePlan(title="How", kind="process", items=steps))
@@ -398,8 +398,13 @@ def test_items_over_capacity_are_a_problem_with_trim_and_split_options():
     (problem,) = assignment.problems
     assert problem.as_dict()["slide"] == 2
     # The team slide holds more, but it is not a close kind of 'process'.
-    assert problem.problem == "items: 7 given; the largest 'process' slide holds 3"
-    assert problem.options[:2] == ["trim to 3 items", "split the items over two slides"]
+    assert problem.problem == (
+        "items: 7 given; the largest 'process' slide holds 3, 2 slides hold 6"
+    )
+    assert problem.options[:2] == [
+        "trim to 6 items (beyond 3 they continue on a second slide)",
+        "or keep 3 here and move the rest to slides of your own",
+    ]
 
 
 def test_a_kind_the_template_lacks_is_replaced_by_a_close_kind():
@@ -413,7 +418,9 @@ def test_a_kind_the_template_lacks_is_replaced_by_a_close_kind():
     ]
 
 
-def _items_pattern(pid: str, kind: Any, count: int, roles: List[Any]) -> Pattern:
+def _items_pattern(
+    pid: str, kind: Any, count: int, roles: List[Any], sample: str = ""
+) -> Pattern:
     """An example slide of ``count`` items, each with one zone per role."""
     group = RepeatGroup(
         key=f"g{pid}",
@@ -429,6 +436,7 @@ def _items_pattern(pid: str, kind: Any, count: int, roles: List[Any]) -> Pattern
                     font_pt=14.0,
                     chars_per_line=20,
                     max_lines=2,
+                    sample=sample if role == "number" else "",
                 )
                 for role in roles
             ]
@@ -447,20 +455,27 @@ def _items_pattern(pid: str, kind: Any, count: int, roles: List[Any]) -> Pattern
     )
 
 
-_SOMMAIRE = SlidePlan(
-    title="Sommaire",
-    kind="agenda",
-    items=[PlanItem(number=f"0{i}", heading=f"Topic {i}") for i in range(1, 10)],
-)
+def _sommaire(n: int, numbered: bool = True) -> SlidePlan:
+    return SlidePlan(
+        title="Sommaire",
+        kind="agenda",
+        items=[
+            PlanItem(number=f"{i:02d}" if numbered else None, heading=f"Topic {i}")
+            for i in range(1, n + 1)
+        ],
+    )
+
+
+_SOMMAIRE = _sommaire(17)
 
 
 def test_an_agenda_too_long_is_never_built_on_an_unrelated_kind():
-    """Live Paintress case: 9 agenda items, an agenda slide of 8 and a team
-    slide of 15; the agenda was built on the team slide."""
+    """Live Paintress case, beyond what a continuation slide adds: 17 agenda
+    items, an agenda slide of 8 and a team slide of 30."""
     inventory = _inventory(
         _bullets("layout:1", "Text"),
         _items_pattern("slide:2", "agenda", 8, ["number", "heading"]),
-        _items_pattern("slide:3", "team", 15, ["heading", "label"]),
+        _items_pattern("slide:3", "team", 30, ["heading", "label"]),
     )
     assignment = assign(
         inventory, _plan(SlidePlan(title="Intro", bullets=["a"]), _SOMMAIRE)
@@ -468,8 +483,13 @@ def test_an_agenda_too_long_is_never_built_on_an_unrelated_kind():
     assert assignment.patterns == []
     (problem,) = assignment.problems
     assert problem.index == 2
-    assert problem.problem == "items: 9 given; the largest 'agenda' slide holds 8"
-    assert problem.options[:2] == ["trim to 8 items", "split the items over two slides"]
+    assert problem.problem == (
+        "items: 17 given; the largest 'agenda' slide holds 8, 2 slides hold 16"
+    )
+    assert problem.options[:2] == [
+        "trim to 16 items (beyond 8 they continue on a second slide)",
+        "or keep 8 here and move the rest to slides of your own",
+    ]
     assert any(o.startswith("or rewrite it as kind 'bullets'") for o in problem.options)
     assert not any("team" in o for o in problem.options)
 
@@ -478,19 +498,159 @@ def test_an_agenda_too_long_goes_to_a_close_kind_that_holds_it():
     inventory = _inventory(
         _bullets("layout:1", "Text"),
         _items_pattern("slide:2", "agenda", 8, ["number", "heading"]),
-        _items_pattern("slide:3", "team", 15, ["heading", "label"]),
-        _items_pattern("slide:4", "process", 10, ["number", "heading"]),
+        _items_pattern("slide:3", "team", 30, ["heading", "label"]),
+        _items_pattern("slide:4", "process", 20, ["number", "heading"]),
     )
     assignment = assign(
         inventory, _plan(SlidePlan(title="Intro", bullets=["a"]), _SOMMAIRE)
     )
-    assert not assignment.problems
+    assert not assignment.problems and not assignment.parts
     assert assignment.patterns[1] and assignment.patterns[1].kind == "process"
     assert assignment.notes == [
         "Slide 2: built as 'process' instead of 'agenda': the 'agenda' slide does not "
-        "fit (items: 9 given, max 8). To get the 'agenda' slide, call again and trim "
+        "fit (items: 17 given, max 8). To get the 'agenda' slide, call again and trim "
         "to 8 items or split them over two slides; otherwise nothing to do."
     ]
+
+
+# --- a list continued on a second slide -------------------------------------------------------
+
+
+def _agenda_inventory(*extra: Pattern) -> TemplateInventory:
+    return _inventory(
+        _bullets("layout:1", "Text"),
+        _items_pattern("slide:2", "agenda", 8, ["number", "heading"], sample="01"),
+        _items_pattern("slide:5", "agenda", 6, ["number", "heading"], sample="01"),
+        _items_pattern("slide:3", "team", 15, ["heading", "label"]),
+        _items_pattern("slide:4", "process", 10, ["number", "heading"]),
+        *extra,
+    )
+
+
+def test_an_agenda_one_entry_too_long_continues_on_a_second_agenda_slide():
+    """Live Paintress case: 9 entries, an agenda slide of 8. A same-kind split
+    beats the process slide that would hold all nine."""
+    plan = _plan(SlidePlan(title="Intro", bullets=["a"]), _sommaire(9), _points(2))
+    assignment = assign(_agenda_inventory(), plan)
+    assert not assignment.problems
+    deck, patterns, numbers = assignment.deck(plan)
+    assert [s.title for s in deck.slides] == [
+        "Intro",
+        "Sommaire (1/2)",
+        "Sommaire (2/2)",
+        "Points 2",
+    ]
+    assert [len(s.items) for s in deck.slides[1:3]] == [5, 4]
+    # The same template slide for both parts, the numbers as sent.
+    first, second = patterns[1:3]
+    assert first and second and first.kind == "agenda" and first.id == second.id
+    assert [i.number for i in deck.slides[2].items] == ["06", "07", "08", "09"]
+    assert numbers == [1, 2, 2, 3]
+    assert assignment.notes == [
+        "Slide 2: its 9 items continue on a second 'agenda' slide (5 + 4, titles marked "
+        "(1/2) and (2/2)): the largest 'agenda' slide holds 8. Nothing to do; to keep "
+        "one slide, send at most 8 items."
+    ]
+    # The model's plan itself is untouched.
+    assert plan.slides[1].title == "Sommaire" and len(plan.slides[1].items) == 9
+
+
+def test_items_without_numbers_continue_the_count_on_the_second_slide():
+    plan = _plan(SlidePlan(title="Intro", bullets=["a"]), _sommaire(9, numbered=False))
+    deck, _, _ = assign(_agenda_inventory(), plan).deck(plan)
+    assert [i.number for i in deck.slides[1].items] == [None] * 5
+    assert [i.number for i in deck.slides[2].items] == ["06", "07", "08", "09"]
+
+
+def test_steps_numbered_from_six_need_no_number_zone_on_a_continuation():
+    team = _items_pattern("slide:3", "team", 5, ["heading", "label"])
+    items = [PlanItem(number=str(i), heading=f"S{i}") for i in range(6, 10)]
+    assert not misfit(team, SlidePlan(title="Who", items=items), (1, 1))[0]
+    years = [PlanItem(number=str(y), heading="x") for y in range(2024, 2027)]
+    assert misfit(team, SlidePlan(title="When", items=years), (1, 1))[0]
+
+
+def test_a_list_without_a_requested_kind_splits_on_its_first_inferred_kind():
+    agenda = _sommaire(9).model_copy(update={"kind": None})
+    plan = _plan(SlidePlan(title="Intro", bullets=["a"]), agenda)
+    inventory = _inventory(
+        _bullets("layout:1", "Text"),
+        _items_pattern("slide:2", "agenda", 8, ["number", "heading"]),
+    )
+    assignment = assign(inventory, plan)
+    assert not assignment.problems
+    assert [p.kind for _, p in assignment.parts[2]] == ["agenda", "agenda"]
+
+
+def test_a_list_whose_kind_holds_it_whole_is_never_split():
+    plan = _plan(SlidePlan(title="Intro", bullets=["a"]), _sommaire(8))
+    assignment = assign(_agenda_inventory(), plan)
+    assert not assignment.parts and not assignment.notes
+
+
+def test_a_text_too_long_is_never_split():
+    long = _sommaire(9)
+    long.items[0] = PlanItem(number="01", heading="word " * 30)
+    inventory = _inventory(
+        _bullets("layout:1", "Text"),
+        _items_pattern("slide:2", "agenda", 8, ["number", "heading"]),
+    )
+    assignment = assign(inventory, _plan(SlidePlan(title="Intro", bullets=["a"]), long))
+    assert not assignment.parts
+    (problem,) = assignment.problems
+    assert problem.problem.startswith(
+        "items: 9 given; the largest 'agenda' slide holds 8"
+    )
+    assert "items[0].heading" in problem.problem
+
+
+def test_bullets_are_never_split():
+    slide = SlidePlan(title="Many", bullets=["word " * 12] * 30)
+    assignment = assign(_inventory(_bullets("layout:1", "Plain")), _plan(slide))
+    assert not assignment.parts and assignment.problems
+
+
+def test_a_split_list_alone_never_asks_for_variety():
+    """Both parts on one template slide count as one slide, even with max 1."""
+    plan = _plan(SlidePlan(title="Intro", bullets=["a"]), _sommaire(9))
+    agenda = _items_pattern("slide:2", "agenda", 8, ["number", "heading"])
+    inventory = _inventory(_bullets("layout:1", "Text"), agenda)
+    for variety in ("template_slide", "kind"):
+        assignment = assign(inventory, plan, variety, 1)  # type: ignore[arg-type]
+        assert not assignment.repeats
+        assert len(assignment.notes) == 1  # the split note only
+
+
+def test_a_continuation_stays_on_its_first_parts_slide_even_at_max_one():
+    inventory = _inventory(
+        _bullets("layout:1", "Text"),
+        _items_pattern("slide:2", "cards", 4, ["heading", "body"]),
+        _items_pattern("slide:3", "cards", 4, ["heading", "body"]),
+    )
+    items = [PlanItem(heading=f"H{i}", text="t") for i in range(7)]
+    plan = _plan(SlidePlan(title="Offers", kind="cards", items=items))
+    assignment = assign(inventory, plan, "template_slide", 1)
+    assert not assignment.problems and not assignment.repeats
+    first, second = (p for _, p in assignment.parts[1])
+    assert first.id == second.id
+
+
+def test_a_split_list_still_counts_once_beside_other_slides_of_its_template_slide():
+    cards = _items_pattern("slide:2", "cards", 4, ["heading", "body"])
+    inventory = _inventory(_bullets("layout:1", "Text"), cards)
+
+    def card(title: str, n: int) -> SlidePlan:
+        items = [PlanItem(heading=f"H{i}", text="t") for i in range(n)]
+        return SlidePlan(title=title, kind="cards", items=items)
+
+    split = _plan(card("A", 6), card("B", 2))
+    assignment = assign(inventory, split, "template_slide", 2)
+    assert not assignment.problems and not assignment.repeats
+    assert list(assignment.parts) == [1]
+    # Three slides of their own on that template slide are a repeat (cap 2).
+    three = _plan(card("A", 6), card("B", 2), card("C", 2), card("D", 2))
+    (repeat,) = assign(inventory, three, "template_slide", 2).repeats
+    assert repeat.slides == [1, 2, 3, 4]
 
 
 def test_an_agenda_written_as_bullets_goes_to_a_bullets_slide():

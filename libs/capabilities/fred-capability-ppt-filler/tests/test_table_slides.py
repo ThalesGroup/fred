@@ -252,3 +252,38 @@ def test_a_table_the_render_cannot_fit_is_a_note_with_its_remedy(template, inven
         "most 5 columns or split the table over two slides."
     ]
     assert result.report.issues() == []
+
+
+def test_a_table_too_tall_continues_on_a_second_table_slide_with_its_header(
+    template, inventory
+):
+    plan = _deck(SlidePlan(title="Comparatif", table=_table(22)))
+    assignment = assign(inventory, plan)
+    assert not assignment.problems, [p.as_dict() for p in assignment.problems]
+    deck, patterns, numbers = assignment.deck(plan)
+    assert [s.title for s in deck.slides[1:]] == [
+        "Comparatif (1/2)",
+        "Comparatif (2/2)",
+    ]
+    tables = [s.table for s in deck.slides[1:] if s.table]
+    assert [t.header for t in tables] == [[f"Col {c}" for c in range(5)]] * 2
+    assert [len(t.rows) for t in tables] == [11, 11]
+    assert tables[1].rows[0][0] == "x 11.0" and numbers == [1, 2, 2]
+    assert assignment.notes == [
+        "Slide 2: its 22 rows continue on a second 'table' slide (11 + 11, header "
+        "repeated, titles marked (1/2) and (2/2)): they do not fit one 'table' slide. "
+        "Nothing to do; to keep one slide, send fewer rows or shorter cells."
+    ]
+    result = render_deck(template, inventory, deck, patterns, None, numbers)
+    shown = Presentation(io.BytesIO(result.pptx)).slides
+    assert len(shown) == 3
+    frames = [
+        next(s for s in slide.shapes if getattr(s, "has_table", False))
+        for slide in list(shown)[1:]
+    ]
+    assert [_rows(f)[0] for f in frames] == [[f"Col {c}" for c in range(5)]] * 2
+
+
+def test_a_table_beyond_two_slides_still_needs_revision(inventory):
+    problems = assign(inventory, _deck(SlidePlan(title="T", table=_table(60)))).problems
+    assert len(problems) == 1 and "60 rows need" in problems[0].problem

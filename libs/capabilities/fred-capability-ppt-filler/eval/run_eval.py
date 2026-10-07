@@ -327,6 +327,7 @@ class RunResult:
     # Text strings of the raw tool arguments absent from the delivered deck:
     # catches what the coercion drops before the renderer's report sees it.
     lost: int = 0
+    splits: int = 0  # slides whose list continued on a second slide
     lost_texts: List[str] = field(default_factory=list)
     variety_asks: int = 0
     # Model tokens over the run, for cost comparisons between models.
@@ -621,7 +622,9 @@ def _measure(
     schema = tools_mod._args_schema(inventory)
     plan: DeckPlan = tools_mod._to_plan(schema(**args))
     # Deterministic: the same assignment, with the run's settings, the tool rendered.
-    assigned = assign(inventory, plan, variety, max_uses).patterns
+    assignment = assign(inventory, plan, variety, max_uses)
+    assigned = assignment.patterns
+    run.splits = len(assignment.parts)
     chosen = [p for p in assigned if p is not None]
     slides = [s for s in plan.slides if s.invalid_entry is None]
     run.slides = len(chosen)
@@ -648,9 +651,15 @@ def _measure(
             run.truncated += len(slide_report.truncated)
     deck = next((b for k, b in workspace.files.items() if k.endswith(".pptx")), None)
     if deck is not None:
-        run.leftovers = _leftovers(variant, slides, chosen, deck)
-        _tables(run, slides, chosen, deck)
-        run.lost_texts = _lost_texts(args, assigned, deck)
+        # A split list renders as its parts: slide-by-slide checks read those.
+        parts, rendered, numbers = assignment.deck(plan)
+        shown = [s for s in parts.slides if s.invalid_entry is None]
+        on = [p for p in rendered if p is not None]
+        run.leftovers = _leftovers(variant, shown, on, deck)
+        _tables(run, shown, on, deck)
+        run.lost_texts = _lost_texts(
+            args, assigned, deck, [n for n, p in zip(numbers, rendered) if p]
+        )
         run.lost = len(run.lost_texts)
 
 
@@ -674,17 +683,25 @@ def _bare(text: str) -> str:
 
 
 def _lost_texts(
-    args: Dict[str, Any], patterns: Sequence[Optional[Pattern]], deck: bytes
+    args: Dict[str, Any],
+    patterns: Sequence[Optional[Pattern]],
+    deck: bytes,
+    numbers: Sequence[int] = (),
 ) -> List[str]:
     """Raw-argument text that is not on its slide of the deck; fixed slides
-    (shown as is) and step numbers (the item order shows them) are not content."""
-    shown = iter(
+    (shown as is) and step numbers (the item order shows them) are not content.
+    The parts of a split list are read as one slide."""
+    texts = [
         "\n".join(
             _bare("".join(t.text or "" for t in p.iter(qn("a:t"))))
             for p in slide._element.iter(qn("a:p"))
         )
         for slide in Presentation(io.BytesIO(deck)).slides
-    )
+    ]
+    merged: Dict[int, str] = {}
+    for number, text in zip(numbers or range(1, len(texts) + 1), texts):
+        merged[number] = f"{merged[number]}\n{text}" if number in merged else text
+    shown = iter(merged.values())
     raw = args.get("slides") or []
     lost = []
     for entry, pattern in zip(raw if isinstance(raw, list) else [], patterns):
@@ -789,8 +806,8 @@ def _summary(results: List[RunResult], variants: List[Variant]) -> str:
         "| template | mode | runs | success | first call | avg repairs | cover once@1 "
         "| 3-in-a-row | distinct/slides | max reuse | max kind repeat (max / mean) | A-B-A | avoidable reuses "
         "| patterns used | tables used/given | table shape kept | table overflow "
-        "| leftovers | removed by check | truncated | lost | variety asks | avg wall s | tokens in / out (k) | reply chars (mean) | tool call instead of reply |",
-        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+        "| leftovers | removed by check | truncated | lost | split lists | variety asks | avg wall s | tokens in / out (k) | reply chars (mean) | tool call instead of reply |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for variant in variants:
         runs = [
@@ -823,6 +840,7 @@ def _summary(results: List[RunResult], variants: List[Variant]) -> str:
             f"| {sum(len(r.leftovers) for r in ok)} "
             f"| {sum(r.removed_by_check for r in ok)} "
             f"| {sum(r.truncated for r in ok)} | {sum(r.lost for r in ok)} "
+            f"| {sum(r.splits for r in ok)} "
             f"| {sum(r.variety_asks for r in runs)} "
             f"| {mean([r.wall_seconds for r in runs])} "
             f"| {sum(r.input_tokens for r in runs) / 1000:.0f} / "
