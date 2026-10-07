@@ -318,3 +318,11 @@ Owns: `assign.py` (closest fit, repeat count, options), `tools.py` (ask wording)
 Owns: `tools.py` (build entry)
 
 - [x] 27.1 One build at a time per answer; a copy of a call still running (same arguments) is answered "Ignored: …" without a second build, and a different plan sent in parallel waits its turn. Seen live: mistral-small sent the same two-slide call twice in parallel and both built the same file. Test: two identical parallel calls → one write, one "Ignored"; two different parallel plans → both built. Package `make code-quality` + `make test` (426 passed, 5 skipped)
+
+## WP28. Close-kind fallback and actionable messages (D21)
+
+Owns: `assign.py` (close kinds, problems, notes), `tools.py` and `render.py` (message texts), `design.md` D7/D21, delta spec, tests, `verification.md`.
+
+- [x] 28.1 A requested kind falls back only to its close kinds (`CLOSE_KINDS`); with none fitting, `needs_revision` on the requested kind's closest slide (its own largest item count, trim/split, close-kind options), never an unrelated kind; the substitution note says why and how to get the requested kind. Seen live: a 9-item agenda (agenda slide max 8) built on a team slide. Tests: the live case → `needs_revision` "the largest 'agenda' slide holds 8", no team option; 9 items with a process slide of 10 → process with the actionable note; the agenda written as bullets → bullets slide, note "give the bullets as items (at most 8)"; fallback tests updated (cover → section, closing → section, timeline → bullets, process max counted on process slides)
+- [x] 28.2 Every message of `build_presentation` and `list_images_in_folder` states what happened, why and one remedy or "nothing to do" (errors, render errors, review notes, repeat notes, skipped entries, unusable images, empty folder, busy, duplicate, repeated problem); success and "Ignored:" prefixes unchanged. Tests asserting exact texts updated
+- [x] 28.3 Package `make code-quality` + `make test`; `verification.md`

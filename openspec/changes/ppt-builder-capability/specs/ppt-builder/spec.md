@@ -284,7 +284,17 @@ The system SHALL accept from the model a plan of slides carrying content only â€
 #### Scenario: Requested kind unavailable
 
 - **WHEN** a slide asks for a kind the template does not offer, cannot fill with this content, or forbids at that position
-- **THEN** the slide is assigned from its content shape to a fitting pattern of another kind, and the success message names the substitution
+- **THEN** the slide is assigned to a fitting pattern of a kind close to the requested one, and the success message names the substitution, why, and how to get the requested kind
+
+#### Scenario: Semantic fallback
+
+- **WHEN** a slide asks for `agenda` with 9 items, the agenda slide holds 8 items and a process slide holds 10
+- **THEN** the slide is built on the process slide, never on a team, figures, cards or other unrelated slide, and the note reads "built as 'process' instead of 'agenda': the 'agenda' slide does not fit (items: 9 given, max 8). To get the 'agenda' slide, call again and trim to 8 items or split them over two slides; otherwise nothing to do."
+
+#### Scenario: No absurd substitution
+
+- **WHEN** a slide asks for `agenda` with 9 items, the agenda slide holds 8 items, a team slide holds 15 and no close kind (bullets, process, timeline) holds the content
+- **THEN** no deck is written and `needs_revision` names the slide with `items: 9 given; the largest 'agenda' slide holds 8`, the options `trim to 8 items` and `split the items over two slides`, and what each close kind the template offers takes; the team slide is never offered
 
 #### Scenario: Fit check
 
@@ -498,6 +508,11 @@ The system SHALL NOT substitute an unfitting pattern for a slide. When a slide f
 
 - **WHEN** a deck is built with kind substitutions, truncations, removed leftovers or lost content
 - **THEN** the result names them per slide and allows another call with the whole corrected deck
+
+#### Scenario: Actionable messages
+
+- **WHEN** either tool returns a text to the model (a problem, a note, an error, a variety ask, a delivery)
+- **THEN** the text states what happened, why, and one concrete remedy, or says there is nothing to do; a result that builds nothing starts "No deck was built", and the delivery prefixes and the duplicate "Ignored:" prefix stay unchanged
 
 ### Requirement: Rendering only fills the template
 

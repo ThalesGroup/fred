@@ -669,6 +669,22 @@ mean 54 chars with 5/11 rebuilds (E), 83 chars with 5/13 rebuilds (F).
   touched: the closest fit was already computed for the problem text; the stand-in
   candidates add one beam pass entry per slide to fix, on a call that builds nothing.
   Not proven: the live mistral-small session re-run.
+- WP28 (close-kind fallback and actionable messages, 2026-10-07): package `make code-quality`
+  passed (basedpyright 0 errors, the 1 warning in `tests/builder_decks.py` untouched);
+  `make test` 429 passed, 5 skipped. New: `test_an_agenda_too_long_is_never_built_on_an_unrelated_kind`
+  (the live shape: agenda max 8, team max 15, 9 items → `needs_revision` "items: 9 given; the
+  largest 'agenda' slide holds 8", trim/split first, a bullets option, no team),
+  `test_an_agenda_too_long_goes_to_a_close_kind_that_holds_it` (a process slide of 10 → built
+  there, note with the fix), `test_an_agenda_written_as_bullets_goes_to_a_bullets_slide`.
+  Changed: cover → section and closing → section/bullets notes now carry the remedy; a
+  fixed closing given contact lines lands on `section` (first close kind) instead of
+  `bullets`; process over capacity names the largest process slide (3), no longer the team
+  slide (6); exact texts of the empty plan, repeated problem and review-note tests. The
+  variety/first-call tests (merged ask, no ask after a fit repair, closest-fit count) are
+  unchanged and green. No LLM call, I/O or shared state touched (a static table and string
+  formatting on a call that already runs in `to_thread`). Not proven: the live
+  mistral-small session re-run, and the first-call rate on the eval (a requested kind that
+  used to land on an unrelated slide now asks for a revision).
 - WP27 (parallel copies of a build call, 2026-10-07): new `test_a_parallel_copy_of_a_call_is_not_built_twice`; package `make code-quality` (0 errors) and `make test` 426 passed, 5 skipped. Live trigger: session 157140ab, mistral-small sent one call twice in parallel.
 - PowerPoint (developer check, 2026-10-07): a deck delivered by the build tool opens in
   PowerPoint without a repair prompt, verifying the sections fix (`d1deb28ed`, 24.1).
