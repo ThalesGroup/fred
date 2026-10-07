@@ -455,6 +455,13 @@ The system SHALL accept from the model a plan of slides carrying content only �
 - **THEN** each text field's description states its room from the inventory: per kind, the largest variant's room for that field (the catalogue's measure), as the most common value across kinds plus the kinds that differ, the cover's own room included
 - **AND** no field carries a hard `maxLength`, so an over-long text still reaches the tool and gets `needs_revision`
 
+#### Scenario: Limits phrased in words
+
+- **GIVEN** any template, a zone measured at C characters per line × L lines
+- **WHEN** the description, the schema hints or a `needs_revision` result quotes that zone's room
+- **THEN** it reads as a word budget followed by the measured characters (`≤4 words (≈32 chars)`, `≤20 words (≈71 chars × 2 lines)`, `1 word (≈12 chars)`), the words being `floor((C + 1) / 7)` per line × L, at least one ("1 short word" under 6 characters per line), from the same rule on every template
+- **AND** the fit check still measures characters against the same room, and a shortening option names the same target (`shorten items[2].label to 1 word (≈12 chars)`)
+
 #### Scenario: Item heading without a heading zone
 
 - **GIVEN** items with a heading and a text, and a list whose items have a single text zone

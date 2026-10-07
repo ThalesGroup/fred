@@ -327,3 +327,11 @@ Owns: `assign.py` (close kinds, problems, notes), `tools.py` and `render.py` (me
 - [x] 28.2 Every message of `build_presentation` and `list_images_in_folder` states what happened, why and one remedy or "nothing to do" (errors, render errors, review notes, repeat notes, skipped entries, unusable images, empty folder, busy, duplicate, repeated problem); success and "Ignored:" prefixes unchanged. Tests asserting exact texts updated
 - [x] 28.3 Package `make code-quality` + `make test`; `verification.md`
 - [x] 28.4 Renderer findings the after-check report does not carry reach the model in the "To review" notes, each with its remedy (`DeckReport.notes`): agenda gap, one-line overflow, items slide given no items, content on a fixed slide, a table the render cannot fit; findings already in the report stay in the logs (`RenderResult.warnings`, now logged). Tests: exact note texts in `test_builder_render.py` and `test_table_slides.py`, the agenda note in a delivered message (`test_build_tool.py`)
+
+## WP29. Limits phrased in words (D22)
+
+Owns: `plan.py` (`capacity_text`), `assign.py` (shortening options), `tools.py` (catalogue header), `design.md` D22, delta spec, tests, `verification.md`.
+
+- [ ] 29.1 One generic rule turns a zone's measured room into a word budget (`floor((chars per line + 1) / 7)` per line × lines, floor 1, "1 short word" under 6 chars per line), quoted before the chars everywhere the model reads a room: catalogue, schema hints, `needs_revision` reasons and options, kind advice. Same rooms, same fit check, no template-specific logic, no sample-text example (D22)
+- [ ] 29.2 Tests: the wording for 1-word, multi-word, multi-line and under-6-char rooms; a shortening option names words and chars; schema hints and catalogue on the Paintress and built-in references read coherently
+- [ ] 29.3 Package `make code-quality` + `make test`; eval strictly sequential, WP21 settings (Paintress rules, 14 prompts, `--no-builtin`, `template_slide` max 1): small + stand-in (vs A), medium + stand-in (vs C); `verification.md` with success, first call, calls, figure-label and cover-subtitle too-long problems, decks ×3+, tokens, and a keep/revert recommendation

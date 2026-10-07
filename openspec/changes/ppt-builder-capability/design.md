@@ -218,6 +218,17 @@ Found live (Paintress, `mistral-small`): an `agenda` slide with 9 items, where t
 
 Rejected: keeping the inferred tier after the close kinds (that is where `team` came from); refusing every substitution (loses the D7 first-call gain on templates that lack a kind); converting items to bullets for a bullets fallback (a renderer change; the revision option asks the model instead).
 
+### D22. Limits phrased in words
+
+Found by the WP21 eval: with the figure-label room in the schema ("figures ≈12 chars"), `mistral-small` still wrote 18–40-char labels (6 too-long labels in cell A, first-call success 3/14). Small models do not count characters; they follow a word count.
+
+- **One rule, every template.** Wherever the model reads a room (catalogue, schema hints, `needs_revision` reasons and options, the kind advice), `capacity_text` quotes a word budget first, then the measured characters: `≤4 words (≈32 chars)`, `≤20 words (≈71 chars × 2 lines)`, `1 word (≈12 chars)`. Words per line = `floor((chars per line + 1) / 7)` (the last word needs no space), times the lines, since a word never spans two lines; at least one, "1 short word" under 6 chars per line. Nothing is tuned per template: the only input is the room the analysis already measures.
+- **Ratio 7 chars per word, space included.** French prose averages about 5 letters per word (6 with the space), business vocabulary runs longer ("stratégique", "déploiement"): 7 errs on the short side, so the budget never promises more room than the characters allow on typical text. The characters stay quoted next to it.
+- **Unchanged.** The rooms, the fit check (characters), the targets of the options (the same `per_line × lines`), the schema (no `maxLength`) and the reason's leading `<field> is N chars` measure.
+- **No example from the template's sample text.** Considered (`label: 1 word, like 'Clients'`) and dropped: on Paintress every sample that fits its zone and is not placeholder text is either a slide name describing the layout ("3 colonnes d'image + texte", "Planche à puces") or a number ("01", "2022"); the label samples are "KPI #1", "Nom", "Changer ce texte". An example would be template-dependent, mostly absent, and misleading where present.
+
+Rejected: per-kind or per-template ratios (template-dependent); words only, without chars (the fit check counts chars, and the model needs the target it is judged by).
+
 ## Risks / Trade-offs
 
 - [Vision model mislabels] → the author relabels in the panel; deterministic geometry still bounds what can be filled; eval measures the effect.
