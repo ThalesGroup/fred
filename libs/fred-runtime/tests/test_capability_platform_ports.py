@@ -189,6 +189,33 @@ def test_team_override_for_the_template_wins(monkeypatch: pytest.MonkeyPatch) ->
     assert _ask(port) == "vision-model"
 
 
+def test_a_revoked_model_stops_being_used_after_the_ttl(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    usable = {"ids": frozenset({TEXT_ID, VISION_ID})}
+    queries: list[str] = []
+    now = {"t": 1000.0}
+
+    async def _usable(rebac: object, team_id: str) -> frozenset[str]:
+        queries.append(team_id)
+        return usable["ids"]
+
+    monkeypatch.setattr(platform_ports, "usable_model_capability_ids", _usable)
+    monkeypatch.setattr(platform_ports, "_monotonic", lambda: now["t"])
+    port = RoutedCapabilityModelPort(
+        binding=_binding(), routing_agent_id="agent-1", factory=_factory(), rebac=None
+    )
+
+    assert _ask(port, profile_id=VISION_PROFILE) == "vision-model"
+    usable["ids"] = frozenset({TEXT_ID})
+    now["t"] += 5
+    assert _ask(port, profile_id=VISION_PROFILE) == "vision-model"
+    assert len(queries) == 1
+    now["t"] += platform_ports._USABLE_MODELS_TTL_S
+    assert _ask(port, profile_id=VISION_PROFILE) == "text-model"
+    assert len(queries) == 2
+
+
 def test_port_without_routed_factory_fails_closed() -> None:
     port = RoutedCapabilityModelPort(
         binding=_binding(), routing_agent_id="a", factory=None, rebac=None

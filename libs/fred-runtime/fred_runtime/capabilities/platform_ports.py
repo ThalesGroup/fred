@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 
 from fastapi import Depends, HTTPException, Request, status
@@ -78,6 +79,12 @@ def parse_save_routing(params: Mapping[str, str]) -> CapabilitySaveRouting | Non
         ) from exc
 
 
+# A port may serve a background job for minutes: re-read the team's usable
+# models this often, so a revoked model stops being used.
+_USABLE_MODELS_TTL_S = 30.0
+_monotonic = time.monotonic
+
+
 class _RoutingKeyDefinition(AgentDefinition):
     """Model routing reads `agent_id` only; this carries nothing else."""
 
@@ -103,6 +110,7 @@ class RoutedCapabilityModelPort(CapabilityModelPort):
         self._factory = factory
         self._rebac = rebac
         self._resolved: BoundRuntimeContext | None = None
+        self._resolved_at = 0.0
         self._resolve_lock = asyncio.Lock()
 
     async def ainvoke(
@@ -136,22 +144,29 @@ class RoutedCapabilityModelPort(CapabilityModelPort):
             raise TypeError(f"Chat model returned {type(result).__name__}.")
         return result
 
+    def _fresh(self) -> BoundRuntimeContext | None:
+        if _monotonic() - self._resolved_at < _USABLE_MODELS_TTL_S:
+            return self._resolved
+        return None
+
     async def _usable_binding(self) -> BoundRuntimeContext:
-        """The save binding plus the team's usable models, queried once."""
-        if self._resolved is not None:
-            return self._resolved
+        """The save binding plus the team's usable models, re-read after a TTL."""
+        if (resolved := self._fresh()) is not None:
+            return resolved
         async with self._resolve_lock:
-            if self._resolved is None:
-                team_id = self._binding.runtime_context.team_id
-                ids = (
-                    await usable_model_capability_ids(self._rebac, team_id)
-                    if team_id
-                    else None
-                )
-                self._resolved = self._binding.model_copy(
-                    update={"usable_model_ids": tuple(ids) if ids is not None else None}
-                )
-            return self._resolved
+            if (resolved := self._fresh()) is not None:
+                return resolved
+            team_id = self._binding.runtime_context.team_id
+            ids = (
+                await usable_model_capability_ids(self._rebac, team_id)
+                if team_id
+                else None
+            )
+            resolved = self._binding.model_copy(
+                update={"usable_model_ids": tuple(ids) if ids is not None else None}
+            )
+            self._resolved, self._resolved_at = resolved, _monotonic()
+            return resolved
 
 
 async def require_team_permission(
