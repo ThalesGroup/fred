@@ -653,6 +653,17 @@ mean 54 chars with 5/11 rebuilds (E), 83 chars with 5/13 rebuilds (F).
 
 ## Checks
 
+- WP23 `fred-performance-reviewer` (tool path, middleware, analysis store): no finding. The
+  build tool loses an HTTP listing (it ran when an ask was possible) and gains an in-memory scan
+  of the last model call's messages, only when an ask would follow: 16 µs on 300 messages. The
+  middleware stores a reference to `request.messages` per model call (no copy, no I/O, nothing on
+  the LLM call path). The outdated-analysis refresh adds no write per turn (claimability is
+  checked in Python first, then one conditional `UPDATE` wins across replicas); the job runs in
+  the existing background slot. An outdated inventory is served uncached, so while one exists
+  (a refresh running, or after a failed one until the author re-runs) each turn of that agent
+  does one primary-key `SELECT` and parses the inventory on the event loop (0.1 ms for the
+  built-in template's 18 kB). No new KPI, label or shared client; `_ports` stays pod-local, as
+  before.
 - WP23.3 (D19 cap): documentation only. `_caps` in `assign.py` computes one cap per mode from
   the deck's content slides and the pool's content template slides (or kinds) since it was
   introduced (`8a2ddfa9e`); `test_assign.py::test_max_uses_is_raised_to_what_the_template_allows`
