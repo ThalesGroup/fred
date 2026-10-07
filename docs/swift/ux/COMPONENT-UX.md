@@ -2807,7 +2807,7 @@ Step 1: template browser. Step 2: a full-width `ButtonGroup` tab strip (`variant
 
 - **Général** — Nom, Rôle, Description, plus every tuning field whose `ui.group` is not `"Prompts"` (the pre-#2105 catch-all "Settings" tab content — `Settings`, `Credentials`, `Document reading`, `Mindmap`, `Grounding`, `Comparison`, `Fallback`, ... — verified against real `fred-agents` templates). No template-side (`ui.group`) changes; purely a frontend regrouping.
 - **Prompts** — every `ui.group == "Prompts"` field, unchanged content.
-- **Outils** - the Simple Team resources pack enables corpus access and conversation attachments together. A switch below library scoping narrows it to attachments-only search, withdrawing similarity access while retaining tabular analysis for attached CSV and Excel files and keeping the pack on. Advanced keeps each capability and document-access option separate. A complete legacy attachments-only selection reads on in the scoped profile; an incomplete selection leaves the pack off while its selected members remain visible in the pack's list. Existing agent selections are not rewritten on form load or unrelated save.
+- **Outils** - the Simple view offers two document packs, Attachments and Team documents, each turning on one `document_access` source (`attachments` / `team_documents`). Shared members (document access, tabular, summarize, verbatim, extract) stay while either pack is on; similarity belongs to Team documents only; turning off the last pack deselects document access. Library binding lives under Team documents. A pack reads on when document access is selected and its source is on; legacy configs are read through the source mapping on load, without rewriting the stored selection. In Advanced, the Documents card shows the two source switches first, hides the scope fields while Team documents is off (a hidden `visible_when` gate also hides its dependants), and blocks Save with both sources off.
 - **Engagement** — required "Cas d'usage" field (large `TextArea`, label + placeholder, no field-level hint text), persisted as `ManagedAgentInstanceSummary.usage_statement` (screens agent purpose for platform/org risk). A compliance-framing paragraph sits above the textarea ("Afin de garantir la conformité de votre agent aux normes et règlementations en vigueur...", i18n'd) explaining why the field is mandatory.
 
 Edit mode: same 4 tabs → metadata footer (created_by · relative date) → delete button.
@@ -3805,7 +3805,9 @@ The Document access capability now offers the exact configuration surface and
 composer controls of "Document search (legacy)": Document library picker and
 Document picker toggles (split), Bind to specific libraries gating the
 bound-libraries tree (`ui.visible_when`; bound ids are inert while unbound,
-like the legacy tool), File attachments, Search policy picker (configured
+like the legacy tool), the Attachments / Team documents sources (2026-10-07,
+replacing File attachments and Search in attachments only; Team documents off
+hides the scope pickers and the "Your documents" RAG scope), Search policy picker (configured
 policy becomes the picker default; enforced only when the picker is hidden),
 RAG scope picker + default. All emitted as the same stock widgets — the
 choices travel on `RuntimeContext`, which the v2 document-search adapter

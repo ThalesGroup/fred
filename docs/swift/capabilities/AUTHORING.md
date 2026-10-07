@@ -139,6 +139,10 @@ migrations described under "Registration, boot invariants, tables" below
   `salutation` → `greeting` rename, with its own round-trip test
   (`test_version_mismatch_runs_upgrade_hook_lazily`). Write an equivalent
   test for your own migration; there is no other way to prove it works.
+  Under the pre-GA no-bump policy below, a same-version rename may instead be
+  absorbed by a `model_validator(mode="before")` on the config model, which
+  also covers old keys still arriving in submitted, copied or imported values
+  (`DocumentAccessConfig._upgrade_legacy_slices` is the in-tree example).
 - **If `upgrade_config` is missing or raises** for a real mismatch, the
   failure surfaces as the named `CapabilityConfigInvalidError` → the
   `capability_config_invalid` suspension reason (RFC §3.9) — the agent is

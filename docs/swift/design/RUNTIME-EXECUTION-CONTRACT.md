@@ -1110,6 +1110,9 @@ class DocumentSearchPort(ABC):
         library_tag_ids: Sequence[str] | None = None,
         document_uids: Sequence[str] | None = None,
         search_policy: str | None = None,
+        include_attachments: bool = True,
+        include_team_documents: bool = True,
+        attachments_only: bool | None = None,  # deprecated alias
     ) -> DocumentSearchResult: ...
 
 @dataclass(frozen=True, slots=True)
@@ -1142,6 +1145,21 @@ conversation's attached files, never the corpus. First consumer:
 `document_access.search_attachments_only` (the capability also drops its
 scope-picker chat control when the flag is on). `general_only` RAG scope keeps
 precedence (no search at all).
+
+**Amendment (2026-10-07, split-attachments-and-team-documents).** `search()`
+takes two source ceilings, `include_attachments: bool = True` and
+`include_team_documents: bool = True`. The adapter ANDs them with the per-turn
+RAG scope (`session = turn_session and include_attachments`,
+`corpus = turn_corpus and include_team_documents`), so the turn can only narrow
+the agent's sources, and returns no hits without calling Knowledge Flow when
+neither scope remains. `attachments_only` stays accepted as a deprecated alias
+(`True` = `include_team_documents=False`, warning logged once per process); its
+removal is announced in a migration note. `document_access` now passes its
+`attachments` / `team_documents` config, which replaces
+`show_attach_files_control` / `search_attachments_only` (legacy keys are read
+through a before-validator). `RagScopeControlParams` gains an additive
+`options: list[RagScopeName] | None` (None = every choice); `document_access`
+drops `corpus_only` when `team_documents` is off. No OpenAPI/wire-schema change.
 
 ---
 
