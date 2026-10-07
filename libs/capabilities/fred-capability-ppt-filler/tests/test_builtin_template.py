@@ -15,9 +15,11 @@
 """The built-in template's stored analysis stays current."""
 
 import json
+import re
 
 from fred_capability_ppt_filler.builder import builtin
 from fred_capability_ppt_filler.builder.analysis import ANALYSIS_VERSION
+from fred_capability_ppt_filler.builder.tools import _args_schema, _description
 
 _REGENERATE = "run `make builtin-inventory` in the package"
 
@@ -55,3 +57,19 @@ def test_builtin_deck_reads_its_example_slides():
     assert by_name["Fred Content with Image"].kind == "image_text"
     assert by_name["Fred Two Content"].kind == "two_columns"
     assert not by_name["Fred Comparison"].groups
+
+
+def test_builtin_rooms_read_as_words_then_chars():
+    """Every room the model reads on the shipped deck leads with a word budget."""
+    _, inventory = builtin.builtin_template()
+    text = _description(inventory, "template_slide", 2) + json.dumps(
+        _args_schema(inventory).model_json_schema(), ensure_ascii=False
+    )
+    rooms = re.findall(r"(\S+ \S+) \(≈(\d+) chars(?: × (\d+) lines)?\)", text)
+    assert rooms
+    for words, chars, lines in rooms:
+        budget = 1 if words in ("1 word", "short word") else int(words[1:].split()[0])
+        # Never more words than the chars hold at the 7-chars-per-word rule.
+        assert budget <= max(1, (int(chars) + 1) // 7 * int(lines or 1)), words
+    # No room left quoted in chars only (table cells aside).
+    assert not re.search(r"(?<!\()≈\d+ chars(?! per cell)", text)

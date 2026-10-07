@@ -333,7 +333,7 @@ def _too_long(
         length, target = len(lines[0].text), per_line * rows
         return Misfit(
             f"{source} is {length} chars; this zone holds {room}",
-            f"shorten {source} to ≈{target} chars",
+            f"shorten {source} to {room}",
             source,
             length,
             room,
@@ -345,7 +345,7 @@ def _too_long(
     return Misfit(
         f"{name}: {len(lines)} entries, {total} chars; this zone holds {room} "
         f"(longest: {longest.source or name}, {len(longest.text)} chars)",
-        f"keep {name} within {rows} line(s) of ≈{per_line} chars: shorten or drop entries",
+        f"keep {name} within {room}: shorten or drop entries",
     )
 
 
@@ -501,11 +501,11 @@ def _many(found: List[Misfit]) -> Misfit:
     """``items[0].text is 150 chars; …`` ×N folded into one reason."""
     if any(not f.source for f in found):
         return Misfit("; ".join(f.text for f in found), found[0].option)
+    tightest = min(found, key=lambda f: f.target)
     return Misfit(
         f"{', '.join(f.source for f in found)} are "
         f"{', '.join(str(f.length) for f in found)} chars; each zone holds {found[0].room}",
-        f"shorten every {re.sub(r'\[\d+\]', '[]', found[0].source)} to "
-        f"≈{min(f.target for f in found)} chars",
+        f"shorten every {re.sub(r'\[\d+\]', '[]', found[0].source)} to {tightest.room}",
     )
 
 
@@ -973,7 +973,11 @@ def _advice(pool: List[Pattern], kind: str, shape: Shape) -> Optional[str]:
         return v.room is not None and v.room < shape.longest
 
     best = min(found, key=lambda v: (short(v), v.holes, v.layout, -(v.room or 0)))
-    shorten = f", shorten each entry to ≈{best.room} chars" if short(best) else ""
+    shorten = (
+        f", shorten each entry to {capacity_text(best.room or 1, 1)}"
+        if short(best)
+        else ""
+    )
     return f"{kind} holds {best.hint}{shorten}"
 
 

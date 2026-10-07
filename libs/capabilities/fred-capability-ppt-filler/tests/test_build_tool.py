@@ -180,13 +180,15 @@ def test_each_text_field_states_its_room_where_the_model_writes_it():
     slide = defs["BuildSlide"]["properties"]
     # The most common room, then each kind that differs; a single kind is named.
     title = slide["title"]["description"]
-    assert title.startswith("Slide title. Room: ≈33 chars; cover ≈29 chars × 2 lines")
+    assert title.startswith(
+        "Slide title. Room: ≤4 words (≈33 chars); cover ≤8 words (≈29 chars × 2 lines)"
+    )
     assert (
-        "Room: section ≈66 chars × 3 lines; cover ≈33 chars × 3 lines."
-        in (slide["subtitle"]["description"])
+        "Room: section ≤27 words (≈66 chars × 3 lines); "
+        "cover ≤12 words (≈33 chars × 3 lines)." in (slide["subtitle"]["description"])
     )
     heading = defs["BuildColumn"]["properties"]["heading"]["description"]
-    assert heading.endswith("Room: comparison ≈30 chars.")
+    assert heading.endswith("Room: comparison ≤4 words (≈30 chars).")
     # Hints only: an over-long text must reach the tool, not fail at the provider.
     assert "maxLength" not in json.dumps(schema.model_json_schema())
     # Equal templates share one cached schema, and the plan still coerces.
@@ -635,7 +637,9 @@ async def test_one_kind_on_different_slides_is_asked_once_with_content_advice(
     assert repeat["kind"] == "bullets" and repeat["slides"] == [3, 5, 7, 9, 10]
     suggested = repeat["suggested"]
     assert any(
-        s.startswith("slide 7 (dated items) → timeline holds items max 6 [heading ≈20")
+        s.startswith(
+            "slide 7 (dated items) → timeline holds items max 6 [heading ≤12 words (≈20"
+        )
         for s in suggested
     )
     assert any(s.startswith("slide 5 (parallel") for s in suggested)

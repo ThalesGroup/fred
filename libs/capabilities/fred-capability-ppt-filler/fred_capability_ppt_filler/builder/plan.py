@@ -377,9 +377,24 @@ def has_content(slide: SlidePlan) -> bool:
 # --- what a pattern holds, in plan fields ------------------------------------------------
 
 
+# Chars per word, space included: errs short of French business prose (~6), so a
+# word budget never promises more than the measured chars hold.
+CHARS_PER_WORD = 7
+
+
+def word_budget(chars_per_line: int, lines: int) -> str:
+    """A room as a word count: small models follow words, not characters."""
+    per_line = (chars_per_line + 1) // CHARS_PER_WORD
+    if per_line == 0:
+        return "1 short word"
+    words = per_line * lines
+    return "1 word" if words == 1 else f"≤{words} words"
+
+
 def capacity_text(chars_per_line: int, lines: int) -> str:
     """How a zone's room is quoted to the agent, in the tool description and errors."""
-    return f"≈{chars_per_line} chars" + (f" × {lines} lines" if lines > 1 else "")
+    chars = f"≈{chars_per_line} chars" + (f" × {lines} lines" if lines > 1 else "")
+    return f"{word_budget(chars_per_line, lines)} ({chars})"
 
 
 def _room(zones: Sequence[Zone]) -> Optional[Tuple[int, int]]:

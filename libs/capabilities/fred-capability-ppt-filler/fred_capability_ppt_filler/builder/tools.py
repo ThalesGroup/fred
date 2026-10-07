@@ -614,8 +614,8 @@ def _description(
         + _guide(kinds, variety, max_uses)
         + "\n"
         "Slide kinds of this template, with each variant's name and what each zone holds at full "
-        "size (≈chars per line × lines; items max N; variants separated by |). Write to these sizes:\n"
-        + catalogue(inventory)
+        "size (words, then ≈chars per line × lines; items max N; variants separated by |). Write to "
+        "these sizes, counting words:\n" + catalogue(inventory)
     )
 
 

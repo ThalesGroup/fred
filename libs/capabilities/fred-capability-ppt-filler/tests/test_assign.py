@@ -43,6 +43,7 @@ from fred_capability_ppt_filler.builder.plan import (
     PlanColumn,
     PlanItem,
     SlidePlan,
+    capacity_text,
     zone_summary,
 )
 from fred_capability_ppt_filler.builder.render import _assign_text
@@ -527,16 +528,27 @@ def test_a_text_too_long_everywhere_names_the_element_and_its_measured_limit():
     ).problems
     assert problem.problem == (
         "closest fit, a 'bullets' slide: bullets: 2 entries, 1004 chars; this zone "
-        "holds ≈37 chars × 8 lines (longest: bullets[1], 999 chars)"
+        "holds ≤40 words (≈37 chars × 8 lines) (longest: bullets[1], 999 chars)"
     )
     assert any(o.startswith("keep bullets within") for o in problem.options)
+
+
+def test_a_room_is_quoted_as_words_then_its_measured_chars():
+    """One rule for every template: 7 chars per word, words never span lines."""
+    assert capacity_text(12, 1) == "1 word (≈12 chars)"
+    assert capacity_text(32, 1) == "≤4 words (≈32 chars)"
+    assert capacity_text(71, 2) == "≤20 words (≈71 chars × 2 lines)"
+    assert capacity_text(4, 1) == "1 short word (≈4 chars)"
+    assert capacity_text(4, 3) == "1 short word (≈4 chars × 3 lines)"
 
 
 def test_one_title_too_long_is_named_with_the_room_it_has():
     slide = SlidePlan(title="T" * 400, subtitle="Team")
     (problem,) = assign(INVENTORY, _plan(slide)).problems
-    assert "title is 400 chars; this zone holds ≈" in problem.problem
-    assert any(o.startswith("shorten title to ≈") for o in problem.options)
+    assert "title is 400 chars; this zone holds ≤8 words (≈29 chars × 2 lines)" in (
+        problem.problem
+    )
+    assert "shorten title to ≤8 words (≈29 chars × 2 lines)" in problem.options
 
 
 def test_columns_beyond_every_pattern_are_a_problem_not_a_lost_column():
@@ -619,7 +631,7 @@ def test_a_cover_with_only_a_heading_is_described_as_taking_the_title():
         kind="cover",
         zones=[heading],
     )
-    assert zone_summary(cover) == "title ≈60 chars"
+    assert zone_summary(cover) == "title ≤8 words (≈60 chars)"
     assert _labels(_inventory(cover), SlidePlan(title="Kick-off")) == ["Cover"]
 
 
@@ -737,7 +749,7 @@ def test_a_slide_used_three_times_is_reported_with_the_unused_variants():
     ]
     (note,) = [n for n in assign(inventory, _plan(*slides)).notes if "all use" in n]
     assert note.startswith("Slides 1, 3, 5 all use the template slide 'A'.")
-    assert "Narrow: title ≈60 chars; bullets ≈2 chars" in note
+    assert "Narrow: title ≤8 words (≈60 chars); bullets 1 short word (≈2 chars)" in note
     # By kind, the two template slides make one repeat.
     assignment = assign(inventory, _plan(*slides), "kind")
     (note,) = [n for n in assignment.notes if "are all" in n]
@@ -745,7 +757,7 @@ def test_a_slide_used_three_times_is_reported_with_the_unused_variants():
         "Slides 1, 2, 3, 4, 5 are all 'bullets' slides (template slides 'A', 'B')."
     )
     # The unused variants of that kind, with their sizes; never another kind's.
-    assert "Narrow: title ≈60 chars; bullets ≈2 chars" in note
+    assert "Narrow: title ≤8 words (≈60 chars); bullets 1 short word (≈2 chars)" in note
     assert "cards" not in note
     assert note.endswith("To vary them, recast one as above; otherwise nothing to do.")
 
@@ -759,7 +771,7 @@ def test_one_kind_on_five_template_slides_is_a_repeat_with_content_advice():
     assert repeat.kind == "bullets" and repeat.slides == [3, 5, 7, 9, 10]
     assert len(repeat.labels) == 5 and repeat.revisable
     # Each suggestion says what the template's slide of that kind holds.
-    items = "items max 6 [heading ≈20 chars × 4 lines, text ≈20 chars × 4 lines]"
+    items = "items max 6 [heading ≤12 words (≈20 chars × 4 lines), text ≤12 words (≈20 chars × 4 lines)]"
     # One cards and one timeline variant; the one two_columns variant already
     # holds two slides: slides 9 and 10 get nothing left to suggest.
     assert repeat.suggested == [
@@ -807,16 +819,17 @@ def test_advice_quotes_the_favoured_variant_and_the_size_to_shorten_to():
     lead = "slide 2 (dated items) → timeline holds items max 6 ["
     # The example slide when the entries fit it.
     assert advice(2) == [
-        f"{lead}heading ≈20 chars × 4 lines, text ≈20 chars × 4 lines]"
+        f"{lead}heading ≤12 words (≈20 chars × 4 lines), text ≤12 words (≈20 chars × 4 lines)]"
     ]
     # Only the layout holds the long entry: it is quoted.
     assert advice(10) == [
-        f"{lead}heading ≈40 chars × 4 lines, text ≈40 chars × 4 lines]"
+        f"{lead}heading ≤20 words (≈40 chars × 4 lines), "
+        "text ≤20 words (≈40 chars × 4 lines)]"
     ]
     # Nothing holds it: the example slide, with the size to shorten to.
     assert advice(20) == [
-        f"{lead}heading ≈20 chars × 4 lines, text ≈20 chars × 4 lines], "
-        "shorten each entry to ≈160 chars"
+        f"{lead}heading ≤12 words (≈20 chars × 4 lines), text ≤12 words (≈20 chars × 4 lines)], "
+        "shorten each entry to ≤23 words (≈160 chars)"
     ]
 
 
