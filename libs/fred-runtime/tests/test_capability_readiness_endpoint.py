@@ -103,7 +103,7 @@ def test_readiness_reports_each_known_capability(tmp_path, monkeypatch) -> None:
         client.__exit__(None, None, None)
 
 
-def test_a_raising_hook_gives_no_verdict(tmp_path, monkeypatch) -> None:
+def test_a_raising_hook_reads_as_pending(tmp_path, monkeypatch) -> None:
     client = _app_with_capabilities(tmp_path, monkeypatch, _JobCapability())
     try:
         response = client.post(
@@ -111,6 +111,27 @@ def test_a_raising_hook_gives_no_verdict(tmp_path, monkeypatch) -> None:
             json={
                 "agent_instance_id": "inst-1",
                 "items": [_item("job_probe", {"state": "boom"})],
+            },
+        )
+        assert response.status_code == 200
+        # Omitted would read as ready to the control plane.
+        assert response.json() == {
+            "results": [
+                {"capability_id": "job_probe", "state": "pending", "detail": None}
+            ]
+        }
+    finally:
+        client.__exit__(None, None, None)
+
+
+def test_an_unreadable_slice_is_left_to_config_health(tmp_path, monkeypatch) -> None:
+    client = _app_with_capabilities(tmp_path, monkeypatch, _JobCapability())
+    try:
+        response = client.post(
+            _URL,
+            json={
+                "agent_instance_id": "inst-1",
+                "items": [_item("job_probe", {"state": ["not", "a", "string"]})],
             },
         )
         assert response.status_code == 200

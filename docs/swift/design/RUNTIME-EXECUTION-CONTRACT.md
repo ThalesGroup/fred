@@ -7199,9 +7199,10 @@ analysis) but never waits for it.
 `POST /agents/capabilities/readiness` (authenticated like chat-controls) takes
 `{agent_instance_id, team_id, items: [{capability_id, stored: {schema_version,
 config}}]}` and returns `{results: [{capability_id, state, detail}]}`. A stored slice
-whose `schema_version` lags is read through `upgrade_config`. An unknown capability,
-a slice that no longer parses or a raising hook is omitted: config health owns that
-verdict. Control-plane maps the answers to the `capability_pending` suspension
+whose `schema_version` lags is read through `upgrade_config`. An unknown capability
+or a slice that no longer parses is omitted: config health owns that verdict. A
+raising hook reports `pending` without detail, since an omitted capability reads as
+ready. Control-plane maps the answers to the `capability_pending` suspension
 (`CONTROL-PLANE-PRODUCT-CONTRACT.md` §68).
 
 `GET /agents/models-catalog` entries gain `vision_profile_ids`, the subset of

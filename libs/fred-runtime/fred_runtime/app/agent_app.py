@@ -6141,15 +6141,27 @@ def _build_agent_router(
                         item.stored.config, item.stored.schema_version
                     )
                 )
-                verdict = await capability.readiness(stored, identity)
             except Exception:
+                # A slice that no longer parses is config health's verdict.
                 logger.warning(
-                    "[capability-readiness] no verdict for '%s' on instance %s",
+                    "[capability-readiness] unreadable slice for '%s' on instance %s",
                     item.capability_id,
                     body.agent_instance_id,
                     exc_info=True,
                 )
                 continue
+            try:
+                verdict = await capability.readiness(stored, identity)
+            except Exception:
+                # Omitted would read as ready: a hook that failed keeps it pending.
+                logger.warning(
+                    "[capability-readiness] readiness hook of '%s' failed on "
+                    "instance %s",
+                    item.capability_id,
+                    body.agent_instance_id,
+                    exc_info=True,
+                )
+                verdict = CapabilityReadiness(state="pending")
             results.append(
                 _ReadinessResult(
                     capability_id=item.capability_id,
