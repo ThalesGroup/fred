@@ -389,7 +389,8 @@
       "ariaLabel": "Generated files",
       "downloadAria": "Download {{name}}",
       "downloadFailed": "Could not download {{name}}",
-      "fallbackName": "Download"
+      "fallbackName": "Download",
+      "citationAria": "Open source “{{name}}” ({{host}}) in a new tab"
     },
     "commandTurn": {
       "open": "Open the prompt behind the /{{command}} command",
@@ -1747,7 +1748,32 @@
         "markdown": "Reading the workbook catalog",
         "schemas": "Reading tabular schemas",
         "descriptions": "Reading tabular documents",
-        "search": "Searching tabular values"
+        "search": "Searching tabular values",
+        "webSearch": "Searching the web",
+        "fetchUrl": "Reading a web page",
+        "searchAndFetch": "Searching and reading the web"
+      },
+      "webResearch": {
+        "query": "Search:",
+        "page": "Page:",
+        "noResults": "No result found.",
+        "extractedText_one": "Extracted text ({{count}} character)",
+        "extractedText_other": "Extracted text ({{count}} characters)",
+        "truncated": "truncated",
+        "errors": {
+          "unavailable": "Web research is unavailable.",
+          "timed_out": "The request timed out.",
+          "rejected": "The request was rejected.",
+          "invalid_response": "The response could not be read.",
+          "activity_unavailable": "Web research is unavailable: its activity log cannot be written.",
+          "unsafe_destination": "This address is not public and was blocked.",
+          "too_many_redirects": "Too many redirects.",
+          "unsupported_content": "This content type is not supported.",
+          "response_too_large": "The page is too large.",
+          "provider_failed": "The search provider failed.",
+          "busy": "Web research is busy, try again shortly.",
+          "http_error": "The site returned an error."
+        }
       }
     },
     "collapse": "Collapse",

@@ -5,6 +5,7 @@ from typing import cast
 
 import pytest
 from fred_capability_web_research.capability import WebResearchCapability
+from fred_capability_web_research.citations import citation_parts
 from fred_runtime.capabilities.registry import CapabilityRegistry
 from fred_sdk.contracts.capability import (
     CapabilityContext,
@@ -12,6 +13,7 @@ from fred_sdk.contracts.capability import (
     EmptyModel,
     SaveContext,
 )
+from fred_sdk.contracts.context import LinkKind
 from fred_sdk.contracts.runtime import RuntimeServices
 from fred_sdk.contracts.web_research import (
     WebPage,
@@ -88,6 +90,12 @@ async def test_tool_result_has_sources_and_shared_error_signal():
     )
     assert json.loads(result.content)["results"][0]["url"] == "https://example.com"
     assert not result.artifact.is_error
+    (citation,) = result.artifact.ui_parts
+    assert (citation.href, citation.title, citation.kind) == (
+        "https://example.com",
+        "Source",
+        LinkKind.citation,
+    )
     port.fail = True
     result = await tool.ainvoke(
         {
@@ -99,6 +107,7 @@ async def test_tool_result_has_sources_and_shared_error_signal():
     )
     assert result.artifact.is_error
     assert json.loads(result.content) == {"error_code": "timed_out"}
+    assert result.artifact.ui_parts == ()
 
 
 @pytest.mark.asyncio
@@ -165,3 +174,19 @@ async def test_graph_uses_same_native_tools_and_error_artifacts():
         "fetch_url",
         "search_and_fetch",
     }
+
+
+def test_citations_skip_failed_duplicate_and_non_http_pages():
+    result = WebResearchResult(
+        results=[
+            WebPage(url="https://a.org/x", final_url="https://a.org/y", title="A"),
+            WebPage(url="https://a.org/y"),
+            WebPage(url="https://b.org", error_code="http_error"),
+            WebPage(url="ftp://c.org"),
+            WebPage(url="https://d.org/page"),
+        ]
+    )
+    assert [(p.href, p.title) for p in citation_parts(result)] == [
+        ("https://a.org/y", "A"),
+        ("https://d.org/page", "d.org"),
+    ]

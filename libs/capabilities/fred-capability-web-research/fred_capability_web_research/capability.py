@@ -35,6 +35,8 @@ from fred_sdk.contracts.web_research import (
 from langchain_core.tools import BaseTool, StructuredTool
 from pydantic import BaseModel
 
+from fred_capability_web_research.citations import citation_parts
+
 
 def _port(port: WebResearchPort | None) -> WebResearchPort:
     if port is None:
@@ -74,17 +76,20 @@ class WebResearchCapability(AgentCapability[EmptyModel, EmptyModel, EmptyModel])
         ) -> tuple[str, ToolInvocationResult]:
             try:
                 result = await port.execute(request)
-                content = json.dumps(
-                    result.model_dump(exclude_none=True), ensure_ascii=False
-                )
-                failed = False
             except WebResearchError as exc:
                 content = json.dumps({"error_code": exc.code})
-                failed = True
+                return content, ToolInvocationResult(
+                    tool_ref=f"web_research.{request.operation}",
+                    is_error=True,
+                    blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=content),),
+                )
+            content = json.dumps(
+                result.model_dump(exclude_none=True), ensure_ascii=False
+            )
             return content, ToolInvocationResult(
                 tool_ref=f"web_research.{request.operation}",
-                is_error=failed,
                 blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=content),),
+                ui_parts=citation_parts(result),
             )
 
         async def search(**kwargs: object) -> tuple[str, ToolInvocationResult]:

@@ -601,3 +601,58 @@ describe("TraceDetailDrawer tabular tools", () => {
     expect(failed).toContain("Failed");
   });
 });
+
+function webEntry(name: string, args: Record<string, unknown>, content: unknown, ok = true) {
+  const entry = tabularEntry(name, content, ok, "web-1");
+  return {
+    ...entry,
+    call: message({ channel: "tool_call", parts: [{ type: "tool_call", call_id: "web-1", name, args }] }),
+  };
+}
+
+describe("TraceDetailDrawer web research", () => {
+  it("shows the query and each page as a safe external link with its extract", () => {
+    const entry = webEntry(
+      "search_and_fetch",
+      { query: "python release" },
+      {
+        results: [
+          {
+            url: "https://www.python.org/",
+            title: "Welcome to Python",
+            snippet: "Official site",
+            content: "Python 3.14 released",
+            truncated: true,
+          },
+          { url: "javascript:alert(1)", title: "Bad link" },
+          { url: "https://example.org/x", error_code: "http_error" },
+        ],
+        untrusted_content: true,
+      },
+    );
+    const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
+    expect(html).toContain("rework.chatTrace.toolLabels.searchAndFetch");
+    expect(html).toContain("python release");
+    expect(html).toContain('href="https://www.python.org/"');
+    expect(html).toContain('rel="noopener noreferrer"');
+    expect(html).toContain("Welcome to Python");
+    expect(html).toContain("Python 3.14 released");
+    expect(html).toContain("rework.chatTrace.webResearch.truncated");
+    expect(html).toContain("rework.chatTrace.webResearch.errors.http_error");
+    expect(html).not.toContain("javascript:");
+  });
+
+  it("shows the page URL and a localized failure instead of the raw payload", () => {
+    const entry = webEntry(
+      "fetch_url",
+      { url: "http://169.254.169.254/" },
+      { error_code: "unsafe_destination" },
+      false,
+    );
+    const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
+    expect(html).toContain("rework.chatTrace.webResearch.page");
+    expect(html).toContain("http://169.254.169.254/");
+    expect(html).toContain("rework.chatTrace.webResearch.errors.unsafe_destination");
+    expect(html).not.toContain("error_code");
+  });
+});

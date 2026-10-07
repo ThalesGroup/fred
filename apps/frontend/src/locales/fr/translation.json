@@ -389,7 +389,8 @@
       "ariaLabel": "Fichiers générés",
       "downloadAria": "Télécharger {{name}}",
       "downloadFailed": "Téléchargement de {{name}} impossible",
-      "fallbackName": "Télécharger"
+      "fallbackName": "Télécharger",
+      "citationAria": "Ouvrir la source « {{name}} » ({{host}}) dans un nouvel onglet"
     },
     "commandTurn": {
       "open": "Ouvrir le prompt de la commande /{{command}}",
@@ -1747,7 +1748,32 @@
         "markdown": "Lecture du catalogue du classeur",
         "schemas": "Lecture des schémas tabulaires",
         "descriptions": "Lecture des documents tabulaires",
-        "search": "Recherche d'une valeur tabulaire"
+        "search": "Recherche d'une valeur tabulaire",
+        "webSearch": "Recherche sur le web",
+        "fetchUrl": "Lecture d'une page web",
+        "searchAndFetch": "Recherche et lecture sur le web"
+      },
+      "webResearch": {
+        "query": "Recherche :",
+        "page": "Page :",
+        "noResults": "Aucun résultat.",
+        "extractedText_one": "Texte extrait ({{count}} caractère)",
+        "extractedText_other": "Texte extrait ({{count}} caractères)",
+        "truncated": "tronqué",
+        "errors": {
+          "unavailable": "La recherche web est indisponible.",
+          "timed_out": "La requête a expiré.",
+          "rejected": "La requête a été refusée.",
+          "invalid_response": "La réponse est illisible.",
+          "activity_unavailable": "La recherche web est indisponible : son journal d'activité ne peut pas être écrit.",
+          "unsafe_destination": "Cette adresse n'est pas publique et a été bloquée.",
+          "too_many_redirects": "Trop de redirections.",
+          "unsupported_content": "Ce type de contenu n'est pas pris en charge.",
+          "response_too_large": "La page est trop volumineuse.",
+          "provider_failed": "Le moteur de recherche a échoué.",
+          "busy": "La recherche web est saturée, réessayez dans un instant.",
+          "http_error": "Le site a renvoyé une erreur."
+        }
       }
     },
     "collapse": "Réduire",
