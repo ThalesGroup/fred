@@ -80,3 +80,28 @@ def test_team_authorizer_dependency_returns_the_bound_authorizer() -> None:
     authorizer = _AllowAll()
     setattr(request.state, CAPABILITY_TEAM_AUTHORIZER_STATE, authorizer)
     assert asyncio.run(capability_team_authorizer(request)) is authorizer
+
+
+def test_fred_sdk_imports_fastapi_only_in_the_route_dependency_module() -> None:
+    # fred-sdk declares no fastapi dependency: only the lazily loaded route
+    # dependency module may import it.
+    import ast
+    from pathlib import Path
+
+    import fred_sdk
+
+    root = Path(fred_sdk.__file__).parent
+    importers = set()
+    for path in root.rglob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in tree.body:
+            names = (
+                [node.module or ""]
+                if isinstance(node, ast.ImportFrom)
+                else [a.name for a in node.names]
+                if isinstance(node, ast.Import)
+                else []
+            )
+            if any(n == "fastapi" or n.startswith("fastapi.") for n in names):
+                importers.add(path.relative_to(root).as_posix())
+    assert importers == {"contracts/_capability_route_deps.py"}

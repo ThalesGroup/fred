@@ -44,7 +44,6 @@ from typing import (
     TypeVar,
 )
 
-from fastapi import HTTPException, Request
 from fred_core.history.history_schema import FinishReason, coerce_finish_reason
 from fred_core.kpi import BaseKPIWriter
 from fred_core.portable import MetricsProvider, Span, Tracer
@@ -68,6 +67,10 @@ from .web_research import WebResearchPort
 
 if TYPE_CHECKING:
     from langchain_core.messages import AIMessage, BaseMessage
+
+    from ._capability_route_deps import (
+        capability_team_authorizer as capability_team_authorizer,
+    )
 
 ChatModelHandle: TypeAlias = object
 RuntimeToolHandle: TypeAlias = object
@@ -616,17 +619,14 @@ class CapabilityTeamAuthorizer(ABC):
         """Raise HTTP 403 unless the caller may edit the agents of `team_id`."""
 
 
-async def capability_team_authorizer(request: Request) -> CapabilityTeamAuthorizer:
-    """FastAPI dependency for capability routers: the caller's team authorizer.
+def __getattr__(name: str) -> Any:
+    # `capability_team_authorizer` loads on first use: fred-sdk does not
+    # depend on fastapi (see `CapabilityManifest`).
+    if name == "capability_team_authorizer":
+        from ._capability_route_deps import capability_team_authorizer
 
-    Fails closed (503) on a pod that did not bind one.
-    """
-    authorizer = getattr(request.state, CAPABILITY_TEAM_AUTHORIZER_STATE, None)
-    if not isinstance(authorizer, CapabilityTeamAuthorizer):
-        raise HTTPException(
-            status_code=503, detail="Team authorization is not available."
-        )
-    return authorizer
+        return capability_team_authorizer
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 class ToolInvokerPort(ABC):
