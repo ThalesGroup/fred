@@ -1327,6 +1327,41 @@
           "title": "Enabled",
           "type": "boolean"
         },
+        "provider": {
+          "default": "duckduckgo",
+          "enum": [
+            "duckduckgo",
+            "fixture",
+            "brave"
+          ],
+          "title": "Provider",
+          "type": "string"
+        },
+        "provider_key_env": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Z][A-Z0-9_]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Provider Key Env"
+        },
+        "fixture_file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fixture File"
+        },
         "proxy_url": {
           "anyOf": [
             {
@@ -1387,6 +1422,20 @@
           ],
           "title": "Safesearch",
           "type": "string"
+        },
+        "max_results": {
+          "default": 5,
+          "maximum": 30,
+          "minimum": 1,
+          "title": "Max Results",
+          "type": "integer"
+        },
+        "max_chars_per_page": {
+          "default": 6000,
+          "maximum": 50000,
+          "minimum": 500,
+          "title": "Max Chars Per Page",
+          "type": "integer"
         },
         "timeout_seconds": {
           "default": 60,

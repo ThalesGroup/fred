@@ -59,20 +59,12 @@ class WebResearchService:
             raise RuntimeError(
                 "Web research activity requires SQL statement logging to be disabled."
             )
-        from fred_capability_web_research.research import (
-            DuckDuckGoProvider,
-            ResearchEngine,
-            create_engine,
-        )
+        from fred_capability_web_research.research import create_engine
 
         self.config = config
         self.service_name = service_name
         self.store = WebResearchActivityStore(engine, config.activity_retention_days)
-        self.research = (
-            ResearchEngine(config, DuckDuckGoProvider(client, config.max_bytes), client)
-            if client is not None
-            else create_engine(config)
-        )
+        self.research = create_engine(config, client)
         self._slots = asyncio.Semaphore(config.max_concurrency)
 
     def bind(self, binding: BoundRuntimeContext) -> WebResearchPort:

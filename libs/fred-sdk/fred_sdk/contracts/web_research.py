@@ -11,6 +11,7 @@ from urllib.parse import urlsplit
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 SafeSearch = Literal["on", "moderate", "off"]
+SearchProviderName = Literal["duckduckgo", "fixture", "brave"]
 Freshness = Literal["d", "w", "m", "y"]
 
 
@@ -139,12 +140,19 @@ class WebResearchDeploymentConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     enabled: bool = False
+    # duckduckgo: keyless (local); fixture: offline results; brave: keyed API with SLA.
+    provider: SearchProviderName = "duckduckgo"
+    provider_key_env: str | None = Field(default=None, pattern=r"^[A-Z][A-Z0-9_]+$")
+    fixture_file: str | None = None
     proxy_url: str | None = None
     proxy_auth_env: str | None = Field(default=None, pattern=r"^[A-Z][A-Z0-9_]+$")
     proxy_ca_file: str | None = None
     max_bytes: int = Field(default=5 * 1024 * 1024, ge=1024, le=10 * 1024 * 1024)
     retries: int = Field(default=1, ge=0, le=2)
     safesearch: SafeSearch = "on"
+    # Ceilings on what reaches the model, whatever the tool arguments ask for.
+    max_results: int = Field(default=5, ge=1, le=30)
+    max_chars_per_page: int = Field(default=6000, ge=500, le=50_000)
     timeout_seconds: float = Field(default=60, ge=5, le=120)
     max_concurrency: int = Field(default=4, ge=1, le=32)
     activity_retention_days: int = Field(default=30, ge=1, le=365)
@@ -175,6 +183,14 @@ class WebResearchDeploymentConfig(BaseModel):
                 "Invalid forward proxy endpoint; credentials belong in the secret environment."
             )
         return value.rstrip("/")
+
+    @model_validator(mode="after")
+    def provider_material(self) -> WebResearchDeploymentConfig:
+        if self.provider == "brave" and not self.provider_key_env:
+            raise ValueError("The brave provider requires provider_key_env.")
+        if self.fixture_file and self.provider != "fixture":
+            raise ValueError("fixture_file requires the fixture provider.")
+        return self
 
     @model_validator(mode="after")
     def proxy_material(self) -> WebResearchDeploymentConfig:

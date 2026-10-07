@@ -1,3 +1,25 @@
+## ADDED Requirements
+
+### Requirement: Configurable search provider
+
+Fred SHALL select the web search provider from deployment configuration among a keyless public provider, an offline fixture provider and a keyed commercial provider, behind the same tools, ceilings, activity records and metrics. Fred MUST NOT fall back from the configured provider to another one. A keyed provider MUST read its key from the secret environment and MUST NOT expose it to model arguments, activity, logs or any other origin.
+
+#### Scenario: Local development without dependencies
+- **WHEN** web research is enabled without a provider setting
+- **THEN** Fred uses the keyless provider with no key, account or extra service
+
+#### Scenario: Offline tests
+- **WHEN** the fixture provider is configured
+- **THEN** searches return the configured results without any network access
+
+#### Scenario: Production provider without key
+- **WHEN** a keyed provider is configured and its secret is missing
+- **THEN** Fred Agents refuses to start with a configuration error
+
+#### Scenario: Provider outage
+- **WHEN** the configured provider fails or rejects a request
+- **THEN** the tool returns `provider_failed` and no other provider is called
+
 ## MODIFIED Requirements
 
 ### Requirement: Controlled external egress

@@ -10,8 +10,17 @@
 - [x] 2.2 Verify direct native-tool execution, attribution/errors/cancellation, DNS/redirect safety, explicit proxy/no fallback, credential isolation and TLS with focused tests.
 - [ ] 2.3 Run affected root quality gates, independent read-only review and schema/migration/OpenSpec checks; reconcile this existing change and draft PR #2983.
 
+## 3. Configurable search provider
+
+- [x] 3.1 Add `provider` and `provider_key_env` deployment fields with validation; regenerate schemas; Helm default `brave`.
+- [x] 3.2 Implement `fixture` and `brave` providers beside `duckduckgo`; select in `create_engine`; fail startup on a missing key; skip DNS vetting only for fixture results.
+- [x] 3.3 Shared provider contract tests (shape, ceilings, errors, key isolation) plus selection/startup tests.
+- [x] 3.4 Update migration guide, `.env.template` and Helm values.
+
 ## Evidence
 
 Previous version: 67 focused tests and root quality gates passed; separate egress HTTPS topology was reviewed against implementation head `289b26e509aae586ae5b4b27fbc09a584cfcaf4a`. This is historical evidence, not verification of the revised transport. Current work reuses issue #2980 and branch `codex/add-governed-web-search`.
 
 Proxy assumption: operator-owned HTTP(S) forward proxy with CONNECT and final DNS/destination enforcement, configured explicitly; proxy deployment is outside this change. No public-provider or production proxy validation is claimed.
+
+Provider selection (2026-10-07): 40 capability tests (8 new shared provider contract/selection tests with mocked transports, no live Brave call), 7 runtime web-research tests, ruff and basedpyright clean, `make generate-config-schema`, `make check-config-files` and `helm lint` pass. Local Fred Agents reloaded on the default keyless provider.

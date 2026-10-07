@@ -16,6 +16,8 @@ from fred_sdk.contracts.web_research import (
 
 
 class Provider:
+    trusted = False
+
     def __init__(self):
         self.requests = []
 
@@ -144,7 +146,8 @@ async def test_text_fetch_is_bounded_and_focus_selects_passages():
 async def test_provider_uses_guarded_client_and_actual_safesearch_parameter():
     from urllib.parse import parse_qs
 
-    from fred_capability_web_research.research import DuckDuckGoProvider, ResearchEngine
+    from fred_capability_web_research.providers import DuckDuckGoProvider
+    from fred_capability_web_research.research import ResearchEngine
     from fred_sdk.contracts.web_research import WebSearchRequest
 
     def respond(request):
@@ -245,3 +248,27 @@ async def test_valid_unicode_arguments_need_no_wire_serialization():
             FetchRequest(url="https://example.com/" + "😀" * 4000, focus="😀" * 2048)
         )
         assert result.results[0].content == "public"
+
+
+def test_deployment_ceilings_bound_every_operation():
+    from fred_capability_web_research.research import ResearchEngine
+    from fred_sdk.contracts.web_research import (
+        FetchRequest,
+        SearchAndFetchRequest,
+        WebSearchRequest,
+    )
+
+    config = WebResearchDeploymentConfig(
+        enabled=True, max_results=2, max_chars_per_page=1000
+    )
+    engine = ResearchEngine(config, Provider(), httpx.AsyncClient())
+    search = engine.capped(WebSearchRequest(query="q", max_results=30))
+    fetch = engine.capped(FetchRequest(url="https://example.com", max_chars=50_000))
+    combined = engine.capped(
+        SearchAndFetchRequest(query="q", max_results=10, max_chars_per_page=9000)
+    )
+    small = engine.capped(WebSearchRequest(query="q", max_results=1))
+    assert search.max_results == 2
+    assert fetch.max_chars == 1000
+    assert (combined.max_results, combined.max_chars_per_page) == (2, 1000)
+    assert small.max_results == 1

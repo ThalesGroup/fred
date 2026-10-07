@@ -43,11 +43,23 @@ Helm fields live under `applications.fred-agents.configuration.web_research`:
 ```yaml
 web_research:
   enabled: true
+  provider: brave
+  provider_key_env: WEB_RESEARCH_PROVIDER_KEY # Brave Search API key secret
   proxy_url: https://proxy.dmz.example:3128
   proxy_auth_env: WEB_RESEARCH_PROXY_AUTH # Optional Basic username:password secret
   proxy_ca_file: /run/secrets/proxy-ca.crt # Optional private HTTPS proxy CA
+  max_results: 5 # Results sent to the model per search
+  max_chars_per_page: 6000 # Text sent to the model per read page
   activity_retention_days: 30
 ```
+
+`provider` selects the search engine: `duckduckgo` (SDK default, keyless, no
+SLA, local use), `fixture` (offline results from `fixture_file` or built-in
+samples, for development and CI) or `brave` (Brave Search API key read from the
+variable named by `provider_key_env`). The chart defaults to `brave`, so enabling
+it without the key fails Fred Agents startup. Providers never fall back to one
+another; an outage returns `provider_failed`. The key reaches only the provider
+endpoint, never logs, activity or model arguments.
 
 Without `proxy_url`, research uses direct public access. With it, every provider,
 page and redirect uses the configured HTTP(S) forward proxy; failures never fall
@@ -72,14 +84,17 @@ No Fred-specific API or service executable belongs on the proxy host.
 Default off; retention 30 days (1–365), purge every 60 seconds, four concurrent
 operations and a 60-second operation deadline including queue/admission and
 outbound I/O. Saturation returns `busy`; each activity write has its own 5-second
-storage deadline. Defaults also bound pages to 5 MiB, 50,000 returned characters
-and ports 80/443. Configure `max_bytes`, `retries` and the `safesearch` floor at
-deployment level. Direct access pins vetted public DNS addresses to connections.
+storage deadline. Defaults also bound pages to 5 MiB and ports 80/443. To limit
+model context, at most `max_results` (default 5) results and `max_chars_per_page`
+(default 6,000) characters per read page reach the model, whatever the tool
+arguments request. Configure these, `max_bytes`, `retries` and the `safesearch`
+floor at deployment level. Direct access pins vetted public DNS addresses to connections.
 All modes check redirects, refuse binary/compressed responses and isolate cookies.
 Extraction/focus runs in bounded worker threads.
 
-Before production enablement, approve raw-query storage and DuckDuckGo HTML
-provider usage under deployment policy; the provider has no availability SLA.
+Before production enablement, approve raw-query storage and the chosen search
+provider under deployment policy; DuckDuckGo HTML has no availability SLA and is
+not intended for production load.
 The restricted SQL sink must exist and SQL statement logging must be disabled.
 Reads require `CAN_MANAGE_PLATFORM`, erasure `CAN_ADMINISTER_USERS`.
 

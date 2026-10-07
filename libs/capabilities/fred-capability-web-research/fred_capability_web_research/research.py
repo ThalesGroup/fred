@@ -12,14 +12,15 @@ import re
 import socket
 import ssl
 import unicodedata
-from collections.abc import Awaitable, Callable
-from typing import Any, Protocol, TypeVar
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 import httpcore
 import httpx
 from fred_sdk.contracts.web_research import (
     FetchArguments,
     FetchRequest,
+    SearchAndFetchRequest,
     WebPage,
     WebResearchDeploymentConfig,
     WebResearchError,
@@ -28,6 +29,8 @@ from fred_sdk.contracts.web_research import (
     WebSearchRequest,
 )
 from httpcore._backends.auto import AutoBackend
+
+from fred_capability_web_research.providers import SearchProvider, build_provider
 
 logger = logging.getLogger(__name__)
 
@@ -102,112 +105,6 @@ class PublicTransport(httpx.AsyncHTTPTransport):
         )
 
 
-class SearchProvider(Protocol):
-    async def search(
-        self,
-        request: WebSearchRequest,
-        run: Callable[[Callable[[], list[WebPage]]], Awaitable[list[WebPage]]],
-    ) -> list[WebPage]: ...
-
-
-class DuckDuckGoProvider:
-    """Bounded HTML search using the same pinned transport as page fetches."""
-
-    def __init__(self, client: httpx.AsyncClient, max_bytes: int) -> None:
-        self.client = client
-        self.max_bytes = max_bytes
-
-    async def search(
-        self,
-        request: WebSearchRequest,
-        run: Callable[[Callable[[], list[WebPage]]], Awaitable[list[WebPage]]],
-    ) -> list[WebPage]:
-        payload = {
-            "q": request.query,
-            "kl": request.region,
-            "kp": {"on": "1", "moderate": "-1", "off": "-2"}[request.safesearch],
-        }
-        if request.timelimit:
-            payload["df"] = request.timelimit
-        async with self.client.stream(
-            "POST",
-            "https://html.duckduckgo.com/html/",
-            data=payload,
-            headers={
-                "Cookie": "",
-                "Accept-Encoding": "identity",
-                "User-Agent": "Fred-Web-Research/1.0",
-            },
-        ) as response:
-            if (
-                response.status_code != 200
-                or response.headers.get("content-encoding", "identity") != "identity"
-            ):
-                raise WebResearchError("provider_failed")
-            body = bytearray()
-            async for chunk in response.aiter_raw():
-                if len(body) + len(chunk) > self.max_bytes:
-                    raise WebResearchError("provider_failed")
-                body.extend(chunk)
-
-        def parse() -> list[WebPage]:
-            from urllib.parse import parse_qs, urlsplit
-
-            import trafilatura
-
-            html = trafilatura.load_html(bytes(body))
-            if html is None:
-                raise WebResearchError("provider_failed")
-            pages = []
-            for node in html.xpath(
-                '//div[contains(concat(" ", normalize-space(@class), " "), " result ")]'
-            ):
-                links = node.xpath(
-                    './/a[contains(concat(" ", normalize-space(@class), " "), " result__a ")]'
-                )
-                if not links:
-                    continue
-                link = links[0]
-                url = str(link.get("href", ""))
-                if url.startswith("//"):
-                    url = "https:" + url
-                parsed = urlsplit(url)
-                if (
-                    parsed.hostname in {"duckduckgo.com", "www.duckduckgo.com"}
-                    and parsed.path == "/l/"
-                ):
-                    url = parse_qs(parsed.query).get("uddg", [""])[0]
-                if any(
-                    marker in url
-                    for marker in ("bing.com/aclick", "duckduckgo.com/y.js")
-                ):
-                    continue
-                try:
-                    FetchArguments(url=url)
-                except ValueError:
-                    continue
-                snippets = node.xpath(
-                    './/*[contains(concat(" ", normalize-space(@class), " "), " result__snippet ")]'
-                )
-                pages.append(
-                    WebPage(
-                        url=url,
-                        title=link.text_content().strip()[:512],
-                        snippet=snippets[0].text_content().strip()[:2000]
-                        if snippets
-                        else "",
-                    )
-                )
-                if len(pages) == request.max_results:
-                    break
-            if not pages and not html.xpath('//*[contains(@class, "no-results")]'):
-                # Captchas/layout changes must never masquerade as empty searches.
-                raise WebResearchError("provider_failed")
-            return pages
-
-        return await run(parse)
-
-
 _T = TypeVar("_T")
 
 
@@ -269,7 +166,11 @@ class ResearchEngine:
                     except WebResearchError:
                         return False
 
-                checks = await asyncio.gather(*(public(page) for page in pages))
+                checks = (
+                    [True] * len(pages)
+                    if self.provider.trusted
+                    else await asyncio.gather(*(public(page) for page in pages))
+                )
                 return WebResearchResult(
                     results=[
                         page
@@ -373,7 +274,22 @@ class ResearchEngine:
                 )
         raise WebResearchError("too_many_redirects")
 
+    def capped(self, request: WebResearchRequest) -> WebResearchRequest:
+        """Apply deployment ceilings so tool arguments cannot inflate model context."""
+        chars = self.config.max_chars_per_page
+        if isinstance(request, FetchRequest):
+            return request.model_copy(
+                update={"max_chars": min(request.max_chars, chars)}
+            )
+        update: dict[str, int] = {
+            "max_results": min(request.max_results, self.config.max_results)
+        }
+        if isinstance(request, SearchAndFetchRequest):
+            update["max_chars_per_page"] = min(request.max_chars_per_page, chars)
+        return request.model_copy(update=update)
+
     async def execute(self, request: WebResearchRequest) -> WebResearchResult:
+        request = self.capped(request)
         if isinstance(request, FetchRequest):
             return WebResearchResult(results=[await self.fetch(request)])
         if isinstance(request, WebSearchRequest):
@@ -452,13 +368,18 @@ class ProxyTransport(httpx.AsyncHTTPTransport):
         return await super().handle_async_request(request)
 
 
-def create_engine(config: WebResearchDeploymentConfig) -> ResearchEngine:
+def create_engine(
+    config: WebResearchDeploymentConfig, client: httpx.AsyncClient | None = None
+) -> ResearchEngine:
+    """Build the engine; `client` replaces the guarded transport only in tests."""
     # Diagnostic libraries can include raw queries/URLs; only Fred's metadata
     # metrics and restricted activity store are authorized to observe requests.
     for name in ("trafilatura", "httpx", "httpcore"):
         library_logger = logging.getLogger(name)
         library_logger.handlers = [logging.NullHandler()]
         library_logger.propagate = False
+    if client is not None:
+        return ResearchEngine(config, build_provider(config, client), client)
     if config.proxy_url:
         credentials = None
         if config.proxy_auth_env:
@@ -489,4 +410,4 @@ def create_engine(config: WebResearchDeploymentConfig) -> ResearchEngine:
         follow_redirects=False,
         trust_env=False,
     )
-    return ResearchEngine(config, DuckDuckGoProvider(client, config.max_bytes), client)
+    return ResearchEngine(config, build_provider(config, client), client)

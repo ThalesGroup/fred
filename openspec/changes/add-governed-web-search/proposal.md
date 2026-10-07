@@ -7,6 +7,7 @@ Revise #2980 / draft PR #2983 before delivery. The dedicated HTTPS egress proces
 - Execute search, extraction and focus inside Fred Agents through the existing SDK port. Reuse the three tools, authorization, restricted activity store, erasure and metrics.
 - Use direct public Internet access when enabled without a proxy. Support an explicitly configured HTTP(S) forward proxy for all research traffic, with no fallback to direct access.
 - Remove the Fred egress HTTP server, its token, TLS listener, health polling and service deployment examples. Local activation requires only `web_research.enabled: true`.
+- Select the search provider by configuration: keyless `duckduckgo` (local default), offline `fixture` (dev/CI) or keyed `brave` (production SLA). No silent fallback between providers; a keyed provider without its secret fails startup.
 - Preserve bounded requests, direct DNS connection pinning, redirect checks, SafeSearch and verified origin TLS. Document the proxy's responsibility for final DNS resolution and destination enforcement.
 
 ## Capabilities
@@ -17,7 +18,7 @@ None.
 
 ### Modified Capabilities
 
-- `web-research`: internal execution and direct-or-proxy outbound routing; monitoring uses existing Fred metrics.
+- `web-research`: internal execution, direct-or-proxy outbound routing and a configurable search provider; monitoring uses existing Fred metrics.
 
 ## Impact
 
