@@ -59,7 +59,14 @@ from fred_sdk.contracts.context import (
 from langchain_core.messages import BaseMessage, ToolMessage
 from langchain_core.tools import BaseTool, StructuredTool
 from PIL import Image, UnidentifiedImageError
-from pydantic import BaseModel, ConfigDict, Field, create_model
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationInfo,
+    create_model,
+    field_validator,
+)
 from pydantic.json_schema import SkipJsonSchema
 
 from fred_capability_ppt_filler.builder.assign import (
@@ -74,6 +81,7 @@ from fred_capability_ppt_filler.builder.changes import (
     ChangeError,
     SlideChange,
     apply_changes,
+    change_shape,
 )
 from fred_capability_ppt_filler.builder.checks import SlideReport
 from fred_capability_ppt_filler.builder.deck_plans import get_deck_plan_store
@@ -275,6 +283,9 @@ def _schema_for(
         "BuildPresentationArgs",
         __base__=BaseModel,
         __config__=ConfigDict(extra="ignore"),
+        __validators__={
+            "_lists": field_validator("slides", "changes", mode="before")(_listed)
+        },
         slides=(
             List[slide_model],
             Field(
@@ -301,6 +312,19 @@ def _schema_for(
         ),
     )
     return model
+
+
+def _listed(value: Any, info: ValidationInfo) -> Any:
+    """`slides: null` beside `changes`, or one change sent as an object: a
+    validation error here would reach the user as an opaque tool failure."""
+    if value is None:
+        return [] if info.field_name == "slides" else None
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except ValueError:
+            return value
+    return [value] if isinstance(value, dict) else value
 
 
 def _to_plan(validated: Any) -> DeckPlan:
@@ -387,6 +411,7 @@ def _needs_revision(
     previous: _Previous,
     repeats: List[Repeat],
     lead: List[str],
+    from_changes: bool = False,
 ) -> tuple[str, ToolInvocationResult]:
     """The problems, each flagged when the previous call already had it, so the
     model never reads the same message twice without learning what changed;
@@ -423,8 +448,11 @@ def _needs_revision(
             restated=""
         )
     text += (
-        " Then call build_presentation again with only `changes` for these slides (numbers "
-        "as listed), or the whole deck in `slides`."
+        " Then call build_presentation again with the same `changes`, corrected (all of them: "
+        "they apply to the deck before them), or the whole deck in `slides`."
+        if from_changes
+        else " Then call build_presentation again with only `changes` for these slides "
+        "(numbers as listed), or the whole deck in `slides`."
     )
     if repeats:
         text += (
@@ -747,9 +775,11 @@ def build_builder_tools(
     # and a copy of a call still running is answered without a second build.
     build_lock = asyncio.Lock()
     in_flight: set[str] = set()
-    # The last plan this turn evaluated, and the `changes` that produced it.
+    # The last plan this turn evaluated and, when `changes` produced it, the plan
+    # they applied to and their shape: a corrected resend applies there again.
     turn_base: List[DeckPlan] = []
-    turn_changes: List[Optional[str]] = [None]
+    turn_parent: List[DeckPlan] = []
+    turn_shape: List[Any] = [None]
     plans = _BasePlans(identity.session_id, identity.agent_instance_id)
 
     async def _build(**kwargs: object) -> tuple[str, ToolInvocationResult]:
@@ -780,15 +810,14 @@ def build_builder_tools(
                 "again with 'slides' as a list of objects, each with its content (title, "
                 "bullets, items…)."
             )
-        changes_key: Optional[str] = None
+        shape: Any = None
+        base: Optional[DeckPlan] = None
         if changes is not None and (changes or not plan.slides):
             if plan.slides:
                 return _error(_BOTH_MODES)
             if not changes:
                 return _error(_NO_CHANGE)
-            changes_key = json.dumps(
-                kwargs.get("changes"), sort_keys=True, default=_jsonable
-            )
+            shape = change_shape(changes)
             try:
                 base = turn_base[0] if turn_base else await plans.read()
             except Exception:  # noqa: BLE001 - the model can resend the whole deck
@@ -796,24 +825,25 @@ def build_builder_tools(
                 return _error(_BASE_UNREADABLE)
             if base is None:
                 return _error(_NO_BASE)
-            changed = base
-            # The same changes again: their result is the base already.
-            if changes_key != turn_changes[0]:
-                try:
-                    changed = apply_changes(base, changes)
-                except ChangeError as exc:
-                    return _error(
-                        "No deck was built: some changes cannot be applied to the previous "
-                        "deck (nothing was changed). Fix them and call again:\n"
-                        + "\n".join(exc.problems)
-                    )
+            # Models resend refused changes corrected, never applied twice.
+            if turn_parent and shape == turn_shape[0]:
+                base = turn_parent[0]
+            try:
+                changed = apply_changes(base, changes)
+            except ChangeError as exc:
+                return _error(
+                    "No deck was built: some changes cannot be applied to the previous "
+                    "deck (nothing was changed). Fix them and call again:\n"
+                    + "\n".join(exc.problems)
+                )
             plan = changed.model_copy(
                 update={"file_name": validated.file_name or changed.file_name}
             )
 
         async def evaluated() -> None:
             turn_base[:] = [plan]
-            turn_changes[0] = changes_key
+            turn_parent[:] = [] if base is None else [base]
+            turn_shape[0] = shape
             await plans.write(plan)
 
         if not any(has_content(s) for s in plan.slides if s.invalid_entry is None):
@@ -849,7 +879,12 @@ def build_builder_tools(
         if assignment.problems:
             await evaluated()
             return _needs_revision(
-                assignment, plan, previous_problems, repeats, unloadable
+                assignment,
+                plan,
+                previous_problems,
+                repeats,
+                unloadable,
+                base is not None,
             )
         previous_problems.clear()
         if repeats:

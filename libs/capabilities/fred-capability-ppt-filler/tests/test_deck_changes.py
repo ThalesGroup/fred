@@ -441,3 +441,54 @@ async def test_a_deck_without_session_keeps_its_base_for_the_turn_only(monkeypat
     await build(slides=[COVER, _TOO_LONG])
     text, _ = await build(changes=[{"op": "remove", "slide": 2}])
     assert "there is no previous deck" not in text
+
+
+@pytest.mark.asyncio
+async def test_a_corrected_resend_of_refused_changes_replaces_them(
+    monkeypatch, deck_plan_store
+):
+    """Seen in the eval: a refused insert resent corrected, as `insert` again,
+    added one more copy per call when applied to the refused plan."""
+    workspace = FakeWorkspace()
+    first = _Turn(monkeypatch, workspace)
+    await first.build(slides=[COVER, {"title": "Agenda", "bullets": ["a"]}])
+    second = _Turn(monkeypatch, workspace)
+    text, result = await second.build(
+        changes=[{"op": "insert", "after": 1, "slides": [_TOO_LONG]}]
+    )
+    assert result.is_error and _payload(text)["slides"][0]["slide"] == 2
+    assert "with the same `changes`, corrected (all of them" in text
+    fixed = {"title": "Method", "kind": "process", "items": _STEPS[:3]}
+    text, result = await second.build(
+        changes=[{"op": "insert", "after": 1, "slides": [fixed]}]
+    )
+    assert not result.is_error, text
+    assert [s.title for s in second.rendered[-1].slides] == [
+        "Kick-off",
+        "Method",
+        "Agenda",
+    ]
+    # A fix numbered on the refused plan (another shape) applies to that plan.
+    await second.build(changes=[{"op": "insert", "after": 3, "slides": [_TOO_LONG]}])
+    text, result = await second.build(
+        changes=[{"op": "replace", "slide": 4, "slides": [fixed]}]
+    )
+    assert not result.is_error, text
+    assert [s.title for s in second.rendered[-1].slides] == [
+        "Kick-off",
+        "Method",
+        "Agenda",
+        "Method",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_null_slides_and_a_single_change_object_are_read(monkeypatch):
+    turn = _Turn(monkeypatch, FakeWorkspace())
+    await turn.build(slides=[COVER, {"title": "Agenda", "bullets": ["a"]}])
+    text, result = await turn.build(
+        slides=None,
+        changes={"op": "edit", "slide": 2, "field": "title", "value": "Plan"},
+    )
+    assert not result.is_error, text
+    assert turn.rendered[-1].slides[1].title == "Plan"

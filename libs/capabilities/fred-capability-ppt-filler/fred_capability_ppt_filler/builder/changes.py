@@ -224,6 +224,22 @@ def _edit(slide: Dict[str, Any], path: str, value: Any) -> Optional[str]:
 # --- applying ---------------------------------------------------------------------------
 
 
+def change_shape(changes: List[SlideChange]) -> Tuple[Tuple[str, int, int, str], ...]:
+    """What a list of changes does, without its content: a corrected resend of
+    the same changes has the same shape."""
+    return tuple(
+        sorted(
+            (
+                c.op or "",
+                -1 if c.slide is None else c.slide,
+                -1 if c.after is None else c.after,
+                c.field or "",
+            )
+            for c in changes
+        )
+    )
+
+
 def _check(change: SlideChange, n: int) -> List[str]:
     """What is wrong with one change on its own, each with its remedy."""
     issues = list(change.unknown)
