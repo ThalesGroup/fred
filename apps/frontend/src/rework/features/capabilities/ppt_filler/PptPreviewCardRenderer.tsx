@@ -42,6 +42,7 @@ import type { UiPartRendererProps } from "../types";
 import type { PptPreviewPartData } from "./types";
 import { openPreview, registerPreview } from "./pptPreviewSlice";
 import PptxDownloadButton from "./PptxDownloadButton";
+import DeckSummaryButton from "./DeckSummaryButton";
 import styles from "./PptPreviewCardRenderer.module.css";
 
 // Module-level so the heuristic survives card remounts within one page load.
@@ -92,6 +93,7 @@ export function PptPreviewCardRenderer({ part }: UiPartRendererProps) {
         <span className={styles.title} title={title}>
           {title}
         </span>
+        <DeckSummaryButton summary={preview.summary} />
         {preview.pptx_download_url && (
           <PptxDownloadButton href={preview.pptx_download_url} fileName={preview.file_name} />
         )}

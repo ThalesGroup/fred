@@ -40,6 +40,7 @@ import type { CapabilitySidePanelProps } from "../types";
 import { useSessionPptPreview } from "./useSessionPptPreview";
 import { usePptPreview } from "./usePptPreview";
 import PptxDownloadButton from "./PptxDownloadButton";
+import DeckSummaryButton from "./DeckSummaryButton";
 import styles from "./PptPreviewPane.module.css";
 
 const PDF_SCALE = 0.95;
@@ -166,6 +167,7 @@ export function PptPreviewPane({ onClose }: CapabilitySidePanelProps) {
           <Icon category="outlined" type="slideshow" />
           <span className={styles.title}>{current?.title || untitled}</span>
         </div>
+        <DeckSummaryButton summary={current?.summary} />
         {current?.pptx_download_url && (
           <PptxDownloadButton href={current.pptx_download_url} fileName={current.file_name} />
         )}

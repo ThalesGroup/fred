@@ -492,6 +492,30 @@
           "title": "Aperçu de la présentation",
           "launcher": "Viewer PPT"
         }
+      },
+      "summary": {
+        "open": "Ce qui a été construit",
+        "title": "Ce qui a été construit",
+        "close": "Fermer",
+        "count_one": "Cette présentation compte {{count}} diapositive.",
+        "count_other": "Cette présentation compte {{count}} diapositives.",
+        "untitled": "Diapositive sans titre",
+        "notes": {
+          "text_shortened": "Un texte a été raccourci pour tenir sur la diapositive.",
+          "content_left_out": "Une partie du contenu n'avait pas de place sur cette diapositive et a été laissée de côté.",
+          "items_left_out_one": "{{count}} élément a été laissé de côté : la diapositive n'a pas de place pour plus.",
+          "items_left_out_other": "{{count}} éléments ont été laissés de côté : la diapositive n'a pas de place pour plus.",
+          "image_unusable_one": "{{count}} image n'a pas pu être utilisée.",
+          "image_unusable_other": "{{count}} images n'ont pas pu être utilisées.",
+          "table_left_out": "Le tableau ne tenait pas et a été laissé de côté.",
+          "table_text_smaller": "Le texte du tableau a été réduit pour tenir.",
+          "text_overflows": "Un titre est trop long pour une ligne et peut déborder sur le texte en dessous.",
+          "left_empty": "Cette diapositive reste vide : elle attend une liste et aucune n'a été fournie.",
+          "fixed_slide": "Cette diapositive est reprise telle quelle du template, son contenu a donc été laissé de côté.",
+          "list_continues": "La liste continue sur la diapositive suivante.",
+          "list_continuation": "Suite de la liste de la diapositive précédente.",
+          "other_kind": "Construite en « {{built}} » au lieu de « {{asked}} »."
+        }
       }
     }
   },

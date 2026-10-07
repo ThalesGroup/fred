@@ -80,4 +80,12 @@ describe("PptPreviewCardRenderer", () => {
   it("opens the ppt_filler pane for a part that predates the field", () => {
     expect(clickOpen(deck)).toEqual([{ capabilityId: "ppt_filler", widget: "ppt_preview_pane" }]);
   });
+
+  it('offers "What was built" only for a deck that carries a summary', () => {
+    const label = '[aria-label="capability.ppt_builder.summary.open"]';
+    expect(mount(deck).querySelector(label)).toBeNull();
+    act(() => root?.unmount());
+    const slide = { number: 1, part: 1, parts: 1, title: "A", kind: "cover", template: "Cover", notes: [] };
+    expect(mount({ ...deck, summary: [slide] }).querySelector(label)).not.toBeNull();
+  });
 });

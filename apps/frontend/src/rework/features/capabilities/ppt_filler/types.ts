@@ -43,4 +43,26 @@ export interface PptPreviewPartData {
   file_name?: string;
   /** Capability that produced the deck, whose pane opens it (absent on older parts: ppt_filler). */
   capability_id?: string;
+  /** ppt_builder only: each rendered slide as built, read by the "What was built" dialog. */
+  summary?: BuiltSlide[] | null;
+}
+
+/** What happened to one slide, as a code the UI words for the user. */
+export interface BuildNote {
+  code: string;
+  count?: number | null;
+  /** The requested kind, for `other_kind`. */
+  kind?: string | null;
+}
+
+/** One rendered slide; `number` is the plan's, shared by both parts of a split list. */
+export interface BuiltSlide {
+  number: number;
+  part: number;
+  parts: number;
+  title: string;
+  kind: string;
+  /** Label of the template slide it was built on. */
+  template: string;
+  notes: BuildNote[];
 }

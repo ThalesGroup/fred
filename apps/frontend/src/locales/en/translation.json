@@ -492,6 +492,30 @@
           "title": "Presentation preview",
           "launcher": "PPT viewer"
         }
+      },
+      "summary": {
+        "open": "What was built",
+        "title": "What was built",
+        "close": "Close",
+        "count_one": "This presentation has {{count}} slide.",
+        "count_other": "This presentation has {{count}} slides.",
+        "untitled": "Untitled slide",
+        "notes": {
+          "text_shortened": "Some text was shortened to fit.",
+          "content_left_out": "Some content had no place on this slide and was left out.",
+          "items_left_out_one": "{{count}} item was left out: the slide has no room for more.",
+          "items_left_out_other": "{{count}} items were left out: the slide has no room for more.",
+          "image_unusable_one": "{{count}} image could not be used.",
+          "image_unusable_other": "{{count}} images could not be used.",
+          "table_left_out": "The table did not fit and was left out.",
+          "table_text_smaller": "The table text was made smaller to fit.",
+          "text_overflows": "A heading is too long for one line and may run into the text below.",
+          "left_empty": "This slide stays empty: it expects a list and none was given.",
+          "fixed_slide": "This slide is used as it is in the template, so its content was left out.",
+          "list_continues": "The list continues on the next slide.",
+          "list_continuation": "Continuation of the list from the previous slide.",
+          "other_kind": "Built as “{{built}}” instead of “{{asked}}”."
+        }
       }
     }
   },
