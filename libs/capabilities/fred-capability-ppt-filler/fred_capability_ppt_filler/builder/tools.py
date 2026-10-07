@@ -277,7 +277,14 @@ def _schema_for(
             List[Dict[str, Any]],
             Field(
                 default_factory=list,
-                description="replace, insert: the new slides, written as in `slides`.",
+                description=(
+                    "replace, insert: the new slides, each written as an entry of `slides`, "
+                    "with the same fields and rooms: title, subtitle, bullets [...], columns "
+                    "[{heading, bullets}], items [{number, heading, text, label, image}], "
+                    "image, images, "
+                    + ("table {header, rows}, " if "table" in kinds else "")
+                    + "notes, kind."
+                ),
             ),
         ),
     )
