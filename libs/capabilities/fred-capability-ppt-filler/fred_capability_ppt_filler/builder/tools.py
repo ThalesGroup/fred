@@ -784,6 +784,8 @@ def _description(
         '[...]}, {"op": "insert", "after": N (0 = at the start), "slides": [...]}, {"op": "remove", "slide": '
         'N}, {"op": "edit", "slide": N, "field": "title" | "bullets[1]" | "items[2].label" (indexes from 0), '
         '"value": ...}. The other slides stay exactly as they were and the whole deck is rebuilt. '
+        "To change text inside a slide, use `edit`: the slide keeps its design; `replace` is for "
+        "a different slide (one of the same kind keeps the replaced slide's design when it fits). "
         "For each slide write its content: title, subtitle, bullets (telegraphic, "
         "'- ' prefix for a sub-bullet, **bold** allowed), columns [{heading, bullets}], items [{number, "
         "heading, text, label, image}], image/images (document_ids from list_images_in_folder), "
@@ -968,6 +970,14 @@ def build_builder_tools(
         # Stored as delivered: a split list's parts become slides of their own,
         # so the file, the model and later `changes` share one numbering.
         deck, patterns, numbers = assignment.deck(plan)
+        deck = deck.model_copy(
+            update={
+                "slides": [
+                    s.model_copy(update={"built_on": p.id if p else None})
+                    for s, p in zip(deck.slides, patterns)
+                ]
+            }
+        )
         try:
             result = await asyncio.to_thread(
                 _prepare_and_render,

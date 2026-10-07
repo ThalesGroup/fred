@@ -386,7 +386,10 @@ def apply_changes(base: DeckPlan, changes: List[SlideChange]) -> DeckPlan:
     slides: List[SlidePlan] = list(inserts.get(0, []))
     for number, slide in enumerate(base.slides, start=1):
         if number in replaced:
-            slides.extend(replaced[number])
+            # The replacement keeps the replaced slide's design when it fits.
+            new = replaced[number]
+            first = new[0].model_copy(update={"built_on": slide.built_on})
+            slides.extend([first, *new[1:]] if new[0].built_on is None else new)
         elif number not in removed:
             slides.append(edited.get(number, slide))
         slides.extend(inserts.get(number, []))

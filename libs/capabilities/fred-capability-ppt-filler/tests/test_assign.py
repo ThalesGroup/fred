@@ -661,6 +661,21 @@ def test_a_delivered_split_rebuilds_as_it_was_and_still_counts_once():
     assert first and second and first.id == second.id
 
 
+def test_a_delivered_slide_keeps_its_template_slide_while_it_fits_its_kind():
+    items = [PlanItem(heading=f"H{i}", text="t") for i in range(3)]
+    for built_on in ("slide:2", "slide:3"):
+        slide = SlidePlan(title="Offers", items=items, built_on=built_on)
+        (pattern,) = assign(_offers(), _plan(slide)).patterns
+        assert pattern and pattern.id == built_on
+    # Another kind asked, or content that no longer fits there: assigned anew.
+    asked = SlidePlan(title="Offers", bullets=["a"], kind="bullets", built_on="slide:3")
+    (pattern,) = assign(_offers(), _plan(asked)).patterns
+    assert pattern and pattern.id == "layout:1"
+    many = [PlanItem(heading=f"H{i}", text="t") for i in range(5)]
+    split = SlidePlan(title="Offers", items=many, built_on="slide:3")
+    assert assign(_offers(), _plan(split)).parts
+
+
 def test_delivered_notes_name_the_files_slide_numbers():
     """A list split on slide 2 makes the next slide the file's slide 4."""
     items = [PlanItem(heading=f"H{i}", text="t") for i in range(7)]

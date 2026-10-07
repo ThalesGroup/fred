@@ -316,6 +316,72 @@ async def test_a_flattened_replace_is_built_as_its_slide(monkeypatch, deck_plan_
     assert (stored.slides[1].title, stored.slides[1].bullets) == ("Plan", ["A", "B"])
 
 
+def test_a_replacement_inherits_the_replaced_slides_template_slide():
+    base = DeckPlan(
+        slides=[
+            s.model_copy(update={"built_on": f"slide:{n}"})
+            for n, s in enumerate(BASE.slides)
+        ]
+    )
+    two = [{"title": "A", "bullets": ["a"]}, {"title": "B", "bullets": ["b"]}]
+    plan = apply_changes(
+        base, [SlideChange.model_validate({"op": "replace", "slide": 4, "slides": two})]
+    )
+    assert [s.built_on for s in plan.slides] == [
+        "slide:0",
+        "slide:1",
+        "slide:2",
+        "slide:3",
+        None,
+    ]
+
+
+@pytest.mark.asyncio
+async def test_a_text_replace_keeps_the_replaced_slides_design(
+    monkeypatch, deck_plan_store
+):
+    """Live: a closing slide replaced only to change its text moved to another
+    template slide. A replacement of the same kind that fits stays where it was."""
+    workspace = FakeWorkspace()
+    deck = [
+        COVER,
+        {"title": "Part A", "kind": "section"},
+        {"title": "Points", "bullets": ["a"]},
+    ]
+    text, result = await _Turn(monkeypatch, workspace).build(slides=deck)
+    assert not result.is_error, text
+    key = ("sess-9", "inst-7")
+    stored = DeckPlan.model_validate_json(deck_plan_store.plans[key])
+    built_on = stored.slides[1].built_on
+    assert built_on in ("layout:2", "layout:5")
+    # Pin it on the other section variant, as an earlier build could have chosen.
+    other = "layout:5" if built_on == "layout:2" else "layout:2"
+    stored.slides[1].built_on = other
+    deck_plan_store.plans[key] = stored.model_dump_json()
+
+    used: List[Any] = []
+    real = tools_mod.render_deck
+
+    def recording(template, inventory, plan, patterns, images, numbers=None):
+        used.append([p.id for p in patterns])
+        return real(template, inventory, plan, patterns, images, numbers)
+
+    monkeypatch.setattr(tools_mod, "render_deck", recording)
+    replace = {
+        "op": "replace",
+        "slide": 2,
+        "slides": [{"title": "Part B", "kind": "section"}],
+    }
+    text, result = await _Turn(monkeypatch, workspace).build(changes=[replace])
+    assert not result.is_error, text
+    assert used[-1][1] == other
+    # Another kind is a different slide: the pin does not hold it.
+    text, _ = await _Turn(monkeypatch, workspace).build(
+        changes=[{**replace, "slides": [{"title": "Part B", "kind": "quote"}]}]
+    )
+    assert used[-1][1] not in ("layout:2", "layout:5")
+
+
 @pytest.mark.asyncio
 async def test_a_later_turn_edit_keeps_every_other_slide_identical(
     monkeypatch, deck_plan_store

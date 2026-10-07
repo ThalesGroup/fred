@@ -626,6 +626,20 @@ class _Slide:
     start: int = 0
 
 
+def _kept(
+    slide: _Slide, candidates: List[Tuple[Pattern, float]]
+) -> List[Tuple[Pattern, float]]:
+    """The template slide the delivered deck showed this slide on, alone, while
+    it still fits there with the same kind: a text change keeps its design."""
+    asked = slide.plan.kind
+    kept = [
+        c
+        for c in candidates
+        if c[0].id == slide.plan.built_on and asked in (None, c[0].kind)
+    ]
+    return kept or candidates
+
+
 def _allowed(pattern: Pattern, slide: _Slide, has_cover: bool) -> bool:
     if pattern.kind == "cover":
         return slide.first
@@ -1388,7 +1402,7 @@ def assign(
             continue
         slide.tiers = _tiers(slide, has_cover)
         slide.checked = [(p, *misfit(p, slide.plan, size)) for p in pool]
-        slide.candidates = _candidates(slide, has_cover)
+        slide.candidates = _kept(slide, _candidates(slide, has_cover))
         own_kind = (
             bool(slide.candidates) and slide.candidates[0][0].kind in slide.tiers[0]
         )

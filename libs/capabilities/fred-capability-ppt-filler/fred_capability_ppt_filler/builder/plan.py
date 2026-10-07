@@ -314,6 +314,8 @@ class SlidePlan(BaseModel):
     # Keys of the call that match no field and no alias (`key 'text'`): the
     # assigner returns them as a problem rather than drop their text.
     ignored_fields: SkipJsonSchema[List[str]] = Field(default_factory=list)
+    # The template slide the delivered deck shows it on: kept while it fits.
+    built_on: SkipJsonSchema[Optional[str]] = None
 
     @model_validator(mode="before")
     @classmethod

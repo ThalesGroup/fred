@@ -207,6 +207,10 @@ def test_the_tool_tells_the_agent_one_call_builds_the_whole_deck():
     )
     assert "To CHANGE the last deck of this conversation" in description
     assert '{"op": "insert", "after": N (0 = at the start)' in description
+    assert (
+        "To change text inside a slide, use `edit`: the slide keeps its design"
+        in description
+    )
     assert "Never split a deck across several calls" in description
     assert "The first slide is always the template's cover" in description
     # The choice guide names only kinds this template offers.
