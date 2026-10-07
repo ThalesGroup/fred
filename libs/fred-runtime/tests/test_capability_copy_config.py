@@ -402,3 +402,29 @@ def test_export_endpoint_unreadable_file_is_422(tmp_path, monkeypatch) -> None:
         assert "deck.pptx" in response.json()["detail"]
     finally:
         client.__exit__(None, None, None)
+
+
+def test_endpoint_routes_the_target_save_with_the_destination_team(
+    tmp_path, monkeypatch
+) -> None:
+    routing_by_team: dict[str, object] = {}
+
+    def _services(**kwargs):
+        routing_by_team[kwargs["team_id"]] = kwargs.get("routing")
+        return RuntimeServices(agent_assets=_MemoryAssets({"deck.pptx": b"pptx-bytes"}))
+
+    monkeypatch.setattr(agent_app_module, "_build_capability_save_services", _services)
+    client = _app_with_capabilities(tmp_path, monkeypatch, _DeckCapability())
+    try:
+        response = client.post(
+            "/pod/v1/agents/capabilities/deck_copy/copy-config",
+            json=_request("team-b").model_dump(mode="json"),
+            params={"template_agent_id": "deck", "chat_default_profile_id": "p1"},
+        )
+        assert response.status_code == 200
+        target = routing_by_team["team-b"]
+        assert getattr(target, "template_agent_id") == "deck"
+        assert getattr(target, "chat_default_profile_id") == "p1"
+        assert routing_by_team["team-a"] is None
+    finally:
+        client.__exit__(None, None, None)

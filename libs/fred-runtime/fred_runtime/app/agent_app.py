@@ -5966,6 +5966,7 @@ def _build_agent_router(
         capability_id: str,
         team_id: str,
         agent_instance_id: str,
+        routing: CapabilitySaveRouting | None = None,
     ) -> SaveContext:
         user_id = (caller.uid if caller is not None else None) or "anonymous"
         auth = http_request.headers.get("Authorization", "")
@@ -5981,6 +5982,7 @@ def _build_agent_router(
                 team_id=team_id,
                 access_token=auth.removeprefix("Bearer ").strip() or None,
                 agent_instance_id=agent_instance_id,
+                routing=routing,
             ),
         )
 
@@ -6027,6 +6029,8 @@ def _build_agent_router(
                     capability_id,
                     body.target_team_id,
                     body.target_agent_instance_id,
+                    # The destination team's routing, as validate-config reads it.
+                    parse_save_routing(http_request.query_params),
                 ),
             )
         except CapabilityCopyRejectedError as exc:
