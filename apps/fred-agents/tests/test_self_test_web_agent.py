@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 from types import SimpleNamespace
 from typing import cast
+from urllib.parse import urlsplit
 
 import pytest
 from fred_agents.registry import build_registry
@@ -109,10 +110,8 @@ class _Offline(_ProtectiveEngine):
 
     async def execute(self, request: WebResearchRequest) -> WebResearchResult:
         if isinstance(request, FetchRequest) and (
-            "httpbin" in request.url
-            or "nip.io" in request.url
-            or "example.com" in request.url
-        ):
+            urlsplit(request.url).hostname or ""
+        ).endswith(("httpbin.org", "nip.io", "example.com")):
             raise WebResearchError("unavailable")
         if not isinstance(request, FetchRequest):
             raise WebResearchError("provider_failed")

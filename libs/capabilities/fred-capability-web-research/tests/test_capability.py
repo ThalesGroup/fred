@@ -162,7 +162,8 @@ async def test_graph_uses_same_native_tools_and_error_artifacts():
     result = await graph.invoke_runtime_tool("web_search", {"query": "evidence"})
     assert isinstance(result, dict)
     assert result["is_error"] is False
-    assert "https://example.com" in result["blocks"][0]["text"]
+    text = result["blocks"][0]["text"]
+    assert json.loads(text)["results"][0]["url"] == "https://example.com"
     port.fail = True
     result = await graph.invoke_runtime_tool("web_search", {"query": "evidence"})
     assert isinstance(result, dict)
