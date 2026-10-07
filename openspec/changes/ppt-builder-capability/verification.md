@@ -653,6 +653,18 @@ mean 54 chars with 5/11 rebuilds (E), 83 chars with 5/13 rebuilds (F).
 
 ## Checks
 
+- WP23.2 (outdated analysis refresh): package `make code-quality` passed; `make test` 407
+  passed, 5 skipped. New in `test_analysis_job.py`: an analysis one `ANALYSIS_VERSION` behind
+  stays `ready` under two concurrent readiness checks and a turn's read, exactly one job starts,
+  the row stays `succeeded` with `current: true` while it runs, the old inventory serves the
+  turn, and after the job the new version is stored and cached; a refresh whose analysis fails
+  keeps the old inventory and version, spends `MAX_ATTEMPTS`, reports `current: false`, starts
+  no second job on later checks, and a forced re-run starts one with the agent still ready. In
+  `test_builder_capability.py` the re-run route on an outdated analysis keeps it `succeeded`.
+  No schema change (no migration), no API field change (the `current` comment only), no
+  frontend change: the existing "outdated" message and re-run button now show only after a
+  failed refresh. Not proven: several real replicas racing on Postgres (the claim is one
+  conditional `UPDATE`, as `claim_interrupted`).
 - WP23.1 (first deck from the history): package `make code-quality` passed; `make test` 405
   passed, 5 skipped. `test_build_tool.py`: the two listing tests deleted with `_deck_delivered`
   and the `FsEntry`/`ls` fakes (tests and eval); new: a delivered deck's real text in the

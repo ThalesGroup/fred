@@ -61,9 +61,6 @@ from pptx import Presentation
 from pydantic import BaseModel, Field, model_validator
 
 from fred_capability_ppt_filler.builder import analysis_job
-from fred_capability_ppt_filler.builder.analysis import (
-    ANALYSIS_VERSION,
-)
 from fred_capability_ppt_filler.builder.analysis_job import (
     AnalysisRecord,
     AnalysisRow,
@@ -72,6 +69,7 @@ from fred_capability_ppt_filler.builder.analysis_job import (
     get_analysis_store,
     labelling_key,
     ready_inventory,
+    refresh_outdated,
     restart_from_stored,
     spawn_analysis,
     status_response,
@@ -245,10 +243,13 @@ def _build_router() -> APIRouter:
         status = status_response(record).status
         if status in ("pending", "running"):
             raise HTTPException(status_code=409, detail="The analysis is running.")
-        if status == "succeeded" and record.analysis_version >= ANALYSIS_VERSION:
+        if status == "succeeded" and not record.outdated():
             raise HTTPException(status_code=409, detail="The analysis succeeded.")
         store = get_analysis_store()
-        await restart_from_stored(store, record)
+        if status == "succeeded":  # outdated: the agent keeps it meanwhile
+            await refresh_outdated(store, record, force=True)
+        else:
+            await restart_from_stored(store, record)
         refreshed = await store.get(instance_id)
         if refreshed is None:
             raise HTTPException(status_code=404, detail="No template analysis.")
@@ -550,6 +551,9 @@ class PptBuilderCapability(
             analysis_job.remember_port(instance, ctx.services.capability_model)
             await restart_from_stored(store, record, labelling_key=key)
         else:
+            if record.outdated():
+                analysis_job.remember_port(instance, ctx.services.capability_model)
+                await refresh_outdated(store, record, force=True)
             inventory = (
                 record.inventory()
                 if record.matches(config.template_sha256, key)
@@ -564,11 +568,11 @@ class PptBuilderCapability(
 
     @staticmethod
     def _needs_rerun(record: AnalysisRecord, key: str) -> bool:
-        if record.labelling_key != key or record.status == "failed":
-            return True
-        if record.status == "succeeded":
-            return record.analysis_version < ANALYSIS_VERSION
-        return record.interrupted(analysis_job._utcnow())
+        return (
+            record.labelling_key != key
+            or record.status == "failed"
+            or record.interrupted(analysis_job._utcnow())
+        )
 
     async def _accept_upload(
         self, config: PptBuilderConfig, content: bytes, ctx: SaveContext

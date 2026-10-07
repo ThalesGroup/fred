@@ -42,7 +42,7 @@ The reliable approach in the market (Copilot in PowerPoint, Anthropic's pptx ski
 - `libs/fred-sdk` + `libs/fred-runtime`: a turn-free capability model port added to `RuntimeServices` and injected on the save path and the background path; an optional `supports_vision` flag on model profiles (design D3).
 - `apps/fred-agents/config/models_catalog.yaml`: vision flag on capable profiles.
 - `apps/frontend/src/rework/features/capabilities/ppt_builder/`: analysis-status state, simplified review dialog, regenerated API slice; `locales/{en,fr}`.
-- Stored agent configs: `ANALYSIS_VERSION` bump; older inventories are recomputed through the existing re-analysis path, now in the background. `PatternSource="composed"` disappears; no released config holds it.
+- Stored agent configs: `ANALYSIS_VERSION` bump; older inventories stay in use and are recomputed in the background when first seen. `PatternSource="composed"` disappears; no released config holds it.
 - Docs: `RUNTIME-EXECUTION-CONTRACT.md` §8 entry (new `RuntimeServices` port), `AUTHORING.md` (turn-free model port), `COMPONENT-UX.md` (review panel), package `README.md`; migration note per `docs/swift/ops/MIGRATION-GUIDES.md`.
 - Out of scope: the control-plane validate-config timeout (handled separately).
 - Tracking: GitHub issue #2679.

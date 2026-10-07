@@ -40,6 +40,7 @@ from sqlalchemy import (
     LargeBinary,
     String,
     Text,
+    case,
     select,
     update,
 )
@@ -178,6 +179,12 @@ class AnalysisRecord:
     def interrupted(self, now: datetime) -> bool:
         return self.status in ("pending", "running") and self.lease_until < now
 
+    def outdated(self) -> bool:
+        return self.status == "succeeded" and self.analysis_version < ANALYSIS_VERSION
+
+    def refreshing(self, now: datetime) -> bool:
+        return self.outdated() and self.lease_until >= now
+
     def view_status(self, now: datetime) -> ViewStatus:
         return "interrupted" if self.interrupted(now) else self.status
 
@@ -228,6 +235,11 @@ class AnalysisStore(ABC):
     @abstractmethod
     async def claim_interrupted(self, instance_id: str) -> Optional[str]:
         """Take over an interrupted analysis with attempts left; one replica wins."""
+
+    @abstractmethod
+    async def claim_refresh(self, instance_id: str, *, force: bool) -> Optional[str]:
+        """Take an outdated succeeded analysis for a re-run that keeps it in use
+        meanwhile; ``force`` (an author's action) ignores the attempts spent."""
 
     @abstractmethod
     async def heartbeat(self, instance_id: str, job_id: str) -> bool: ...
@@ -381,12 +393,34 @@ class SqlAnalysisStore(AnalysisStore):
         )
         return job_id if claimed else None
 
+    async def claim_refresh(self, instance_id: str, *, force: bool) -> Optional[str]:
+        job_id = str(uuid.uuid4())
+        now = _utcnow()
+        where = [
+            AnalysisRow.status == "succeeded",
+            AnalysisRow.analysis_version < ANALYSIS_VERSION,
+            AnalysisRow.lease_until < now,
+        ]
+        if not force:
+            where.append(AnalysisRow.attempts < MAX_ATTEMPTS)
+        claimed = await self._update(
+            instance_id,
+            *where,
+            job_id=job_id,
+            attempts=1 if force else AnalysisRow.attempts + 1,
+            lease_until=now + timedelta(seconds=LEASE_SECONDS),
+        )
+        return job_id if claimed else None
+
     async def heartbeat(self, instance_id: str, job_id: str) -> bool:
+        # A refresh keeps its row succeeded: the old inventory stays in use.
         return await self._update(
             instance_id,
             AnalysisRow.job_id == job_id,
-            AnalysisRow.status.in_(("pending", "running")),
-            status="running",
+            AnalysisRow.status.in_(("pending", "running", "succeeded")),
+            status=case(
+                (AnalysisRow.status == "succeeded", "succeeded"), else_="running"
+            ),
             lease_until=_utcnow() + timedelta(seconds=LEASE_SECONDS),
         )
 
@@ -401,16 +435,21 @@ class SqlAnalysisStore(AnalysisStore):
             instance_id,
             AnalysisRow.job_id == job_id,
             status="succeeded",
+            analysis_version=ANALYSIS_VERSION,
             inventory_json=inventory.model_dump_json(),
             patterns_pdf=patterns_pdf,
             error=None,
         )
 
     async def fail(self, instance_id: str, job_id: str, error: str) -> bool:
+        # A failed refresh keeps the old result and is not retried automatically.
+        refresh = AnalysisRow.status == "succeeded"
         return await self._update(
             instance_id,
             AnalysisRow.job_id == job_id,
-            status="failed",
+            status=case((refresh, "succeeded"), else_="failed"),
+            attempts=case((refresh, MAX_ATTEMPTS), else_=AnalysisRow.attempts),
+            lease_until=_utcnow(),
             error=error[:2000],
         )
 
@@ -482,7 +521,8 @@ def clear_caches() -> None:
 async def ready_inventory(
     store: AnalysisStore, instance_id: str, sha: str, key: str
 ) -> Optional[TemplateInventory]:
-    """The succeeded analysis for this exact template and labelling, or None."""
+    """The succeeded analysis for this exact template and labelling, or None.
+    An outdated one is still served, uncached until its refresh lands."""
     cache_key = (instance_id, sha, key)
     cached = _inventories.get(cache_key)
     if cached is not None:
@@ -491,7 +531,9 @@ async def ready_inventory(
     if record is None or not record.matches(sha, key):
         return None
     inventory = record.inventory()
-    if inventory is not None:
+    if inventory is not None and record.outdated():
+        await _refresh_quietly(store, record)
+    elif inventory is not None:
         _inventories.set(cache_key, inventory)
     return inventory
 
@@ -650,15 +692,45 @@ async def recover_interrupted(store: AnalysisStore, instance_id: str) -> bool:
     return True
 
 
+async def refresh_outdated(
+    store: AnalysisStore, record: AnalysisRecord, *, force: bool = False
+) -> bool:
+    """Re-run an analysis made by older rules from its stored template, its
+    result staying in use meanwhile. One replica wins the claim; a failure is
+    not retried unless ``force`` (an author's action)."""
+    if not record.outdated() or record.refreshing(_utcnow()):
+        return False
+    if not force and record.attempts >= MAX_ATTEMPTS:
+        return False  # checked before the claim: no write on every turn
+    instance_id = record.agent_instance_id
+    job_id = await store.claim_refresh(instance_id, force=force)
+    if job_id is None:
+        return False
+    template = await store.template(instance_id)
+    if template is None:
+        return False
+    logger.info("Refreshing the outdated analysis of %s", instance_id)
+    spawn_analysis(store, instance_id, job_id, template, record.labelling_key)
+    return True
+
+
+async def _refresh_quietly(store: AnalysisStore, record: AnalysisRecord) -> None:
+    try:
+        await refresh_outdated(store, record)
+    except Exception:  # the outdated result still serves; the next check retries
+        logger.warning("Outdated analysis refresh not started", exc_info=True)
+
+
 async def analysis_readiness(
     store: AnalysisStore, instance_id: str, sha: str, key: str
 ) -> CapabilityReadiness:
     """Readiness of the analysis for this template and labelling; restarts an
-    interrupted one (bounded by ``MAX_ATTEMPTS``)."""
+    interrupted one (bounded by ``MAX_ATTEMPTS``) and refreshes an outdated one."""
     record = await store.get(instance_id, with_inventory=False)
     if record is None or not record.matches(sha, key):
         return CapabilityReadiness.failed(_MISSING_DETAIL)
     if record.status == "succeeded":
+        await _refresh_quietly(store, record)
         return CapabilityReadiness.ready()
     if record.status == "failed":
         return CapabilityReadiness.failed(
@@ -683,7 +755,7 @@ class AnalysisStatusResponse(BaseModel):
     template_sha256: str
     labelling_key: str
     analysis_version: int
-    # False when the rules changed since: the next save re-runs it.
+    # False when the rules changed since and no refresh is running: worth a re-run.
     current: bool
     error: Optional[str] = None
     updated_at: datetime
@@ -701,7 +773,7 @@ def status_response(record: AnalysisRecord) -> AnalysisStatusResponse:
         template_sha256=record.template_sha256,
         labelling_key=record.labelling_key,
         analysis_version=record.analysis_version,
-        current=record.analysis_version >= ANALYSIS_VERSION,
+        current=not record.outdated() or record.refreshing(now),
         error=_INTERRUPTED_DETAIL if status == "interrupted" else record.error,
         updated_at=record.updated_at,
         has_thumbnails=record.has_thumbnails,

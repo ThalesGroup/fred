@@ -253,3 +253,91 @@ async def test_a_lost_row_is_rebuilt_from_the_stored_template(analysis_db):
     await _save(stored, assets=assets)
     await drain()
     assert (await PptBuilderCapability().readiness(stored, IDENTITY)).state == "ready"
+
+
+async def _outdated(analysis_db, monkeypatch) -> tuple[PptBuilderConfig, list]:
+    """A succeeded analysis made by older rules; records each job started."""
+    stored = await _save(PptBuilderConfig(use_vision=False), _uploads())
+    await drain()
+    await age_row(analysis_db, INSTANCE, analysis_version=ANALYSIS_VERSION - 1)
+    analysis_job.clear_caches()
+    jobs: list = []
+    original = analysis_job.run_analysis
+
+    async def _recording(store, instance_id, job_id, template, port, key):
+        jobs.append(job_id)
+        await original(store, instance_id, job_id, template, port, key)
+
+    monkeypatch.setattr(analysis_job, "run_analysis", _recording)
+    return stored, jobs
+
+
+@pytest.mark.asyncio
+async def test_an_outdated_analysis_stays_ready_and_is_refreshed_once(
+    analysis_db, monkeypatch
+):
+    stored, jobs = await _outdated(analysis_db, monkeypatch)
+    release = asyncio.Event()
+
+    async def _slow_label(inventory, template, pdf, port, *, profile_id, use_vision):
+        await release.wait()
+        return inventory
+
+    monkeypatch.setattr(analysis_job, "label_inventory", _slow_label)
+    store = get_analysis_store()
+    capability = PptBuilderCapability()
+    # Readiness checks and a turn notice it together: one refresh starts.
+    states = await asyncio.gather(
+        capability.readiness(stored, IDENTITY),
+        capability.readiness(stored, IDENTITY),
+        ready_inventory(store, INSTANCE, SHA, "rules"),
+    )
+    assert [s.state for s in states[:2]] == ["ready", "ready"]
+    assert states[2] is not None  # the old inventory still serves the turn
+    await asyncio.sleep(0)
+    assert len(jobs) == 1
+    record = await store.get(INSTANCE)
+    assert record is not None and record.status == "succeeded"
+    assert status_response(record).current  # being refreshed: no re-run offered
+    assert (await capability.readiness(stored, IDENTITY)).state == "ready"
+    assert len(jobs) == 1
+
+    release.set()
+    await drain()
+    record = await store.get(INSTANCE)
+    assert record is not None and record.analysis_version == ANALYSIS_VERSION
+    assert await ready_inventory(store, INSTANCE, SHA, "rules") is not None
+    assert analysis_job.cached_inventory(INSTANCE, SHA, "rules") is not None
+
+
+@pytest.mark.asyncio
+async def test_a_failed_refresh_keeps_the_old_analysis_and_is_not_retried(
+    analysis_db, monkeypatch
+):
+    stored, jobs = await _outdated(analysis_db, monkeypatch)
+
+    def _broken(_content):
+        return AnalyzeResult(
+            errors=[AnalysisError(code="invalid_upload", message="No slide master.")]
+        )
+
+    monkeypatch.setattr(analysis_job, "analyze_template", _broken)
+    capability = PptBuilderCapability()
+    assert (await capability.readiness(stored, IDENTITY)).state == "ready"
+    await drain()
+    store = get_analysis_store()
+    record = await store.get(INSTANCE)
+    assert record is not None and record.status == "succeeded"
+    assert record.analysis_version == ANALYSIS_VERSION - 1
+    assert record.inventory() is not None and record.attempts == MAX_ATTEMPTS
+    assert not status_response(record).current  # the author may re-run it
+
+    assert (await capability.readiness(stored, IDENTITY)).state == "ready"
+    assert await ready_inventory(store, INSTANCE, SHA, "rules") is not None
+    await drain()
+    assert len(jobs) == 1
+    # The author's re-run still starts one, and the agent stays ready meanwhile.
+    assert await analysis_job.refresh_outdated(store, record, force=True)
+    assert (await capability.readiness(stored, IDENTITY)).state == "ready"
+    await drain()
+    assert len(jobs) == 2

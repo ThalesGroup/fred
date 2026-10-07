@@ -174,8 +174,11 @@ The system SHALL complete the agent save without waiting for the template analys
 
 #### Scenario: Analysis rules change
 
-- **WHEN** an agent's stored analysis was produced by older analysis rules and the agent is saved
-- **THEN** the analysis is run again in the background from the stored template
+- **GIVEN** an agent whose succeeded analysis was produced by older analysis rules
+- **WHEN** its readiness is checked, a turn reads the analysis, or the agent is saved
+- **THEN** the agent stays available and its turns keep using the stored analysis, and one re-run starts in the background from the stored template, without a user token
+- **AND** concurrent checks on any replica start no second re-run while one is running, and the agent form shows the analysis as current meanwhile
+- **AND** once the re-run succeeds its result is used; when it fails, the stored analysis stays in use, no re-run starts automatically again, and the form offers the re-run action, which re-runs it the same way
 
 ### Requirement: Author review
 
