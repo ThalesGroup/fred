@@ -854,54 +854,6 @@
   },
   "mcp": {
     "servers": {
-      "corpus": {
-        "description": "Permet à votre agent d'accéder à des outils de gestion de corpus documentaire (téléversement, traitement, vectorisation)",
-        "name": "Gestion du corpus documentaire",
-        "fields": {
-          "chat_options": {
-            "libraries_selection": {
-              "title": "Sélecteur de bibliothèque de documents",
-              "description": "Afficher un sélecteur de bibliothèque de documents dans l'interface de discussion."
-            },
-            "libraries_binding": {
-              "title": "Lier à des bibliothèques spécifiques",
-              "description": "Restreindre cet agent à un ensemble fixe de bibliothèques de documents choisies lors de la configuration."
-            },
-            "bound_library_ids": {
-              "title": "Bibliothèques de documents liées",
-              "description": "Restreindre le sélecteur de bibliothèque du chat à cet ensemble présélectionné de bibliothèques de documents."
-            },
-            "documents_selection": {
-              "title": "Sélecteur de document",
-              "description": "Afficher un sélecteur de document dans l'interface de discussion."
-            },
-            "attach_files": {
-              "title": "Pièces jointes",
-              "description": "Permettre aux utilisateurs de joindre des fichiers (PDF, images, texte) à leurs messages dans l'interface de discussion."
-            },
-            "search_policy_enabled": {
-              "title": "Sélecteur de politique de recherche dans le chat",
-              "description": "Permettre aux utilisateurs de changer la politique de recherche depuis l'interface de discussion."
-            },
-            "search_policy": {
-              "title": "Politique de recherche par défaut",
-              "description": "Stratégie de recherche utilisée lorsque l'utilisateur ne l'a pas modifiée."
-            },
-            "search_rag_scope_enabled": {
-              "title": "Sélecteur de portée RAG dans le chat",
-              "description": "Permettre aux utilisateurs de changer la portée RAG depuis l'interface de discussion."
-            },
-            "search_rag_scope": {
-              "title": "Portée RAG par défaut",
-              "description": "Portée utilisée lorsque l'utilisateur ne l'a pas modifiée."
-            }
-          }
-        }
-      },
-      "filesystem": {
-        "description": "Capacité de parcourir l'ensemble des dossiers et fichiers présents dans les ressources.",
-        "name": "Parcourir l'arborescence des ressources"
-      },
       "jira": {
         "description": "Permet à votre agent d'interagir avec Jira",
         "name": "Accès Jira"
@@ -1985,32 +1937,14 @@
       "workspaceTitle": "Fichiers",
       "pageTitle": "Ressources de l'équipe",
       "pageSubtitle": "Gérer les ressources locales, manuellement ajoutées à l'équipe",
-      "rootsAria": "Espaces de ressources",
       "storageQuota": "Stockage",
       "roots": {
         "resources": "Corpus d'équipe",
-        "mine": "Mon espace",
-        "team": "Espace d'équipe",
-        "agents": "Agents",
-        "removedAgent": "Agent supprimé",
         "indexed": "corpus indexé",
         "private": "privé · dans {{team}}",
         "privatePersonal": "privé · personnel",
         "fileCount": "{{count}} fichiers",
         "empty": "vide"
-      },
-      "hints": {
-        "resources": "La base de connaissances de l'équipe, indexée pour la recherche IA. Créez d'abord une bibliothèque (dossier), puis ajoutez les documents à l'intérieur. Un fichier au niveau supérieur n'a pas de bibliothèque et ne sera pas indexé.",
-        "mine": "Vos fichiers privés dans cette équipe. Vous seul·e les voyez. Brouillons, modèles, tout ce qui est personnel.",
-        "team": "Fichiers partagés avec toute l'équipe. Déposez des modèles communs, ou utilisez « Copier dans l'espace d'équipe » pour partager un fichier.",
-        "agents": "Les fichiers créés pour vous par vos agents, regroupés par agent. Ils restent privés, et c'est vous qui décidez quoi partager avec l'équipe."
-      },
-      "provenance": {
-        "origins": {
-          "uploaded": "Déposé",
-          "agent_generated": "Généré",
-          "shared_copy": "Partagé"
-        }
       },
       "search": {
         "placeholder": "Rechercher",
@@ -2046,7 +1980,6 @@
         "addFile": "Ajouter des fichiers",
         "addFileHint": "Sélectionnez d'abord un dossier",
         "back": "Revenir au dossier précédent",
-        "copyToTeam": "Copier dans l'espace d'équipe",
         "delete": "Supprimer",
         "deleteDisabledWhileProcessing": "Indisponible tant que l’ingestion est en attente ou en cours",
         "download": "Télécharger",
@@ -2998,20 +2931,6 @@
           "tags_skipped": "Tags ignorés",
           "docs_imported": "Documents importés",
           "docs_skipped": "Documents ignorés"
-        }
-      },
-      "repair": {
-        "detailsTitle": "Rapport de réparation",
-        "counter": {
-          "metadata_documents": "Documents correspondant à ce source_tag",
-          "already_done": "Déjà marqués terminés",
-          "eligible_with_vectors_and_content": "Vecteurs et contenu confirmés",
-          "repaired": "Réparés",
-          "missing_vectors": "Vecteurs manquants (non touchés)",
-          "missing_content": "Contenu manquant (non touché)",
-          "tabular_excluded": "Documents tabulaires exclus (sql, hors périmètre)",
-          "failed_or_running_excluded": "En échec ou en cours (non touchés)",
-          "errors": "Erreurs"
         }
       }
     },

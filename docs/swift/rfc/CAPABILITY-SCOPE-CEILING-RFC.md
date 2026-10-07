@@ -4,7 +4,12 @@
 **Author:** Maxime Daragon
 **Date:** 2026-08-05
 **ID:** CAPAB-SCOPE-01
-**Related docs:** `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md` §8.11 (pod-side authorization), §8.15 amendment 2026-07-21 (`attachments_only`), §8.16 (document ports); `docs/swift/rfc/AGENT-FILESYSTEM-HARDENING-RFC.md` (F1/P1 — same problem at the `/fs` boundary); `docs/swift/capabilities/AUTHORING.md`; `docs/swift/platform/REBAC.md`
+**Related docs:** `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md` §8.11 (pod-side authorization), §8.15 amendment 2026-07-21 (`attachments_only`), §8.16 (document ports); `docs/swift/capabilities/AUTHORING.md`; `docs/swift/platform/REBAC.md`
+
+> **Scope update (2026-10-07):** The general-purpose agent filesystem and its
+> hardening RFC were superseded by #2984/#2986. References below to filesystem
+> MCP tools, Workspace scope, or a shared filesystem principal are historical
+> examples, not implemented dependencies or part of this RFC's current scope.
 
 ---
 
@@ -72,7 +77,7 @@ Two facts define the gap:
   session vectors owned by the requesting user. There is no step that asks
   whether _this agent_ was ever meant to reach beyond attachments. The same is
   true, by construction, of any future document-touching capability (PPT
-  filler, tabular/filesystem MCP tools, writable-document exports, etc.): each
+  filler, tabular tools, writable-document exports, etc.): each
   reaches the platform its own way and authorizes against the user alone.
 
 So the principle this RFC argues for is **already accepted and shipped in one
@@ -80,13 +85,10 @@ place** — it is not a new invention. What is missing is (a) making it a
 **first-class, once-declared ceiling** rather than a per-tool boolean, and (b)
 making **every** document-touching port honor it, not just search.
 
-The `AGENT-FILESYSTEM-HARDENING-RFC` reaches the identical conclusion for the
-`/fs` boundary (F1: _"Knowledge Flow receives only a `KeycloakUser`. It cannot
-know whether a write … was made by the matching runtime agent instance or by
-another first-party caller using the user's bearer token"_). This RFC is the
-generalization of that finding from the filesystem to the whole document/
-capability surface, and should share its enforcement mechanism rather than
-invent a parallel one.
+The retired `AGENT-FILESYSTEM-HARDENING-RFC` recorded a similar concern at the
+old `/fs` boundary. Its proposed principal did not ship and is no longer a
+dependency. This RFC's document/capability authorization question stands on
+its own.
 
 ## 3. The principle we should adopt
 
@@ -99,8 +101,7 @@ Concretely:
   descriptor** — the set of resource classes and instances the mission is
   permitted to touch (e.g. `documents: {session_attachments}` for an
   attachments-only agent; `documents: {corpus(libraries=…), session_attachments}`
-  for a full document-access agent; `filesystem: {agents/<id>/…}` for the
-  workspace, already the filesystem RFC's subject).
+  for a full document-access agent).
 - This descriptor is computed **once**, at the pod, from the agent instance —
   the same place and moment the pod already builds the tools and adapters. It
   is **not** user-supplied and **not** per-turn; the user's per-turn RAG-scope
@@ -142,9 +143,9 @@ value of a general, uniformly-enforced scope.
    attachment-local" is unbuildable; the agent inherits each admin's full
    reach.
 
-4. **Divergent, duplicated isolation mechanisms.** The filesystem boundary is
-   already growing its own actor-scope mechanism (filesystem RFC P1). Document
-   tools have `attachments_only`. Left unaddressed, each new surface invents its
+4. **Divergent, duplicated isolation mechanisms.** Document tools have
+   `attachments_only`; future resource surfaces could invent their own
+   actor-scope mechanisms. Left unaddressed, each new surface invents its
    own ad-hoc scoping, and "what can this agent touch?" has no single
    answer — the opposite of the capability model's "one capability carried end
    to end" doctrine (`AUTHORING.md`).
@@ -156,9 +157,8 @@ value of a general, uniformly-enforced scope.
 
 ## 5. Proposed model — two enforcement tiers
 
-Following the precedent the filesystem RFC already set (trusted first-party
-enforcement now; defense-in-depth at the service boundary later), enforcement
-is staged. **Tier 1 delivers the principle; Tier 2 hardens it.**
+Enforcement is staged between the trusted pod and the service boundary.
+**Tier 1 delivers the principle; Tier 2 hardens it.**
 
 ### Tier 1 — Uniform ceiling in the pod's port layer (the target this RFC seeks approval to design)
 
@@ -186,14 +186,12 @@ is staged. **Tier 1 delivers the principle; Tier 2 hardens it.**
 ### Tier 2 — Ceiling enforced at the Knowledge Flow boundary (defense in depth, later)
 
 - Carry the agent scope descriptor to KF as an explicit request-scoped input
-  (the actor-scope idea shared with filesystem RFC P1 — `actor_type`,
-  `agent_instance_id`, permitted document scope), **derived from the existing
+  (`actor_type`, `agent_instance_id`, permitted document scope), **derived from the existing
   JWT + pod-verified execution scope, not a control-plane-signed grant** (D5
   stands). KF then applies the ceiling server-side _before_ its per-user ReBAC,
   so even a pod path that forgot the Tier-1 intersection cannot exceed scope.
-- This converges with, and should reuse, whatever principal the filesystem
-  hardening lands — one actor-scope mechanism for `/fs` and document endpoints,
-  not two.
+- If a future agent file capability is designed, its authorization must be
+  reviewed against this ceiling rather than assuming the retired `/fs` model.
 
 ## 6. Impact on existing contracts
 
@@ -212,8 +210,8 @@ is staged. **Tier 1 delivers the principle; Tier 2 hardens it.**
   enforces the ceiling. This keeps runtime/identity info out of LLM-facing tool
   signatures (existing doctrine) while giving the platform a uniform place to
   bound reach.
-- **Filesystem RFC.** Its P1 actor principal and this RFC's Tier 2 should be
-  specced as one mechanism. Flag the dependency in both.
+- **Future file capabilities.** They need their own scoped contract; the retired
+  filesystem RFC is not an implementation dependency.
 
 ## 7. Alternatives considered
 
@@ -225,8 +223,7 @@ is staged. **Tier 1 delivers the principle; Tier 2 hardens it.**
   then the descriptor should own the booleans, not vice-versa.
 - **Enforce only in Knowledge Flow (skip Tier 1).** Cleaner trust boundary, but
   larger blast radius and a wire-contract change up front; delays delivering the
-  principle at all. Staging (Tier 1 now, Tier 2 later) matches the filesystem
-  RFC's accepted approach and de-risks.
+  principle at all. Staging Tier 1 before Tier 2 limits the initial scope.
 - **Reintroduce a control-plane-signed scope grant.** Explicitly rejected:
   contradicts RUNTIME-07 rev. 2 / D5 (§8.11). The ceiling must derive from the
   agent instance the pod already resolves + the existing JWT/OpenFGA context.
@@ -249,7 +246,7 @@ is staged. **Tier 1 delivers the principle; Tier 2 hardens it.**
    `#2220`, and the separate question of splitting attach-files into its own
    capability).
 3. **Tier boundary.** Approve Tier 1 alone now (pod-enforced, no wire change),
-   with Tier 2 as a tracked follow-up gated on the filesystem actor principal?
+   with Tier 2 as a separately scoped follow-up?
    Recommendation: yes.
 4. **Interaction with the standalone attachment/summarize capability discussion.**
    This RFC is the _authorization_ substrate under that product question:

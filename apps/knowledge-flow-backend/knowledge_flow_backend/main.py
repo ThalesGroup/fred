@@ -58,7 +58,6 @@ from knowledge_flow_backend.core.monitoring.monitoring_controller import (
 from knowledge_flow_backend.features.audio.audio_transcription_controller import AudioTranscriptionController
 from knowledge_flow_backend.features.content import report_controller
 from knowledge_flow_backend.features.content.content_controller import ContentController
-from knowledge_flow_backend.features.corpus_manager.corpus_manager_controller import CorpusManagerController
 from knowledge_flow_backend.features.corpus_tree.controller import CorpusTreeController
 from knowledge_flow_backend.features.extract.controller import ExtractController
 from knowledge_flow_backend.features.filesystem.mcp_fs_controller import McpFilesystemController
@@ -311,7 +310,6 @@ def create_app() -> FastAPI:
     ExtractController(app, router)
     ResourceController(router)
     McpFilesystemController(router)
-    CorpusManagerController(router)
 
     if configuration.mcp.tabular_enabled:
         # Required for Tessa
@@ -508,40 +506,6 @@ def create_app() -> FastAPI:
         mcp_resources.mount_http(mount_path=f"{mcp_prefix}/mcp-resources")
     else:
         logger.info("%s MCP Resources disabled via configuration.mcp.resources_enabled=false", LOG_PREFIX)
-
-    if configuration.mcp.filesystem_enabled:
-        mcp_fs = _without_response_docs(
-            DelegatedFastApiMCP(
-                app,
-                name="Knowledge Flow Filesystem MCP",
-                description=(
-                    "Provides unified filesystem access for agents. "
-                    "Exposes a virtual filesystem backed by the server's configured storage "
-                    "(such as local or MinIO) and allows agents to browse directories, inspect metadata, "
-                    "read and write files, delete resources, and search content using regex. "
-                    "Use this MCP when an agent needs to retrieve data, persist intermediate results, "
-                    "inspect logs, or navigate structured file-based resources during workflow execution."
-                ),
-                include_tags=["Filesystem"],
-                auth_config=_mcp_auth(),
-            )
-        )
-
-        mcp_fs.mount_http(mount_path=f"{mcp_prefix}/mcp-fs")
-    else:
-        logger.info("%s MCP Filesystem disabled via configuration.mcp.filesystem_enabled=false", LOG_PREFIX)
-
-    # Corpus manager MCP (mock; exports the HTTP-tagged routes to MCP clients)
-    mcp_corpus = _without_response_docs(
-        DelegatedFastApiMCP(
-            app,
-            name="Knowledge Flow Corpus MCP",
-            description=("Manage corpora: start TOC builds, revectorize, purge vectors, and poll task status. Mock implementation backed by in-memory tasks for demos."),
-            include_tags=["CorpusManager"],
-            auth_config=_mcp_auth(),
-        )
-    )
-    mcp_corpus.mount_http(mount_path=f"{mcp_prefix}/mcp-corpus")
 
     return app
 

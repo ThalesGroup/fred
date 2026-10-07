@@ -924,8 +924,6 @@ async def test_every_401_recovery_hop_is_still_a_coroutine():
         adapters._VectorSearchAgentShim.refresh_user_access_token,
         adapters._McpRuntimeAgentShim.refresh_user_access_token,
         adapters._WorkspaceAgentShim.refresh_user_access_token,
-        # workspace filesystem (not in the original issue evidence)
-        adapters.FredWorkspaceFs._token,
         adapters._workspace_access_token,
         adapters._refresh_runtime_context_access_token,
         # the shared helper itself

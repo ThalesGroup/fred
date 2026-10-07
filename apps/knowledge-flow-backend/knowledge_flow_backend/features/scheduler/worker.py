@@ -37,16 +37,10 @@ from knowledge_flow_backend.common.structures import (
     extraction_task_queue,
 )
 from knowledge_flow_backend.features.scheduler.activities import (
-    delete_vectors,
     emit_ingestion_task_event,
     fast_delete_vectors,
     fast_store_vectors,
-    get_chunk_count,
-    list_documents_in_scope,
-    mark_document_vectorized,
     output_process,
-    output_process_trusted,
-    prepare_revectorize_file,
 )
 from knowledge_flow_backend.features.scheduler.pdf_render_expiry_activities import expire_pdf_renders
 from knowledge_flow_backend.features.scheduler.pdf_render_expiry_schedule import sync_pdf_render_expiry_schedule
@@ -59,14 +53,6 @@ from knowledge_flow_backend.features.scheduler.push_files_activities import (
     get_push_file_metadata,
     push_input_process,
 )
-from knowledge_flow_backend.features.scheduler.repair_vector_metadata_activities import (
-    bulk_repair_vector_metadata,
-    emit_repair_vector_metadata_task_event,
-    list_repair_candidates_for_source_tag,
-    list_strict_content_document_uids,
-    list_strict_vector_document_uids,
-)
-from knowledge_flow_backend.features.scheduler.repair_vector_metadata_workflow import RepairVectorMetadataWorkflow
 from knowledge_flow_backend.features.scheduler.workflow import (
     CreatePullFileMetadata,
     FastDeleteVectors,
@@ -79,8 +65,6 @@ from knowledge_flow_backend.features.scheduler.workflow import (
     ProcessPushFile,
     PullInputProcess,
     PushInputProcess,
-    RevectorizeCorpusWorkflow,
-    RevectorizeDocument,
 )
 
 logger = logging.getLogger(__name__)
@@ -100,9 +84,6 @@ _COMMON_WORKFLOWS = [
     OutputProcess,
     FastStoreVectors,
     FastDeleteVectors,
-    RevectorizeCorpusWorkflow,
-    RevectorizeDocument,
-    RepairVectorMetadataWorkflow,
     ExpirePdfRendersWorkflow,
 ]
 
@@ -118,20 +99,9 @@ _COMMON_ACTIVITIES = [
     create_pull_file_metadata,
     get_push_file_metadata,
     output_process,
-    output_process_trusted,
     fast_store_vectors,
     fast_delete_vectors,
     emit_ingestion_task_event,
-    list_documents_in_scope,
-    get_chunk_count,
-    delete_vectors,
-    prepare_revectorize_file,
-    mark_document_vectorized,
-    list_repair_candidates_for_source_tag,
-    list_strict_vector_document_uids,
-    list_strict_content_document_uids,
-    bulk_repair_vector_metadata,
-    emit_repair_vector_metadata_task_event,
     expire_pdf_renders,
 ]
 

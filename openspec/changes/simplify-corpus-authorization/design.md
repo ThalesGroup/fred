@@ -99,8 +99,9 @@ This replaces the earlier proposal to rank globally and discard unauthorized
 candidates: that approach risks starving relevant authorized results.
 Validate returned hits against canonical membership in bulk to reject stale or
 missing rows. This is integrity checking, not per-document permission evaluation.
-Use the same gate for metadata, content, counters, agent filesystem and service
-identities. Folder summaries never load item IDs; document pages are separate.
+Use the same gate for corpus metadata, content, counters and service
+identities. This change does not restore the retired general-purpose agent
+filesystem. Folder summaries never load item IDs; document pages are separate.
 
 Let E be the fixed number of applicable ancestor/current spaces, P a finite page
 of candidate projects, B the check batch size and A the finite attempt budget.

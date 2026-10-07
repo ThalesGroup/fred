@@ -50,10 +50,6 @@ class _ServiceStub:
         del user, path
         raise FileNotFoundError("Path not found")
 
-    async def write(self, user, path, data):
-        del user, path, data
-        return None
-
     async def read_bytes(self, user, path):
         del user, path
         raise FileNotFoundError("Path not found")
@@ -66,10 +62,6 @@ class _ServiceStub:
         del user, path
         return None
 
-    async def edit_file(self, user, path, *, old_string, new_string, replace_all=False):
-        del user, path, old_string, new_string, replace_all
-        return {"path": "/workspace/report.md", "occurrences": 1}
-
     async def glob(self, user, pattern, path="/"):
         del user, pattern, path
         return []
@@ -77,10 +69,6 @@ class _ServiceStub:
     async def grep(self, user, pattern, path="/"):
         del user, pattern, path
         return []
-
-    async def mkdir(self, user, path):
-        del user, path
-        return None
 
 
 def _build_filesystem_app(monkeypatch, service: object | None = None) -> TestClient:

@@ -35,9 +35,7 @@ from ..contracts.context import (
     AgentInvocationResult,
     BoundRuntimeContext,
     ConversationTurn,
-    FsEntry,
     InvocationScope,
-    PublishedArtifact,
     ToolInvocationResult,
     UiPart,
 )
@@ -247,47 +245,6 @@ class GraphNodeContext(Protocol):
           validated payload is returned on ``AgentInvocationResult.structured``.
         - ``scope``: narrow the callee's retrieval world for this call only
           (documents/libraries/search policy). Narrows, never widens.
-        """
-        raise NotImplementedError()
-
-    async def write(
-        self,
-        path: str,
-        content: bytes | str,
-        *,
-        content_type: str | None = None,
-        title: str | None = None,
-    ) -> PublishedArtifact:
-        """
-        Write a file and return a downloadable artifact.
-
-        A bare path is private to the current user; prefix with ``shared/`` to share with the
-        whole team. The team and user are injected from the session context.
-
-        Example:
-        - `artifact = await context.write("outputs/result.txt", sql)`
-        """
-        raise NotImplementedError()
-
-    async def read(self, path: str) -> str:
-        """Read a file as UTF-8 text."""
-        raise NotImplementedError()
-
-    async def read_bytes(self, path: str) -> bytes:
-        """Read a file as raw bytes (binary-safe)."""
-        raise NotImplementedError()
-
-    async def ls(self, path: str = "") -> list[FsEntry]:
-        """List a directory."""
-        raise NotImplementedError()
-
-    async def resolve_template(self, name: str) -> bytes:
-        """
-        Find a template by name: the user's ``templates/{name}`` first, then the team's
-        ``shared/templates/{name}``.
-
-        Example:
-        - `template = await context.resolve_template("brand.pptx")`
         """
         raise NotImplementedError()
 

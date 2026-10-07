@@ -670,16 +670,16 @@ OpenAI-style markdown-first message bodies.
 Do not introduce structured `code` or `diagram` parts unless a concrete UI
 need proves markdown is insufficient and the contract is extended by RFC.
 
-**2026-06-18 — MCP filesystem-first file exchange (AGENT-FILESYSTEM):**
-`ArtifactPublisherPort` and `ResourceReaderPort` in `RuntimeServices`, and the
-associated SDK types (`ArtifactPublishRequest`, `PublishedArtifact`,
-`ResourceFetchRequest`, `FetchedResource`, `ArtifactScope`, `ResourceScope`) are
-removed or no longer exported in the fresh Swift target. Agents and graph nodes use
-the authenticated Knowledge Flow MCP filesystem through SDK `ctx.fs` / `context.fs`
-helpers or direct MCP tools. Generated files are written to filesystem paths and
-returned to chat as safe Fred/Knowledge Flow `LinkPart` download references. The
-`LinkPart` / `ui_parts` SSE contract is unchanged; runtime history must persist those
-parts so live streaming and replay match. See `docs/swift/design/FILESYSTEM.md`.
+**2026-06-18 — historical file-exchange decision, retired by #2984/#2986:**
+The MCP filesystem and generic SDK `ctx.fs` / `context.fs` helpers described in
+the original decision are no longer available. The retained PPT Filler path uses
+`RuntimeServices.workspace_fs.write` for generated files and
+`RuntimeServices.agent_assets` for its configured template; the authenticated
+Knowledge Flow binary `/fs` transport supplies its download link. The
+`LinkPart` / `ui_parts` SSE contract is unchanged, and runtime history persists
+those parts so live streaming and replay match. Corpus documents, attachments,
+Deep conversation files, Wiki and writable documents use their separate
+contracts. See `docs/swift/design/FILESYSTEM.md`.
 
 ---
 
@@ -899,7 +899,10 @@ The Rico system prompt (`basic_react_rag_expert_system_prompt.md`) was also
 rewritten to add explicit `[N]` citation format rules, inline placement
 requirements, and a "never reproduce URLs" guardrail.
 
-### 8.8 ✅ `artifacts.publish_text` — `key` arg removed — FILES-04 (June 2026)
+### 8.8 Historical: `artifacts.publish_text` — retired by #2986
+
+The whole legacy tool was subsequently removed. The note below records its
+June 2026 schema correction and does not describe a current agent tool.
 
 **Was**: `ArtifactPublishTextToolArgs` (`fred-sdk` builtin catalog) exposed an
 optional `key` "logical storage key" field with the promise *"leave empty to let
@@ -3571,9 +3574,8 @@ route, no plumbing duplication.
 
 **Bounded context.** `CorpusTreeService` is a read-only projection over the
 already-ingested corpus — it stores no bytes, accepts no writes, and is
-intentionally distinct from the future `WorkspaceService` (mutable,
-persistent user/agent files, currently implemented under `/fs`). See
-`FILESYSTEM.md` "Business labels vs. scope tags".
+intentionally distinct from the retired general-purpose user/agent filesystem.
+See `FILESYSTEM.md` "Business labels vs. scope tags".
 
 Tests: `test_corpus_tree_builder.py` (renderer invariant),
 `test_corpus_tree_service.py`, `test_metadata_service_labels.py` +
@@ -4953,6 +4955,10 @@ inspection.
 ---
 
 ### 8.69 ✅ MCP tool descriptions stop carrying response schemas — issue #2412 item 2 (2026-08-28)
+
+This section records the August 2026 measurements. The filesystem and corpus
+MCP mounts, and later the corpus-manager HTTP API, were retired by #2984;
+the corresponding follow-up findings below are historical.
 
 **What changed.** No MCP tool description carries response documentation any
 more. Two steps, landed together in knowledge-flow's `main.py`:

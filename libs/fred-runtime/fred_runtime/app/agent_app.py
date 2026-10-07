@@ -1015,7 +1015,6 @@ def _build_runtime_services(
             settings=settings,
             ports=AuthoredToolRuntimePorts(
                 chat_model_factory=runtime_config.chat_model_factory,
-                workspace_fs=workspace_fs,
                 fallback_tool_invoker=base_tool_invoker,
                 media_fetcher=_build_media_fetcher(
                     binding=binding,

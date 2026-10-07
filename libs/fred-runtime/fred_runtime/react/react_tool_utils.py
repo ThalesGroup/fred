@@ -24,7 +24,7 @@ How to use:
   normalized shapes expected by LangChain tools and Fred ports
 
 Example:
-- `tool_name = sanitize_tool_name("artifacts.publish_text")`
+- `tool_name = sanitize_tool_name("knowledge.search")`
 """
 
 from __future__ import annotations
@@ -77,7 +77,7 @@ def sanitize_tool_name(tool_ref: str) -> str:
     - pass any tool ref or runtime-provided tool name before exposing it to the model
 
     Example:
-    - `sanitize_tool_name("artifacts.publish_text")`
+    - `sanitize_tool_name("knowledge.search")`
     """
 
     cleaned = "".join(ch if ch.isalnum() else "_" for ch in tool_ref.strip().lower())

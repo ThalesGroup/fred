@@ -7793,12 +7793,6 @@
                       "title": "Prometheus Ops Enabled",
                       "type": "boolean"
                     },
-                    "filesystem_enabled": {
-                      "default": false,
-                      "description": "Expose agent filesystem utils endpoints and the corresponding MCP server.",
-                      "title": "Filesystem Enabled",
-                      "type": "boolean"
-                    },
                     "filesystem_read_default_limit": {
                       "default": 100,
                       "description": "Default line count returned by filesystem read_file when callers omit limit.",
@@ -12677,12 +12671,6 @@
                       "title": "Prometheus Ops Enabled",
                       "type": "boolean"
                     },
-                    "filesystem_enabled": {
-                      "default": false,
-                      "description": "Expose agent filesystem utils endpoints and the corresponding MCP server.",
-                      "title": "Filesystem Enabled",
-                      "type": "boolean"
-                    },
                     "filesystem_read_default_limit": {
                       "default": 100,
                       "description": "Default line count returned by filesystem read_file when callers omit limit.",
@@ -17365,12 +17353,6 @@
                       "title": "Prometheus Ops Enabled",
                       "type": "boolean"
                     },
-                    "filesystem_enabled": {
-                      "default": false,
-                      "description": "Expose agent filesystem utils endpoints and the corresponding MCP server.",
-                      "title": "Filesystem Enabled",
-                      "type": "boolean"
-                    },
                     "filesystem_read_default_limit": {
                       "default": 100,
                       "description": "Default line count returned by filesystem read_file when callers omit limit.",
@@ -22037,12 +22019,6 @@
                       "default": false,
                       "description": "Expose Prometheus operational endpoints and the corresponding MCP server.",
                       "title": "Prometheus Ops Enabled",
-                      "type": "boolean"
-                    },
-                    "filesystem_enabled": {
-                      "default": false,
-                      "description": "Expose agent filesystem utils endpoints and the corresponding MCP server.",
-                      "title": "Filesystem Enabled",
                       "type": "boolean"
                     },
                     "filesystem_read_default_limit": {
@@ -26713,12 +26689,6 @@
                       "title": "Prometheus Ops Enabled",
                       "type": "boolean"
                     },
-                    "filesystem_enabled": {
-                      "default": false,
-                      "description": "Expose agent filesystem utils endpoints and the corresponding MCP server.",
-                      "title": "Filesystem Enabled",
-                      "type": "boolean"
-                    },
                     "filesystem_read_default_limit": {
                       "default": 100,
                       "description": "Default line count returned by filesystem read_file when callers omit limit.",
@@ -27804,12 +27774,6 @@
                               "default": false,
                               "description": "Enable Fred's integrated Apps surface deployment-wide. When false, application discovery, application catalog administration, and the frontend Apps experience stay disabled.",
                               "title": "Enableapplications",
-                              "type": "boolean"
-                            },
-                            "enableAllResourceSpaces": {
-                              "default": false,
-                              "description": "Show Mon espace/Espace d'\u00e9quipe/Agents tabs on the Resources page, not just Corpus d'\u00e9quipe.",
-                              "title": "Enableallresourcespaces",
                               "type": "boolean"
                             },
                             "enableInformationSystems": {
@@ -30098,12 +30062,6 @@
                               "default": false,
                               "description": "Enable Fred's integrated Apps surface deployment-wide. When false, application discovery, application catalog administration, and the frontend Apps experience stay disabled.",
                               "title": "Enableapplications",
-                              "type": "boolean"
-                            },
-                            "enableAllResourceSpaces": {
-                              "default": false,
-                              "description": "Show Mon espace/Espace d'\u00e9quipe/Agents tabs on the Resources page, not just Corpus d'\u00e9quipe.",
-                              "title": "Enableallresourcespaces",
                               "type": "boolean"
                             },
                             "enableInformationSystems": {

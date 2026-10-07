@@ -277,12 +277,15 @@ def test_runtime_template_payload_parses_default_capability_ids() -> None:
             "description": "Echo template description",
             "kind": "assistant",
             "available_mcp_servers": [],
-            "default_capability_ids": ["document_access", "mcp-knowledge-flow-fs"],
+            "default_capability_ids": [
+                "document_access",
+                "mcp-knowledge-flow-mcp-tabular",
+            ],
         }
     )
     assert payload.default_capability_ids == [
         "document_access",
-        "mcp-knowledge-flow-fs",
+        "mcp-knowledge-flow-mcp-tabular",
     ]
 
 

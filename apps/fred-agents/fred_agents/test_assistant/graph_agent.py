@@ -35,7 +35,6 @@ Field type coverage:
 
 Tool coverage:
   declared_tool_refs   knowledge.search (required=True, locked)
-                       artifacts.publish_text (required=False, toggleable)
 
 Capability coverage:
   document summarize  Search then summarize through the capability approval gate.
@@ -61,13 +60,11 @@ Workflow overview (keyword-routed by dispatch_step):
      ├─ markdown    ──► markdown_step     ──► finalize
      ├─ mermaid     ──► mermaid_step      ──► finalize
      ├─ long        ──► long_step         ──► finalize
-     ├─ files       ──► files_step        ──► finalize
      ├─ geo         ──► geo_step          ──► finalize
      ├─ document    ──► document_step     ──► finalize
      ├─ assist      ──► assist_route ─┬─ search ─► assist_search ─► assist_draft
      │                                └─ direct ─────────────────► assist_draft
-     │                  assist_draft ─► assist_review [HITL] ─► assist_confirm [HITL]
-     │                  ─► assist_commit ─► finalize  (discard / keep ─► finalize)
+     │                  assist_draft ─► assist_review [HITL] ─► finalize
      ├─ delegate    ──► delegate_step     ──► finalize
      ├─ crash       ──► crash_step  (raises, no on_error: the turn fails)
      ├─ graph check ──► graph_check_step ──► finalize  (live conformance run)
@@ -82,7 +79,6 @@ from __future__ import annotations
 
 from fred_core.store import VectorSearchHit
 from fred_sdk import (
-    TOOL_REF_ARTIFACTS_PUBLISH_TEXT,
     TOOL_REF_KNOWLEDGE_SEARCH,
     FieldSpec,
     GraphAgent,
@@ -90,14 +86,12 @@ from fred_sdk import (
     ToolRefRequirement,
     UIHints,
 )
-from fred_sdk.contracts.context import ConversationTurn, GeoPart, LinkPart
+from fred_sdk.contracts.context import ConversationTurn, GeoPart
 from fred_sdk.graph.runtime import GraphExecutionOutput
 from pydantic import BaseModel
 
 from .graph_state import TEST_ASSISTANT_AGENT_ID, TestInput, TestState
 from .graph_steps import (
-    assist_commit_step,
-    assist_confirm_step,
     assist_draft_step,
     assist_review_step,
     assist_route_step,
@@ -109,7 +103,6 @@ from .graph_steps import (
     echo_step,
     error_step,
     fallback_step,
-    files_step,
     finalize_step,
     geo_step,
     graph_check_step,
@@ -129,7 +122,7 @@ _DEFAULT_SYSTEM_PROMPT = (
     "You are the Test Assistant — a no-LLM validation agent.\n\n"
     "Send a message starting with one of these keywords to trigger a scenario:\n"
     "  echo | model | planning | hitl confirm | hitl choice | hitl text | hitl comment | "
-    "trace | error | think | markdown | mermaid | long | files | geo | document\n\n"
+    "trace | error | think | markdown | mermaid | long | geo | document\n\n"
     "Any other message shows this help menu."
 )
 
@@ -175,14 +168,12 @@ class TestAssistantGraphAgent(GraphAgent):
         "and every FieldSpec type (prompt, boolean, integer, string, select, "
         "number, text-multiline, array, secret, url). "
         "Routing by keyword prefix: echo | model | planning | "
-        "hitl confirm | hitl choice | hitl text | hitl comment | trace | error | think | markdown | long | files."
+        "hitl confirm | hitl choice | hitl text | hitl comment | trace | error | think | markdown | long."
     )
     tags: tuple[str, ...] = ("test", "graph", "hitl", "streaming", "no-llm", "dev")
 
     # ── Tool ref coverage ─────────────────────────────────────────────────────
-    # Two tool refs to test both rendering modes in the agent form:
-    # - required=True  (default) → locked row, cannot be disabled
-    # - required=False           → toggleable row, can be disabled per instance
+    # The required search tool is locked in the agent form.
     declared_tool_refs: tuple[ToolRefRequirement, ...] = (
         ToolRefRequirement(
             tool_ref=TOOL_REF_KNOWLEDGE_SEARCH,
@@ -190,14 +181,6 @@ class TestAssistantGraphAgent(GraphAgent):
             description=(
                 "Knowledge search declared required=True. "
                 "This row appears locked in the agent form and cannot be disabled."
-            ),
-        ),
-        ToolRefRequirement(
-            tool_ref=TOOL_REF_ARTIFACTS_PUBLISH_TEXT,
-            required=False,
-            description=(
-                "Artifact publish declared required=False. "
-                "This row appears as a toggleable option in the agent form."
             ),
         ),
     )
@@ -371,15 +354,12 @@ class TestAssistantGraphAgent(GraphAgent):
             "markdown": markdown_step,
             "mermaid": mermaid_step,
             "long": long_step,
-            "files": files_step,
             "geo": geo_step,
             "document": document_step,
             "assist_route": assist_route_step,
             "assist_search": assist_search_step,
             "assist_draft": assist_draft_step,
             "assist_review": assist_review_step,
-            "assist_confirm": assist_confirm_step,
-            "assist_commit": assist_commit_step,
             "delegate": delegate_step,
             "crash": crash_step,
             "graph_check": graph_check_step,
@@ -389,7 +369,6 @@ class TestAssistantGraphAgent(GraphAgent):
         edges={
             "assist_search": "assist_draft",
             "assist_draft": "assist_review",
-            "assist_commit": "finalize",
             "delegate": "finalize",
             "graph_check": "finalize",
             "echo": "finalize",
@@ -403,7 +382,6 @@ class TestAssistantGraphAgent(GraphAgent):
             "markdown": "finalize",
             "mermaid": "finalize",
             "long": "finalize",
-            "files": "finalize",
             "geo": "finalize",
             "document": "finalize",
             "fallback": "finalize",
@@ -428,7 +406,6 @@ class TestAssistantGraphAgent(GraphAgent):
                 "markdown": "markdown",
                 "mermaid": "mermaid",
                 "long": "long",
-                "files": "files",
                 "geo": "geo",
                 "document": "document",
                 "assist": "assist_route",
@@ -442,12 +419,8 @@ class TestAssistantGraphAgent(GraphAgent):
                 "direct": "assist_draft",
             },
             "assist_review": {
-                "approved": "assist_confirm",
+                "approved": "finalize",
                 "discarded": "finalize",
-            },
-            "assist_confirm": {
-                "publish": "assist_commit",
-                "keep": "finalize",
             },
         },
     )
@@ -466,8 +439,7 @@ class TestAssistantGraphAgent(GraphAgent):
     def build_output(self, state: BaseModel) -> BaseModel:
         """
         Override to attach mock VectorSearchHit sources and token_usage when the
-        trace scenario ran (SourcesPanel + token badge), LinkPart ui_parts when
-        the files scenario ran (download chip rendering), and GeoPart ui_parts
+        trace scenario ran (SourcesPanel + token badge), and GeoPart ui_parts
         when the geo scenario ran (feature-count summary chip rendering — the
         interactive Leaflet map was removed from the frontend, PR #2067).
         """
@@ -479,9 +451,7 @@ class TestAssistantGraphAgent(GraphAgent):
             hit = VectorSearchHit.model_validate(raw)
             sources = (*sources, hit)
 
-        ui_parts: tuple[LinkPart | GeoPart, ...] = ()
-        for raw in state.link_parts:
-            ui_parts = (*ui_parts, LinkPart.model_validate(raw))
+        ui_parts: tuple[GeoPart, ...] = ()
         for raw in state.geo_parts:
             ui_parts = (*ui_parts, GeoPart.model_validate(raw))
 

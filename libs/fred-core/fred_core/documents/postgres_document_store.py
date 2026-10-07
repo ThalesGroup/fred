@@ -230,25 +230,6 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
             await self._hydrate_labels(docs, s)
         return docs
 
-    async def list_by_source_tag(
-        self, source_tag: str, session: AsyncSession | None = None
-    ) -> List[DocumentMetadata]:
-        async with use_session(self._sessions, session) as s:
-            rows = (
-                (
-                    await s.execute(
-                        select(DocumentMetadataRow).where(
-                            DocumentMetadataRow.source_tag == source_tag
-                        )
-                    )
-                )
-                .scalars()
-                .all()
-            )
-            docs = [self._from_row(row) for row in rows]
-            await self._hydrate_labels(docs, s)
-        return docs
-
     async def list_by_source_library(
         self,
         source_library_id: str,

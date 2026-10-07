@@ -42,20 +42,11 @@ from fred_capability_ppt_filler.capability import PptFillerCapability
 from fred_runtime.app._catalogs import apply_external_catalog_overrides
 from fred_runtime.app.config import AgentPodConfig
 from fred_runtime.app.service_endpoints import ConfiguredServiceEndpoints
-from fred_runtime.capabilities.copy import prepare_capability_copy
 from fred_runtime.capabilities.registry import (
     CapabilityRegistry,
     boot_capability_registry,
 )
-from fred_sdk.contracts.capability import (
-    CapabilityConfigCopyRequest,
-    CapabilityIdentity,
-    SaveContext,
-    StoredCapabilityConfig,
-)
-from fred_sdk.contracts.capability.mcp import McpCapability, build_mcp_capability
-from fred_sdk.contracts.runtime import RuntimeServices
-from fred_sdk.contracts.services import FredService
+from fred_sdk.contracts.capability.mcp import McpCapability
 
 _PPT_PREVIEW_PART_KIND = "ppt_preview"
 
@@ -196,6 +187,8 @@ def test_default_mcp_catalog_loads_packaged_instructions(
     by_id = {server.id: server for server in catalog.servers}
     assert "mcp-knowledge-flow-mcp-text" not in by_id
     assert "mcp-web-github-readonly" not in by_id
+    assert "mcp-knowledge-flow-fs" not in by_id
+    assert "mcp-knowledge-flow-corpus" not in by_id
     assert "## Tabular data access" in (
         by_id["mcp-knowledge-flow-mcp-tabular"].agent_instructions or ""
     )
@@ -203,8 +196,6 @@ def test_default_mcp_catalog_loads_packaged_instructions(
     expected_paths = {
         "mcp-knowledge-flow-mcp-tabular": "mcp-tabular",
         "mcp-knowledge-flow-opensearch-ops": "mcp-opensearch-ops",
-        "mcp-knowledge-flow-fs": "mcp-fs",
-        "mcp-knowledge-flow-corpus": "mcp-corpus",
         "mcp-knowledge-flow-prometheus-ops": "mcp-prometheus-ops",
     }
     assert set(by_id) == set(expected_paths)
@@ -219,48 +210,3 @@ def test_document_templates_default_to_native_document_access() -> None:
 
     for template in (REACT_RAG_MCP_AGENT, MINDMAP_AGENT, COMPARISON_AGENT):
         assert [ref.id for ref in template.default_mcp_servers] == ["document_access"]
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("target_team", ["team-a", "team-b"])
-async def test_packaged_corpus_copy_preserves_scope_classification(
-    target_team: str,
-) -> None:
-    class Services:
-        def get_base_url(self, service: FredService) -> str:
-            return "http://localhost:8111/knowledge-flow/v1"
-
-    server = load_catalog(Services()).get_server("mcp-knowledge-flow-corpus")
-    assert server is not None
-    capability = build_mcp_capability(server)
-    source = StoredCapabilityConfig(
-        schema_version=capability.manifest.version,
-        config={
-            "chat_options.bound_library_ids": ["library-a"],
-            "chat_options.libraries_binding": True,
-        },
-    )
-
-    def context(team_id: str) -> SaveContext:
-        return SaveContext(
-            identity=CapabilityIdentity(user_id="user-a", team_id=team_id),
-            services=RuntimeServices(),
-        )
-
-    copied = await prepare_capability_copy(
-        capability,
-        CapabilityConfigCopyRequest(
-            config=source,
-            source_team_id="team-a",
-            source_agent_instance_id="agent-a",
-            target_team_id=target_team,
-            target_agent_instance_id="agent-b",
-        ),
-        source_ctx=context("team-a"),
-        target_ctx=context(target_team),
-    )
-
-    expected = ["library-a"] if target_team == "team-a" else []
-    assert copied.config["chat_options.bound_library_ids"] == expected
-    assert copied.config["chat_options.libraries_binding"] is True
-    assert source.config["chat_options.bound_library_ids"] == ["library-a"]

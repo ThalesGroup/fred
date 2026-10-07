@@ -135,9 +135,6 @@ class GeneralAssistantDefinition(ReActAgentDefinition):
     # new instances pre-ticked, which made carrying any at all a decision to
     # take deliberately rather than by inheritance.
     #
-    # Filesystem (`mcp-knowledge-flow-fs`) stays out until the /fs boundary
-    #   is agent/team-scoped (AGENT-FILESYSTEM-HARDENING-RFC F1, #2334) - same
-    #   stance as `deep_assistant`.
     default_mcp_servers: tuple[MCPServerRef, ...] = ()
 
     fields: tuple[FieldSpec, ...] = (

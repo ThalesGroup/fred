@@ -246,7 +246,6 @@ def test_create_app_mounts_prometheus_mcp_when_enabled(
         "ExtractController",
         "ResourceController",
         "McpFilesystemController",
-        "CorpusManagerController",
         "TabularController",
         "OpenSearchOpsController",
         "SchedulerController",
