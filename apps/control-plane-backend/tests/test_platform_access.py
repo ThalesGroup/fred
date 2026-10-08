@@ -1134,13 +1134,13 @@ async def test_free_link_history_openings_recovery_expiry_and_individual_revocat
         0
     ].status == "expired"
     for operation in (
-        service.preview_link(access, newcomer, later, None),
-        service.enroll(access, newcomer, later, None),
-        service.accept_cgu(access, newcomer, later, "v1", "v1"),
-        service.record_opening(access, later),
+        lambda: service.preview_link(access, newcomer, later, None),
+        lambda: service.enroll(access, newcomer, later, None),
+        lambda: service.accept_cgu(access, newcomer, later, "v1", "v1"),
+        lambda: service.record_opening(access, later),
     ):
         with pytest.raises(HTTPException):
-            await operation
+            await operation()
     with pytest.raises(HTTPException):
         await service.reveal_link(access, "other-team", first.id)
 
@@ -1228,7 +1228,7 @@ async def test_pg_concurrent_openings_and_revocation_are_serialized(pg_access):
         await asyncio.sleep(0.05)
         assert not enrolling.done()
     with pytest.raises(HTTPException):
-        await enrolling
+        await asyncio.wait_for(enrolling, timeout=5)
     assert not pg_access.rebac.writes
 
 
