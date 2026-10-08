@@ -10,7 +10,7 @@ dependencies = [
   # Deliberately lean: configuration, identity, naming and plain contract
   # models only. The agent platform (fred-core, langchain, langgraph) lives
   # behind the `agents` extra so a Knowledge Base pod never installs it.
-  "fred-pod>=4.4.0",
+  "fred-pod>=4.4.2",
   "pydantic>=2.7.0,<3.0.0",
   "httpx>=0.28.1",
 ]
