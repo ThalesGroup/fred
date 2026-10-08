@@ -13,14 +13,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { ErrorResponse, User } from "oidc-client-ts";
+import { ErrorResponse, OidcClient, User } from "oidc-client-ts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApplicationRequest } from "../rework/features/applications/applicationRequest";
 import { OidcBrowserSession } from "./OidcBrowserSession";
 
 const sessions: OidcBrowserSession[] = [];
 
-function person(seconds = 300, subject = "person"): User {
+function person(seconds = 300, subject = "person", url_state?: string): User {
   const now = Math.floor(Date.now() / 1000);
   const profile = { iss: "https://identity.example", aud: "ui", sub: subject, iat: now, exp: now + seconds };
   const payload = btoa(JSON.stringify(profile)).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
@@ -30,6 +30,7 @@ function person(seconds = 300, subject = "person"): User {
     token_type: "Bearer",
     expires_at: now + seconds,
     profile,
+    url_state,
   });
 }
 
@@ -327,4 +328,69 @@ it("preserves a Free enrollment route through the OIDC round trip", async () => 
   await session.login(authenticated);
   expect(window.location.pathname).toBe(target);
   expect(authenticated).toHaveBeenCalledOnce();
+});
+
+describe("OIDC sign-in redirect keeps the requested page", () => {
+  it("stores the current path, query and hash in local state", async () => {
+    window.history.replaceState({}, "", "/help?topic=agents#tools");
+    const session = newSession();
+    const redirect = vi.spyOn(session.manager, "signinRedirect").mockResolvedValue();
+
+    await session.login(vi.fn());
+    expect(redirect).toHaveBeenCalledWith({ state: "/help?topic=agents#tools" });
+  });
+
+  it("returns to url_state after the callback, or to the root without it", async () => {
+    for (const [urlState, expected] of [
+      ["/help?topic=agents#tools", "/help?topic=agents#tools"],
+      [undefined, "/"],
+    ] as const) {
+      const session = newSession();
+      const user = person(600, "person", urlState);
+      vi.spyOn(session.manager, "signinRedirectCallback").mockResolvedValue(user);
+      window.history.replaceState({}, "", "/?code=synthetic&state=synthetic");
+      const authenticated = vi.fn();
+
+      await session.login(authenticated);
+      expect(authenticated).toHaveBeenCalledOnce();
+      expect(window.location.pathname + window.location.search + window.location.hash).toBe(expected);
+    }
+  });
+});
+
+it("rejects external callback destinations", async () => {
+  for (const destination of ["//example.org/", "https://example.org/"]) {
+    const session = newSession();
+    vi.spyOn(session.manager, "signinRedirectCallback").mockResolvedValue(person(600, "person", destination));
+    window.history.replaceState({}, "", "/?code=synthetic&state=synthetic");
+    await session.login(vi.fn());
+    expect(window.location.pathname).toBe("/");
+  }
+});
+
+it("keeps invitation capabilities out of the provider authorization state", async () => {
+  const capability = "synthetic-capability-token".padEnd(43, "x");
+  const target = `/fred/join-free/${capability}?source=invitation#terms`;
+  window.history.replaceState({}, "", target);
+  const session = newSession();
+  const signin = vi.spyOn(session.manager, "signinRedirect").mockResolvedValue();
+  await session.login(vi.fn());
+  const client = new OidcClient({
+    authority: "https://identity.example",
+    client_id: "ui",
+    redirect_uri: "https://fred.example/",
+    response_type: "code",
+    scope: "openid",
+    metadata: {
+      issuer: "https://identity.example",
+      authorization_endpoint: "https://identity.example/authorize",
+      token_endpoint: "https://identity.example/token",
+    },
+  });
+  const request = await client.createSigninRequest(signin.mock.calls[0][0]);
+  const authorizationState = new URL(request.url).searchParams.get("state");
+  expect(request.state.data).toBe(target);
+  expect(authorizationState).toBe(request.state.id);
+  expect(decodeURIComponent(request.url)).not.toContain(capability);
+  expect(request.state.url_state).toBeUndefined();
 });
