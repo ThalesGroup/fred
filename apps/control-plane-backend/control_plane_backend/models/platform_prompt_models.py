@@ -73,3 +73,36 @@ class PlatformPromptRow(Base):
         default=utcnow,
         onupdate=utcnow,
     )
+
+
+class CreationAssistantSettingsRow(Base):
+    """ORM model for ``creation_assistant_settings``: the admin settings of the
+    agent creation assistant. Same single-row shape as above; a NULL `text`
+    means "use the pod's built-in meta-prompt", a NULL `model_profile_id`
+    the pod's default chat profile."""
+
+    __tablename__ = "creation_assistant_settings"
+    __table_args__ = (
+        CheckConstraint(
+            f"id = '{PLATFORM_PROMPT_SINGLETON_ID}'",
+            name="ck_creation_assistant_settings_singleton",
+        ),
+        CheckConstraint(
+            "reasoning_effort IN ('off', 'low', 'medium', 'high')",
+            name="ck_creation_assistant_settings_reasoning_effort",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, default=PLATFORM_PROMPT_SINGLETON_ID
+    )
+    text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    model_profile_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    reasoning_effort: Mapped[str] = mapped_column(
+        String, nullable=False, default="off", server_default="off"
+    )
+    updated_by: Mapped[str | None] = mapped_column(String, nullable=True)
+    # No `onupdate`: the store moves it only when the meta-prompt is saved.
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )

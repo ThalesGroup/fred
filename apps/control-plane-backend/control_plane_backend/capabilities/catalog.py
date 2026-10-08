@@ -228,6 +228,10 @@ async def aggregate_capability_catalog(
                             existing.model_thinking_profile_ids,
                             entry.model_thinking_profile_ids,
                         ),
+                        "model_reasoning_efforts": {
+                            **existing.model_reasoning_efforts,
+                            **entry.model_reasoning_efforts,
+                        },
                         # The union rule above applied to a scalar: a label
                         # authored on one pod survives another that serves the
                         # same model unnamed, so a partly rolled-out catalog

@@ -24,7 +24,13 @@ from fred_core.kpi import estimate_green_cost
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 
 from control_plane_backend.kpi.presets.base import PresetDef
-from control_plane_backend.kpi.presets.common import LabelValuePoint, LabelValueResponse
+from control_plane_backend.kpi.presets.common import (
+    BY_AGENT_SCOPE_FILTER,
+    CREATION_ASSISTANT_LABEL,
+    TOKEN_USAGE_FILTER,
+    LabelValuePoint,
+    LabelValueResponse,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -55,9 +61,9 @@ async def query_user_token_usage_by_agent(
                             }
                         }
                     },
-                    {"term": {"metric.name": "agent.turn_completed"}},
+                    TOKEN_USAGE_FILTER,
                     {"term": {"dims.user_id": user.uid}},
-                    {"exists": {"field": "dims.agent_instance_name"}},
+                    BY_AGENT_SCOPE_FILTER,
                 ]
             }
         },
@@ -69,7 +75,11 @@ async def query_user_token_usage_by_agent(
                 # talks to a handful of agents, not thousands — so fetch all of
                 # them unbounded and rank by combined tokens in Python instead
                 # (same pattern agent_prompt_length_distribution.py uses).
-                "terms": {"field": "dims.agent_instance_name", "size": 10000},
+                "terms": {
+                    "field": "dims.agent_instance_name",
+                    "size": 10000,
+                    "missing": CREATION_ASSISTANT_LABEL,
+                },
                 "aggs": {
                     "sum_input": {"sum": {"field": "quantities.input_tokens"}},
                     "sum_output": {"sum": {"field": "quantities.output_tokens"}},

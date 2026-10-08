@@ -38,6 +38,9 @@ from control_plane_backend.kpi.presets.conversations_per_user import (
 from control_plane_backend.kpi.presets.conversations_per_user_trend import (
     CONVERSATIONS_PER_USER_TREND_PRESET,
 )
+from control_plane_backend.kpi.presets.creation_assistant_usage import (
+    CREATION_ASSISTANT_USAGE_PRESET,
+)
 from control_plane_backend.kpi.presets.documents_total import DOCUMENTS_TOTAL_PRESET
 from control_plane_backend.kpi.presets.messages_over_time import (
     MESSAGES_OVER_TIME_PRESET,
@@ -118,6 +121,7 @@ PRESETS: list[PresetDef] = [
     TOKEN_USAGE_OVER_TIME_PRESET,
     TOKEN_USAGE_BY_AGENT_PRESET,
     TOKEN_USAGE_BY_MODEL_PRESET,
+    CREATION_ASSISTANT_USAGE_PRESET,
     STORAGE_BY_TEAM_PRESET,
 ]
 

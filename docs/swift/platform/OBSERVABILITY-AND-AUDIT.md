@@ -67,6 +67,17 @@ and personal dashboards), not by Grafana. This surface resolves the caller's aut
 only their own teams, an individual user sees only their own consumption. It is backed by
 OpenSearch and — deliberately — carries full identity (including `user_id`) in that store, because
 without it the per-viewer scoping in the paragraph above could not be enforced.
+Token consumption there sums `agent.turn_completed` and
+`agent.creation_assistant_completed` (the agent form's creation assistant),
+which carries no agent and is shown as its own "Creation assistant" row in
+by-agent views; the admin Analytics page also totals it alone
+(`creation_assistant_usage`). Its bounded dims `calls`, `hedged` and `winner`
+mark drafts where a slow reasoning call was hedged by a second call: a
+cancelled call's tokens are not counted, though the provider may bill them.
+These three are OpenSearch analytics only, never Prometheus labels (only
+`model_name`, `status` and `actor_type` are). The event is emitted for every
+outcome, so timeouts and provider errors show in latency/status; it carries
+tokens only when the provider answered, and only those events are summed.
 
 This stream is specified and owned by a separate design document (tracked informally as
 `OBSERV-02`); this document does not modify it. The only fact this document depends on is
