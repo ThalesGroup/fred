@@ -147,7 +147,7 @@ export function PptFillerPackOptions({
         />
       </div>
 
-      <Link className={styles.learnMoreLink} to="/ppt-filler-help" target="_blank" rel="noopener noreferrer">
+      <Link className={styles.learnMoreLink} to="/ppt-filler-help" target="_blank" rel="opener">
         {t("capability.ppt_filler.form.learnMore")}
       </Link>
 
