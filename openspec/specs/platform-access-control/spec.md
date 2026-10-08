@@ -63,7 +63,7 @@ When filtering is active, the system SHALL admit a non-suspended person if their
 
 ### Requirement: Platform administrators manage live exceptions
 
-Only people holding the existing platform-management permission SHALL read or modify the platform access administration surface. It SHALL provide paginated individual exception management using Fred's local users, team authorization and Free-team controls, filtering state, effective admission sources with team identifiers, observed claim selection, rule editing and draft preview. Team administrators and team managers SHALL NOT obtain this authority through their existing roles. Removing an individual exception SHALL NOT remove an identity or revoke independent team sources. Rule updates SHALL be explicit, atomic and versioned; stale concurrent saves SHALL return a conflict without overwriting another administrator's changes. Preview SHALL NOT change filtering, policy, T0, membership or evidence selected only by the proposed rule.
+Only people holding the existing platform-management permission SHALL read or modify the platform access administration surface. It SHALL provide paginated individual exception management using Fred's local users, team authorization and Free-team controls, filtering state, effective admission sources with team identifiers, own-session claim selection, rule editing and draft preview. Team administrators and team managers SHALL NOT obtain this authority through their existing roles. Removing an individual exception SHALL NOT remove an identity or revoke independent team sources. Rule updates SHALL be explicit, atomic and versioned; stale concurrent saves SHALL return a conflict without overwriting another administrator's changes. Preview SHALL NOT change filtering, policy, T0, membership or evidence selected only by the proposed rule.
 
 #### Scenario: Administrator authorizes a Fred user or team
 
@@ -72,9 +72,9 @@ Only people holding the existing platform-management permission SHALL read or mo
 
 #### Scenario: Administrator authorizes a selected user list
 
-- **WHEN** a platform administrator selects one to 100 existing Fred users and grants admission
+- **WHEN** a platform administrator selects any nonempty list of existing Fred users and grants admission
 - **THEN** the operation SHALL atomically add removable manual exceptions without overwriting existing sources
-- **WHEN** the list includes an unknown user, exceeds the bound or is submitted by a non-platform administrator
+- **WHEN** the list includes an unknown user or is submitted by a non-platform administrator
 - **THEN** no exceptions SHALL be granted
 
 #### Scenario: Leaving an allowed or Free team revokes its global source
@@ -102,6 +102,15 @@ Only people holding the existing platform-management permission SHALL read or mo
 
 - **WHEN** a save uses an older revision than the active policy
 - **THEN** the system SHALL return HTTP 409 and retain the newer policy, while the UI preserves the unsaved draft and explains the conflict
+
+User rows SHALL show identifier, first name and last name using the team-member table presentation, with email and source information retained. Selection SHALL survive paging without a fixed total cap; SQL batches SHALL remain bounded and grants atomic.
+
+#### Scenario: Grant more than 100 people
+
+- **WHEN** an administrator submits more than 100 known identities
+- **THEN** all missing exceptions SHALL be added atomically, duplicate identities ignored and existing origins preserved
+- **WHEN** an identity in a later batch is unknown
+- **THEN** the complete operation SHALL roll back
 
 ### Requirement: T0 grandfathering is an explicit fixed snapshot
 
@@ -226,12 +235,12 @@ The frontend SHALL display a standalone localized refusal page for `platform_acc
 
 ### Requirement: Activation and migration are explicit
 
-An absent admission authority SHALL initialize with filtering inactive until explicit administrator activation. Activation SHALL require a valid nonempty rule and SHALL be refused if the acting administrator would lose their last admission source. Saving a policy or changing access exceptions while filtering is active SHALL apply the same actor safeguard atomically. Existing root bootstrap safeguards SHALL remain intact. Activation concurrent with a nonempty legacy-file gate SHALL be rejected; readers SHALL refuse an active conflicting gate. Policy, imported entries and membership SHALL survive restarts and temporary filtering disablement.
+An absent admission authority SHALL initialize with filtering inactive until explicit administrator activation. Activation SHALL require a saved valid rule or at least one independent individual/team source and SHALL be refused if the acting administrator would lose their last admission source. Saving a policy or changing access exceptions while filtering is active SHALL apply the same actor safeguard atomically. Existing root bootstrap safeguards SHALL remain intact. Activation concurrent with a nonempty legacy-file gate SHALL be rejected; readers SHALL refuse an active conflicting gate. Policy, imported entries and membership SHALL survive restarts and temporary filtering disablement.
 
 #### Scenario: Upgrade does not silently activate filtering
 
 - **WHEN** operators deploy the required migration with empty admission state
-- **THEN** filtering SHALL remain inactive until a rule is prepared and an administrator explicitly activates it
+- **THEN** filtering SHALL remain inactive until an admission source is prepared and an administrator explicitly activates it
 
 #### Scenario: Administrator would lock themselves out
 
@@ -240,7 +249,7 @@ An absent admission authority SHALL initialize with filtering inactive until exp
 
 #### Scenario: Rule is not configured
 
-- **WHEN** an administrator attempts activation without a valid nonempty rule
+- **WHEN** an administrator attempts activation without any saved rule or independent admission source
 - **THEN** activation SHALL be refused without changing the filtering state
 
 #### Scenario: Conflicting whitelist modes
@@ -248,13 +257,32 @@ An absent admission authority SHALL initialize with filtering inactive until exp
 - **WHEN** an administrator attempts activation while a nonempty legacy file gate is active
 - **THEN** activation SHALL be refused without changing state, and readers SHALL fail closed if conflicting active state exists
 
+The page SHALL offer a bottom-right filtering action across every tab with explicit confirmation. Before activation, a read-only population review SHALL show identifiable allowed, blocked and uncertain users under the saved rule and current independent sources, with counts and observation time. Stale/missing/conflicted evidence SHALL be uncertain rather than declared blocked. A preview SHALL NOT grant access or save drafts. Activation confirmation SHALL reject a changed policy revision and retain the actor safeguard.
+
+#### Scenario: Review before activating
+
+- **WHEN** an administrator requests activation with prepared saved admission sources
+- **THEN** a confirmation dialog SHALL display the population dry run before any activation mutation
+- **WHEN** they cancel
+- **THEN** filtering SHALL remain unchanged
+
+#### Scenario: Whitelist-only activation
+
+- **WHEN** no rule is saved but the actor has an independent current exception
+- **THEN** activation SHALL be allowed and other people without independent sources SHALL be refused
+
+#### Scenario: Evidence cannot establish an outcome
+
+- **WHEN** selected claim evidence is missing, expired or conflicted and no independent source applies
+- **THEN** the preview SHALL mark that person uncertain without inventing token values or granting access
+
 ### Requirement: Administrators compose understandable bounded predicates
 
-The editor SHALL support one to sixteen conditions combined by either all (AND) or any (OR), with localized labels. Each condition SHALL select an unambiguous claim path, operator, operand and explicit case handling. Operators SHALL include literal equals/not-equals, contains/not-contains, and advanced whole-value regex. Literal metacharacters SHALL NOT be interpreted as regex. Literal comparison SHALL default to ignoring case; administrators SHALL be able to select case-sensitive comparison. For nonempty string arrays, positive predicates SHALL match any element and negative predicates SHALL require all elements to satisfy the negation. Missing, empty, incompatible and oversized values SHALL fail every predicate. Invalid input SHALL be rejected before saving; bounded regex timeouts SHALL NOT establish rule-derived admission.
+Saved rules SHALL contain one to sixteen conditions; the editor SHALL support an empty local draft when no policy exists or all draft conditions have been removed. Testing and saving SHALL require a valid nonempty rule. Activation SHALL require a saved rule or an independent configured admission source. Existing saved conditions SHALL be loaded without fabrication or omission. The editor SHALL support these conditions combined by either all (AND) or any (OR), with localized labels. Each condition SHALL select an unambiguous claim path, operator, operand and explicit case handling. Operators SHALL include literal equals/not-equals, contains/not-contains, and advanced whole-value regex. Literal metacharacters SHALL NOT be interpreted as regex. Literal comparison SHALL default to ignoring case; administrators SHALL be able to select case-sensitive comparison. For nonempty string arrays, positive predicates SHALL match any element and negative predicates SHALL require all elements to satisfy the negation. Missing, empty, incompatible and oversized values SHALL fail every predicate. Invalid input SHALL be rejected before saving; bounded regex timeouts SHALL NOT establish rule-derived admission.
 
 The policy SHALL expose allow/block mode above the conditions and persist it in the shared authority; absent mode SHALL retain allow behavior. Allow mode SHALL derive admission from matching rules. Block mode SHALL derive admission from nonmatching rules, including verified missing, empty or incompatible claims. Independent user/team admission sources SHALL remain sufficient in either mode. A timeout SHALL NOT derive admission. Delegated rule-derived admission SHALL require fresh, unconflicted evidence covering all selected claim paths. Preview SHALL show effective admission with readable green/red accents and a larger heading while separately explaining condition matching.
 
-Condition controls SHALL share a compact row when space permits and reflow without horizontal overflow on narrow screens. A labeled left-aligned dropdown SHALL expose root text field names and the exact selected path, with an entry for the detailed session explorer. After field confirmation a separate popup SHALL offer explicit reuse of the current verified account value or retention of the existing operand; copying SHALL respect operand bounds and regex literal escaping. A small case toggle SHALL remain directly visible, and manual path entry SHALL NOT be shown. Validation feedback SHALL remain visible and associated with its input. Operand counters SHALL appear at 90% of the existing limit without relaxing that limit. Condition removal SHALL identify the affected condition and SHALL preserve at least one condition. Adding a condition SHALL be separate from testing/saving the whole draft.
+Condition controls SHALL share a compact row when space permits and reflow without horizontal overflow on narrow screens. An add-condition action SHALL open the verified-session JSON picker directly; confirming a field SHALL append one condition, while cancellation SHALL append nothing. Each existing condition SHALL show its exact selected path as text with an accessible edit action opening the same picker; an account-field dropdown SHALL NOT be shown. After field confirmation a separate popup SHALL offer explicit reuse of the current verified account value or retention of the existing operand; copying SHALL respect operand bounds and regex literal escaping. A small case toggle SHALL remain directly visible, and manual path entry SHALL NOT be shown. Validation feedback SHALL remain visible and associated with its input. Operand counters SHALL appear at 90% of the existing limit without relaxing that limit. Condition removal SHALL identify the affected condition; removing the last draft condition SHALL show the local empty state without deleting or saving the stored policy. Adding a condition SHALL be separate from testing/saving the whole draft.
 
 #### Scenario: Literal input contains regex punctuation
 
@@ -322,28 +350,46 @@ Condition controls SHALL share a compact row when space permits and reflow witho
 - **WHEN** delegated evidence does not cover a newly selected claim path
 - **THEN** that evidence SHALL NOT establish rule-derived admission until a fresh direct observation
 
-### Requirement: Claim discovery exposes names without a personal-data inventory
+The editor SHALL present a prominent save-rule action near its title and explain that rule edits affect admission only after a successful explicit save, when filtering is active. Unsaved, saving and successful-save states SHALL be distinguishable; errors and conflicts SHALL retain the draft and SHALL NOT display successful-save feedback. The save action SHALL retain validity, busy, permission, revision and actor-lockout safeguards. Preview and field/value choices SHALL NOT save automatically.
 
-The system SHALL discover bounded nested string/string-array claim paths from verified human access tokens and expose observed names and supported types only to platform administrators. The catalog SHALL NOT expose other users' claim values, JWTs or workload claims, and SHALL NOT claim to enumerate the IdP schema. The editor SHALL distinguish observed names from universal availability and permit entry of an unambiguous path not yet observed. Traversal, catalog growth and retained token facts SHALL be bounded; exceeding these bounds SHALL NOT produce a positive match for unavailable facts.
+#### Scenario: First condition starts with a field question
 
-#### Scenario: Another human reveals a custom path
+- **WHEN** no policy is saved and an administrator opens the editor
+- **THEN** no fabricated condition SHALL be displayed and an add-condition invitation SHALL be visible
+- **WHEN** the administrator chooses to add a condition
+- **THEN** the own-account JSON picker SHALL open before any condition is appended
 
-- **WHEN** a verified human token contains a supported custom nested claim
-- **THEN** its path SHALL become selectable without Helm changes and without exposing that person's value
+#### Scenario: Cancel condition creation
 
-#### Scenario: Workload or unverified token supplies names
+- **WHEN** an administrator dismisses the add-condition picker without confirmation
+- **THEN** the draft, its condition count and its dirty state SHALL remain unchanged
 
-- **WHEN** a workload token or unverified input contains additional claims
-- **THEN** it SHALL NOT populate the human claim catalog or establish human admission
+#### Scenario: Confirm a new field
 
-#### Scenario: Desired claim has not been observed
+- **WHEN** an administrator confirms a supported field in the add-condition picker
+- **THEN** exactly one draft condition SHALL be appended with that exact path
+- **AND** the separate optional value prompt SHALL follow without a save or preview request
 
-- **WHEN** an administrator enters a valid path absent from the observed catalog
-- **THEN** it SHALL be usable in a draft and a saved rule, while tokens lacking it SHALL fail that condition
+#### Scenario: Remove the last local condition
+
+- **WHEN** an administrator removes the final draft condition
+- **THEN** the empty-state invitation SHALL appear, testing and saving SHALL be disabled, and the persisted policy SHALL remain intact
+
+#### Scenario: Explicit save makes the draft effective
+
+- **WHEN** an administrator edits a condition or mode
+- **THEN** the editor SHALL indicate unsaved changes and send no save automatically
+- **WHEN** the administrator saves a valid draft successfully
+- **THEN** the returned revision SHALL become the baseline and successful-save feedback SHALL be announced
+
+#### Scenario: Save fails or conflicts
+
+- **WHEN** a save is rejected or fails
+- **THEN** unsaved edits SHALL remain available, error feedback SHALL be shown and no saved confirmation SHALL be announced
 
 ### Requirement: Administrators select claims using their own verified session
 
-The rule editor SHALL offer observed root text attribute names in its dropdown, excluding token protocol metadata; the detailed explorer SHALL default to selectable root text attributes from the connected administrator's own verified access-token claims. The observed-name catalog SHALL use the same root-text and metadata restrictions by default. An explicit advanced-fields action SHALL expose the complete bounded searchable JSON tree and catalog, including nested paths and string arrays. Changing display mode SHALL clear pending field selection and copied values without modifying the rule draft. Only compatible bounded string/string-array paths SHALL be selectable. In advanced mode, unsupported values SHALL be visible with an explanation; omitted oversized values SHALL be indicated. Selected keys SHALL preserve their exact nested path without interpreting literal dots. After confirming a field, administrators SHALL explicitly choose in a separate popup whether to reuse a current string or array element from their own verified account or retain the entered operand. Field selection SHALL modify only the draft; existing AND/OR, preview, save and concurrent-revision safeguards SHALL remain in effect. Observed names/types SHALL remain available; exact paths SHALL be selected through the explorer rather than manual entry. The view SHALL be restricted to own human credentials and platform administration, SHALL NOT expose bearer tokens, signatures or other users' values, SHALL NOT persist or log payload values, and SHALL NOT retain the response after dismissal.
+Adding a condition or editing its field SHALL open the verified-session JSON picker directly. Its localized title SHALL ask which account field to filter. The picker SHALL default to a flat JSON presentation of selectable root text attributes from the connected administrator's own verified access-token claims, with blue selectable keys and visible selection feedback; token protocol metadata SHALL remain hidden. The picker SHALL offer only the connected administrator's own fields; shared observed names/types SHALL NOT be collected or exposed. An explicit advanced-fields action SHALL expose the complete bounded searchable own JSON tree, including nested paths and string arrays. Changing display mode SHALL clear pending field selection and copied values without modifying the rule draft. Only compatible bounded string/string-array paths SHALL be selectable. In advanced mode, unsupported values SHALL be visible with an explanation; omitted oversized values SHALL be indicated. Selected keys SHALL preserve their exact nested path without interpreting literal dots. After confirming a field, administrators SHALL explicitly choose in a separate popup whether to reuse a current string or array element from their own verified account or retain the entered operand. Field selection SHALL modify only the draft; existing AND/OR, preview, save and concurrent-revision safeguards SHALL remain in effect. Exact paths SHALL be selected through the explorer rather than manual entry. The view SHALL be restricted to own human credentials and platform administration, SHALL NOT expose bearer tokens, signatures or other users' values, SHALL NOT persist or log payload values, and SHALL NOT retain the response after dismissal.
 
 #### Scenario: Select a nested claim from the real session
 
@@ -367,13 +413,25 @@ The rule editor SHALL offer observed root text attribute names in its dropdown, 
 
 #### Scenario: Choose a root account attribute without token metadata
 
-- **WHEN** an administrator opens either claim source in the default mode
+- **WHEN** an administrator opens the own-claims picker in the default mode
 - **THEN** root text account attributes SHALL be shown, while token metadata, nested paths, arrays and non-text values SHALL remain hidden
 
 #### Scenario: Return from advanced fields
 
 - **WHEN** an administrator selects an advanced field and switches back to simple fields
 - **THEN** the hidden selection and copied operand SHALL be cleared, while saved rules and the existing draft SHALL remain unchanged
+
+The modal SHALL scroll only its JSON region, keeping the field search, display toggle, selection and action bar stationary. The scroll region SHALL be keyboard reachable with a localized accessible name.
+
+#### Scenario: Browse a long own payload
+
+- **WHEN** the administrator scrolls a long JSON payload with a pointer or keyboard
+- **THEN** only that region SHALL scroll and selection/confirmation controls SHALL remain reachable
+
+#### Scenario: Open the selector on a populated platform
+
+- **WHEN** an administrator opens the picker regardless of the number of users
+- **THEN** only their own verified claims SHALL be requested and no directory/catalog scan SHALL occur
 
 ### Requirement: Admission feedback uses the shared Fred error presentation
 
@@ -391,7 +449,11 @@ Admission denial, invalid Free enrollment links and admission verification failu
 
 ### Requirement: Administrators manage independent Free-link history
 
-Only platform administrators SHALL create, list and revoke Free-team links. The bounded paginated history SHALL expose the link identifier, note, creation and expiry dates, revocation state, suspension state and authenticated opening count/last-opening time, without reusable tokens or visitor identity. Administrators SHALL be able to inspect and revoke links while Free is disabled. The UI SHALL identify manual sharing and explicit URL recovery; it SHALL NOT claim message delivery.
+Only platform administrators SHALL create, list and revoke Free-team links. The bounded paginated history SHALL expose the link identifier, note, creation and expiry dates, revocation state, suspension state and authenticated opening count/last-opening time, without reusable tokens or visitor identity. Administrators SHALL be able to inspect and revoke links while Free is disabled. Manage links SHALL open on the bounded invitation list with a Create link action; note and expiry inputs SHALL appear only in a separate creation view. That view SHALL place the optional note before optional expiration and reuse the platform KPI selector presentation, with a single future date/time input, future duration shortcuts, a No expiration option and Apply. The date draft SHALL prevent creation until applied or dismissed; Escape SHALL close only the selector and restore trigger focus. Empty expiration SHALL mean no expiry; invalid or past expiration SHALL prevent creation without losing the note. Generation success SHALL show the original URL and an immediately available Copy URL action.
+
+History SHALL use an explicit Copy URL action that recovers the original token and attempts clipboard writing without generating another link. Clipboard success SHALL be announced only after the write succeeds. If clipboard writing is unavailable or rejected, the UI SHALL retain the usable URL with a clear manual-copy fallback; a copy failure SHALL NOT be presented as generation failure or cause another invitation to be created. Creation/recovery URL state SHALL remain transient and clear on manager dismissal, without logging URLs or retaining reusable mutation payloads.
+
+The opening-count column SHALL use the short localized label Clicks and explain that it counts authenticated page openings rather than unique users, anonymous clicks or message delivery. The UI SHALL identify manual sharing and explicit URL recovery; it SHALL NOT claim message delivery.
 
 #### Scenario: Generate a second invitation
 
@@ -415,6 +477,46 @@ Only platform administrators SHALL create, list and revoke Free-team links. The 
 - **WHEN** one invitation is revoked
 - **THEN** other valid invitations SHALL remain usable and existing team membership SHALL remain intact
 
+#### Scenario: Open history without a creation form
+
+- **WHEN** an administrator opens Manage links
+- **THEN** the invitation list and Create link action SHALL appear without note or expiration inputs
+- **WHEN** the administrator chooses Create link
+- **THEN** a separate creation form SHALL appear with note followed by expiration
+
+#### Scenario: Cancel creation
+
+- **WHEN** the administrator cancels the creation form
+- **THEN** the history SHALL remain available and no invitation SHALL be generated
+
+#### Scenario: Created invitation is ready to copy
+
+- **WHEN** generation succeeds
+- **THEN** the usable invitation URL and Copy URL action SHALL be shown with successful creation feedback
+- **AND** generating the link SHALL NOT claim that clipboard writing or message delivery succeeded
+
+#### Scenario: Copy from invitation history
+
+- **WHEN** an own-human platform administrator chooses Copy URL on a recoverable row
+- **THEN** the existing original URL SHALL be recovered and written to the clipboard
+- **AND** successful copy feedback SHALL appear only after clipboard confirmation, without changing link validity or counts
+
+#### Scenario: Clipboard access is refused
+
+- **WHEN** the browser refuses clipboard access after generation or recovery
+- **THEN** the usable URL SHALL remain available for manual copying with specific feedback
+- **AND** no replacement invitation SHALL be created and the failure SHALL NOT be announced as a failed creation
+
+#### Scenario: Short counter heading retains its meaning
+
+- **WHEN** the invitation history displays Clicks
+- **THEN** the displayed value SHALL remain the authenticated opening aggregate and the counting definition SHALL remain available
+
+#### Scenario: Invalid creation input retains the draft
+
+- **WHEN** expiration is invalid or no longer in the future, or generation fails
+- **THEN** the creation form SHALL retain the note and date with actionable feedback, without closing the manager
+
 ### Requirement: Authenticated enrollment-page openings use link aggregates
 
 The frontend SHALL record each authenticated enrollment-page opening using its own credential. Aggregate opening count and last-opening time SHALL be stored on the link row without a separate visit table. The frontend SHALL submit one signal per page opening, including under duplicate React effects; every accepted opening POST SHALL increment the count. A subsequent new page opening SHALL count again. Preview, terms acceptance and enrollment SHALL NOT increment the opening count themselves. Invalid, expired, revoked or suspended links SHALL NOT record openings. Visitor identities, IP addresses and account payloads SHALL NOT be stored as analytics.
@@ -433,3 +535,22 @@ The frontend SHALL record each authenticated enrollment-page opening using its o
 
 - **WHEN** revocation commits before a concurrent enrollment mutation checks the link
 - **THEN** no membership SHALL be granted through that invitation
+
+### Requirement: Access administration has readable section navigation
+
+The page SHALL provide localized Rules, Users, Teams and links, and Activation tabs using the shared Fred navigation presentation. Only the active panel SHALL be exposed visually or to keyboard and assistive navigation. The rule draft, user selection and paging SHALL survive tab changes without implicit saving or admission mutations. Import existing users SHALL be grouped with users. The last Activation view SHALL summarize status, and a floating filtering action SHALL remain available across all tabs. Ordinary content, secondary explanations and section headings SHALL use a consistent readable typography scale across the page and its dialogs. Repeated explanations SHALL be removed while authorization exceptions, revocation consequences, validation and errors remain understandable.
+
+#### Scenario: Return to an unsaved rule or selected users
+
+- **WHEN** an administrator changes a draft or selects users, navigates to another tab and returns
+- **THEN** those local changes SHALL remain and no save or authorization mutation SHALL have been sent by navigation
+
+#### Scenario: Navigate sections using the keyboard
+
+- **WHEN** an administrator uses arrow keys on the section strip
+- **THEN** focus and selection SHALL move using the shared tab behavior and only the associated panel SHALL be exposed
+
+#### Scenario: Read page and modal content
+
+- **WHEN** an administrator reads conditions, selection dialogs or invitation history
+- **THEN** ordinary text and secondary help SHALL use consistent readable sizes, with errors and revocation guidance retained

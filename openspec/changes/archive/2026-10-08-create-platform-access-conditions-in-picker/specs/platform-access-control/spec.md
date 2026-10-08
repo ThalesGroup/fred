@@ -2,7 +2,7 @@
 
 ### Requirement: Access administration has readable section navigation
 
-The page SHALL provide localized Rules, Users, Teams and links, and Activation tabs using the shared Fred navigation presentation. Only the active panel SHALL be exposed visually or to keyboard and assistive navigation. The rule draft, user selection and paging SHALL survive tab changes without implicit saving or admission mutations. T0 import SHALL be grouped with users and the filtering control SHALL appear in the last Activation view. Ordinary content, secondary explanations and section headings SHALL use a consistent readable typography scale across the page and its dialogs. Repeated explanations SHALL be removed while authorization exceptions, revocation consequences, validation and errors remain understandable.
+The page SHALL provide localized Rules, Users, Teams and links, and Activation tabs using the shared Fred navigation presentation. Only the active panel SHALL be exposed visually or to keyboard and assistive navigation. The rule draft, user selection and paging SHALL survive tab changes without implicit saving or admission mutations. Import existing users SHALL be grouped with users. The last Activation view SHALL summarize status, and a floating filtering action SHALL remain available across all tabs. Ordinary content, secondary explanations and section headings SHALL use a consistent readable typography scale across the page and its dialogs. Repeated explanations SHALL be removed while authorization exceptions, revocation consequences, validation and errors remain understandable.
 
 #### Scenario: Return to an unsaved rule or selected users
 
@@ -23,7 +23,7 @@ The page SHALL provide localized Rules, Users, Teams and links, and Activation t
 
 ### Requirement: Administrators compose understandable bounded predicates
 
-Saved rules SHALL contain one to sixteen conditions; the editor SHALL support an empty local draft when no policy exists or all draft conditions have been removed. Testing, saving and activation SHALL require a valid nonempty rule. Existing saved conditions SHALL be loaded without fabrication or omission. The editor SHALL support these conditions combined by either all (AND) or any (OR), with localized labels. Each condition SHALL select an unambiguous claim path, operator, operand and explicit case handling. Operators SHALL include literal equals/not-equals, contains/not-contains, and advanced whole-value regex. Literal metacharacters SHALL NOT be interpreted as regex. Literal comparison SHALL default to ignoring case; administrators SHALL be able to select case-sensitive comparison. For nonempty string arrays, positive predicates SHALL match any element and negative predicates SHALL require all elements to satisfy the negation. Missing, empty, incompatible and oversized values SHALL fail every predicate. Invalid input SHALL be rejected before saving; bounded regex timeouts SHALL NOT establish rule-derived admission.
+Saved rules SHALL contain one to sixteen conditions; the editor SHALL support an empty local draft when no policy exists or all draft conditions have been removed. Testing and saving SHALL require a valid nonempty rule. Activation SHALL require a saved rule or an independent configured admission source. Existing saved conditions SHALL be loaded without fabrication or omission. The editor SHALL support these conditions combined by either all (AND) or any (OR), with localized labels. Each condition SHALL select an unambiguous claim path, operator, operand and explicit case handling. Operators SHALL include literal equals/not-equals, contains/not-contains, and advanced whole-value regex. Literal metacharacters SHALL NOT be interpreted as regex. Literal comparison SHALL default to ignoring case; administrators SHALL be able to select case-sensitive comparison. For nonempty string arrays, positive predicates SHALL match any element and negative predicates SHALL require all elements to satisfy the negation. Missing, empty, incompatible and oversized values SHALL fail every predicate. Invalid input SHALL be rejected before saving; bounded regex timeouts SHALL NOT establish rule-derived admission.
 
 The policy SHALL expose allow/block mode above the conditions and persist it in the shared authority; absent mode SHALL retain allow behavior. Allow mode SHALL derive admission from matching rules. Block mode SHALL derive admission from nonmatching rules, including verified missing, empty or incompatible claims. Independent user/team admission sources SHALL remain sufficient in either mode. A timeout SHALL NOT derive admission. Delegated rule-derived admission SHALL require fresh, unconflicted evidence covering all selected claim paths. Preview SHALL show effective admission with readable green/red accents and a larger heading while separately explaining condition matching.
 
@@ -135,7 +135,7 @@ The editor SHALL present a prominent save-rule action near its title and explain
 
 ### Requirement: Administrators select claims using their own verified session
 
-Adding a condition or editing its field SHALL open the verified-session JSON picker directly. Its localized title SHALL ask which account field to filter. The picker SHALL default to a flat JSON presentation of selectable root text attributes from the connected administrator's own verified access-token claims, with blue selectable keys and visible selection feedback; token protocol metadata SHALL remain hidden. Observed field names SHALL remain available through the existing alternate source inside that modal. The observed-name catalog SHALL use the same root-text and metadata restrictions by default. An explicit advanced-fields action SHALL expose the complete bounded searchable JSON tree and catalog, including nested paths and string arrays. Changing display mode SHALL clear pending field selection and copied values without modifying the rule draft. Only compatible bounded string/string-array paths SHALL be selectable. In advanced mode, unsupported values SHALL be visible with an explanation; omitted oversized values SHALL be indicated. Selected keys SHALL preserve their exact nested path without interpreting literal dots. After confirming a field, administrators SHALL explicitly choose in a separate popup whether to reuse a current string or array element from their own verified account or retain the entered operand. Field selection SHALL modify only the draft; existing AND/OR, preview, save and concurrent-revision safeguards SHALL remain in effect. Observed names/types SHALL remain available; exact paths SHALL be selected through the explorer rather than manual entry. The view SHALL be restricted to own human credentials and platform administration, SHALL NOT expose bearer tokens, signatures or other users' values, SHALL NOT persist or log payload values, and SHALL NOT retain the response after dismissal.
+Adding a condition or editing its field SHALL open the verified-session JSON picker directly. Its localized title SHALL ask which account field to filter. The picker SHALL default to a flat JSON presentation of selectable root text attributes from the connected administrator's own verified access-token claims, with blue selectable keys and visible selection feedback; token protocol metadata SHALL remain hidden. The picker SHALL offer only the connected administrator's own fields; shared observed names/types SHALL NOT be collected or exposed. An explicit advanced-fields action SHALL expose the complete bounded searchable own JSON tree, including nested paths and string arrays. Changing display mode SHALL clear pending field selection and copied values without modifying the rule draft. Only compatible bounded string/string-array paths SHALL be selectable. In advanced mode, unsupported values SHALL be visible with an explanation; omitted oversized values SHALL be indicated. Selected keys SHALL preserve their exact nested path without interpreting literal dots. After confirming a field, administrators SHALL explicitly choose in a separate popup whether to reuse a current string or array element from their own verified account or retain the entered operand. Field selection SHALL modify only the draft; existing AND/OR, preview, save and concurrent-revision safeguards SHALL remain in effect. Exact paths SHALL be selected through the explorer rather than manual entry. The view SHALL be restricted to own human credentials and platform administration, SHALL NOT expose bearer tokens, signatures or other users' values, SHALL NOT persist or log payload values, and SHALL NOT retain the response after dismissal.
 
 #### Scenario: Select a nested claim from the real session
 
@@ -159,7 +159,7 @@ Adding a condition or editing its field SHALL open the verified-session JSON pic
 
 #### Scenario: Choose a root account attribute without token metadata
 
-- **WHEN** an administrator opens either claim source in the default mode
+- **WHEN** an administrator opens the own-claims picker in the default mode
 - **THEN** root text account attributes SHALL be shown, while token metadata, nested paths, arrays and non-text values SHALL remain hidden
 
 #### Scenario: Return from advanced fields
@@ -167,21 +167,22 @@ Adding a condition or editing its field SHALL open the verified-session JSON pic
 - **WHEN** an administrator selects an advanced field and switches back to simple fields
 - **THEN** the hidden selection and copied operand SHALL be cleared, while saved rules and the existing draft SHALL remain unchanged
 
+The modal SHALL scroll only its JSON region, keeping the field search, display toggle, selection and action bar stationary. The scroll region SHALL be keyboard reachable with a localized accessible name.
+
+#### Scenario: Browse a long own payload
+
+- **WHEN** the administrator scrolls a long JSON payload with a pointer or keyboard
+- **THEN** only that region SHALL scroll and selection/confirmation controls SHALL remain reachable
+
+#### Scenario: Open the selector on a populated platform
+
+- **WHEN** an administrator opens the picker regardless of the number of users
+- **THEN** only their own verified claims SHALL be requested and no directory/catalog scan SHALL occur
+
+## REMOVED Requirements
+
 ### Requirement: Claim discovery exposes names without a personal-data inventory
 
-The system SHALL discover bounded nested string/string-array claim paths from verified human access tokens and expose observed names and supported types only to platform administrators. The catalog SHALL NOT expose other users' claim values, JWTs or workload claims, and SHALL NOT claim to enumerate the IdP schema. The editor SHALL distinguish observed names from universal availability and permit selection of an unambiguous path present in the own verified session but not yet in the observed catalog. Traversal, catalog growth and retained token facts SHALL be bounded; exceeding these bounds SHALL NOT produce a positive match for unavailable facts.
+**Reason:** Shared discovery is no longer required. Selection uses the connected administrator only, reducing metadata exposure and removing unnecessary collection.
 
-#### Scenario: Another human reveals a custom path
-
-- **WHEN** a verified human token contains a supported custom nested claim
-- **THEN** its path SHALL become selectable without Helm changes and without exposing that person's value
-
-#### Scenario: Workload or unverified token supplies names
-
-- **WHEN** a workload token or unverified input contains additional claims
-- **THEN** it SHALL NOT populate the human claim catalog or establish human admission
-
-#### Scenario: Desired claim has not been observed
-
-- **WHEN** an administrator selects a supported own-session path absent from the observed catalog
-- **THEN** it SHALL be usable in a draft and a saved rule, while tokens lacking it SHALL fail that condition
+**Migration:** Remove catalog collection, route, consumers and its pending table. Use the existing own-claims projection; retain selected admission evidence for delegated evaluation, never as a picker source.
