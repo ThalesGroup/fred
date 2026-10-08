@@ -82,3 +82,14 @@ runtime test typing correction `32ff50467`.
 
 Live manual task 6.3 and post-merge archive task 6.5 remain pending. No registry
 publication, live model evaluation, or live browser validation is claimed.
+
+### CI follow-up: UI peer dependency assertion
+
+Updated the stale exact peer-dependency expectation in `build-ui.test.mjs` to
+include the approved `^0.1.1-alpha.0` token range. The production manifest is
+unchanged. The full `libs/frontend` `npm test` now passes: 379 passed, 0 failed,
+1 skipped (local iframe SDK consumer cache absent); the previously failing
+UI build determinism/scoping/externalization test passes. Targeted ESLint,
+Prettier and `git diff --check` pass. Author review is limited to this mechanical
+test expectation against preceding head `b19069544`; no new behavior or OpenSpec
+planning is needed, and no broader readiness claim is added.
