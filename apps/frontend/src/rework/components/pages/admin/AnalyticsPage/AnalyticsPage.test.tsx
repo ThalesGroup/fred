@@ -101,6 +101,7 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
   useTokenUsageOverTimeQuery: h.neutralQuery,
   useTokenUsageByAgentQuery: h.neutralQuery,
   useTokenUsageByModelQuery: h.neutralQuery,
+  useCreationAssistantUsageQuery: h.neutralQuery,
   useStorageByTeamQuery: h.neutralQuery,
 }));
 
@@ -168,5 +169,13 @@ describe("AnalyticsPage admin-only section (§2.4/§2.5)", () => {
       expect(en).toHaveProperty(key);
       expect(fr).toHaveProperty(key);
     }
+  });
+
+  it("shows the creation assistant tile in the token-usage section", () => {
+    h.capabilities = { ...h.capabilities, canAdmin: false };
+    const html = render();
+    expect(html).toContain("rework.analytics.tokenUsage.creationAssistant.label");
+    expect(en).toHaveProperty("rework.analytics.tokenUsage.creationAssistant.label");
+    expect(fr).toHaveProperty("rework.analytics.tokenUsage.creationAssistant.label");
   });
 });

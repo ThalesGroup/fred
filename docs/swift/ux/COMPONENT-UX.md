@@ -126,7 +126,10 @@ Escape/scrim dismissal, and focus restoration. `Dialog.tsx` remains a thin FRED
 wrapper supplying its translated Cancel default; neutral callers supply their
 own labels. Consumer-root portals inherit light/dark theme; the application
 without `.fred-ui` retains its body portal. An open Select gets the first Escape
-inside Dialog, and option selection does not confirm the Dialog.
+inside Dialog, and option selection does not confirm the Dialog. Escape, Tab and
+Enter belong to the topmost modal only (`isTopmostModal` in `utils/Portal.tsx`,
+any `dialog` or `alertdialog` with `aria-modal`): a `ConfirmationDialog` opened
+over a Dialog gets the keyboard, and an Escape already handled is ignored.
 
 Removable Chip controls are named `Remove <label>` unless a caller supplies
 `removeAriaLabel`. Tooltip preserves hover/keyboard descriptions and viewport
@@ -219,7 +222,9 @@ Chrome (label, border, focus ring, error state) mirrors the `TextArea` atom so a
 does not read as a foreign widget next to the other fields. The editing surface is a `contenteditable`,
 not a form control, so it is named with `aria-labelledby` rather than a `<label for>`, and
 `disabled` sets `EditorState.readOnly` alongside `EditorView.editable` — the drop handler gates on
-the former alone, so `editable` by itself still let a drop edit a locked field. Spell-checking is
+the former alone, so `editable` by itself still let a drop edit a locked field. `readOnly` (a draft
+to review) keeps the surface editable with `EditorState.readOnly` and `aria-readonly="true"`: it
+stays a tab stop, so keyboard users can focus, scroll and select it, while typing is blocked. Spell-checking is
 turned back on (CodeMirror defaults it off); `autocorrect`/`autocapitalize` stay off, since they
 rewrite what is typed and a prompt's tags must survive verbatim.
 
@@ -258,25 +263,66 @@ right in the order the model receives the blocks — the read-only platform inst
 which carry the precedence rule, then the editable global prompt — and a backend 422 is
 shown under the editor rather than only as a toast.
 
----
+2026-10-08: the page is now **Platform prompts**, with `ButtonGroup variant="tabs"` in the
+`PageHeader` (`?tab=creation-assistant` keeps the choice). Tab 1 is the content above, unchanged
+(`PlatformSystemPromptPane`); tab 2 (`CreationAssistantPane`) holds the creation assistant's
+settings: a small, label-less model `Select` (named by `ariaLabel`; "Platform default model"
+first, then the pods' chat profiles; a saved profile no pod serves stays listed as unavailable)
+at the top right of the card, facing the title and description and wrapping under them when
+narrow, followed by a "Reasoning" control that follows the selected model: a `2xs` radio `ButtonGroup`
+(Off/Low/Medium/High, only the declared levels, named "Reasoning") when the option has two or more
+`reasoning_efforts`, else a small `Switch` (on stores `medium`; disabled, with a tooltip and the
+reason in its accessible name, when the option reports `supports_reasoning: false`). "Platform
+default model" uses the pods' default profile's control when known; a model change normalises the
+value (a level becomes on, on becomes the nearest offered level). When the model's control is
+unknown (pods disagree on the default, or a saved profile no pod serves) the switch keeps the
+stored level untouched until the user toggles it, as does a model that cannot reason; and a meta-prompt editor in `fillHeight` mode so it stays inside the card, with a
+Default/Customised badge, a confirmed "Restore default" (text only, model and reasoning are kept), and a
+non-blocking warning when `{language}` is missing. Save sends both; an untouched built-in text is
+not saved as an override. When the built-in text was revised after the override, a second warning
+(left-bordered `.warning` row) gives both dates and a text "View default" button that toggles the
+built-in text read-only above the editor, styled like the platform instructions block.
 
-### `PromptPicker`
+### `CreationAssistantDialog` (agent form header)
 
-**Location:** `src/rework/components/shared/molecules/PromptPicker/PromptPicker.tsx`
-**Status:** `Functional`
+**Location:** `src/rework/components/pages/TeamAgentsPage/AgentFormModal/CreationAssistantDialog/`
+**Status:** `Functional` — not UX-reviewed
 
-Inline prompt library picker used inside `TuningFieldRenderer` for `type: "prompt"` tuning fields.
-Renders a toggle button ("Pick from library"). When open, shows all available `ContextPromptSummary`
-items (personal + team scope pooled by `GetContextPromptsEarly`) reusing the exact same `PromptCard`
-organism and `FilterChips` category filter bar as the team prompt library page (`PromptsPage`), for
-visual consistency between the two prompt-browsing surfaces (PROMPT-09 follow-up). `canManage` is
-always `false` here (no more-menu — picking, not managing) and the card's click handler is
-rewired to `onSelect(id)` instead of opening the read-only view dialog. Categories come from
-`GetTeamPromptCategories` scoped to the current team; a pooled prompt whose `category_id` doesn't
-match any of those (e.g. a personal-scope prompt's own category) falls into the "Sans catégorie"
-bucket rather than crashing or mismatching. The scope badge ("personal"/"team") the old plain-grid
-version showed per card is gone — `PromptCard` doesn't render one, and reusing "the exact same card"
-was the explicit ask.
+The single entry point is an **Assistant** button (`Button variant="tonal"`, new: M3 filled
+tonal, same `container` / `on-container` tokens as `IconButton`'s tonal; `auto_awesome`, small) in
+the `SettingsModal` header actions, before Cancel, in create and edit modes. It is hidden on the
+template step: the assistant cannot pick a template from a description yet. It opens a
+`Dialog` in two steps: a plain-words description (`TextArea`, 4000 characters, spinner while
+drafting, friendly inline errors that keep the description), then a review where every proposal is
+a selectable tile (not a checkbox, which cost width and indented the values), all selected by
+default. A tile is a `button role="checkbox"` whose content starts at the left edge, with a status
+icon top-right (`check_circle` filled `--primary` / `radio_button_unchecked` `--on-surface-retreat`);
+selected: 1px `--primary` 70% border on `--surface-container`, `--on-surface` text; unselected:
+transparent, `--on-surface-retreat` text; inset state-layer hover, 2px `--primary` focus ring,
+`--radius-s`, `--spacing-xs` padding, `--spacing-2xs` between tiles. The review step's header carries a
+`--primary` instruction pushed right of the title ("select the proposals to apply"); it takes the whole
+dialog height in three full-height columns (stacked under 40rem): the proposed identity (name, role
+and description, label over value); the drafted prompt in a read-only `PromptEditor` filling that
+height (new `fillHeight` prop, 2.4 of 4.4 width shares; editor label visually hidden via
+`hideLabel`), the editor itself staying free for text selection; then the recommended capabilities.
+Each column is a `--surface-container-low` panel (`--radius-s`, clipped) with a fixed section header
+over a scrolling body (`--spacing-xs` padding). The header is a full-width `button role="checkbox"`
+on `--surface-container` (`--spacing-xs` `--spacing-s` padding, `--font-title-small`, top corners
+following the panel) that selects or clears the whole section: tri-state icon right (`check_circle`,
+`remove_circle` with `aria-checked="mixed"` when partly selected, `radio_button_unchecked`), inset
+state-layer hover, 2px `--primary` focus ring. Wherever the Simple view offers its reasoning pack,
+the capabilities column always starts with a reasoning tile (the pack's title), selected by default
+and counted in the header's tri-state; applied, it turns reasoning on with conversations starting
+in it, unticked it leaves the form's reasoning alone. The hint shows when no capability is
+recommended and no reasoning tile is offered; the header is a plain title only when the column has no tile at all. **Apply** is disabled when nothing is ticked and writes only ticked items
+(capabilities replace the selection, document access through the resource pack). If a ticked item
+would replace a value the user wrote (on create, template seeds count as empty; capabilities compare
+what Apply would write, selection and document sources), a critical `ConfirmationDialog` lists
+those fields first; it takes focus on Cancel and keeps Tab inside, Cancel returns to the review.
+Escape closes only the topmost layer: the confirmation, else the dialog, never the form.
+Its token use shows on the admin `AnalyticsPage` as a **Creation assistant** `KpiStatCard`
+(token-usage section) with the number of uses in the card's optional `caption`
+(`--font-body-small`, retreat).
 
 ---
 
@@ -2296,6 +2342,11 @@ every existing critical dialog (leave team, delete agent, delete session,
 delete prompt) now gets the inverted emphasis for free — the three call
 sites that used to pass the override triplet by hand had it removed since
 it's now redundant with the default.
+
+Keyboard: on open, focus lands on Cancel (the safe choice); Tab and Shift+Tab
+wrap inside the dialog; Escape cancels only while it is the topmost modal;
+closing gives focus back to the element that opened it. A Dialog or
+`FullPageModal` underneath leaves Escape, Tab and Enter to it.
 
 #### Open UX issues
 

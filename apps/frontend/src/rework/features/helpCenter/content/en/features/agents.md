@@ -30,6 +30,28 @@ freely. You always talk to an agent of your own team.
   attached, it sees no document at all.
 - **Functions** — what it can do beyond answering.
 
+## Let the creation assistant draft your agent
+
+Writing good instructions (the "system prompt") takes practice. Once you have
+chosen a template, the **Assistant** button at the top of the agent
+form helps you get started, for a new agent or an existing one:
+
+1. Describe in your own words what the agent should do: its role, its mission,
+   who it talks to, its tone, what it must not do. A few sentences are enough.
+2. Click **Suggest**. After a few seconds the assistant proposes a name, a
+   role, a short description, instructions and the capabilities that look
+   useful for this agent. When the agent can offer it, **Reasoning** is always
+   proposed first among the capabilities.
+3. Read the proposals. Everything is ticked: untick what you do not want. If
+   nothing fits, edit your description and ask again.
+4. Click **Apply**: only the ticked items are filled in. Ticked capabilities
+   replace the current selection. Ticked **Reasoning** offers it in the chat
+   and turns it on at the start of each conversation.
+
+If a ticked item would replace something you already wrote, the assistant asks
+you to confirm first. Nothing is saved until you save the agent: you can still
+change everything.
+
 ## What an agent can do beyond answering
 
 The **Capabilities** tab decides what the agent is allowed to do: search the

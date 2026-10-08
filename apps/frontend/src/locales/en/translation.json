@@ -1447,6 +1447,7 @@
       "tokenUsage": {
         "byAgent": {
           "empty": "No agent usage in this period.",
+          "creationAssistant": "Creation assistant",
           "title": "Token usage by agent",
           "valueLabel": "Tokens"
         },
@@ -1454,6 +1455,11 @@
           "empty": "No model usage in this period.",
           "title": "Token usage by model",
           "valueLabel": "Tokens"
+        },
+        "creationAssistant": {
+          "drafts_one": "{{count, number}} use",
+          "drafts_other": "{{count, number}} uses",
+          "label": "Creation assistant"
         },
         "overTime": {
           "title": "Token usage over time",
@@ -2181,7 +2187,7 @@
           "selftest": "Self-test",
           "tasks": "Activity",
           "teams": "Teams",
-          "platformPrompt": "Platform global prompt",
+          "platformPrompt": "Platform prompts",
           "announcements": "Announcements",
           "uiSettings": "User interface"
         },
@@ -2755,6 +2761,48 @@
           "removeTagAria": "Remove {{tag}}",
           "tagsPlaceholder": "Type and press Enter to add tags..."
         },
+        "creationAssistant": {
+          "open": "Assistant",
+          "title": "Creation assistant",
+          "intro": "Describe in your own words what your agent should do: its role, its mission, its audience, its constraints… The assistant suggests a name, a role, a description, instructions (the system prompt) and capabilities. You choose what to keep.",
+          "descriptionLabel": "What your agent should do",
+          "descriptionPlaceholder": "Example: an assistant for the HR team that answers employees' questions about leave and health insurance from our internal documents. Friendly tone, short answers, always cite the source document. Never give legal advice.",
+          "generate": "Suggest",
+          "loading": "Preparing suggestions…",
+          "apply": "Apply",
+          "editDescription": "Edit the description",
+          "identityHeading": "Proposed identity",
+          "promptHeading": "Suggested system prompt",
+          "fields": {
+            "name": "Name",
+            "role": "Role",
+            "description": "Description"
+          },
+          "capabilitiesHeading": "Recommended capabilities",
+          "noCapabilities": "No capability recommended: the agent will answer from its instructions alone.",
+          "selectHint": "Select the assistant's proposals you want to apply.",
+          "applyHint": "Apply fills in only the ticked items; ticked capabilities replace the current selection. Nothing is saved until you save the agent.",
+          "overwrite": {
+            "title": "Replace what is already filled in?",
+            "message": "Applying replaces these values in the form:",
+            "confirm": "Replace",
+            "items": {
+              "systemPrompt": "System prompt",
+              "name": "Name",
+              "role": "Role",
+              "description": "Description",
+              "capabilities": "Capability selection"
+            }
+          },
+          "errors": {
+            "forbidden": "You are not allowed to edit this team's agents.",
+            "unsupported": "The creation assistant is not available for this agent template. Fill in the form yourself or contact an administrator.",
+            "timeout": "The suggestions took too long. Try again, possibly with a shorter description.",
+            "unavailable": "The creation assistant is unavailable right now. Try again in a moment.",
+            "invalid": "The description was not accepted. Check that it is not empty and does not exceed 4000 characters.",
+            "failed": "The suggestions could not be prepared. Your description is kept: you can try again."
+          }
+        },
         "sections": {
           "aria": "Form sections",
           "general": "General",
@@ -2949,7 +2997,7 @@
       "unknownAuthor": "an administrator"
     },
     "platformPrompt": {
-      "title": "Platform global prompt",
+      "title": "Platform prompts",
       "subtitle": "The two platform-wide blocks every agent receives, in the order the model reads them: the operating instructions shipped with the platform, then your global prompt. The tool rules and each agent's own instructions come after.",
       "editor": {
         "title": "Global prompt",
@@ -2976,7 +3024,48 @@
         "note": "These instructions belong to the platform itself: they are what keeps every agent behaving consistently — using the tools it was actually given, never inventing a result, recovering from a failed call. They are shipped with the platform and cannot be edited by anyone, so that a change to one team's prompt can never weaken how the whole platform behaves. Use the global prompt, alongside, to give your platform its personality and its own standards.",
         "unavailable": "No agent pod could be reached to read these instructions. They still apply to agents; it is only this display that is unavailable."
       },
-      "sourceUnavailable": "No agent pod could be reached to read the default prompt. What you see here is not what agents receive — don't save anything until a pod answers."
+      "sourceUnavailable": "No agent pod could be reached to read the default prompt. What you see here is not what agents receive — don't save anything until a pod answers.",
+      "tabs": {
+        "aria": "Platform prompts",
+        "system": "Platform system prompt",
+        "creationAssistant": "Creation assistant"
+      },
+      "creationAssistant": {
+        "title": "Creation assistant",
+        "badgeDefault": "Default",
+        "badgeCustom": "Customised",
+        "subtitle": "The creation assistant drafts an agent (name, role, description, instructions, capabilities) from the description a user types in the agent form. These are the instructions it follows. Keep the {language} text: it is replaced with the user's language.",
+        "hint": "Edit them to fit drafted agents to your organisation's style. \"Restore default\" goes back to the text shipped with the platform; it does not change the model.",
+        "missingLanguage": "The {language} text is missing: drafts may no longer be written in the user's language. You can still save.",
+        "defaultRevised": "The default prompt was updated on {{revised}}, after your customisation of {{customized}}.",
+        "viewDefault": "View default",
+        "hideDefault": "Hide default",
+        "empty": "The instructions cannot be empty.",
+        "reset": "Restore default",
+        "resetConfirm": {
+          "title": "Restore the default text?",
+          "message": "Your customised instructions will be deleted and the creation assistant will use the text shipped with the platform again. The chosen model is kept."
+        },
+        "resetDone": "Default text restored.",
+        "resetFailed": "Could not restore the default text.",
+        "saved": "Creation assistant settings saved.",
+        "saveFailed": "Could not save the creation assistant settings.",
+        "model": {
+          "label": "Model",
+          "default": "Platform default model",
+          "missing": "{{id}} (no longer available, the default model is used)"
+        },
+        "reasoning": {
+          "label": "Reasoning",
+          "unsupported": "This model cannot reason.",
+          "levels": {
+            "off": "Off",
+            "low": "Low",
+            "medium": "Medium",
+            "high": "High"
+          }
+        }
+      }
     },
     "wiki": {
       "title": "Wiki",

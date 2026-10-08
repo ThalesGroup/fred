@@ -28,6 +28,7 @@ import {
   useConversationsPerUserTrendQuery,
   useDocumentsTotalQuery,
   useMessagesOverTimeQuery,
+  useCreationAssistantUsageQuery,
   useSessionsByScopeQuery,
   useSessionsOverTimeQuery,
   useStorageByTeamQuery,
@@ -46,6 +47,7 @@ import MultiSeriesLineChart from "@shared/molecules/MultiSeriesLineChart/MultiSe
 import KpiStatCard from "@shared/molecules/KpiStatCard/LocalizedKpiStatCard";
 import PieChart from "@shared/molecules/PieChart/PieChart";
 import BarChart from "@shared/molecules/BarChart/BarChart";
+import { agentUsageRows } from "@rework/utils/agentUsageRows";
 import HistogramChart from "@shared/molecules/HistogramChart/HistogramChart";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
 import IconButton from "@shared/atoms/IconButton/IconButton";
@@ -250,6 +252,15 @@ export default function AnalyticsPage() {
     isLoading: tokenUsageByModelIsLoading,
     isError: tokenUsageByModelIsError,
   } = useTokenUsageByModelQuery({ since: timeRange.since, until: timeRange.until }, { refetchOnMountOrArgChange: 300 });
+
+  const {
+    data: creationAssistantData,
+    isLoading: creationAssistantIsLoading,
+    isError: creationAssistantIsError,
+  } = useCreationAssistantUsageQuery(
+    { since: timeRange.since, until: timeRange.until },
+    { refetchOnMountOrArgChange: 300 },
+  );
 
   // Admin-only section (§2.4/§2.5) — can_manage_platform, not the weaker
   // can_observe_platform every query above requires. Skipped entirely for a
@@ -570,6 +581,17 @@ export default function AnalyticsPage() {
       {/* New (v3, §2.7): platform-wide token usage + green/cost, inline with
           the same charts — not a separate panel. */}
       <Disclosure title={t("rework.analytics.sections.tokenUsage")} defaultOpen>
+        <div className={styles.kpiRow}>
+          <KpiStatCard
+            label={t("rework.analytics.tokenUsage.creationAssistant.label")}
+            value={creationAssistantData?.total_tokens}
+            caption={t("rework.analytics.tokenUsage.creationAssistant.drafts", {
+              count: creationAssistantData?.drafts ?? 0,
+            })}
+            isLoading={creationAssistantIsLoading}
+            isError={creationAssistantIsError}
+          />
+        </div>
         <div className={styles.chartGrid}>
           <div className={styles.cellWide}>
             <TimeSeriesLineChart
@@ -585,7 +607,7 @@ export default function AnalyticsPage() {
           </div>
           <BarChart
             title={t("rework.analytics.tokenUsage.byAgent.title")}
-            rows={tokenUsageByAgentData?.rows ?? []}
+            rows={agentUsageRows(tokenUsageByAgentData?.rows, t)}
             valueLabel={t("rework.analytics.tokenUsage.byAgent.valueLabel")}
             emptyMessage={t("rework.analytics.tokenUsage.byAgent.empty")}
             isLoading={tokenUsageByAgentIsLoading}

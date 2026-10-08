@@ -19,6 +19,7 @@ import type {
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
   withReasoning,
+  draftTargets,
   buildAgentFormSubmitPayload,
   defaultCapabilitySelection,
   defaultReasoningSelection,
@@ -335,6 +336,87 @@ describe("withReasoning", () => {
     expect(withReasoning({ reasoningEnabled: true, reasoningDefaultOn: true }, false)).toEqual({
       reasoningEnabled: false,
       reasoningDefaultOn: true,
+    });
+  });
+});
+
+describe("draftTargets", () => {
+  const template = {
+    template_id: "t",
+    display_name: "Template name",
+    description: "Template description",
+    description_by_lang: { fr: "Description du modèle" },
+    default_capability_ids: ["team_wiki"],
+    available_capabilities: [{ id: "team_wiki" }, { id: "html_artifact" }],
+    default_tuning_fields: [{ key: "prompts.system", type: "prompt", default: "Seed prompt" }],
+  } as unknown as AgentTemplateSummary;
+
+  it("treats values still equal to the template's seeds as empty", () => {
+    const targets = draftTargets(
+      {
+        displayName: "Template name",
+        role: "",
+        description: "Description du modèle",
+        tuningValues: { "prompts.system": "Seed prompt" },
+        selectedCapabilityIds: ["team_wiki"],
+        capabilityConfigValues: {},
+      },
+      template,
+      "fr",
+      "prompts.system",
+      "create",
+    );
+    expect(targets).toEqual({
+      name: "",
+      role: "",
+      description: "",
+      systemPrompt: "",
+      capabilityIds: [],
+      capabilityConfigValues: {},
+    });
+  });
+
+  it("keeps what the user wrote", () => {
+    const targets = draftTargets(
+      {
+        displayName: "Mine",
+        role: "My role",
+        description: "My text",
+        tuningValues: { "prompts.system": "My prompt" },
+        selectedCapabilityIds: ["html_artifact"],
+        capabilityConfigValues: {},
+      },
+      template,
+      "fr",
+      "prompts.system",
+      "create",
+    );
+    expect(targets).toEqual({
+      name: "Mine",
+      role: "My role",
+      description: "My text",
+      systemPrompt: "My prompt",
+      capabilityIds: ["html_artifact"],
+      capabilityConfigValues: {},
+    });
+  });
+
+  it("keeps saved values equal to the template's seeds when editing an agent", () => {
+    const saved = {
+      displayName: "Template name",
+      role: "",
+      description: "Description du modèle",
+      tuningValues: { "prompts.system": "Seed prompt" },
+      selectedCapabilityIds: ["team_wiki"],
+      capabilityConfigValues: {},
+    };
+    expect(draftTargets(saved, template, "fr", "prompts.system", "edit")).toEqual({
+      name: "Template name",
+      role: "",
+      description: "Description du modèle",
+      systemPrompt: "Seed prompt",
+      capabilityIds: ["team_wiki"],
+      capabilityConfigValues: {},
     });
   });
 });
