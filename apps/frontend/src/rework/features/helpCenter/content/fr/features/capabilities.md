@@ -43,6 +43,8 @@ passages qu'elle juge pertinents : elle est rapide, mais pas exhaustive. La
 comparaison de documents ne fonctionne que sur les documents de l'équipe : elle
 vient donc avec le pack **Documents de l'équipe**.
 
+Le mode **Documents uniquement** utilise les sources documentaires autorisées par l'agent, pièces jointes comprises. Voir [Les conversations](/help/fr/features/chat#choisir-les-sources-de-la-réponse).
+
 **Exemples** - avec **Pièces jointes** seulement, joindre un contrat et demander
 à l'agent d'en relever les échéances. Avec **Documents de l'équipe**, demander
 ce que prévoient les procédures de l'équipe pour un incident.

@@ -41,6 +41,8 @@ the team's documents. Search returns the passages it judges relevant: it is
 fast, but not exhaustive. Comparing documents only works on team documents, so
 it comes with the **Team documents** pack.
 
+The **Documents only** conversation mode uses whichever document sources the agent allows, including attachments. See [Conversations](/help/en/features/chat#choosing-the-answer-sources).
+
 **Examples** - with **Attachments** only, attach a contract and ask the agent
 to list its deadlines. With **Team documents**, ask what the team's procedures
 say about incident response.

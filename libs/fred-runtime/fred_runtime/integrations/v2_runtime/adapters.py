@@ -101,7 +101,6 @@ from fred_sdk.contracts.runtime import (
     WikiPageRef,
     WikiProposalRef,
     WorkspaceFsPort,
-    resolve_search_sources,
     unwrap_run_stop_error,
 )
 from fred_sdk.support.builtins import (
@@ -1402,16 +1401,10 @@ class DocumentSearchAdapter(DocumentSearchPort):
         search_policy: str | None = None,
         include_attachments: bool = True,
         include_team_documents: bool = True,
-        attachments_only: bool | None = None,
     ) -> DocumentSearchResult:
         runtime_context = self._binding.runtime_context
         if get_rag_knowledge_scope(runtime_context) == "general_only":
             return DocumentSearchResult(hits=())
-        include_attachments, include_team_documents = resolve_search_sources(
-            include_attachments=include_attachments,
-            include_team_documents=include_team_documents,
-            attachments_only=attachments_only,
-        )
         # The agent's sources are ceilings: the per-turn scope only narrows them.
         turn_session, turn_corpus = get_vector_search_scopes(runtime_context)
         include_session_scope = turn_session and include_attachments

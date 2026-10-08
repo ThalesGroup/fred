@@ -34,6 +34,19 @@ l'équipe.
 Joindre un fichier suppose que l'agent dispose du pack **Pièces jointes** ;
 sinon le trombone n'apparaît pas.
 
+## Choisir les sources de la réponse
+
+**Documents uniquement** demande à l'agent de répondre à partir des documents,
+sans compléter les informations manquantes par ses connaissances générales.
+Ce mode inclut les pièces jointes de la conversation et les documents de l'équipe
+lorsque les deux sources sont activées. Si l'agent n'autorise qu'une source, seule
+celle-ci est recherchée. Si les documents ne contiennent pas la réponse, l'agent
+reçoit la consigne de le signaler.
+
+**Connaissances générales + documents** combine les sources documentaires
+activées et les connaissances générales. **Connaissances générales** ne lance
+pas de recherche documentaire.
+
 ## Insérer un prompt
 
 Plutôt que de retaper une demande récurrente, insérez le contenu d'un prompt

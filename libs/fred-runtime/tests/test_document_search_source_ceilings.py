@@ -15,12 +15,10 @@
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Sequence
 from typing import Any, cast
 
 import fred_runtime.integrations.v2_runtime.adapters as adapters_module
-import fred_sdk.contracts.runtime as runtime_contract
 import pytest
 from fred_core.store.vector_search import VectorSearchHit
 from fred_sdk.contracts.context import (
@@ -89,12 +87,15 @@ CASES = [
     ("hybrid", True, True, (True, True)),
     ("hybrid", True, False, (True, False)),
     ("hybrid", False, True, (False, True)),
-    ("corpus_only", True, True, (False, True)),
+    ("corpus_only", True, True, (True, True)),
     ("corpus_only", False, True, (False, True)),
-    ("corpus_only", True, False, None),
+    ("corpus_only", True, False, (True, False)),
     ("general_only", True, True, None),
     ("general_only", True, False, None),
     ("general_only", False, True, None),
+    ("hybrid", False, False, None),
+    ("corpus_only", False, False, None),
+    ("general_only", False, False, None),
 ]
 
 
@@ -126,20 +127,25 @@ async def test_sources_bound_the_turn_scope(
 
 
 @pytest.mark.asyncio
-async def test_deprecated_attachments_only_alias_warns_once(
-    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+async def test_removed_attachments_only_keyword_is_rejected(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(runtime_contract, "_attachments_only_warned", False)
     adapter, clients = _adapter(monkeypatch, "hybrid")
+    with pytest.raises(TypeError, match="attachments_only"):
+        await adapter.search("q", **{"attachments_only": True})
+    assert clients[0].calls == []
 
-    with caplog.at_level(logging.WARNING, logger=runtime_contract.__name__):
-        await adapter.search("q", attachments_only=True)
-        await adapter.search("q", attachments_only=True)
 
-    for call in clients[0].calls:
-        assert (call["include_session_scope"], call["include_corpus_scope"]) == (
-            True,
-            False,
-        )
-    warnings = [r for r in caplog.records if "attachments_only" in r.getMessage()]
-    assert len(warnings) == 1
+@pytest.mark.parametrize("scope", ["corpus_only", "hybrid"])
+@pytest.mark.parametrize(
+    "session,corpus", [(True, False), (False, True), (False, False)]
+)
+def test_explicit_turn_scope_still_narrows_document_sources(
+    scope: str, session: bool, corpus: bool
+) -> None:
+    context = RuntimeContext(
+        search_rag_scope=cast(RagScopeName, scope),
+        include_session_scope=session,
+        include_corpus_scope=corpus,
+    )
+    assert adapters_module.get_vector_search_scopes(context) == (session, corpus)

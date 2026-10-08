@@ -26,7 +26,6 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import inspect
-import logging
 
 import fred_sdk.contracts.runtime as runtime_contract
 import pytest
@@ -53,7 +52,6 @@ class _FakePort(runtime_contract.DocumentSearchPort):
         search_policy=None,
         include_attachments: bool = True,
         include_team_documents: bool = True,
-        attachments_only: bool | None = None,
     ) -> runtime_contract.DocumentSearchResult:
         self.calls.append(
             {
@@ -86,6 +84,7 @@ def test_search_signature_takes_scope_params_not_identity() -> None:
         "include_attachments",
         "include_team_documents",
     } <= params
+    assert "attachments_only" not in params
     assert sig.parameters["include_attachments"].default is True
     assert sig.parameters["include_team_documents"].default is True
     # No context/identity/token parameter may leak into the capability-facing
@@ -109,31 +108,3 @@ def test_runtime_services_carries_a_concrete_port() -> None:
     assert isinstance(result, runtime_contract.DocumentSearchResult)
     assert result.hits[0].uid == "d1"
     assert port.calls[0]["library_tag_ids"] == ["a"]
-
-
-def test_deprecated_attachments_only_alias_maps_onto_the_ceilings(
-    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
-) -> None:
-    monkeypatch.setattr(runtime_contract, "_attachments_only_warned", False)
-    unchanged = runtime_contract.resolve_search_sources(
-        include_attachments=False, include_team_documents=True, attachments_only=None
-    )
-    assert unchanged == (False, True)
-    with caplog.at_level(logging.WARNING, logger=runtime_contract.__name__):
-        pinned = runtime_contract.resolve_search_sources(
-            include_attachments=True, include_team_documents=True, attachments_only=True
-        )
-        narrowed_off = runtime_contract.resolve_search_sources(
-            include_attachments=False,
-            include_team_documents=True,
-            attachments_only=True,
-        )
-        off = runtime_contract.resolve_search_sources(
-            include_attachments=True,
-            include_team_documents=True,
-            attachments_only=False,
-        )
-    assert pinned == (True, False)
-    assert narrowed_off == (False, False)
-    assert off == (True, True)
-    assert len([r for r in caplog.records if "deprecated" in r.getMessage()]) == 1

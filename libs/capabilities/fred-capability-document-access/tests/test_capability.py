@@ -123,7 +123,6 @@ class _FakePort(DocumentSearchPort):
         search_policy=None,
         include_attachments: bool = True,
         include_team_documents: bool = True,
-        attachments_only: bool | None = None,
     ) -> DocumentSearchResult:
         self.calls.append(
             {
@@ -777,21 +776,13 @@ def test_rag_scope_offers_every_choice_with_team_documents() -> None:
     assert params["default"] == "corpus_only"
 
 
-def test_rag_scope_hides_your_documents_without_team_documents() -> None:
-    params = _rag_params(DocumentAccessConfig(team_documents=False))
-    assert params["options"] == ["hybrid", "general_only"]
-    assert params["default"] == "hybrid"
-
-
-def test_rag_scope_impossible_default_falls_back_to_hybrid() -> None:
+@pytest.mark.parametrize("default", ["corpus_only", "hybrid", "general_only"])
+def test_rag_scope_offers_document_only_with_attachments(default: str) -> None:
     params = _rag_params(
-        DocumentAccessConfig(team_documents=False, default_rag_scope="corpus_only")
+        DocumentAccessConfig(team_documents=False, default_rag_scope=default)
     )
-    assert params["default"] == "hybrid"
-    kept = _rag_params(
-        DocumentAccessConfig(team_documents=False, default_rag_scope="general_only")
-    )
-    assert kept["default"] == "general_only"
+    assert params["options"] is None
+    assert params["default"] == default
 
 
 @pytest.mark.asyncio

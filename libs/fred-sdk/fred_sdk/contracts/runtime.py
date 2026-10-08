@@ -27,7 +27,6 @@ implementations execute it.
 
 from __future__ import annotations
 
-import logging
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Mapping, Sequence
 from dataclasses import dataclass
@@ -62,8 +61,6 @@ from .context import (
     UiPart,
 )
 from .models import AgentDefinition
-
-logger = logging.getLogger(__name__)
 
 ChatModelHandle: TypeAlias = object
 RuntimeToolHandle: TypeAlias = object
@@ -857,7 +854,6 @@ class DocumentSearchPort(ABC):
         search_policy: str | None = None,
         include_attachments: bool = True,
         include_team_documents: bool = True,
-        attachments_only: bool | None = None,
     ) -> DocumentSearchResult:
         """
         Run one scoped vector search and return typed hits.
@@ -868,35 +864,7 @@ class DocumentSearchPort(ABC):
         binding's default policy when provided. `include_attachments` /
         `include_team_documents` are ceilings on the conversation's attached
         files and the team corpus: the per-turn RAG scope can only narrow them.
-        `attachments_only` is a deprecated alias, see `resolve_search_sources`.
         """
-
-
-_attachments_only_warned = False
-
-
-def resolve_search_sources(
-    *,
-    include_attachments: bool,
-    include_team_documents: bool,
-    attachments_only: bool | None,
-) -> tuple[bool, bool]:
-    """Fold the deprecated `attachments_only` keyword into the two source
-    ceilings, warning once per process. `True` only narrows to attachments:
-    it never re-enables a source the caller turned off."""
-
-    global _attachments_only_warned
-    if attachments_only is None:
-        return include_attachments, include_team_documents
-    if not _attachments_only_warned:
-        _attachments_only_warned = True
-        logger.warning(
-            "DocumentSearchPort.search(attachments_only=...) is deprecated; "
-            "pass include_attachments / include_team_documents instead."
-        )
-    if attachments_only:
-        return include_attachments, False
-    return include_attachments, include_team_documents
 
 
 class DocumentSimilarityPort(ABC):

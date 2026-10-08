@@ -34,6 +34,17 @@ lasting, shared document, use the team's
 Attaching a file assumes the agent has the **Attachments** pack; without it the
 paperclip does not appear.
 
+## Choosing the answer sources
+
+**Documents only** asks the agent to answer from documents, without filling gaps
+from general knowledge. It includes conversation attachments and team documents
+when both sources are enabled. If the agent allows only one source, only that
+source is searched. When the documents do not contain the answer, the agent is
+instructed to say so.
+
+**General knowledge + documents** combines the enabled document sources with
+general knowledge. **General knowledge** skips document search.
+
 ## Inserting a prompt
 
 Rather than retyping a recurring request, insert a saved prompt into the input

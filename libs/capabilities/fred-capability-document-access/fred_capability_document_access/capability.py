@@ -535,16 +535,12 @@ class DocumentAccessCapability(
                 )
             )
         if config.show_rag_scope_control:
-            # "Your documents" (corpus_only) returns nothing without team
-            # documents, so it is not offered and an impossible default falls back.
-            offered = [s for s in _RAG_SCOPES if corpus or s != "corpus_only"]
             default = config.default_rag_scope
             controls.append(
                 ChatControlSpec(
                     widget="rag_scope",
                     params=RagScopeControlParams(
-                        default=default if default in offered else "hybrid",  # type: ignore[arg-type]
-                        options=None if corpus else offered,  # type: ignore[arg-type]
+                        default=default if default in _RAG_SCOPES else "hybrid",  # type: ignore[arg-type]
                     ),
                 )
             )

@@ -3808,12 +3808,15 @@ Document picker toggles (split), Bind to specific libraries gating the
 bound-libraries tree (`ui.visible_when`; bound ids are inert while unbound,
 like the legacy tool), the Attachments / Team documents sources (2026-10-07,
 replacing File attachments and Search in attachments only; Team documents off
-hides the scope pickers and the "Your documents" RAG scope), Search policy picker (configured
+hides the scope pickers), Search policy picker (configured
 policy becomes the picker default; enforced only when the picker is hidden),
 RAG scope picker + default. All emitted as the same stock widgets — the
 choices travel on `RuntimeContext`, which the v2 document-search adapter
-already honors. The manifest version stays 0.1.0 pre-GA; stored older slices
-revalidate unchanged (the single scope toggle maps onto the split ones, and a
+already honors. "Documents only" / "Documents uniquement" includes attachments
+and team documents according to the enabled sources, without general-knowledge
+supplementation. It remains available for attachments-only agents. The manifest
+version is 0.2.0 to refresh cached controls; stored older slices
+revalidate through the compatibility mapping (the single scope toggle maps onto the split ones, and a
 pre-`bind_libraries` library scope stays binding). The legacy tool's "Bound
 document libraries" raw tag-id input now renders as the library tree, gated
 on its binding toggle, via `ui.widget` / `ui.visible_when` hints in the pod's
