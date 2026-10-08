@@ -50,6 +50,12 @@
   gap: var(--spacing-s);
 }
 
+.caption {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+  text-align: center;
+}
+
 .state {
   display: flex;
   justify-content: center;

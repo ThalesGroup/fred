@@ -22,6 +22,14 @@ export function uiPortalRoot(anchor: Element | null): HTMLElement {
   return (anchor?.closest(".fred-ui") as HTMLElement | null) ?? document.body;
 }
 
+const MODAL_SELECTOR = '[role="dialog"][aria-modal="true"], [role="alertdialog"][aria-modal="true"]';
+
+/** Keyboard handling (Escape, Tab trap) belongs to the modal opened last, i.e. last in the document. */
+export function isTopmostModal(modal: Element | null): boolean {
+  const modals = document.querySelectorAll(MODAL_SELECTOR);
+  return modals.length === 0 || modals[modals.length - 1] === modal;
+}
+
 interface PortalProps {
   children: ReactNode;
   id?: string;

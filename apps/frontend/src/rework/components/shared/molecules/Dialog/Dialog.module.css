@@ -44,7 +44,7 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-2xs);
-  padding: var(--spacing-s) var(--spacing-m);
+  padding: var(--spacing-s) var(--spacing-m) var(--dialog-title-padding-bottom, var(--spacing-s));
 }
 
 .title {
@@ -63,9 +63,17 @@
   overflow-y: auto;
 }
 
+/* Left-aligned content facing the buttons; it takes the free space and wraps. */
+.actionsStart {
+  flex: 1;
+  margin-right: auto;
+  min-width: 0;
+}
+
 .actions {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
   gap: var(--spacing-xs);
   border-top: 1px solid var(--outline-muted);
   padding: var(--spacing-m);

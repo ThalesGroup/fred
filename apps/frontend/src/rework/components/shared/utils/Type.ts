@@ -22,7 +22,7 @@ export type ColorTheme =
   | "info"
   | "on-surface"
   | "on-surface-retreat";
-export type ButtonVariant = "filled" | "outlined" | "text";
+export type ButtonVariant = "filled" | "tonal" | "outlined" | "text";
 
 /**
  * Shared size scale for interactive components (Button, IconButton, ButtonGroupItem, Select…).
@@ -107,6 +107,7 @@ export const materialIcons = [
   "build",
   "check",
   "check_circle",
+  "remove_circle",
   "check_box",
   "check_box_outline_blank",
   "star",
