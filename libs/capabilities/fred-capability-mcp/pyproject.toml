@@ -1,12 +1,12 @@
 [project]
 name = "fred-capability-mcp"
-version = "0.1.1"
+version = "4.4.3"
 description = "Catalog and packaged agent instructions for Fred's existing MCP capabilities."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Thales", email = "noreply@thalesgroup.com" }]
-dependencies = ["fred-sdk[agents]>=4.3.0"]
+dependencies = ["fred-sdk[agents]>=4.4.3"]
 
 [project.optional-dependencies]
 # Empty on purpose: python-deps.mk syncs `--extra dev`, and this package has no

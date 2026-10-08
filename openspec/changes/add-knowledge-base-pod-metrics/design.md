@@ -142,6 +142,6 @@ fields whose combinations would need rules an enum makes impossible.
 
 Covered by `docs/swift/ops/migrations/knowledge-base-pod-metrics.md`: set
 `app.runtime_id` in the pod configuration (chart values), rebuild the image on
-`fred-sdk[knowledge-base]>=4.4.2`, bind the endpoints outward, expose the
+`fred-sdk[knowledge-base]>=4.4.3`, bind the endpoints outward, expose the
 ports and add a scrape target. No Fred redeployment. Rollback: redeploy the
 previous image; the extra configuration keys are ignored by older SDKs.

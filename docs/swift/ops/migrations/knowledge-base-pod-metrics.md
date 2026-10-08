@@ -4,11 +4,11 @@ title: "Knowledge Base pods name themselves and expose operational metrics"
 impact: none
 configuration: local
 configuration_reason: "libs/fred-runtime/fred_runtime/app/config.py now takes the app.runtime_id pattern from fred-pod; the key, its pattern, its default and the generated agent-pod schema are byte-identical, so Fred's chart values are unaffected. Only a Knowledge Base pod's own configuration.yaml gains the required app.runtime_id and the optional observability keys."
-no_action_reason: "Fred deployments are unaffected. A Knowledge Base image is affected only once rebuilt against fred-sdk 4.4.2, and its own deployment then sets app.runtime_id."
+no_action_reason: "Fred deployments are unaffected. A Knowledge Base image is affected only once rebuilt against fred-sdk 4.4.3, and its own deployment then sets app.runtime_id."
 ---
 ## Applicability
 
-Knowledge Base images built on `fred-sdk[knowledge-base]` 4.4.2 or later. Fred's
+Knowledge Base images built on `fred-sdk[knowledge-base]` 4.4.3 or later. Fred's
 own applications and chart are not affected. The `app.runtime_id` model moves to
 `fred-pod`, where agent pods (`fred-runtime`) and Knowledge Base pods share it;
 agent pods see no change. The `fred-sdk` patch release refreshes the local
@@ -23,7 +23,7 @@ needs Prometheus, and the Prometheus Operator CRDs if it uses a ServiceMonitor.
 
 **Breaking for Knowledge Base pods:** `app.runtime_id` is required — a lowercase
 slug such as `webdav-kb`, chosen per deployment, the key agent pods already use.
-A pod rebuilt on 4.4.2 without it exits at startup naming the key. It becomes
+A pod rebuilt on 4.4.3 without it exits at startup naming the key. It becomes
 the `service` label of every series and the `service` field of every log line.
 
 **Breaking for Knowledge Base code:** `KnowledgeBaseSyncResult.reconciliation_complete`
@@ -42,7 +42,7 @@ ignore all of these keys.
 ## Upgrade
 
 Add `app.runtime_id` to the pod configuration (in chart values when the chart
-renders it), rebuild the image against `fred-sdk[knowledge-base]>=4.4.2`, bind
+renders it), rebuild the image against `fred-sdk[knowledge-base]>=4.4.3`, bind
 the endpoints outward, expose their ports and add a scrape target. Logs on
 standard output become JSON lines; adjust any log parsing that expected text.
 No Fred redeployment is required.

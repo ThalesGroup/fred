@@ -22,7 +22,7 @@ alert can rely on them.
   completely, with **zero metrics API** in the SDK.
 - An author MAY add domain series of their own on the same endpoint, with the
   implementation language's ordinary metrics library.
-- The Python SDK (`fred-sdk[knowledge-base]` 4.4.2, already on this branch)
+- The Python SDK (`fred-sdk[knowledge-base]` 4.4.3)
   becomes the reference implementation, checked against the contract.
 - Pod configuration keys reuse `fred-pod`'s `observability.kpi.prometheus`, the
   path every Fred backend reads; the workflow engine's own exporter sits under
@@ -55,7 +55,7 @@ are a separate change and SHALL NOT add to the SDK's surface.
 - `libs/fred-pod` gains the shared `app.runtime_id` model and pattern;
   `libs/fred-runtime` reuses them with no behaviour change.
 - `libs/fred-sdk` gains the optional `prometheus-client` dependency in the
-  `knowledge-base` extra; dependent lockfiles pick up the 4.4.2 patch version.
+  `knowledge-base` extra; dependent lockfiles pick up the 4.4.3 patch version.
 - Docs: `docs/swift/design/KNOWLEDGE-BASE.md` (its dangling *Operational
   metrics* reference), `docs/swift/ops/migrations/knowledge-base-pod-metrics.md`.
 - Fred's own applications, chart and schemas are unchanged. Knowledge Base
