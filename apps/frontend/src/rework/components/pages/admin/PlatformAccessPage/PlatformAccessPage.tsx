@@ -28,7 +28,7 @@ import PlatformAccessLinkManager from "./PlatformAccessLinkManager";
 import PlatformAccessRuleEditor from "./PlatformAccessRuleEditor";
 import styles from "./PlatformAccessPage.module.css";
 
-const tabs = ["rules", "users", "teams", "activation"] as const;
+const tabs = ["rules", "users", "teams"] as const;
 
 export default function PlatformAccessPage() {
   const { t } = useTranslation();
@@ -334,26 +334,6 @@ export default function PlatformAccessPage() {
                   },
                 ]}
               />
-            </section>
-          </div>
-          <div
-            className={styles.panel}
-            id={`${panelId}-activation-panel`}
-            role="tabpanel"
-            aria-labelledby={`${panelId}-activation-tab`}
-            hidden={tabIndex !== 3}
-            tabIndex={0}
-          >
-            <section className={styles.section}>
-              <h2>{t("rework.platformAccess.tabs.activation")}</h2>
-              <p>
-                {t(
-                  state.data?.filtering_enabled
-                    ? "rework.platformAccess.activation.active"
-                    : "rework.platformAccess.activation.inactive",
-                )}
-              </p>
-              <p>{t("rework.platformAccess.activation.savedOnly")}</p>
             </section>
           </div>
           <div className={styles.floatingAction}>

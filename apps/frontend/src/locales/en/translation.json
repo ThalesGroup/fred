@@ -3242,8 +3242,7 @@
         "label": "Platform access sections",
         "rules": "Rules",
         "users": "Users",
-        "teams": "Teams and links",
-        "activation": "Activation"
+        "teams": "Teams and links"
       },
       "bulkHint": "Select users across searches and pages to add independent exceptions. Team access follows current membership.",
       "allowSelected": "Allow selected users ({{count}})",
@@ -3425,9 +3424,7 @@
         "allowed": "Allowed",
         "blocked": "Blocked",
         "unknown": "Uncertain",
-        "email": "Email",
-        "active": "Filtering is active.",
-        "inactive": "Filtering is inactive."
+        "email": "Email"
       }
     }
   },

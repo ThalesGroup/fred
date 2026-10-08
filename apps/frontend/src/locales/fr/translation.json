@@ -3242,8 +3242,7 @@
         "label": "Sections de l'accès plateforme",
         "rules": "Règles",
         "users": "Utilisateurs",
-        "teams": "Équipes et liens",
-        "activation": "Activation"
+        "teams": "Équipes et liens"
       },
       "bulkHint": "Sélectionnez les utilisateurs sur plusieurs recherches et pages pour ajouter des exceptions indépendantes. L'accès par équipe suit ses membres actuels.",
       "allowSelected": "Autoriser les utilisateurs sélectionnés ({{count}})",
@@ -3425,9 +3424,7 @@
         "allowed": "Autorisés",
         "blocked": "Bloqués",
         "unknown": "Incertains",
-        "email": "E-mail",
-        "active": "Le filtrage est actif.",
-        "inactive": "Le filtrage est inactif."
+        "email": "E-mail"
       }
     }
   },

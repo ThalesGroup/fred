@@ -100,7 +100,7 @@ it("exposes only the selected panel and supports keyboard section navigation", (
   act(() => root.render(<PlatformAccessPage />));
   const tabs = [...host.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
   const panels = [...host.querySelectorAll<HTMLDivElement>('[role="tabpanel"]')];
-  expect(tabs).toHaveLength(4);
+  expect(tabs).toHaveLength(3);
   expect(panels.filter((panel) => !panel.hidden)).toEqual([panels[0]]);
   expect(panels[0].getAttribute("aria-labelledby")).toBe(tabs[0].id);
   expect(tabs[0].getAttribute("aria-controls")).toBe(panels[0].id);
@@ -108,8 +108,8 @@ it("exposes only the selected panel and supports keyboard section navigation", (
   expect(document.activeElement).toBe(tabs[1]);
   expect(tabs[1].getAttribute("aria-selected")).toBe("true");
   expect(panels.filter((panel) => !panel.hidden)).toEqual([panels[1]]);
-  openTab("activation");
-  expect(panels.filter((panel) => !panel.hidden)).toEqual([panels[3]]);
+  openTab("teams");
+  expect(panels.filter((panel) => !panel.hidden)).toEqual([panels[2]]);
   expect(
     [...host.querySelectorAll("button")].find((node) => node.textContent === "rework.platformAccess.activation.enable"),
   ).toBeDefined();
@@ -230,7 +230,7 @@ it("requires configuration and confirmation across all tabs before activating", 
   expect(action().disabled).toBe(true);
   state.configured = true;
   render();
-  for (const tab of ["rules", "users", "teams", "activation"]) {
+  for (const tab of ["rules", "users", "teams"]) {
     openTab(tab);
     expect(action().disabled).toBe(false);
   }

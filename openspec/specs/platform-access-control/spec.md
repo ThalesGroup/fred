@@ -538,7 +538,7 @@ The frontend SHALL record each authenticated enrollment-page opening using its o
 
 ### Requirement: Access administration has readable section navigation
 
-The page SHALL provide localized Rules, Users, Teams and links, and Activation tabs using the shared Fred navigation presentation. Only the active panel SHALL be exposed visually or to keyboard and assistive navigation. The rule draft, user selection and paging SHALL survive tab changes without implicit saving or admission mutations. Import existing users SHALL be grouped with users. The last Activation view SHALL summarize status, and a floating filtering action SHALL remain available across all tabs. Ordinary content, secondary explanations and section headings SHALL use a consistent readable typography scale across the page and its dialogs. Repeated explanations SHALL be removed while authorization exceptions, revocation consequences, validation and errors remain understandable.
+The page SHALL provide localized Rules, Users, and Teams and links tabs using the shared Fred navigation presentation. Only the active panel SHALL be exposed visually or to keyboard and assistive navigation. The rule draft, user selection and paging SHALL survive tab changes without implicit saving or admission mutations. Import existing users SHALL be grouped with users. A floating filtering action SHALL remain available across all tabs, without a separate Activation tab. Ordinary content, secondary explanations and section headings SHALL use a consistent readable typography scale across the page and its dialogs. Repeated explanations SHALL be removed while authorization exceptions, revocation consequences, validation and errors remain understandable.
 
 #### Scenario: Return to an unsaved rule or selected users
 
