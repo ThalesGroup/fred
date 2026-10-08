@@ -432,7 +432,7 @@ export function AgentFormBody({
                       className={styles.learnMoreLink}
                       to={helpPagePath(helpLang, "features", "capabilities")}
                       target="_blank"
-                      rel="noopener noreferrer"
+                      rel="opener"
                     >
                       {t("rework.teams.formAgent.capabilities.learnMore")}
                     </Link>
