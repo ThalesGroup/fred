@@ -3262,11 +3262,10 @@
       "team": "Équipe",
       "allowTeam": "Autoriser les membres",
       "free": "Inscription Free",
-      "freeHint": "Les équipes Free autorisent leurs membres. Le lien inscrit uniquement la personne connectée comme membre. Retirer Free invalide le lien et retire cette source d'accès.",
+      "freeHint": "Les équipes Free autorisent leurs membres. Le lien inscrit uniquement la personne connectée comme membre. Retirer Free suspend les liens et retire cette source d'accès.",
       "link": "Lien d'inscription",
-      "rotateLink": "Remplacer le lien",
       "createLink": "Créer un lien",
-      "copyLink": "Copiez ce lien - il est affiché uniquement maintenant",
+      "copyLink": "URL d'invitation",
       "failed": "L'opération n'a pas abouti. Vérifiez votre accès et réessayez.",
       "deniedTitle": "Accès non autorisé",
       "deniedMessage": "Vous n'êtes pas autorisé à accéder à cette plateforme. Contactez le support pour demander un accès.",
@@ -3276,7 +3275,7 @@
       "joinTitle": "Rejoindre une équipe Free",
       "joinTeam": "Vous pouvez rejoindre l'équipe {{team}}.",
       "join": "Rejoindre cette équipe",
-      "invalidLink": "Ce lien ne peut pas être utilisé. Il a pu être remplacé ou désactivé, ou le service est indisponible.",
+      "invalidLink": "Ce lien ne peut pas être utilisé. Il est peut-être expiré, révoqué ou suspendu, ou le service est indisponible.",
       "loading": "Chargement...",
       "acceptCgu": "J'ai lu et j'accepte les conditions générales d'utilisation.",
       "source": {
@@ -3368,7 +3367,33 @@
         "noValue": "Ce champ n'a pas de valeur texte utilisable dans votre compte actuel.",
         "valueTooLong": "Cette valeur dépasse la limite du filtre. Gardez votre valeur et saisissez-en une plus courte."
       },
-      "verificationFailed": "Vérification de l'accès indisponible"
+      "verificationFailed": "Vérification de l'accès indisponible",
+      "links": {
+        "manage": "Gérer les liens",
+        "title": "Invitations pour {{team}}",
+        "hint": "Générez un lien puis partagez-le manuellement. Créer un autre lien conserve les invitations existantes. Le compteur suit les ouvertures après connexion, pas les personnes uniques ni les messages envoyés.",
+        "suspendedHint": "Free est désactivé. Les invitations sont suspendues ; les liens non révoqués et non expirés refonctionneront à sa réactivation.",
+        "note": "Note (facultative)",
+        "expiry": "Expiration (facultative)",
+        "futureExpiry": "Choisissez une date et une heure futures.",
+        "never": "Sans expiration",
+        "untitled": "Sans note",
+        "created": "Création",
+        "statusLabel": "Statut",
+        "openings": "Ouvertures après connexion",
+        "actions": "Actions",
+        "showUrl": "Afficher l'URL",
+        "revoke": "Révoquer",
+        "revokeTitle": "Révoquer cette invitation ?",
+        "revokeHint": "Ce lien ne permettra plus de nouvelles inscriptions. Les autres liens et les membres actuels restent inchangés. Retirez un membre ou désactivez Free pour retirer son accès plateforme lié à cette équipe.",
+        "openingFailed": "Cette ouverture n'a pas pu être enregistrée. Vous pouvez tout de même essayer de rejoindre l'équipe.",
+        "status": {
+          "active": "Actif",
+          "suspended": "Suspendu",
+          "expired": "Expiré",
+          "revoked": "Révoqué"
+        }
+      }
     }
   },
   "runtime": {

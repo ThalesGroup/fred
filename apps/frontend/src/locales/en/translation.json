@@ -3262,11 +3262,10 @@
       "team": "Team",
       "allowTeam": "Authorize members",
       "free": "Free enrollment",
-      "freeHint": "Free teams admit their members. The link only enrolls its signed-in caller as a member. Removing Free invalidates its link and withdraws this access source.",
+      "freeHint": "Free teams admit their members. The link only enrolls its signed-in caller as a member. Removing Free suspends its links and withdraws this access source.",
       "link": "Enrollment link",
-      "rotateLink": "Replace link",
       "createLink": "Create link",
-      "copyLink": "Copy this link - it is only shown now",
+      "copyLink": "Invitation URL",
       "failed": "The operation could not be completed. Check your access and try again.",
       "deniedTitle": "Access not authorized",
       "deniedMessage": "You are not authorized to access this platform. Please contact support to request access.",
@@ -3276,7 +3275,7 @@
       "joinTitle": "Join a Free team",
       "joinTeam": "You can join the team {{team}}.",
       "join": "Join this team",
-      "invalidLink": "This link cannot be used. It may have been replaced or disabled, or the service is unavailable.",
+      "invalidLink": "This link cannot be used. It may be expired, revoked or suspended, or the service is unavailable.",
       "loading": "Loading...",
       "acceptCgu": "I have read and accept the terms of use.",
       "source": {
@@ -3368,7 +3367,33 @@
         "noValue": "This field has no usable text value in your current account.",
         "valueTooLong": "This value exceeds the filter limit. Keep your value and enter a shorter one."
       },
-      "verificationFailed": "Access verification unavailable"
+      "verificationFailed": "Access verification unavailable",
+      "links": {
+        "manage": "Manage links",
+        "title": "Invitations for {{team}}",
+        "hint": "Generate a link, then share it manually. Creating another link keeps existing invitations valid. Openings count authenticated page visits, not unique people or message delivery.",
+        "suspendedHint": "Free is disabled. Invitations are suspended; unrevoked, unexpired links resume when Free is enabled again.",
+        "note": "Note (optional)",
+        "expiry": "Expiration (optional)",
+        "futureExpiry": "Choose a future date and time.",
+        "never": "No expiration",
+        "untitled": "No note",
+        "created": "Created",
+        "statusLabel": "Status",
+        "openings": "Authenticated openings",
+        "actions": "Actions",
+        "showUrl": "Show URL",
+        "revoke": "Revoke",
+        "revokeTitle": "Revoke this invitation?",
+        "revokeHint": "This link will permanently stop accepting new enrollments. Other links and existing team members remain unchanged. Remove a member or disable Free to withdraw team-derived platform access.",
+        "openingFailed": "The opening could not be recorded. You can still try to join.",
+        "status": {
+          "active": "Active",
+          "suspended": "Suspended",
+          "expired": "Expired",
+          "revoked": "Revoked"
+        }
+      }
     }
   },
   "runtime": {

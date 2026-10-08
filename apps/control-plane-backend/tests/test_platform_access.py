@@ -19,6 +19,7 @@ from fred_core.security.platform_access.access_control import (
 )
 from fred_core.security.platform_access.models import (
     PlatformAccessClaimRow,
+    PlatformAccessLinkRow,
     PlatformAccessSettingsRow,
     PlatformAccessUserRow,
 )
@@ -81,6 +82,7 @@ async def access(tmp_path):
             UserRow,
             TeamMetadataRow,
             PlatformAccessClaimRow,
+            PlatformAccessLinkRow,
             PlatformAccessSettingsRow,
             PlatformAccessUserRow,
         ):
@@ -171,14 +173,17 @@ async def test_own_eligible_team_cannot_be_revoked_by_access_policy_actor(access
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("version", ["v1", "2026-10"])
-async def test_free_link_rotation_revocation_and_private_enrollment(access, version):
+async def test_independent_free_links_suspension_revocation_and_private_enrollment(
+    access, version
+):
     actor, newcomer = user("accepted"), user()
     await access.observe(actor)
     await service.set_team(access, actor, "demo", False, True)
-    token = await service.generate_link(access, "demo")
+    token = await service.generate_link(access, "demo", user("accepted"))
     assert len(token) == 43
-    team = (await access.store.teams())[0]
-    assert token != team.enrollment_token_hash
+    links = await service.list_links(access, "demo", 0, 25)
+    assert token not in links.model_dump_json()
+    assert await service.reveal_link(access, "demo", links.items[0].id) == token
     assert (await service.preview_link(access, newcomer, token, version)).cgu_required
     with pytest.raises(HTTPException, match="user_not_accept_gcu"):
         await service.enroll(access, newcomer, token, version)
@@ -205,22 +210,23 @@ async def test_free_link_rotation_revocation_and_private_enrollment(access, vers
     )
     team = (await access.store.teams())[0]
     assert (team.visibility, team.joining_mode) == ("private", "invite_only")
-    replacement = await service.generate_link(access, "demo")
+    replacement = await service.generate_link(access, "demo", user("accepted"))
+    await service.enroll(access, user(), token, None)
+    await service.revoke_link(access, "demo", links.items[0].id)
     with pytest.raises(HTTPException):
         await service.enroll(access, user(), token, None)
     assert await access.admitted(newcomer)
     await service.set_team(access, actor, "demo", False, False)
     assert not await access.admitted(newcomer)
     await service.set_team(access, actor, "demo", False, True)
-    with pytest.raises(HTTPException):
-        await service.enroll(access, user(), replacement, None)
+    await service.enroll(access, user(), replacement, None)
 
 
 @pytest.mark.asyncio
 async def test_failed_membership_write_can_retry_without_granting_admin(access):
     actor, newcomer = user(), user()
     await service.set_team(access, actor, "demo", False, True)
-    token = await service.generate_link(access, "demo")
+    token = await service.generate_link(access, "demo", user("accepted"))
     access.rebac.write_failure = True
     with pytest.raises(HTTPException) as unavailable:
         await service.enroll(access, newcomer, token, None)
@@ -236,7 +242,7 @@ async def test_personal_team_and_nonfree_link_are_refused(access):
     with pytest.raises(HTTPException):
         await service.set_team(access, user(), "personal-user", True, True)
     with pytest.raises(HTTPException):
-        await service.generate_link(access, "demo")
+        await service.generate_link(access, "demo", user("accepted"))
 
 
 def test_ordinary_team_update_cannot_set_admission_state():
@@ -343,6 +349,7 @@ async def pg_access(monkeypatch):
                 UserRow,
                 TeamMetadataRow,
                 PlatformAccessClaimRow,
+                PlatformAccessLinkRow,
                 PlatformAccessSettingsRow,
                 PlatformAccessUserRow,
             ):
@@ -392,7 +399,7 @@ async def test_pg_enrollment_serializes_free_revocation(pg_access, monkeypatch):
     import asyncio
 
     actor, newcomer = user("accepted"), user()
-    token = await service.generate_link(pg_access, "demo")
+    token = await service.generate_link(pg_access, "demo", user("accepted"))
     await service.set_filtering(pg_access, actor, True)
     started, release = asyncio.Event(), asyncio.Event()
     original = pg_access.rebac.add_relation
@@ -424,13 +431,12 @@ async def test_pg_enrollment_serializes_free_revocation(pg_access, monkeypatch):
 async def test_pg_link_disabled_before_locked_enrollment_refuses(pg_access):
     import asyncio
 
-    token = await service.generate_link(pg_access, "demo")
+    token = await service.generate_link(pg_access, "demo", user("accepted"))
     newcomer = user()
     await pg_access.observe(newcomer)
     async with pg_access.store.mutation() as session:
         team = await pg_access.store.team("demo", session)
         team.platform_access_free = False
-        team.enrollment_token_hash = None
         await session.flush()
         enrolling = asyncio.create_task(
             service.enroll(pg_access, newcomer, token, None)
@@ -501,6 +507,13 @@ async def test_pg_startup_empty_authority_saved_policy_and_missing_schema(
     state = await pg_access.state()
     assert state.policy == draft().model_dump()
     assert state.revision == 1 and state.filtering_enabled
+    async with engine.begin() as connection:
+        await connection.execute(sa.text("DROP TABLE platform_access_links"))
+    await access_control.initialize_platform_access(security, engine, rebac)
+    with pytest.raises(RuntimeError, match="platform_access_links"):
+        await access_control.initialize_platform_access(
+            security, engine, rebac, authority=True
+        )
     async with engine.begin() as connection:
         await connection.execute(sa.text("DROP TABLE platform_access_users"))
     with pytest.raises(RuntimeError, match="platform_access_users"):
@@ -742,7 +755,7 @@ async def test_pg_live_policy_and_free_journey_with_cached_human_facts(pg_access
     assert not await second.admitted(newcomer)
     await service.save_policy(pg_access, actor, draft("accepted", ["attribute"]), 1)
     assert not await second.admitted(newcomer)
-    token = await service.generate_link(pg_access, "demo")
+    token = await service.generate_link(pg_access, "demo", user("accepted"))
     await service.accept_cgu(pg_access, newcomer, token, "v2", "v2")
     enrolled = await service.enroll(pg_access, newcomer, token, "v2")
     assert enrolled.admitted
@@ -1054,3 +1067,166 @@ async def test_own_claim_endpoint_requires_admin_own_verified_human_and_disables
         response = await client.get("/admin/platform/access/own-claims")
         assert response.status_code == 403
         assert "actual" not in response.text
+
+
+@pytest.mark.asyncio
+async def test_free_link_history_openings_recovery_expiry_and_individual_revocation(
+    access,
+):
+    from datetime import datetime, timedelta, timezone
+
+    from control_plane_backend.platform_access.schemas import (
+        CreatePlatformEnrollmentLink,
+    )
+
+    actor, newcomer = user("accepted"), user()
+    await service.set_team(access, actor, "demo", False, True)
+    token = await service.generate_link(
+        access, "demo", actor, CreatePlatformEnrollmentLink(note="Workshop")
+    )
+    page = await service.list_links(access, "demo", 0, 25)
+    first = page.items[0]
+    assert (
+        first.note == "Workshop"
+        and first.expires_at is None
+        and first.status == "active"
+    )
+    assert token not in page.model_dump_json()
+    revision = (await access.state()).revision
+    await service.record_opening(access, token)
+    assert (await service.list_links(access, "demo", 0, 25)).items[0].opening_count == 1
+    await service.preview_link(access, newcomer, token, None)
+    await service.enroll(access, newcomer, token, None)
+    assert (await service.list_links(access, "demo", 0, 25)).items[0].opening_count == 1
+    assert await service.reveal_link(access, "demo", first.id) == token
+    await service.record_opening(access, token)
+    assert (await service.list_links(access, "demo", 0, 25)).items[0].opening_count == 2
+    assert (await access.state()).revision == revision
+    later = await service.generate_link(
+        access,
+        "demo",
+        actor,
+        CreatePlatformEnrollmentLink(
+            note="Later",
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+        ),
+    )
+    history = await service.list_links(access, "demo", 0, 1)
+    assert history.total == 2 and len(history.items) == 1
+    later_id = history.items[0].id
+    await service.set_team(access, actor, "demo", False, False)
+    assert all(
+        item.status == "suspended"
+        for item in (await service.list_links(access, "demo", 0, 25)).items
+    )
+    with pytest.raises(HTTPException):
+        await service.record_opening(access, token)
+    await service.revoke_link(access, "demo", first.id)
+    await service.revoke_link(access, "demo", first.id)
+    await service.set_team(access, actor, "demo", False, True)
+    with pytest.raises(HTTPException):
+        await service.enroll(access, user(), token, None)
+    await service.preview_link(access, newcomer, later, None)
+    async with access.store.mutation() as session:
+        row = await session.get(PlatformAccessLinkRow, later_id)
+        row.expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+    assert (await service.list_links(access, "demo", 0, 25)).items[
+        0
+    ].status == "expired"
+    for operation in (
+        service.preview_link(access, newcomer, later, None),
+        service.enroll(access, newcomer, later, None),
+        service.accept_cgu(access, newcomer, later, "v1", "v1"),
+        service.record_opening(access, later),
+    ):
+        with pytest.raises(HTTPException):
+            await operation
+    with pytest.raises(HTTPException):
+        await service.reveal_link(access, "other-team", first.id)
+
+
+def test_link_creation_rejects_past_naive_expiry_and_oversized_note():
+    from datetime import datetime, timedelta, timezone
+
+    from control_plane_backend.platform_access.schemas import (
+        CreatePlatformEnrollmentLink,
+    )
+    from pydantic import ValidationError
+
+    for body in (
+        {"expires_at": datetime.now(timezone.utc) - timedelta(seconds=1)},
+        {"expires_at": datetime.now() + timedelta(days=1)},
+        {"note": "x" * 513},
+        {"created_by": "another-person"},
+    ):
+        with pytest.raises(ValidationError):
+            CreatePlatformEnrollmentLink.model_validate(body)
+
+
+@pytest.mark.asyncio
+async def test_link_admin_history_and_tokens_are_guarded(access):
+    actor = user("accepted")
+    await access.observe(actor)
+    await service.set_team(access, actor, "demo", False, True)
+    token = await service.generate_link(access, "demo", actor)
+    link_id = (await service.list_links(access, "demo", 0, 25)).items[0].id
+    app = FastAPI()
+    app.include_router(api.router)
+    app.dependency_overrides[get_platform_access] = lambda: access
+    app.dependency_overrides[api.get_current_user] = lambda: actor
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        access.rebac.admin = False
+        for method, path in (
+            ("GET", "/admin/platform/access/teams/demo/enrollment-links"),
+            (
+                "POST",
+                f"/admin/platform/access/teams/demo/enrollment-links/{link_id}/reveal",
+            ),
+            ("DELETE", f"/admin/platform/access/teams/demo/enrollment-links/{link_id}"),
+        ):
+            assert (await client.request(method, path)).status_code == 403
+        access.rebac.admin = True
+        history = await client.get("/admin/platform/access/teams/demo/enrollment-links")
+        assert token not in history.text
+        revealed = await client.post(
+            f"/admin/platform/access/teams/demo/enrollment-links/{link_id}/reveal"
+        )
+        assert revealed.json() == {"token": token}
+        assert revealed.headers["cache-control"] == "no-store"
+        actor.service_account = True
+        assert (
+            await client.post(
+                f"/admin/platform/access/teams/demo/enrollment-links/{link_id}/reveal"
+            )
+        ).status_code == 403
+        assert (
+            await client.post(
+                "/admin/platform/access/teams/demo/enrollment-link", json={}
+            )
+        ).status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_pg_concurrent_openings_and_revocation_are_serialized(pg_access):
+    import asyncio
+
+    token = await service.generate_link(pg_access, "demo", user("accepted"))
+    link_id = (await service.list_links(pg_access, "demo", 0, 25)).items[0].id
+    await asyncio.gather(*(service.record_opening(pg_access, token) for _ in range(4)))
+    assert (await service.list_links(pg_access, "demo", 0, 25)).items[
+        0
+    ].opening_count == 4
+    async with pg_access.store.mutation() as session:
+        link = await session.get(PlatformAccessLinkRow, link_id)
+        from datetime import datetime, timezone
+
+        link.revoked_at = datetime.now(timezone.utc)
+        await session.flush()
+        enrolling = asyncio.create_task(service.enroll(pg_access, user(), token, None))
+        await asyncio.sleep(0.05)
+        assert not enrolling.done()
+    with pytest.raises(HTTPException):
+        await enrolling
+    assert not pg_access.rebac.writes

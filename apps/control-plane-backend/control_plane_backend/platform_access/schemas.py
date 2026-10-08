@@ -4,7 +4,14 @@ from typing import Literal
 from uuid import UUID
 
 from fred_pod.security.platform_access import PlatformAccessPolicy
-from pydantic import BaseModel, ConfigDict, Field, JsonValue
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    ConfigDict,
+    Field,
+    JsonValue,
+    field_validator,
+)
 
 
 class PlatformAccessState(BaseModel):
@@ -44,7 +51,6 @@ class PlatformAccessTeam(BaseModel):
     name: str | None
     allowed: bool
     free: bool
-    has_enrollment_link: bool
 
 
 class SetPlatformAccessTeam(BaseModel):
@@ -55,6 +61,38 @@ class SetPlatformAccessTeam(BaseModel):
 
 class PlatformEnrollmentLink(BaseModel):
     token: str
+
+
+class CreatePlatformEnrollmentLink(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    note: str | None = Field(default=None, max_length=512)
+    expires_at: AwareDatetime | None = None
+
+    @field_validator("expires_at")
+    @classmethod
+    def future_expiry(cls, value: datetime | None) -> datetime | None:
+        from datetime import timezone
+
+        if value is not None and value <= datetime.now(timezone.utc):
+            raise ValueError("Expiration must be in the future")
+        return value
+
+
+class PlatformEnrollmentLinkInfo(BaseModel):
+    id: UUID
+    note: str | None
+    created_at: datetime
+    expires_at: datetime | None
+    revoked_at: datetime | None
+    status: Literal["active", "suspended", "expired", "revoked"]
+    opening_count: int
+    last_opened_at: datetime | None
+    recoverable: bool
+
+
+class PlatformEnrollmentLinksPage(BaseModel):
+    items: list[PlatformEnrollmentLinkInfo]
+    total: int
 
 
 class PlatformT0Preview(BaseModel):
@@ -99,7 +137,13 @@ class PlatformAccessPolicyPreview(BaseModel):
     matched: bool
     admitted: bool
     conditions: list[
-        Literal["matched", "not_matching", "missing", "incompatible", "timeout"]
+        Literal[
+            "matched",
+            "not_matching",
+            "missing",
+            "incompatible",
+            "timeout",
+        ]
     ]
 
 

@@ -27,6 +27,7 @@ from control_plane_backend.config.models import Configuration
 from control_plane_backend.platform_access import service
 from control_plane_backend.platform_access.schemas import (
     AcceptFreeEnrollmentCgu,
+    CreatePlatformEnrollmentLink,
     FreeEnrollmentPreview,
     GrantPlatformAccessUsers,
     PlatformAccessClaim,
@@ -37,6 +38,7 @@ from control_plane_backend.platform_access.schemas import (
     PlatformAccessTeam,
     PlatformAccessUsersPage,
     PlatformEnrollmentLink,
+    PlatformEnrollmentLinksPage,
     PlatformT0Preview,
     SetPlatformAccessPolicy,
     SetPlatformAccessTeam,
@@ -221,11 +223,65 @@ async def set_platform_access_team(
     response_model=PlatformEnrollmentLink,
 )
 async def generate_platform_enrollment_link(
-    team_id: str, access: Access, user: Admin
+    team_id: str,
+    body: CreatePlatformEnrollmentLink,
+    access: Access,
+    user: Admin,
+    response: Response,
 ) -> PlatformEnrollmentLink:
-    token = await service.generate_link(access, team_id)
-    emit_audit_log("platform.access.link.rotated", actor_uid=user.uid, team_id=team_id)
+    service.require_own_credential(user)
+    token = await service.generate_link(access, team_id, user, body)
+    response.headers["Cache-Control"] = "no-store"
+    emit_audit_log("platform.access.link.created", actor_uid=user.uid, team_id=team_id)
     return PlatformEnrollmentLink(token=token)
+
+
+@router.get(
+    "/admin/platform/access/teams/{team_id}/enrollment-links",
+    response_model=PlatformEnrollmentLinksPage,
+)
+async def list_platform_enrollment_links(
+    team_id: str,
+    access: Access,
+    user: Admin,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(25, ge=1, le=100),
+) -> PlatformEnrollmentLinksPage:
+    return await service.list_links(access, team_id, offset, limit)
+
+
+@router.post(
+    "/admin/platform/access/teams/{team_id}/enrollment-links/{link_id}/reveal",
+    response_model=PlatformEnrollmentLink,
+)
+async def reveal_platform_enrollment_link(
+    team_id: str, link_id: UUID, access: Access, user: Admin, response: Response
+) -> PlatformEnrollmentLink:
+    service.require_own_credential(user)
+    token = await service.reveal_link(access, team_id, link_id)
+    response.headers["Cache-Control"] = "no-store"
+    emit_audit_log(
+        "platform.access.link.revealed",
+        actor_uid=user.uid,
+        team_id=team_id,
+        link_id=str(link_id),
+    )
+    return PlatformEnrollmentLink(token=token)
+
+
+@router.delete(
+    "/admin/platform/access/teams/{team_id}/enrollment-links/{link_id}", status_code=204
+)
+async def revoke_platform_enrollment_link(
+    team_id: str, link_id: UUID, access: Access, user: Admin
+) -> None:
+    await service.revoke_link(access, team_id, link_id)
+    emit_audit_log(
+        "platform.access.link.revoked",
+        actor_uid=user.uid,
+        team_id=team_id,
+        link_id=str(link_id),
+    )
 
 
 @router.get("/platform-access/status", response_model=PlatformAccessStatus)
@@ -240,6 +296,13 @@ async def preview_free_enrollment(
     token: str, access: Access, config: Config, user: OwnUser
 ) -> FreeEnrollmentPreview:
     return await service.preview_link(access, user, token, config.app.gcu_version)
+
+
+@router.post("/platform-access/free/{token}/opening", status_code=204)
+async def record_free_enrollment_opening(
+    token: str, access: Access, user: OwnUser
+) -> None:
+    await service.record_opening(access, token)
 
 
 @router.post("/platform-access/free/{token}/gcu", status_code=204)

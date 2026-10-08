@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from fred_core.security.platform_access.models import (
     PlatformAccessClaimRow,
+    PlatformAccessLinkRow,
     PlatformAccessSettingsRow,
     PlatformAccessUserRow,
 )
@@ -274,13 +275,23 @@ class PlatformAccessStore:
     async def team(self, team_id: str, session: AsyncSession) -> TeamMetadataRow | None:
         return await session.get(TeamMetadataRow, team_id)
 
-    async def link_team(
+    async def link(
         self, token_hash: str, session: AsyncSession
-    ) -> TeamMetadataRow | None:
-        return await session.scalar(
-            select(TeamMetadataRow).where(
-                TeamMetadataRow.enrollment_token_hash == token_hash,
+    ) -> tuple[PlatformAccessLinkRow, TeamMetadataRow] | None:
+        now = datetime.now(timezone.utc)
+        result = await session.execute(
+            select(PlatformAccessLinkRow, TeamMetadataRow)
+            .join(TeamMetadataRow, TeamMetadataRow.id == PlatformAccessLinkRow.team_id)
+            .where(
+                PlatformAccessLinkRow.token_hash == token_hash,
+                PlatformAccessLinkRow.revoked_at.is_(None),
+                or_(
+                    PlatformAccessLinkRow.expires_at.is_(None),
+                    PlatformAccessLinkRow.expires_at > now,
+                ),
                 TeamMetadataRow.platform_access_free.is_(True),
                 ~TeamMetadataRow.id.startswith("personal-"),
             )
         )
+        row = result.one_or_none()
+        return (row[0], row[1]) if row is not None else None

@@ -2,7 +2,17 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Uuid, text
+from sqlalchemy import (
+    JSON,
+    BigInteger,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Uuid,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from fred_core.models import Base
@@ -47,4 +57,35 @@ class PlatformAccessUserRow(Base):
     granted_by: Mapped[str] = mapped_column(String, nullable=False)
     granted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
+    )
+
+
+class PlatformAccessLinkRow(Base):
+    __tablename__ = "platform_access_links"
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
+    team_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("teammetadata.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    token: Mapped[str | None] = mapped_column(String(43), nullable=True)
+    note: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    created_by: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    opening_count: Mapped[int] = mapped_column(
+        BigInteger, default=0, server_default="0", nullable=False
+    )
+    last_opened_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )

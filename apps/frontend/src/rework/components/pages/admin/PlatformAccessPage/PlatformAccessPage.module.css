@@ -109,3 +109,16 @@
 .exampleValue {
   overflow-wrap: anywhere;
 }
+.linkCreation {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--spacing-s);
+}
+.linkOutput {
+  margin-top: var(--spacing-s);
+}
+@media (max-width: 600px) {
+  .linkCreation {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -159,6 +159,38 @@ const injectedRtkApi = api.injectEndpoints({
       query: (queryArg) => ({
         url: `/control-plane/v1/admin/platform/access/teams/${queryArg.teamId}/enrollment-link`,
         method: "POST",
+        body: queryArg.createPlatformEnrollmentLink,
+      }),
+    }),
+    listPlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksGet: build.query<
+      ListPlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksGetApiResponse,
+      ListPlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/access/teams/${queryArg.teamId}/enrollment-links`,
+        params: {
+          offset: queryArg.offset,
+          limit: queryArg.limit,
+        },
+      }),
+    }),
+    revealPlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdRevealPost:
+      build.mutation<
+        RevealPlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdRevealPostApiResponse,
+        RevealPlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdRevealPostApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/control-plane/v1/admin/platform/access/teams/${queryArg.teamId}/enrollment-links/${queryArg.linkId}/reveal`,
+          method: "POST",
+        }),
+      }),
+    revokePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdDelete: build.mutation<
+      RevokePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdDeleteApiResponse,
+      RevokePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/access/teams/${queryArg.teamId}/enrollment-links/${queryArg.linkId}`,
+        method: "DELETE",
       }),
     }),
     getPlatformAccessStatusControlPlaneV1PlatformAccessStatusGet: build.query<
@@ -172,6 +204,15 @@ const injectedRtkApi = api.injectEndpoints({
       PreviewFreeEnrollmentControlPlaneV1PlatformAccessFreeTokenGetApiArg
     >({
       query: (queryArg) => ({ url: `/control-plane/v1/platform-access/free/${queryArg.token}` }),
+    }),
+    recordFreeEnrollmentOpeningControlPlaneV1PlatformAccessFreeTokenOpeningPost: build.mutation<
+      RecordFreeEnrollmentOpeningControlPlaneV1PlatformAccessFreeTokenOpeningPostApiResponse,
+      RecordFreeEnrollmentOpeningControlPlaneV1PlatformAccessFreeTokenOpeningPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/platform-access/free/${queryArg.token}/opening`,
+        method: "POST",
+      }),
     }),
     acceptFreeEnrollmentCguControlPlaneV1PlatformAccessFreeTokenGcuPost: build.mutation<
       AcceptFreeEnrollmentCguControlPlaneV1PlatformAccessFreeTokenGcuPostApiResponse,
@@ -1855,13 +1896,39 @@ export type GeneratePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeams
   /** status 200 Successful Response */ PlatformEnrollmentLink;
 export type GeneratePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinkPostApiArg = {
   teamId: string;
+  createPlatformEnrollmentLink: CreatePlatformEnrollmentLink;
 };
+export type ListPlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksGetApiResponse =
+  /** status 200 Successful Response */ PlatformEnrollmentLinksPage;
+export type ListPlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksGetApiArg = {
+  teamId: string;
+  offset?: number;
+  limit?: number;
+};
+export type RevealPlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdRevealPostApiResponse =
+  /** status 200 Successful Response */ PlatformEnrollmentLink;
+export type RevealPlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdRevealPostApiArg =
+  {
+    teamId: string;
+    linkId: string;
+  };
+export type RevokePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdDeleteApiResponse =
+  unknown;
+export type RevokePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdDeleteApiArg =
+  {
+    teamId: string;
+    linkId: string;
+  };
 export type GetPlatformAccessStatusControlPlaneV1PlatformAccessStatusGetApiResponse =
   /** status 200 Successful Response */ PlatformAccessStatus;
 export type GetPlatformAccessStatusControlPlaneV1PlatformAccessStatusGetApiArg = void;
 export type PreviewFreeEnrollmentControlPlaneV1PlatformAccessFreeTokenGetApiResponse =
   /** status 200 Successful Response */ FreeEnrollmentPreview;
 export type PreviewFreeEnrollmentControlPlaneV1PlatformAccessFreeTokenGetApiArg = {
+  token: string;
+};
+export type RecordFreeEnrollmentOpeningControlPlaneV1PlatformAccessFreeTokenOpeningPostApiResponse = unknown;
+export type RecordFreeEnrollmentOpeningControlPlaneV1PlatformAccessFreeTokenOpeningPostApiArg = {
   token: string;
 };
 export type AcceptFreeEnrollmentCguControlPlaneV1PlatformAccessFreeTokenGcuPostApiResponse = unknown;
@@ -3057,7 +3124,6 @@ export type PlatformAccessTeam = {
   name: string | null;
   allowed: boolean;
   free: boolean;
-  has_enrollment_link: boolean;
 };
 export type SetPlatformAccessTeam = {
   allowed: boolean;
@@ -3065,6 +3131,25 @@ export type SetPlatformAccessTeam = {
 };
 export type PlatformEnrollmentLink = {
   token: string;
+};
+export type CreatePlatformEnrollmentLink = {
+  note?: string | null;
+  expires_at?: string | null;
+};
+export type PlatformEnrollmentLinkInfo = {
+  id: string;
+  note: string | null;
+  created_at: string;
+  expires_at: string | null;
+  revoked_at: string | null;
+  status: "active" | "suspended" | "expired" | "revoked";
+  opening_count: number;
+  last_opened_at: string | null;
+  recoverable: boolean;
+};
+export type PlatformEnrollmentLinksPage = {
+  items: PlatformEnrollmentLinkInfo[];
+  total: number;
 };
 export type PlatformAccessStatus = {
   admitted: boolean;
@@ -4770,10 +4855,15 @@ export const {
   useLazyListPlatformAccessTeamsControlPlaneV1AdminPlatformAccessTeamsGetQuery,
   useSetPlatformAccessTeamControlPlaneV1AdminPlatformAccessTeamsTeamIdPatchMutation,
   useGeneratePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinkPostMutation,
+  useListPlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksGetQuery,
+  useLazyListPlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksGetQuery,
+  useRevealPlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdRevealPostMutation,
+  useRevokePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdDeleteMutation,
   useGetPlatformAccessStatusControlPlaneV1PlatformAccessStatusGetQuery,
   useLazyGetPlatformAccessStatusControlPlaneV1PlatformAccessStatusGetQuery,
   usePreviewFreeEnrollmentControlPlaneV1PlatformAccessFreeTokenGetQuery,
   useLazyPreviewFreeEnrollmentControlPlaneV1PlatformAccessFreeTokenGetQuery,
+  useRecordFreeEnrollmentOpeningControlPlaneV1PlatformAccessFreeTokenOpeningPostMutation,
   useAcceptFreeEnrollmentCguControlPlaneV1PlatformAccessFreeTokenGcuPostMutation,
   useEnrollFreeTeamControlPlaneV1PlatformAccessFreeTokenEnrollPostMutation,
   useListUsersControlPlaneV1UsersGetQuery,

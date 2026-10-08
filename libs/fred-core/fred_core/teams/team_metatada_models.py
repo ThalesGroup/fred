@@ -39,9 +39,6 @@ class TeamMetadataRow(Base):
     platform_access_free: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("false")
     )
-    enrollment_token_hash: Mapped[str | None] = mapped_column(
-        String(64), nullable=True, unique=True, index=True
-    )
     # AUTHZ-05 review item 9 (RFC Part 6 §29-32): a team's identity lives here
     # now — no Keycloak group backs it. No backfill on this column: it lands
     # on a fresh deployment with zero pre-existing teams.

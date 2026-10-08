@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import Button from "@shared/atoms/Button/Button";
@@ -12,6 +12,7 @@ import {
   useFreeEnrollmentPreviewQuery,
   useAcceptFreeCguMutation,
   useEnrollFreeTeamMutation,
+  useRecordFreeOpeningMutation,
 } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import styles from "./PlatformAccessPage.module.css";
 import PlatformAccessError from "./PlatformAccessError";
@@ -23,6 +24,21 @@ export default function FreeEnrollmentPage() {
   const preview = useFreeEnrollmentPreviewQuery({ token });
   const [accept, acceptance] = useAcceptFreeCguMutation();
   const [enroll, enrollment] = useEnrollFreeTeamMutation();
+  const [record] = useRecordFreeOpeningMutation();
+  const opening = useRef<{ token: string; result: Promise<unknown> } | null>(null);
+  const [openingFailed, setOpeningFailed] = useState(false);
+  useEffect(() => {
+    if (!preview.isSuccess) return;
+    let active = true;
+    setOpeningFailed(false);
+    if (opening.current?.token !== token) opening.current = { token, result: record({ token }).unwrap() };
+    void opening.current.result.catch(() => {
+      if (active) setOpeningFailed(true);
+    });
+    return () => {
+      active = false;
+    };
+  }, [token, preview.isSuccess, record]);
   const markdown = useLegalMarkdown("gcu");
   const [accepted, setAccepted] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -57,6 +73,7 @@ export default function FreeEnrollmentPage() {
       {preview.data && (
         <>
           <p>{t("rework.platformAccess.joinTeam", { team: preview.data.team_name })}</p>
+          {openingFailed && <p role="status">{t("rework.platformAccess.links.openingFailed")}</p>}
           {preview.data.cgu_required && (
             <>
               <div className={styles.legal}>

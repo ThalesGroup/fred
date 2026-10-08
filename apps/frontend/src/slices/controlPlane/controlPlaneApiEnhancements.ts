@@ -63,6 +63,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     "ControlPlaneTeamWiki",
     "ControlPlaneKnowledgeBase",
     "PlatformAccess",
+    "PlatformAccessLinks",
     "ControlPlaneAnnouncement",
   ],
   endpoints: {
@@ -81,9 +82,20 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     grantPlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdPut: { invalidatesTags: ["PlatformAccess"] },
     revokePlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdDelete: { invalidatesTags: ["PlatformAccess"] },
     importPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0ImportPost: { invalidatesTags: ["PlatformAccess"] },
-    setPlatformAccessTeamControlPlaneV1AdminPlatformAccessTeamsTeamIdPatch: { invalidatesTags: ["PlatformAccess"] },
+    setPlatformAccessTeamControlPlaneV1AdminPlatformAccessTeamsTeamIdPatch: {
+      invalidatesTags: ["PlatformAccess", "PlatformAccessLinks"],
+    },
     generatePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinkPost: {
-      invalidatesTags: ["PlatformAccess"],
+      invalidatesTags: ["PlatformAccessLinks"],
+    },
+    listPlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksGet: {
+      providesTags: ["PlatformAccessLinks"],
+    },
+    revokePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdDelete: {
+      invalidatesTags: ["PlatformAccessLinks"],
+    },
+    recordFreeEnrollmentOpeningControlPlaneV1PlatformAccessFreeTokenOpeningPost: {
+      invalidatesTags: ["PlatformAccessLinks"],
     },
     acceptFreeEnrollmentCguControlPlaneV1PlatformAccessFreeTokenGcuPost: { invalidatesTags: ["PlatformAccess"] },
     enrollFreeTeamControlPlaneV1PlatformAccessFreeTokenEnrollPost: {
@@ -914,3 +926,12 @@ export const usePreviewPlatformPolicyMutation =
   enhancedControlPlaneApi.usePreviewPlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPreviewPostMutation;
 export const useSavePlatformPolicyMutation =
   enhancedControlPlaneApi.useSavePlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPutMutation;
+
+export const usePlatformEnrollmentLinksQuery =
+  enhancedControlPlaneApi.useListPlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksGetQuery;
+export const useRevealPlatformLinkMutation =
+  enhancedControlPlaneApi.useRevealPlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdRevealPostMutation;
+export const useRevokePlatformLinkMutation =
+  enhancedControlPlaneApi.useRevokePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdDeleteMutation;
+export const useRecordFreeOpeningMutation =
+  enhancedControlPlaneApi.useRecordFreeEnrollmentOpeningControlPlaneV1PlatformAccessFreeTokenOpeningPostMutation;

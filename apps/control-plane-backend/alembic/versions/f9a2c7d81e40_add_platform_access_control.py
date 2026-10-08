@@ -46,14 +46,27 @@ def upgrade() -> None:
             nullable=False,
         ),
     )
-    op.add_column(
-        "teammetadata", sa.Column("enrollment_token_hash", sa.String(64), nullable=True)
+    op.create_table(
+        "platform_access_links",
+        sa.Column("id", sa.Uuid(), primary_key=True),
+        sa.Column(
+            "team_id",
+            sa.String(),
+            sa.ForeignKey("teammetadata.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        sa.Column("token_hash", sa.String(64), unique=True, nullable=False),
+        sa.Column("token", sa.String(43), nullable=True),
+        sa.Column("note", sa.String(512), nullable=True),
+        sa.Column("created_by", sa.String(), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("expires_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("revoked_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("opening_count", sa.BigInteger(), server_default="0", nullable=False),
+        sa.Column("last_opened_at", sa.DateTime(timezone=True), nullable=True),
     )
     op.create_index(
-        "ix_teammetadata_enrollment_token_hash",
-        "teammetadata",
-        ["enrollment_token_hash"],
-        unique=True,
+        "ix_platform_access_links_team_id", "platform_access_links", ["team_id"]
     )
     op.create_table(
         "platform_access_settings",
@@ -94,9 +107,8 @@ def downgrade() -> None:
     op.drop_table("platform_access_users")
     op.drop_table("platform_access_claims")
     op.drop_table("platform_access_settings")
-    op.drop_index("ix_teammetadata_enrollment_token_hash", table_name="teammetadata")
+    op.drop_table("platform_access_links")
     for name in (
-        "enrollment_token_hash",
         "platform_access_free",
         "platform_access_allowed",
     ):

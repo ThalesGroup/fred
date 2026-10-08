@@ -5,7 +5,7 @@ import json
 import secrets
 from datetime import datetime, timezone
 from typing import Literal, cast
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import HTTPException
 from fred_core.common import TeamId
@@ -13,6 +13,7 @@ from fred_core.logs.audit_log import emit_audit_log
 from fred_core.security.delegation import require_active_subject
 from fred_core.security.platform_access.access_control import PlatformAccess
 from fred_core.security.platform_access.models import (
+    PlatformAccessLinkRow,
     PlatformAccessSettingsRow,
     PlatformAccessUserRow,
 )
@@ -22,11 +23,12 @@ from fred_core.users.user_models import UserRow
 from fred_pod.security.platform_access import PlatformAccessPolicy
 from fred_pod.security.structure import KeycloakUser, is_service_agent
 from pydantic import JsonValue
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from control_plane_backend.platform_access.schemas import (
     AdmissionSource,
+    CreatePlatformEnrollmentLink,
     FreeEnrollmentPreview,
     PlatformAccessClaim,
     PlatformAccessOwnClaims,
@@ -36,6 +38,8 @@ from control_plane_backend.platform_access.schemas import (
     PlatformAccessTeam,
     PlatformAccessUser,
     PlatformAccessUsersPage,
+    PlatformEnrollmentLinkInfo,
+    PlatformEnrollmentLinksPage,
     PlatformT0Preview,
 )
 from control_plane_backend.teams.schemas import UserTeamRelation
@@ -57,7 +61,6 @@ def team_view(team: TeamMetadataRow) -> PlatformAccessTeam:
         name=team.name,
         allowed=team.platform_access_allowed,
         free=team.platform_access_free,
-        has_enrollment_link=team.enrollment_token_hash is not None,
     )
 
 
@@ -236,34 +239,149 @@ async def set_team(
         await access.state(session)
         team = await require_team(access, team_id, session)
         team.platform_access_allowed, team.platform_access_free = allowed, free
-        if not free:
-            team.enrollment_token_hash = None
         await preserve_actor(access, actor, session)
         return team_view(team)
 
 
-async def generate_link(access: PlatformAccess, team_id: str) -> str:
+def utc(value: datetime | None) -> datetime | None:
+    return (
+        value.replace(tzinfo=timezone.utc)
+        if value is not None and value.tzinfo is None
+        else value
+    )
+
+
+def link_view(link: PlatformAccessLinkRow, free: bool) -> PlatformEnrollmentLinkInfo:
+    expires = utc(link.expires_at)
+    status: Literal["active", "suspended", "expired", "revoked"] = (
+        "revoked"
+        if link.revoked_at
+        else "expired"
+        if expires is not None and expires <= datetime.now(timezone.utc)
+        else "suspended"
+        if not free
+        else "active"
+    )
+    return PlatformEnrollmentLinkInfo(
+        id=link.id,
+        note=link.note,
+        created_at=utc(link.created_at) or link.created_at,
+        expires_at=expires,
+        revoked_at=utc(link.revoked_at),
+        status=status,
+        opening_count=link.opening_count,
+        last_opened_at=utc(link.last_opened_at),
+        recoverable=link.token is not None,
+    )
+
+
+async def generate_link(
+    access: PlatformAccess,
+    team_id: str,
+    actor: KeycloakUser,
+    body: CreatePlatformEnrollmentLink | None = None,
+) -> str:
+    body = body or CreatePlatformEnrollmentLink()
     async with access.store.mutation() as session:
         await access.state(session)
         team = await require_team(access, team_id, session)
         if not team.platform_access_free:
             raise HTTPException(409, "team_not_free")
+        now = datetime.now(timezone.utc)
+        if body.expires_at is not None and body.expires_at <= now:
+            raise HTTPException(409, "free_enrollment_expiry_past")
         token = secrets.token_urlsafe(32)
-        team.enrollment_token_hash = hashlib.sha256(token.encode()).hexdigest()
+        session.add(
+            PlatformAccessLinkRow(
+                id=uuid4(),
+                team_id=team_id,
+                token=token,
+                token_hash=hashlib.sha256(token.encode()).hexdigest(),
+                note=body.note,
+                created_by=actor.uid,
+                created_at=now,
+                expires_at=body.expires_at,
+                opening_count=0,
+            )
+        )
         return token
+
+
+async def list_links(
+    access: PlatformAccess, team_id: str, offset: int, limit: int
+) -> PlatformEnrollmentLinksPage:
+    async with access.store.read() as session:
+        await access.state(session)
+        team = await require_team(access, team_id, session)
+        predicate = PlatformAccessLinkRow.team_id == team_id
+        rows = await session.scalars(
+            select(PlatformAccessLinkRow)
+            .where(predicate)
+            .order_by(
+                PlatformAccessLinkRow.created_at.desc(), PlatformAccessLinkRow.id.desc()
+            )
+            .offset(offset)
+            .limit(limit)
+        )
+        return PlatformEnrollmentLinksPage(
+            items=[link_view(link, team.platform_access_free) for link in rows],
+            total=int(
+                await session.scalar(
+                    select(func.count())
+                    .select_from(PlatformAccessLinkRow)
+                    .where(predicate)
+                )
+                or 0
+            ),
+        )
+
+
+async def owned_link(
+    access: PlatformAccess, team_id: str, link_id: UUID, session: AsyncSession
+) -> PlatformAccessLinkRow:
+    await require_team(access, team_id, session)
+    link = await session.get(PlatformAccessLinkRow, link_id)
+    if link is None or link.team_id != team_id:
+        raise HTTPException(404, "free_enrollment_link_invalid")
+    return link
+
+
+async def reveal_link(access: PlatformAccess, team_id: str, link_id: UUID) -> str:
+    async with access.store.read() as session:
+        await access.state(session)
+        link = await owned_link(access, team_id, link_id, session)
+        if link.token is None:
+            raise HTTPException(409, "free_enrollment_link_not_recoverable")
+        return link.token
+
+
+async def revoke_link(access: PlatformAccess, team_id: str, link_id: UUID) -> None:
+    async with access.store.mutation() as session:
+        await access.state(session)
+        link = await owned_link(access, team_id, link_id, session)
+        if link.revoked_at is None:
+            link.revoked_at = datetime.now(timezone.utc)
 
 
 async def require_link(
     access: PlatformAccess, token: str, session: AsyncSession
-) -> TeamMetadataRow:
+) -> tuple[PlatformAccessLinkRow, TeamMetadataRow]:
     if len(token) != 43:
         raise HTTPException(404, "free_enrollment_link_invalid")
-    team = await access.store.link_team(
+    result = await access.store.link(
         hashlib.sha256(token.encode()).hexdigest(), session
     )
-    if team is None:
+    if result is None:
         raise HTTPException(404, "free_enrollment_link_invalid")
-    return team
+    return result
+
+
+async def record_opening(access: PlatformAccess, token: str) -> None:
+    async with access.store.mutation() as session:
+        await access.state(session)
+        link, _ = await require_link(access, token, session)
+        link.opening_count += 1
+        link.last_opened_at = datetime.now(timezone.utc)
 
 
 async def cgu_required(
@@ -295,7 +413,7 @@ async def preview_link(
     await access.state()
     await access.observe(user)
     async with access.store.read() as session:
-        team = await require_link(access, token, session)
+        _, team = await require_link(access, token, session)
         return FreeEnrollmentPreview(
             team_name=team.name or team.id,
             cgu_required=await cgu_required(access, user.uid, version, session),
@@ -328,7 +446,7 @@ async def enroll(
     async with access.store.mutation() as session:
         await require_active_subject(user)
         await access.state(session)
-        team = await require_link(access, token, session)
+        _, team = await require_link(access, token, session)
         if await cgu_required(access, user.uid, version, session):
             raise HTTPException(403, "user_not_accept_gcu")
         if not (await access.rebac.has_team_memberships(user.uid, [team.id]))[0]:

@@ -209,6 +209,7 @@ async def initialize_platform_access(
             "platform_access_claims",
             "users",
             "teammetadata",
+            *(["platform_access_links"] if authority else []),
         ],
         component="platform-access",
         migrate_command="make db-upgrade (apps/control-plane-backend)",

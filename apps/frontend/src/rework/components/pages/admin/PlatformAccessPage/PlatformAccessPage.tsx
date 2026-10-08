@@ -10,7 +10,6 @@ import PageHeader from "@shared/molecules/PageHeader/PageHeader";
 import DataTable from "@shared/molecules/DataTable/LocalizedDataTable";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { getConfig } from "../../../../../common/config";
-import { platformPath } from "../../../../../common/platformAccess";
 import {
   usePlatformAccessStateQuery,
   usePlatformAccessUsersQuery,
@@ -22,8 +21,8 @@ import {
   useRevokePlatformUserMutation,
   useImportPlatformT0Mutation,
   useSetPlatformTeamMutation,
-  useGeneratePlatformLinkMutation,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import PlatformAccessLinkManager from "./PlatformAccessLinkManager";
 import PlatformAccessRuleEditor from "./PlatformAccessRuleEditor";
 import styles from "./PlatformAccessPage.module.css";
 
@@ -35,7 +34,7 @@ export default function PlatformAccessPage() {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
-  const [link, setLink] = useState<string>();
+  const [linkTeam, setLinkTeam] = useState<string>();
   const state = usePlatformAccessStateQuery(undefined, { skip: !enabled });
   const users = usePlatformAccessUsersQuery({ offset, limit: 25, query }, { skip: !enabled });
   const t0 = usePlatformAccessT0Query(undefined, { skip: !enabled });
@@ -46,7 +45,6 @@ export default function PlatformAccessPage() {
   const [revoke] = useRevokePlatformUserMutation();
   const [importT0] = useImportPlatformT0Mutation();
   const [setTeam] = useSetPlatformTeamMutation();
-  const [generate] = useGeneratePlatformLinkMutation();
   const run = async (action: () => Promise<unknown>) => {
     setBusy(true);
     try {
@@ -263,7 +261,6 @@ export default function PlatformAccessPage() {
                       disabled={locked || teams.isFetching}
                       checked={team.free}
                       onChange={(event) => {
-                        setLink(undefined);
                         void run(() =>
                           setTeam({
                             teamId: team.team_id,
@@ -282,35 +279,22 @@ export default function PlatformAccessPage() {
                       color="primary"
                       variant="filled"
                       size="medium"
-                      disabled={locked || !team.free || teams.isFetching}
-                      onClick={() =>
-                        void run(async () => {
-                          const result = await generate({ teamId: team.team_id }).unwrap();
-                          setLink(
-                            new URL(platformPath(`join-free/${result.token}`), window.location.origin).toString(),
-                          );
-                        })
-                      }
+                      disabled={locked || teams.isFetching}
+                      onClick={() => setLinkTeam(team.team_id)}
                     >
-                      {t(
-                        team.has_enrollment_link
-                          ? "rework.platformAccess.rotateLink"
-                          : "rework.platformAccess.createLink",
-                      )}
+                      {t("rework.platformAccess.links.manage")}
                     </Button>
                   ),
                 },
               ]}
             />
-            {link && (
-              <TextInput
-                label={t("rework.platformAccess.copyLink")}
-                value={link}
-                readOnly
-                onFocus={(event) => event.target.select()}
-              />
-            )}
           </section>
+          {linkTeam && teams.data?.find((team) => team.team_id === linkTeam) && (
+            <PlatformAccessLinkManager
+              team={teams.data.find((team) => team.team_id === linkTeam)!}
+              onClose={() => setLinkTeam(undefined)}
+            />
+          )}
         </>
       )}
     </div>
