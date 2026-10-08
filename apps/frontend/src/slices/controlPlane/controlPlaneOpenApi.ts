@@ -54,12 +54,6 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.setPlatformFiltering,
       }),
     }),
-    listPlatformAccessClaimsControlPlaneV1AdminPlatformAccessClaimsGet: build.query<
-      ListPlatformAccessClaimsControlPlaneV1AdminPlatformAccessClaimsGetApiResponse,
-      ListPlatformAccessClaimsControlPlaneV1AdminPlatformAccessClaimsGetApiArg
-    >({
-      query: () => ({ url: `/control-plane/v1/admin/platform/access/claims` }),
-    }),
     getPlatformAccessOwnClaimsControlPlaneV1AdminPlatformAccessOwnClaimsGet: build.query<
       GetPlatformAccessOwnClaimsControlPlaneV1AdminPlatformAccessOwnClaimsGetApiResponse,
       GetPlatformAccessOwnClaimsControlPlaneV1AdminPlatformAccessOwnClaimsGetApiArg
@@ -1842,9 +1836,6 @@ export type SetPlatformAccessFilteringControlPlaneV1AdminPlatformAccessPatchApiR
 export type SetPlatformAccessFilteringControlPlaneV1AdminPlatformAccessPatchApiArg = {
   setPlatformFiltering: SetPlatformFiltering;
 };
-export type ListPlatformAccessClaimsControlPlaneV1AdminPlatformAccessClaimsGetApiResponse =
-  /** status 200 Successful Response */ PlatformAccessClaim[];
-export type ListPlatformAccessClaimsControlPlaneV1AdminPlatformAccessClaimsGetApiArg = void;
 export type GetPlatformAccessOwnClaimsControlPlaneV1AdminPlatformAccessOwnClaimsGetApiResponse =
   /** status 200 Successful Response */ PlatformAccessOwnClaims;
 export type GetPlatformAccessOwnClaimsControlPlaneV1AdminPlatformAccessOwnClaimsGetApiArg = void;
@@ -3073,10 +3064,6 @@ export type PlatformAccessState = {
 };
 export type SetPlatformFiltering = {
   filtering_enabled: boolean;
-};
-export type PlatformAccessClaim = {
-  path: string[];
-  types: ("string" | "string_array")[];
 };
 export type JsonValue = any;
 export type PlatformAccessOwnClaims = {
@@ -4838,8 +4825,6 @@ export const {
   useGetPlatformAccessStateControlPlaneV1AdminPlatformAccessGetQuery,
   useLazyGetPlatformAccessStateControlPlaneV1AdminPlatformAccessGetQuery,
   useSetPlatformAccessFilteringControlPlaneV1AdminPlatformAccessPatchMutation,
-  useListPlatformAccessClaimsControlPlaneV1AdminPlatformAccessClaimsGetQuery,
-  useLazyListPlatformAccessClaimsControlPlaneV1AdminPlatformAccessClaimsGetQuery,
   useGetPlatformAccessOwnClaimsControlPlaneV1AdminPlatformAccessOwnClaimsGetQuery,
   useLazyGetPlatformAccessOwnClaimsControlPlaneV1AdminPlatformAccessOwnClaimsGetQuery,
   usePreviewPlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPreviewPostMutation,

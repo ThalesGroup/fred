@@ -24,7 +24,6 @@ from fred_core.security.platform_access.access_control import (
     PlatformAccess,
 )
 from fred_core.security.platform_access.models import (
-    PlatformAccessClaimRow,
     PlatformAccessSettingsRow,
     PlatformAccessUserRow,
 )
@@ -92,7 +91,6 @@ async def access(tmp_path):
         for model in (
             UserRow,
             TeamMetadataRow,
-            PlatformAccessClaimRow,
             PlatformAccessSettingsRow,
             PlatformAccessUserRow,
         ):
@@ -497,9 +495,6 @@ async def test_live_policy_cached_facts_new_paths_and_delegation(access):
         state.policy = rule("contains", "blocked", claim=["department"]).model_dump()
     assert not await second.admitted(human)
     assert not await access.admitted(delegated)
-    catalog = await access.store.claims()
-    assert ["unrelated"] in [row.path for row in catalog]
-    assert all(not hasattr(row, "value") for row in catalog)
 
 
 @pytest.mark.asyncio
@@ -529,30 +524,6 @@ async def test_delayed_observation_projects_current_policy_not_its_old_snapshot(
     row = await access.store.observe(human, previous)
     assert row.admission_attribute == {path_key(["new"]): "allowed"}
     assert await access.admitted(SimpleNamespace(uid=human.uid))
-
-
-@pytest.mark.asyncio
-async def test_catalog_is_bounded_metadata_and_known_claims_avoid_writes(
-    access, monkeypatch
-):
-    human = person()
-    human.admission_claims = {path_key([str(i)]): "private" for i in range(256)}
-    await access.store.discover(human)
-    assert len(await access.store.claims()) == 256
-    original = access.store.mutation
-    from unittest.mock import MagicMock
-
-    mutation = MagicMock(side_effect=original)
-    monkeypatch.setattr(access.store, "mutation", mutation)
-    await access.store.discover(human)
-    assert mutation.call_count == 0
-    human.admission_claims = {path_key(["not cataloged"]): "hidden"}
-    await access.store.discover(human)
-    assert mutation.call_count == 0
-    assert len(await access.store.claims()) == 256
-    assert evaluate(
-        rule("equals", "hidden", claim=["not cataloged"]), human.admission_claims
-    ).matched
 
 
 def test_object_claim_has_incompatible_explanation():

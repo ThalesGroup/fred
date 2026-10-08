@@ -34,19 +34,6 @@ class PlatformAccessSettingsRow(Base):
     )
 
 
-class PlatformAccessClaimRow(Base):
-    __tablename__ = "platform_access_claims"
-
-    id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    path: Mapped[list[str]] = mapped_column(JSON, nullable=False)
-    string_seen: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False, server_default=text("false")
-    )
-    array_seen: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False, server_default=text("false")
-    )
-
-
 class PlatformAccessUserRow(Base):
     __tablename__ = "platform_access_users"
 

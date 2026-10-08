@@ -69,7 +69,6 @@ SHARED_CORE_TABLES: frozenset[str] = frozenset(
         "session",
         "teammetadata",
         "platform_access_settings",
-        "platform_access_claims",
         "platform_access_users",
         "platform_access_links",
     }

@@ -30,7 +30,6 @@ from control_plane_backend.platform_access.schemas import (
     AdmissionSource,
     CreatePlatformEnrollmentLink,
     FreeEnrollmentPreview,
-    PlatformAccessClaim,
     PlatformAccessOwnClaims,
     PlatformAccessPolicyPreview,
     PlatformAccessState,
@@ -455,24 +454,6 @@ async def enroll(
             )
     emit_audit_log("platform.access.free.enrolled", actor_uid=user.uid, team_id=team.id)
     return await self_status(access, user, version)
-
-
-async def claim_catalog(access: PlatformAccess) -> list[PlatformAccessClaim]:
-    await access.state()
-    kinds: tuple[Literal["string", "string_array"], ...] = ("string", "string_array")
-    return [
-        PlatformAccessClaim(
-            path=row.path,
-            types=[
-                kind
-                for kind, seen in zip(
-                    kinds, (row.string_seen, row.array_seen), strict=True
-                )
-                if seen
-            ],
-        )
-        for row in await access.store.claims()
-    ]
 
 
 def require_own_credential(actor: KeycloakUser) -> None:

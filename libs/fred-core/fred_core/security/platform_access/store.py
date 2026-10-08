@@ -14,7 +14,6 @@ from sqlalchemy import func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from fred_core.security.platform_access.models import (
-    PlatformAccessClaimRow,
     PlatformAccessLinkRow,
     PlatformAccessSettingsRow,
     PlatformAccessUserRow,
@@ -40,8 +39,6 @@ class PlatformAccessStore:
     def __init__(self, engine: AsyncEngine):
         self.engine = engine
         self.sessions = make_session_factory(engine)
-        self._catalog_known: set[tuple[str, bool]] = set()
-        self._catalog_full = False
 
     @asynccontextmanager
     async def read(
@@ -136,65 +133,6 @@ class PlatformAccessStore:
                     granted_at=datetime.now(timezone.utc),
                 )
             )
-
-    async def claims(self) -> list[PlatformAccessClaimRow]:
-        async with self.read() as session:
-            return list(
-                (
-                    await session.scalars(
-                        select(PlatformAccessClaimRow)
-                        .order_by(PlatformAccessClaimRow.id)
-                        .limit(256)
-                    )
-                ).all()
-            )
-
-    async def discover(self, user: KeycloakUser) -> None:
-        observations = {
-            (key, isinstance(value, list))
-            for key, value in user.admission_claims.items()
-        }
-        unknown = observations - self._catalog_known
-        if not unknown:
-            return
-        if self._catalog_full:
-            known_paths = {key for key, _ in self._catalog_known}
-            unknown = {item for item in unknown if item[0] in known_paths}
-            if not unknown:
-                return
-        async with self.mutation("claim_catalog") as session:
-            rows = list(
-                (await session.scalars(select(PlatformAccessClaimRow).limit(256))).all()
-            )
-            by_id = {row.id: row for row in rows}
-            for key, array in sorted(unknown):
-                identity = hashlib.sha256(key.encode()).hexdigest()
-                row = by_id.get(identity)
-                if row is None:
-                    if len(by_id) >= 256:
-                        continue
-                    row = PlatformAccessClaimRow(
-                        id=identity,
-                        path=json.loads(key),
-                        string_seen=False,
-                        array_seen=False,
-                    )
-                    session.add(row)
-                    by_id[identity] = row
-                if array:
-                    row.array_seen = True
-                else:
-                    row.string_seen = True
-            await session.flush()
-            known = {
-                (path_key(row.path), array)
-                for row in by_id.values()
-                for array, seen in ((False, row.string_seen), (True, row.array_seen))
-                if seen
-            }
-            full = len(by_id) >= 256
-        self._catalog_known = known
-        self._catalog_full = full
 
     async def observe(
         self, user: KeycloakUser, policy: PlatformAccessPolicy | None

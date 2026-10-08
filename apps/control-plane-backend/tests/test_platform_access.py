@@ -18,7 +18,6 @@ from fred_core.security.platform_access.access_control import (
     get_platform_access,
 )
 from fred_core.security.platform_access.models import (
-    PlatformAccessClaimRow,
     PlatformAccessLinkRow,
     PlatformAccessSettingsRow,
     PlatformAccessUserRow,
@@ -81,7 +80,6 @@ async def access(tmp_path):
         for model in (
             UserRow,
             TeamMetadataRow,
-            PlatformAccessClaimRow,
             PlatformAccessLinkRow,
             PlatformAccessSettingsRow,
             PlatformAccessUserRow,
@@ -348,7 +346,6 @@ async def pg_access(monkeypatch):
             for model in (
                 UserRow,
                 TeamMetadataRow,
-                PlatformAccessClaimRow,
                 PlatformAccessLinkRow,
                 PlatformAccessSettingsRow,
                 PlatformAccessUserRow,
@@ -581,7 +578,7 @@ async def test_unseeded_policy_requires_explicit_rule_before_activation(access):
 
 
 @pytest.mark.asyncio
-async def test_rule_endpoints_permissions_validation_and_names_only(access):
+async def test_rule_endpoints_permissions_validation_and_retired_catalog(access):
     actor = user("accepted")
     await access.observe(actor)
     app = FastAPI()
@@ -591,10 +588,7 @@ async def test_rule_endpoints_permissions_validation_and_names_only(access):
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
-        catalog = await client.get("/admin/platform/access/claims")
-        assert catalog.status_code == 200
-        assert all(set(item) == {"path", "types"} for item in catalog.json())
-        assert "accepted" not in catalog.text
+        assert (await client.get("/admin/platform/access/claims")).status_code == 404
         response = await client.post(
             "/admin/platform/access/policy-preview", json=draft().model_dump()
         )
@@ -615,8 +609,6 @@ async def test_rule_endpoints_permissions_validation_and_names_only(access):
         )
         assert response.status_code == 422
         access.rebac.admin = False
-        response = await client.get("/admin/platform/access/claims")
-        assert response.status_code == 403
         response = await client.post(
             "/admin/platform/access/policy-preview", json=draft().model_dump()
         )

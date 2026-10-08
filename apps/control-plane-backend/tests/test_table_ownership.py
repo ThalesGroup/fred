@@ -61,7 +61,6 @@ def test_owned_set_covers_cp_tables_and_nothing_foreign() -> None:
         "session",
         "teammetadata",
         "platform_access_settings",
-        "platform_access_claims",
         "platform_access_users",
         "platform_access_links",
     }

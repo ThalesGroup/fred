@@ -3296,15 +3296,12 @@
       "rule": {
         "title": "Règle d'accès",
         "hint": "Les exceptions individuelles et les équipes autorisées permettent toujours l'accès.",
-        "discoveryHint": "Ces noms ont été observés dans des tokens humains vérifiés. La liste ne décrit pas tout le fournisseur d'identité ; certains utilisateurs peuvent ne pas avoir un claim.",
-        "claimsFailed": "La découverte des claims est indisponible. Choisissez un champ de votre compte dans l'explorateur.",
         "combination": "Combiner les conditions",
         "all": "Toutes les conditions (ET)",
         "any": "Au moins une condition (OU)",
         "condition": "Condition {{number}}",
         "accountField": "Champ du compte",
         "removeConditionNumber": "Retirer la condition {{number}}",
-        "observedClaim": "Claim observé",
         "operator": "Comparaison",
         "value": "Valeur",
         "regex": "Expression régulière",
@@ -3319,7 +3316,7 @@
         "conflict": "Un autre administrateur a enregistré une règle plus récente. Votre brouillon est conservé. Abandonnez-le et rechargez avant d'enregistrer à nouveau.",
         "actorLockout": "Cette règle retirerait votre dernière autorisation d'accès. Conservez une règle qui vous accepte ou ajoutez-vous d'abord une exception indépendante.",
         "invalidOrFailed": "Impossible de valider ou d'enregistrer la règle. Vérifiez les clés, les valeurs et les expressions régulières, puis réessayez.",
-        "required": "Enregistrez une règle d'accès avant d'activer le filtrage.",
+        "required": "Enregistrez une règle ou ajoutez une autorisation avant de filtrer.",
         "mode": "Mode de filtrage",
         "modeLabel": {
           "allow": "Autoriser les utilisateurs correspondant à la règle",
@@ -3331,10 +3328,6 @@
         "ruleDoesNotMatch": "Votre token ne satisfait pas la règle proposée.",
         "admitted": "Avec le filtrage actif, vous seriez autorisé, en tenant compte des exceptions et des équipes.",
         "denied": "Avec le filtrage actif, votre accès serait refusé.",
-        "type": {
-          "string": "Texte",
-          "string_array": "Liste de textes"
-        },
         "operatorLabel": {
           "contains": "Contient",
           "not_contains": "Ne contient pas",
@@ -3352,15 +3345,17 @@
         },
         "invalidRegex": "Expression régulière invalide. Vérifiez sa syntaxe.",
         "invalidCondition": "Condition invalide. Vérifiez ses clés et sa valeur.",
-        "delegatedHint": "Après un changement de champ, les requêtes déléguées peuvent nécessiter une nouvelle requête directe. Les exceptions et les équipes restent valides."
+        "delegatedHint": "Après un changement de champ, les requêtes déléguées peuvent nécessiter une nouvelle requête directe. Les exceptions et les équipes restent valides.",
+        "empty": "Aucune condition. Ajoutez une condition pour choisir un champ de votre compte.",
+        "saving": "Enregistrement...",
+        "unsaved": "Modifications non enregistrées",
+        "saveHint": "Les modifications de la règle s'appliquent après enregistrement, lorsque le filtrage est actif."
       },
       "picker": {
         "choose": "Choisir un champ de mon compte",
-        "title": "Choisir un champ",
+        "title": "Quel champ de votre compte voulez-vous filtrer ?",
         "own": "Champs de mon compte",
-        "observed": "Autres champs observés",
         "ownHint": "Choisissez un champ texte de votre compte actuel. Les champs techniques du token et les propriétés imbriquées sont masqués par défaut.",
-        "observedHint": "Champs texte à la racine observés dans les tokens vérifiés. Les valeurs des autres utilisateurs ne sont jamais affichées.",
         "search": "Rechercher un champ",
         "unsupported": "Cette valeur ne peut pas être filtrée comme du texte.",
         "truncated": "Certaines valeurs dépassent les limites d'affichage et ont été omises. Les champs indisponibles ne peuvent pas être sélectionnés.",
@@ -3369,7 +3364,6 @@
         "selected": "Champ sélectionné",
         "useField": "Utiliser ce champ",
         "ownAdvancedHint": "Claims vérifiés de votre token actuel, y compris les champs techniques et les propriétés imbriquées. Cliquez sur une clé contenant du texte ou une liste de textes.",
-        "observedAdvancedHint": "Tous les noms et types observés, y compris les chemins imbriqués et les listes de textes. Les valeurs des autres utilisateurs ne sont jamais affichées.",
         "advancedFields": "Afficher les champs avancés",
         "simpleFields": "Afficher les champs simples",
         "simpleEmpty": "Aucun champ texte à la racine ne correspond. Modifiez la recherche ou affichez les champs avancés.",

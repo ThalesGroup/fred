@@ -4,29 +4,21 @@ import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
 import TextInput from "@shared/atoms/TextInput/TextInput";
 import { Dialog } from "@shared/molecules/Dialog/Dialog";
-import type {
-  PlatformAccessClaim,
-  PlatformAccessCondition,
-} from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { PlatformAccessCondition } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { usePlatformAccessOwnClaimsQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import styles from "./PlatformAccessClaimPicker.module.css";
 
 import { isRootAttribute } from "./platformAccessClaims";
 
 export default function PlatformAccessClaimPicker({
-  observed,
-  catalogFailed,
   onSelect,
   onClose,
 }: {
-  observed: PlatformAccessClaim[];
-  catalogFailed: boolean;
   onSelect: (update: Partial<PlatformAccessCondition>) => void;
   onClose: () => void;
 }) {
   const { t } = useTranslation();
   const own = usePlatformAccessOwnClaimsQuery(undefined, { refetchOnMountOrArgChange: true });
-  const [source, setSource] = useState<"own" | "observed">("own");
   const [advanced, setAdvanced] = useState(false);
   const [search, setSearch] = useState("");
   const [path, setPath] = useState<string[]>();
@@ -46,9 +38,6 @@ export default function PlatformAccessClaimPicker({
     ([key, value]) =>
       (advanced || (typeof value === "string" && isRootAttribute([key]) && selectable.has(JSON.stringify([key])))) &&
       hasMatch(value, [key]),
-  );
-  const observedFields = observed.filter(
-    (claim) => (advanced || (isRootAttribute(claim.path) && claim.types.includes("string"))) && matches(claim.path),
   );
   const tree = (value: unknown, next: string[], key: string) => {
     if (!hasMatch(value, next)) return null;
@@ -92,33 +81,16 @@ export default function PlatformAccessClaimPicker({
       open
       title={t("rework.platformAccess.picker.title")}
       maxWidth={900}
+      scrollMode="children"
       confirmLabel={t("rework.platformAccess.picker.useField")}
       cancelLabel={t("common.cancel")}
-      confirmDisabled={!path || (source === "own" && !selectable.has(JSON.stringify(path)))}
+      confirmDisabled={!path || !selectable.has(JSON.stringify(path))}
       onCancel={onClose}
       onConfirm={() => {
         if (path) onSelect({ claim: path });
       }}
     >
       <div className={styles.content}>
-        <div className={styles.sources}>
-          {(["own", "observed"] as const).map((tab) => (
-            <Button
-              key={tab}
-              color="primary"
-              variant={source === tab ? "filled" : "outlined"}
-              size="medium"
-              aria-pressed={source === tab}
-              onClick={() => {
-                setSource(tab);
-                setPath(undefined);
-              }}
-            >
-              {t(`rework.platformAccess.picker.${tab}`)}
-            </Button>
-          ))}
-        </div>
-        <p>{t(`rework.platformAccess.picker.${source}${advanced ? "Advanced" : ""}Hint`)}</p>
         <div>
           <Button
             color="primary"
@@ -134,60 +106,46 @@ export default function PlatformAccessClaimPicker({
           </Button>
         </div>
         <TextInput
+          size="small"
+          compact
           label={t("rework.platformAccess.picker.search")}
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
-        {source === "own" ? (
-          <>
-            {own.isFetching && <p role="status">{t("rework.platformAccess.loading")}</p>}
-            {own.isError && (
-              <div role="alert">
-                <p>{t("rework.platformAccess.picker.failed")}</p>
-                <Button color="primary" variant="outlined" size="small" onClick={() => void own.refetch()}>
-                  {t("rework.platformAccess.retry")}
-                </Button>
-              </div>
-            )}
-            {facts && (
-              <>
-                {facts.truncated && <p role="status">{t("rework.platformAccess.picker.truncated")}</p>}
-                <div className={styles.json}>
-                  {advanced && "{"}
-                  <div className={styles.children}>{ownFields.map(([key, value]) => tree(value, [key], key))}</div>
-                  {advanced && "}"}
-                </div>
-                {!ownFields.length && <p>{t(`rework.platformAccess.picker.${advanced ? "empty" : "simpleEmpty"}`)}</p>}
-              </>
-            )}
-          </>
-        ) : (
-          <>
-            {catalogFailed && <p role="alert">{t("rework.platformAccess.rule.claimsFailed")}</p>}
-            <div className={styles.catalog}>
-              {observedFields.map((claim) => (
-                <button
-                  type="button"
-                  className={styles.key}
-                  key={JSON.stringify(claim.path)}
-                  aria-pressed={JSON.stringify(path) === JSON.stringify(claim.path)}
-                  onClick={() => select(claim.path)}
-                >
-                  {claim.path.map((key) => JSON.stringify(key)).join(" > ")}{" "}
-                  <span className={styles.explanation}>
-                    {claim.types.map((type) => t(`rework.platformAccess.rule.type.${type}`)).join(", ")}
-                  </span>
-                </button>
-              ))}
+        <>
+          {own.isFetching && <p role="status">{t("rework.platformAccess.loading")}</p>}
+          {own.isError && (
+            <div role="alert">
+              <p>{t("rework.platformAccess.picker.failed")}</p>
+              <Button color="primary" variant="outlined" size="small" onClick={() => void own.refetch()}>
+                {t("rework.platformAccess.retry")}
+              </Button>
             </div>
-            {!observedFields.length && <p>{t(`rework.platformAccess.picker.${advanced ? "empty" : "simpleEmpty"}`)}</p>}
-          </>
-        )}
+          )}
+          {facts && (
+            <>
+              {facts.truncated && <p role="status">{t("rework.platformAccess.picker.truncated")}</p>}
+              <div
+                className={styles.json}
+                role="region"
+                aria-label={t("rework.platformAccess.picker.own")}
+                tabIndex={0}
+              >
+                {advanced && "{"}
+                <div className={styles.children}>{ownFields.map(([key, value]) => tree(value, [key], key))}</div>
+                {advanced && "}"}
+              </div>
+              {!ownFields.length && <p>{t(`rework.platformAccess.picker.${advanced ? "empty" : "simpleEmpty"}`)}</p>}
+            </>
+          )}
+        </>
         {path && (
           <div className={styles.selection}>
             <p>
               {t("rework.platformAccess.picker.selected")}:{" "}
-              <strong>{path.map((key) => JSON.stringify(key)).join(" > ")}</strong>
+              <strong title={path.map((key) => JSON.stringify(key)).join(" > ")}>
+                {path.map((key) => JSON.stringify(key)).join(" > ")}
+              </strong>
             </p>
           </div>
         )}

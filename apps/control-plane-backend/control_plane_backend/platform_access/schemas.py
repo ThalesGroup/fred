@@ -122,11 +122,6 @@ class SetPlatformAccessPolicy(BaseModel):
     policy: PlatformAccessPolicy
 
 
-class PlatformAccessClaim(BaseModel):
-    path: list[str]
-    types: list[Literal["string", "string_array"]]
-
-
 class PlatformAccessOwnClaims(BaseModel):
     claims: dict[str, JsonValue]
     selectable_paths: list[list[str]]

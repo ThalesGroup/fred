@@ -30,7 +30,6 @@ from control_plane_backend.platform_access.schemas import (
     CreatePlatformEnrollmentLink,
     FreeEnrollmentPreview,
     GrantPlatformAccessUsers,
-    PlatformAccessClaim,
     PlatformAccessOwnClaims,
     PlatformAccessPolicyPreview,
     PlatformAccessState,
@@ -82,13 +81,6 @@ async def set_platform_access_filtering(
         filtering_enabled=body.filtering_enabled,
     )
     return result
-
-
-@router.get("/admin/platform/access/claims", response_model=list[PlatformAccessClaim])
-async def list_platform_access_claims(
-    access: Access, user: Admin
-) -> list[PlatformAccessClaim]:
-    return await service.claim_catalog(access)
 
 
 @router.get("/admin/platform/access/own-claims", response_model=PlatformAccessOwnClaims)

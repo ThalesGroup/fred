@@ -3296,15 +3296,12 @@
       "rule": {
         "title": "Admission rule",
         "hint": "Individual exceptions and authorized teams always allow access.",
-        "discoveryHint": "These names were observed in verified human tokens. This is not the complete identity-provider schema; some users may lack a claim.",
-        "claimsFailed": "Claim discovery is unavailable. Choose a field from your account using the explorer.",
         "combination": "Combine conditions",
         "all": "All conditions (AND)",
         "any": "At least one condition (OR)",
         "condition": "Condition {{number}}",
         "accountField": "Account field",
         "removeConditionNumber": "Remove condition {{number}}",
-        "observedClaim": "Observed claim",
         "operator": "Comparison",
         "value": "Value",
         "regex": "Regular expression",
@@ -3319,7 +3316,7 @@
         "conflict": "Another administrator saved a newer rule. Your draft is preserved. Discard it and reload before saving again.",
         "actorLockout": "This rule would remove your last admission source. Keep a rule that allows you or grant yourself an independent exception first.",
         "invalidOrFailed": "The rule could not be validated or saved. Check the claim keys, values and regular expressions, then try again.",
-        "required": "Save an admission rule before activating filtering.",
+        "required": "Save a rule or add an admission exception before activating filtering.",
         "mode": "Filter mode",
         "modeLabel": {
           "allow": "Allow users matching the rule",
@@ -3331,10 +3328,6 @@
         "ruleDoesNotMatch": "Your token does not match the draft rule.",
         "admitted": "With filtering active, you would be admitted, including independent exceptions and teams.",
         "denied": "With filtering active, you would be refused.",
-        "type": {
-          "string": "Text",
-          "string_array": "List of text"
-        },
         "operatorLabel": {
           "contains": "Contains",
           "not_contains": "Does not contain",
@@ -3352,15 +3345,17 @@
         },
         "invalidRegex": "Invalid regular expression. Check its syntax.",
         "invalidCondition": "Invalid condition. Check its keys and value.",
-        "delegatedHint": "After a field change, delegated requests may require a new direct user request. Exceptions and teams remain valid."
+        "delegatedHint": "After a field change, delegated requests may require a new direct user request. Exceptions and teams remain valid.",
+        "empty": "No conditions yet. Add a condition to choose a field from your account.",
+        "saving": "Saving...",
+        "unsaved": "Unsaved changes",
+        "saveHint": "Rule changes apply after saving, when filtering is active."
       },
       "picker": {
         "choose": "Choose an account field",
-        "title": "Choose a field",
+        "title": "Which account field do you want to filter?",
         "own": "My account fields",
-        "observed": "Other observed fields",
         "ownHint": "Choose a text field from your current account. Technical token fields and nested properties are hidden by default.",
-        "observedHint": "Root text fields observed in verified user tokens. Other users' values are never shown.",
         "search": "Search field names",
         "unsupported": "This value cannot be filtered as text.",
         "truncated": "Some values were omitted because the token exceeds display limits. Unavailable fields cannot be selected.",
@@ -3369,7 +3364,6 @@
         "selected": "Selected field",
         "useField": "Use this field",
         "ownAdvancedHint": "Verified claims from your current access token, including technical fields and nested properties. Click a text or text-list key to select it.",
-        "observedAdvancedHint": "All observed field names and types, including nested paths and text lists. Other users' values are never shown.",
         "advancedFields": "Show advanced fields",
         "simpleFields": "Show simple fields",
         "simpleEmpty": "No matching root text fields. Change the search or show advanced fields.",

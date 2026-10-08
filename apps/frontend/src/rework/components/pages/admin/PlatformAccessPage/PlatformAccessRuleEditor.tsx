@@ -16,14 +16,12 @@ import type {
   PlatformAccessState,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
-  usePlatformAccessClaimsQuery,
   usePreviewPlatformPolicyMutation,
   useSavePlatformPolicyMutation,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import styles from "./PlatformAccessPage.module.css";
 import PlatformAccessClaimPicker from "./PlatformAccessClaimPicker";
 import PlatformAccessValuePrompt from "./PlatformAccessValuePrompt";
-import { isRootAttribute } from "./platformAccessClaims";
 
 const emptyCondition = (): PlatformAccessCondition => ({
   claim: [""],
@@ -34,7 +32,7 @@ const emptyCondition = (): PlatformAccessCondition => ({
 const copyPolicy = (policy: PlatformAccessPolicy | null): PlatformAccessPolicy =>
   policy
     ? { ...policy, conditions: policy.conditions.map((condition) => ({ ...condition, claim: [...condition.claim] })) }
-    : { combination: "all", conditions: [emptyCondition()] };
+    : { combination: "all", conditions: [] };
 const operators: PlatformAccessCondition["operator"][] = ["contains", "not_contains", "equals", "not_equals", "regex"];
 
 export default function PlatformAccessRuleEditor({
@@ -47,7 +45,6 @@ export default function PlatformAccessRuleEditor({
   reload: () => Promise<PlatformAccessState | undefined>;
 }) {
   const { t } = useTranslation();
-  const claims = usePlatformAccessClaimsQuery();
   const [preview] = usePreviewPlatformPolicyMutation();
   const [save] = useSavePlatformPolicyMutation();
   const generation = useRef(0);
@@ -55,13 +52,15 @@ export default function PlatformAccessRuleEditor({
   const [revision, setRevision] = useState(state.revision);
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<string>();
   const [conflict, setConflict] = useState(false);
   const [conditionErrors, setConditionErrors] = useState<Record<number, string>>({});
-  const [picking, setPicking] = useState<number>();
+  const [picking, setPicking] = useState<number | "add">();
   const [selection, setSelection] = useState<{ index: number; claim: string[] }>();
   const [result, setResult] = useState<PlatformAccessPolicyPreview>();
   const locked = disabled || busy;
+  const [saved, setSaved] = useState(false);
   const valid =
     draft.conditions.length > 0 &&
     draft.conditions.every(
@@ -74,7 +73,7 @@ export default function PlatformAccessRuleEditor({
     );
 
   useEffect(() => {
-    if (!dirty && state.revision >= revision) {
+    if (!dirty && picking === undefined && selection === undefined && state.revision >= revision) {
       if (state.revision !== revision) {
         generation.current += 1;
         setResult(undefined);
@@ -82,12 +81,13 @@ export default function PlatformAccessRuleEditor({
       setDraft(copyPolicy(state.policy));
       setRevision(state.revision);
     }
-  }, [state, dirty, revision]);
+  }, [state, dirty, revision, picking, selection]);
 
   const edit = (policy: PlatformAccessPolicy) => {
     generation.current += 1;
     setDraft(policy);
     setDirty(true);
+    setSaved(false);
     setResult(undefined);
     setFeedback(undefined);
     setConditionErrors({});
@@ -142,6 +142,8 @@ export default function PlatformAccessRuleEditor({
   };
   const persist = async () => {
     setBusy(true);
+    setSaving(true);
+    setSaved(false);
     setFeedback(undefined);
     try {
       const saved = await save({ setPlatformAccessPolicy: { policy: draft, expected_revision: revision } }).unwrap();
@@ -151,11 +153,13 @@ export default function PlatformAccessRuleEditor({
       setConflict(false);
       setConditionErrors({});
       setResult(undefined);
+      setSaved(true);
       setFeedback(t("rework.platformAccess.rule.saved"));
     } catch (error) {
       reportError(error);
     } finally {
       setBusy(false);
+      setSaving(false);
     }
   };
   const discardAndReload = async () => {
@@ -179,7 +183,27 @@ export default function PlatformAccessRuleEditor({
 
   return (
     <section className={`${styles.section} ${styles.ruleEditor}`}>
-      <h2>{t("rework.platformAccess.rule.title")}</h2>
+      <div className={styles.ruleHeader}>
+        <h2>{t("rework.platformAccess.rule.title")}</h2>
+        <Button
+          color="primary"
+          variant="filled"
+          size="medium"
+          disabled={locked || !valid || !dirty || conflict}
+          onClick={() => void persist()}
+        >
+          {t(saving ? "rework.platformAccess.rule.saving" : "rework.platformAccess.rule.save")}
+        </Button>
+      </div>
+      <p className={styles.hint} role="status">
+        {t(
+          dirty
+            ? "rework.platformAccess.rule.unsaved"
+            : saved
+              ? "rework.platformAccess.rule.saved"
+              : "rework.platformAccess.rule.saveHint",
+        )}
+      </p>
       <Select
         label={t("rework.platformAccess.rule.mode")}
         size="medium"
@@ -194,7 +218,6 @@ export default function PlatformAccessRuleEditor({
       />
       <p>{t("rework.platformAccess.rule.hint")}</p>
       <p className={styles.hint}>{t("rework.platformAccess.rule.delegatedHint")}</p>
-      {claims.isError && <p role="alert">{t("rework.platformAccess.rule.claimsFailed")}</p>}
       <div className={styles.row} role="group" aria-label={t("rework.platformAccess.rule.combination")}>
         <span>{t("rework.platformAccess.rule.combination")}</span>
         {(["all", "any"] as const).map((combination) => (
@@ -225,7 +248,7 @@ export default function PlatformAccessRuleEditor({
             <legend className={styles.screenReaderOnly}>{conditionLabel}</legend>
             <div className={styles.conditionHeader}>
               <span aria-hidden="true">{conditionLabel}</span>
-              {draft.conditions.length > 1 && (
+              {
                 <Tooltip text={t("rework.platformAccess.rule.removeConditionNumber", { number: index + 1 })}>
                   <IconButton
                     variant="icon"
@@ -236,44 +259,22 @@ export default function PlatformAccessRuleEditor({
                     onClick={() => edit({ ...draft, conditions: draft.conditions.filter((_, i) => i !== index) })}
                   />
                 </Tooltip>
-              )}
+              }
             </div>
             <div className={styles.conditionGrid}>
-              <Select
-                size="small"
-                compact
-                label={t("rework.platformAccess.rule.accountField")}
-                ariaLabel={`${t("rework.platformAccess.rule.accountField")}: ${selectedField}`}
-                disabled={locked}
-                value={JSON.stringify(condition.claim)}
-                placeholder={t("rework.platformAccess.picker.choose")}
-                options={[
-                  ...(condition.claim.some(Boolean)
-                    ? [{ key: "current", value: JSON.stringify(condition.claim), label: selectedField }]
-                    : []),
-                  ...(claims.data ?? [])
-                    .filter(
-                      (claim) =>
-                        isRootAttribute(claim.path) &&
-                        claim.types.includes("string") &&
-                        JSON.stringify(claim.path) !== JSON.stringify(condition.claim),
-                    )
-                    .map((claim) => ({
-                      key: JSON.stringify(claim.path),
-                      value: JSON.stringify(claim.path),
-                      label: claim.path[0],
-                    })),
-                  { key: "explore", value: "explore", label: t("rework.platformAccess.picker.choose") },
-                ]}
-                onChange={(value) => {
-                  if (value === "explore") setPicking(index);
-                  else {
-                    const claim = JSON.parse(value) as string[];
-                    updateCondition(index, { claim });
-                    setSelection({ index, claim });
-                  }
-                }}
-              />
+              <div className={styles.accountField}>
+                <span>{t("rework.platformAccess.rule.accountField")}</span>
+                <button
+                  type="button"
+                  disabled={locked}
+                  className={styles.fieldChoice}
+                  aria-label={`${t("rework.platformAccess.rule.accountField")}: ${selectedField}`}
+                  aria-haspopup="dialog"
+                  onClick={() => setPicking(index)}
+                >
+                  {selectedField}
+                </button>
+              </div>
               <Select
                 size="small"
                 label={t("rework.platformAccess.rule.operator")}
@@ -317,13 +318,14 @@ export default function PlatformAccessRuleEditor({
           </fieldset>
         );
       })}
+      {!draft.conditions.length && <p>{t("rework.platformAccess.rule.empty")}</p>}
       <div className={styles.row}>
         <Button
           color="primary"
           variant="outlined"
           size="medium"
           disabled={locked || draft.conditions.length >= 16}
-          onClick={() => edit({ ...draft, conditions: [...draft.conditions, emptyCondition()] })}
+          onClick={() => setPicking("add")}
         >
           {t("rework.platformAccess.rule.addCondition")}
         </Button>
@@ -338,15 +340,6 @@ export default function PlatformAccessRuleEditor({
         >
           {t("rework.platformAccess.rule.test")}
         </Button>
-        <Button
-          color="primary"
-          variant="filled"
-          size="medium"
-          disabled={locked || !valid || !dirty || conflict}
-          onClick={() => void persist()}
-        >
-          {t("rework.platformAccess.rule.save")}
-        </Button>
         {(dirty || conflict) && (
           <Button
             color="primary"
@@ -359,15 +352,16 @@ export default function PlatformAccessRuleEditor({
           </Button>
         )}
       </div>
-      {picking !== undefined && draft.conditions[picking] && (
+      {picking !== undefined && (
         <PlatformAccessClaimPicker
-          observed={claims.data ?? []}
-          catalogFailed={claims.isError}
           onClose={() => setPicking(undefined)}
           onSelect={(update) => {
             if (update.claim) {
-              updateCondition(picking, { claim: update.claim });
-              setSelection({ index: picking, claim: update.claim });
+              const index = picking === "add" ? draft.conditions.length : picking;
+              if (picking === "add")
+                edit({ ...draft, conditions: [...draft.conditions, { ...emptyCondition(), claim: update.claim }] });
+              else updateCondition(picking, { claim: update.claim });
+              setSelection({ index, claim: update.claim });
             }
             setPicking(undefined);
           }}

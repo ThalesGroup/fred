@@ -165,3 +165,18 @@ export {
   badToastCopy,
   loneSortState,
 };
+
+const invalidDialogScroll = (
+  // @ts-expect-error Only body or child-owned scrolling is supported.
+  <Dialog
+    open
+    title="Bad"
+    confirmLabel="Done"
+    scrollMode="none"
+    onConfirm={() => {}}
+    onCancel={() => {}}
+  >
+    Text
+  </Dialog>
+);
+export { invalidDialogScroll };

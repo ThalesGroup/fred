@@ -2,21 +2,27 @@
 .content {
   --font-body-small: var(--font-body-medium);
   display: flex;
+  flex: 1;
   flex-direction: column;
   gap: var(--spacing-m);
   min-width: 0;
+  min-height: 0;
   font: var(--font-body-large);
 }
-.sources {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--spacing-s);
+.content > :not(.json) {
+  flex-shrink: 0;
+}
+.content p {
+  margin: 0;
 }
 .json {
+  flex: 1 1 20rem;
   border-radius: var(--radius-ms);
   background: var(--surface-container);
   padding: var(--spacing-m);
+  min-height: 0;
   overflow: auto;
+  overscroll-behavior: contain;
   color: var(--on-surface);
   font-family: var(--font-family-mono);
 }
@@ -65,14 +71,28 @@
   color: var(--on-surface-retreat);
   font: var(--font-body-medium);
 }
-.catalog {
-  display: flex;
-  flex-direction: column;
-  align-items: start;
-  gap: var(--spacing-xs);
-}
 .selection {
   border-top: 1px solid var(--outline-muted);
   padding-block-start: var(--spacing-m);
   overflow-wrap: anywhere;
+}
+
+@media (max-height: 600px) {
+  .content {
+    gap: var(--spacing-xs);
+  }
+  .json {
+    padding: var(--spacing-s);
+  }
+  .selection {
+    padding-block-start: var(--spacing-xs);
+    font: var(--font-body-medium);
+  }
+}
+
+.selection strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

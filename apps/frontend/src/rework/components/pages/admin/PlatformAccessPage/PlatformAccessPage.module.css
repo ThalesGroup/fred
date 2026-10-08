@@ -146,3 +146,43 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.ruleHeader {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-s);
+}
+.ruleHeader h2 {
+  margin: 0;
+  font: var(--font-title-large);
+}
+.accountField {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  min-width: 0;
+}
+.accountField > span {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
+.fieldChoice {
+  cursor: pointer;
+  border: 0;
+  border-radius: var(--radius-ms);
+  background: transparent;
+  padding: var(--spacing-s) 0;
+  color: var(--primary);
+  font: var(--font-body-large);
+  text-align: start;
+  overflow-wrap: anywhere;
+}
+.fieldChoice:hover {
+  text-decoration: underline;
+}
+.fieldChoice:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}

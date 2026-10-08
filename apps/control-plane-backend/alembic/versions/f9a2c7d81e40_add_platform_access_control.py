@@ -79,17 +79,6 @@ def upgrade() -> None:
         sa.Column("t0_completed_at", sa.DateTime(timezone=True), nullable=True),
     )
     op.create_table(
-        "platform_access_claims",
-        sa.Column("id", sa.String(64), primary_key=True),
-        sa.Column("path", sa.JSON(), nullable=False),
-        sa.Column(
-            "string_seen", sa.Boolean(), server_default=sa.false(), nullable=False
-        ),
-        sa.Column(
-            "array_seen", sa.Boolean(), server_default=sa.false(), nullable=False
-        ),
-    )
-    op.create_table(
         "platform_access_users",
         sa.Column(
             "user_id",
@@ -105,7 +94,6 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_table("platform_access_users")
-    op.drop_table("platform_access_claims")
     op.drop_table("platform_access_settings")
     op.drop_table("platform_access_links")
     for name in (

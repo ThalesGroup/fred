@@ -55,6 +55,8 @@ export interface DialogProps {
   hideCancel?: boolean;
   confirmColor?: ColorTheme;
   maxWidth?: number;
+  /** Let a bounded child region handle scrolling instead of the whole body. */
+  scrollMode?: "body" | "children";
   /** Optional element shown right after the title, e.g. an info icon with a tooltip. */
   titleAddon?: ReactNode;
   /** Optional caller-owned portal container inside the themed .fred-ui root. */
@@ -73,6 +75,7 @@ export function DialogPrimitive({
   hideCancel = false,
   confirmColor = "primary",
   maxWidth,
+  scrollMode = "body",
   titleAddon,
   portalContainer,
 }: DialogProps) {
@@ -206,7 +209,12 @@ export function DialogPrimitive({
                 </p>
                 {titleAddon}
               </div>
-              <div ref={contentRef} className={styles.content} tabIndex={bodyScrolls ? 0 : undefined}>
+              <div
+                ref={contentRef}
+                className={styles.content}
+                data-scroll-mode={scrollMode}
+                tabIndex={scrollMode === "body" && bodyScrolls ? 0 : undefined}
+              >
                 {children}
               </div>
               <div className={styles.actions}>

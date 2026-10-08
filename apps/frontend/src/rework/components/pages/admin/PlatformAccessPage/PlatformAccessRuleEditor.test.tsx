@@ -11,14 +11,6 @@ vi.mock("react-i18next", () => ({
   }),
 }));
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
-  usePlatformAccessClaimsQuery: () => ({
-    data: [
-      { path: ["profile", "unit"], types: ["string"] },
-      { path: ["a.b"], types: ["string_array"] },
-      { path: ["department"], types: ["string"] },
-      { path: ["iss"], types: ["string"] },
-    ],
-  }),
   usePlatformAccessOwnClaimsQuery: () => ({
     data: {
       claims: {
@@ -46,7 +38,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   state = {
     filtering_enabled: false,
-    t0_completed_at: null,
+      t0_completed_at: null,
     revision: 1,
     policy: {
       combination: "all",
@@ -84,10 +76,6 @@ const change = (node: HTMLInputElement, value: string) =>
 const showPicker = () => {
   const field = host.querySelector<HTMLButtonElement>('button[aria-label^="rework.platformAccess.rule.accountField"]')!;
   act(() => field.click());
-  const explore = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(
-    (node) => node.textContent?.trim() === "rework.platformAccess.picker.choose",
-  )!;
-  act(() => explore.click());
 };
 const valuePrompt = (useValue: boolean, example?: string) => {
   const dialog = document.querySelector('[role="dialog"]')!;
@@ -142,17 +130,37 @@ it("preserves drafts on concurrent refresh and conflict, then explicitly reloads
   await act(async () => button("reload").click());
   expect(input("value").value).toBe("remote");
 });
-it("adds and removes conditions without exposing manual path editing", () => {
-  render();
-  expect(input("pathKey 1")).toBeUndefined();
-  act(() => button("addCondition").click());
-  expect(host.querySelectorAll("fieldset")).toHaveLength(2);
-  expect(button("test").disabled).toBe(true);
-  const removals = [...host.querySelectorAll("button")].filter((node) =>
-    node.getAttribute("aria-label")?.startsWith("rework.platformAccess.rule.removeConditionNumber"),
+const confirmField = (name = '"department"') => {
+  const dialog = document.querySelector('[role="dialog"]')!;
+  act(() => [...dialog.querySelectorAll("button")].find((node) => node.textContent === name)!.click());
+  act(() =>
+    [...dialog.querySelectorAll("button")]
+      .find((node) => node.textContent === "rework.platformAccess.picker.useField")!
+      .click(),
   );
-  act(() => removals[1].click());
+};
+it("adds only confirmed fields and permits an empty unsaved draft", () => {
+  state.policy = null;
+  render();
+  expect(host.querySelectorAll("fieldset")).toHaveLength(0);
+  expect(button("test").disabled).toBe(true);
+  expect(button("save").disabled).toBe(true);
+  act(() => button("addCondition").click());
+  expect(host.querySelectorAll("fieldset")).toHaveLength(0);
+  act(() => [...document.querySelectorAll("button")].find((node) => node.textContent === "common.cancel")!.click());
+  expect(host.textContent).not.toContain("rule.unsaved");
+  act(() => button("addCondition").click());
+  confirmField();
+  valuePrompt(true);
   expect(host.querySelectorAll("fieldset")).toHaveLength(1);
+  act(() =>
+    host
+      .querySelector<HTMLButtonElement>('button[aria-label^="rework.platformAccess.rule.removeConditionNumber"]')!
+      .click(),
+  );
+  expect(host.querySelectorAll("fieldset")).toHaveLength(0);
+  expect(button("save").disabled).toBe(true);
+  expect(hooks.save).not.toHaveBeenCalled();
 });
 
 it("keeps selection accessible by keyboard", () => {
@@ -217,8 +225,9 @@ it("keeps case handling visible without a manual path editor", async () => {
 
 it("changes combination without saving and identifies each removable condition", async () => {
   render();
-  expect(host.querySelector('button[aria-label^="rework.platformAccess.rule.removeConditionNumber"]')).toBeNull();
   act(() => button("addCondition").click());
+  confirmField();
+  valuePrompt(true);
   const removal = host.querySelector<HTMLButtonElement>(
     'button[aria-label="rework.platformAccess.rule.removeConditionNumber 2"]',
   )!;
@@ -367,17 +376,13 @@ it("defaults to root text account attributes and explicitly copies a selected va
   expect(hooks.preview.mock.calls[0][0].platformAccessPolicy.conditions[0].claim).toEqual(["department"]);
 });
 
-it("limits observed names to root text attributes until advanced fields are requested", () => {
+it("exposes only own fields in a named keyboard scroll region", () => {
   const dialog = openPicker();
-  act(() => pickerButton(dialog, "rework.platformAccess.picker.observed")!.click());
-  expect(dialog.textContent).toContain('"department"');
-  expect(dialog.textContent).not.toContain('"iss"');
-  expect(dialog.textContent).not.toContain('"profile"');
-  expect(dialog.textContent).not.toContain('"a.b"');
-  act(() => pickerButton(dialog, "rework.platformAccess.picker.advancedFields")!.click());
-  expect(dialog.textContent).toContain('"iss"');
-  expect(dialog.textContent).toContain('"profile" > "unit"');
-  expect(dialog.textContent).toContain('"a.b"');
+  expect(pickerButton(dialog, "rework.platformAccess.picker.observed")).toBeUndefined();
+  const region = dialog.querySelector<HTMLElement>('[role="region"]')!;
+  expect(region.getAttribute("aria-label")).toBe("rework.platformAccess.picker.own");
+  expect(region.tabIndex).toBe(0);
+  expect(dialog.querySelector('[data-scroll-mode="children"]')).not.toBeNull();
 });
 
 it("clears hidden advanced selections without changing the draft", () => {
@@ -406,42 +411,37 @@ it("reports an empty simple search without exposing hidden token metadata", () =
   expect(dialog.textContent).not.toContain("rework.platformAccess.picker.simpleEmpty");
 });
 
-it("offers root text fields in a dropdown and keeps the existing operand when declined", async () => {
+it("opens the own JSON directly and preserves its original revision while selecting", async () => {
   render();
-  const field = host.querySelector<HTMLButtonElement>('button[aria-label^="rework.platformAccess.rule.accountField"]')!;
-  act(() => field.click());
-  const options = [...document.querySelectorAll<HTMLElement>('[role="option"]')];
-  expect(options.map((option) => option.textContent?.trim())).toEqual([
-    '"profile" > "unit"',
-    "department",
-    "rework.platformAccess.picker.choose",
-  ]);
-  act(() => options[1].click());
-  expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Customer Services");
-  valuePrompt(false);
-  expect(input("value").value).toBe("accepted");
-  await act(async () => button("test").click());
-  expect(hooks.preview.mock.calls[0][0].platformAccessPolicy.conditions[0].claim).toEqual(["department"]);
-  expect(hooks.save).not.toHaveBeenCalled();
-});
-
-it("preserves a confirmed field draft while its current-value prompt is open", () => {
-  render();
-  const field = host.querySelector<HTMLButtonElement>('button[aria-label^="rework.platformAccess.rule.accountField"]')!;
-  act(() => field.click());
-  const option = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(
-    (node) => node.textContent?.trim() === "department",
-  )!;
-  act(() => option.click());
-  expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+  showPicker();
+  expect(document.querySelector('[role="listbox"]')).toBeNull();
   state = {
     ...state,
     revision: 2,
     policy: { combination: "all", conditions: [{ claim: ["other"], operator: "equals", value: "remote" }] },
   };
   render();
+  confirmField();
   valuePrompt(false);
   expect(input("value").value).toBe("accepted");
+  await act(async () => button("save").click());
+  expect(hooks.save.mock.calls[0][0].setPlatformAccessPolicy).toMatchObject({
+    expected_revision: 1,
+    policy: { conditions: [{ claim: ["department"], value: "accepted" }] },
+  });
+});
+it("adopts a newer clean policy after picker cancellation", () => {
+  render();
+  showPicker();
+  state = {
+    ...state,
+    revision: 2,
+    policy: { combination: "all", conditions: [{ claim: ["other"], operator: "equals", value: "remote" }] },
+  };
+  render();
+  act(() => [...document.querySelectorAll("button")].find((node) => node.textContent === "common.cancel")!.click());
+  expect(input("value").value).toBe("remote");
+  expect(hooks.save).not.toHaveBeenCalled();
 });
 
 it("places persisted allow/block mode before conditions and submits the selected draft mode", async () => {

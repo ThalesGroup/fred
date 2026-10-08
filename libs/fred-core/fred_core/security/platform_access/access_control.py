@@ -90,7 +90,6 @@ class PlatformAccess:
 
     async def observe(self, user: KeycloakUser) -> UserRow:
         state = await self.state()
-        await self.store.discover(user)
         return await self.store.observe(user, self.policy(state))
 
     async def team_sources(
@@ -148,8 +147,7 @@ class PlatformAccess:
         try:
             state = await self.state()
             if isinstance(user, KeycloakUser):
-                await self.store.discover(user)
-            if not state.filtering_enabled:
+                    if not state.filtering_enabled:
                 if isinstance(user, KeycloakUser):
                     await self.store.observe(user, self.policy(state))
                 return True
@@ -211,7 +209,6 @@ async def initialize_platform_access(
         [
             "platform_access_settings",
             "platform_access_users",
-            "platform_access_claims",
             "users",
             "teammetadata",
             *(["platform_access_links"] if authority else []),
