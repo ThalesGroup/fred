@@ -4,14 +4,14 @@ Covered by automated tests, against the scenarios in `specs/document-access-sour
 
 - Config: the three legacy shapes, an absent `show_attach_files_control`, string booleans (`"false"` stays false), new keys winning over leftover legacy keys, both-off rejected, no legacy key in `model_dump` (`fred-capability-document-access/tests/test_capability.py`).
 - Manifest: sources first in a `sources` group, `visible_when="team_documents"` on the scope fields, no legacy key.
-- Chat controls: paperclip only with attachments; no scope picker and no bound libraries without team documents; `rag_scope` drops `corpus_only` and an impossible default falls back to `hybrid`.
+- Chat controls: paperclip only with attachments; no scope picker and no bound libraries without team documents; `rag_scope` offers all modes with either source, preserving a document-only default.
 - Tools: `include_attachments` / `include_team_documents` passed to the port; `list_document_tree` only with team documents.
-- Adapter: every ceiling combination crossed with `hybrid`, `corpus_only` and `general_only`, asserting the flags sent to Knowledge Flow, or no call (`fred-runtime/tests/test_document_search_source_ceilings.py`); the `attachments_only` alias narrows to attachments, never re-enables attachments turned off (`test_document_search_port_1906.py`), and warns once.
+- Adapter: every ceiling combination crossed with `hybrid`, `corpus_only` and `general_only`, asserting the flags sent to Knowledge Flow, or no call (`fred-runtime/tests/test_document_search_source_ceilings.py`); the removed `attachments_only` keyword is rejected; document-only mode includes attachments and respects source ceilings and explicit turn scope.
 - Simple packs: each pack alone, both, turning off one, turning off the last (document access deselected, both sources reset, library scope kept), unavailable members, shared capability cleared, Advanced clear, legacy attachments-only agent read (`toolPackLogic.test.ts`); two cards and no retired card or switch (`SimpleCapabilitiesView.test.tsx`).
 - Form: legacy keys normalized on load (`AgentFormModal.test.ts`), turning off the last source in Advanced deselects document access and resets both sources (`applyDocumentAccessConfigChange`), hidden gate hides its dependants (`CapabilityCard.test.tsx`).
 - Composer: `RagScopeControl` renders only `params.options`; a remembered scope no longer offered falls back to the control default.
 
-## Test evidence
+## Initial implementation test evidence (before reviewer decisions)
 
 | Suite | Result |
 | --- | --- |
@@ -36,9 +36,49 @@ Pending (task 6.3), for the developer on a local stack.
 
 ## Review and limitations
 
-- Performance review (task 6.2, `fred-performance-reviewer`): no finding. The search path still makes at most one awaited Knowledge Flow call per tool call, now skipped entirely when no scope remains; the tool stays wrapped by the existing tool observability middleware; no new metric, client or blocking call. The once-per-process warning flag is pod-local by design and has no await between check and set.
+- Performance review (task 6.2, `fred-performance-reviewer`): no finding. The search path still makes at most one awaited Knowledge Flow call per tool call, now skipped entirely when no scope remains; the tool stays wrapped by the existing tool observability middleware; no new metric, client or blocking call. The warning flag was subsequently deleted by the reviewer decision.
 - Advanced both-off: first implemented as a Save block, then replaced after developer review by deselecting document access (`applyDocumentAccessConfigChange` in `toolPackLogic.ts`, called from `AgentFormModal.handleCapabilityConfigChange`). Checks: `npx tsc --noEmit -p .` clean; `npx vitest run src/rework/components/pages/TeamAgentsPage` 12 files, 92 tests passed.
 - Review fixes (after author/independent review): alias narrowing, manifest version 0.2.0 (control-plane chat-controls cache key), strict legacy bool parsing, Simple last-pack reset, pack card a11y (missing flag as description, expand button named per pack with `aria-controls`). Checks: document-access `make code-quality` + `make test` 59 passed; fred-sdk `make code-quality` + `make test` 565 passed, 3 skipped; fred-runtime `test_document_search_source_ceilings.py` 10 passed; frontend `npx tsc`, `npx eslint`, `npx prettier`, `npx vitest run` (TeamAgentsPage, shared/organisms) 39 files, 334 passed.
-- Reviewer decision 3: raising the capability's `fred-sdk` floor to the release that ships the new port keywords (the migration note states the runtime requirement meanwhile).
-- Test fakes of `DocumentSearchPort` still declare `attachments_only`, because basedpyright rejects an override that drops a parameter.
+- Reviewer decision 3: require `fred-sdk[agents]>=4.4.2` now; the maintainer will publish the libraries immediately after PR merge.
+- All port fakes now omit the removed `attachments_only` argument.
 - Not covered by automated tests: the rendered pack cards, the library options under the Team documents card, the Advanced error message placement and the Help Center copy.
+
+## Reviewer decision follow-up — 2026-10-08
+
+The developer confirmed immediate removal of the SDK alias, document-only retrieval
+including attachments, and patch increments for all libraries. The maintainer will
+publish immediately after merge. The SDK warning state and helper are deleted;
+stored-config compatibility remains. ReAct/Deep now receive a conditional
+evidence-only answer instruction; custom Graph prompt policy is outside that hook.
+
+| Current verification | Result |
+| --- | --- |
+| Repository-root `make code-quality` | pass across all modules; runtime: 0 errors, 5 existing warnings |
+| SDK `make test` | 564 passed, 3 skipped |
+| Runtime `make test` | 1835 passed, 11 skipped (optional fastapi_mcp unavailable), 21 deselected |
+| Document access offline pytest suite | 60 passed |
+| Agent pod `make test` | 120 passed, 6 expected failures |
+| Frontend focused vitest | 14 files, 108 passed |
+| Frontend package `release:check`, `release:test` | pass; 153 tests passed |
+| Frontend package `pack:check` | all three archives pass |
+| Migration declaration / OpenSpec strict validation | pass |
+
+Independent read-only review covered the full branch against `swift`
+`c074584822f3d1e785c54c253e642b34e86da164`, starting from `a6f538f9a` plus
+pending implementation changes subsequently committed in `4dc140e5e` and
+`9a05777d2`. Backend/contracts/performance review found no actionable defect;
+frontend/composition/release review found one P3 French help-anchor mismatch,
+fixed in `3fade3d4d`. Author review checked that fix and the subsequent negative
+runtime test typing correction `32ff50467`.
+
+| Responsibility | Challenged invariant and result |
+| --- | --- |
+| SDK/runtime/capability | Source ceilings intersect turn flags; removed keyword rejects before I/O; both-off and general-only skip search; all cases covered by tests |
+| Config and consumers | Legacy booleans, canonical precedence, serialized values and cache invalidation agree with source controls |
+| Answer policy | Shared ReAct/Deep prompt receives document-only instruction only in that mode; actual model adherence untested |
+| UI composition | Simple/Advanced state, switch/expander events, shared modal consumers and translated scope labels reviewed; no live browser run |
+| Package metadata | All 12 Python and 3 npm packages incremented, local locks aligned, SDK/runtime floors raised; package publication and external consumers untested |
+| Performance | Existing awaited search transport and tool metrics retained; no new I/O or shared mutable state; no load campaign |
+
+Live manual task 6.3 and post-merge archive task 6.5 remain pending. No registry
+publication, live model evaluation, or live browser validation is claimed.

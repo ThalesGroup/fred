@@ -66,17 +66,17 @@
 - [x] 6.2 Run the `fred-performance-reviewer` skill on the adapter and capability diff, since the per-turn search call site changes. Verify that no finding is left open.
 - [ ] 6.3 Manually check on a local stack:
   - a legacy attachments-only agent shows "Attachments" on, has the paperclip, and its search never hits the corpus;
-  - a new Team-documents-only agent shows no paperclip and no "Your documents" gap;
+  - a new Team-documents-only agent shows no paperclip and offers "Documents only";
   - a re-saved agent stores only the new keys.
 
   Verify by recording the observations in `verification.md`.
-- [ ] 6.4 Apply the three confirmed reviewer decisions in design.md and replace the open questions in the PR description with their answers and verification evidence.
+- [x] 6.4 Apply the three confirmed reviewer decisions in design.md and replace the open questions in the PR description with their answers and verification evidence.
 - [ ] 6.5 Reconcile the artifacts with the delivered behavior, run `openspec validate split-attachments-and-team-documents --strict`, and archive once merged. Verify that `openspec/specs/document-access-sources/spec.md` exists and the GitHub issue is closed.
 
 ## 7. Reviewer decision follow-up
 
-- [ ] 7.1 Remove the SDK alias, resolver, warning state and fake parameters; verify the removed keyword is rejected.
-- [ ] 7.2 Include session attachments in document-only searches, preserve source and turn ceilings, offer document-only mode for either source, and verify all scope combinations and affected consumers.
-- [ ] 7.3 Update English/French labels, Help Center and runtime contract; verify document-only answer instructions reach the model.
-- [ ] 7.4 Increase every publishable `libs/` package patch version, preserve the npm alpha channel, raise affected SDK/runtime floors and refresh Python/npm consumer locks. Verify release metadata consistency without publishing.
-- [ ] 7.5 Run root code quality, affected tests and independent full-branch review against the PR's actual base; record findings and dispositions here or in the PR.
+- [x] 7.1 Remove the SDK alias, resolver, warning state and fake parameters; verify the removed keyword is rejected.
+- [x] 7.2 Include session attachments in document-only searches, preserve source and turn ceilings, offer document-only mode for either source, and verify all scope combinations and affected consumers.
+- [x] 7.3 Update English/French labels, Help Center and runtime contract; verify document-only answer instructions reach the model.
+- [x] 7.4 Increase every publishable `libs/` package patch version, preserve the npm alpha channel, raise affected SDK/runtime floors and refresh Python/npm consumer locks. Verify release metadata consistency without publishing.
+- [x] 7.5 Run root code quality, affected tests and independent full-branch review against the PR's actual base; record findings and dispositions here or in the PR.

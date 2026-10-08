@@ -117,7 +117,7 @@ Upgrade SDK/runtime and document-access consumers together. Migrate external `at
 
 1. Remove `attachments_only` in this PR. The developer explicitly accepts this API break and requests patch version increments rather than waiting for a minor or major release.
 2. Include attachments in `corpus_only` when both sources are enabled. Use all enabled sources, preserve source ceilings, and update the labels and Help Center to describe document-only answers.
-3. Raise dependency floors in this PR. Increase every publishable library under `libs/` by one patch (Python core `4.4.2`, each capability's next patch, frontend `0.1.1-alpha.0` retaining its alpha channel), refresh consumer lockfiles and require the new SDK/runtime where the changed contract needs them. This prepares versions; it does not publish packages or tag a code/chart release.
+3. Raise dependency floors in this PR. Increase every publishable library under `libs/` by one patch (Python core `4.4.2`, each capability's next patch, frontend `0.1.1-alpha.0` retaining its alpha channel), refresh consumer lockfiles and require the new SDK/runtime where the changed contract needs them. The maintainer will publish the libraries immediately after PR merge, before consumers upgrade. This prepares versions; it does not publish packages or tag a code/chart release.
 
 ## Deferred (separate issues)
 

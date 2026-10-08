@@ -107,7 +107,7 @@ The document search SHALL include the conversation's attached files only when `a
 
 #### Scenario: Per-turn scope narrows within the agent's sources
 
-- **WHEN** an agent with both sources on searches during a turn whose RAG scope is "Your documents"
+- **WHEN** an agent with both sources on searches during a turn whose RAG scope is "Documents only"
 - **THEN** both the session attachments and team corpus are searched, and the answer uses document evidence without supplementation from general knowledge
 
 #### Scenario: General knowledge only
