@@ -59,6 +59,21 @@ Condition controls SHALL share a compact row when space permits and reflow witho
 - **THEN** only the draft claim path SHALL change and the existing operand SHALL remain intact
 - **AND** neither choice SHALL save the policy automatically
 
+#### Scenario: Block mode with independent exception
+
+- **WHEN** a person matches a block rule and has a current user exception or authorized/Free membership
+- **THEN** the independent source SHALL admit them
+
+#### Scenario: Block mode with absent claim
+
+- **WHEN** the verified token lacks the selected claim and the combined block rule does not match
+- **THEN** the rule SHALL permit admission
+
+#### Scenario: Block mode with unobserved delegated path
+
+- **WHEN** delegated evidence does not cover a newly selected claim path
+- **THEN** that evidence SHALL NOT establish rule-derived admission until a fresh direct observation
+
 ### Requirement: Administrators select claims using their own verified session
 
 The rule editor SHALL offer observed root text attribute names in its dropdown, excluding token protocol metadata; the detailed explorer SHALL default to selectable root text attributes from the connected administrator's own verified access-token claims. The observed-name catalog SHALL use the same root-text and metadata restrictions by default. An explicit advanced-fields action SHALL expose the complete bounded searchable JSON tree and catalog, including nested paths and string arrays. Changing display mode SHALL clear pending field selection and copied values without modifying the rule draft. Only compatible bounded string/string-array paths SHALL be selectable. In advanced mode, unsupported values SHALL be visible with an explanation; omitted oversized values SHALL be indicated. Selected keys SHALL preserve their exact nested path without interpreting literal dots. After confirming a field, administrators SHALL explicitly choose in a separate popup whether to reuse a current string or array element from their own verified account or retain the entered operand. Field selection SHALL modify only the draft; existing AND/OR, preview, save and concurrent-revision safeguards SHALL remain in effect. Observed names/types SHALL remain available; exact paths SHALL be selected through the explorer rather than manual entry. The view SHALL be restricted to own human credentials and platform administration, SHALL NOT expose bearer tokens, signatures or other users' values, SHALL NOT persist or log payload values, and SHALL NOT retain the response after dismissal.
@@ -93,18 +108,91 @@ The rule editor SHALL offer observed root text attribute names in its dropdown, 
 - **WHEN** an administrator selects an advanced field and switches back to simple fields
 - **THEN** the hidden selection and copied operand SHALL be cleared, while saved rules and the existing draft SHALL remain unchanged
 
+### Requirement: Admission policy is managed and activated by administrators
 
-#### Scenario: Block mode with independent exception
+Admission administration SHALL be available in authenticated Fred deployments with enforced ReBAC after the required shared SQL migration. Its policy and activation SHALL be controlled exclusively by versioned durable administrator state. There SHALL be no admission-specific YAML, Helm, SDK environment or Pydantic configuration model, and no deployment seed. An absent authority SHALL initialize with no policy, revision zero and filtering inactive. Restarts SHALL preserve administrator state. Authentication-disabled development SHALL retain its existing behavior. Support destinations SHALL reuse frontend `contactSupportLink`.
 
-- **WHEN** a person matches a block rule and has a current user exception or authorized/Free membership
-- **THEN** the independent source SHALL admit them
+#### Scenario: Configured nested attribute matches
 
-#### Scenario: Block mode with absent claim
+- **WHEN** an administrator saves a nested claim condition in allow mode and explicitly activates filtering
+- **THEN** a verified human token satisfying the condition SHALL establish rule-derived admission
 
-- **WHEN** the verified token lacks the selected claim and the combined block rule does not match
-- **THEN** the rule SHALL permit admission
+#### Scenario: Attribute does not establish eligibility
 
-#### Scenario: Block mode with unobserved delegated path
+- **WHEN** a selected claim is absent, empty, incompatible or fails its predicate
+- **THEN** that predicate SHALL NOT match, including for negative operators; effective admission SHALL follow the combined rule, policy mode and independent sources
 
-- **WHEN** delegated evidence does not cover a newly selected claim path
-- **THEN** that evidence SHALL NOT establish rule-derived admission until a fresh direct observation
+#### Scenario: Configuration omitted or invalid
+
+- **WHEN** an authenticated deployment starts without any admission configuration
+- **THEN** administration SHALL be available and an absent SQL authority SHALL begin with filtering inactive
+- **WHEN** an administrator submits an invalid rule
+- **THEN** the API SHALL reject it without changing policy or filtering
+
+#### Scenario: UI policy survives restart
+
+- **WHEN** services restart after an administrator saves policy or filtering state
+- **THEN** all participating services SHALL continue using the saved SQL authority
+
+#### Scenario: Keycloak directory remains authoritative
+
+- **WHEN** admission is used with `user_directory: keycloak` or `local`
+- **THEN** the directory SHALL retain profile/provisioning authority and verified human observations SHALL supply Fred admission evidence
+
+### Requirement: Admission sources are independent of resource permissions
+
+When filtering is active, the system SHALL admit a non-suspended person if their verified claim evaluation permits admission under the current allow/block mode, they have a current individual exception, or they are a current member of an authorized team, including a Free team. Ordinary public-team visibility SHALL not count as membership. Admission SHALL neither grant a platform role nor extend team or resource permissions. Account suspension and required CGU acceptance SHALL still apply.
+
+#### Scenario: New non-matching person is refused
+
+- **WHEN** a new person is not admitted by the current rule mode and has no individual exception or eligible membership
+- **THEN** normal platform access SHALL return HTTP 403 with `detail="platform_access_denied"`
+
+#### Scenario: One source is removed while another remains
+
+- **WHEN** a person's individual exception is removed but another valid admission source remains
+- **THEN** admission SHALL remain available through that other source
+
+#### Scenario: Visibility and admission are different
+
+- **WHEN** a person can view a public authorized team but is not its member
+- **THEN** that visibility SHALL not grant platform admission
+
+#### Scenario: Admitted person is suspended or lacks resource permission
+
+- **WHEN** an otherwise eligible person is suspended or requests a resource they cannot access
+- **THEN** the existing suspension or resource refusal SHALL remain effective
+
+### Requirement: Admission is enforced at backend boundaries
+
+The same authoritative live policy and exception state SHALL govern normal direct and delegated human requests across participating backends and replicas. A workload acting for a person SHALL use that person's complete, unconflicted and unexpired selected human evidence interpreted under the current policy mode, or independent exceptions, never the workload's claims or service role. Pure service operations SHALL retain existing authentication and authorization. JWT decoding caches SHALL NOT cache admission decisions or prevent selection of a newly configured claim for direct human requests. Only active-policy selected human evidence SHALL be persisted; whole JWTs and unrelated claim values SHALL NOT be persisted or exposed in principal responses/logs. Shared-state failures SHALL fail closed with HTTP 503 rather than be presented as definitive policy denial.
+
+#### Scenario: Direct API or cached token cannot bypass removal
+
+- **WHEN** a person's last exception is removed and they call another backend or replica with an already decoded JWT
+- **THEN** the next request SHALL use current admission state and be refused
+
+#### Scenario: Policy changes with a cached human token
+
+- **WHEN** an administrator changes a selected claim, predicate, allow/block mode or all/any combination
+- **THEN** subsequent direct human requests SHALL evaluate the new policy against verified token facts without restart or token renewal
+
+#### Scenario: Delegated person loses admission
+
+- **WHEN** a person's last admission source is withdrawn
+- **THEN** delegated calls SHALL be refused even if the workload remains authorized as a service
+
+#### Scenario: Claim-derived delegated eligibility is stale
+
+- **WHEN** selected evidence is expired, contradictory or incompatible with the current selected paths
+- **THEN** it SHALL NOT establish claim-derived eligibility
+
+#### Scenario: A newly selected delegated claim has no observation
+
+- **WHEN** a changed rule references a claim not present in the person's stored verified evidence
+- **THEN** rule-derived admission SHALL be refused until fresh human evidence covers all selected paths, in both allow and block modes, while independent exceptions remain effective
+
+#### Scenario: Admission authority unavailable
+
+- **WHEN** authoritative policy, exceptions or required membership cannot be read reliably
+- **THEN** normal human platform requests SHALL fail closed with HTTP 503

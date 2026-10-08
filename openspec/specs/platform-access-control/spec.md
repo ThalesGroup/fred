@@ -12,13 +12,13 @@ Admission administration SHALL be available in authenticated Fred deployments wi
 
 #### Scenario: Configured nested attribute matches
 
-- **WHEN** an administrator saves a nested claim condition and explicitly activates filtering
+- **WHEN** an administrator saves a nested claim condition in allow mode and explicitly activates filtering
 - **THEN** a verified human token satisfying the condition SHALL establish rule-derived admission
 
 #### Scenario: Attribute does not establish eligibility
 
 - **WHEN** a selected claim is absent, empty, incompatible or fails its predicate
-- **THEN** that condition SHALL NOT establish eligibility, including for negative operators
+- **THEN** that predicate SHALL NOT match, including for negative operators; effective admission SHALL follow the combined rule, policy mode and independent sources
 
 #### Scenario: Configuration omitted or invalid
 
@@ -39,11 +39,11 @@ Admission administration SHALL be available in authenticated Fred deployments wi
 
 ### Requirement: Admission sources are independent of resource permissions
 
-When filtering is active, the system SHALL admit a non-suspended person if their verified attribute matches, they have a current individual exception, or they are a current member of an authorized team, including a Free team. Ordinary public-team visibility SHALL not count as membership. Admission SHALL neither grant a platform role nor extend team or resource permissions. Account suspension and required CGU acceptance SHALL still apply.
+When filtering is active, the system SHALL admit a non-suspended person if their verified claim evaluation permits admission under the current allow/block mode, they have a current individual exception, or they are a current member of an authorized team, including a Free team. Ordinary public-team visibility SHALL not count as membership. Admission SHALL neither grant a platform role nor extend team or resource permissions. Account suspension and required CGU acceptance SHALL still apply.
 
 #### Scenario: New non-matching person is refused
 
-- **WHEN** a new person has no matching claim, individual exception or eligible membership
+- **WHEN** a new person is not admitted by the current rule mode and has no individual exception or eligible membership
 - **THEN** normal platform access SHALL return HTTP 403 with `detail="platform_access_denied"`
 
 #### Scenario: One source is removed while another remains
@@ -124,7 +124,7 @@ The system SHALL provide an administrator-triggered preview and one atomic impor
 
 ### Requirement: Free-team links admit only their authenticated caller
 
-A platform administrator SHALL be able to enable Free enrollment and obtain an opaque revocable link for one existing non-personal team. A signed-in person otherwise denied by admission filtering SHALL be able to use that link to join that team. A successful enrollment SHALL grant only the existing member relation to the caller, retain CGU and suspension checks, and expose the Free-team admission source in administration. The enrollment surface SHALL not reveal directories, normal product bootstrap or arbitrary private-team data.
+A platform administrator SHALL be able to enable Free enrollment and generate multiple independent opaque revocable links for one existing non-personal team. Each link SHALL have an optional note and optional timezone-aware expiry; omitted expiry SHALL mean no time limit. Generating a link SHALL NOT invalidate earlier links. Revocation SHALL be individual and irreversible; expired or revoked links SHALL fail preview, legal acceptance and enrollment. Only generation and an explicit own-human platform-administrator recovery action SHALL return the plaintext token, with no-store response headers. A signed-in person otherwise denied by admission filtering SHALL be able to use that link to join that team. A successful enrollment SHALL grant only the existing member relation to the caller, retain CGU and suspension checks, and expose the Free-team admission source in administration. The enrollment surface SHALL not reveal directories, normal product bootstrap or arbitrary private-team data.
 
 #### Scenario: Denied external person joins a Free team
 
@@ -143,12 +143,12 @@ A platform administrator SHALL be able to enable Free enrollment and obtain an o
 
 #### Scenario: Old or disabled link is refused
 
-- **WHEN** a link is invalid, rotated, or belongs to a team whose Free flag was removed or whose registry entry was deleted
+- **WHEN** a link is invalid, revoked, expired, or belongs to a team whose Free flag is disabled or whose registry entry was deleted
 - **THEN** enrollment SHALL be refused without granting membership or admission
 
 ### Requirement: Team-derived admission follows current state
 
-Admission derived from a team SHALL require both a current authorization or Free flag and current membership. Removing Free SHALL invalidate its enrollment links and its derived admission source, while keeping existing membership and independent admission sources intact. Disabling and later re-enabling Free SHALL not reactivate old links. Revoking team authorization, leaving the team or deleting the team SHALL withdraw the corresponding source on subsequent requests.
+Admission derived from a team SHALL require both a current authorization or Free flag and current membership. Removing Free SHALL suspend its usable enrollment links and remove its derived admission source, while keeping existing membership and independent admission sources intact. Re-enabling Free SHALL resume links that have not expired or been revoked. Revoking a link SHALL prevent future enrollment without removing existing membership; admission withdrawal SHALL continue to follow current membership and team flags. Revoking team authorization, leaving the team or deleting the team SHALL withdraw the corresponding source on subsequent requests.
 
 #### Scenario: Free is removed
 
@@ -160,9 +160,20 @@ Admission derived from a team SHALL require both a current authorization or Free
 - **WHEN** a person leaves or is removed from an authorized or Free team
 - **THEN** that team's source SHALL no longer grant admission, including with the same JWT
 
+#### Scenario: Free is restored without resurrecting revoked links
+
+- **WHEN** Free is disabled then restored
+- **THEN** previously usable links SHALL resume while expired or individually revoked links SHALL remain unusable
+
+#### Scenario: Membership is removed while links remain reusable
+
+- **WHEN** a person's only Free-team membership is removed
+- **THEN** the same JWT SHALL no longer grant global admission
+- **AND** a valid reusable invitation SHALL permit a later explicit enrollment, without silently recreating membership
+
 ### Requirement: Admission is enforced at backend boundaries
 
-The same authoritative live policy and exception state SHALL govern normal direct and delegated human requests across participating backends and replicas. A workload acting for a person SHALL use that person's compatible unexpired selected human evidence or independent exceptions, never the workload's claims or service role. Pure service operations SHALL retain existing authentication and authorization. JWT decoding caches SHALL NOT cache admission decisions or prevent selection of a newly configured claim for direct human requests. Only active-policy selected human evidence SHALL be persisted; whole JWTs and unrelated claim values SHALL NOT be persisted or exposed in principal responses/logs. Shared-state failures SHALL fail closed with HTTP 503 rather than be presented as definitive policy denial.
+The same authoritative live policy and exception state SHALL govern normal direct and delegated human requests across participating backends and replicas. A workload acting for a person SHALL use that person's complete, unconflicted and unexpired selected human evidence interpreted under the current policy mode, or independent exceptions, never the workload's claims or service role. Pure service operations SHALL retain existing authentication and authorization. JWT decoding caches SHALL NOT cache admission decisions or prevent selection of a newly configured claim for direct human requests. Only active-policy selected human evidence SHALL be persisted; whole JWTs and unrelated claim values SHALL NOT be persisted or exposed in principal responses/logs. Shared-state failures SHALL fail closed with HTTP 503 rather than be presented as definitive policy denial.
 
 #### Scenario: Direct API or cached token cannot bypass removal
 
@@ -171,7 +182,7 @@ The same authoritative live policy and exception state SHALL govern normal direc
 
 #### Scenario: Policy changes with a cached human token
 
-- **WHEN** an administrator changes a selected claim, predicate or all/any combination
+- **WHEN** an administrator changes a selected claim, predicate, allow/block mode or all/any combination
 - **THEN** subsequent direct human requests SHALL evaluate the new policy against verified token facts without restart or token renewal
 
 #### Scenario: Delegated person loses admission
@@ -187,7 +198,7 @@ The same authoritative live policy and exception state SHALL govern normal direc
 #### Scenario: A newly selected delegated claim has no observation
 
 - **WHEN** a changed rule references a claim not present in the person's stored verified evidence
-- **THEN** that condition SHALL fail until fresh human evidence exists, including for negative predicates, while independent exceptions remain effective
+- **THEN** rule-derived admission SHALL be refused until fresh human evidence covers all selected paths, in both allow and block modes, while independent exceptions remain effective
 
 #### Scenario: Admission authority unavailable
 
@@ -241,6 +252,10 @@ An absent admission authority SHALL initialize with filtering inactive until exp
 
 The editor SHALL support one to sixteen conditions combined by either all (AND) or any (OR), with localized labels. Each condition SHALL select an unambiguous claim path, operator, operand and explicit case handling. Operators SHALL include literal equals/not-equals, contains/not-contains, and advanced whole-value regex. Literal metacharacters SHALL NOT be interpreted as regex. Literal comparison SHALL default to ignoring case; administrators SHALL be able to select case-sensitive comparison. For nonempty string arrays, positive predicates SHALL match any element and negative predicates SHALL require all elements to satisfy the negation. Missing, empty, incompatible and oversized values SHALL fail every predicate. Invalid input SHALL be rejected before saving; bounded regex timeouts SHALL NOT establish rule-derived admission.
 
+The policy SHALL expose allow/block mode above the conditions and persist it in the shared authority; absent mode SHALL retain allow behavior. Allow mode SHALL derive admission from matching rules. Block mode SHALL derive admission from nonmatching rules, including verified missing, empty or incompatible claims. Independent user/team admission sources SHALL remain sufficient in either mode. A timeout SHALL NOT derive admission. Delegated rule-derived admission SHALL require fresh, unconflicted evidence covering all selected claim paths. Preview SHALL show effective admission with readable green/red accents and a larger heading while separately explaining condition matching.
+
+Condition controls SHALL share a compact row when space permits and reflow without horizontal overflow on narrow screens. A labeled left-aligned dropdown SHALL expose root text field names and the exact selected path, with an entry for the detailed session explorer. After field confirmation a separate popup SHALL offer explicit reuse of the current verified account value or retention of the existing operand; copying SHALL respect operand bounds and regex literal escaping. A small case toggle SHALL remain directly visible, and manual path entry SHALL NOT be shown. Validation feedback SHALL remain visible and associated with its input. Operand counters SHALL appear at 90% of the existing limit without relaxing that limit. Condition removal SHALL identify the affected condition and SHALL preserve at least one condition. Adding a condition SHALL be separate from testing/saving the whole draft.
+
 #### Scenario: Literal input contains regex punctuation
 
 - **WHEN** a contains condition uses `a.b` and a claim contains `aXb` but not `a.b`
@@ -268,6 +283,45 @@ The editor SHALL support one to sixteen conditions combined by either all (AND) 
 - **WHEN** evaluating a saved rule exhausts its regex budget
 - **THEN** the rule SHALL NOT grant access, while independent admission sources remain available
 
+#### Scenario: Compact editing preserves draft behavior
+
+- **WHEN** an administrator selects a field, changes a comparison or value, or selects a nested path in the explorer
+- **THEN** selection and editing SHALL affect only the draft, and exact paths and explicit case handling SHALL be retained
+- **AND** preview/save and concurrent-revision safeguards SHALL remain available
+
+#### Scenario: Narrow screen or long path
+
+- **WHEN** the editor has a narrow viewport or a long selected path
+- **THEN** controls SHALL remain operable without horizontal overflow and the full selected path SHALL remain accessible
+
+#### Scenario: Hidden counter and validation feedback
+
+- **WHEN** a short operand has invalid input feedback
+- **THEN** the counter SHALL remain hidden while feedback remains visible and associated with the input
+- **WHEN** the operand reaches 90% of its limit
+- **THEN** its counter SHALL become visible and native input limits SHALL remain enforced
+
+#### Scenario: Administrator declines current value reuse
+
+- **WHEN** a selected field has a current text value and the administrator declines copying it
+- **THEN** only the draft claim path SHALL change and the existing operand SHALL remain intact
+- **AND** neither choice SHALL save the policy automatically
+
+#### Scenario: Block mode with independent exception
+
+- **WHEN** a person matches a block rule and has a current user exception or authorized/Free membership
+- **THEN** the independent source SHALL admit them
+
+#### Scenario: Block mode with absent claim
+
+- **WHEN** the verified token lacks the selected claim and the combined block rule does not match
+- **THEN** the rule SHALL permit admission
+
+#### Scenario: Block mode with unobserved delegated path
+
+- **WHEN** delegated evidence does not cover a newly selected claim path
+- **THEN** that evidence SHALL NOT establish rule-derived admission until a fresh direct observation
+
 ### Requirement: Claim discovery exposes names without a personal-data inventory
 
 The system SHALL discover bounded nested string/string-array claim paths from verified human access tokens and expose observed names and supported types only to platform administrators. The catalog SHALL NOT expose other users' claim values, JWTs or workload claims, and SHALL NOT claim to enumerate the IdP schema. The editor SHALL distinguish observed names from universal availability and permit entry of an unambiguous path not yet observed. Traversal, catalog growth and retained token facts SHALL be bounded; exceeding these bounds SHALL NOT produce a positive match for unavailable facts.
@@ -289,7 +343,7 @@ The system SHALL discover bounded nested string/string-array claim paths from ve
 
 ### Requirement: Administrators select claims using their own verified session
 
-The rule editor SHALL default to selectable text attributes at the root of the connected administrator's own verified access-token claims, excluding token protocol metadata. The observed-name catalog SHALL use the same root-text and metadata restrictions by default. An explicit advanced-fields action SHALL expose the complete bounded searchable JSON tree and catalog, including nested paths and string arrays. Changing display mode SHALL clear pending field selection and copied values without modifying the rule draft. Only compatible bounded string/string-array paths SHALL be selectable. In advanced mode, unsupported values SHALL be visible with an explanation; omitted oversized values SHALL be indicated. Selected keys SHALL preserve their exact nested path without interpreting literal dots. Administrators SHALL explicitly choose whether to reuse a current string or array element. Field selection SHALL modify only the draft; existing AND/OR, preview, save and concurrent-revision safeguards SHALL remain in effect. Observed names/types and advanced manual path entry SHALL remain available. The view SHALL be restricted to own human credentials and platform administration, SHALL NOT expose bearer tokens, signatures or other users' values, SHALL NOT persist or log payload values, and SHALL NOT retain the response after dismissal.
+The rule editor SHALL offer observed root text attribute names in its dropdown, excluding token protocol metadata; the detailed explorer SHALL default to selectable root text attributes from the connected administrator's own verified access-token claims. The observed-name catalog SHALL use the same root-text and metadata restrictions by default. An explicit advanced-fields action SHALL expose the complete bounded searchable JSON tree and catalog, including nested paths and string arrays. Changing display mode SHALL clear pending field selection and copied values without modifying the rule draft. Only compatible bounded string/string-array paths SHALL be selectable. In advanced mode, unsupported values SHALL be visible with an explanation; omitted oversized values SHALL be indicated. Selected keys SHALL preserve their exact nested path without interpreting literal dots. After confirming a field, administrators SHALL explicitly choose in a separate popup whether to reuse a current string or array element from their own verified account or retain the entered operand. Field selection SHALL modify only the draft; existing AND/OR, preview, save and concurrent-revision safeguards SHALL remain in effect. Observed names/types SHALL remain available; exact paths SHALL be selected through the explorer rather than manual entry. The view SHALL be restricted to own human credentials and platform administration, SHALL NOT expose bearer tokens, signatures or other users' values, SHALL NOT persist or log payload values, and SHALL NOT retain the response after dismissal.
 
 #### Scenario: Select a nested claim from the real session
 
@@ -334,3 +388,48 @@ Admission denial, invalid Free enrollment links and admission verification failu
 
 - **WHEN** admission verification fails transiently
 - **THEN** the shared error presentation SHALL offer a retry without falsely reporting definitive denial
+
+### Requirement: Administrators manage independent Free-link history
+
+Only platform administrators SHALL create, list and revoke Free-team links. The bounded paginated history SHALL expose the link identifier, note, creation and expiry dates, revocation state, suspension state and authenticated opening count/last-opening time, without reusable tokens or visitor identity. Administrators SHALL be able to inspect and revoke links while Free is disabled. The UI SHALL identify manual sharing and explicit URL recovery; it SHALL NOT claim message delivery.
+
+#### Scenario: Generate a second invitation
+
+- **WHEN** an administrator creates another link with a note and optional future expiry
+- **THEN** both invitations SHALL remain independently usable until their own revocation or expiry
+- **AND** their purposes, lifecycle and opening counts SHALL appear in history
+
+#### Scenario: Ordinary team manager attempts link administration
+
+- **WHEN** a person without platform-management authority calls link administration
+- **THEN** no link history, reusable token or mutation SHALL be granted
+
+#### Scenario: Copy a previously generated invitation
+
+- **WHEN** an own-human platform administrator requests a usable invitation URL from history
+- **THEN** the original token SHALL be returned without changing its validity or opening count
+- **AND** ordinary listing and workload/delegated requests SHALL NOT expose that token
+
+#### Scenario: Revoke one invitation
+
+- **WHEN** one invitation is revoked
+- **THEN** other valid invitations SHALL remain usable and existing team membership SHALL remain intact
+
+### Requirement: Authenticated enrollment-page openings use link aggregates
+
+The frontend SHALL record each authenticated enrollment-page opening using its own credential. Aggregate opening count and last-opening time SHALL be stored on the link row without a separate visit table. The frontend SHALL submit one signal per page opening, including under duplicate React effects; every accepted opening POST SHALL increment the count. A subsequent new page opening SHALL count again. Preview, terms acceptance and enrollment SHALL NOT increment the opening count themselves. Invalid, expired, revoked or suspended links SHALL NOT record openings. Visitor identities, IP addresses and account payloads SHALL NOT be stored as analytics.
+
+#### Scenario: Duplicate frontend effect
+
+- **WHEN** React repeats the authenticated page effect for the same mounted link
+- **THEN** the frontend SHALL submit exactly one opening POST
+
+#### Scenario: New opening without enrollment
+
+- **WHEN** the authenticated person opens the invitation again on a new page
+- **THEN** the count SHALL increase once regardless of whether they join
+
+#### Scenario: Revocation races with enrollment
+
+- **WHEN** revocation commits before a concurrent enrollment mutation checks the link
+- **THEN** no membership SHALL be granted through that invitation
