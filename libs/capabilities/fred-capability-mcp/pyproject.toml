@@ -1,6 +1,6 @@
 [project]
 name = "fred-capability-mcp"
-version = "0.1.0"
+version = "0.1.1"
 description = "Catalog and packaged agent instructions for Fred's existing MCP capabilities."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"

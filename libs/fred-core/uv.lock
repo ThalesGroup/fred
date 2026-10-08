@@ -822,7 +822,7 @@ wheels = [
 
 [[package]]
 name = "fred-core"
-version = "4.4.1"
+version = "4.4.2"
 source = { editable = "." }
 dependencies = [
     { name = "aiosqlite" },
@@ -954,7 +954,7 @@ dev = [
 
 [[package]]
 name = "fred-pod"
-version = "4.4.1"
+version = "4.4.2"
 source = { editable = "../fred-pod" }
 dependencies = [
     { name = "httpx" },

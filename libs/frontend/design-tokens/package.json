@@ -1,6 +1,6 @@
 {
   "name": "@fred-oss/design-tokens",
-  "version": "0.1.0-alpha.4",
+  "version": "0.1.1-alpha.0",
   "description": "FRED design tokens and optional packaged Geist fonts",
   "license": "Apache-2.0",
   "type": "module",
