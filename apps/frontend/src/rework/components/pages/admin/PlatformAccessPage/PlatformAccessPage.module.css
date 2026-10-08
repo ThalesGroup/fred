@@ -139,6 +139,21 @@
   grid-template-columns: minmax(0, 1fr);
   gap: var(--spacing-s);
 }
+.linkToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-m);
+  margin-bottom: var(--spacing-m);
+}
+.linkToolbar > p {
+  flex: 1 1 20rem;
+  margin: 0;
+  min-width: 0;
+}
+.linkToolbar > button {
+  margin-inline-start: auto;
+}
 .linkOutput {
   margin-top: var(--spacing-s);
 }

@@ -120,21 +120,23 @@ export default function PlatformAccessLinkManager({
         }}
       >
         <div className={styles.dialogBody}>
-          <p>{t("rework.platformAccess.links.hint")}</p>
+          <div className={styles.linkToolbar}>
+            <p>{t("rework.platformAccess.links.hint")}</p>
+            <Button
+              color="primary"
+              variant="filled"
+              size="medium"
+              disabled={busy || !team.free}
+              onClick={() => {
+                setFailed(false);
+                setCopyStatus(undefined);
+                setView("create");
+              }}
+            >
+              {t("rework.platformAccess.createLink")}
+            </Button>
+          </div>
           {!team.free && <p role="status">{t("rework.platformAccess.links.suspendedHint")}</p>}
-          <Button
-            color="primary"
-            variant="filled"
-            size="medium"
-            disabled={busy || !team.free}
-            onClick={() => {
-              setFailed(false);
-              setCopyStatus(undefined);
-              setView("create");
-            }}
-          >
-            {t("rework.platformAccess.createLink")}
-          </Button>
           {copyStatus === "copied" && <p role="status">{t("rework.platformAccess.links.copied")}</p>}
           {failed && <p role="alert">{t("rework.platformAccess.failed")}</p>}
           {links.isError && (
