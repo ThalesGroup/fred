@@ -13,6 +13,7 @@ import httpx
 from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_sdk.contracts.context import BoundRuntimeContext
 from fred_sdk.contracts.web_research import (
+    DailyQuota,
     WebResearchDeploymentConfig,
     WebResearchError,
     WebResearchPort,
@@ -72,6 +73,20 @@ class WebResearchService:
     def bind(self, binding: BoundRuntimeContext) -> WebResearchPort:
         return WebResearchAdapter(self, binding)
 
+    async def quota(self, user_id: str, operation: str) -> DailyQuota | None:
+        limit = (
+            self.config.max_searches_per_user_per_day
+            if operation == "web_search"
+            else self.config.max_fetches_per_user_per_day
+        )
+        if limit is None:
+            return None
+        # The request's own activity row already exists, so concurrent calls never overshoot.
+        used = await self.store.count_today(user_id, operation)
+        if used > limit:
+            raise WebResearchError("quota_exceeded")
+        return DailyQuota(limit=limit, remaining=limit - used)
+
     async def close(self) -> None:
         await self.research.client.aclose()
         if self.research.pending:
@@ -124,10 +139,12 @@ class WebResearchAdapter(WebResearchPort):
         cancelled = False
         try:
             async with asyncio.timeout(service.config.timeout_seconds):
+                quota = await service.quota(portable.user_id, request.operation)
                 if service._slots.locked():
                     raise WebResearchError("busy")
                 async with service._slots:
                     result = await service.research.execute(request)
+                result = result.model_copy(update={"daily_quota": quota})
         except (TimeoutError, httpx.TimeoutException):
             error = WebResearchError("timed_out")
         except httpx.ProxyError as exc:

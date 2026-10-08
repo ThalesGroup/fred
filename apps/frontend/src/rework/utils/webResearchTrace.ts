@@ -26,7 +26,11 @@ export type WebResearchPage = {
   errorCode: string | null;
 };
 
-export type WebResearchTraceResult = { kind: "pages"; pages: WebResearchPage[] } | { kind: "error"; errorCode: string };
+export type WebResearchQuota = { limit: number; remaining: number };
+
+export type WebResearchTraceResult =
+  | { kind: "pages"; pages: WebResearchPage[]; dailyQuota: WebResearchQuota | null }
+  | { kind: "error"; errorCode: string };
 
 const TOOL_KINDS: Record<string, WebResearchToolKind> = {
   web_search: "webSearch",
@@ -65,5 +69,10 @@ export function parseWebResearchResult(content: string): WebResearchTraceResult 
       truncated: item.truncated === true,
       errorCode: typeof item.error_code === "string" ? item.error_code : null,
     }));
-  return { kind: "pages", pages };
+  const quota = record.daily_quota as Record<string, unknown> | undefined;
+  const dailyQuota =
+    quota && typeof quota.limit === "number" && typeof quota.remaining === "number"
+      ? { limit: quota.limit, remaining: quota.remaining }
+      : null;
+  return { kind: "pages", pages, dailyQuota };
 }

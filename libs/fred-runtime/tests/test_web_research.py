@@ -19,6 +19,7 @@ from fred_sdk.contracts.context import (
     RuntimeContext,
 )
 from fred_sdk.contracts.web_research import (
+    FetchRequest,
     WebResearchDeploymentConfig,
     WebResearchError,
     WebSearchRequest,
@@ -183,6 +184,48 @@ async def test_only_a_proxy_403_is_a_refusal(service, monkeypatch, answer, code)
         await backend.bind(binding()).execute(WebSearchRequest(query="query"))
     rows = await backend.store.list(user_id="user", limit=10)
     assert rows[0].error_code == code
+
+
+@pytest.mark.asyncio
+async def test_daily_quota_refuses_before_dispatch_per_operation(service):
+    backend, _ = service
+    backend.config = backend.config.model_copy(
+        update={"max_searches_per_user_per_day": 2}
+    )
+    port = backend.bind(binding())
+    remaining = []
+    for _ in range(2):
+        result = await port.execute(WebSearchRequest(query="query"))
+        assert result.daily_quota is not None
+        remaining.append(result.daily_quota.remaining)
+    assert remaining == [1, 0]
+    dispatched = backend.research.execute
+
+    async def must_not_dispatch(request):
+        raise AssertionError("quota refusals never reach the network")
+
+    backend.research.execute = must_not_dispatch
+    for _ in range(2):
+        with pytest.raises(WebResearchError, match="quota_exceeded"):
+            await port.execute(WebSearchRequest(query="query"))
+    backend.research.execute = dispatched
+    # Page reads have their own, here absent, cap; another user is unaffected.
+    page = await port.execute(FetchRequest(url="https://example.com/"))
+    assert page.daily_quota is None
+    other = await backend.bind(binding("other")).execute(WebSearchRequest(query="q"))
+    assert other.daily_quota is not None and other.daily_quota.remaining == 1
+    rows = await backend.store.list(user_id="user", limit=10)
+    assert [r.error_code for r in rows].count("quota_exceeded") == 2
+    assert await backend.store.count_today("user", "web_search") == 2
+
+
+@pytest.mark.asyncio
+async def test_no_quota_configured_never_refuses(service):
+    backend, _ = service
+    port = backend.bind(binding())
+    for _ in range(3):
+        result = await port.execute(WebSearchRequest(query="query"))
+        assert result.daily_quota is None
 
 
 @pytest.mark.asyncio

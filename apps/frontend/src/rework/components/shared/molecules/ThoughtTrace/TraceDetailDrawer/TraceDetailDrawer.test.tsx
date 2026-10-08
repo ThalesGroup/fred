@@ -655,4 +655,18 @@ describe("TraceDetailDrawer web research", () => {
     expect(html).toContain("rework.chatTrace.webResearch.errors.unsafe_destination");
     expect(html).not.toContain("error_code");
   });
+
+  it("shows the remaining daily quota only when the deployment caps the operation", () => {
+    const capped = webEntry(
+      "web_search",
+      { query: "python" },
+      { results: [], daily_quota: { limit: 10, remaining: 7 }, untrusted_content: true },
+    );
+    const html = renderToStaticMarkup(<TraceDetailDrawer entry={capped} onClose={() => undefined} />);
+    expect(html).toContain("rework.chatTrace.webResearch.quotaSearches");
+    const uncapped = webEntry("web_search", { query: "python" }, { results: [], untrusted_content: true });
+    expect(renderToStaticMarkup(<TraceDetailDrawer entry={uncapped} onClose={() => undefined} />)).not.toContain(
+      "quotaSearches",
+    );
+  });
 });

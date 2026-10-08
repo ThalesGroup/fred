@@ -1547,6 +1547,7 @@
           "provider_failed": "Provider failed",
           "http_error": "Site error",
           "proxy_refused": "Refused by the proxy",
+          "quota_exceeded": "Daily quota reached",
           "unavailable": "Unavailable",
           "rejected": "Rejected",
           "invalid_response": "Invalid response",
@@ -1799,6 +1800,8 @@
         "extractedText_one": "Extracted text ({{count}} character)",
         "extractedText_other": "Extracted text ({{count}} characters)",
         "truncated": "truncated",
+        "quotaSearches": "Searches left today: {{remaining}} / {{limit}}",
+        "quotaFetches": "Page reads left today: {{remaining}} / {{limit}}",
         "errors": {
           "unavailable": "The site or the Internet could not be reached (network, DNS or proxy).",
           "timed_out": "The request timed out.",
@@ -1812,7 +1815,8 @@
           "provider_failed": "The search engine did not answer correctly.",
           "busy": "Web research is busy, try again shortly.",
           "http_error": "The site returned an HTTP error (missing page or access denied).",
-          "proxy_refused": "The network proxy refused this site (blocked by security policy)."
+          "proxy_refused": "The network proxy refused this site (blocked by security policy).",
+          "quota_exceeded": "Daily web research quota reached, try again after midnight UTC."
         }
       }
     },

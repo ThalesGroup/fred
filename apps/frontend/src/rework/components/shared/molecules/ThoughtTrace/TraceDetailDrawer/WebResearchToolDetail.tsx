@@ -97,6 +97,16 @@ export function WebResearchToolDetail({ kind, target, result }: WebResearchToolD
       {result?.kind === "pages" && (
         <div className={styles.toolSection}>
           <p className={styles.sectionLabel}>{t("rework.chatTrace.sources", { count: result.pages.length })}</p>
+          {result.dailyQuota && (
+            <p className={webStyles.empty}>
+              {t(
+                kind === "fetchUrl"
+                  ? "rework.chatTrace.webResearch.quotaFetches"
+                  : "rework.chatTrace.webResearch.quotaSearches",
+                result.dailyQuota,
+              )}
+            </p>
+          )}
           {result.pages.length === 0 ? (
             <p className={webStyles.empty}>{t("rework.chatTrace.webResearch.noResults")}</p>
           ) : (

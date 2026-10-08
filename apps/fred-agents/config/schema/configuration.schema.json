@@ -1465,6 +1465,34 @@
           "title": "Activity Retention Days",
           "type": "integer"
         },
+        "max_searches_per_user_per_day": {
+          "anyOf": [
+            {
+              "maximum": 100000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Searches Per User Per Day"
+        },
+        "max_fetches_per_user_per_day": {
+          "anyOf": [
+            {
+              "maximum": 100000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Fetches Per User Per Day"
+        },
         "purge_interval_seconds": {
           "default": 60,
           "maximum": 3600,

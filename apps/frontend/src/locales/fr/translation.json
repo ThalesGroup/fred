@@ -1547,6 +1547,7 @@
           "provider_failed": "Moteur en échec",
           "http_error": "Erreur du site",
           "proxy_refused": "Refusée par le proxy",
+          "quota_exceeded": "Quota journalier atteint",
           "unavailable": "Indisponible",
           "rejected": "Refusée",
           "invalid_response": "Réponse invalide",
@@ -1799,6 +1800,8 @@
         "extractedText_one": "Texte extrait ({{count}} caractère)",
         "extractedText_other": "Texte extrait ({{count}} caractères)",
         "truncated": "tronqué",
+        "quotaSearches": "Recherches restantes aujourd'hui : {{remaining}} / {{limit}}",
+        "quotaFetches": "Lectures de pages restantes aujourd'hui : {{remaining}} / {{limit}}",
         "errors": {
           "unavailable": "Site ou Internet injoignable (réseau, DNS ou proxy).",
           "timed_out": "La requête a expiré.",
@@ -1812,7 +1815,8 @@
           "provider_failed": "Le moteur de recherche n'a pas répondu correctement.",
           "busy": "La recherche web est saturée, réessayez dans un instant.",
           "http_error": "Le site a renvoyé une erreur HTTP (page absente ou accès refusé).",
-          "proxy_refused": "Le proxy réseau a refusé ce site (bloqué par la politique de sécurité)."
+          "proxy_refused": "Le proxy réseau a refusé ce site (bloqué par la politique de sécurité).",
+          "quota_exceeded": "Quota journalier de recherche web atteint, réessayez après minuit UTC."
         }
       }
     },

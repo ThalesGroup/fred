@@ -9,7 +9,17 @@ from typing import Any, cast
 from urllib.parse import urlsplit, urlunsplit
 
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import DateTime, Integer, String, Text, delete, select, update
+from sqlalchemy import (
+    DateTime,
+    Integer,
+    String,
+    Text,
+    delete,
+    func,
+    or_,
+    select,
+    update,
+)
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -102,6 +112,22 @@ class WebResearchActivityStore:
                 .where(WebResearchActivityRow.request_id == request_id)
                 .values(**fields)
             )
+
+    async def count_today(self, user_id: str, operation: str) -> int:
+        """Requests this UTC day, the caller's own included; undispatched refusals excluded."""
+        midnight = utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        row = WebResearchActivityRow
+        statement = select(func.count()).where(
+            row.user_id == user_id,
+            row.operation == operation,
+            row.created_at >= midnight,
+            or_(
+                row.error_code.is_(None),
+                row.error_code.not_in(("quota_exceeded", "busy")),
+            ),
+        )
+        async with self._sessions() as session:
+            return (await session.execute(statement)).scalar_one()
 
     async def list(
         self, *, user_id: str | None, limit: int

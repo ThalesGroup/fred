@@ -842,6 +842,8 @@ applications:
         timeout_seconds: 60
         max_concurrency: 4
         activity_retention_days: 30
+        max_searches_per_user_per_day: null # Daily cap per user (UTC day); null = no quota
+        max_fetches_per_user_per_day: null # Daily cap on page reads per user; null = no quota
         purge_interval_seconds: 60
 
       storage:

@@ -112,11 +112,20 @@ class WebPage(BaseModel):
     error_code: str | None = Field(default=None, pattern=r"^[a-z_]{1,64}$")
 
 
+class DailyQuota(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    limit: int = Field(ge=1)
+    remaining: int = Field(ge=0)
+
+
 class WebResearchResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     results: list[WebPage] = Field(default_factory=list, max_length=30)
     safesearch: SafeSearch | None = None
+    # Set only when the operation has a per-user daily cap (UTC day).
+    daily_quota: DailyQuota | None = None
     untrusted_content: Literal[True] = True
 
 
@@ -138,6 +147,7 @@ class WebResearchError(RuntimeError):
             "busy",
             "http_error",
             "proxy_refused",
+            "quota_exceeded",
         }
         self.code = code if code in allowed else "unavailable"
         super().__init__(self.code)
@@ -177,6 +187,9 @@ class WebResearchDeploymentConfig(BaseModel):
     timeout_seconds: float = Field(default=60, ge=5, le=120)
     max_concurrency: int = Field(default=4, ge=1, le=32)
     activity_retention_days: int = Field(default=30, ge=1, le=365)
+    # Per-user caps per UTC calendar day; None means no quota.
+    max_searches_per_user_per_day: int | None = Field(default=None, ge=1, le=100_000)
+    max_fetches_per_user_per_day: int | None = Field(default=None, ge=1, le=100_000)
     purge_interval_seconds: int = Field(default=60, ge=5, le=3600)
 
     @field_validator("proxy_url")
