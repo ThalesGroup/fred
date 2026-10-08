@@ -11,42 +11,14 @@ import type {
 import { usePlatformAccessOwnClaimsQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import styles from "./PlatformAccessClaimPicker.module.css";
 
-const TOKEN_METADATA = new Set([
-  "iss",
-  "sub",
-  "aud",
-  "typ",
-  "azp",
-  "sid",
-  "acr",
-  "amr",
-  "jti",
-  "nonce",
-  "scope",
-  "exp",
-  "iat",
-  "nbf",
-  "auth_time",
-  "at_hash",
-  "c_hash",
-  "s_hash",
-  "cnf",
-  "act",
-  "may_act",
-  "client_id",
-  "session_state",
-  "allowed-origins",
-]);
-const isRootAttribute = (path: string[]) => path.length === 1 && !TOKEN_METADATA.has(path[0]);
+import { isRootAttribute } from "./platformAccessClaims";
 
 export default function PlatformAccessClaimPicker({
-  condition,
   observed,
   catalogFailed,
   onSelect,
   onClose,
 }: {
-  condition: PlatformAccessCondition;
   observed: PlatformAccessClaim[];
   catalogFailed: boolean;
   onSelect: (update: Partial<PlatformAccessCondition>) => void;
@@ -58,12 +30,10 @@ export default function PlatformAccessClaimPicker({
   const [advanced, setAdvanced] = useState(false);
   const [search, setSearch] = useState("");
   const [path, setPath] = useState<string[]>();
-  const [copied, setCopied] = useState<string>();
   const facts = !own.isFetching && !own.isError ? own.data : undefined;
   const selectable = new Set((facts?.selectable_paths ?? []).map((part) => JSON.stringify(part)));
   const select = (next: string[]) => {
     setPath(next);
-    setCopied(undefined);
   };
   const matches = (next: string[]) => next.join(" > ").toLocaleLowerCase().includes(search.toLocaleLowerCase());
   const hasMatch = (value: unknown, next: string[]): boolean =>
@@ -117,22 +87,6 @@ export default function PlatformAccessClaimPicker({
       </div>
     );
   };
-  let current: unknown = facts?.claims;
-  for (const key of path ?? [])
-    current =
-      current && typeof current === "object" && Object.prototype.hasOwnProperty.call(current, key)
-        ? (current as Record<string, unknown>)[key]
-        : undefined;
-  const examples =
-    source === "own" && path && selectable.has(JSON.stringify(path))
-      ? typeof current === "string"
-        ? [current]
-        : Array.isArray(current)
-          ? current.filter((value): value is string => typeof value === "string")
-          : []
-      : [];
-  const copy = (value: string) =>
-    setCopied(condition.operator === "regex" ? value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") : value);
   return (
     <Dialog
       open
@@ -143,7 +97,7 @@ export default function PlatformAccessClaimPicker({
       confirmDisabled={!path || (source === "own" && !selectable.has(JSON.stringify(path)))}
       onCancel={onClose}
       onConfirm={() => {
-        if (path) onSelect({ claim: path, ...(copied === undefined ? {} : { value: copied }) });
+        if (path) onSelect({ claim: path });
       }}
     >
       <div className={styles.content}>
@@ -158,7 +112,6 @@ export default function PlatformAccessClaimPicker({
               onClick={() => {
                 setSource(tab);
                 setPath(undefined);
-                setCopied(undefined);
               }}
             >
               {t(`rework.platformAccess.picker.${tab}`)}
@@ -175,7 +128,6 @@ export default function PlatformAccessClaimPicker({
             onClick={() => {
               setAdvanced(!advanced);
               setPath(undefined);
-              setCopied(undefined);
             }}
           >
             {t(`rework.platformAccess.picker.${advanced ? "simpleFields" : "advancedFields"}`)}
@@ -237,23 +189,6 @@ export default function PlatformAccessClaimPicker({
               {t("rework.platformAccess.picker.selected")}:{" "}
               <strong>{path.map((key) => JSON.stringify(key)).join(" > ")}</strong>
             </p>
-            {!!examples.length && (
-              <>
-                <p>{t("rework.platformAccess.picker.copyHint")}</p>
-                <div className={styles.sources}>
-                  {examples.map((value, index) => (
-                    <Button key={index} color="primary" variant="outlined" size="small" onClick={() => copy(value)}>
-                      <span className={styles.claimValue}>{JSON.stringify(value)}</span>
-                    </Button>
-                  ))}
-                </div>
-              </>
-            )}
-            {copied !== undefined && (
-              <p role="status">
-                {t("rework.platformAccess.picker.copied")}: <span className={styles.claimValue}>{copied}</span>
-              </p>
-            )}
           </div>
         )}
       </div>

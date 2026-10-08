@@ -71,7 +71,11 @@ const typedIconButton: IconButtonProps = {
   icon: { type: "add" },
   "aria-label": "Add item",
 };
-const typedInput: TextInputProps = { label: "Project name", maxLength: 12 };
+const typedInput: TextInputProps = {
+  label: "Project name",
+  maxLength: 12,
+  showCharacterCount: true,
+};
 const typedSpinner: SpinnerProps = { statusText: "Saving package" };
 const typedCheckbox: CheckboxProps = { "aria-label": "Accept terms" };
 const typedChip: ChipProps = { label: "Draft", tone: "default" };

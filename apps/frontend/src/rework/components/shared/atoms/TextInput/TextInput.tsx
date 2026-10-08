@@ -32,6 +32,7 @@ export interface TextInputProps extends Omit<ComponentPropsWithRef<"input">, "si
    *  exclusive with `icon` — both sit at the field's left edge. */
   prefix?: string;
   compact?: boolean;
+  showCharacterCount?: boolean;
   /** Shrinks the input's own height (shared ComponentSize scale). Omit to
    *  keep the existing default height — every other TextInput call site is
    *  unaffected. Shadows the native HTML `size` attribute (character-width
@@ -47,6 +48,7 @@ export default function TextInput({
   suffix,
   prefix,
   compact = false,
+  showCharacterCount = true,
   size,
   maxLength,
   value,
@@ -162,7 +164,9 @@ export default function TextInput({
         <span className={styles.hint} id={message ? hintId : undefined}>
           {message || null}
         </span>
-        <span className={styles.maxLength}>{maxLength !== undefined && `${characterCounter} / ${maxLength}`}</span>
+        <span className={styles.maxLength}>
+          {showCharacterCount && maxLength !== undefined && `${characterCounter} / ${maxLength}`}
+        </span>
       </span>
     </div>
   );
