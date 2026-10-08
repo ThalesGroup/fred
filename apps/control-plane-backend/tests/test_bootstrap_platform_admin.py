@@ -39,7 +39,7 @@ from control_plane_backend.bootstrap.schemas import (
 )
 from control_plane_backend.bootstrap.service import bootstrap_platform_admin
 from fred_core import (
-    ORGANIZATION_ID,
+    PLATFORM_ID,
     KeycloakUser,
     RebacReference,
     Relation,
@@ -164,7 +164,7 @@ async def test_bootstrap_grants_platform_admin_to_the_caller(tmp_path, monkeypat
     written = rebac.added_relations[0]
     assert written.subject == RebacReference(Resource.USER, "benjamin-sub")
     assert written.relation == RelationType.PLATFORM_ADMIN
-    assert written.resource == RebacReference(Resource.ORGANIZATION, ORGANIZATION_ID)
+    assert written.resource == RebacReference(Resource.PLATFORM, PLATFORM_ID)
 
 
 @pytest.mark.asyncio

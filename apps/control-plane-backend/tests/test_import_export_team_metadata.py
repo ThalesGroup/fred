@@ -25,7 +25,6 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable
 
 import pytest
 from control_plane_backend.import_export.bundle import open_bundle
@@ -40,18 +39,6 @@ from fred_core.tasks.service import TaskService
 from fred_core.teams.team_metatada_models import TeamMetadataRow
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
-
-
-class _FakeRebac:
-    """Minimal `RebacEngine` stand-in — only what the import's #2065
-    organization-relation reconciliation phase needs."""
-
-    def __init__(self, *, enabled: bool = True) -> None:
-        self.enabled = enabled
-        self.ensured_team_ids: list[str] = []
-
-    async def ensure_team_organization_relations(self, team_ids: Iterable[str]) -> None:
-        self.ensured_team_ids.extend(team_ids)
 
 
 def _as_utc(value: datetime) -> datetime:
@@ -82,9 +69,7 @@ async def _seed_team(engine: AsyncEngine, row: TeamMetadataRow) -> None:
             session.add(row)
 
 
-async def _import(
-    bundle_bytes: bytes, engine: AsyncEngine, *, rebac: Any | None = None
-) -> MigrationReport:
+async def _import(bundle_bytes: bytes, engine: AsyncEngine) -> MigrationReport:
     task_service = TaskService.build(
         engine=engine, tables=TASK_TABLES, backend=SchedulerBackend.MEMORY
     )
@@ -96,7 +81,6 @@ async def _import(
         task_id=start.task_id,
         task_service=task_service,
         engine=engine,
-        rebac=rebac,
     )
 
 
@@ -248,58 +232,6 @@ async def test_team_metadata_import_is_idempotent_and_skips_existing(
         assert row.description == "Live description"
         assert row.joining_mode == "open"
         assert row.team_delete_grace == "P365D"
-    finally:
-        await source.dispose()
-        await dest.dispose()
-
-
-@pytest.mark.asyncio
-async def test_team_metadata_import_guarantees_organization_relation(
-    tmp_path: Path,
-) -> None:
-    """An import never restores raw OpenFGA tuples and
-    `_import_team_metadata` writes `TeamMetadataRow`s directly, bypassing
-    `teams.service.create_team` (which now writes the organization structural
-    edge itself) entirely. The import's own cold-path reconciliation must
-    establish it instead of silently leaving a newly-registered team without
-    the invariant."""
-    source = await _make_engine(tmp_path, "org-src.sqlite3")
-    dest = await _make_engine(tmp_path, "org-dst.sqlite3")
-    try:
-        await _seed_team(source, TeamMetadataRow(id="team-gamma", name="Gamma"))
-        snapshot = await run_export(source)
-        rebac = _FakeRebac()
-
-        report = await _import(snapshot, dest, rebac=rebac)
-
-        assert report.teams_imported == 1
-        assert rebac.ensured_team_ids == ["team-gamma"]
-    finally:
-        await source.dispose()
-        await dest.dispose()
-
-
-@pytest.mark.asyncio
-async def test_team_metadata_import_warns_when_rebac_unavailable(
-    tmp_path: Path,
-) -> None:
-    """#2065: with no ReBAC engine available (the default `rebac=None` used
-    by every other test in this module), the import must not silently skip
-    the organization structural relation — it must warn explicitly that the
-    invariant was not established and a ReBAC-enabled re-run is required."""
-    source = await _make_engine(tmp_path, "warn-src.sqlite3")
-    dest = await _make_engine(tmp_path, "warn-dst.sqlite3")
-    try:
-        await _seed_team(source, TeamMetadataRow(id="team-delta", name="Delta"))
-        snapshot = await run_export(source)
-
-        report = await _import(snapshot, dest)
-
-        assert report.teams_imported == 1
-        assert any(
-            "organization structural relation" in w and "ReBAC" in w
-            for w in report.warnings
-        )
     finally:
         await source.dispose()
         await dest.dispose()

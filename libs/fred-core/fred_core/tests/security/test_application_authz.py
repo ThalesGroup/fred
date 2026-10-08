@@ -33,7 +33,7 @@ from fred_core.security.rebac.application_authz import (
 )
 from fred_core.security.rebac.noop_engine import NoopRebacEngine
 from fred_core.security.rebac.rebac_engine import (
-    ORGANIZATION_ID,
+    PLATFORM_ID,
     RebacEngine,
     RebacReference,
     Relation,
@@ -95,7 +95,7 @@ async def test_usable_application_ids_uses_raw_app_resources() -> None:
         Relation(
             subject=RebacReference(type=Resource.TEAM, id="team-1"),
             relation=RelationType.TEAM,
-            resource=RebacReference(type=Resource.ORGANIZATION, id=ORGANIZATION_ID),
+            resource=RebacReference(type=Resource.PLATFORM, id=PLATFORM_ID),
         )
     ]
 
@@ -151,7 +151,7 @@ async def test_can_team_use_application_rejects_personal_spaces(team_id: str) ->
 def test_schema_declares_only_collaborative_application_relations() -> None:
     relations = _app_type()["relations"]
     assert set(relations) == {
-        "organization",
+        "platform",
         "default_on",
         "enabled",
         "disabled",
@@ -160,9 +160,9 @@ def test_schema_declares_only_collaborative_application_relations() -> None:
         "can_use",
     }
     metadata = _app_type()["metadata"]["relations"]
-    for relation in ("organization", "default_on"):
+    for relation in ("platform", "default_on"):
         assert metadata[relation]["directly_related_user_types"] == [
-            {"type": "organization"}
+            {"type": "platform"}
         ]
     for relation in ("enabled", "disabled"):
         assert metadata[relation]["directly_related_user_types"] == [{"type": "team"}]
@@ -202,7 +202,7 @@ def test_use_is_decided_by_team_grants_without_a_platform_wide_marker(
 def test_application_can_manage_follows_capability_governance() -> None:
     """App rows are toggled from the same admin page, behind the same org gate."""
     can_manage = _app_type()["relations"]["can_manage"]
-    assert can_manage["tupleToUserset"]["tupleset"]["relation"] == "organization"
+    assert can_manage["tupleToUserset"]["tupleset"]["relation"] == "platform"
     assert (
         can_manage["tupleToUserset"]["computedUserset"]["relation"]
         == "can_manage_capabilities"

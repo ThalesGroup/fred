@@ -33,7 +33,7 @@ from fred_core import (
     DocumentPermission,
     OpenFgaRebacConfig,
     OpenFgaRebacEngine,
-    OrganizationPermission,
+    PlatformPermission,
     RebacDisabledResult,
     RebacEngine,
     RebacReference,
@@ -48,7 +48,8 @@ from fred_core.security.rebac.capability_authz import (
     CapabilityEnablementFacts,
     can_team_use_from_facts,
 )
-from fred_core.security.rebac.rebac_engine import ORGANIZATION_ID
+from fred_core.security.rebac.rebac_engine import PLATFORM_ID
+from fred_core.security.rebac.rebac_engine import SpacePermission
 from fred_core.security.structure import KeycloakUser, M2MSecurity
 
 MAX_STARTUP_ATTEMPTS = 40
@@ -401,7 +402,6 @@ async def test_team_hierarchy_and_permissions(
     relations never bypass explicit team roles either.
     """
     # Create entities
-    organization = _make_reference(Resource.ORGANIZATION, prefix="organization")
     team = _make_reference(Resource.TEAM, prefix="marketing")
     team_admin = _make_reference(Resource.USER, prefix="team-admin")
     team_editor = _make_reference(Resource.USER, prefix="team-editor")
@@ -413,9 +413,6 @@ async def test_team_hierarchy_and_permissions(
     token = await rebac_engine.add_relations(
         [
             # Team hierarchy - team has a organization reference
-            Relation(
-                subject=organization, relation=RelationType.ORGANIZATION, resource=team
-            ),
             Relation(
                 subject=team_admin, relation=RelationType.TEAM_ADMIN, resource=team
             ),
@@ -524,7 +521,7 @@ async def test_platform_admin_and_observer_never_grant_team_access(
     for the new `platform_admin`/`platform_observer` relations, so a future schema
     edit can't quietly reintroduce the same escalation under the new names.
     """
-    organization = _make_reference(Resource.ORGANIZATION, prefix="organization")
+    organization = _make_reference(Resource.PLATFORM, prefix="platform")
     platform_admin = _make_reference(Resource.USER, prefix="platform-admin")
     platform_observer = _make_reference(Resource.USER, prefix="platform-observer")
     team = _make_reference(Resource.TEAM, prefix="finance")
@@ -541,22 +538,19 @@ async def test_platform_admin_and_observer_never_grant_team_access(
                 relation=RelationType.PLATFORM_OBSERVER,
                 resource=organization,
             ),
-            Relation(
-                subject=organization, relation=RelationType.ORGANIZATION, resource=team
-            ),
         ]
     )
 
     assert await rebac_engine.has_permission(
         platform_admin,
-        OrganizationPermission.CAN_MANAGE_PLATFORM,
+        PlatformPermission.CAN_MANAGE_PLATFORM,
         organization,
         consistency_token=token,
     ), "platform_admin should satisfy the org-level can_manage_platform capability"
 
     assert await rebac_engine.has_permission(
         platform_observer,
-        OrganizationPermission.IS_PLATFORM_OBSERVER,
+        PlatformPermission.IS_PLATFORM_OBSERVER,
         organization,
         consistency_token=token,
     ), "platform_observer should satisfy the direct platform_observer relation check"
@@ -623,7 +617,7 @@ async def test_platform_admin_and_observer_never_grant_team_access(
 # are raw role relations, not capabilities, so the `can_` prefix filters them.
 ORGANIZATION_CAPABILITIES = tuple(
     permission
-    for permission in list(OrganizationPermission)
+    for permission in list(PlatformPermission)
     if permission.value.startswith("can_")
 )
 
@@ -632,31 +626,31 @@ ORGANIZATION_CAPABILITIES = tuple(
 # and user-administration surfaces. The `IS_*` entry is the raw role check
 # behind the frontend's platform-role list.
 DELEGATED_ROLE_REACH: tuple[
-    tuple[str, RelationType, set[OrganizationPermission], OrganizationPermission], ...
+    tuple[str, RelationType, set[PlatformPermission], PlatformPermission], ...
 ] = (
     (
         "team_manager",
         RelationType.TEAM_MANAGER,
         {
-            OrganizationPermission.CAN_CREATE_TEAM,
-            OrganizationPermission.CAN_LIST_ALL_TEAMS,
+            PlatformPermission.CAN_CREATE_TEAM,
+            PlatformPermission.CAN_LIST_ALL_TEAMS,
         },
-        OrganizationPermission.IS_TEAM_MANAGER,
+        PlatformPermission.IS_TEAM_MANAGER,
     ),
     (
         "feature_manager",
         RelationType.FEATURE_MANAGER,
         {
-            OrganizationPermission.CAN_MANAGE_CAPABILITIES,
-            OrganizationPermission.CAN_LIST_ALL_TEAMS,
+            PlatformPermission.CAN_MANAGE_CAPABILITIES,
+            PlatformPermission.CAN_LIST_ALL_TEAMS,
         },
-        OrganizationPermission.IS_FEATURE_MANAGER,
+        PlatformPermission.IS_FEATURE_MANAGER,
     ),
     (
         "prompt_editor",
         RelationType.PROMPT_EDITOR,
-        {OrganizationPermission.CAN_EDIT_PLATFORM_PROMPT},
-        OrganizationPermission.IS_PROMPT_EDITOR,
+        {PlatformPermission.CAN_EDIT_PLATFORM_PROMPT},
+        PlatformPermission.IS_PROMPT_EDITOR,
     ),
 )
 
@@ -672,13 +666,13 @@ async def test_delegated_role_reaches_exactly_its_own_capabilities(
     rebac_engine: RebacEngine,
     label: str,
     role: RelationType,
-    expected: set[OrganizationPermission],
-    role_check: OrganizationPermission,
+    expected: set[PlatformPermission],
+    role_check: PlatformPermission,
 ) -> None:
     """Closed-world check: a delegated role reaches its own surface and nothing
     else. Asserting the whole reachable set, rather than hand-picked denials,
     is what makes a capability that later unions in one of these roles fail."""
-    organization = _make_reference(Resource.ORGANIZATION, prefix="organization")
+    organization = _make_reference(Resource.PLATFORM, prefix="platform")
     holder = _make_reference(Resource.USER, prefix=label)
     platform_admin = _make_reference(Resource.USER, prefix="platform-admin")
     team = _make_reference(Resource.TEAM, prefix="northbridge")
@@ -690,9 +684,6 @@ async def test_delegated_role_reaches_exactly_its_own_capabilities(
                 subject=platform_admin,
                 relation=RelationType.PLATFORM_ADMIN,
                 resource=organization,
-            ),
-            Relation(
-                subject=organization, relation=RelationType.ORGANIZATION, resource=team
             ),
         ]
     )
@@ -1082,7 +1073,7 @@ async def test_team_filtering_by_visibility(
     platform_admin = _make_reference(Resource.USER, prefix="admin")
 
     # Create organization
-    organization = _make_reference(Resource.ORGANIZATION, prefix="main-organization")
+    organization = _make_reference(Resource.PLATFORM, prefix="main-organization")
 
     # Create teams
     public_team_1 = _make_reference(Resource.TEAM, prefix="public-marketing")
@@ -1100,37 +1091,6 @@ async def test_team_filtering_by_visibility(
                 subject=platform_admin,
                 relation=RelationType.PLATFORM_ADMIN,
                 resource=organization,
-            ),
-            # Link all teams to organization
-            Relation(
-                subject=organization,
-                relation=RelationType.ORGANIZATION,
-                resource=public_team_1,
-            ),
-            Relation(
-                subject=organization,
-                relation=RelationType.ORGANIZATION,
-                resource=public_team_2,
-            ),
-            Relation(
-                subject=organization,
-                relation=RelationType.ORGANIZATION,
-                resource=private_team_owned,
-            ),
-            Relation(
-                subject=organization,
-                relation=RelationType.ORGANIZATION,
-                resource=private_team_managed,
-            ),
-            Relation(
-                subject=organization,
-                relation=RelationType.ORGANIZATION,
-                resource=private_team_member,
-            ),
-            Relation(
-                subject=organization,
-                relation=RelationType.ORGANIZATION,
-                resource=other_private_team,
             ),
             # Public teams - anyone can read
             Relation(
@@ -1247,11 +1207,11 @@ async def test_team_filtering_by_visibility(
 
 
 def _organization_ref() -> RebacReference:
-    return RebacReference(type=Resource.ORGANIZATION, id=ORGANIZATION_ID)
+    return RebacReference(type=Resource.PLATFORM, id=PLATFORM_ID)
 
 
 def _org_team_edge(team: RebacReference) -> list[Relation]:
-    """Contextual `organization#team@team:<id>` reverse edge for team-subject
+    """Contextual `platform#team@team:<id>` reverse edge for team-subject
     capability checks (never persisted — every team belongs to the org)."""
 
     return [
@@ -1261,7 +1221,7 @@ def _org_team_edge(team: RebacReference) -> list[Relation]:
 
 def _org_personal_team_edge(team: RebacReference) -> list[Relation]:
     """Contextual reverse edges for a PERSONAL space: both the plain
-    `organization#team` edge and the personal-only `organization#personal_team`
+    `platform#team` edge and the personal-only `platform#personal_team`
     edge the personal-space class relations resolve through (CAPAB-01 / #1961,
     RFC §8.4). A regular team gets only the first."""
 
@@ -1285,9 +1245,7 @@ async def test_capability_can_use_tristate(rebac_engine: RebacEngine) -> None:
 
     token = await rebac_engine.add_relations(
         [
-            Relation(
-                subject=org, relation=RelationType.ORGANIZATION, resource=capability
-            ),
+            Relation(subject=org, relation=RelationType.PLATFORM, resource=capability),
         ]
     )
 
@@ -1340,7 +1298,7 @@ async def test_capability_can_use_tristate(rebac_engine: RebacEngine) -> None:
 @pytest.mark.asyncio
 async def test_capability_default_on_inherited(rebac_engine: RebacEngine) -> None:
     """A default-on capability is usable by any team (via the contextual
-    `organization#team` edge), and a per-team `disabled` tuple opts that
+    `platform#team` edge), and a per-team `disabled` tuple opts that
     team back out (tri-state: inherited-on)."""
 
     org = _organization_ref()
@@ -1349,9 +1307,7 @@ async def test_capability_default_on_inherited(rebac_engine: RebacEngine) -> Non
 
     token = await rebac_engine.add_relations(
         [
-            Relation(
-                subject=org, relation=RelationType.ORGANIZATION, resource=capability
-            ),
+            Relation(subject=org, relation=RelationType.PLATFORM, resource=capability),
             Relation(
                 subject=org, relation=RelationType.DEFAULT_ON, resource=capability
             ),
@@ -1400,7 +1356,7 @@ async def test_capability_personal_class_scope(rebac_engine: RebacEngine) -> Non
     regular = _make_reference(Resource.TEAM, prefix="team")
 
     await rebac_engine.add_relation(
-        Relation(subject=org, relation=RelationType.ORGANIZATION, resource=capability)
+        Relation(subject=org, relation=RelationType.PLATFORM, resource=capability)
     )
 
     # (1) personal_on → every personal space can use it...
@@ -1444,9 +1400,7 @@ async def test_capability_personal_class_scope(rebac_engine: RebacEngine) -> Non
     dropped = _make_reference(Resource.TEAM, prefix="personal")
     token = await rebac_engine.add_relations(
         [
-            Relation(
-                subject=org_off, relation=RelationType.ORGANIZATION, resource=cap2
-            ),
+            Relation(subject=org_off, relation=RelationType.PLATFORM, resource=cap2),
             Relation(subject=org_off, relation=RelationType.DEFAULT_ON, resource=cap2),
             Relation(
                 subject=org_off, relation=RelationType.PERSONAL_DISABLED, resource=cap2
@@ -1482,9 +1436,7 @@ async def test_capability_can_manage_is_org_admin(rebac_engine: RebacEngine) -> 
 
     token = await rebac_engine.add_relations(
         [
-            Relation(
-                subject=org, relation=RelationType.ORGANIZATION, resource=capability
-            ),
+            Relation(subject=org, relation=RelationType.PLATFORM, resource=capability),
             Relation(subject=admin, relation=RelationType.PLATFORM_ADMIN, resource=org),
         ]
     )
@@ -1512,8 +1464,8 @@ async def test_capability_lookup_resources_lists_usable(
 
     token = await rebac_engine.add_relations(
         [
-            Relation(subject=org, relation=RelationType.ORGANIZATION, resource=usable),
-            Relation(subject=org, relation=RelationType.ORGANIZATION, resource=hidden),
+            Relation(subject=org, relation=RelationType.PLATFORM, resource=usable),
+            Relation(subject=org, relation=RelationType.PLATFORM, resource=hidden),
             Relation(subject=team, relation=RelationType.ENABLED, resource=usable),
         ]
     )
@@ -1574,7 +1526,7 @@ async def test_local_can_use_fold_agrees_with_openfga(
 
     token = await rebac_engine.add_relations(
         [
-            Relation(subject=org, relation=RelationType.ORGANIZATION, resource=cap)
+            Relation(subject=org, relation=RelationType.PLATFORM, resource=cap)
             for cap in capabilities
         ]
         + [
@@ -1689,10 +1641,10 @@ async def test_app_can_use_is_typed_and_team_scoped(rebac_engine: RebacEngine) -
 
     token = await rebac_engine.add_relations(
         [
-            Relation(subject=org, relation=RelationType.ORGANIZATION, resource=app),
+            Relation(subject=org, relation=RelationType.PLATFORM, resource=app),
             Relation(
                 subject=org,
-                relation=RelationType.ORGANIZATION,
+                relation=RelationType.PLATFORM,
                 resource=capability,
             ),
             Relation(subject=team, relation=RelationType.ENABLED, resource=app),
@@ -1744,7 +1696,7 @@ async def test_app_default_on_is_inherited_and_can_be_disabled(
 
     token = await rebac_engine.add_relations(
         [
-            Relation(subject=org, relation=RelationType.ORGANIZATION, resource=app),
+            Relation(subject=org, relation=RelationType.PLATFORM, resource=app),
             Relation(subject=org, relation=RelationType.DEFAULT_ON, resource=app),
         ]
     )
@@ -1783,8 +1735,8 @@ async def test_app_can_manage_and_lookup_resources(rebac_engine: RebacEngine) ->
 
     token = await rebac_engine.add_relations(
         [
-            Relation(subject=org, relation=RelationType.ORGANIZATION, resource=app),
-            Relation(subject=org, relation=RelationType.ORGANIZATION, resource=hidden),
+            Relation(subject=org, relation=RelationType.PLATFORM, resource=app),
+            Relation(subject=org, relation=RelationType.PLATFORM, resource=hidden),
             Relation(subject=team, relation=RelationType.ENABLED, resource=app),
             Relation(subject=admin, relation=RelationType.PLATFORM_ADMIN, resource=org),
         ]
@@ -2022,3 +1974,168 @@ async def test_has_direct_relation_ignores_computed_team_member_rewrite(
     assert await rebac_engine.has_direct_relation(
         member_and_editor, RelationType.TEAM_MEMBER, team, consistency_token=token
     ), "member_and_editor must read as holding a direct team_member tuple"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "kind", [Resource.ORGANIZATION, Resource.TEAM, Resource.PROJECT]
+)
+@pytest.mark.parametrize(
+    "role",
+    [
+        RelationType.MEMBER,
+        RelationType.EDITOR,
+        RelationType.ANALYST,
+        RelationType.ADMIN,
+    ],
+)
+async def test_local_space_roles_do_not_imply_other_elevated_roles(
+    rebac_engine: RebacEngine, kind: Resource, role: RelationType
+) -> None:
+    subject = _make_reference(Resource.USER)
+    space = _make_reference(kind)
+    parent = _make_reference(Resource.TEAM)
+    stored_role = (
+        {
+            RelationType.MEMBER: RelationType.TEAM_MEMBER,
+            RelationType.EDITOR: RelationType.TEAM_EDITOR,
+            RelationType.ANALYST: RelationType.TEAM_ANALYST,
+            RelationType.ADMIN: RelationType.TEAM_ADMIN,
+        }[role]
+        if kind == Resource.TEAM
+        else role
+    )
+    tuples = [Relation(subject=subject, relation=stored_role, resource=space)]
+    if kind == Resource.PROJECT:
+        tuples += [
+            Relation(subject=parent, relation=RelationType.PARENT, resource=space),
+            Relation(
+                subject=subject, relation=RelationType.TEAM_MEMBER, resource=parent
+            ),
+        ]
+    token = await rebac_engine.add_relations(tuples)
+    expected = {
+        SpacePermission.READ_CORPUS: True,
+        SpacePermission.USE_AGENTS: True,
+        SpacePermission.EDIT_CORPUS: role == RelationType.EDITOR,
+        SpacePermission.EDIT_AGENTS: role == RelationType.EDITOR,
+        SpacePermission.ANALYZE: role == RelationType.ANALYST,
+        SpacePermission.ADMINISTER_MEMBERS: role == RelationType.ADMIN,
+    }
+    if kind == Resource.ORGANIZATION:
+        expected[SpacePermission.CREATE_TEAM] = role == RelationType.ADMIN
+    elif kind == Resource.TEAM:
+        expected[SpacePermission.CREATE_PROJECT] = role == RelationType.ADMIN
+    for permission, allowed in expected.items():
+        assert (
+            await rebac_engine.has_permission(
+                subject, permission, space, consistency_token=token
+            )
+            is allowed
+        )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_parent_governance_does_not_grant_project_content_or_membership(
+    rebac_engine: RebacEngine,
+) -> None:
+    subject = _make_reference(Resource.USER)
+    organization = _make_reference(Resource.ORGANIZATION)
+    team = _make_reference(Resource.TEAM)
+    project = _make_reference(Resource.PROJECT)
+    token = await rebac_engine.add_relations(
+        [
+            Relation(
+                subject=subject, relation=RelationType.ADMIN, resource=organization
+            ),
+            Relation(
+                subject=subject, relation=RelationType.ANALYST, resource=organization
+            ),
+            Relation(
+                subject=organization, relation=RelationType.ORGANIZATION, resource=team
+            ),
+            Relation(subject=subject, relation=RelationType.TEAM_ADMIN, resource=team),
+            Relation(subject=team, relation=RelationType.PARENT, resource=project),
+        ]
+    )
+    assert await rebac_engine.has_permission(
+        subject, SpacePermission.CREATE_TEAM, organization, consistency_token=token
+    )
+    assert await rebac_engine.has_permission(
+        subject, SpacePermission.CREATE_PROJECT, team, consistency_token=token
+    )
+    for permission in (
+        SpacePermission.READ_CORPUS,
+        SpacePermission.EDIT_CORPUS,
+        SpacePermission.ANALYZE,
+        SpacePermission.ADMINISTER_MEMBERS,
+    ):
+        assert not await rebac_engine.has_permission(
+            subject, permission, project, consistency_token=token
+        )
+    assert not await rebac_engine.has_permission(
+        subject, TeamPermission.CAN_RUN_EVALUATIONS, team, consistency_token=token
+    )
+    assert not await rebac_engine.has_permission(
+        subject,
+        TeamPermission.CAN_MANAGE_EVALUATION_CORPUS,
+        team,
+        consistency_token=token,
+    )
+    assert not await rebac_engine.has_permission(
+        subject,
+        TeamPermission.CAN_READ_CONVERSATIONS_FOR_EVALUATION,
+        team,
+        consistency_token=token,
+    )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_project_revocation_denies_surviving_local_role_tuples(
+    rebac_engine: RebacEngine,
+) -> None:
+    subject = _make_reference(Resource.USER)
+    team = _make_reference(Resource.TEAM)
+    project = _make_reference(Resource.PROJECT)
+    membership = Relation(
+        subject=subject, relation=RelationType.TEAM_MEMBER, resource=team
+    )
+    token = await rebac_engine.add_relations(
+        [
+            membership,
+            Relation(subject=team, relation=RelationType.PARENT, resource=project),
+            *(
+                Relation(subject=subject, relation=role, resource=project)
+                for role in (
+                    RelationType.ADMIN,
+                    RelationType.EDITOR,
+                    RelationType.ANALYST,
+                )
+            ),
+        ]
+    )
+    for permission in (
+        SpacePermission.READ_CORPUS,
+        SpacePermission.EDIT_CORPUS,
+        SpacePermission.ANALYZE,
+        SpacePermission.ADMINISTER_MEMBERS,
+    ):
+        assert await rebac_engine.has_permission(
+            subject, permission, project, consistency_token=token
+        )
+    await rebac_engine.delete_relation(membership)
+    for permission in (
+        SpacePermission.READ_CORPUS,
+        SpacePermission.EDIT_CORPUS,
+        SpacePermission.ANALYZE,
+        SpacePermission.ADMINISTER_MEMBERS,
+    ):
+        assert not await rebac_engine.has_permission(
+            subject,
+            permission,
+            project,
+            consistency_token=rebac_engine.HIGHER_CONSISTENCY,
+        )

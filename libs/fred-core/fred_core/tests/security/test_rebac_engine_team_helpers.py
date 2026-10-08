@@ -229,26 +229,6 @@ async def test_check_user_permission_or_raise_sends_no_contextual_relations() ->
 
 
 @pytest.mark.asyncio
-async def test_ensure_team_organization_relations_creates_unique_edges() -> None:
-    engine = _RecordingRebacEngine()
-
-    token = await engine.ensure_team_organization_relations(
-        ["team-a", "team-a", "", "team-b"]
-    )
-
-    assert token is not None
-    assert int(token) == 2
-    assert len(engine.added_relations) == 2
-
-    expected_resources = {"team-a", "team-b"}
-    for relation in engine.added_relations:
-        assert relation.subject == RebacReference(Resource.ORGANIZATION, "fred")
-        assert relation.relation == RelationType.ORGANIZATION
-        assert relation.resource.type == Resource.TEAM
-        assert relation.resource.id in expected_resources
-
-
-@pytest.mark.asyncio
 async def test_check_user_team_permissions_or_raise_no_longer_touches_organization_edge() -> (
     None
 ):
@@ -560,17 +540,6 @@ async def test_add_relation_allows_owner_editor_grant_on_personal_team() -> None
 
 
 @pytest.mark.asyncio
-async def test_add_relation_allows_organization_edge_on_personal_team() -> None:
-    engine = _PersonalTeamAwareEngine()
-    team_id = personal_team_id("alice")
-
-    await engine.ensure_team_organization_relations([team_id])
-
-    assert len(engine.added_relations) == 1
-    assert engine.added_relations[0].relation == RelationType.ORGANIZATION
-
-
-@pytest.mark.asyncio
 async def test_check_user_team_permission_or_raise_never_persists_organization_edge_for_personal_space() -> (
     None
 ):
@@ -603,7 +572,7 @@ class _InMemoryCountingRebacEngine(RebacEngine):
     #2065 regression coverage: `_RecordingRebacEngine`/`_PersonalTeamAwareEngine`
     above both stub `list_relations` to `return []` unconditionally, which
     can't distinguish "no existing edges" from "existing edges I forgot to
-    return" — it would pass even if `ensure_team_organization_relations`
+    return" — it would pass even if `ensure_team_public_relations`
     stopped calling `list_relations` at all. This fake actually stores what
     was written/deleted and answers `list_relations` from that state, so
     tests can assert the *skip* behavior (no write for an edge that already
@@ -706,36 +675,6 @@ class _InMemoryCountingRebacEngine(RebacEngine):
         consistency_token: str | None = None,
     ) -> bool:
         return any(r.subject == subject and r.resource == resource for r in self.tuples)
-
-
-@pytest.mark.asyncio
-async def test_ensure_team_organization_relations_skips_already_granted_edges() -> None:
-    engine = _InMemoryCountingRebacEngine()
-
-    await engine.ensure_team_organization_relations(["team-a", "team-b"])
-    assert len(engine.added_relations) == 2
-
-    await engine.ensure_team_organization_relations(["team-a", "team-b"])
-    assert len(engine.added_relations) == 2, "steady-state call must write nothing"
-
-    await engine.ensure_team_organization_relations(["team-a", "team-b", "team-c"])
-    assert len(engine.added_relations) == 3, "only the genuinely new team is written"
-    assert engine.added_relations[-1].resource.id == "team-c"
-
-
-@pytest.mark.asyncio
-async def test_ensure_team_organization_relations_writes_everything_when_disabled() -> (
-    None
-):
-    engine = _InMemoryCountingRebacEngine(disabled=True)
-
-    await engine.ensure_team_organization_relations(["team-a", "team-b"])
-    await engine.ensure_team_organization_relations(["team-a", "team-b"])
-
-    assert len(engine.added_relations) == 4, (
-        "an engine that can't bulk-list relations must fall back to "
-        "unconditional writes, unchanged from before #2065"
-    )
 
 
 @pytest.mark.asyncio

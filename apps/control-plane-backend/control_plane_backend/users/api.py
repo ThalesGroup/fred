@@ -30,10 +30,10 @@ from fastapi import (
 )
 from fastapi.responses import JSONResponse
 from fred_core import (
-    ORGANIZATION_ID,
+    PLATFORM_ID,
     BaseUserStore,
     KeycloakUser,
-    OrganizationPermission,
+    PlatformPermission,
     RebacEngine,
     get_current_user,
 )
@@ -239,7 +239,7 @@ async def list_users(
     user: KeycloakUser = Depends(get_current_user),
 ) -> list[UserSummary]:
     await rebac.check_user_permission_or_raise(
-        user, OrganizationPermission.CAN_ADMINISTER_USERS, ORGANIZATION_ID
+        user, PlatformPermission.CAN_ADMINISTER_USERS, PLATFORM_ID
     )
     """
     Return the user-administration list surface backed by explicit DI wiring.
@@ -380,7 +380,7 @@ async def create_user(
     user: KeycloakUser = Depends(get_current_user),
 ) -> UserSummary:
     await rebac.check_user_permission_or_raise(
-        user, OrganizationPermission.CAN_ADMINISTER_USERS, ORGANIZATION_ID
+        user, PlatformPermission.CAN_ADMINISTER_USERS, PLATFORM_ID
     )
     """
     Create a Keycloak user for temporary bootstrap and testing flows.
@@ -415,7 +415,7 @@ async def delete_user(
     user: KeycloakUser = Depends(get_current_user),
 ) -> None:
     await rebac.check_user_permission_or_raise(
-        user, OrganizationPermission.CAN_ADMINISTER_USERS, ORGANIZATION_ID
+        user, PlatformPermission.CAN_ADMINISTER_USERS, PLATFORM_ID
     )
     # Deleting the root would freeze bootstrap with no in-product recovery.
     if user_id == await bootstrap_store.get_completed_by():

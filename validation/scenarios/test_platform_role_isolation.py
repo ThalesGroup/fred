@@ -17,7 +17,7 @@
 Swift platform-role isolation validation.
 
 Keycloak is identity-only for users in the clean Swift seed. Platform roles are
-stored OpenFGA relations on organization:fred and must never grant collaborative
+stored OpenFGA relations on platform:fred and must never grant collaborative
 team data. The concrete platform users are read from config/configuration.yaml so
 this file stays aligned with the factory seed (today: alice=platform_admin,
 gabriel=platform_observer).
@@ -89,7 +89,9 @@ def test_platform_role_alone_sees_no_collaborative_team(username: str, cp) -> No
     (`is_member`), not list presence -- see GitHub #2146 cluster C.
     """
     items = cp(username).get("/teams").json()
-    collaborative = [t for t in items if not str(t.get("id", "")).startswith("personal-")]
+    collaborative = [
+        t for t in items if not str(t.get("id", "")).startswith("personal-")
+    ]
     joined = [t for t in collaborative if t.get("is_member")]
     assert not joined, (
         f"{username} unexpectedly holds membership in collaborative teams: "
@@ -107,7 +109,9 @@ def test_identity_only_user_sees_no_collaborative_team(username: str, cp) -> Non
     empty (GitHub #2146 cluster C).
     """
     items = cp(username).get("/teams").json()
-    collaborative = [t for t in items if not str(t.get("id", "")).startswith("personal-")]
+    collaborative = [
+        t for t in items if not str(t.get("id", "")).startswith("personal-")
+    ]
     joined = [t for t in collaborative if t.get("is_member")]
     assert not joined, (
         f"{username} unexpectedly holds membership in collaborative teams: "
@@ -119,5 +123,7 @@ def test_swift_platform_fixture_users_are_registered() -> None:
     """Sanity check: the clean Swift platform users exist in the parsed factory matrix."""
     expected = {"alice", "gabriel"}
     missing = expected - set(USERS)
-    assert not missing, f"Expected Swift platform fixture users missing: {sorted(missing)}"
+    assert not missing, (
+        f"Expected Swift platform fixture users missing: {sorted(missing)}"
+    )
     assert PLATFORM_ONLY_USERS, "Expected at least one platform-only fixture user"

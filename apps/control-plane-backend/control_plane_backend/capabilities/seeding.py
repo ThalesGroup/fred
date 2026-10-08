@@ -19,7 +19,7 @@ One seed point, idempotent:
 
 - **Registration seeding** — a `manifest.team_scope: default_on` capability gets
   its `default_on` tuple written the FIRST time it is registered (detected by
-  the absence of its organization anchor). Afterwards the tuple is runtime state
+  the absence of its platform anchor). Afterwards the tuple is runtime state
   owned by admins, so seeding never re-writes it. The `default_policy: explicit`
   deployment flag skips all seeds; a capability with required team settings can
   never be default-on (§8.2).
@@ -39,7 +39,7 @@ from typing import Iterable
 from fred_core import RebacDisabledResult
 from fred_core.security.models import Resource
 from fred_core.security.rebac.rebac_engine import (
-    ORGANIZATION_ID,
+    PLATFORM_ID,
     RebacEngine,
     RelationType,
 )
@@ -47,7 +47,7 @@ from fred_sdk.contracts.capability import CapabilityCatalogEntry
 from fred_sdk.contracts.capability.manifest import TeamScopePolicy
 
 from control_plane_backend.capabilities.enablement import (
-    ORG_REF,
+    PLATFORM_REF,
     enablement_ref,
     ensure_enablement_anchor,
     team_settings_has_required_fields,
@@ -59,17 +59,17 @@ logger = logging.getLogger(__name__)
 async def _is_entry_registered(
     rebac: RebacEngine, entry: CapabilityCatalogEntry
 ) -> bool:
-    """True once a catalog entry's typed object has an organization anchor."""
+    """True once a catalog entry's typed object has an platform anchor."""
 
     subjects = await rebac.lookup_subjects(
         enablement_ref(entry),
-        RelationType.ORGANIZATION,
-        Resource.ORGANIZATION,
+        RelationType.PLATFORM,
+        Resource.PLATFORM,
     )
     if isinstance(subjects, RebacDisabledResult):
         # ReBAC disabled: no state to track, treat as unregistered (no-op writes).
         return False
-    return any(ref.id == ORGANIZATION_ID for ref in subjects)
+    return any(ref.id == PLATFORM_ID for ref in subjects)
 
 
 async def seed_registration_defaults(
@@ -117,7 +117,7 @@ def _default_on_relation(entry: CapabilityCatalogEntry):
     from fred_core.security.rebac.rebac_engine import Relation
 
     return Relation(
-        subject=ORG_REF,
+        subject=PLATFORM_REF,
         relation=RelationType.DEFAULT_ON,
         resource=enablement_ref(entry),
     )

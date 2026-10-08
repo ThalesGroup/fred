@@ -13,9 +13,9 @@
 # limitations under the License.
 from __future__ import annotations
 
-from fred_core import KeycloakUser, OrganizationPermission
+from fred_core import KeycloakUser, PlatformPermission
 from fred_core.logs.audit_log import emit_audit_log
-from fred_core.security.rebac.rebac_engine import ORGANIZATION_ID
+from fred_core.security.rebac.rebac_engine import PLATFORM_ID
 
 from control_plane_backend.platform_ui_settings.schemas import (
     PlatformUiSettings,
@@ -30,7 +30,7 @@ async def _require_manage_platform(
 ) -> None:
     # Same catch-all platform gate as announcements: a platform-wide presentation setting.
     await deps.team_dependencies.rebac.check_user_permission_or_raise(
-        user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+        user, PlatformPermission.CAN_MANAGE_PLATFORM, PLATFORM_ID
     )
 
 

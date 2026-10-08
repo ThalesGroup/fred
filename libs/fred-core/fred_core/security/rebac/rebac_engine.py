@@ -30,7 +30,7 @@ from fred_core.security.models import (
 )
 from fred_core.security.structure import KeycloakUser
 
-ORGANIZATION_ID = "fred"
+PLATFORM_ID = "fred"
 logger = logging.getLogger(__name__)
 
 
@@ -61,15 +61,16 @@ class RelationType(str, Enum):
     EDITOR = "editor"
     VIEWER = "viewer"
     PARENT = "parent"
+    PLATFORM = "platform"
     ORGANIZATION = "organization"
+    ADMIN = "admin"
+    ANALYST = "analyst"
+    MEMBER = "member"
     SUSPENDED = "suspended"
-    # Reverse index of team.organization (`organization:fred#team@team:<id>`).
-    # Never persisted — injected as a contextual tuple for team-subject checks
-    # (capability#can_use and app#can_use), since every team belongs to the
-    # singleton org.
+    # Contextual catalog-membership edge; no persisted team/platform parent.
     TEAM = "team"
     # Reverse index restricted to PERSONAL spaces
-    # (`organization:fred#personal_team@team:<id>`). Never persisted — injected
+    # (`platform:fred#personal_team@team:<id>`). Never persisted — injected
     # as a contextual tuple only for `personal-{uid}` subjects so the
     # personal-space capability class (CAPAB-01 / #1961, RFC §8.4) applies to
     # every personal team and no regular team.
@@ -107,6 +108,19 @@ class RelationType(str, Enum):
     TEAM_EDITOR = "team_editor"
     TEAM_ANALYST = "team_analyst"
     TEAM_MEMBER = "team_member"
+
+
+class SpacePermission(str, Enum):
+    """Local permissions; callers supply the canonical typed space reference."""
+
+    READ_CORPUS = "can_read_corpus"
+    EDIT_CORPUS = "can_update_resources"
+    USE_AGENTS = "can_use_agents"
+    EDIT_AGENTS = "can_update_agents"
+    ANALYZE = "can_read_conversations_for_evaluation"
+    ADMINISTER_MEMBERS = "can_administer_members"
+    CREATE_TEAM = "can_create_team"
+    CREATE_PROJECT = "can_create_project"
 
 
 class TagPermission(str, Enum):
@@ -226,61 +240,19 @@ class AgentPermission(str, Enum):
     OWNER = RelationType.OWNER.value
 
 
-class OrganizationPermission(str, Enum):
-    """Actions allowed at global organization scope.
-
-    These gate endpoints that act on global / infrastructure surfaces with no
-    resource instance to scope on (observability, platform administration).
-    The check target is always the singleton ``organization:fred``. AUTHZ-05
-    review item 8a removed the "any connected user" tier entirely (it never
-    protected anything specific) — only admin-tier capabilities and the raw
-    role-relation checks remain.
-    """
+class PlatformPermission(str, Enum):
+    """Operational permissions on the singleton platform:fred."""
 
     CAN_EDIT_AGENT_CLASS_PATH = "can_edit_agent_class_path"
-
-    # Already-defined organization relations, now exposed to Python callers.
     CAN_CREATE_TEAM = "can_create_team"
-
-    # AUTHZ-05 review item 9 (RFC Part 6 §32): team-registry governance —
-    # existence of teams only, never their data.
     CAN_LIST_ALL_TEAMS = "can_list_all_teams"
     CAN_DELETE_TEAM = "can_delete_team"
     CAN_RESCUE_TEAM_ADMIN = "can_rescue_team_admin"
-
-    # RFC FRED-AUTHORIZATION-TARGET-MODEL §6.1: platform_observer's own named
-    # capability (platform_admin included via the platform_observer union) —
-    # the one relation for cross-user / platform-wide KPI observation. Gates
-    # the control-plane Analytics presets (`/admin/analytics`) and the raw
-    # OpenSearch Ops surface. The raw Prometheus Ops surface is
-    # authentication-only and is not gated by this relation. AUTHZ-05 review
-    # item 16: previously split into a second,
-    # platform_admin-only `CAN_READ_KPI_GLOBAL` (legacy READ_GLOBAL) for the
-    # Analytics presets — retired as a duplicate of this relation the RFC
-    # never asked for; today `/admin/analytics` shows the same platform-wide
-    # recap to both platform_admin and platform_observer. When the Analytics
-    # dashboard grows admin-only technical panels, gate those specific
-    # widgets on a new, narrower capability — don't resurrect this split.
-    # Retired 2026-08-08: this relation also used to gate the standalone KPI
-    # dashboard (`/monitoring/kpis`, backed by `POST /knowledge-flow/v1/kpi/query`)
-    # — both were removed once the control-plane Analytics presets fully
-    # superseded them.
     CAN_OBSERVE_PLATFORM = "can_observe_platform"
-
-    # Platform administration (platform_admin only).
     CAN_ADMINISTER_USERS = "can_administer_users"
     CAN_MANAGE_PLATFORM = "can_manage_platform"
-
-    # Carved out of the `can_manage_platform` catch-all (which also gates
-    # import/export, tasks and platform reset) so one narrow surface can be
-    # delegated to `feature_manager` / `prompt_editor` without the rest.
     CAN_MANAGE_CAPABILITIES = "can_manage_capabilities"
     CAN_EDIT_PLATFORM_PROMPT = "can_edit_platform_prompt"
-
-    # Direct checks against the raw role relations — not computed
-    # capabilities. Used to derive the display-only frontend role list
-    # (`PermissionSummary.platform_roles`, AUTHZ-05 review item 4/8a) where no
-    # single gated action stands for the role.
     IS_PLATFORM_OBSERVER = "platform_observer"
     IS_TEAM_MANAGER = "team_manager"
     IS_FEATURE_MANAGER = "feature_manager"
@@ -292,7 +264,7 @@ class CapabilityPermission(str, Enum):
 
     The target is always ``capability:<id>``. Callers check only these computed
     permissions — never the structural relations (`enabled`/`disabled`/
-    `default_on`/`organization`), which are written solely by the enablement API.
+    `default_on`/`platform`), which are written solely by the enablement API.
 
     - `CAN_USE`: may agents of one team select this capability? The check
       SUBJECT IS THE TEAM (`Check(team:<id>, can_use, capability:<id>)`), never
@@ -301,7 +273,7 @@ class CapabilityPermission(str, Enum):
       tri-state (inherited via default-on / explicitly enabled / disabled).
     - `CAN_MANAGE`: may an actor enable/disable it for a team or toggle its
       default-on marker? Defined as `can_manage_capabilities from
-      organization`, so it admits exactly the same actors as the org-level
+      platform`, so it admits exactly the same actors as the platform-level
       gate on the aggregate list and can never drift away from it.
     """
 
@@ -338,7 +310,8 @@ RebacPermission = (
     | ResourcePermission
     | TeamPermission
     | AgentPermission
-    | OrganizationPermission
+    | PlatformPermission
+    | SpacePermission
     | CapabilityPermission
     | AppPermission
     | KnowledgeBaseDefinitionPermission
@@ -362,8 +335,8 @@ def _resource_for_permission(permission: RebacPermission) -> Resource:
         return Resource.TEAM
     if isinstance(permission, AgentPermission):
         return Resource.AGENT
-    if isinstance(permission, OrganizationPermission):
-        return Resource.ORGANIZATION
+    if isinstance(permission, PlatformPermission):
+        return Resource.PLATFORM
     if isinstance(permission, CapabilityPermission):
         return Resource.CAPABILITY
     if isinstance(permission, AppPermission):
@@ -387,49 +360,34 @@ class Relation:
     resource: RebacReference
 
 
-def team_organization_relation(team_id: str) -> Relation:
-    """Canonical shape of the `organization -> team` structural edge (#2065).
-
-    A module-level pure function, not a method, so it can be imported and
-    called directly (e.g. `teams.service.create_team`'s direct bootstrap
-    write) without requiring every duck-typed `RebacEngine` test double to
-    implement it. `RebacEngine.ensure_team_organization_relations` (the
-    cold-path repair primitive, below) is the only other caller — both go
-    through this one function, so the tuple's shape has a single owner.
-    """
-    return Relation(
-        subject=RebacReference(Resource.ORGANIZATION, ORGANIZATION_ID),
-        relation=RelationType.ORGANIZATION,
-        resource=RebacReference(Resource.TEAM, team_id),
-    )
-
-
 def team_subject_and_context(
     team_id: str,
 ) -> tuple[RebacReference, list[Relation]]:
-    """Build a team subject and its contextual organization reverse edges.
+    """Build a team subject and its contextual platform reverse edges.
 
-    The plain ``organization#team`` edge is shared by capability and
+    The plain ``platform#team`` edge is shared by capability and
     application checks. Personal teams also receive the capability-only class
     edge; application callers reject personal ids before reaching OpenFGA.
     """
 
     team_ref = RebacReference(type=Resource.TEAM, id=team_id)
-    org_ref = RebacReference(type=Resource.ORGANIZATION, id=ORGANIZATION_ID)
-    context = [Relation(subject=team_ref, relation=RelationType.TEAM, resource=org_ref)]
+    platform_ref = RebacReference(type=Resource.PLATFORM, id=PLATFORM_ID)
+    context = [
+        Relation(subject=team_ref, relation=RelationType.TEAM, resource=platform_ref)
+    ]
     if is_personal_team_id(team_id):
         context.append(
             Relation(
                 subject=team_ref,
                 relation=RelationType.PERSONAL_TEAM,
-                resource=org_ref,
+                resource=platform_ref,
             )
         )
     return team_ref, context
 
 
 # Account status is owned by the control plane's account lifecycle: generic
-# relation writes and deletes refuse these on the organization.
+# relation writes and deletes refuse these on the platform.
 _ACCOUNT_STATUS_RELATIONS = frozenset({RelationType.SUSPENDED})
 
 
@@ -505,8 +463,8 @@ class RebacEngine(ABC):
     @staticmethod
     def _reject_account_status_write(relation: Relation) -> None:
         if (
-            relation.resource.type == Resource.ORGANIZATION
-            and relation.resource.id == ORGANIZATION_ID
+            relation.resource.type == Resource.PLATFORM
+            and relation.resource.id == PLATFORM_ID
             and relation.relation in _ACCOUNT_STATUS_RELATIONS
         ):
             raise ValueError(
@@ -524,23 +482,7 @@ class RebacEngine(ABC):
 
     @staticmethod
     def _reject_unsanctioned_personal_team_write(relation: Relation) -> None:
-        """Enforce the personal-team tuple invariant at the one audited write chokepoint.
-
-        A personal team (`personal-<uid>`) is a real ReBAC team object (AUTHZ-08),
-        but the *only* tuples ever allowed to name one are:
-        - the owner's own `team_editor` grant, self-healed by
-          `_ensure_personal_team_editor` on first touch;
-        - the structural `organization -> team` edge written by
-          `ensure_team_organization_relations` (same shape used for every team).
-
-        Every other shape — a different user, an elevated role, another relation
-        type — is refused here, unconditionally, regardless of caller. This is
-        what makes writing a real tuple for personal teams safe: no admin API,
-        import/export path, or future caller can ever grant (or be tricked into
-        granting) access to someone else's personal space, because there is
-        exactly one write chokepoint (`add_relation`) and it only recognizes
-        these two shapes for personal-team resources.
-        """
+        """Only the owner may hold a personal role; parent edges grant no content rights."""
         if relation.resource.type != Resource.TEAM or not is_personal_team_id(
             relation.resource.id
         ):
@@ -552,7 +494,6 @@ class RebacEngine(ABC):
         )
         is_organization_edge = (
             relation.subject.type == Resource.ORGANIZATION
-            and relation.subject.id == ORGANIZATION_ID
             and relation.relation == RelationType.ORGANIZATION
         )
         if is_owner_editor_grant or is_organization_edge:
@@ -631,35 +572,9 @@ class RebacEngine(ABC):
         subject: RebacReference,
         consistency_token: str | None = None,
     ) -> set[str] | None:
-        """Bulk-read every team currently holding `subject -> relation -> team:*`.
+        """Bulk-read team relations anchored to an exact subject.
 
-        Backs the existence-check `ensure_*`/`revoke_*` team helpers below:
-        called on every team listing (#2065), a per-team `add_relation`/
-        `delete_relation` fan-out re-writes (and, for grants, re-audits) an
-        edge that almost always already has the correct state — one bulk
-        `list_relations` read replaces that fan-out with a single round-trip
-        (paginated) the caller diffs locally.
-
-        `subject` must be exact (`organization:fred` for the organization
-        edge, `user:*` for the public edge) — OpenFGA's Read API rejects a
-        relation + object-type-only filter with no `user` to anchor it (see
-        `list_relations`'s docstring), so there is no "any subject" bulk-read
-        shape here; every caller of this helper already has one exact subject.
-
-        `consistency_token` defaults to the engine's eventually-consistent
-        read — fine for the lazy, bulk, self-healing listing call sites this
-        was built for. A caller on a direct, single-team write path (a
-        visibility toggle, not a bulk backfill) must pass `HIGHER_CONSISTENCY`
-        instead: an eventually-consistent read here can still miss a tuple
-        this same request-chain just wrote moments earlier, causing the
-        caller to wrongly skip a still-required write.
-
-        Returns `None` when relation listing is disabled (`RebacDisabledResult`)
-        so callers fall back to their prior unconditional write/delete
-        behavior — cheap and side-effect-free on `NoopRebacEngine`, whose
-        `_persist_relation` performs no I/O and whose `enabled=False` already
-        skips the audit call.
-        """
+        Returns None when relation listing is disabled."""
         existing = await self.list_relations(
             resource_type=Resource.TEAM,
             relation=relation,
@@ -672,91 +587,13 @@ class RebacEngine(ABC):
         # — no client-side re-filter needed.
         return {rel.resource.id for rel in existing}
 
-    async def ensure_team_organization_relations(
-        self,
-        team_ids: Iterable[str],
-    ) -> str | None:
-        """Cold-path repair: back-fill the `organization -> team` structural
-        edge for teams that may pre-date it.
-
-        This is no longer called from any per-request path (#2065) — every
-        collaborative team gets this edge once, directly, at creation
-        (`teams.service.create_team`, via `team_organization_relation`
-        above). The only remaining callers are cold paths that must handle
-        teams created before that invariant existed or outside the ordinary
-        creation flow: control-plane startup reconciliation (once per
-        process, over the full team registry) and platform import (Swift-
-        native and kea bundles). `require_team_access`/`get_team_by_id`/
-        `_list_teams` and the shared `check_user_team_permission(s)_or_raise`
-        helpers below never call this — nothing in schema.fga's computed team
-        permissions reads the persisted edge; capability team-scoping instead
-        uses a separate, never-persisted *contextual* reverse tuple
-        (`RelationType.TEAM`'s docstring above).
-
-        Idempotent, and — since #2065 — only writes (and audits) edges that
-        are actually missing: a bulk `_teams_with_relation` read filters out
-        every team that already has the edge, so a steady-state call (the
-        common case once every team has been backfilled once) issues zero
-        writes instead of one per team. Returns the write consistency token
-        when a write actually happened, else `None`.
-        """
-        unique_team_ids: list[str] = []
-        seen: set[str] = set()
-        for team_id in team_ids:
-            if not team_id or team_id in seen:
-                continue
-            seen.add(team_id)
-            unique_team_ids.append(team_id)
-
-        if not unique_team_ids:
-            return None
-
-        organization = RebacReference(Resource.ORGANIZATION, ORGANIZATION_ID)
-        existing_team_ids = await self._teams_with_relation(
-            relation=RelationType.ORGANIZATION, subject=organization
-        )
-        target_team_ids = (
-            unique_team_ids
-            if existing_team_ids is None
-            else [tid for tid in unique_team_ids if tid not in existing_team_ids]
-        )
-        if not target_team_ids:
-            return None
-
-        relations = [team_organization_relation(team_id) for team_id in target_team_ids]
-        return await self.add_relations(relations)
-
     async def ensure_team_public_relations(
         self,
         team_ids: Iterable[str],
         *,
         consistency_token: str | None = None,
     ) -> str | None:
-        """Ensure each team grants `public` (profile/discovery `can_read`) to
-        every user (TEAM-09, RFC FRED-TEAM-CONFIG-RFC.md §5.1.1).
-
-        Marketplace discovery is gated by `TeamVisibility` (TEAM-10, RFC
-        §5.1.2), never by `joining_mode` — only the ability to become a
-        member is gated (see `JoiningMode`). Callers must pass only teams
-        whose stored `visibility` is `PUBLIC`; a `PRIVATE` team's `public`
-        relation is instead withheld/revoked via
-        `revoke_team_public_relations` below. This mirrors
-        `ensure_team_organization_relations` exactly: idempotent
-        (`on_duplicate_writes=IGNORE` at the OpenFGA write layer), called
-        both at team creation and lazily on every team listing, so it
-        backfills every pre-existing public team without a separate one-off
-        migration.
-
-        Example:
-        - Before returning `GET /teams`, ensure `user:* -> public -> team:<id>`
-          exists for every `PUBLIC` team about to be listed.
-
-        Since #2065, only writes edges actually missing (see
-        `_teams_with_relation`) — a steady-state call issues zero writes. Pass
-        `consistency_token=HIGHER_CONSISTENCY` on a direct visibility-toggle
-        call (`update_team`) — the lazy listing call sites can keep the
-        default eventually-consistent read.
-        """
+        """Publish only teams whose canonical visibility is public."""
         unique_team_ids: list[str] = []
         seen: set[str] = set()
         for team_id in team_ids:
@@ -1115,7 +952,7 @@ class RebacEngine(ABC):
             suspended = await self._has_permission_raw(
                 RebacReference(Resource.USER, user_id),
                 RelationType.SUSPENDED,
-                RebacReference(Resource.ORGANIZATION, ORGANIZATION_ID),
+                RebacReference(Resource.PLATFORM, PLATFORM_ID),
                 consistency_token=self.HIGHER_CONSISTENCY,
             )
         except Exception:
@@ -1353,20 +1190,7 @@ class RebacEngine(ABC):
         team_id: str,
         permissions: Iterable[TeamPermission],
     ) -> str | None:
-        """Check one or more team permissions for a user on one team.
-
-        The canonical path for team permission checks across every backend
-        (control-plane, knowledge-flow, fred-runtime). Since #2065 this no
-        longer ensures `organization -> team` first: that structural edge is
-        established once, directly, at team creation
-        (`teams.service.create_team`), and repaired only on cold paths
-        (control-plane startup, platform import) via
-        `ensure_team_organization_relations` — never here. Nothing in
-        schema.fga's computed team permissions reads the persisted edge, so a
-        per-request Check never needed it. Returns `None`: with no write in
-        this call, there is no consistency token to propagate. No I/O at all
-        when `permissions` is empty.
-        """
+        """Check requested team permissions without structural writes."""
         permissions_to_check = list(permissions)
         if not permissions_to_check:
             return None

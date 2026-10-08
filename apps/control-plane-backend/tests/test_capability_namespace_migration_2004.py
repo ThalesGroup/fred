@@ -40,7 +40,7 @@ from control_plane_backend.config.models import RuntimeCatalogSourceConfig
 from control_plane_backend.product import service
 from fred_core.security.models import Resource
 from fred_core.security.rebac.rebac_engine import (
-    ORGANIZATION_ID,
+    PLATFORM_ID,
     RebacReference,
     Relation,
     RelationType,
@@ -48,7 +48,7 @@ from fred_core.security.rebac.rebac_engine import (
 from fred_sdk.contracts.capability import CapabilityCatalogEntry
 from fred_sdk.contracts.models import TeamScopePolicy
 
-_ORG_REF = RebacReference(type=Resource.ORGANIZATION, id=ORGANIZATION_ID)
+_PLATFORM_REF = RebacReference(type=Resource.PLATFORM, id=PLATFORM_ID)
 
 
 class _FakeMigrationRebac:
@@ -159,9 +159,9 @@ async def test_rename_migration_moves_every_relation_type(
     old_ref = RebacReference(type=Resource.CAPABILITY, id=old_id)
     team_a = RebacReference(type=Resource.TEAM, id="team-a")
     team_b = RebacReference(type=Resource.TEAM, id="team-b")
-    await rebac.seed(_ORG_REF, RelationType.ORGANIZATION, old_ref)
-    await rebac.seed(_ORG_REF, RelationType.DEFAULT_ON, old_ref)
-    await rebac.seed(_ORG_REF, RelationType.PERSONAL_ON, old_ref)
+    await rebac.seed(_PLATFORM_REF, RelationType.PLATFORM, old_ref)
+    await rebac.seed(_PLATFORM_REF, RelationType.DEFAULT_ON, old_ref)
+    await rebac.seed(_PLATFORM_REF, RelationType.PERSONAL_ON, old_ref)
     await rebac.seed(team_a, RelationType.ENABLED, old_ref)
     await rebac.seed(team_b, RelationType.DISABLED, old_ref)
 
@@ -176,17 +176,17 @@ async def test_rename_migration_moves_every_relation_type(
     assert summary.skipped_unreachable_sources == 0
     # Every relation moved to the new id...
     assert (
-        f"organization:{ORGANIZATION_ID}",
-        "organization",
+        f"platform:{PLATFORM_ID}",
+        "platform",
         new_ref_key,
     ) in rebac.tuples
     assert (
-        f"organization:{ORGANIZATION_ID}",
+        f"platform:{PLATFORM_ID}",
         "default_on",
         new_ref_key,
     ) in rebac.tuples
     assert (
-        f"organization:{ORGANIZATION_ID}",
+        f"platform:{PLATFORM_ID}",
         "personal_on",
         new_ref_key,
     ) in rebac.tuples

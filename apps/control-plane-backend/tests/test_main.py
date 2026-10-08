@@ -68,7 +68,7 @@ from control_plane_backend.users.schemas import PlatformRoleRelation, UserSummar
 from fred_core import (
     JoiningMode,
     KeycloakUser,
-    OrganizationPermission,
+    PlatformPermission,
     RelationType,
     SessionSchema,
     TeamPermission,
@@ -1009,12 +1009,10 @@ async def test_frontend_bootstrap_permission_summary_derives_platform_admin_from
         async def has_user_permission(
             self, _user, permission, _resource_id, *, consistency_token=None
         ) -> bool:
-            return permission == OrganizationPermission.CAN_MANAGE_PLATFORM
+            return permission == PlatformPermission.CAN_MANAGE_PLATFORM
 
         # AUTHZ-05 review item 9: `_list_teams` (called from bootstrap's team
         # listing) now also touches these collaborators.
-        async def ensure_team_organization_relations(self, _team_ids) -> str | None:
-            return None
 
         # TEAM-09: `_list_teams` also lazily backfills marketplace visibility.
         async def ensure_team_public_relations(self, _team_ids) -> str | None:
@@ -7326,7 +7324,7 @@ async def test_enrolling_internal_template_is_admin_only(
             self, user, permission, _resource_id, *, consistency_token=None
         ) -> bool:
             return (
-                permission == OrganizationPermission.CAN_MANAGE_PLATFORM
+                permission == PlatformPermission.CAN_MANAGE_PLATFORM
                 and user.uid == "alice"
             )
 

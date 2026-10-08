@@ -35,7 +35,7 @@ from typing import Any
 import pytest
 from control_plane_backend.kpi import scope as kpi_scope
 from control_plane_backend.kpi.scope import KpiScope, resolve_kpi_scope
-from fred_core import KeycloakUser, OrganizationPermission, TeamPermission
+from fred_core import KeycloakUser, PlatformPermission, TeamPermission
 from fred_core.common import TeamId
 from fred_core.security.models import AuthorizationError, Resource
 
@@ -57,7 +57,7 @@ class _FakeRebac:
         del user, kwargs
         self.calls.append((permission, resource_id))
         if (permission, resource_id) not in self.allow:
-            raise AuthorizationError("u1", str(permission), Resource.ORGANIZATION)
+            raise AuthorizationError("u1", str(permission), Resource.PLATFORM)
 
 
 class _FakeContainer:
@@ -78,19 +78,15 @@ def _request_with(monkeypatch: pytest.MonkeyPatch, rebac: _FakeRebac) -> Any:
 
 @pytest.mark.asyncio
 async def test_platform_scope_allowed(monkeypatch: pytest.MonkeyPatch) -> None:
-    from fred_core import ORGANIZATION_ID
+    from fred_core import PLATFORM_ID
 
-    rebac = _FakeRebac(
-        allow={(OrganizationPermission.CAN_OBSERVE_PLATFORM, ORGANIZATION_ID)}
-    )
+    rebac = _FakeRebac(allow={(PlatformPermission.CAN_OBSERVE_PLATFORM, PLATFORM_ID)})
     request = _request_with(monkeypatch, rebac)
 
     result = await resolve_kpi_scope(request, _user(), None)
 
     assert result == KpiScope(team_id=None)
-    assert rebac.calls == [
-        (OrganizationPermission.CAN_OBSERVE_PLATFORM, ORGANIZATION_ID)
-    ]
+    assert rebac.calls == [(PlatformPermission.CAN_OBSERVE_PLATFORM, PLATFORM_ID)]
 
 
 @pytest.mark.asyncio
@@ -132,11 +128,9 @@ async def test_platform_admin_only_requires_can_manage_platform(
     """can_observe_platform alone must NOT satisfy a platform_admin_only preset
     (e.g. storage_by_team's platform-wide ranked view) — a platform_observer
     who is not also a platform_admin must be denied."""
-    from fred_core import ORGANIZATION_ID
+    from fred_core import PLATFORM_ID
 
-    rebac = _FakeRebac(
-        allow={(OrganizationPermission.CAN_OBSERVE_PLATFORM, ORGANIZATION_ID)}
-    )
+    rebac = _FakeRebac(allow={(PlatformPermission.CAN_OBSERVE_PLATFORM, PLATFORM_ID)})
     request = _request_with(monkeypatch, rebac)
 
     with pytest.raises(AuthorizationError):
@@ -147,19 +141,15 @@ async def test_platform_admin_only_requires_can_manage_platform(
 async def test_platform_admin_only_allowed_for_can_manage_platform(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from fred_core import ORGANIZATION_ID
+    from fred_core import PLATFORM_ID
 
-    rebac = _FakeRebac(
-        allow={(OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID)}
-    )
+    rebac = _FakeRebac(allow={(PlatformPermission.CAN_MANAGE_PLATFORM, PLATFORM_ID)})
     request = _request_with(monkeypatch, rebac)
 
     result = await resolve_kpi_scope(request, _user(), None, platform_admin_only=True)
 
     assert result == KpiScope(team_id=None)
-    assert rebac.calls == [
-        (OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID)
-    ]
+    assert rebac.calls == [(PlatformPermission.CAN_MANAGE_PLATFORM, PLATFORM_ID)]
 
 
 @pytest.mark.asyncio

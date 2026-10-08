@@ -56,8 +56,8 @@ from fred_core.security.delegation import (
 )
 from fred_core.security.models import AuthorizationError, Resource
 from fred_core.security.rebac.rebac_engine import (
-    ORGANIZATION_ID,
-    OrganizationPermission,
+    PLATFORM_ID,
+    PlatformPermission,
     RebacDisabledResult,
     TeamPermission,
 )
@@ -6496,7 +6496,7 @@ async def test_caller_can_manage_platform_true_when_enabled_and_granted(
 
     assert await agent_app_module._caller_can_manage_platform(_ALICE) is True
     assert engine.calls == [
-        ("alice", OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID)
+        ("alice", PlatformPermission.CAN_MANAGE_PLATFORM, PLATFORM_ID)
     ]
 
 
@@ -6562,7 +6562,7 @@ async def test_get_kpi_turns_requires_can_manage_platform_when_enforcing(
     with pytest.raises(AuthorizationError):
         await endpoint(limit=10, container=container, caller=_ALICE)
     assert denying_engine.calls == [
-        ("alice", OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID)
+        ("alice", PlatformPermission.CAN_MANAGE_PLATFORM, PLATFORM_ID)
     ]
 
     granting_engine = _FakePlatformRebacEngine(enabled=True, grant=True)

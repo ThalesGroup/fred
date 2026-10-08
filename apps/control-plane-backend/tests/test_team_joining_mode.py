@@ -24,7 +24,7 @@ tests: it must (1) only ever succeed when the stored `joining_mode` is `OPEN`
 
 #2065 follow-up: `join_team` builds its response directly through
 `_build_team_with_permissions` instead of re-running `get_team_by_id` (a
-second `ensure_team_organization_relations` Read + `CAN_READ` Check cycle) —
+second `ensure_team_platform_relations` Read + `CAN_READ` Check cycle) —
 the write that just succeeded already establishes `can_read` (schema.fga:
 `team_member or public`), so re-checking it is a redundant round-trip, not an
 extra safety property. The budget test below locks that in: exactly the
@@ -174,7 +174,7 @@ async def test_join_team_budget_skips_the_redundant_ensure_org_and_check_cycle()
     None
 ):
     """The old `join_team` delegated to `get_team_by_id`, which re-runs
-    `ensure_team_organization_relations` (a `list_relations` Read) and a
+    `ensure_team_platform_relations` (a `list_relations` Read) and a
     `CAN_READ` `has_permission` Check. Neither is needed: the org edge was
     already established when the team was created/listed, and a fresh
     `team_member` write already satisfies `can_read` unconditionally. Budget:

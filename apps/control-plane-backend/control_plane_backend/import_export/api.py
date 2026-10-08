@@ -41,9 +41,9 @@ from fastapi import (
     UploadFile,
 )
 from fred_core import (
-    ORGANIZATION_ID,
+    PLATFORM_ID,
     KeycloakUser,
-    OrganizationPermission,
+    PlatformPermission,
     RebacEngine,
     get_current_user,
 )
@@ -252,7 +252,7 @@ def build_import_export_router(prefix: str = "") -> APIRouter:
         label: Annotated[str | None, Form()] = None,
     ) -> ImportLaunchResponse:
         await rebac.check_user_permission_or_raise(
-            user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+            user, PlatformPermission.CAN_MANAGE_PLATFORM, PLATFORM_ID
         )
         await _reject_if_migration_task_active(task_service)
 
@@ -335,7 +335,7 @@ def build_import_export_router(prefix: str = "") -> APIRouter:
         rebac: Annotated[RebacEngine, Depends(_get_rebac_engine)],
     ) -> Response:
         await rebac.check_user_permission_or_raise(
-            user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+            user, PlatformPermission.CAN_MANAGE_PLATFORM, PLATFORM_ID
         )
         data = await run_export(engine)
         return Response(
@@ -367,7 +367,7 @@ def build_import_export_router(prefix: str = "") -> APIRouter:
         rebac: Annotated[RebacEngine, Depends(_get_rebac_engine)],
     ) -> PlatformStats:
         await rebac.check_user_permission_or_raise(
-            user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+            user, PlatformPermission.CAN_MANAGE_PLATFORM, PLATFORM_ID
         )
         return await compute_platform_stats(
             user=user,
@@ -398,7 +398,7 @@ def build_import_export_router(prefix: str = "") -> APIRouter:
         rebac: Annotated[RebacEngine, Depends(_get_rebac_engine)],
     ) -> ResetLaunchResponse:
         await rebac.check_user_permission_or_raise(
-            user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+            user, PlatformPermission.CAN_MANAGE_PLATFORM, PLATFORM_ID
         )
         await _reject_if_migration_task_active(task_service)
 

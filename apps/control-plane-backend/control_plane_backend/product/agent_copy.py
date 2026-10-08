@@ -33,9 +33,9 @@ from uuid import uuid4
 import httpx
 from fastapi import HTTPException
 from fred_core import (
-    ORGANIZATION_ID,
+    PLATFORM_ID,
     KeycloakUser,
-    OrganizationPermission,
+    PlatformPermission,
     TeamPermission,
 )
 from fred_core.common import TeamId
@@ -120,7 +120,7 @@ async def _resolve_copy_source(
 
     base_url = _runtime_base_url(record, deps)
     can_see_non_public = await deps.team_dependencies.rebac.has_user_permission(
-        user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+        user, PlatformPermission.CAN_MANAGE_PLATFORM, PLATFORM_ID
     )
     templates = await product_service._fetch_runtime_templates(
         base_url, include_non_public=can_see_non_public

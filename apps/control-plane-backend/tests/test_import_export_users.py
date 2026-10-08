@@ -99,7 +99,7 @@ from control_plane_backend.users.service import (
     find_user_subs_bulk,
 )
 from fred_core import (
-    ORGANIZATION_ID,
+    PLATFORM_ID,
     AuthorizationError,
     KeycloackDisabled,
     KeycloakUser,
@@ -160,9 +160,6 @@ class _FakeTeamRebac:
         # report the same thing a real, active ReBAC engine would.
         self.enabled = True
 
-    async def ensure_team_organization_relations(self, team_ids: list[Any]) -> None:
-        return None
-
     # TEAM-09: create_team also grants immediate marketplace visibility.
     async def ensure_team_public_relations(self, team_ids: list[Any]) -> None:
         return None
@@ -184,7 +181,7 @@ class _FakeTeamRebac:
     async def check_user_permission_or_raise(
         self, user: KeycloakUser, permission: Any, resource_id: Any, **_kwargs: Any
     ) -> None:
-        if str(resource_id) == ORGANIZATION_ID:
+        if str(resource_id) == PLATFORM_ID:
             return
         from fred_core import AuthorizationError
 
@@ -579,8 +576,6 @@ async def test_local_import_checks_referenced_collisions_before_business_writes(
         get_content_store=MagicMock,
     )
     rebac = _FakeTeamRebac()
-    structural_writes = AsyncMock()
-    monkeypatch.setattr(rebac, "ensure_team_organization_relations", structural_writes)
     team_deps = _team_deps(engine, rebac)
     try:
         old_owner, new_owner, unique_id = uuid4(), uuid4(), uuid4()
@@ -608,7 +603,6 @@ async def test_local_import_checks_referenced_collisions_before_business_writes(
                 await team_deps.get_team_metadata_store().get_by_name("Gamma") is None
             )
             assert rebac.org_relations == rebac.team_relations == []
-            structural_writes.assert_not_awaited()
         else:
             report = await _run(
                 bundle,
@@ -625,7 +619,6 @@ async def test_local_import_checks_referenced_collisions_before_business_writes(
             assert [relation.subject.id for relation in rebac.org_relations] == [
                 str(unique_id)
             ]
-            structural_writes.assert_awaited_once_with(["team-gamma"])
         assert await store.count_identities() == 3
     finally:
         await engine.dispose()
@@ -697,13 +690,13 @@ async def test_users_phase_full_fixture_reconciles_all_identities_teams_and_role
         assert any(
             r.subject == RebacReference(Resource.USER, "created-alice-sub")
             and r.relation == RelationType.PLATFORM_ADMIN
-            and r.resource == RebacReference(Resource.ORGANIZATION, ORGANIZATION_ID)
+            and r.resource == RebacReference(Resource.PLATFORM, PLATFORM_ID)
             for r in rebac.org_relations
         )
         assert any(
             r.subject == RebacReference(Resource.USER, "created-gabriel-sub")
             and r.relation == RelationType.PLATFORM_OBSERVER
-            and r.resource == RebacReference(Resource.ORGANIZATION, ORGANIZATION_ID)
+            and r.resource == RebacReference(Resource.PLATFORM, PLATFORM_ID)
             for r in rebac.org_relations
         )
 

@@ -25,7 +25,7 @@ called) proves the row build now uses exactly one exact
 write-invalidated TTL.
 
 Also covers the performance-review correction on top of the first pass at this
-fix: `has_org_relation` (and `_read_personal_scope`) ended up used ONLY by
+fix: `has_platform_relation` (and `_read_personal_scope`) ended up used ONLY by
 write-path peek-before-mutate decisions once `_build_enablement_item` was
 rewritten to fold its own single fetch locally — caching those would have
 bought the read-only listing path nothing while risking a stale suspend/
@@ -49,7 +49,7 @@ from control_plane_backend.capabilities.enablement import (
     enable_capability_for_team,
 )
 from control_plane_backend.capabilities.service import _build_enablement_item
-from fred_core import ORGANIZATION_ID, RebacReference, Relation, RelationType, Resource
+from fred_core import PLATFORM_ID, RebacReference, Relation, RelationType, Resource
 from fred_core.common import TeamId
 from fred_sdk.contracts.capability import CapabilityCatalogEntry
 from fred_sdk.contracts.capability.manifest import TeamScopePolicy
@@ -100,12 +100,12 @@ def _seed_relations(cap_id: str) -> list[Relation]:
             resource=resource,
         ),
         Relation(
-            subject=RebacReference(Resource.ORGANIZATION, ORGANIZATION_ID),
+            subject=RebacReference(Resource.PLATFORM, PLATFORM_ID),
             relation=RelationType.DEFAULT_ON,
             resource=resource,
         ),
         Relation(
-            subject=RebacReference(Resource.ORGANIZATION, ORGANIZATION_ID),
+            subject=RebacReference(Resource.PLATFORM, PLATFORM_ID),
             relation=RelationType.PERSONAL_ON,
             resource=resource,
         ),
@@ -284,8 +284,8 @@ async def test_enable_capability_for_team_invalidates_cache() -> None:
 
 
 @pytest.mark.asyncio
-async def test_has_org_relation_always_reads_fresh_never_cached() -> None:
-    """`has_org_relation` (used by the write-path pre-checks in
+async def test_has_platform_relation_always_reads_fresh_never_cached() -> None:
+    """`has_platform_relation` (used by the write-path pre-checks in
     `reset_team_capability`/`set_personal_scope`) deliberately bypasses the
     cache — see its docstring: those are write-path peek-before-mutate
     decisions that must see live OpenFGA state, not up to 45s of another
@@ -296,17 +296,17 @@ async def test_has_org_relation_always_reads_fresh_never_cached() -> None:
 
     engine = CountingRebacEngine(direct_relations=_seed_relations("corp_drive"))
 
-    assert await enablement.has_org_relation(
+    assert await enablement.has_platform_relation(
         engine, "corp_drive", RelationType.DEFAULT_ON
     )
-    assert await enablement.has_org_relation(
+    assert await enablement.has_platform_relation(
         engine, "corp_drive", RelationType.PERSONAL_ON
     )
-    assert not await enablement.has_org_relation(
+    assert not await enablement.has_platform_relation(
         engine, "corp_drive", RelationType.PERSONAL_DISABLED
     )
     assert len(engine.list_direct_relations_calls) == 3, (
-        "has_org_relation must read fresh every call, never from the "
+        "has_platform_relation must read fresh every call, never from the "
         "45s cache — it's a write-path correctness check now, and the "
         "listing endpoint no longer calls it"
     )
@@ -314,27 +314,29 @@ async def test_has_org_relation_always_reads_fresh_never_cached() -> None:
 
 
 @pytest.mark.asyncio
-async def test_has_org_relation_sees_a_write_immediately_on_the_same_pod() -> None:
-    """The flip side of the above: because `has_org_relation` never caches,
+async def test_has_platform_relation_sees_a_write_immediately_on_the_same_pod() -> None:
+    """The flip side of the above: because `has_platform_relation` never caches,
     a write is visible on the very next call with no invalidation needed —
     proving the bypass is actually live, not just uncounted."""
 
     engine = CountingRebacEngine()
     cap_id = "corp_drive"
 
-    assert not await enablement.has_org_relation(
+    assert not await enablement.has_platform_relation(
         engine, cap_id, RelationType.DEFAULT_ON
     )
 
     await engine.add_relation(
         Relation(
-            subject=RebacReference(Resource.ORGANIZATION, ORGANIZATION_ID),
+            subject=RebacReference(Resource.PLATFORM, PLATFORM_ID),
             relation=RelationType.DEFAULT_ON,
             resource=cap_ref(cap_id),
         )
     )
 
-    assert await enablement.has_org_relation(engine, cap_id, RelationType.DEFAULT_ON)
+    assert await enablement.has_platform_relation(
+        engine, cap_id, RelationType.DEFAULT_ON
+    )
 
 
 class _AppGrantFailsRebac(CountingRebacEngine):

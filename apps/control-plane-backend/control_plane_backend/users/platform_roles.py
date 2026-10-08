@@ -34,9 +34,9 @@ import asyncio
 import logging
 
 from fred_core import (
-    ORGANIZATION_ID,
+    PLATFORM_ID,
     KeycloakUser,
-    OrganizationPermission,
+    PlatformPermission,
     RebacDisabledResult,
     RebacEngine,
     RebacReference,
@@ -66,7 +66,7 @@ from control_plane_backend.users.service import (
 
 logger = logging.getLogger(__name__)
 
-_ORGANIZATION_REF = RebacReference(Resource.ORGANIZATION, ORGANIZATION_ID)
+_ORGANIZATION_REF = RebacReference(Resource.PLATFORM, PLATFORM_ID)
 
 
 def _require_rebac(rebac: RebacEngine) -> None:
@@ -143,7 +143,7 @@ async def list_platform_roles(
     """
     _require_rebac(rebac)
     await rebac.check_user_permission_or_raise(
-        user, OrganizationPermission.CAN_ADMINISTER_USERS, ORGANIZATION_ID
+        user, PlatformPermission.CAN_ADMINISTER_USERS, PLATFORM_ID
     )
 
     holders_by_role, completed_by = await asyncio.gather(
@@ -201,7 +201,7 @@ async def grant_platform_role(
     """
     _require_rebac(rebac)
     await rebac.check_user_permission_or_raise(
-        user, OrganizationPermission.CAN_ADMINISTER_USERS, ORGANIZATION_ID
+        user, PlatformPermission.CAN_ADMINISTER_USERS, PLATFORM_ID
     )
     if relation is PlatformRoleRelation.PLATFORM_ADMIN:
         await _check_root_guards(user, bootstrap_store, revoke_target=None)
@@ -241,7 +241,7 @@ async def revoke_platform_role(
     """
     _require_rebac(rebac)
     await rebac.check_user_permission_or_raise(
-        user, OrganizationPermission.CAN_ADMINISTER_USERS, ORGANIZATION_ID
+        user, PlatformPermission.CAN_ADMINISTER_USERS, PLATFORM_ID
     )
     if relation is PlatformRoleRelation.PLATFORM_ADMIN:
         await _check_root_guards(user, bootstrap_store, revoke_target=target_user_id)

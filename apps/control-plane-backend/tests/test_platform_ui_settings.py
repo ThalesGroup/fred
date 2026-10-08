@@ -35,7 +35,7 @@ from control_plane_backend.platform_ui_settings.service import (
 from control_plane_backend.platform_ui_settings.store import PlatformUiSettingsStore
 from control_plane_backend.product import service as product_service
 from control_plane_backend.product.dependencies import ProductServiceDependencies
-from fred_core import AuthorizationError, KeycloakUser, OrganizationPermission
+from fred_core import AuthorizationError, KeycloakUser, PlatformPermission
 from fred_core.security.models import Resource
 from httpx import ASGITransport, AsyncClient
 from pydantic import ValidationError
@@ -109,7 +109,7 @@ def test_request_accepts_ids_the_backend_does_not_know() -> None:
 
 
 class _RoleRebac:
-    def __init__(self, *allowed: OrganizationPermission) -> None:
+    def __init__(self, *allowed: PlatformPermission) -> None:
         self._allowed = set(allowed)
 
     async def check_user_permission_or_raise(
@@ -117,7 +117,7 @@ class _RoleRebac:
     ) -> None:
         if permission not in self._allowed:
             raise AuthorizationError(
-                user.uid, str(permission), Resource.ORGANIZATION, "denied"
+                user.uid, str(permission), Resource.PLATFORM, "denied"
             )
 
 
@@ -153,7 +153,7 @@ def _user() -> KeycloakUser:
 @pytest.mark.asyncio
 async def test_non_admin_can_neither_read_nor_write() -> None:
     store = _MemoryStore()
-    deps = _deps(_RoleRebac(OrganizationPermission.CAN_EDIT_PLATFORM_PROMPT), store)
+    deps = _deps(_RoleRebac(PlatformPermission.CAN_EDIT_PLATFORM_PROMPT), store)
     with pytest.raises(AuthorizationError):
         await get_platform_ui_settings(user=_user(), deps=deps)
     with pytest.raises(AuthorizationError):
@@ -168,7 +168,7 @@ async def test_non_admin_can_neither_read_nor_write() -> None:
 @pytest.mark.asyncio
 async def test_platform_admin_reads_defaults_then_writes() -> None:
     store = _MemoryStore()
-    deps = _deps(_RoleRebac(OrganizationPermission.CAN_MANAGE_PLATFORM), store)
+    deps = _deps(_RoleRebac(PlatformPermission.CAN_MANAGE_PLATFORM), store)
 
     unset = await get_platform_ui_settings(user=_user(), deps=deps)
     assert (unset.default_theme, unset.hidden_themes, unset.updated_at) == (

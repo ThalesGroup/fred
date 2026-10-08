@@ -50,7 +50,7 @@ from fred_sdk.contracts.capability.manifest import (
 from control_plane_backend.app.feature_flags import is_feature_enabled
 from control_plane_backend.capabilities.catalog import aggregate_capability_catalog
 from control_plane_backend.capabilities.enablement import (
-    ORG_REF,
+    PLATFORM_REF,
     CapabilityNotFound,
     ReasoningNotSupported,
     cap_ref,
@@ -59,8 +59,8 @@ from control_plane_backend.capabilities.enablement import (
     enablement_ref,
     ensure_capability_anchor,
     get_enablement_relations_cached,
-    has_enablement_org_relation,
-    has_org_relation,
+    has_enablement_platform_relation,
+    has_platform_relation,
     is_projected_product_object,
     is_template_capability_instance,
     reset_capability_for_team,
@@ -85,7 +85,7 @@ from control_plane_backend.capabilities.schemas import (
     PersonalScope,
     TeamCapabilityEnablementResult,
 )
-from control_plane_backend.organization_authz import require_manage_capabilities
+from control_plane_backend.platform_authz import require_manage_capabilities
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 from control_plane_backend.teams.service import (
     count_all_collaborative_teams,
@@ -111,7 +111,7 @@ async def _require_can_manage(
 
     Capabilities are checked through ``capability#can_manage``, which the
     schema resolves through that relation. Applications and Knowledge Base
-    definitions first pass the equivalent organization gate, then resolve an
+    definitions first pass the equivalent platform gate, then resolve an
     exact ``app__`` / ``kb__`` entry. Their typed anchor is left to the mutation
     itself, after any team-scope guard has run, so a rejected request cannot
     write a tuple of either type.
@@ -119,7 +119,7 @@ async def _require_can_manage(
 
     if capability_id.startswith(APPLICATION_CATALOG_NAMESPACE_PREFIX):
         # Validate reserved application ids without first anchoring an
-        # arbitrary path parameter. The org-level gate runs before loading
+        # arbitrary path parameter. The platform-level gate runs before loading
         # application metadata, preserving the admin boundary. The deployment
         # kill switch is then checked before reading registered applications or
         # creating any structural tuple, so disabled applications are both
@@ -148,7 +148,7 @@ async def _require_can_manage(
 
     if capability_id.startswith(KNOWLEDGE_BASE_CATALOG_NAMESPACE_PREFIX):
         # Same shape, same reason as the application branch above: gate on the
-        # organization relation BEFORE touching the id, so an unauthorized
+        # platform relation BEFORE touching the id, so an unauthorized
         # caller can never anchor an arbitrary path parameter — and never on
         # the `capability` type, which is not this id's authorization object.
         await require_manage_capabilities(rebac, user)
@@ -295,19 +295,19 @@ async def _read_personal_scope(rebac: RebacEngine, capability_id: str) -> Person
     (`scope_before`, used to detect the access-transition that decides
     whether to revive suspended dependents) — a write-path decision, so this
     deliberately does NOT go through `get_capability_relations_cached` (see
-    `has_org_relation`'s docstring for why: caching here would risk acting on
+    `has_platform_relation`'s docstring for why: caching here would risk acting on
     up to 45s-stale state from another replica's write, for no benefit to the
     read-only listing path, which never calls this). Still `list_direct_
     relations` (a `Read`), not `lookup_subjects` (`ListUsers`) — cheaper per
     call even uncached.
 
-    Codex review (#2181 PR): narrowed to `subject=ORG_REF`, same reasoning as
-    `has_org_relation` — this only ever needs the org-subject tuples, not
+    Codex review (#2181 PR): narrowed to `subject=PLATFORM_REF`, same reasoning as
+    `has_platform_relation` — this only ever needs the platform-subject tuples, not
     every team's grant on the capability.
     """
 
     relations = await rebac.list_direct_relations(
-        cap_ref(capability_id), subject=ORG_REF
+        cap_ref(capability_id), subject=PLATFORM_REF
     )
     return _fold_personal_scope(_enablement_facts(relations))
 
@@ -600,7 +600,7 @@ async def reset_team_capability(
     catalog = await aggregate_capability_catalog(deps)
     entry = _catalog_entry_for_revoke(catalog, capability_id)
     team_id = _canonical_team_id_for_entry(user, entry, team_id)
-    default_on = await has_enablement_org_relation(
+    default_on = await has_enablement_platform_relation(
         rebac, enablement_ref(entry), RelationType.DEFAULT_ON
     )
     suspended = await reset_capability_for_team(
@@ -886,7 +886,9 @@ async def set_personal_scope(
     # during this call — only the two personal-class tuples do — so one read
     # covers both the before and after side of the access formula.
     scope_before = await _read_personal_scope(rebac, capability_id)
-    default_on = await has_org_relation(rebac, capability_id, RelationType.DEFAULT_ON)
+    default_on = await has_platform_relation(
+        rebac, capability_id, RelationType.DEFAULT_ON
+    )
     had_access = scope_before == "enabled" or (scope_before == "default" and default_on)
 
     suspended = await set_capability_personal_scope(

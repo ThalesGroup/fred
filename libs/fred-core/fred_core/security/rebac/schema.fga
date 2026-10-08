@@ -3,7 +3,7 @@ model
 
 type user
 
-type organization
+type platform
   relations
     # A person Fred has removed; every other person's account is active. Only
     # the control plane's account lifecycle writes it, when a person is deleted;
@@ -23,10 +23,8 @@ type organization
     define feature_manager: [user] or platform_admin
     define prompt_editor: [user] or platform_admin
 
-    # Reverse index of team.organization (FGA cannot traverse relations
-    # backwards). Never persisted: callers inject it as a CONTEXTUAL tuple when
-    # checking with a team subject (capability#can_use) — every team belongs to
-    # the singleton organization, so the edge is derived, not stored state.
+    # Contextual catalog membership for team-subject checks.
+    # No team/platform structural edge is persisted.
     define team: [team]
 
     # Reverse index restricted to PERSONAL spaces (`personal-{uid}` teams).
@@ -95,6 +93,21 @@ type organization
   define can_edit_platform_prompt: platform_admin or prompt_editor
 
 
+type organization
+  relations
+    define admin: [user]
+    define editor: [user]
+    define analyst: [user]
+    define member: [user] or admin or editor or analyst
+
+    define can_read_corpus: member
+    define can_update_resources: editor
+    define can_use_agents: member
+    define can_update_agents: editor
+    define can_read_conversations_for_evaluation: analyst
+    define can_administer_members: admin
+    define can_create_team: admin
+
 type team
   relations
     define organization: [organization]
@@ -106,7 +119,7 @@ type team
     # authority; team_editor is the reverse. team_analyst is a distinct,
     # narrower role for evaluation work (RFC §3.2). None of these relations
     # are ever derived from a platform role (RFC §24.2, §24.7): a
-    # `platform_admin from organization` exception was tried for team
+    # `platform_admin from platform` exception was tried for team
     # bootstrap and reverted the same day — OpenFGA cannot express "only if
     # this team has no owner yet", so it applied to every team, always, and
     # was a live escalation through the `add_team_member`/`update_team_member`
@@ -174,32 +187,47 @@ type team
     # marketplace" into "may read this team's files" for every PUBLIC team
     define can_access_files: team_member
 
-    # Team-scoped evaluation capabilities (RFC §6.2/§3.2). team_admin may run
-    # evaluations directly (RFC §24.6: team_admin may also grant team_analyst
-    # without separate platform approval); team_editor has no evaluation
-    # authority by default.
-    define can_run_evaluations: team_analyst or team_admin
-    define can_manage_evaluation_corpus: team_analyst or team_admin
+    # Analysis requires the explicit local analyst role, including for admins.
+    define can_run_evaluations: team_analyst
+    define can_manage_evaluation_corpus: team_analyst
     define can_read_conversations_for_evaluation: team_analyst
 
     # --------------- Helpers (not permission to use directly, only to help define them) ---------------
 
     # Can upload/rename/delete team resources (file/folders)
     # -> must be at least team_editor
+    define can_read_corpus: team_member
+    define can_use_agents: team_member
+    define can_create_project: team_admin
     define can_update_resources: team_editor
 
     # Can create/update/delete team agents
     # -> must be at least team_editor
     define can_update_agents: team_editor
 
+type project
+  relations
+    define parent: [team]
+    define admin: [user]
+    define editor: [user]
+    define analyst: [user]
+    define member: ([user] or admin or editor or analyst) and team_member from parent
+
+    define can_read_corpus: member
+    define can_use_agents: member
+    define can_update_resources: editor and team_member from parent
+    define can_update_agents: editor and team_member from parent
+    define can_read_conversations_for_evaluation: analyst and team_member from parent
+    define can_administer_members: admin and team_member from parent
+
 type agent
   relations
-    define owner: [user, team]
+    define owner: [user, organization, team, project]
 
     # --------------- Permissions (computed relations) ---------------
     # Can read agemt: see its name, description...
     # -> must be at least viewer or team member
-    define read: owner or team_member from owner
+    define read: owner or can_use_agents from owner
 
     # Can update agent configuration
     # -> must be owner
@@ -283,12 +311,12 @@ type capability
   # structural relations below are written exclusively by the enablement API.
   relations
     # Platform anchor — every capability is anchored to the singleton
-    # organization so management rights derive from the org admin role.
-    define organization: [organization]
+    # platform so management rights derive from operational roles.
+    define platform: [platform]
 
     # Default-on marker: tuple present => usable by ALL teams (runtime state,
     # toggled by writing/deleting this one tuple — never a code property).
-    define default_on: [organization]
+    define default_on: [platform]
 
     # Explicit per-team grant (the admin-gated path).
     define enabled: [team]
@@ -298,25 +326,25 @@ type capability
     define disabled: [team]
 
     # Personal-space class position (CAPAB-01 / #1961, RFC §8.4). One
-    # platform-wide tuple each, subject the singleton organization:
+    # platform-wide tuple each, subject the singleton platform:
     #   personal_on       => enabled for ALL personal spaces;
     #   personal_disabled => disabled for ALL personal spaces.
-    # They apply to a team only through the contextual `organization#personal_team`
+    # They apply to a team only through the contextual `platform#personal_team`
     # reverse edge, which the caller injects solely for `personal-{uid}` subjects
     # — so the class reaches every personal space and no regular team, with no
     # per-team tuple persisted.
-    define personal_on: [organization]
-    define personal_disabled: [organization]
+    define personal_on: [platform]
+    define personal_disabled: [platform]
     define personal_grant: personal_team from personal_on
     define personal_block: personal_team from personal_disabled
 
     # --------------- Permissions (computed relations) ---------------
-    # Can manage (enable/disable/toggle default-on) — delegates to the org's
-    # own `can_manage_capabilities` so the per-object gate and the org-level
+    # Can manage (enable/disable/toggle default-on) — delegates to the platform's
+    # own `can_manage_capabilities` so the per-object gate and the platform-level
     # gate on the same admin surface can never drift apart.
-    define can_manage: can_manage_capabilities from organization
+    define can_manage: can_manage_capabilities from platform
 
-    # Inherited (non-explicit) access: the org-wide `default_on` marker OR the
+    # Inherited (non-explicit) access: the platform-wide `default_on` marker OR the
     # personal-space class grant, minus the personal-space class opt-out. The
     # intermediate relation exists so `personal_block` subtracts ONLY from the
     # inherited layer — never from a per-space explicit `enabled` grant.
@@ -329,7 +357,7 @@ type capability
     # specific wins: a team's explicit `enabled`/`disabled` beats the
     # personal-space class position, which beats `default_on`. The `default_on`
     # and personal-class edges resolve through the contextual
-    # `organization#team` / `organization#personal_team` reverse edges.
+    # `platform#team` / `platform#personal_team` reverse edges.
     define can_use: (enabled or inherited) but not disabled
 
 type app
@@ -337,10 +365,10 @@ type app
   # remain distinct from agent capabilities and have no personal-space class.
   relations
     # Platform anchor for management rights.
-    define organization: [organization]
+    define platform: [platform]
 
-    # Organization-wide default inherited through the contextual team edge.
-    define default_on: [organization]
+    # Platform-wide default inherited through the contextual team edge.
+    define default_on: [platform]
 
     # Explicit per-team grant and override.
     define enabled: [team]
@@ -348,8 +376,8 @@ type app
 
     # --------------- Permissions (computed relations) ---------------
     # Same delegation as `capability#can_manage`: applications are governed
-    # from the same admin surface, behind the same org-level gate.
-    define can_manage: can_manage_capabilities from organization
+    # from the same admin surface, behind the same platform-level gate.
+    define can_manage: can_manage_capabilities from platform
     define inherited: team from default_on
     define can_use: (enabled or inherited) but not disabled
 
@@ -363,16 +391,16 @@ type knowledge_base_definition
   # reaches every personal space at once.
   relations
     # Platform anchor for management rights.
-    define organization: [organization]
+    define platform: [platform]
 
-    # Organization-wide default inherited through the contextual team edge.
-    define default_on: [organization]
+    # Platform-wide default inherited through the contextual team edge.
+    define default_on: [platform]
 
     # Explicit per-team grant and override.
     define enabled: [team]
     define disabled: [team]
 
     # --------------- Permissions (computed relations) ---------------
-    define can_manage: platform_admin from organization
+    define can_manage: platform_admin from platform
     define inherited: team from default_on
     define can_use: (enabled or inherited) but not disabled

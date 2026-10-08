@@ -35,10 +35,10 @@ from __future__ import annotations
 
 import pytest
 from fred_core import (
-    ORGANIZATION_ID,
+    PLATFORM_ID,
     AuthorizationError,
     KeycloakUser,
-    OrganizationPermission,
+    PlatformPermission,
 )
 from fred_core.documents.document_structures import (
     DocumentMetadata,
@@ -69,8 +69,8 @@ class _FakeRebac:
         self._is_platform_admin = is_platform_admin
 
     async def has_user_permission(self, user, permission, resource_id, **_kw) -> bool:
-        assert permission == OrganizationPermission.CAN_MANAGE_PLATFORM
-        assert resource_id == ORGANIZATION_ID
+        assert permission == PlatformPermission.CAN_MANAGE_PLATFORM
+        assert resource_id == PLATFORM_ID
         return self._is_platform_admin
 
 

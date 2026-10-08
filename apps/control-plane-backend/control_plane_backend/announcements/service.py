@@ -17,9 +17,9 @@ from __future__ import annotations
 import uuid
 
 from fastapi import HTTPException, status
-from fred_core import KeycloakUser, OrganizationPermission
+from fred_core import KeycloakUser, PlatformPermission
 from fred_core.logs.audit_log import emit_audit_log
-from fred_core.security.rebac.rebac_engine import ORGANIZATION_ID
+from fred_core.security.rebac.rebac_engine import PLATFORM_ID
 
 from control_plane_backend.announcements.schemas import (
     Announcement,
@@ -34,14 +34,14 @@ async def _require_manage_platform(
 ) -> None:
     """The catch-all platform gate, as the other admin-only surfaces use it.
 
-    `organization_authz.py` deliberately keeps no helper for this one — the
+    `platform_authz.py` deliberately keeps no helper for this one — the
     named helpers exist so a delegated surface cannot reuse the catch-all — so
     the check is spelled out here, the same way `main.py` spells it out for
     import/export, tasks and platform reset.
     """
 
     await deps.team_dependencies.rebac.check_user_permission_or_raise(
-        user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+        user, PlatformPermission.CAN_MANAGE_PLATFORM, PLATFORM_ID
     )
 
 

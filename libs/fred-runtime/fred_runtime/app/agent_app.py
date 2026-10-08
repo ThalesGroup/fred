@@ -88,8 +88,8 @@ from fred_core.security.delegation import (
 )
 from fred_core.security.models import AuthorizationError
 from fred_core.security.rebac.rebac_engine import (
-    ORGANIZATION_ID,
-    OrganizationPermission,
+    PLATFORM_ID,
+    PlatformPermission,
     TeamPermission,
 )
 from fred_core.security.rebac.rebac_factory import rebac_factory
@@ -2114,7 +2114,7 @@ async def _caller_can_manage_platform(caller: KeycloakUser | None) -> bool:
     if rebac is None or not rebac.enabled:
         return False
     return await rebac.has_user_permission(
-        caller, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+        caller, PlatformPermission.CAN_MANAGE_PLATFORM, PLATFORM_ID
     )
 
 
@@ -4860,7 +4860,7 @@ def _build_agent_router(
         rebac = get_runtime_context().config.rebac_engine
         if caller is not None and rebac is not None and rebac.enabled:
             await rebac.check_user_permission_or_raise(
-                caller, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+                caller, PlatformPermission.CAN_MANAGE_PLATFORM, PLATFORM_ID
             )
         with container._kpi_turns_lock:
             events = list(container.kpi_turns_buffer)
@@ -4889,7 +4889,7 @@ def _build_agent_router(
         rebac = get_runtime_context().config.rebac_engine
         if caller is not None and rebac is not None and rebac.enabled:
             await rebac.check_user_permission_or_raise(
-                caller, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+                caller, PlatformPermission.CAN_MANAGE_PLATFORM, PLATFORM_ID
             )
         with container._audit_events_lock:
             events = list(container.audit_events_buffer)

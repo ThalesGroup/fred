@@ -26,7 +26,7 @@ here so the RFC invariants hold in exactly one spot:
   (`CAPABILITY_ACCESS_REVOKED`) through `reconcile_instance_suspension` — the
   entry point #1975 exposed for exactly this.
 - **Callers check only `can_use`/`can_manage`** — this module writes the
-  structural tuples (`organization` anchor / `enabled` / `disabled` /
+  structural tuples (`platform` anchor / `enabled` / `disabled` /
   `default_on`) they never touch directly.
 """
 
@@ -55,7 +55,7 @@ from fred_core.security.rebac.knowledge_base_authz import (
     knowledge_base_name_from_catalog_id,
 )
 from fred_core.security.rebac.rebac_engine import (
-    ORGANIZATION_ID,
+    PLATFORM_ID,
     RebacEngine,
     RebacReference,
     Relation,
@@ -81,7 +81,7 @@ from control_plane_backend.capabilities.settings_store import (
 from control_plane_backend.common.field_values import validate_field_values
 
 if TYPE_CHECKING:
-    # Only ever imported lazily at runtime (see `has_org_relation`/
+    # Only ever imported lazily at runtime (see `has_platform_relation`/
     # `capability_relation_subjects` below) to avoid a `fred_core` import
     # cycle; a `TYPE_CHECKING`-guarded import is enough for the type
     # annotations that reference it (`__future__` annotations mean the
@@ -90,7 +90,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-ORG_REF = RebacReference(type=Resource.ORGANIZATION, id=ORGANIZATION_ID)
+PLATFORM_REF = RebacReference(type=Resource.PLATFORM, id=PLATFORM_ID)
 
 
 class CapabilityNotFound(Exception):
@@ -222,7 +222,7 @@ async def agent_capability_missing_platform_dependencies(
         return []
     missing: list[str] = []
     for cap_id in catalog_entry.default_capability_ids:
-        if not await has_org_relation(rebac, cap_id, RelationType.DEFAULT_ON):
+        if not await has_platform_relation(rebac, cap_id, RelationType.DEFAULT_ON):
             missing.append(cap_id)
     return missing
 
@@ -249,12 +249,12 @@ async def _require_agent_capability_dependencies_usable_by_all_personal_spaces(
 ) -> None:
     """Personal-scope counterpart of the check above: refuse to class-enable a
     `kind="agent"` capability for every personal space unless each of its
-    `default_capability_ids` already has org-level personal access — i.e. is
+    `default_capability_ids` already has platform-level personal access — i.e. is
     itself `personal_on` or `default_on` (and not `personal_disabled`).
 
     There is no single concrete team to run `usable_capability_ids` against
     here (the grant applies to every personal space at once), so this reads
-    the same org-subject markers `set_capability_personal_scope` itself reads
+    the same platform-subject markers `set_capability_personal_scope` itself reads
     to decide `had_access`/`has_access` for the capability being toggled.
     """
 
@@ -262,9 +262,11 @@ async def _require_agent_capability_dependencies_usable_by_all_personal_spaces(
         return
     missing: list[str] = []
     for cap_id in catalog_entry.default_capability_ids:
-        personal_on = await has_org_relation(rebac, cap_id, RelationType.PERSONAL_ON)
-        default_on = await has_org_relation(rebac, cap_id, RelationType.DEFAULT_ON)
-        personal_disabled = await has_org_relation(
+        personal_on = await has_platform_relation(
+            rebac, cap_id, RelationType.PERSONAL_ON
+        )
+        default_on = await has_platform_relation(rebac, cap_id, RelationType.DEFAULT_ON)
+        personal_disabled = await has_platform_relation(
             rebac, cap_id, RelationType.PERSONAL_DISABLED
         )
         if not ((personal_on or default_on) and not personal_disabled):
@@ -394,19 +396,19 @@ def _suspension_store(
 async def ensure_enablement_anchor(
     rebac: RebacEngine, resource: RebacReference
 ) -> None:
-    """Idempotently anchor an enablement resource to the organization."""
+    """Idempotently anchor an enablement resource to the platform."""
 
     await rebac.add_relation(
         Relation(
-            subject=ORG_REF,
-            relation=RelationType.ORGANIZATION,
+            subject=PLATFORM_REF,
+            relation=RelationType.PLATFORM,
             resource=resource,
         )
     )
 
 
 async def ensure_capability_anchor(rebac: RebacEngine, capability_id: str) -> None:
-    """Idempotently anchor a capability to the singleton organization so its
+    """Idempotently anchor a capability to the singleton platform so its
     `can_manage` / `can_use` permissions resolve (RFC §8.1)."""
 
     await ensure_enablement_anchor(rebac, cap_ref(capability_id))
@@ -910,7 +912,7 @@ async def set_capability_default_on(
         try:
             await rebac.add_relation(
                 Relation(
-                    subject=ORG_REF,
+                    subject=PLATFORM_REF,
                     relation=RelationType.DEFAULT_ON,
                     resource=resource,
                 ),
@@ -927,7 +929,7 @@ async def set_capability_default_on(
     try:
         await rebac.delete_relation(
             Relation(
-                subject=ORG_REF,
+                subject=PLATFORM_REF,
                 relation=RelationType.DEFAULT_ON,
                 resource=resource,
             )
@@ -966,7 +968,7 @@ async def set_capability_personal_scope(
 ) -> int:
     """Set the personal-space class position for a capability (RFC §8.4).
 
-    The class is a tri-state, written as at most one org-subject tuple:
+    The class is a tri-state, written as at most one platform-subject tuple:
 
     - ``enabled``  → `personal_on`  present, `personal_disabled` absent;
     - ``disabled`` → `personal_disabled` present, `personal_on` absent;
@@ -1012,13 +1014,13 @@ async def set_capability_personal_scope(
     # `(personal_on OR default_on) AND NOT personal_disabled` — the FGA
     # `inherited` relation evaluated for a personal subject. `default_on` is a
     # constant across the write; only the two class tuples move.
-    was_on_class = await has_org_relation(
+    was_on_class = await has_platform_relation(
         rebac, catalog_entry.id, RelationType.PERSONAL_ON
     )
-    was_off_class = await has_org_relation(
+    was_off_class = await has_platform_relation(
         rebac, catalog_entry.id, RelationType.PERSONAL_DISABLED
     )
-    default_on = await has_org_relation(
+    default_on = await has_platform_relation(
         rebac, catalog_entry.id, RelationType.DEFAULT_ON
     )
     had_access = (was_on_class or default_on) and not was_off_class
@@ -1052,16 +1054,16 @@ async def _apply_personal_scope_tuples(
     want_disabled: bool,
     updated_by: str | None = None,
 ) -> None:
-    """Write/delete the two org-subject class tuples so exactly the requested
+    """Write/delete the two platform-subject class tuples so exactly the requested
     state holds (at most one present). Idempotent."""
 
     on_relation = Relation(
-        subject=ORG_REF,
+        subject=PLATFORM_REF,
         relation=RelationType.PERSONAL_ON,
         resource=cap_ref(capability_id),
     )
     disabled_relation = Relation(
-        subject=ORG_REF,
+        subject=PLATFORM_REF,
         relation=RelationType.PERSONAL_DISABLED,
         resource=cap_ref(capability_id),
     )
@@ -1203,11 +1205,11 @@ def capability_relation_subjects(
     }
 
 
-async def has_org_relation(
+async def has_platform_relation(
     rebac: RebacEngine, capability_id: str, relation: RelationType
 ) -> bool:
-    """True when the singleton org holds `relation` on the capability (used to
-    read back the class/default-on org-subject markers).
+    """True when the singleton platform holds `relation` on the capability (used to
+    read back the class/default-on platform-subject markers).
 
     #2181: every remaining caller of this function is a write-path
     peek-before-mutate decision (`reset_team_capability`'s suspend/revive
@@ -1224,26 +1226,28 @@ async def has_org_relation(
     (a `Read`) rather than `lookup_subjects` (`ListUsers`) — cheaper per call
     even uncached (#2065's finding: `Read` is the cheaper primitive).
 
-    Codex review (#2181 PR): narrowed to `subject=ORG_REF` so OpenFGA filters
-    server-side to the handful of org-subject tuples instead of transferring
+    Codex review (#2181 PR): narrowed to `subject=PLATFORM_REF` so OpenFGA filters
+    server-side to the handful of platform-subject tuples instead of transferring
     and paginating through every team's `enabled`/`disabled` grant merely to
-    answer one org-marker question — matters once a capability has grants
+    answer one platform-marker question — matters once a capability has grants
     across many teams.
     """
 
-    return await has_enablement_org_relation(rebac, cap_ref(capability_id), relation)
+    return await has_enablement_platform_relation(
+        rebac, cap_ref(capability_id), relation
+    )
 
 
-async def has_enablement_org_relation(
+async def has_enablement_platform_relation(
     rebac: RebacEngine,
     resource: RebacReference,
     relation: RelationType,
 ) -> bool:
-    """Fresh org-marker lookup for one typed enablement object."""
+    """Fresh platform-marker lookup for one typed enablement object."""
 
-    relations = await rebac.list_direct_relations(resource, subject=ORG_REF)
-    return ORGANIZATION_ID in capability_relation_subjects(
-        relations, relation, Resource.ORGANIZATION
+    relations = await rebac.list_direct_relations(resource, subject=PLATFORM_REF)
+    return PLATFORM_ID in capability_relation_subjects(
+        relations, relation, Resource.PLATFORM
     )
 
 

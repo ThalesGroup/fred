@@ -54,13 +54,13 @@ def _engine(client: _ModelOnlyOpenFga) -> OpenFgaRebacEngine:
 
 
 def _allow_list_model() -> dict:
-    """An organization that lists active people and defines no `suspended` relation."""
+    """A platform that lists active people and defines no `suspended` relation."""
     model = json.loads(DEFAULT_SCHEMA)
-    organization = next(t for t in model["type_definitions"] if t["type"] == "organization")
-    del organization["relations"]["suspended"]
-    del organization["metadata"]["relations"]["suspended"]
-    organization["relations"]["active"] = {"this": {}}
-    organization["metadata"]["relations"]["active"] = {"directly_related_user_types": [{"type": "user"}]}
+    platform = next(t for t in model["type_definitions"] if t["type"] == "platform")
+    del platform["relations"]["suspended"]
+    del platform["metadata"]["relations"]["suspended"]
+    platform["relations"]["active"] = {"this": {}}
+    platform["metadata"]["relations"]["active"] = {"directly_related_user_types": [{"type": "user"}]}
     return model
 
 
@@ -135,7 +135,7 @@ def test_app_startup_installs_the_engine_when_account_status_is_required(
 
     required = delegation.in_use or local_directory
     assert len(built) == (1 if required else 0)
-    assert client.checks == ([("user:synthetic-person", "suspended", "organization:fred")] if required else [])
+    assert client.checks == ([("user:synthetic-person", "suspended", "platform:fred")] if required else [])
     assert client.writes == []
 
 

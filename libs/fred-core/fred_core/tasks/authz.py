@@ -35,8 +35,8 @@ from __future__ import annotations
 from fastapi import HTTPException
 
 from fred_core.security.rebac.rebac_engine import (
-    ORGANIZATION_ID,
-    OrganizationPermission,
+    PLATFORM_ID,
+    PlatformPermission,
     RebacEngine,
     TeamPermission,
 )
@@ -59,7 +59,7 @@ async def authorize_task_access(
     if run.created_by is not None and run.created_by == user.uid:
         return
     if await rebac.has_user_permission(
-        user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+        user, PlatformPermission.CAN_MANAGE_PLATFORM, PLATFORM_ID
     ):
         return
     if run.team_id:
@@ -91,7 +91,7 @@ async def authorize_task_mutation(
     if run.created_by is not None and run.created_by == user.uid:
         return
     if await rebac.has_user_permission(
-        user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+        user, PlatformPermission.CAN_MANAGE_PLATFORM, PLATFORM_ID
     ):
         return
     raise HTTPException(status_code=403, detail="Not authorized to cancel this task")
@@ -146,7 +146,7 @@ async def list_tasks_scoped(
         )
     if scope == "platform":
         await rebac.check_user_permission_or_raise(
-            user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+            user, PlatformPermission.CAN_MANAGE_PLATFORM, PLATFORM_ID
         )
         return await service.list_tasks(kind=kind, state=state)
     # scope == "team"
@@ -155,7 +155,7 @@ async def list_tasks_scoped(
             status_code=400, detail="team_id is required for scope=team"
         )
     if not await rebac.has_user_permission(
-        user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+        user, PlatformPermission.CAN_MANAGE_PLATFORM, PLATFORM_ID
     ):
         await rebac.check_user_team_permission_or_raise(
             user, TeamPermission.CAN_READ_MEMEBERS, team_id=team_id

@@ -127,7 +127,7 @@ async def test_converts_every_relation_type_present() -> None:
             [
                 _tup("user:alice", "team_admin", "team:fredlab"),
                 _tup("user:bob", "team_member", "team:fredlab"),
-                _tup("organization:fred", "organization", "team:fredlab"),
+                _tup("platform:fred", "platform", "team:fredlab"),
                 _tup("user:*", "public", "team:fredlab"),
             ]
         ]
@@ -139,7 +139,7 @@ async def test_converts_every_relation_type_present() -> None:
     assert set((r.subject.type, r.subject.id, r.relation) for r in relations) == {
         (Resource.USER, "alice", RelationType.TEAM_ADMIN),
         (Resource.USER, "bob", RelationType.TEAM_MEMBER),
-        (Resource.ORGANIZATION, "fred", RelationType.ORGANIZATION),
+        (Resource.PLATFORM, "fred", RelationType.PLATFORM),
         (Resource.USER, "*", RelationType.PUBLIC),
     }
     assert all(

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Shared organization-scoped gates.
+"""Shared platform-scoped gates.
 
 One named helper per capability, never a parameterised entry point: the narrow
 relations carved out of `can_manage_platform` exist so a delegated surface
@@ -21,22 +21,22 @@ cannot reuse the catch-all gate. The catch-all keeps no helper here.
 
 from __future__ import annotations
 
-from fred_core import KeycloakUser, OrganizationPermission
-from fred_core.security.rebac.rebac_engine import ORGANIZATION_ID, RebacEngine
+from fred_core import KeycloakUser, PlatformPermission
+from fred_core.security.rebac.rebac_engine import PLATFORM_ID, RebacEngine
 
 
 async def _require(
-    rebac: RebacEngine, user: KeycloakUser, permission: OrganizationPermission
+    rebac: RebacEngine, user: KeycloakUser, permission: PlatformPermission
 ) -> None:
-    await rebac.check_user_permission_or_raise(user, permission, ORGANIZATION_ID)
+    await rebac.check_user_permission_or_raise(user, permission, PLATFORM_ID)
 
 
 async def require_manage_capabilities(rebac: RebacEngine, user: KeycloakUser) -> None:
     """Feature-governance gate: `can_manage_capabilities`, which the schema
-    defines as `platform_admin or feature_manager`. The org-level twin of
+    defines as `platform_admin or feature_manager`. The platform-level twin of
     `capability#can_manage`, which resolves through the very same relation."""
 
-    await _require(rebac, user, OrganizationPermission.CAN_MANAGE_CAPABILITIES)
+    await _require(rebac, user, PlatformPermission.CAN_MANAGE_CAPABILITIES)
 
 
 async def require_edit_platform_prompt(rebac: RebacEngine, user: KeycloakUser) -> None:
@@ -44,4 +44,4 @@ async def require_edit_platform_prompt(rebac: RebacEngine, user: KeycloakUser) -
     prompt_editor`). Not `can_manage_platform` — that catch-all also carries
     import/export, tasks and platform reset."""
 
-    await _require(rebac, user, OrganizationPermission.CAN_EDIT_PLATFORM_PROMPT)
+    await _require(rebac, user, PlatformPermission.CAN_EDIT_PLATFORM_PROMPT)

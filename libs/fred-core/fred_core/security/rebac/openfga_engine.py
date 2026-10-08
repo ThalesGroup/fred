@@ -31,7 +31,7 @@ from fred_core.security.rebac.openfga_schema import (
 )
 from fred_core.security.rebac.rebac_engine import (
     _ACCOUNT_STATUS_RELATIONS,
-    ORGANIZATION_ID,
+    PLATFORM_ID,
     RebacEngine,
     RebacPermission,
     RebacReference,
@@ -78,7 +78,7 @@ _MAX_TUPLES_PER_WRITE = 100
 # a reference that keeps gaining tuples from looping forever.
 _MAX_REFERENCE_CLEANUP_PASSES = 10
 
-_ORGANIZATION_OBJECT = f"{Resource.ORGANIZATION.value}:{ORGANIZATION_ID}"
+_PLATFORM_OBJECT = f"{Resource.PLATFORM.value}:{PLATFORM_ID}"
 _ACCOUNT_STATUS_RELATION_NAMES = frozenset(
     relation.value for relation in _ACCOUNT_STATUS_RELATIONS
 )
@@ -299,7 +299,7 @@ class OpenFgaRebacEngine(RebacEngine):
 
             for tup in res.tuples:
                 if (
-                    tup.key.object == _ORGANIZATION_OBJECT
+                    tup.key.object == _PLATFORM_OBJECT
                     and tup.key.relation in _ACCOUNT_STATUS_RELATION_NAMES
                 ):
                     continue
@@ -633,13 +633,13 @@ class OpenFgaRebacEngine(RebacEngine):
             model = response.authorization_model
             if model is None:
                 raise ValueError
-            organization = next(
+            platform = next(
                 definition
                 for definition in model.type_definitions
-                if definition.type == Resource.ORGANIZATION.value
+                if definition.type == Resource.PLATFORM.value
             )
-            relations = organization.relations
-            metadata = organization.metadata.relations
+            relations = platform.relations
+            metadata = platform.metadata.relations
 
             # suspended: [user]
             suspended = RelationType.SUSPENDED.value
@@ -662,7 +662,7 @@ class OpenFgaRebacEngine(RebacEngine):
             Relation(
                 subject=RebacReference(Resource.USER, user_id),
                 relation=RelationType.SUSPENDED,
-                resource=RebacReference(Resource.ORGANIZATION, ORGANIZATION_ID),
+                resource=RebacReference(Resource.PLATFORM, PLATFORM_ID),
             )
         )
 

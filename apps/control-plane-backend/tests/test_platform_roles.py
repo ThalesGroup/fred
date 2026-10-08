@@ -56,7 +56,7 @@ from control_plane_backend.users.schemas import (
     UserNotFoundError,
 )
 from fred_core import (
-    ORGANIZATION_ID,
+    PLATFORM_ID,
     KeycloackDisabled,
     KeycloakUser,
     RebacDisabledResult,
@@ -70,14 +70,14 @@ ROOT_UID = "root-sub"
 ADMIN_UID = "admin-sub"
 OTHER_UID = "other-sub"
 
-_ORG_REF = RebacReference(Resource.ORGANIZATION, ORGANIZATION_ID)
+_PLATFORM_REF = RebacReference(Resource.PLATFORM, PLATFORM_ID)
 
 
 def _org_tuple(uid: str, relation: RelationType) -> Relation:
     return Relation(
         subject=RebacReference(Resource.USER, uid),
         relation=relation,
-        resource=_ORG_REF,
+        resource=_PLATFORM_REF,
     )
 
 
@@ -120,7 +120,7 @@ class _FakeRebac:
     async def list_direct_relations(self, resource, **kwargs):
         if self._disabled_reads:
             return RebacDisabledResult()
-        assert resource == _ORG_REF
+        assert resource == _PLATFORM_REF
         return [
             _org_tuple(uid, role.to_relation())
             for role, uids in self._holders.items()
@@ -128,7 +128,7 @@ class _FakeRebac:
         ]
 
     async def has_direct_relation(self, subject, relation, resource, **kwargs):
-        assert resource == _ORG_REF
+        assert resource == _PLATFORM_REF
         return subject.id in self._holders[PlatformRoleRelation(relation.value)]
 
     async def add_relation(self, relation: Relation, *, actor_uid=None):
@@ -255,7 +255,7 @@ async def test_any_admin_grants_platform_observer():
     relation, actor_uid = rebac.added[0]
     assert relation.subject == RebacReference(Resource.USER, OTHER_UID)
     assert relation.relation == RelationType.PLATFORM_OBSERVER
-    assert relation.resource == _ORG_REF
+    assert relation.resource == _PLATFORM_REF
     assert actor_uid == ADMIN_UID
 
 
@@ -545,7 +545,7 @@ async def test_any_admin_grants_a_delegated_role(role: PlatformRoleRelation):
     assert len(rebac.added) == 1
     relation, actor_uid = rebac.added[0]
     assert relation.relation == role.to_relation()
-    assert relation.resource == _ORG_REF
+    assert relation.resource == _PLATFORM_REF
     assert actor_uid == ADMIN_UID
 
 

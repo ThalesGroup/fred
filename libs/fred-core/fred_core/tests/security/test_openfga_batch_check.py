@@ -178,8 +178,8 @@ async def test_contextual_tuples_are_transmitted_identically_to_every_check() ->
     engine = _make_engine(client)
     contextual = [
         Relation(
-            subject=RebacReference(Resource.ORGANIZATION, "fred"),
-            relation=RelationType.ORGANIZATION,
+            subject=RebacReference(Resource.PLATFORM, "fred"),
+            relation=RelationType.PLATFORM,
             resource=_TEAM,
         )
     ]
@@ -195,8 +195,8 @@ async def test_contextual_tuples_are_transmitted_identically_to_every_check() ->
     for item in body.checks:
         assert item.contextual_tuples is not None
         assert len(item.contextual_tuples) == 1
-        assert item.contextual_tuples[0].user == "organization:fred"
-        assert item.contextual_tuples[0].relation == "organization"
+        assert item.contextual_tuples[0].user == "platform:fred"
+        assert item.contextual_tuples[0].relation == "platform"
         assert item.contextual_tuples[0].object == "team:fredlab"
 
 
@@ -345,8 +345,8 @@ async def test_base_class_fallback_materializes_contextual_relations_once() -> N
     fully-populated sequence rather than an empty one after the first."""
     engine = _RecordingContextualRelationsEngine()
     contextual_relation = Relation(
-        subject=RebacReference(Resource.ORGANIZATION, "fred"),
-        relation=RelationType.ORGANIZATION,
+        subject=RebacReference(Resource.PLATFORM, "fred"),
+        relation=RelationType.PLATFORM,
         resource=_TEAM,
     )
 

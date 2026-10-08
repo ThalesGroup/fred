@@ -81,7 +81,7 @@ class _FakeRebac:
         del user, permission, resource
         if not self.platform_admin:
             raise AuthorizationError(
-                "admin-1", "can_manage_platform", Resource.ORGANIZATION
+                "admin-1", "can_manage_platform", Resource.PLATFORM
             )
 
     # `can_use: (enabled or inherited) but not disabled`
@@ -114,7 +114,7 @@ class _FakeRebac:
     def anchored(self, definition_id: str) -> bool:
         target = f"{Resource.KNOWLEDGE_BASE_DEFINITION.value}:{definition_id}"
         return any(
-            rel == "organization" and res == target for _, rel, res in self.relations
+            rel == "platform" and res == target for _, rel, res in self.relations
         )
 
 

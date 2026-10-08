@@ -43,7 +43,7 @@ from control_plane_backend.capabilities.enablement import (
     DefaultOnNotAllowed,
     disable_capability_for_team,
     enable_capability_for_team,
-    has_org_relation,
+    has_platform_relation,
     reset_capability_for_team,
     set_capability_default_on,
     set_capability_personal_scope,
@@ -56,12 +56,12 @@ from control_plane_backend.product.service import PodModelCatalog
 from fred_core import (
     CapabilityPermission,
     KeycloakUser,
-    OrganizationPermission,
+    PlatformPermission,
     RebacDisabledResult,
 )
 from fred_core.security.models import Resource
 from fred_core.security.rebac.rebac_engine import (
-    ORGANIZATION_ID,
+    PLATFORM_ID,
     RebacReference,
     Relation,
     RelationType,
@@ -153,7 +153,7 @@ class _FakeRebac:
     async def list_direct_relations(
         self, resource, *, subject=None, consistency_token=None
     ):
-        """#2181: `has_org_relation`/`_read_personal_scope`/`_build_enablement_item`
+        """#2181: `has_platform_relation`/`_read_personal_scope`/`_build_enablement_item`
         now read the exact-object `Read` shape instead of `lookup_subjects` —
         same recorded `self.tuples` state, filtered locally exactly like
         `capability_relation_subjects` does against the real engine."""
@@ -192,7 +192,7 @@ class _FakeRebac:
         if not self._enabled:
             return RebacDisabledResult()
         team_key = f"{subject.type.value}:{subject.id}"
-        org_key = f"organization:{ORGANIZATION_ID}"
+        org_key = f"platform:{PLATFORM_ID}"
 
         def _ids(user: str, rel: str) -> set[str]:
             return {
@@ -334,8 +334,8 @@ async def test_enable_writes_settings_row_before_enabled_tuple() -> None:
     assert ("team:team-a", "enabled", "capability:corp_drive") in rebac.tuples
     # Anchor written so can_manage/can_use resolve.
     assert (
-        "organization:fred",
-        "organization",
+        "platform:fred",
+        "platform",
         "capability:corp_drive",
     ) in rebac.tuples
 
@@ -769,7 +769,7 @@ async def test_default_on_allows_agent_capability_once_dependency_is_default_on(
         updated_by="admin",
     )
 
-    assert await has_org_relation(
+    assert await has_platform_relation(
         rebac, SQL_EXPERT_TEMPLATE_ID, RelationType.DEFAULT_ON
     )
 
@@ -820,7 +820,7 @@ async def test_default_off_is_never_blocked_by_the_dependency_gate() -> None:
         on=False,
         updated_by="admin",
     )
-    assert not await has_org_relation(
+    assert not await has_platform_relation(
         rebac, SQL_EXPERT_TEMPLATE_ID, RelationType.DEFAULT_ON
     )
 
@@ -840,7 +840,7 @@ async def test_default_on_gate_ignores_tool_capabilities() -> None:
         on=True,
         updated_by="admin",
     )
-    assert await has_org_relation(rebac, "corp_drive", RelationType.DEFAULT_ON)
+    assert await has_platform_relation(rebac, "corp_drive", RelationType.DEFAULT_ON)
 
 
 @pytest.mark.asyncio
@@ -993,7 +993,7 @@ async def test_seed_registration_writes_default_on_for_new_capability() -> None:
 
     assert seeded == ["doc_access"]
     assert (
-        "organization:fred",
+        "platform:fred",
         "default_on",
         "capability:doc_access",
     ) in rebac.tuples
@@ -1007,7 +1007,7 @@ async def test_seed_registration_is_first_registration_only() -> None:
     # Simulate an admin toggling default_on OFF afterwards.
     await rebac.delete_relation(
         Relation(
-            subject=RebacReference(type=Resource.ORGANIZATION, id=ORGANIZATION_ID),
+            subject=RebacReference(type=Resource.PLATFORM, id=PLATFORM_ID),
             relation=RelationType.DEFAULT_ON,
             resource=RebacReference(type=Resource.CAPABILITY, id="doc_access"),
         )
@@ -1018,7 +1018,7 @@ async def test_seed_registration_is_first_registration_only() -> None:
     )
     assert seeded_again == []
     assert (
-        "organization:fred",
+        "platform:fred",
         "default_on",
         "capability:doc_access",
     ) not in rebac.tuples
@@ -1078,7 +1078,7 @@ async def test_seed_registration_seeds_default_on_mcp_entry() -> None:
 
     assert seeded == ["mcp-bank-core-demo"]
     assert (
-        "organization:fred",
+        "platform:fred",
         "default_on",
         "capability:mcp-bank-core-demo",
     ) in rebac.tuples
@@ -1106,7 +1106,7 @@ async def test_seed_registration_isolates_per_entry_failure() -> None:
 
     assert seeded == ["good_cap"]
     assert (
-        "organization:fred",
+        "platform:fred",
         "default_on",
         "capability:good_cap",
     ) in rebac.tuples
@@ -1939,7 +1939,7 @@ async def test_set_default_on_off_survives_missing_model_catalog_entry(
     model_id = "model__openai__gpt-5.1"
     rebac = _FakeRebac()
     rebac.tuples.add(
-        (f"organization:{ORGANIZATION_ID}", "default_on", f"capability:{model_id}")
+        (f"platform:{PLATFORM_ID}", "default_on", f"capability:{model_id}")
     )
     store = _FakeAgentInstanceStore([])
 
@@ -1971,7 +1971,7 @@ async def test_set_default_on_off_survives_missing_model_catalog_entry(
 
     assert result.default_on is False
     assert (
-        f"organization:{ORGANIZATION_ID}",
+        f"platform:{PLATFORM_ID}",
         "default_on",
         f"capability:{model_id}",
     ) not in rebac.tuples
@@ -2042,7 +2042,7 @@ _PERSONAL_DISABLED = "personal_disabled"
 
 
 def _org_tuple(relation: str, cap_id: str = "corp_drive") -> tuple[str, str, str]:
-    return (f"organization:{ORGANIZATION_ID}", relation, f"capability:{cap_id}")
+    return (f"platform:{PLATFORM_ID}", relation, f"capability:{cap_id}")
 
 
 @pytest.mark.asyncio
@@ -2067,7 +2067,7 @@ async def test_personal_scope_writes_exactly_one_class_tuple(
     assert _org_tuple(present) in rebac.tuples
     assert _org_tuple(absent) not in rebac.tuples
     # Anchored so can_manage/can_use resolve.
-    assert _org_tuple("organization") in rebac.tuples
+    assert _org_tuple("platform") in rebac.tuples
 
 
 @pytest.mark.asyncio
@@ -2186,7 +2186,7 @@ async def test_personal_scope_default_with_default_on_keeps_access() -> None:
     # default-on marker + personal_on grant.
     await rebac.add_relation(
         Relation(
-            subject=RebacReference(type=Resource.ORGANIZATION, id=ORGANIZATION_ID),
+            subject=RebacReference(type=Resource.PLATFORM, id=PLATFORM_ID),
             relation=RelationType.DEFAULT_ON,
             resource=RebacReference(type=Resource.CAPABILITY, id="corp_drive"),
         )
@@ -2221,7 +2221,7 @@ async def test_personal_scope_default_to_disabled_with_default_on_suspends() -> 
     entry = _entry(team_scope=TeamScopePolicy.DEFAULT_ON)
     await rebac.add_relation(
         Relation(
-            subject=RebacReference(type=Resource.ORGANIZATION, id=ORGANIZATION_ID),
+            subject=RebacReference(type=Resource.PLATFORM, id=PLATFORM_ID),
             relation=RelationType.DEFAULT_ON,
             resource=RebacReference(type=Resource.CAPABILITY, id="corp_drive"),
         )
@@ -2404,14 +2404,14 @@ async def test_personal_scope_disabled_to_default_with_default_on_revives(
     entry = _entry(team_scope=TeamScopePolicy.DEFAULT_ON)
     await rebac.add_relation(
         Relation(
-            subject=RebacReference(type=Resource.ORGANIZATION, id=ORGANIZATION_ID),
+            subject=RebacReference(type=Resource.PLATFORM, id=PLATFORM_ID),
             relation=RelationType.DEFAULT_ON,
             resource=RebacReference(type=Resource.CAPABILITY, id="corp_drive"),
         )
     )
     await rebac.add_relation(
         Relation(
-            subject=RebacReference(type=Resource.ORGANIZATION, id=ORGANIZATION_ID),
+            subject=RebacReference(type=Resource.PLATFORM, id=PLATFORM_ID),
             relation=RelationType.PERSONAL_DISABLED,
             resource=RebacReference(type=Resource.CAPABILITY, id="corp_drive"),
         )
@@ -2556,7 +2556,7 @@ async def test_personal_scope_enabled_to_disabled_does_not_revive(
     entry = _entry()
     await rebac.add_relation(
         Relation(
-            subject=RebacReference(type=Resource.ORGANIZATION, id=ORGANIZATION_ID),
+            subject=RebacReference(type=Resource.PLATFORM, id=PLATFORM_ID),
             relation=RelationType.PERSONAL_ON,
             resource=RebacReference(type=Resource.CAPABILITY, id="corp_drive"),
         )
@@ -2620,7 +2620,7 @@ class _FilterRebac:
     """Answers `can_use` from a per-team allow-set (or disabled).
 
     Asserts the team-subject check shape: subject is `team:<id>` and the
-    contextual `organization#team` reverse edge is supplied (the leak fix —
+    contextual `platform#team` reverse edge is supplied (the leak fix —
     a user subject would grant a capability in every team the user belongs to).
     """
 
@@ -2636,7 +2636,7 @@ class _FilterRebac:
             (
                 subject,
                 "team",
-                RebacReference(type=Resource.ORGANIZATION, id=ORGANIZATION_ID),
+                RebacReference(type=Resource.PLATFORM, id=PLATFORM_ID),
             )
         ]
         return subject.id
@@ -2920,7 +2920,7 @@ async def test_aggregate_list_exposes_optouts_and_platform_team_count(
 
     rebac = _FakeRebac()
     cap = RebacReference(type=Resource.CAPABILITY, id="doc_access")
-    org = RebacReference(type=Resource.ORGANIZATION, id=ORGANIZATION_ID)
+    org = RebacReference(type=Resource.PLATFORM, id=PLATFORM_ID)
     await rebac.add_relation(
         Relation(subject=org, relation=RelationType.DEFAULT_ON, resource=cap)
     )
@@ -3008,7 +3008,7 @@ async def test_aggregate_list_derives_personal_scope(
 
     rebac = _FakeRebac()
     cap = RebacReference(type=Resource.CAPABILITY, id="doc_access")
-    org = RebacReference(type=Resource.ORGANIZATION, id=ORGANIZATION_ID)
+    org = RebacReference(type=Resource.PLATFORM, id=PLATFORM_ID)
     if relation is not None:
         await rebac.add_relation(Relation(subject=org, relation=relation, resource=cap))
 
@@ -3274,8 +3274,8 @@ async def test_capability_list_demands_the_narrow_org_relation() -> None:
         )
 
     assert rebac.demanded == (
-        OrganizationPermission.CAN_MANAGE_CAPABILITIES,
-        ORGANIZATION_ID,
+        PlatformPermission.CAN_MANAGE_CAPABILITIES,
+        PLATFORM_ID,
     )
 
 
@@ -3300,6 +3300,6 @@ async def test_catch_all_surfaces_still_demand_can_manage_platform() -> None:
         )
 
     assert rebac.demanded == (
-        OrganizationPermission.CAN_MANAGE_PLATFORM,
-        ORGANIZATION_ID,
+        PlatformPermission.CAN_MANAGE_PLATFORM,
+        PLATFORM_ID,
     )

@@ -23,7 +23,7 @@ from control_plane_backend.models.base import Base
 
 # Fixed primary key value: this table only ever holds zero or one row. There
 # is no per-tenant/per-org dimension to key on (single-organization model,
-# `ORGANIZATION_ID` = "fred" everywhere else in the schema).
+# `PLATFORM_ID` = "fred" everywhere else in the schema).
 SINGLETON_ID = "platform"
 
 

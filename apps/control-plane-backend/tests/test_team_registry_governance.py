@@ -52,7 +52,7 @@ from control_plane_backend.users.schemas import UserSummary
 from fred_core import (
     AuthorizationError,
     KeycloakUser,
-    OrganizationPermission,
+    PlatformPermission,
     RebacReference,
     Relation,
     RelationType,
@@ -74,9 +74,9 @@ class _FakeRebac:
         *,
         team_admin_ids: set[str] | None = None,
         add_relations_raises: Exception | None = None,
-        granted: set[OrganizationPermission] | None = None,
+        granted: set[PlatformPermission] | None = None,
     ) -> None:
-        self.permission_checks: list[OrganizationPermission] = []
+        self.permission_checks: list[PlatformPermission] = []
         self.team_permission_checks: list[tuple[str, tuple[TeamPermission, ...]]] = []
         self.team_admin_ids = team_admin_ids or set()
         self.added_relations: list[Relation] = []
@@ -92,7 +92,7 @@ class _FakeRebac:
         # relies on; a set turns this into a real allow-list so a delegated
         # role's exact reach can be asserted.
         if self._granted is not None and permission not in self._granted:
-            raise AuthorizationError(user.uid, permission.value, Resource.ORGANIZATION)
+            raise AuthorizationError(user.uid, permission.value, Resource.PLATFORM)
 
     async def check_user_team_permissions_or_raise(
         self, *, user, team_id, permissions
@@ -289,12 +289,8 @@ async def test_create_team_translates_db_integrity_error_to_already_exists() -> 
 
 
 @pytest.mark.asyncio
-async def test_create_team_rolls_back_metadata_when_structural_write_fails() -> None:
-    """#2065: the organization structural edge and the initial team_admin(s)
-    are written in the same `add_relations` call — a failure there (e.g. an
-    OpenFGA outage) must roll back the just-created metadata row exactly like
-    an admin-grant failure already did, never leaving a team registered
-    without its structural invariant."""
+async def test_create_team_rolls_back_metadata_when_admin_grant_fails() -> None:
+    """Failed initial grants must not leave a registered team without an admin."""
     rebac = _FakeRebac(add_relations_raises=RuntimeError("openfga unavailable"))
     store = _FakeMetadataStore()
 
@@ -571,7 +567,7 @@ async def test_rescue_team_admin_grants_admin_when_team_has_zero_admins() -> Non
         _user(), TeamId("orphan-team"), "rescued-user", _deps(rebac, store)
     )
 
-    assert rebac.permission_checks == [OrganizationPermission.CAN_RESCUE_TEAM_ADMIN]
+    assert rebac.permission_checks == [PlatformPermission.CAN_RESCUE_TEAM_ADMIN]
     assert len(rebac.added_relations) == 1
     written = rebac.added_relations[0]
     assert written.subject == RebacReference(Resource.USER, "rescued-user")
@@ -625,7 +621,7 @@ async def test_delete_team_removes_metadata_and_all_relations() -> None:
 
     await delete_team(_user(), TeamId("gone-team"), _deps(rebac, store))
 
-    assert rebac.permission_checks == [OrganizationPermission.CAN_DELETE_TEAM]
+    assert rebac.permission_checks == [PlatformPermission.CAN_DELETE_TEAM]
     assert rebac.deleted_references == [RebacReference(Resource.TEAM, "gone-team")]
     assert store.deleted_ids == ["gone-team"]
 
@@ -667,7 +663,7 @@ async def test_list_all_teams_for_registry_checks_permission_before_delegating(
     result = await list_all_teams_for_registry(_user(), _deps(rebac, store))
 
     assert result == []
-    assert rebac.permission_checks == [OrganizationPermission.CAN_LIST_ALL_TEAMS]
+    assert rebac.permission_checks == [PlatformPermission.CAN_LIST_ALL_TEAMS]
     assert len(captured) == 1
 
 
@@ -725,7 +721,7 @@ async def test_list_all_teams_for_registry_without_membership_reads_no_relations
 
     result = await list_all_teams_for_registry(_user(), deps, include_membership=False)
 
-    assert rebac.permission_checks == [OrganizationPermission.CAN_LIST_ALL_TEAMS]
+    assert rebac.permission_checks == [PlatformPermission.CAN_LIST_ALL_TEAMS]
     assert {
         (str(team.id), team.name, team.max_resources_storage_size) for team in result
     } == {("fredlab", "Fredlab", 1024), ("northbridge", "Northbridge", 10)}
@@ -826,8 +822,8 @@ async def test_get_teams_all_route_is_not_swallowed_by_team_id_path_param(
 # owns work, and nothing else in the admin tier does.
 
 _TEAM_MANAGER_GRANTS = {
-    OrganizationPermission.CAN_CREATE_TEAM,
-    OrganizationPermission.CAN_LIST_ALL_TEAMS,
+    PlatformPermission.CAN_CREATE_TEAM,
+    PlatformPermission.CAN_LIST_ALL_TEAMS,
 }
 
 
@@ -864,7 +860,7 @@ async def test_team_manager_creates_a_team_with_no_further_gate(
     )
 
     assert team.name == "Northbridge"
-    assert rebac.permission_checks == [OrganizationPermission.CAN_CREATE_TEAM]
+    assert rebac.permission_checks == [PlatformPermission.CAN_CREATE_TEAM]
     admin_subjects = {
         relation.subject.id
         for relation in rebac.added_relations
@@ -898,7 +894,7 @@ async def test_team_manager_lists_the_whole_registry(
     result = await list_all_teams_for_registry(_team_manager(), _deps(rebac, store))
 
     assert {str(team.id) for team in result} == {"fredlab", "northbridge"}
-    assert rebac.permission_checks == [OrganizationPermission.CAN_LIST_ALL_TEAMS]
+    assert rebac.permission_checks == [PlatformPermission.CAN_LIST_ALL_TEAMS]
 
 
 @pytest.mark.asyncio
@@ -954,7 +950,7 @@ async def test_team_manager_cannot_reach_a_can_manage_platform_surface(
         resp = await client.get("/control-plane/v1/import-export/stats")
 
     assert resp.status_code == 403
-    assert rebac.permission_checks == [OrganizationPermission.CAN_MANAGE_PLATFORM]
+    assert rebac.permission_checks == [PlatformPermission.CAN_MANAGE_PLATFORM]
 
 
 # --------------------------- candidate-admin search -------------------------
@@ -977,7 +973,7 @@ async def test_search_candidate_team_admins_is_gated_on_can_create_team() -> Non
     )
 
     assert [user.id for user in matches] == ["alice"]
-    assert rebac.permission_checks == [OrganizationPermission.CAN_CREATE_TEAM]
+    assert rebac.permission_checks == [PlatformPermission.CAN_CREATE_TEAM]
 
 
 @pytest.mark.asyncio

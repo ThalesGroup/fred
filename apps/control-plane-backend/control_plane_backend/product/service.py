@@ -28,10 +28,10 @@ from uuid import uuid4
 
 import httpx
 from fred_core import (
-    ORGANIZATION_ID,
+    PLATFORM_ID,
     AssertedUser,
     KeycloakUser,
-    OrganizationPermission,
+    PlatformPermission,
     Principal,
     RebacEngine,
     holds_caller_role,
@@ -334,12 +334,12 @@ class _RuntimeTemplatePayload:
 # One OpenFGA check per platform role. `platform_admin` goes through
 # `can_manage_platform` (its own named capability); the delegated roles have no
 # single capability standing for them, so they check the raw relation.
-_PLATFORM_ROLE_CHECKS: dict[PlatformRoleRelation, OrganizationPermission] = {
-    PlatformRoleRelation.PLATFORM_ADMIN: OrganizationPermission.CAN_MANAGE_PLATFORM,
-    PlatformRoleRelation.PLATFORM_OBSERVER: OrganizationPermission.IS_PLATFORM_OBSERVER,
-    PlatformRoleRelation.TEAM_MANAGER: OrganizationPermission.IS_TEAM_MANAGER,
-    PlatformRoleRelation.FEATURE_MANAGER: OrganizationPermission.IS_FEATURE_MANAGER,
-    PlatformRoleRelation.PROMPT_EDITOR: OrganizationPermission.IS_PROMPT_EDITOR,
+_PLATFORM_ROLE_CHECKS: dict[PlatformRoleRelation, PlatformPermission] = {
+    PlatformRoleRelation.PLATFORM_ADMIN: PlatformPermission.CAN_MANAGE_PLATFORM,
+    PlatformRoleRelation.PLATFORM_OBSERVER: PlatformPermission.IS_PLATFORM_OBSERVER,
+    PlatformRoleRelation.TEAM_MANAGER: PlatformPermission.IS_TEAM_MANAGER,
+    PlatformRoleRelation.FEATURE_MANAGER: PlatformPermission.IS_FEATURE_MANAGER,
+    PlatformRoleRelation.PROMPT_EDITOR: PlatformPermission.IS_PROMPT_EDITOR,
 }
 
 
@@ -364,7 +364,7 @@ async def _build_permission_summary(
     """
     held = await asyncio.gather(
         *(
-            rebac.has_user_permission(user, permission, ORGANIZATION_ID)
+            rebac.has_user_permission(user, permission, PLATFORM_ID)
             for permission in _PLATFORM_ROLE_CHECKS.values()
         )
     )
@@ -2174,7 +2174,7 @@ async def grant_existing_teams_served_templates(
     return summary
 
 
-_ORG_REF = RebacReference(type=Resource.ORGANIZATION, id=ORGANIZATION_ID)
+_PLATFORM_REF = RebacReference(type=Resource.PLATFORM, id=PLATFORM_ID)
 
 
 @dataclass
@@ -2247,19 +2247,23 @@ async def rename_agent_capability_ids_to_namespaced_form(
 
         # Org-subject tuples: anchor + the three platform-wide class markers.
         for relation in (
-            RelationType.ORGANIZATION,
+            RelationType.PLATFORM,
             RelationType.DEFAULT_ON,
             RelationType.PERSONAL_ON,
             RelationType.PERSONAL_DISABLED,
         ):
-            if await rebac.has_direct_relation(_ORG_REF, relation, old_ref):
+            if await rebac.has_direct_relation(_PLATFORM_REF, relation, old_ref):
                 summary.tuples_renamed += 1
                 if not dry_run:
                     await rebac.add_relation(
-                        Relation(subject=_ORG_REF, relation=relation, resource=new_ref)
+                        Relation(
+                            subject=_PLATFORM_REF, relation=relation, resource=new_ref
+                        )
                     )
                     await rebac.delete_relation(
-                        Relation(subject=_ORG_REF, relation=relation, resource=old_ref)
+                        Relation(
+                            subject=_PLATFORM_REF, relation=relation, resource=old_ref
+                        )
                     )
 
         # Team-subject tuples: the per-team enable/disable grant.
@@ -2665,7 +2669,7 @@ async def enroll_agent_instance(
     # it did not exist.
     can_see_non_public_templates = (
         await deps.team_dependencies.rebac.has_user_permission(
-            user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+            user, PlatformPermission.CAN_MANAGE_PLATFORM, PLATFORM_ID
         )
     )
     runtime_templates = await _fetch_runtime_templates(

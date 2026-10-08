@@ -27,7 +27,7 @@ from __future__ import annotations
 import pytest
 from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
-from fred_core import AuthorizationError, KeycloakUser, OrganizationPermission, Resource, get_current_user
+from fred_core import AuthorizationError, KeycloakUser, PlatformPermission, Resource, get_current_user
 from fred_core.common import register_exception_handlers
 
 from knowledge_flow_backend.features.kpi import opensearch_controller as opensearch_controller_module
@@ -59,7 +59,7 @@ class _FakeRebac:
     async def check_user_permission_or_raise(self, user, permission, resource_id, **_kw) -> None:
         self.calls.append((permission, resource_id))
         if self.deny:
-            raise AuthorizationError(user.uid, str(permission), Resource.ORGANIZATION)
+            raise AuthorizationError(user.uid, str(permission), Resource.PLATFORM)
 
 
 def _build_app(monkeypatch, rebac: _FakeRebac) -> TestClient:
@@ -89,7 +89,7 @@ def test_route_requires_can_observe_platform(monkeypatch, path) -> None:
     response = client.get(path)
 
     assert response.status_code == 200
-    assert (OrganizationPermission.CAN_OBSERVE_PLATFORM, "fred") in rebac.calls
+    assert (PlatformPermission.CAN_OBSERVE_PLATFORM, "fred") in rebac.calls
 
 
 @pytest.mark.parametrize("path", ["/os/health", "/os/indices", "/os/shards", "/os/diagnostics"])

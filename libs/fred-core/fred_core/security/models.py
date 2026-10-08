@@ -67,7 +67,9 @@ class Resource(str, Enum):
     # Authorization subject
     USER = "user"
     TEAM = "team"
+    PLATFORM = "platform"
     ORGANIZATION = "organization"
+    PROJECT = "project"
 
 
 class AuthorizationError(PermissionError):
@@ -117,7 +119,7 @@ class AccountStatusError(AuthorizationError):
         super().__init__(
             "",
             "access protected resources",
-            Resource.ORGANIZATION,
+            Resource.PLATFORM,
             "Current account status could not be established.",
             subject_type=Resource.USER,
         )

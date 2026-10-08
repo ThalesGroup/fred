@@ -19,9 +19,9 @@ from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from fred_core import (
-    ORGANIZATION_ID,
+    PLATFORM_ID,
     KeycloakUser,
-    OrganizationPermission,
+    PlatformPermission,
     get_current_user,
 )
 from opensearchpy.exceptions import TransportError  # ← surface OS error details
@@ -57,7 +57,7 @@ class OpenSearchOpsController:
         reaches FastAPI's registered handler as a 403, not this file's
         TransportError-aware `err()` translation.
         """
-        await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_OBSERVE_PLATFORM, ORGANIZATION_ID)
+        await get_rebac_engine().check_user_permission_or_raise(user, PlatformPermission.CAN_OBSERVE_PLATFORM, PLATFORM_ID)
 
     def __init__(
         self,

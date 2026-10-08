@@ -37,8 +37,8 @@ _APP = RebacReference(Resource.APP, "acme-forecast")
 _APP_ID = "app:acme-forecast"
 _PERSON = RebacReference(Resource.USER, "person-deleted")
 _PERSON_ID = "user:person-deleted"
-_BAN = (_PERSON_ID, "suspended", "organization:fred")
-_OTHER_BAN = ("user:person-other", "suspended", "organization:fred")
+_BAN = (_PERSON_ID, "suspended", "platform:fred")
+_OTHER_BAN = ("user:person-other", "suspended", "platform:fred")
 
 
 class _FakeOpenFgaClient:
@@ -211,11 +211,11 @@ async def test_person_cleanup_keeps_their_ban() -> None:
 
 @pytest.mark.asyncio
 async def test_organization_cleanup_keeps_every_suspension() -> None:
-    platform_admin = ("user:person-kept", "platform_admin", "organization:fred")
+    platform_admin = ("user:person-kept", "platform_admin", "platform:fred")
     client = _FakeOpenFgaClient([_BAN, platform_admin, _OTHER_BAN])
 
     await _make_engine(client).delete_all_relations_of_reference(
-        RebacReference(Resource.ORGANIZATION, "fred")
+        RebacReference(Resource.PLATFORM, "fred")
     )
 
     assert client.store == [_BAN, _OTHER_BAN]

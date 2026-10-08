@@ -35,7 +35,7 @@ from fred_core.security.rebac.capability_authz import (
 )
 from fred_core.security.rebac.noop_engine import NoopRebacEngine
 from fred_core.security.rebac.rebac_engine import (
-    ORGANIZATION_ID,
+    PLATFORM_ID,
     CapabilityPermission,
     RebacReference,
     Relation,
@@ -62,7 +62,7 @@ async def test_usable_capability_ids_returns_ids_from_lookup() -> None:
         Relation(
             subject=RebacReference(type=Resource.TEAM, id="team-1"),
             relation=RelationType.TEAM,
-            resource=RebacReference(type=Resource.ORGANIZATION, id=ORGANIZATION_ID),
+            resource=RebacReference(type=Resource.PLATFORM, id=PLATFORM_ID),
         )
     ]
 
@@ -139,7 +139,7 @@ async def test_can_team_use_capability_allows_when_rebac_is_disabled() -> None:
 # ---------------------------------------------------------------------------
 
 _CAPABILITY = RebacReference(type=Resource.CAPABILITY, id="corp_drive")
-ORG = RebacReference(type=Resource.ORGANIZATION, id=ORGANIZATION_ID)
+ORG = RebacReference(type=Resource.PLATFORM, id=PLATFORM_ID)
 TEAM_A = RebacReference(type=Resource.TEAM, id="team-a")
 PERSONAL_U1 = RebacReference(type=Resource.TEAM, id="personal-u1")
 
@@ -234,7 +234,7 @@ def test_can_team_use_from_facts_matches_the_schema(
     """One row per branch of `capability#can_use`. The fold stands in for an
     OpenFGA `Check`, so a divergence here is a wrong admin health column."""
 
-    relations = [_org_relation(RelationType.ORGANIZATION)] + [
+    relations = [_org_relation(RelationType.PLATFORM)] + [
         Relation(subject=subject, relation=relation, resource=_CAPABILITY)
         for subject, relation in tuples
     ]
@@ -250,7 +250,7 @@ def test_from_relations_ignores_the_organization_anchor_and_foreign_subjects() -
 
     facts = CapabilityEnablementFacts.from_relations(
         [
-            _org_relation(RelationType.ORGANIZATION),
+            _org_relation(RelationType.PLATFORM),
             _org_relation(RelationType.ENABLED),
             Relation(
                 subject=RebacReference(type=Resource.USER, id="alice"),

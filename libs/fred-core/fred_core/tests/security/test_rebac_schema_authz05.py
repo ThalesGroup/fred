@@ -43,21 +43,21 @@ def test_team_admin_is_not_derived_from_organization_admin() -> None:
 
     assert team_admin_definition == {"this": {}}, (
         "team.team_admin must only be a directly-assigned relation. A "
-        "'tupleToUserset'/'computedUserset' referencing 'organization' or "
+        "'tupleToUserset'/'computedUserset' referencing 'platform' or "
         "'admin'/'platform_admin' here would resurrect the "
         "platform-admin-sees-every-team bug."
     )
 
 
 def test_organization_has_target_platform_roles() -> None:
-    organization = _type_definition("organization")
+    organization = _type_definition("platform")
 
     assert "platform_admin" in organization["relations"]
     assert "platform_observer" in organization["relations"]
 
 
 def test_account_status_is_decided_by_a_direct_per_person_suspension() -> None:
-    organization = _type_definition("organization")
+    organization = _type_definition("platform")
     relations = organization["relations"]
     metadata = organization["metadata"]["relations"]
 
@@ -68,7 +68,7 @@ def test_account_status_is_decided_by_a_direct_per_person_suspension() -> None:
 
 def test_schema_contains_all_six_target_roles() -> None:
     """The full AUTHZ-05 target vocabulary must exist, exactly as named."""
-    organization = _type_definition("organization")
+    organization = _type_definition("platform")
     team = _type_definition("team")
 
     assert "platform_admin" in organization["relations"]
@@ -181,7 +181,7 @@ def test_can_observe_platform_gates_platform_wide_kpi_observation() -> None:
     duplicate the RFC never asked for (§6.1 defines only
     `can_observe_platform`) and is retired: it must not reappear in the
     schema."""
-    organization = _type_definition("organization")
+    organization = _type_definition("platform")
 
     assert organization["relations"]["can_observe_platform"] == {
         "computedUserset": {"relation": "platform_observer"}
@@ -193,7 +193,7 @@ def test_no_legacy_organization_role_relations_survive() -> None:
     """AUTHZ-05 review item 8a: the Keycloak `admin`/`editor`/`viewer` bridge
     is removed outright, not kept under a legacy_bridge toggle - platform
     roles are `platform_admin`/`platform_observer` stored tuples only."""
-    organization = _type_definition("organization")
+    organization = _type_definition("platform")
 
     for legacy in ("admin", "editor", "viewer"):
         assert legacy not in organization["relations"], (
@@ -209,7 +209,7 @@ def test_destructive_team_registry_capabilities_stay_platform_admin_only() -> No
     stay `platform_admin`-only; none of them may ever be redefined to also
     accept a team relation, which would let a platform role reach team data
     through the registry surface - the exact escalation this RFC closes."""
-    organization = _type_definition("organization")
+    organization = _type_definition("platform")
 
     for capability in ("can_delete_team", "can_rescue_team_admin"):
         assert organization["relations"][capability] == {

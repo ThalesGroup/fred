@@ -19,9 +19,9 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from fred_core import (
-    ORGANIZATION_ID,
+    PLATFORM_ID,
     KeycloakUser,
-    OrganizationPermission,
+    PlatformPermission,
     get_current_user,
 )
 from fred_core.security.rebac.rebac_engine import RebacEngine
@@ -65,7 +65,7 @@ def build_tasks_router(prefix: str = "") -> APIRouter:
         rebac: Annotated[RebacEngine, Depends(_get_rebac_engine)],
     ) -> StartTaskResponse:
         await rebac.check_user_permission_or_raise(
-            user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+            user, PlatformPermission.CAN_MANAGE_PLATFORM, PLATFORM_ID
         )
         return await service.start(body, created_by=user.uid)
 

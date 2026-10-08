@@ -29,7 +29,7 @@ from __future__ import annotations
 from typing import Iterable
 
 from fred_core import (
-    ORGANIZATION_ID,
+    PLATFORM_ID,
     RebacPermission,
     RebacReference,
     Relation,
@@ -110,7 +110,7 @@ class CountingRebacEngine(NoopRebacEngine):
         if relation not in self.membership_relations:
             self.membership_relations.append(relation)
         if relation.resource.type == Resource.TEAM:
-            if relation.relation == RelationType.ORGANIZATION:
+            if relation.relation == RelationType.PLATFORM:
                 self.org_linked_team_ids.add(relation.resource.id)
             elif relation.relation == RelationType.PUBLIC:
                 self.public_team_ids.add(relation.resource.id)
@@ -128,7 +128,7 @@ class CountingRebacEngine(NoopRebacEngine):
             stored for stored in self.membership_relations if stored != relation
         ]
         if relation.resource.type == Resource.TEAM:
-            if relation.relation == RelationType.ORGANIZATION:
+            if relation.relation == RelationType.PLATFORM:
                 self.org_linked_team_ids.discard(relation.resource.id)
             elif relation.relation == RelationType.PUBLIC:
                 self.public_team_ids.discard(relation.resource.id)
@@ -176,15 +176,15 @@ class CountingRebacEngine(NoopRebacEngine):
         # #2065: real OpenFGA (confirmed live against v1.12.1 and v1.15.1)
         # rejects this Read shape without an exact `user` — `subject` must
         # always be given now, never a bare type. Recorded separately so tests can assert the exact subject a
-        # call used (e.g. `organization:fred`, `user:*`) without disturbing
+        # call used (e.g. `platform:fred`, `user:*`) without disturbing
         # the existing `(resource_type, relation)` call-count assertions.
         self.list_relations_calls.append((resource_type, relation))
         self.list_relations_subjects.append(subject)
-        if resource_type == Resource.TEAM and relation == RelationType.ORGANIZATION:
+        if resource_type == Resource.TEAM and relation == RelationType.PLATFORM:
             return [
                 Relation(
-                    subject=RebacReference(Resource.ORGANIZATION, ORGANIZATION_ID),
-                    relation=RelationType.ORGANIZATION,
+                    subject=RebacReference(Resource.PLATFORM, PLATFORM_ID),
+                    relation=RelationType.PLATFORM,
                     resource=RebacReference(Resource.TEAM, team_id),
                 )
                 for team_id in self.org_linked_team_ids

@@ -36,7 +36,7 @@ from fred_core.security.rebac.rebac_engine import (
 )
 from fred_core.security.structure import OpenFgaRebacConfig
 
-_SUSPENDED_ON_PLATFORM = ("suspended", "organization:fred")
+_SUSPENDED_ON_PLATFORM = ("suspended", "platform:fred")
 
 
 class AccountStatusStore:

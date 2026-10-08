@@ -126,7 +126,7 @@ class PlatformRoleRelation(str, Enum):
     """The org-level role relations the platform-roles surface manages.
 
     Deliberately narrower than `RelationType`: this surface must never write
-    any other relation shape onto `organization:fred`. A new role costs a
+    any other relation shape onto `platform:fred`. A new role costs a
     member here *and* an entry in `product/service.py::_PLATFORM_ROLE_CHECKS`
     — without the second, bootstrap never reports the role as held.
     """

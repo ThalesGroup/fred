@@ -18,11 +18,11 @@ from pathlib import Path
 from uuid import UUID
 
 from fred_core import (
-    ORGANIZATION_ID,
+    PLATFORM_ID,
     DocumentPermission,
     DocumentSortField,
     KeycloakUser,
-    OrganizationPermission,
+    PlatformPermission,
     RebacDisabledResult,
     RebacReference,
     Relation,
@@ -1599,7 +1599,7 @@ class MetadataService:
         """
         Scan metadata, content, and vector stores to surface orphan or partial data.
         """
-        await self.rebac.check_user_permission_or_raise(user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID)
+        await self.rebac.check_user_permission_or_raise(user, PlatformPermission.CAN_MANAGE_PLATFORM, PLATFORM_ID)
         try:
             docs = await self.metadata_store.get_all_metadata({})
         except MetadataDeserializationError as e:
@@ -1679,7 +1679,7 @@ class MetadataService:
           re-ingest for missing_content) — the metadata row itself is never
           touched beyond its stage flags.
         """
-        await self.rebac.check_user_permission_or_raise(user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID)
+        await self.rebac.check_user_permission_or_raise(user, PlatformPermission.CAN_MANAGE_PLATFORM, PLATFORM_ID)
         before = await self.audit_stores(user)
         reset_metadata: list[str] = []
 

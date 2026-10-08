@@ -43,7 +43,7 @@ from control_plane_backend.platform_prompt.service import (
     set_platform_prompt,
 )
 from control_plane_backend.platform_prompt.store import StoredPlatformPrompt
-from fred_core import AuthorizationError, KeycloakUser, OrganizationPermission
+from fred_core import AuthorizationError, KeycloakUser, PlatformPermission
 from fred_core.security.models import Resource
 
 
@@ -239,9 +239,9 @@ class _RoleRebac:
     """Answers `check_user_permission_or_raise` from a fixed permission set —
     the tuples one role actually holds, per `schema.fga`."""
 
-    def __init__(self, *allowed: OrganizationPermission) -> None:
+    def __init__(self, *allowed: PlatformPermission) -> None:
         self._allowed = set(allowed)
-        self.asked: list[OrganizationPermission] = []
+        self.asked: list[PlatformPermission] = []
 
     async def check_user_permission_or_raise(
         self, user, permission, resource_id, **kwargs
@@ -249,22 +249,22 @@ class _RoleRebac:
         self.asked.append(permission)
         if permission not in self._allowed:
             raise AuthorizationError(
-                user.uid, str(permission), Resource.ORGANIZATION, "denied"
+                user.uid, str(permission), Resource.PLATFORM, "denied"
             )
 
 
 def _prompt_editor() -> _RoleRebac:
-    """A user holding `organization#prompt_editor` and nothing else. Reaches
+    """A user holding `platform#prompt_editor` and nothing else. Reaches
     `can_edit_platform_prompt` through the schema union; `can_manage_platform`
     stays `platform_admin`-only (pinned in fred-core's schema tests)."""
 
-    return _RoleRebac(OrganizationPermission.CAN_EDIT_PLATFORM_PROMPT)
+    return _RoleRebac(PlatformPermission.CAN_EDIT_PLATFORM_PROMPT)
 
 
 def _platform_admin() -> _RoleRebac:
     return _RoleRebac(
-        OrganizationPermission.CAN_EDIT_PLATFORM_PROMPT,
-        OrganizationPermission.CAN_MANAGE_PLATFORM,
+        PlatformPermission.CAN_EDIT_PLATFORM_PROMPT,
+        PlatformPermission.CAN_MANAGE_PLATFORM,
     )
 
 
@@ -309,7 +309,7 @@ async def test_prompt_editor_reads_the_platform_prompt() -> None:
     )
 
     assert result.text == "SAVED"
-    assert rebac.asked == [OrganizationPermission.CAN_EDIT_PLATFORM_PROMPT]
+    assert rebac.asked == [PlatformPermission.CAN_EDIT_PLATFORM_PROMPT]
 
 
 @pytest.mark.asyncio
@@ -327,7 +327,7 @@ async def test_prompt_editor_updates_the_platform_prompt() -> None:
 
     assert store.written == ["NEW"]
     assert result.text == "NEW"
-    assert rebac.asked == [OrganizationPermission.CAN_EDIT_PLATFORM_PROMPT]
+    assert rebac.asked == [PlatformPermission.CAN_EDIT_PLATFORM_PROMPT]
 
 
 @pytest.mark.asyncio
@@ -342,7 +342,7 @@ async def test_prompt_editor_reads_the_shipped_instructions() -> None:
     )
 
     assert result.source_unavailable is True
-    assert rebac.asked == [OrganizationPermission.CAN_EDIT_PLATFORM_PROMPT]
+    assert rebac.asked == [PlatformPermission.CAN_EDIT_PLATFORM_PROMPT]
 
 
 @pytest.mark.asyncio

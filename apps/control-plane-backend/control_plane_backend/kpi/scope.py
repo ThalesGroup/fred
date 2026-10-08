@@ -30,9 +30,9 @@ from dataclasses import dataclass
 
 from fastapi import Request
 from fred_core import (
-    ORGANIZATION_ID,
+    PLATFORM_ID,
     KeycloakUser,
-    OrganizationPermission,
+    PlatformPermission,
     TeamPermission,
 )
 from fred_core.common import TeamId
@@ -91,11 +91,11 @@ async def resolve_kpi_scope(
     rebac = get_application_container(request).get_rebac_engine()
     if team_id is None:
         permission = (
-            OrganizationPermission.CAN_MANAGE_PLATFORM
+            PlatformPermission.CAN_MANAGE_PLATFORM
             if platform_admin_only
-            else OrganizationPermission.CAN_OBSERVE_PLATFORM
+            else PlatformPermission.CAN_OBSERVE_PLATFORM
         )
-        await rebac.check_user_permission_or_raise(user, permission, ORGANIZATION_ID)
+        await rebac.check_user_permission_or_raise(user, permission, PLATFORM_ID)
         return KpiScope(team_id=None)
     await rebac.check_user_permission_or_raise(
         user, TeamPermission.CAN_READ_MEMEBERS, str(team_id)

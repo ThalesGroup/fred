@@ -17,7 +17,7 @@ must cost exactly 3 logical OpenFGA operations — 1 `has_permission` Check
 (the route's own access gate), 1 `list_direct_relations` exact Read, and 1
 `has_permissions` BatchCheck (14 `TeamPermission`s in one call) — never a
 `ListUsers`/`ListObjects` fan-out, never one-Check-per-permission, and never
-the `list_relations` bulk scan `ensure_team_organization_relations` used to
+the `list_relations` bulk scan `ensure_team_platform_relations` used to
 add: the `organization -> team` edge is established once at team creation
 (`teams.service.create_team`) and repaired only on cold paths (control-plane
 startup, import), never read or repaired by this per-request projection.
@@ -57,7 +57,7 @@ from control_plane_backend.users.schemas import UserSummary
 from fred_core import (
     AuthorizationError,
     KeycloakUser,
-    OrganizationPermission,
+    PlatformPermission,
     RebacReference,
     Relation,
     RelationType,
@@ -187,7 +187,7 @@ def _editor_relation(team_id: str, user_id: str) -> Relation:
 async def test_collaborative_team_budget_is_exactly_three_logical_ops() -> None:
     """1 + 2 + 3: 1 Check (access gate) + 1 exact Read (projection) + 1
     BatchCheck of 14 — zero ListUsers/ListObjects, and zero `list_relations`
-    (the org-link scan `ensure_team_organization_relations` used to add)."""
+    (the org-link scan `ensure_team_platform_relations` used to add)."""
     engine = CountingRebacEngine(
         org_linked_team_ids={"fredlab"},
         granted_permissions=_ALL_PERMISSIONS,
@@ -438,7 +438,7 @@ async def test_create_get_update_share_the_same_assembler(
     # must succeed without ever being checked for CAN_READ. Only the
     # org-level CAN_CREATE_TEAM is granted; no TeamPermission at all.
     engine = CountingRebacEngine(
-        granted_permissions={OrganizationPermission.CAN_CREATE_TEAM}
+        granted_permissions={PlatformPermission.CAN_CREATE_TEAM}
     )
     store = _FakeMetadataStore({})
     created = await create_team(
@@ -562,7 +562,7 @@ async def test_create_team_response_includes_admins_immediately() -> None:
     read — and its token (there being nothing else to prefer it over) is what
     propagates to the projection's Read and BatchCheck."""
     engine = CountingRebacEngine(
-        granted_permissions={OrganizationPermission.CAN_CREATE_TEAM}
+        granted_permissions={PlatformPermission.CAN_CREATE_TEAM}
     )
     store = _FakeMetadataStore({})
     summaries = {"alice": UserSummary(id="alice", username="alice")}
@@ -581,12 +581,12 @@ async def test_create_team_response_includes_admins_immediately() -> None:
     # calls (see test_create_team_is_private_by_default... for the rule).
     assert engine.list_relations_calls == []
     org_relations = [
-        r for r in engine.direct_relations if r.relation == RelationType.ORGANIZATION
+        r for r in engine.direct_relations if r.relation == RelationType.PLATFORM
     ]
     assert org_relations == [
         Relation(
-            subject=RebacReference(Resource.ORGANIZATION, "fred"),
-            relation=RelationType.ORGANIZATION,
+            subject=RebacReference(Resource.PLATFORM, "fred"),
+            relation=RelationType.PLATFORM,
             resource=_team_ref(str(created.id)),
         )
     ]
@@ -601,7 +601,7 @@ async def test_create_team_is_private_by_default_and_never_granted_public() -> N
     even transiently: a grant-then-lazy-revoke would leave the team readable
     by anyone until the next `_list_teams` pass)."""
     engine = CountingRebacEngine(
-        granted_permissions={OrganizationPermission.CAN_CREATE_TEAM}
+        granted_permissions={PlatformPermission.CAN_CREATE_TEAM}
     )
     store = _FakeMetadataStore({})
 
@@ -623,7 +623,7 @@ async def test_create_team_grants_public_when_metadata_is_public() -> None:
     (no production path creates a public team today, but the branch is the
     contract: grant iff discoverable)."""
     engine = CountingRebacEngine(
-        granted_permissions={OrganizationPermission.CAN_CREATE_TEAM}
+        granted_permissions={PlatformPermission.CAN_CREATE_TEAM}
     )
     store = _FakeMetadataStore({}, create_visibility=TeamVisibility.PUBLIC)
 

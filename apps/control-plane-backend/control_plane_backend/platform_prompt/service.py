@@ -20,7 +20,7 @@ from dataclasses import dataclass
 import httpx
 from fred_core import KeycloakUser
 
-from control_plane_backend.organization_authz import require_edit_platform_prompt
+from control_plane_backend.platform_authz import require_edit_platform_prompt
 from control_plane_backend.platform_prompt.schemas import (
     PlatformInstructions,
     PlatformPrompt,

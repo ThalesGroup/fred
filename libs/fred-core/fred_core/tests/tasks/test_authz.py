@@ -57,9 +57,7 @@ class _FakeRebac:
         self, user: KeycloakUser, permission: Any, resource_id: str, **_: Any
     ) -> None:
         if not self._platform:
-            raise AuthorizationError(
-                user.uid, "manage", Resource.ORGANIZATION, "denied"
-            )
+            raise AuthorizationError(user.uid, "manage", Resource.PLATFORM, "denied")
 
     async def check_user_team_permission_or_raise(
         self, user: KeycloakUser, permission: TeamPermission, team_id: str

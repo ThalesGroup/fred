@@ -31,7 +31,7 @@ Covers:
   bypasses the store's own `set()` entirely (malformed provider, unknown
   settings key) fails closed on `get()`, not just at write time
 - the service's feature-governance gate
-  (`organization_authz.require_manage_capabilities`, shared with
+  (`platform_authz.require_manage_capabilities`, shared with
   `capabilities/service.py`)
 - `resolve_platform_chat_model_binding`: the trusted, no-client-authz
   per-turn entrypoint threaded into `ManagedAgentRuntimeBinding.
@@ -66,9 +66,9 @@ from control_plane_backend.routing_policy.store import (
     PlatformModelBindingStore,
     StoredPlatformModelBinding,
 )
-from fred_core import AuthorizationError, KeycloakUser, OrganizationPermission
+from fred_core import AuthorizationError, KeycloakUser, PlatformPermission
 from fred_core.security.models import Resource
-from fred_core.security.rebac.rebac_engine import ORGANIZATION_ID
+from fred_core.security.rebac.rebac_engine import PLATFORM_ID
 from fred_sdk.contracts.context import ModelBinding
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -336,7 +336,7 @@ class _RecordingPlatformModelBindingStore:
 
 
 class _FakeOrgAdminRebac:
-    """Fake for `organization_authz.require_manage_capabilities`'s
+    """Fake for `platform_authz.require_manage_capabilities`'s
     `check_user_permission_or_raise` call — a distinct, narrower interface
     than the team-scoped fakes `test_routing_policy.py` uses."""
 
@@ -352,7 +352,7 @@ class _FakeOrgAdminRebac:
         self.checked.append((permission, resource_id))
         if not self.allow:
             raise AuthorizationError(
-                user.uid, str(permission), Resource.ORGANIZATION, "denied"
+                user.uid, str(permission), Resource.PLATFORM, "denied"
             )
 
 
@@ -452,8 +452,7 @@ async def test_model_bindings_gate_on_the_narrow_feature_relation() -> None:
     await routing_policy_service.delete_platform_model_binding(user=_user(), deps=deps)
 
     assert (
-        rebac.checked
-        == [(OrganizationPermission.CAN_MANAGE_CAPABILITIES, ORGANIZATION_ID)] * 3
+        rebac.checked == [(PlatformPermission.CAN_MANAGE_CAPABILITIES, PLATFORM_ID)] * 3
     )
 
 

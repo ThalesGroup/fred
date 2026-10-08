@@ -258,7 +258,7 @@ async def test_discovery_filters_with_team_subject_application_admission() -> No
         Relation(
             subject=RebacReference(Resource.TEAM, "team-a"),
             relation=RelationType.TEAM,
-            resource=RebacReference(Resource.ORGANIZATION, "fred"),
+            resource=RebacReference(Resource.PLATFORM, "fred"),
         ),
     )
 
@@ -783,8 +783,8 @@ async def test_app_enablement_writes_only_entitlement_and_skips_agent_stores() -
     assert validated == {}
     assert (
         Relation(
-            subject=RebacReference(Resource.ORGANIZATION, "fred"),
-            relation=RelationType.ORGANIZATION,
+            subject=RebacReference(Resource.PLATFORM, "fred"),
+            relation=RelationType.PLATFORM,
             resource=RebacReference(Resource.APP, "example"),
         )
         in rebac.relations
@@ -952,7 +952,7 @@ async def test_app_disable_canonicalizes_personal_alias_for_legacy_cleanup(
 async def test_app_default_off_and_personal_scope_never_touch_agent_store() -> None:
     rebac = _TupleRebac()
     default_on = Relation(
-        subject=RebacReference(Resource.ORGANIZATION, "fred"),
+        subject=RebacReference(Resource.PLATFORM, "fred"),
         relation=RelationType.DEFAULT_ON,
         resource=RebacReference(Resource.APP, "example"),
     )
@@ -1136,8 +1136,8 @@ async def test_listed_application_is_activated_from_configuration_alone(
     assert result.enabled is True
     assert (
         Relation(
-            subject=RebacReference(Resource.ORGANIZATION, "fred"),
-            relation=RelationType.ORGANIZATION,
+            subject=RebacReference(Resource.PLATFORM, "fred"),
+            relation=RelationType.PLATFORM,
             resource=RebacReference(Resource.APP, "example"),
         )
         in rebac.relations
@@ -1200,7 +1200,7 @@ async def test_registration_seeding_leaves_configured_applications_untouched() -
         for relation in rebac.relations
         if relation.resource.type is Resource.CAPABILITY
     } == {
-        (RelationType.ORGANIZATION, RebacReference(Resource.CAPABILITY, tool.id)),
+        (RelationType.PLATFORM, RebacReference(Resource.CAPABILITY, tool.id)),
         (RelationType.DEFAULT_ON, RebacReference(Resource.CAPABILITY, tool.id)),
     }
 

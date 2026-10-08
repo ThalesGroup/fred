@@ -90,7 +90,7 @@ def _model_without_suspended() -> dict:
     organization = next(
         definition
         for definition in model["type_definitions"]
-        if definition["type"] == "organization"
+        if definition["type"] == "platform"
     )
     del organization["relations"]["suspended"]
     del organization["metadata"]["relations"]["suspended"]
@@ -227,7 +227,6 @@ def _app_recording_startup(
     )
     monkeypatch.setattr(main, "initialize_shared_stores", lambda _: None)
     for step in (
-        "_reconcile_team_organization_relations",
         "_reconcile_team_admin_charter_roles",
         "_seed_capability_registration_defaults",
     ):
@@ -264,7 +263,6 @@ async def test_lifespan_installs_the_engine_before_the_startup_reconciliations(
         await require_active_subject(_PERSON)
 
     reconciliations = [
-        "_reconcile_team_organization_relations",
         "_reconcile_team_admin_charter_roles",
         "_seed_capability_registration_defaults",
     ]

@@ -154,7 +154,7 @@ async def test_list_relations_emits_read_operation() -> None:
     await engine.list_relations(
         resource_type=Resource.TEAM,
         relation=RelationType.TEAM_ADMIN,
-        subject=RebacReference(Resource.ORGANIZATION, "fred"),
+        subject=RebacReference(Resource.PLATFORM, "fred"),
     )
 
     assert writer.emitted[0]["dims"]["rebac_operation"] == "read"
@@ -169,21 +169,21 @@ async def test_list_relations_parses_tuples_into_relations() -> None:
     fake_client.read_tuples = [
         SimpleNamespace(
             key=SimpleNamespace(
-                user="organization:fred", relation="organization", object="team:fredlab"
+                user="platform:fred", relation="platform", object="team:fredlab"
             )
         ),
     ]
 
     relations = await engine.list_relations(
         resource_type=Resource.TEAM,
-        relation=RelationType.ORGANIZATION,
-        subject=RebacReference(Resource.ORGANIZATION, "fred"),
+        relation=RelationType.PLATFORM,
+        subject=RebacReference(Resource.PLATFORM, "fred"),
     )
 
     assert relations == [
         Relation(
-            subject=RebacReference(Resource.ORGANIZATION, "fred"),
-            relation=RelationType.ORGANIZATION,
+            subject=RebacReference(Resource.PLATFORM, "fred"),
+            relation=RelationType.PLATFORM,
             resource=RebacReference(Resource.TEAM, "fredlab"),
         )
     ]
@@ -202,14 +202,14 @@ async def test_list_relations_sends_exact_user_for_organization_subject() -> Non
 
     await engine.list_relations(
         resource_type=Resource.TEAM,
-        relation=RelationType.ORGANIZATION,
-        subject=RebacReference(Resource.ORGANIZATION, "fred"),
+        relation=RelationType.PLATFORM,
+        subject=RebacReference(Resource.PLATFORM, "fred"),
     )
 
     assert len(fake_client.read_calls) == 1
     body = fake_client.read_calls[0]
-    assert body.user == "organization:fred"
-    assert body.relation == "organization"
+    assert body.user == "platform:fred"
+    assert body.relation == "platform"
     assert body.object == "team:"
 
 
@@ -270,7 +270,7 @@ async def test_list_relations_paginates_via_continuation_token() -> None:
     relations = await engine.list_relations(
         resource_type=Resource.TEAM,
         relation=RelationType.TEAM_ADMIN,
-        subject=RebacReference(Resource.ORGANIZATION, "fred"),
+        subject=RebacReference(Resource.PLATFORM, "fred"),
     )
 
     assert {(r.subject.id, r.resource.id) for r in relations} == {

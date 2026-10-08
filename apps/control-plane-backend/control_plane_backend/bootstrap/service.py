@@ -20,7 +20,7 @@ import secrets
 from pathlib import Path
 
 from fred_core import (
-    ORGANIZATION_ID,
+    PLATFORM_ID,
     KeycloakUser,
     RebacReference,
     Relation,
@@ -158,7 +158,7 @@ async def bootstrap_platform_admin(
             Relation(
                 subject=RebacReference(Resource.USER, user.uid),
                 relation=RelationType.PLATFORM_ADMIN,
-                resource=RebacReference(Resource.ORGANIZATION, ORGANIZATION_ID),
+                resource=RebacReference(Resource.PLATFORM, PLATFORM_ID),
             ),
             actor_uid=user.uid,
         )

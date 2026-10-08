@@ -75,7 +75,7 @@ def test_schema_declares_capability_relations() -> None:
     cap = _capability_type()
     relations = cap["relations"]
     for name in (
-        "organization",
+        "platform",
         "default_on",
         "enabled",
         "disabled",
@@ -132,11 +132,11 @@ def test_inherited_encodes_default_on_and_personal_class() -> None:
 
 
 def test_organization_declares_team_reverse_edges() -> None:
-    # The contextual reverse indexes `organization#team@team:<id>` and
-    # `organization#personal_team@team:<id>` used by team-subject capability
+    # The contextual reverse indexes `platform#team@team:<id>` and
+    # `platform#personal_team@team:<id>` used by team-subject capability
     # checks must stay declared on the organization.
     schema = _load_schema()
-    org = next(t for t in schema["type_definitions"] if t["type"] == "organization")
+    org = next(t for t in schema["type_definitions"] if t["type"] == "platform")
     relations = org["metadata"]["relations"]
     assert relations["team"]["directly_related_user_types"] == [{"type": "team"}]
     assert relations["personal_team"]["directly_related_user_types"] == [
@@ -145,11 +145,11 @@ def test_organization_declares_team_reverse_edges() -> None:
 
 
 def test_can_manage_resolves_through_the_org_feature_relation() -> None:
-    """The per-object gate must delegate to `organization#can_manage_capabilities`,
+    """The per-object gate must delegate to `platform#can_manage_capabilities`,
     not name `platform_admin` itself: a `feature_manager` would otherwise pass the
     org-level gate on the enablement endpoints and fail this one."""
     cap = _capability_type()
     can_manage = cap["relations"]["can_manage"]
     ttu = can_manage["tupleToUserset"]
-    assert ttu["tupleset"]["relation"] == "organization"
+    assert ttu["tupleset"]["relation"] == "platform"
     assert ttu["computedUserset"]["relation"] == "can_manage_capabilities"

@@ -30,10 +30,10 @@ from fastapi import (
 )
 from fastapi.responses import Response
 from fred_core import (
-    ORGANIZATION_ID,
+    PLATFORM_ID,
     AssertedUser,
     KeycloakUser,
-    OrganizationPermission,
+    PlatformPermission,
     TeamPermission,
     get_current_user,
     get_principal_context,
@@ -270,7 +270,7 @@ async def get_team_agent_templates(
     effective_include_non_public = (
         include_non_public
         and await rebac.has_user_permission(
-            user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+            user, PlatformPermission.CAN_MANAGE_PLATFORM, PLATFORM_ID
         )
     )
     return await list_agent_templates(

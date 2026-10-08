@@ -43,7 +43,7 @@ from control_plane_backend.capabilities.catalog import (
     aggregate_capability_catalog,
     universally_available_chat_model_profile_ids,
 )
-from control_plane_backend.organization_authz import require_manage_capabilities
+from control_plane_backend.platform_authz import require_manage_capabilities
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 from control_plane_backend.routing_policy.schemas import (
     AvailableModelProfile,

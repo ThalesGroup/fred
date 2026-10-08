@@ -80,7 +80,7 @@ from datetime import datetime, timezone
 from typing import Any, TypeVar
 
 from fred_core import (
-    ORGANIZATION_ID,
+    PLATFORM_ID,
     KeycloakUser,
     RebacEngine,
     RebacReference,
@@ -429,7 +429,7 @@ async def _grant_platform_role(
         Relation(
             subject=RebacReference(Resource.USER, user_sub),
             relation=relation,
-            resource=RebacReference(Resource.ORGANIZATION, ORGANIZATION_ID),
+            resource=RebacReference(Resource.PLATFORM, PLATFORM_ID),
         ),
         actor_uid=actor_uid,
     )
@@ -1225,29 +1225,6 @@ async def _run_import_body(
                 import_fn=_import_team_routing_policy,
                 session=session,
             )
-
-    # ── Phase 4bis: organization structural relation ──────────────────────────
-    # (#2065) `_import_team_metadata` above writes `TeamMetadataRow`s directly
-    # via raw ORM inserts, bypassing `teams.service.create_team` (which now
-    # writes the `organization -> team` structural edge itself) entirely — so
-    # every team present in this bundle's team_metadata table, whether just
-    # inserted or already-existing/skipped, must be (re-)reconciled here.
-    # `ensure_team_organization_relations` is the bulk, idempotent, read-then-
-    # write cold-path primitive (never called from a request path). Also
-    # serves as the repair path when this import is a re-run over
-    # already-imported (skipped) team rows.
-    team_metadata_ids = [row["id"] for row in raw_team_metadata]
-    if team_metadata_ids:
-        if rebac is None or not rebac.enabled:
-            report.warnings.append(
-                f"{len(team_metadata_ids)} team(s) imported without the "
-                "organization structural relation established — ReBAC "
-                "engine unavailable or disabled. Re-run this import (or the "
-                "control-plane startup reconciliation) with ReBAC enabled "
-                "before cutover."
-            )
-        else:
-            await rebac.ensure_team_organization_relations(team_metadata_ids)
 
     # ── Phase 5: users.json declarative provisioning (AUTHZ-07 §40.2) ─────────
     # Outside the atomic transaction above: this phase calls full team/ReBAC

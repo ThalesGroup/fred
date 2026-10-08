@@ -366,7 +366,7 @@ async def test_impact_folds_can_use_without_one_listobjects_per_team(
     tuple read per REFERENCED capability and no `ListObjects` at all, so the
     cost tracks the catalog rather than the user base."""
 
-    org = enablement_mod.ORG_REF
+    org = enablement_mod.PLATFORM_REF
     # `_for_all` is default-on but opted out for the whole personal class;
     # `_for_one` is granted to a single collaborative team.
     for_all = "fold_budget_for_all"
@@ -391,10 +391,10 @@ async def test_impact_folds_can_use_without_one_listobjects_per_team(
     )
     rebac = CountingRebacEngine(
         direct_relations=[
-            _cap_relation(org, RelationType.ORGANIZATION, for_all),
+            _cap_relation(org, RelationType.PLATFORM, for_all),
             _cap_relation(org, RelationType.DEFAULT_ON, for_all),
             _cap_relation(org, RelationType.PERSONAL_DISABLED, for_all),
-            _cap_relation(org, RelationType.ORGANIZATION, for_one),
+            _cap_relation(org, RelationType.PLATFORM, for_one),
             _cap_relation(
                 _team_subject("team-collab-0"), RelationType.ENABLED, for_one
             ),
@@ -451,7 +451,7 @@ async def test_impact_attributes_a_team_level_opt_out_of_a_default_on_capability
     the tri-state the health column has to render, and the one branch a fold
     that only ever reads `enabled` would get wrong."""
 
-    org = enablement_mod.ORG_REF
+    org = enablement_mod.PLATFORM_REF
     cap_id = "fold_opt_out_capability"
     enablement_mod.invalidate_capability_relations_cache(cap_id)
 
@@ -468,7 +468,7 @@ async def test_impact_attributes_a_team_level_opt_out_of_a_default_on_capability
     )
     rebac = CountingRebacEngine(
         direct_relations=[
-            _cap_relation(org, RelationType.ORGANIZATION, cap_id),
+            _cap_relation(org, RelationType.PLATFORM, cap_id),
             _cap_relation(org, RelationType.DEFAULT_ON, cap_id),
             _cap_relation(
                 _team_subject("team-opted-out"), RelationType.DISABLED, cap_id
@@ -495,7 +495,7 @@ async def test_preview_revoke_reads_the_capability_fresh_not_the_cache(
     replica invalidates the 45s cache. A stale entry saying "nobody is granted"
     must not make the dialog under-report."""
 
-    org = enablement_mod.ORG_REF
+    org = enablement_mod.PLATFORM_REF
     cap_id = "fold_preview_capability"
     store = _FakeAgentInstanceStore(
         [
@@ -510,7 +510,7 @@ async def test_preview_revoke_reads_the_capability_fresh_not_the_cache(
     )
     rebac = CountingRebacEngine(
         direct_relations=[
-            _cap_relation(org, RelationType.ORGANIZATION, cap_id),
+            _cap_relation(org, RelationType.PLATFORM, cap_id),
             _cap_relation(org, RelationType.PERSONAL_ON, cap_id),
         ]
     )
@@ -595,7 +595,9 @@ async def test_preview_excludes_already_broken_instances(monkeypatch) -> None:
         monkeypatch,
         store,
         [
-            _cap_relation(enablement_mod.ORG_REF, RelationType.DEFAULT_ON, "capa1"),
+            _cap_relation(
+                enablement_mod.PLATFORM_REF, RelationType.DEFAULT_ON, "capa1"
+            ),
             _cap_relation(_team_subject("team-gone"), RelationType.DISABLED, "capa1"),
         ],
     )
@@ -637,7 +639,9 @@ async def test_preview_default_off_excludes_explicitly_enabled_teams(
         monkeypatch,
         store,
         [
-            _cap_relation(enablement_mod.ORG_REF, RelationType.DEFAULT_ON, "capa1"),
+            _cap_relation(
+                enablement_mod.PLATFORM_REF, RelationType.DEFAULT_ON, "capa1"
+            ),
             _cap_relation(
                 _team_subject("team-explicit"), RelationType.ENABLED, "capa1"
             ),
@@ -713,7 +717,11 @@ async def test_preview_revoke_includes_agent_template_instances(monkeypatch) -> 
         store,
         # Works today through the org-wide default, with no explicit grant to
         # exclude it from the platform-wide preview.
-        [_cap_relation(enablement_mod.ORG_REF, RelationType.DEFAULT_ON, template_id)],
+        [
+            _cap_relation(
+                enablement_mod.PLATFORM_REF, RelationType.DEFAULT_ON, template_id
+            )
+        ],
         available_by_source={"runtime-a": frozenset()},
     )
 

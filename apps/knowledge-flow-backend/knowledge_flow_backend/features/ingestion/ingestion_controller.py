@@ -28,11 +28,11 @@ from typing import Dict, List, Literal, Optional, Type
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import Response, StreamingResponse
 from fred_core import (
-    ORGANIZATION_ID,
+    PLATFORM_ID,
     AuthorizationError,
     DocumentPermission,
     KeycloakUser,
-    OrganizationPermission,
+    PlatformPermission,
     RebacEngine,
     Resource,
     TagPermission,
@@ -139,7 +139,7 @@ async def _authorize_fast_ingest_delete(rebac: RebacEngine, user: KeycloakUser, 
     itself verify that association) is refused regardless of caller. Full
     rationale: DESIGN.md, "Session-Scoped Attachment Datasets".
     """
-    is_platform_admin = await rebac.has_user_permission(user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID)
+    is_platform_admin = await rebac.has_user_permission(user, PlatformPermission.CAN_MANAGE_PLATFORM, PLATFORM_ID)
     metadata = await ApplicationContext.get_instance().get_metadata_store().get_metadata_by_uid(document_uid)
 
     def deny() -> AuthorizationError:

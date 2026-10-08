@@ -32,12 +32,12 @@ from fred_core.security.structure import OpenFgaRebacConfig
 _PERSON = RebacReference(Resource.USER, "person-synthetic")
 _BYSTANDER = RebacReference(Resource.USER, "bystander-synthetic")
 _TEAM = RebacReference(Resource.TEAM, "team-synthetic")
-_ORGANIZATION = RebacReference(Resource.ORGANIZATION, "fred")
-_PERSON_SUSPENDED = ("user:person-synthetic", "suspended", "organization:fred")
+_ORGANIZATION = RebacReference(Resource.PLATFORM, "fred")
+_PERSON_SUSPENDED = ("user:person-synthetic", "suspended", "platform:fred")
 
 
 def _organization_of(model: dict) -> dict:
-    return next(t for t in model["type_definitions"] if t["type"] == "organization")
+    return next(t for t in model["type_definitions"] if t["type"] == "platform")
 
 
 def _model_without_suspension(model: dict) -> None:
@@ -74,7 +74,7 @@ class _AccountStatusStore:
         self.model: dict = json.loads(DEFAULT_SCHEMA)
 
     def _answer(self, user: str, relation: str, obj: str) -> bool:
-        if obj.startswith("organization:"):
+        if obj.startswith("platform:"):
             if relation not in _organization_of(self.model)["relations"]:
                 raise ValidationException(status=400, reason="relation not found")
             if relation == RelationType.SUSPENDED.value:

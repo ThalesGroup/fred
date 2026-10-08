@@ -25,12 +25,12 @@ from uuid import uuid4
 
 from fastapi import UploadFile
 from fred_core import (
-    ORGANIZATION_ID,
+    PLATFORM_ID,
     SERVICE_AGENT_ALLOWED_TEAM_PERMISSIONS,
     JoiningMode,
     KeycloackDisabled,
     KeycloakUser,
-    OrganizationPermission,
+    PlatformPermission,
     RebacDisabledResult,
     RebacEngine,
     RebacReference,
@@ -43,7 +43,6 @@ from fred_core import (
     create_keycloak_admin,
     holds_caller_role,
     is_service_agent,
-    team_organization_relation,
 )
 from fred_core.common import TeamId, ThreadSafeLRUCache, is_personal_team_id
 from fred_core.logs.audit_log import emit_audit_log
@@ -215,7 +214,7 @@ async def list_all_teams_unfiltered(
     user: KeycloakUser,
     deps: TeamServiceDependencies,
 ) -> list[Team]:
-    """Same as `list_teams` but without the per-caller `CAN_READ` filter — callers MUST already have verified `OrganizationPermission.CAN_MANAGE_PLATFORM` (e.g. `compute_platform_stats`)."""
+    """Same as `list_teams` but without the per-caller `CAN_READ` filter — callers MUST already have verified `PlatformPermission.CAN_MANAGE_PLATFORM` (e.g. `compute_platform_stats`)."""
     return await _list_teams(user, deps, filter_by_can_read=False)
 
 
@@ -246,7 +245,7 @@ async def list_all_teams_for_registry(
     - `teams = await list_all_teams_for_registry(user, deps)`
     """
     await deps.rebac.check_user_permission_or_raise(
-        user, OrganizationPermission.CAN_LIST_ALL_TEAMS, ORGANIZATION_ID
+        user, PlatformPermission.CAN_LIST_ALL_TEAMS, PLATFORM_ID
     )
     if not include_membership:
         return await _list_registry_teams_without_membership(deps)
@@ -298,7 +297,7 @@ async def delete_team(
     """
     rebac = deps.rebac
     await rebac.check_user_permission_or_raise(
-        user, OrganizationPermission.CAN_DELETE_TEAM, ORGANIZATION_ID
+        user, PlatformPermission.CAN_DELETE_TEAM, PLATFORM_ID
     )
 
     store = deps.get_team_metadata_store()
@@ -349,7 +348,7 @@ async def rescue_team_admin(
     """
     rebac = deps.rebac
     await rebac.check_user_permission_or_raise(
-        user, OrganizationPermission.CAN_RESCUE_TEAM_ADMIN, ORGANIZATION_ID
+        user, PlatformPermission.CAN_RESCUE_TEAM_ADMIN, PLATFORM_ID
     )
 
     store = deps.get_team_metadata_store()
@@ -399,7 +398,7 @@ async def get_default_teams_for_new_users(
 ) -> list[DefaultTeamForNewUsers]:
     """Return the teams every new user joins on first GCU acceptance."""
     await deps.rebac.check_user_permission_or_raise(
-        user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+        user, PlatformPermission.CAN_MANAGE_PLATFORM, PLATFORM_ID
     )
     return [
         DefaultTeamForNewUsers(team_id=metadata.id, name=metadata.name)
@@ -418,7 +417,7 @@ async def set_default_teams_for_new_users(
     Full rationale: CONTROL-PLANE-PRODUCT-CONTRACT.md §52.
     """
     await deps.rebac.check_user_permission_or_raise(
-        user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+        user, PlatformPermission.CAN_MANAGE_PLATFORM, PLATFORM_ID
     )
     unique_ids = list(dict.fromkeys(team_ids))
     found = await deps.get_team_metadata_store().get_by_team_ids(unique_ids)
@@ -781,7 +780,7 @@ async def create_team(
     """
     rebac = deps.rebac
     await rebac.check_user_permission_or_raise(
-        user, OrganizationPermission.CAN_CREATE_TEAM, ORGANIZATION_ID
+        user, PlatformPermission.CAN_CREATE_TEAM, PLATFORM_ID
     )
 
     store = deps.get_team_metadata_store()
@@ -807,35 +806,22 @@ async def create_team(
         raise TeamAlreadyExistsError(request.name) from exc
 
     try:
-        # #2065: the organization structural edge is written directly here,
-        # in the same bootstrap set as the initial team_admin(s) — `team_id`
-        # is freshly generated, so there is no existing edge to check for
-        # (unlike `ensure_team_organization_relations`, the read-then-write
-        # cold-path repair primitive used elsewhere for possibly-pre-existing
-        # teams). Bundling both into one `add_relations` call also means a
-        # failure writing the structural edge rolls back the metadata row
-        # below exactly like an admin-grant failure already did — a team is
-        # never left registered without it.
         bootstrap_token = await rebac.add_relations(
             [
-                team_organization_relation(team_id),
-                *(
-                    Relation(
-                        subject=RebacReference(Resource.USER, admin_user_id),
-                        relation=admin_relation.to_relation(),
-                        resource=RebacReference(Resource.TEAM, team_id),
-                    )
-                    for admin_user_id, admin_relation in zip(
-                        request.initial_team_admin_ids, admin_relations, strict=True
-                    )
-                ),
+                Relation(
+                    subject=RebacReference(Resource.USER, admin_user_id),
+                    relation=admin_relation.to_relation(),
+                    resource=RebacReference(Resource.TEAM, team_id),
+                )
+                for admin_user_id, admin_relation in zip(
+                    request.initial_team_admin_ids, admin_relations, strict=True
+                )
             ],
             actor_uid=user.uid,
         )
     except Exception:
         logger.warning(
-            "Rolling back team %s (%s): failed to bootstrap the organization "
-            "structural relation or initial team_admin(s)",
+            "Rolling back team %s (%s): failed to grant initial team_admin(s)",
             team_id,
             request.name,
         )
@@ -1218,7 +1204,7 @@ async def list_team_members_unfiltered(
     deps: TeamServiceDependencies,
 ) -> list[TeamMember]:
     """Same as `list_team_members` but without the per-team `CAN_READ_MEMEBERS` check —
-    callers MUST already have verified `OrganizationPermission.CAN_MANAGE_PLATFORM`
+    callers MUST already have verified `PlatformPermission.CAN_MANAGE_PLATFORM`
     (e.g. `compute_platform_stats`). `platform_admin` carries no standing team
     relation (RFC "zero implicit access"), so the normal per-team check 403s on
     every real team the admin isn't personally a member of."""
@@ -1369,7 +1355,7 @@ async def search_candidate_team_admins(
     - `matches = await search_candidate_team_admins(user, "cohen", deps)`
     """
     await deps.rebac.check_user_permission_or_raise(
-        user, OrganizationPermission.CAN_CREATE_TEAM, ORGANIZATION_ID
+        user, PlatformPermission.CAN_CREATE_TEAM, PLATFORM_ID
     )
     return await _search_users_bounded(query, deps)
 

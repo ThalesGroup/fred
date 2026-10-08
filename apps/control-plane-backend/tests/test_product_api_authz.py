@@ -34,7 +34,7 @@ from control_plane_backend.product.schemas import (
     PromptScoreUpdateRequest,
     UpdatePromptRequest,
 )
-from fred_core import KeycloakUser, OrganizationPermission, TeamPermission
+from fred_core import KeycloakUser, PlatformPermission, TeamPermission
 from fred_core.common import TeamId
 from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
 
@@ -285,7 +285,7 @@ async def test_include_non_public_requires_real_openfga_platform_admin(
     )
     assert list_templates.await_args is not None
     assert list_templates.await_args.kwargs["include_non_public"] is False
-    assert rebac_denied.calls[0][1] == OrganizationPermission.CAN_MANAGE_PLATFORM
+    assert rebac_denied.calls[0][1] == PlatformPermission.CAN_MANAGE_PLATFORM
 
     # A real OpenFGA platform_admin: honored.
     rebac_allowed = _FakeRebac(can_manage_platform=True)

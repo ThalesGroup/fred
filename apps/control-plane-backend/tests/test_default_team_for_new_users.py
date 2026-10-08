@@ -39,7 +39,7 @@ from control_plane_backend.users.api import validate_gcu
 from fred_core import (
     AuthorizationError,
     KeycloakUser,
-    OrganizationPermission,
+    PlatformPermission,
     RebacReference,
     Relation,
     RelationType,
@@ -71,7 +71,7 @@ class _FakeRebac:
         relations: list[Relation] | None = None,
         add_raises: Exception | None = None,
     ) -> None:
-        self.permission_checks: list[OrganizationPermission] = []
+        self.permission_checks: list[PlatformPermission] = []
         self.added: list[Relation] = []
         self._granted = granted
         self._relations = relations or []
@@ -82,7 +82,7 @@ class _FakeRebac:
     ) -> None:
         self.permission_checks.append(permission)
         if not self._granted:
-            raise AuthorizationError(user.uid, permission.value, Resource.ORGANIZATION)
+            raise AuthorizationError(user.uid, permission.value, Resource.PLATFORM)
 
     async def list_direct_relations(self, resource, *, subject=None, **kwargs):
         return [
@@ -204,7 +204,7 @@ async def test_default_teams_are_read_with_their_names_sorted_by_name() -> None:
         DefaultTeamForNewUsers(team_id=TeamId("team-onboarding"), name="Onboarding"),
         DefaultTeamForNewUsers(team_id=TeamId("team-support"), name="support"),
     ]
-    assert rebac.permission_checks == [OrganizationPermission.CAN_MANAGE_PLATFORM]
+    assert rebac.permission_checks == [PlatformPermission.CAN_MANAGE_PLATFORM]
 
 
 @pytest.mark.asyncio

@@ -29,7 +29,33 @@ integration, repeating only evidence invalidated by subsequent changes or failur
   real PostgreSQL). Fresh PostgreSQL `alembic upgrade head` passed; `alembic check`
   found no drift; sole head `bc21d49e01a7`. These checks concern the structural
   table, not the complete offline translator or final PR readiness.
-- [ ] 1.2 Separate platform anchors from organizations and implement four cumulative local roles plus parent-team-dependent project permissions in the existing FGA facade; verify the allow/deny matrix with real OpenFGA, including local-admin-without-analyst and organization-analyst-without-descendant-access.
+- [x] 1.2 Separate platform anchors from organizations and implement four cumulative local roles plus parent-team-dependent project permissions in the existing FGA facade; verify the allow/deny matrix with real OpenFGA, including local-admin-without-analyst and organization-analyst-without-descendant-access.
+  Real OpenFGA suite: 42 passed, including all four roles in each space kind,
+  parent-admin isolation and immediate project denial after parent membership
+  removal with surviving local grants. Existing operational gates, suspension
+  and catalog anchors now use `platform:fred`; no compatibility alias remains.
+  The unused team-to-singleton tuple, startup reconciliation and import repair
+  were removed. Local organization administration and retirement of the old
+  platform `team_manager` responsibilities remain stage 2 work.
+  Targeted checks: core security 525 passed; control-plane 464 passed plus 115
+  affected catalog checks after naming cleanup; core helpers/tasks 85 passed;
+  runtime authorization 25 passed; Knowledge Flow ingestion/KPI 22 passed and
+  startup 10 passed after correcting the account-model fixture. Counts overlap
+  between runs. Three generated API clients are unchanged after regeneration;
+  Knowledge Flow used an isolated local config with all existing routes enabled.
+  Ruff/diff checks passed; raw basedpyright on the new SQL model and ReBAC engine
+  files reported zero errors/warnings. No end-to-end performance claim yet.
+  This FGA/platform block adds 259 and removes 527 production Python lines
+  (net -268, including shorter comments); tests +477/-626, FGA source +63/-35,
+  generated JSON +1/-1. The SQL block is recorded separately above. The actual
+  removed behavior is structural repair, not generated-client churn.
+  Focused author and independent read-only review covered SQL constraints,
+  migration parity, local-role/revocation semantics, platform consumers and
+  retired repair callers: no actionable findings. Reviewed planning base
+  `58e0eeb07` through SQL commit `72e9a776e` plus this FGA working-tree block.
+  Provisioning, cross-organization service enforcement, corpus/runtime cutover,
+  migration/restore, UI and full PR verification are explicitly excluded;
+  independent review inspected tests but did not rerun them.
 - [ ] 1.3 Add linear, correctly owned Alembic migrations and target-schema installation/provisioning inputs, preserving shared-table ownership; verify one head per backend, empty-database upgrade, schema checks and explicit initial organization/team/personal assignment.
 - [ ] 1.4 Establish protected-request authorization and canonical ancestry resolution with existing higher-consistency/batch support; verify revoked access is denied on the next request and request-local reuse does not become a cross-request positive cache.
 

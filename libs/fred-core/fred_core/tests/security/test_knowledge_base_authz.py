@@ -79,7 +79,7 @@ def test_definition_reference_is_neither_capability_nor_app() -> None:
 def test_schema_declares_the_knowledge_base_definition_type() -> None:
     relations = _definition_type()["relations"]
     assert set(relations) == {
-        "organization",
+        "platform",
         "default_on",
         "enabled",
         "disabled",
@@ -88,9 +88,9 @@ def test_schema_declares_the_knowledge_base_definition_type() -> None:
         "can_use",
     }
     metadata = _definition_type()["metadata"]["relations"]
-    for relation in ("organization", "default_on"):
+    for relation in ("platform", "default_on"):
         assert metadata[relation]["directly_related_user_types"] == [
-            {"type": "organization"}
+            {"type": "platform"}
         ]
     for relation in ("enabled", "disabled"):
         assert metadata[relation]["directly_related_user_types"] == [{"type": "team"}]
@@ -123,5 +123,5 @@ def test_definition_use_is_decided_by_team_grants_without_a_platform_marker() ->
 
 def test_definition_can_manage_is_platform_admin() -> None:
     can_manage = _definition_type()["relations"]["can_manage"]["tupleToUserset"]
-    assert can_manage["tupleset"]["relation"] == "organization"
+    assert can_manage["tupleset"]["relation"] == "platform"
     assert can_manage["computedUserset"]["relation"] == "platform_admin"

@@ -17,7 +17,7 @@ import logging
 from collections.abc import Iterable
 from uuid import UUID
 
-from fred_core import ORGANIZATION_ID, KeycloackDisabled, KeycloakUser, OrganizationPermission, create_keycloak_admin
+from fred_core import PLATFORM_ID, KeycloackDisabled, KeycloakUser, PlatformPermission, create_keycloak_admin
 from fred_core.users.store.postgres_user_store import get_user_store
 from keycloak import KeycloakAdmin
 from keycloak.exceptions import KeycloakGetError
@@ -31,7 +31,7 @@ _USER_PAGE_SIZE = 200
 
 
 async def list_users(_curent_user: KeycloakUser) -> list[UserSummary]:
-    await get_rebac_engine().check_user_permission_or_raise(_curent_user, OrganizationPermission.CAN_ADMINISTER_USERS, ORGANIZATION_ID)
+    await get_rebac_engine().check_user_permission_or_raise(_curent_user, PlatformPermission.CAN_ADMINISTER_USERS, PLATFORM_ID)
     if get_configuration().security.user_directory == "local":
         store = get_user_store()
         local_summaries: list[UserSummary] = []

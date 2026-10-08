@@ -46,7 +46,7 @@ from control_plane_backend.announcements.service import (
 from control_plane_backend.announcements.store import AnnouncementStore
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 from fastapi import HTTPException
-from fred_core import AuthorizationError, KeycloakUser, OrganizationPermission
+from fred_core import AuthorizationError, KeycloakUser, PlatformPermission
 from fred_core.logs.log_setup import AUDIT_LOGGER_NAME
 from fred_core.security.models import Resource
 from pydantic import ValidationError
@@ -56,9 +56,9 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 class _RoleRebac:
     """Answers `check_user_permission_or_raise` from a fixed permission set."""
 
-    def __init__(self, *allowed: OrganizationPermission) -> None:
+    def __init__(self, *allowed: PlatformPermission) -> None:
         self._allowed = set(allowed)
-        self.asked: list[OrganizationPermission] = []
+        self.asked: list[PlatformPermission] = []
 
     async def check_user_permission_or_raise(
         self, user, permission, resource_id, **kwargs
@@ -66,12 +66,12 @@ class _RoleRebac:
         self.asked.append(permission)
         if permission not in self._allowed:
             raise AuthorizationError(
-                user.uid, str(permission), Resource.ORGANIZATION, "denied"
+                user.uid, str(permission), Resource.PLATFORM, "denied"
             )
 
 
 def _platform_admin() -> _RoleRebac:
-    return _RoleRebac(OrganizationPermission.CAN_MANAGE_PLATFORM)
+    return _RoleRebac(PlatformPermission.CAN_MANAGE_PLATFORM)
 
 
 def _nobody() -> _RoleRebac:
@@ -329,7 +329,7 @@ async def test_every_admin_operation_asks_for_can_manage_platform(
     )
     await delete_announcement(user=_user(), announcement_id=created.id, deps=deps)
 
-    assert rebac.asked == [OrganizationPermission.CAN_MANAGE_PLATFORM] * 5
+    assert rebac.asked == [PlatformPermission.CAN_MANAGE_PLATFORM] * 5
 
 
 @pytest.mark.asyncio

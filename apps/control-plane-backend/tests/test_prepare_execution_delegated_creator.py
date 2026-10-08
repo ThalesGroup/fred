@@ -28,7 +28,7 @@ from control_plane_backend.product.dependencies import get_product_service_depen
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from fred_core import (
-    ORGANIZATION_ID,
+    PLATFORM_ID,
     KeycloakUser,
     RebacPermission,
     RebacReference,
@@ -115,7 +115,7 @@ class _RecordingRebac(NoopRebacEngine):
         consistency_token: str | None = None,
     ) -> bool:
         self.reads.append((subject.id, permission.value, resource.id))
-        if permission == RelationType.SUSPENDED and resource.id == ORGANIZATION_ID:
+        if permission == RelationType.SUSPENDED and resource.id == PLATFORM_ID:
             if self._unreachable:
                 raise ConnectionError("synthetic store outage")
             return subject.id in self._suspended
@@ -275,7 +275,7 @@ def test_prepare_step_authorizes_the_named_creator(
         "evaluate_url": f"/runtime/{_RUNTIME}/agents/evaluate",
     }
     assert rebac.reads == [
-        (_CREATOR, RelationType.SUSPENDED.value, ORGANIZATION_ID),
+        (_CREATOR, RelationType.SUSPENDED.value, PLATFORM_ID),
         (_CREATOR, TeamPermission.CAN_READ.value, _TEAM),
     ]
 
@@ -301,7 +301,7 @@ def test_prepare_step_refuses_on_the_named_creators_account_status(
 
     assert response.status_code == status
     assert response.headers["X-Fred-Denial-Cause"] == cause
-    assert rebac.reads[0] == (_CREATOR, RelationType.SUSPENDED.value, ORGANIZATION_ID)
+    assert rebac.reads[0] == (_CREATOR, RelationType.SUSPENDED.value, PLATFORM_ID)
     assert {subject for subject, _, _ in rebac.reads} == {_CREATOR}
 
 
@@ -347,7 +347,7 @@ def test_personal_team_routes_refuse_a_suspended_person(
 
     assert response.status_code == status
     assert response.headers["X-Fred-Denial-Cause"] == cause
-    assert rebac.reads == [(subject, RelationType.SUSPENDED.value, ORGANIZATION_ID)]
+    assert rebac.reads == [(subject, RelationType.SUSPENDED.value, PLATFORM_ID)]
     assert resolved == []
 
 

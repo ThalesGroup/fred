@@ -8,7 +8,7 @@ from __future__ import annotations
 from typing import Iterable
 
 from fred_core import (
-    ORGANIZATION_ID,
+    PLATFORM_ID,
     RebacPermission,
     RebacReference,
     Relation,
@@ -18,7 +18,7 @@ from fred_core import (
 from fred_core.security.rebac.noop_engine import NoopRebacEngine
 from openfga_sdk.exceptions import ValidationException
 
-FRED = RebacReference(Resource.ORGANIZATION, ORGANIZATION_ID)
+FRED = RebacReference(Resource.PLATFORM, PLATFORM_ID)
 
 
 def ban(person_id: str) -> Relation:
