@@ -190,7 +190,7 @@ it("retains the selected users after a failed grant", async () => {
   expect(selection.checked).toBe(true);
 });
 
-it("caps selection at 100 before dispatching a bulk grant", async () => {
+it("grants more than 100 selections without a product cap", async () => {
   state.users = Array.from({ length: 101 }, (_, index) => ({
     user_id: `user-${index}`,
     username: `User ${index}`,
@@ -200,12 +200,12 @@ it("caps selection at 100 before dispatching a bulk grant", async () => {
   render();
   const choices = [...host.querySelectorAll<HTMLInputElement>('input[aria-label="rework.platformAccess.selectUser"]')];
   for (const choice of choices) await act(async () => choice.click());
-  expect(choices.filter((choice) => choice.checked)).toHaveLength(100);
-  expect(choices[100].disabled).toBe(true);
+  expect(choices.filter((choice) => choice.checked)).toHaveLength(101);
+  expect(choices[100].disabled).toBe(false);
   await act(async () =>
     [...host.querySelectorAll("button")]
       .find((node) => node.textContent === "rework.platformAccess.allowSelected")!
       .click(),
   );
-  expect(state.bulk.mock.calls[0][0].grantPlatformAccessUsers.user_ids).toHaveLength(100);
+  expect(state.bulk.mock.calls[0][0].grantPlatformAccessUsers.user_ids).toHaveLength(101);
 });

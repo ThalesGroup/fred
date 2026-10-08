@@ -3245,7 +3245,7 @@
         "teams": "Équipes et liens",
         "activation": "Activation"
       },
-      "bulkHint": "Sélectionnez jusqu'à 100 utilisateurs Fred, même sur plusieurs recherches ou pages, pour ajouter des exceptions manuelles indépendantes. L'autorisation d'une équipe suit ses membres actuels ; quitter l'équipe retire cette source.",
+      "bulkHint": "Sélectionnez les utilisateurs sur plusieurs recherches et pages pour ajouter des exceptions indépendantes. L'accès par équipe suit ses membres actuels.",
       "allowSelected": "Autoriser les utilisateurs sélectionnés ({{count}})",
       "clearSelection": "Effacer la sélection",
       "select": "Sélectionner",
@@ -3257,7 +3257,7 @@
       "t0Hint": "Importez une fois les utilisateurs existants avant d'activer le filtrage. Les entrées individuelles restent supprimables.",
       "t0Preview": "{{count}} utilisateurs à importer ; {{matching}} attributs actuellement acceptés.",
       "t0Done": "Import initial terminé",
-      "t0Import": "Importer les utilisateurs existants (T0)",
+      "t0Import": "Importer les utilisateurs existants",
       "users": "Utilisateurs",
       "search": "Rechercher dans les utilisateurs locaux",
       "user": "Utilisateur",

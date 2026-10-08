@@ -3093,6 +3093,8 @@ export type PlatformAccessUser = {
   user_id: string;
   username: string | null;
   email: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
   sources: AdmissionSource[];
 };
 export type PlatformAccessUsersPage = {

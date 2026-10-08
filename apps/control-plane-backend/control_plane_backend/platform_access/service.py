@@ -93,16 +93,36 @@ async def set_filtering(
 async def grant_users(
     access: PlatformAccess, actor: KeycloakUser, user_ids: list[UUID]
 ) -> None:
-    selected = set(user_ids)
+    selected = sorted(set(user_ids))
     async with access.store.mutation() as session:
         await access.state(session)
-        existing = set(
-            await session.scalars(select(UserRow.id).where(UserRow.id.in_(selected)))
-        )
-        if existing != selected:
-            raise HTTPException(404, "user_not_found")
-        for uid in selected:
-            await access.store.add_exception(uid, actor.uid, "manual", session)
+        now = datetime.now(timezone.utc)
+        for start in range(0, len(selected), 500):
+            batch = selected[start : start + 500]
+            existing = set(
+                await session.scalars(select(UserRow.id).where(UserRow.id.in_(batch)))
+            )
+            if existing != set(batch):
+                raise HTTPException(404, "user_not_found")
+            granted = set(
+                await session.scalars(
+                    select(PlatformAccessUserRow.user_id).where(
+                        PlatformAccessUserRow.user_id.in_(batch)
+                    )
+                )
+            )
+            session.add_all(
+                [
+                    PlatformAccessUserRow(
+                        user_id=uid,
+                        source="manual",
+                        granted_by=actor.uid,
+                        granted_at=now,
+                    )
+                    for uid in batch
+                    if uid not in granted
+                ]
+            )
 
 
 async def set_user(
@@ -159,7 +179,12 @@ async def users_page(
                         )
                     )
             return PlatformAccessUser(
-                user_id=uid, username=row.username, email=row.email, sources=sources
+                user_id=uid,
+                username=row.username,
+                email=row.email,
+                first_name=row.first_name,
+                last_name=row.last_name,
+                sources=sources,
             )
 
     items = await asyncio.gather(*(project(row) for row in rows))

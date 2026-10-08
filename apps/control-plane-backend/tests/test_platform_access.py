@@ -825,7 +825,7 @@ async def test_bulk_endpoint_bounds_unknown_users_and_fresh_admin_permission(acc
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
-        for payload in ([], [first.uid] * 101, ["invalid"]):
+        for payload in ([], ["invalid"]):
             response = await client.post(
                 "/admin/platform/access/users", json={"user_ids": payload}
             )
@@ -838,7 +838,7 @@ async def test_bulk_endpoint_bounds_unknown_users_and_fresh_admin_permission(acc
         assert await access.store.exception(UUID(first.uid)) is None
         response = await client.post(
             "/admin/platform/access/users",
-            json={"user_ids": [first.uid, second.uid]},
+            json={"user_ids": [first.uid] * 101 + [second.uid]},
         )
         assert response.status_code == 204
         assert (
@@ -1317,3 +1317,51 @@ async def test_block_policy_never_admits_uninspected_truncated_claims(access):
     assert preview.conditions == ["unavailable"] and not preview.admitted
     row = await access.store.user(UUID(person.uid))
     assert path_key(["profile", "attribute"]) not in row.admission_attribute
+
+
+@pytest.mark.asyncio
+async def test_large_bulk_grants_and_late_batch_unknown_roll_back(access):
+    from sqlalchemy import func, select
+
+    actor = user("accepted")
+    ids = [UUID(int=index + 10000) for index in range(1001)]
+    async with access.store.mutation() as session:
+        session.add_all(
+            [
+                UserRow(
+                    id=uid,
+                    username=f"person{index}",
+                    first_name="Demo",
+                    last_name=f"Person{index}",
+                )
+                for index, uid in enumerate(ids)
+            ]
+        )
+        await session.flush()
+        await access.store.add_exception(ids[0], actor.uid, "t0", session)
+    with pytest.raises(HTTPException, match="user_not_found"):
+        await service.grant_users(access, actor, [*ids, UUID(int=2**128 - 1)])
+    async with access.store.read() as session:
+        assert (
+            await session.scalar(
+                select(func.count()).select_from(PlatformAccessUserRow)
+            )
+            == 1
+        )
+    await service.grant_users(access, actor, [*ids, *ids])
+    async with access.store.read() as session:
+        assert await session.scalar(
+            select(func.count()).select_from(PlatformAccessUserRow)
+        ) == len(ids)
+    assert (await access.store.exception(ids[0])).source == "t0"
+    page = await service.users_page(access, 0, 25, "Person1000")
+    assert page.total == 1
+    assert (
+        page.items[0].first_name == "Demo" and page.items[0].last_name == "Person1000"
+    )
+
+
+
+
+
+

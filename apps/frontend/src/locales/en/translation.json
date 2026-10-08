@@ -3245,7 +3245,7 @@
         "teams": "Teams and links",
         "activation": "Activation"
       },
-      "bulkHint": "Select up to 100 Fred users across searches or pages to add independent manual exceptions. Team authorization follows current membership; leaving the team removes that source.",
+      "bulkHint": "Select users across searches and pages to add independent exceptions. Team access follows current membership.",
       "allowSelected": "Allow selected users ({{count}})",
       "clearSelection": "Clear selection",
       "select": "Select",
@@ -3257,7 +3257,7 @@
       "t0Hint": "Import existing users once before activating filtering. Individual entries can be removed afterward.",
       "t0Preview": "{{count}} users to import; {{matching}} currently allowed by the rule.",
       "t0Done": "Initial import completed",
-      "t0Import": "Import existing users (T0)",
+      "t0Import": "Import existing users",
       "users": "Users",
       "search": "Search local users",
       "user": "User",

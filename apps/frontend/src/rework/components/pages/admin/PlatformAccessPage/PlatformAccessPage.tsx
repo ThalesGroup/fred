@@ -184,14 +184,12 @@ export default function PlatformAccessPage() {
                       <Checkbox
                         aria-label={t("rework.platformAccess.selectUser", { user: user.username || user.user_id })}
                         checked={selected.includes(user.user_id)}
-                        disabled={
-                          locked || users.isFetching || (selected.length >= 100 && !selected.includes(user.user_id))
-                        }
+                        disabled={locked || users.isFetching}
                         onChange={(event) => {
                           const checked = event.target.checked;
                           setSelected((current) =>
                             checked
-                              ? current.includes(user.user_id) || current.length >= 100
+                              ? current.includes(user.user_id)
                                 ? current
                                 : [...current, user.user_id]
                               : current.filter((id) => id !== user.user_id),
@@ -201,7 +199,7 @@ export default function PlatformAccessPage() {
                     ),
                   },
                   {
-                    label: t("rework.platformAccess.user"),
+                    label: t("rework.teamSettings.members.table.identifiant"),
                     size: "2fr",
                     cellRenderer: (user) => (
                       <span>
@@ -210,6 +208,16 @@ export default function PlatformAccessPage() {
                         {user.email}
                       </span>
                     ),
+                  },
+                  {
+                    label: t("rework.teamSettings.members.table.firstName"),
+                    size: "1fr",
+                    cellRenderer: (user) => user.first_name || "-",
+                  },
+                  {
+                    label: t("rework.teamSettings.members.table.lastName"),
+                    size: "1fr",
+                    cellRenderer: (user) => user.last_name || "-",
                   },
                   {
                     label: t("rework.platformAccess.sources"),

@@ -38,6 +38,8 @@ class PlatformAccessUser(BaseModel):
     user_id: str
     username: str | None
     email: str | None
+    first_name: str | None = None
+    last_name: str | None = None
     sources: list[AdmissionSource]
 
 
@@ -145,4 +147,4 @@ class PlatformAccessPolicyPreview(BaseModel):
 
 class GrantPlatformAccessUsers(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    user_ids: list[UUID] = Field(min_length=1, max_length=100)
+    user_ids: list[UUID] = Field(min_length=1)

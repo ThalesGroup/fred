@@ -111,7 +111,12 @@ class PlatformAccessStore:
             if query:
                 pattern = f"%{query}%"
                 statement = statement.where(
-                    or_(UserRow.username.ilike(pattern), UserRow.email.ilike(pattern))
+                    or_(
+                        UserRow.username.ilike(pattern),
+                        UserRow.email.ilike(pattern),
+                        UserRow.first_name.ilike(pattern),
+                        UserRow.last_name.ilike(pattern),
+                    )
                 )
             return list(
                 (
@@ -214,6 +219,8 @@ class PlatformAccessStore:
                     or_(
                         UserRow.username.ilike(f"%{query}%"),
                         UserRow.email.ilike(f"%{query}%"),
+                        UserRow.first_name.ilike(f"%{query}%"),
+                        UserRow.last_name.ilike(f"%{query}%"),
                     )
                 )
             return int((await session.scalar(statement)) or 0)
