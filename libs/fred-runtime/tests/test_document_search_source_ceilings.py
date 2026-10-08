@@ -131,8 +131,9 @@ async def test_removed_attachments_only_keyword_is_rejected(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     adapter, clients = _adapter(monkeypatch, "hybrid")
+    legacy_kwargs: dict[str, Any] = {"attachments_only": True}
     with pytest.raises(TypeError, match="attachments_only"):
-        await adapter.search("q", **{"attachments_only": True})
+        await adapter.search("q", **legacy_kwargs)
     assert clients[0].calls == []
 
 
