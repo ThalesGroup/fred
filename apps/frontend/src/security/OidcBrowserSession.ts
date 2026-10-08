@@ -99,7 +99,7 @@ export class OidcBrowserSession {
         return;
       }
       this.user = user;
-      window.history.replaceState({}, "", this.redirectUri);
+      window.history.replaceState({}, "", user.url_state ?? this.redirectUri);
     } else if (query.has("state")) {
       await this.manager.signoutRedirectCallback();
       window.history.replaceState({}, "", this.redirectUri);
@@ -115,7 +115,9 @@ export class OidcBrowserSession {
       onAuthenticated();
       return;
     }
-    await this.manager.signinRedirect();
+    // redirect_uri is the site root; carry the requested page through the provider round trip.
+    const { pathname, search, hash } = window.location;
+    await this.manager.signinRedirect({ url_state: pathname + search + hash });
   }
 
   async logout(): Promise<void> {

@@ -20,7 +20,7 @@ import { OidcBrowserSession } from "./OidcBrowserSession";
 
 const sessions: OidcBrowserSession[] = [];
 
-function person(seconds = 300, subject = "person"): User {
+function person(seconds = 300, subject = "person", url_state?: string): User {
   const now = Math.floor(Date.now() / 1000);
   const profile = { iss: "https://identity.example", aud: "ui", sub: subject, iat: now, exp: now + seconds };
   const payload = btoa(JSON.stringify(profile)).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
@@ -30,6 +30,7 @@ function person(seconds = 300, subject = "person"): User {
     token_type: "Bearer",
     expires_at: now + seconds,
     profile,
+    url_state,
   });
 }
 
@@ -309,5 +310,33 @@ describe("OIDC renewal with real user storage", () => {
     const headers = fetch.mock.calls[0][1]?.headers as Headers;
     expect(headers.has("authorization")).toBe(false);
     expect(logout).toHaveBeenCalledOnce();
+  });
+});
+
+describe("OIDC sign-in redirect keeps the requested page", () => {
+  it("sends the current path, query and hash as url_state", async () => {
+    window.history.replaceState({}, "", "/help?topic=agents#tools");
+    const session = newSession();
+    const redirect = vi.spyOn(session.manager, "signinRedirect").mockResolvedValue();
+
+    await session.login(vi.fn());
+    expect(redirect).toHaveBeenCalledWith({ url_state: "/help?topic=agents#tools" });
+  });
+
+  it("returns to url_state after the callback, or to the root without it", async () => {
+    for (const [urlState, expected] of [
+      ["/help?topic=agents#tools", "/help?topic=agents#tools"],
+      [undefined, "/"],
+    ] as const) {
+      const session = newSession();
+      const user = person(600, "person", urlState);
+      vi.spyOn(session.manager, "signinRedirectCallback").mockResolvedValue(user);
+      window.history.replaceState({}, "", "/?code=synthetic&state=synthetic");
+      const authenticated = vi.fn();
+
+      await session.login(authenticated);
+      expect(authenticated).toHaveBeenCalledOnce();
+      expect(window.location.pathname + window.location.search + window.location.hash).toBe(expected);
+    }
   });
 });
