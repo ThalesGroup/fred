@@ -48,7 +48,8 @@ ERROR_GUIDANCE = {
     "provider_failed": "The search engine failed; retry later or answer without web search and say so.",
     "unavailable": "The site or the Internet could not be reached (network, DNS or proxy); answer without it and say so.",
     "activity_unavailable": "Web research is suspended because its activity log cannot be written; answer without it.",
-    "quota_exceeded": "The user's daily web research quota is reached until midnight UTC; answer without it and tell the user.",
+    "quota_exceeded": "The user's daily web search quota is reached until midnight UTC; do not search again, answer with what you have and tell the user.",
+    "quota_exceeded.fetch_url": "The user's daily page-read quota is reached until midnight UTC; do not read more pages, answer with what you have and tell the user.",
     "rejected": "The request was rejected; do not retry it.",
     "invalid_response": "The response could not be read; try another source.",
 }
@@ -96,7 +97,10 @@ class WebResearchCapability(AgentCapability[EmptyModel, EmptyModel, EmptyModel])
                 content = json.dumps(
                     {
                         "error_code": exc.code,
-                        "message": ERROR_GUIDANCE.get(exc.code, ""),
+                        "message": ERROR_GUIDANCE.get(
+                            f"{exc.code}.{request.operation}",
+                            ERROR_GUIDANCE.get(exc.code, ""),
+                        ),
                     }
                 )
                 return content, ToolInvocationResult(

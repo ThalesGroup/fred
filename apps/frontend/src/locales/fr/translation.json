@@ -1816,7 +1816,8 @@
           "busy": "La recherche web est saturée, réessayez dans un instant.",
           "http_error": "Le site a renvoyé une erreur HTTP (page absente ou accès refusé).",
           "proxy_refused": "Le proxy réseau a refusé ce site (bloqué par la politique de sécurité).",
-          "quota_exceeded": "Quota journalier de recherche web atteint, réessayez après minuit UTC."
+          "quota_exceeded": "Quota journalier de recherches web atteint, réessayez après minuit UTC.",
+          "quota_exceeded_fetch": "Quota journalier de lectures de pages atteint, réessayez après minuit UTC."
         }
       }
     },

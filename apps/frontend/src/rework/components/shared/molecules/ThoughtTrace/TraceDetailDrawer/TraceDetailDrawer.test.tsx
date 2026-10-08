@@ -656,6 +656,15 @@ describe("TraceDetailDrawer web research", () => {
     expect(html).not.toContain("error_code");
   });
 
+  it("says which daily quota is spent", () => {
+    const search = webEntry("web_search", { query: "python" }, { error_code: "quota_exceeded" }, false);
+    const fetch = webEntry("fetch_url", { url: "https://python.org/" }, { error_code: "quota_exceeded" }, false);
+    const searchHtml = renderToStaticMarkup(<TraceDetailDrawer entry={search} onClose={() => undefined} />);
+    const fetchHtml = renderToStaticMarkup(<TraceDetailDrawer entry={fetch} onClose={() => undefined} />);
+    expect(searchHtml).toContain("rework.chatTrace.webResearch.errors.quota_exceeded<");
+    expect(fetchHtml).toContain("rework.chatTrace.webResearch.errors.quota_exceeded_fetch");
+  });
+
   it("shows the remaining daily quota only when the deployment caps the operation", () => {
     const capped = webEntry(
       "web_search",

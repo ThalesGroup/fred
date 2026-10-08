@@ -204,3 +204,24 @@ def test_fetch_tool_tells_the_model_to_focus_long_pages():
     assert "without focus and with offset set to next_offset" in fetch.description
     schema = cast(type[BaseModel], fetch.args_schema).model_json_schema()
     assert "Never combine with offset" in schema["properties"]["focus"]["description"]
+
+
+class QuotaPort(Port):
+    async def execute(self, request):
+        raise WebResearchError("quota_exceeded")
+
+
+@pytest.mark.asyncio
+async def test_quota_guidance_names_the_spent_quota():
+    tools = {t.name: t for t in WebResearchCapability().tools(context(QuotaPort()))}
+    messages = {}
+    for name, args in (
+        ("web_search", {"query": "q"}),
+        ("fetch_url", {"url": "https://a.org/"}),
+    ):
+        result = await tools[name].ainvoke(
+            {"type": "tool_call", "name": name, "id": name, "args": args}
+        )
+        messages[name] = json.loads(result.content)["message"]
+    assert "web search quota" in messages["web_search"]
+    assert "page-read quota" in messages["fetch_url"]

@@ -93,7 +93,14 @@ export function WebResearchToolDetail({ kind, target, result }: WebResearchToolD
           )}
         </div>
       )}
-      {result?.kind === "error" && <div className={styles.errorBox}>{errorText(result.errorCode)}</div>}
+      {result?.kind === "error" && (
+        <div className={styles.errorBox}>
+          {/* The search and page-read quotas are separate: say which one is spent. */}
+          {errorText(
+            result.errorCode === "quota_exceeded" && kind === "fetchUrl" ? "quota_exceeded_fetch" : result.errorCode,
+          )}
+        </div>
+      )}
       {result?.kind === "pages" && (
         <div className={styles.toolSection}>
           <p className={styles.sectionLabel}>{t("rework.chatTrace.sources", { count: result.pages.length })}</p>

@@ -1816,7 +1816,8 @@
           "busy": "Web research is busy, try again shortly.",
           "http_error": "The site returned an HTTP error (missing page or access denied).",
           "proxy_refused": "The network proxy refused this site (blocked by security policy).",
-          "quota_exceeded": "Daily web research quota reached, try again after midnight UTC."
+          "quota_exceeded": "Daily web search quota reached, try again after midnight UTC.",
+          "quota_exceeded_fetch": "Daily page-read quota reached, try again after midnight UTC."
         }
       }
     },
