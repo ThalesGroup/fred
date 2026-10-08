@@ -7,12 +7,28 @@ deletions in this task file or the PR, separating tests, generated files, migrat
 tooling and docs. Do not create another status ledger. Run broad suites/reviews at
 integration, repeating only evidence invalidated by subsequent changes or failures.
 
-- [ ] 0.1 Obtain developer confirmation of the reconciled proposal, design and acceptance scenarios before implementation; record the confirmed planning commit in the PR.
+- [x] 0.1 Obtain developer confirmation of the reconciled proposal, design and acceptance scenarios before implementation; record the confirmed planning commit in the PR.
+  Confirmed in conversation on 2026-10-08: planning commit `58e0eeb07f6127b6425e741998da847091f5aa97`. Carry this reference into the single implementation PR when opened.
 - [ ] 0.2 Capture the starting commit, relevant production LOC/concepts and a repeatable isolated performance baseline using existing fixtures/metrics; verify recorded requests, whole-turn tool counts, FGA operations/attempts, SQL rows and latency for fixed contexts at increasing corpus sizes, with real PostgreSQL/OpenFGA and controlled model behavior.
+  Initial evidence at `58e0eeb`: 28 existing real-OpenFGA tests passed. An isolated
+  PostgreSQL 17/OpenFGA 1.15.1 primitive probe with 200 teams/2,000 users measured
+  100/1,000 individual document checks for 100/1,000 requested documents (88/709 ms,
+  single local observations, not capacity claims). Global document ListObjects
+  used one logical operation with growing result cardinality. Raw evidence and
+  the probe are in ignored `.fred-test/rebac-baseline/`; this is not a full-turn
+  baseline and does not close this task. Starting physical Python lines in the
+  selected ReBAC/team/document/metadata/tag/vector-search modules: 11,016.
 
 ## 1. SQL and ReBAC foundation
 
 - [ ] 1.1 Introduce the bounded space identity and explicit organization/team/project parentage, personal-team kind and user organization; verify database constraints reject invalid kinds/parents and permit same team names in distinct organizations without changing existing IDs.
+  First schema block adds `space` and its typed parent/name/personal-owner
+  constraints, owned by control-plane. User organization, existing-team linkage,
+  provisioning and runtime consumers remain pending; this is not a completed
+  ownership cutover. Targeted migration/ownership suite: 50 passed (SQLite and
+  real PostgreSQL). Fresh PostgreSQL `alembic upgrade head` passed; `alembic check`
+  found no drift; sole head `bc21d49e01a7`. These checks concern the structural
+  table, not the complete offline translator or final PR readiness.
 - [ ] 1.2 Separate platform anchors from organizations and implement four cumulative local roles plus parent-team-dependent project permissions in the existing FGA facade; verify the allow/deny matrix with real OpenFGA, including local-admin-without-analyst and organization-analyst-without-descendant-access.
 - [ ] 1.3 Add linear, correctly owned Alembic migrations and target-schema installation/provisioning inputs, preserving shared-table ownership; verify one head per backend, empty-database upgrade, schema checks and explicit initial organization/team/personal assignment.
 - [ ] 1.4 Establish protected-request authorization and canonical ancestry resolution with existing higher-consistency/batch support; verify revoked access is denied on the next request and request-local reuse does not become a cross-request positive cache.

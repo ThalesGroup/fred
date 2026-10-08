@@ -35,15 +35,16 @@ The IdP supplies identity; Fred/OpenFGA supplies authorization.
 Use a shared `space` identity/ancestry table with a closed discriminator:
 organization, team or project. An organization is a root, a team has an organization
 parent, and a project has a collaborative-team parent. Existing team-specific
-settings remain a one-to-one extension; personal is an explicit team kind with one
-owner and no projects. Preserve existing IDs. This replaces ambiguous ownership
+settings remain a one-to-one extension; the structural team kind and personal
+owner live on the space identity so typed foreign keys exclude personal-team
+project parents. Preserve existing IDs. This replaces ambiguous ownership
 references instead of adding a second tree beside `teammetadata`.
 
 | Record | Canonical structural information |
 | --- | --- |
-| Space | ID, kind, name, immutable typed parent; root organizations have no parent |
+| Space | ID, kind, name, immutable typed parent; team kind and unique personal owner; root organizations have no parent |
 | User | Explicit organization reference; never selected from first joined team or an IdP role |
-| Team settings | Team-space reference, collaborative/personal kind, unique personal owner, existing settings |
+| Team settings | Team-space reference and existing settings |
 | Corpus folder | Space reference, local parent folder and name |
 | Corpus document | One folder reference and scalar document name; no membership array |
 | Managed agent | Owning space reference, existing runtime binding and tuning |
