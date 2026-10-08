@@ -3344,13 +3344,13 @@
         "delegatedHint": "Changing a claim path may refuse delegated requests until the user makes a new direct request. Independent exceptions and teams remain valid."
       },
       "picker": {
-        "choose": "Choose from my JWT",
-        "title": "Choose a claim",
-        "own": "My JWT claims",
-        "observed": "Other observed claims",
-        "ownHint": "This is the verified access-token payload of your current session. Click a text or text-list key to select it.",
-        "observedHint": "Names and types observed in verified user tokens. A claim may be absent from your session; other users' values are never shown.",
-        "search": "Search claim keys",
+        "choose": "Choose an account field",
+        "title": "Choose a field",
+        "own": "My account fields",
+        "observed": "Other observed fields",
+        "ownHint": "Choose a text field from your current account. Technical token fields and nested properties are hidden by default.",
+        "observedHint": "Root text fields observed in verified user tokens. Other users' values are never shown.",
+        "search": "Search field names",
         "unsupported": "This value cannot be filtered as text.",
         "truncated": "Some values were omitted because the token exceeds display limits. Unavailable fields cannot be selected.",
         "empty": "No claims to display. You can enter a path in Advanced.",
@@ -3359,7 +3359,12 @@
         "copyHint": "Optionally click one current value to use it as the filter value.",
         "copied": "Value to copy into the draft",
         "useField": "Use this field",
-        "advanced": "Advanced: enter the exact path manually"
+        "advanced": "Advanced: enter the exact path manually",
+        "ownAdvancedHint": "Verified claims from your current access token, including technical fields and nested properties. Click a text or text-list key to select it.",
+        "observedAdvancedHint": "All observed field names and types, including nested paths and text lists. Other users' values are never shown.",
+        "advancedFields": "Show advanced fields",
+        "simpleFields": "Show simple fields",
+        "simpleEmpty": "No matching root text fields. Change the search or show advanced fields."
       },
       "verificationFailed": "Access verification unavailable"
     }

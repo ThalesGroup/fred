@@ -3344,13 +3344,13 @@
         "delegatedHint": "Changer un chemin de claim peut refuser les requêtes déléguées jusqu'à une nouvelle requête directe de l'utilisateur. Les exceptions et les équipes restent valides."
       },
       "picker": {
-        "choose": "Choisir dans mon JWT",
-        "title": "Choisir un claim",
-        "own": "Les claims de mon JWT",
-        "observed": "Autres claims observés",
-        "ownHint": "Voici les claims vérifiés du token de votre session actuelle. Cliquez sur une clé contenant du texte ou une liste de textes pour la sélectionner.",
-        "observedHint": "Noms et types observés dans les tokens vérifiés des utilisateurs. Un claim peut être absent de votre session ; les valeurs des autres utilisateurs ne sont jamais affichées.",
-        "search": "Rechercher une clé",
+        "choose": "Choisir un champ de mon compte",
+        "title": "Choisir un champ",
+        "own": "Champs de mon compte",
+        "observed": "Autres champs observés",
+        "ownHint": "Choisissez un champ texte de votre compte actuel. Les champs techniques du token et les propriétés imbriquées sont masqués par défaut.",
+        "observedHint": "Champs texte à la racine observés dans les tokens vérifiés. Les valeurs des autres utilisateurs ne sont jamais affichées.",
+        "search": "Rechercher un champ",
         "unsupported": "Cette valeur ne peut pas être filtrée comme du texte.",
         "truncated": "Certaines valeurs dépassent les limites d'affichage et ont été omises. Les champs indisponibles ne peuvent pas être sélectionnés.",
         "empty": "Aucun claim à afficher. Vous pouvez saisir un chemin dans Avancé.",
@@ -3359,7 +3359,12 @@
         "copyHint": "Vous pouvez cliquer sur une valeur actuelle pour la reprendre comme valeur du filtre.",
         "copied": "Valeur à copier dans le brouillon",
         "useField": "Utiliser ce champ",
-        "advanced": "Avancé : saisir le chemin exact manuellement"
+        "advanced": "Avancé : saisir le chemin exact manuellement",
+        "ownAdvancedHint": "Claims vérifiés de votre token actuel, y compris les champs techniques et les propriétés imbriquées. Cliquez sur une clé contenant du texte ou une liste de textes.",
+        "observedAdvancedHint": "Tous les noms et types observés, y compris les chemins imbriqués et les listes de textes. Les valeurs des autres utilisateurs ne sont jamais affichées.",
+        "advancedFields": "Afficher les champs avancés",
+        "simpleFields": "Afficher les champs simples",
+        "simpleEmpty": "Aucun champ texte à la racine ne correspond. Modifiez la recherche ou affichez les champs avancés."
       },
       "verificationFailed": "Vérification de l'accès indisponible"
     }

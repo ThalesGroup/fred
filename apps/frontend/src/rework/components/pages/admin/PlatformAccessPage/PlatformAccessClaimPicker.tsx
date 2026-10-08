@@ -11,6 +11,34 @@ import type {
 import { usePlatformAccessOwnClaimsQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import styles from "./PlatformAccessClaimPicker.module.css";
 
+const TOKEN_METADATA = new Set([
+  "iss",
+  "sub",
+  "aud",
+  "typ",
+  "azp",
+  "sid",
+  "acr",
+  "amr",
+  "jti",
+  "nonce",
+  "scope",
+  "exp",
+  "iat",
+  "nbf",
+  "auth_time",
+  "at_hash",
+  "c_hash",
+  "s_hash",
+  "cnf",
+  "act",
+  "may_act",
+  "client_id",
+  "session_state",
+  "allowed-origins",
+]);
+const isRootAttribute = (path: string[]) => path.length === 1 && !TOKEN_METADATA.has(path[0]);
+
 export default function PlatformAccessClaimPicker({
   condition,
   observed,
@@ -27,6 +55,7 @@ export default function PlatformAccessClaimPicker({
   const { t } = useTranslation();
   const own = usePlatformAccessOwnClaimsQuery(undefined, { refetchOnMountOrArgChange: true });
   const [source, setSource] = useState<"own" | "observed">("own");
+  const [advanced, setAdvanced] = useState(false);
   const [search, setSearch] = useState("");
   const [path, setPath] = useState<string[]>();
   const [copied, setCopied] = useState<string>();
@@ -43,6 +72,14 @@ export default function PlatformAccessClaimPicker({
       typeof value === "object" &&
       !Array.isArray(value) &&
       Object.entries(value).some(([key, child]) => hasMatch(child, [...next, key])));
+  const ownFields = Object.entries(facts?.claims ?? {}).filter(
+    ([key, value]) =>
+      (advanced || (typeof value === "string" && isRootAttribute([key]) && selectable.has(JSON.stringify([key])))) &&
+      hasMatch(value, [key]),
+  );
+  const observedFields = observed.filter(
+    (claim) => (advanced || (isRootAttribute(claim.path) && claim.types.includes("string"))) && matches(claim.path),
+  );
   const tree = (value: unknown, next: string[], key: string) => {
     if (!hasMatch(value, next)) return null;
     const identity = JSON.stringify(next);
@@ -128,7 +165,22 @@ export default function PlatformAccessClaimPicker({
             </Button>
           ))}
         </div>
-        <p>{t(`rework.platformAccess.picker.${source}Hint`)}</p>
+        <p>{t(`rework.platformAccess.picker.${source}${advanced ? "Advanced" : ""}Hint`)}</p>
+        <div>
+          <Button
+            color="primary"
+            variant="outlined"
+            size="small"
+            aria-expanded={advanced}
+            onClick={() => {
+              setAdvanced(!advanced);
+              setPath(undefined);
+              setCopied(undefined);
+            }}
+          >
+            {t(`rework.platformAccess.picker.${advanced ? "simpleFields" : "advancedFields"}`)}
+          </Button>
+        </div>
         <TextInput
           label={t("rework.platformAccess.picker.search")}
           value={search}
@@ -149,13 +201,11 @@ export default function PlatformAccessClaimPicker({
               <>
                 {facts.truncated && <p role="status">{t("rework.platformAccess.picker.truncated")}</p>}
                 <div className={styles.json}>
-                  {"{"}
-                  <div className={styles.children}>
-                    {Object.entries(facts.claims).map(([key, value]) => tree(value, [key], key))}
-                  </div>
-                  {"}"}
+                  {advanced && "{"}
+                  <div className={styles.children}>{ownFields.map(([key, value]) => tree(value, [key], key))}</div>
+                  {advanced && "}"}
                 </div>
-                {!Object.keys(facts.claims).length && <p>{t("rework.platformAccess.picker.empty")}</p>}
+                {!ownFields.length && <p>{t(`rework.platformAccess.picker.${advanced ? "empty" : "simpleEmpty"}`)}</p>}
               </>
             )}
           </>
@@ -163,26 +213,22 @@ export default function PlatformAccessClaimPicker({
           <>
             {catalogFailed && <p role="alert">{t("rework.platformAccess.rule.claimsFailed")}</p>}
             <div className={styles.catalog}>
-              {observed
-                .filter((claim) => matches(claim.path))
-                .map((claim) => (
-                  <button
-                    type="button"
-                    className={styles.key}
-                    key={JSON.stringify(claim.path)}
-                    aria-pressed={JSON.stringify(path) === JSON.stringify(claim.path)}
-                    onClick={() => select(claim.path)}
-                  >
-                    {claim.path.map((key) => JSON.stringify(key)).join(" > ")}{" "}
-                    <span className={styles.explanation}>
-                      {claim.types.map((type) => t(`rework.platformAccess.rule.type.${type}`)).join(", ")}
-                    </span>
-                  </button>
-                ))}
+              {observedFields.map((claim) => (
+                <button
+                  type="button"
+                  className={styles.key}
+                  key={JSON.stringify(claim.path)}
+                  aria-pressed={JSON.stringify(path) === JSON.stringify(claim.path)}
+                  onClick={() => select(claim.path)}
+                >
+                  {claim.path.map((key) => JSON.stringify(key)).join(" > ")}{" "}
+                  <span className={styles.explanation}>
+                    {claim.types.map((type) => t(`rework.platformAccess.rule.type.${type}`)).join(", ")}
+                  </span>
+                </button>
+              ))}
             </div>
-            {!observed.filter((claim) => matches(claim.path)).length && (
-              <p>{t("rework.platformAccess.picker.empty")}</p>
-            )}
+            {!observedFields.length && <p>{t(`rework.platformAccess.picker.${advanced ? "empty" : "simpleEmpty"}`)}</p>}
           </>
         )}
         {path && (

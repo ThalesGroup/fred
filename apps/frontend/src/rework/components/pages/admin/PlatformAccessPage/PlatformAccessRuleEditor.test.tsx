@@ -15,12 +15,23 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
     data: [
       { path: ["profile", "unit"], types: ["string"] },
       { path: ["a.b"], types: ["string_array"] },
+      { path: ["department"], types: ["string"] },
+      { path: ["iss"], types: ["string"] },
     ],
   }),
   usePlatformAccessOwnClaimsQuery: () => ({
     data: {
-      claims: { profile: { unit: "actual" }, "a.b": ["one", "two", "a.b[2]"], exp: 123, enabled: true },
-      selectable_paths: [["profile", "unit"], ["a.b"]],
+      claims: {
+        department: "Customer Services",
+        name: "Demo person",
+        iss: "https://identity.example.test/realms/demo",
+        scope: "openid profile",
+        profile: { unit: "actual" },
+        "a.b": ["one", "two", "a.b[2]"],
+        exp: 123,
+        enabled: true,
+      },
+      selectable_paths: [["department"], ["name"], ["iss"], ["scope"], ["profile", "unit"], ["a.b"]],
       truncated: false,
     },
   }),
@@ -188,6 +199,11 @@ it("selects real session keys into a draft without saving or interpreting litera
   )!;
   act(() => choose.click());
   const dialog = document.querySelector('[role="dialog"]')!;
+  act(() =>
+    [...dialog.querySelectorAll("button")]
+      .find((node) => node.textContent === "rework.platformAccess.picker.advancedFields")!
+      .click(),
+  );
   const key = [...dialog.querySelectorAll("button")].find((node) => node.textContent === '\"a.b\"')!;
   act(() => key.click());
   expect(hooks.save).not.toHaveBeenCalled();
@@ -210,6 +226,11 @@ it("copies one current array element explicitly and keeps unsupported keys disab
       .click(),
   );
   const dialog = document.querySelector('[role="dialog"]')!;
+  act(() =>
+    [...dialog.querySelectorAll("button")]
+      .find((node) => node.textContent === "rework.platformAccess.picker.advancedFields")!
+      .click(),
+  );
   const find = (label: string) => [...dialog.querySelectorAll("button")].find((node) => node.textContent === label)!;
   expect(find('"exp"').disabled).toBe(true);
   expect(find('"enabled"').disabled).toBe(true);
@@ -228,6 +249,11 @@ it("keeps Enter on a JSON branch from implicitly confirming a selected field", (
       .click(),
   );
   const dialog = document.querySelector('[role="dialog"]')!;
+  act(() =>
+    [...dialog.querySelectorAll("button")]
+      .find((node) => node.textContent === "rework.platformAccess.picker.advancedFields")!
+      .click(),
+  );
   act(() => [...dialog.querySelectorAll("button")].find((node) => node.textContent === '\"a.b\"')!.click());
   const summary = dialog.querySelector("summary")!;
   act(() => summary.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
@@ -244,10 +270,83 @@ it("reuses a current value as a literal when the condition uses regex", () => {
       .click(),
   );
   const dialog = document.querySelector('[role="dialog"]')!;
+  act(() =>
+    [...dialog.querySelectorAll("button")]
+      .find((node) => node.textContent === "rework.platformAccess.picker.advancedFields")!
+      .click(),
+  );
   const find = (label: string) => [...dialog.querySelectorAll("button")].find((node) => node.textContent === label)!;
   act(() => find('"a.b"').click());
   act(() => find('"a.b[2]"').click());
   act(() => find("rework.platformAccess.picker.useField").click());
   expect(input("regex").value).toBe("a\\.b\\[2\\]");
   expect(hooks.save).not.toHaveBeenCalled();
+});
+
+const openPicker = () => {
+  render();
+  act(() =>
+    [...host.querySelectorAll("button")]
+      .find((node) => node.textContent === "rework.platformAccess.picker.choose")!
+      .click(),
+  );
+  return document.querySelector('[role="dialog"]')!;
+};
+const pickerButton = (dialog: Element, label: string) =>
+  [...dialog.querySelectorAll("button")].find((node) => node.textContent?.trim() === label);
+
+it("defaults to root text account attributes and explicitly copies a selected value", async () => {
+  const dialog = openPicker();
+  expect(pickerButton(dialog, '"department"')).toBeDefined();
+  expect(pickerButton(dialog, '"name"')).toBeDefined();
+  for (const key of ["iss", "scope", "profile", "a.b", "exp", "enabled"])
+    expect(pickerButton(dialog, JSON.stringify(key))).toBeUndefined();
+  expect(dialog.querySelector("summary")).toBeNull();
+  act(() => pickerButton(dialog, '"department"')!.click());
+  act(() => pickerButton(dialog, '"Customer Services"')!.click());
+  act(() => pickerButton(dialog, "rework.platformAccess.picker.useField")!.click());
+  expect(input("value").value).toBe("Customer Services");
+  expect(hooks.save).not.toHaveBeenCalled();
+  await act(async () => button("test").click());
+  expect(hooks.preview.mock.calls[0][0].platformAccessPolicy.conditions[0].claim).toEqual(["department"]);
+});
+
+it("limits observed names to root text attributes until advanced fields are requested", () => {
+  const dialog = openPicker();
+  act(() => pickerButton(dialog, "rework.platformAccess.picker.observed")!.click());
+  expect(dialog.textContent).toContain('"department"');
+  expect(dialog.textContent).not.toContain('"iss"');
+  expect(dialog.textContent).not.toContain('"profile"');
+  expect(dialog.textContent).not.toContain('"a.b"');
+  act(() => pickerButton(dialog, "rework.platformAccess.picker.advancedFields")!.click());
+  expect(dialog.textContent).toContain('"iss"');
+  expect(dialog.textContent).toContain('"profile" > "unit"');
+  expect(dialog.textContent).toContain('"a.b"');
+});
+
+it("clears hidden advanced selections and copied values without changing the draft", () => {
+  const dialog = openPicker();
+  act(() => pickerButton(dialog, "rework.platformAccess.picker.advancedFields")!.click());
+  act(() => pickerButton(dialog, '"a.b"')!.click());
+  act(() => pickerButton(dialog, '"two"')!.click());
+  act(() => pickerButton(dialog, "rework.platformAccess.picker.simpleFields")!.click());
+  expect(pickerButton(dialog, "rework.platformAccess.picker.useField")!.disabled).toBe(true);
+  expect(dialog.textContent).not.toContain("rework.platformAccess.picker.copied");
+  expect(input("value").value).toBe("accepted");
+  act(() => pickerButton(dialog, "rework.platformAccess.picker.advancedFields")!.click());
+  expect(pickerButton(dialog, "rework.platformAccess.picker.useField")!.disabled).toBe(true);
+  expect(hooks.save).not.toHaveBeenCalled();
+});
+
+it("reports an empty simple search without exposing hidden token metadata", () => {
+  const dialog = openPicker();
+  change(dialog.querySelector("input")!, "iss");
+  expect(dialog.textContent).toContain("rework.platformAccess.picker.simpleEmpty");
+  expect(pickerButton(dialog, '"iss"')).toBeUndefined();
+  act(() => pickerButton(dialog, "rework.platformAccess.picker.advancedFields")!.click());
+  expect(pickerButton(dialog, '"iss"')).toBeDefined();
+  act(() => pickerButton(dialog, "rework.platformAccess.picker.simpleFields")!.click());
+  change(dialog.querySelector("input")!, "DEPART");
+  expect(pickerButton(dialog, '"department"')).toBeDefined();
+  expect(dialog.textContent).not.toContain("rework.platformAccess.picker.simpleEmpty");
 });
