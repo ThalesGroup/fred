@@ -13,8 +13,8 @@
 // limitations under the License.
 
 import type { StatusBadgeTone } from "../../atoms/StatusBadge/StatusBadge.tsx";
-import Icon from "@shared/atoms/Icon/Icon";
-import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
+import { MaterialIcon } from "../../atoms/Icon/Icon.tsx";
+import { Tooltip } from "../../atoms/Tooltip/Tooltip.tsx";
 import styles from "./KpiStatCard.module.scss";
 
 export interface KpiStatCardProps {
@@ -69,7 +69,7 @@ export default function KpiStatCard({
         {hint && (
           <Tooltip text={hint}>
             <span className={styles.hint} tabIndex={0} aria-label={hint}>
-              <Icon category="outlined" type="info" />
+              <MaterialIcon type="info" />
             </span>
           </Tooltip>
         )}
