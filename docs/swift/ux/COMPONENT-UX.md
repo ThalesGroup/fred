@@ -1673,9 +1673,7 @@ Renders agent-produced downloadable artifacts (`LinkPart` ui_parts on the final 
 chips below an assistant reply. The `/fs/download` route is session-authenticated, so a chip click
 runs an **authenticated fetch (live Bearer) → blob → save** via the shared `downloadAuthed` util —
 the same proxy-through-KF mechanism as the Resources file browser. A plain markdown anchor would
-navigate without a token and fail ("No authentication token provided"). Signed share links
-(`/fs/share` token-in-URL) are intentionally **not** used here — reserved for explicit external
-sharing — to avoid credential leakage, link rot, and stale-authorization bypass of live ReBAC.
+navigate without a token and fail ("No authentication token provided").
 
 #### Open UX issues
 
@@ -2819,7 +2817,8 @@ Step 1: template browser. Step 2: a full-width `ButtonGroup` tab strip (`variant
 
 - **Général** — Nom, Rôle, Description, plus every tuning field whose `ui.group` is not `"Prompts"` (the pre-#2105 catch-all "Settings" tab content — `Settings`, `Credentials`, `Document reading`, `Mindmap`, `Grounding`, `Comparison`, `Fallback`, ... — verified against real `fred-agents` templates). No template-side (`ui.group`) changes; purely a frontend regrouping.
 - **Prompts** — every `ui.group == "Prompts"` field, unchanged content.
-- **Outils** - the Simple Team resources pack enables corpus access and conversation attachments together. A switch below library scoping narrows it to attachments-only search, withdrawing similarity access while retaining tabular analysis for attached CSV and Excel files and keeping the pack on. Advanced keeps each capability and document-access option separate. A complete legacy attachments-only selection reads on in the scoped profile; an incomplete selection leaves the pack off while its selected members remain visible in the pack's list. Existing agent selections are not rewritten on form load or unrelated save.
+- **Outils** - the Simple view offers two document packs, Attachments and Team documents, each turning on one `document_access` source (`attachments` / `team_documents`). Shared members (document access, tabular, summarize, verbatim, extract) stay while either pack is on; similarity belongs to Team documents only; turning off the last pack deselects document access. Library binding lives under Team documents. A pack reads on when document access is selected and its source is on; legacy configs are read through the source mapping on load, without rewriting the stored selection. In Advanced, the Documents card shows the two source switches first, hides the scope fields while Team documents is off (a hidden `visible_when` gate also hides its dependants), and turning off the last source deselects the card (both sources reset to on). Pack cards are compact for small screens: `radius-s`, 12px padding, a 32px icon, `title-small` / `body-small` text and 32px section headers. They have no switch: the card body is the pack's switch (`role="switch"`, pointer cursor, its own hover), and a separate full-height end segment with its own hover expands the included capabilities. The on state shows through the primary title and icon colors, and a missing admin-enabled capability shows as an error icon next to the title. Inactive pack and Advanced cards use `surface-container-low`, active ones `surface-container` with a 0.5px primary border at 70% (pack cards). Reasoning comes first; turning it on also ticks "on by default". The tab header reads "Activer des capacités pour votre agent" with a "En savoir plus" link to the Help Center Capabilities page; the info banner and the empty "Actions and integration" section are gone; Advanced switches are `small`.
+- **Agent form layout** - 720px max width; small section tabs (equal widths, 36rem) centered over a full-width 50% `outline-muted` divider at mid-height; Name (40%) and Role (60%) share one row. `SettingsModal` exposes `--settings-modal-max-width`, `--settings-modal-header-padding`, `--settings-modal-body-padding-inline` and `--settings-modal-body-padding-bottom`, and its header actions wrap under the title only when they no longer fit in the card.
 - **Engagement** — required "Cas d'usage" field (large `TextArea`, label + placeholder, no field-level hint text), persisted as `ManagedAgentInstanceSummary.usage_statement` (screens agent purpose for platform/org risk). A compliance-framing paragraph sits above the textarea ("Afin de garantir la conformité de votre agent aux normes et règlementations en vigueur...", i18n'd) explaining why the field is mandatory.
 
 Edit mode: same 4 tabs → metadata footer (created_by · relative date) → delete button.
@@ -3789,9 +3788,10 @@ Toggling a capability no longer changes the name's font size
 Active emphasis is now weight + `--primary` color at identical metrics; only
 the config sub-form still expands, which is expected.
 
-### `FilesystemWorkspace` / `AgentsWorkspace` (Resources tabs — Mon espace/Espace d'équipe/Agents)
+### Historical: `FilesystemWorkspace` / `AgentsWorkspace` (removed in #2985)
 
-Expanding an empty folder now shows the same explanatory hint pattern as the
+These Resources tabs were removed in #2985. Previously, expanding an empty
+folder showed the same explanatory hint pattern as the
 corpus workspace (`.hint`, `--on-surface-muted`, body-small) instead of an
 empty dropdown: generic `rework.resources.empty.folder` for folders, dedicated
 `empty.agentFiles` inside an agent's space, and `empty.agents` when no agent
@@ -3816,12 +3816,17 @@ The Document access capability now offers the exact configuration surface and
 composer controls of "Document search (legacy)": Document library picker and
 Document picker toggles (split), Bind to specific libraries gating the
 bound-libraries tree (`ui.visible_when`; bound ids are inert while unbound,
-like the legacy tool), File attachments, Search policy picker (configured
+like the legacy tool), the Attachments / Team documents sources (2026-10-07,
+replacing File attachments and Search in attachments only; Team documents off
+hides the scope pickers), Search policy picker (configured
 policy becomes the picker default; enforced only when the picker is hidden),
 RAG scope picker + default. All emitted as the same stock widgets — the
 choices travel on `RuntimeContext`, which the v2 document-search adapter
-already honors. The manifest version stays 0.1.0 pre-GA; stored older slices
-revalidate unchanged (the single scope toggle maps onto the split ones, and a
+already honors. "Documents only" / "Documents uniquement" includes attachments
+and team documents according to the enabled sources, without general-knowledge
+supplementation. It remains available for attachments-only agents. The manifest
+version is 0.2.0 to refresh cached controls; stored older slices
+revalidate through the compatibility mapping (the single scope toggle maps onto the split ones, and a
 pre-`bind_libraries` library scope stays binding). The legacy tool's "Bound
 document libraries" raw tag-id input now renders as the library tree, gated
 on its binding toggle, via `ui.widget` / `ui.visible_when` hints in the pod's
@@ -3829,7 +3834,7 @@ on its binding toggle, via `ui.widget` / `ui.visible_when` hints in the pod's
 
 ### Resources table — columns beside the import panel (2026-10-01)
 
-In the Documents, Filesystem and Agents workspaces the name column is
+In the Documents workspace the name column is
 `minmax(8rem, 2fr)`, the actions column keeps its fixed width, and the columns
 between them (size, created, author, status) are `minmax(0, <usual width>)`. They
 keep their usual width while there is room and are the ones that shrink, truncated,

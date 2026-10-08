@@ -207,7 +207,7 @@ async def workspace_call(provider: DelegatedCredentialProvider, receiver: Receiv
     workspace._workspace_client.client = httpx.AsyncClient(
         transport=httpx.MockTransport(receiver)
     )
-    await workspace.read_bytes("notes.md")
+    await workspace.write("outputs/notes.md", b"synthetic")
 
 
 async def binding_call(provider: DelegatedCredentialProvider, receiver: Receiver):
@@ -249,7 +249,10 @@ def answering(path: str) -> Receiver:
         if path == "team-wiki":
             return httpx.Response(200, json={"pages": []})
         if path == "workspace":
-            return httpx.Response(200, content=b"file-bytes")
+            return httpx.Response(
+                200,
+                json={"key": "outputs/notes.md", "file_name": "notes.md", "size": 9},
+            )
         return httpx.Response(200, json={"ok": True})
 
     return _answer
@@ -374,14 +377,16 @@ async def test_workspace_child_uses_live_person_bearer_without_grant():
 
     def handle(request: httpx.Request) -> httpx.Response:
         seen.append(request)
-        return httpx.Response(200, content=b"synthetic")
+        return httpx.Response(
+            200, json={"key": "outputs/notes.md", "file_name": "notes.md", "size": 9}
+        )
 
     workspace._workspace_client.client = httpx.AsyncClient(
         transport=httpx.MockTransport(handle)
     )
-    await workspace.read_bytes("notes.md")
+    await workspace.write("outputs/notes.md", b"synthetic")
     token = "person-updated"
-    await workspace.read_bytes("notes.md")
+    await workspace.write("outputs/notes.md", b"synthetic")
     assert [request.headers["Authorization"] for request in seen] == [
         "Bearer person-first",
         "Bearer person-updated",

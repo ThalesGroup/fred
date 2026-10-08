@@ -18,24 +18,27 @@
   border-radius: var(--radius-s);
   overflow: hidden;
   color: var(--on-surface);
+  --card-bg: var(--surface-container-low);
+}
+
+.card[data-checked="true"] {
+  --card-bg: var(--surface-container);
 }
 
 .header {
   display: flex;
   align-items: center;
   gap: var(--spacing-m);
+  transition: box-shadow var(--duration-short-2) var(--easing-standard);
   cursor: pointer;
-  background: var(--surface-container);
+  background: var(--card-bg);
   padding: var(--spacing-xs) var(--spacing-m);
   user-select: none;
 }
 
+/* State layer as an inset shadow: unlike a gradient it can fade in. */
 .header:hover {
-  /* Layers the standard on-surface/8% state tint on top of the header's own
-     surface-container fill, same token used for hover elsewhere
-     (state-on-surface-hover), via a second background layer rather than a
-     plain swap so the base tone still shows through underneath. */
-  background: linear-gradient(var(--state-on-surface-hover), var(--state-on-surface-hover)), var(--surface-container);
+  box-shadow: inset 0 0 0 100vmax var(--state-on-surface-hover);
 }
 
 .meta {

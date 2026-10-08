@@ -12,7 +12,7 @@ packaged servers. Otherwise it combines installed providers with the optional
 `FRED_MCP_EXTERNAL_CATALOG_FILE` or `./config/mcp_catalog_external.yaml` file.
 Duplicate server IDs fail startup.
 
-The wheel includes one `mcp_catalog.yaml` with the five MCPs provided by
+The wheel includes one `mcp_catalog.yaml` with the three MCPs provided by
 Fred / Knowledge Flow. Third-party MCP servers are not defined by this package.
 
 Internal HTTP MCPs declare their backend and a path relative to its API:

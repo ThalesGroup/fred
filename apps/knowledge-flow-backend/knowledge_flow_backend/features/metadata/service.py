@@ -626,7 +626,7 @@ class MetadataService:
     async def delete_document_and_artifacts_trusted(self, actor_uid: str, document_uid: str) -> None:
         """Same as `delete_document_and_artifacts`, but skips the per-document
         `DocumentPermission.DELETE` check — same trust convention as
-        `save_document_metadata_trusted`.
+        trusted system cleanup methods.
 
         Why this exists: the cancel-an-ingestion cleanup
         (`features/scheduler/document_failure.py`) is a system obligation, not a
@@ -1051,33 +1051,6 @@ class MetadataService:
                 await self.rebac.check_user_permission_or_raise(user, TagPermission.UPDATE, tag_id)
         await self._persist_metadata_and_follow_up(user, metadata)
 
-    async def save_document_metadata_trusted(self, user: KeycloakUser, metadata: DocumentMetadata) -> None:
-        """
-        Same as `save_document_metadata`, but skips the per-tag `TagPermission.UPDATE`
-        check.
-
-        Why this exists:
-        - the corpus-revectorize migration path
-          (`features/scheduler/activities.py::output_process_trusted`) is
-          authorized once, at the platform level, by
-          `corpus_manager_controller._authorize_scope` (`CAN_MANAGE_PLATFORM`)
-          before the whole workflow starts — re-checking `TagPermission.UPDATE`
-          per document here would reject a root/platform admin who is not
-          individually a member of every team the migration touches, the same
-          class of gap `mark_document_vectorized`
-          (`features/scheduler/activities.py`) already works around for the
-          `VECTORIZED` stage.
-        - every other follow-up (Parquet pruning, storage-quota adjustment,
-          tag timestamps, ReBAC parent link) still runs unchanged — this must
-          never become a silent metadata write that skips them, only the
-          permission check.
-
-        Never call this from a router or any other user-facing service —
-        reachable only from the already-platform-authorized migration/
-        corpus-revectorize activity path.
-        """
-        await self._persist_metadata_and_follow_up(user, metadata)
-
     async def update_document_metadata(self, user: KeycloakUser, metadata: DocumentMetadata) -> bool:
         """Persist a document the caller already read, never creating one.
 
@@ -1093,11 +1066,6 @@ class MetadataService:
         if metadata.tags:
             for tag_id in metadata.tags.tag_ids:
                 await self.rebac.check_user_permission_or_raise(user, TagPermission.UPDATE, tag_id)
-        return await self._persist_metadata_and_follow_up(user, metadata, update_only=True)
-
-    async def update_document_metadata_trusted(self, user: KeycloakUser, metadata: DocumentMetadata) -> bool:
-        """`update_document_metadata` without the per-tag permission check —
-        same trust rationale as `save_document_metadata_trusted`."""
         return await self._persist_metadata_and_follow_up(user, metadata, update_only=True)
 
     async def _persist_metadata_and_follow_up(self, user: KeycloakUser, metadata: DocumentMetadata, *, update_only: bool = False) -> bool:
@@ -1125,7 +1093,7 @@ class MetadataService:
             # never touches `document_labels` either — `mutate_document_labels`
             # is the ONLY label mutation path (see its docstring). A caller
             # holding a stale in-memory snapshot whose `.labels` no longer
-            # matches the table (e.g. a long-running revectorize activity that
+            # matches the table (e.g. a long-running ingestion activity that
             # loaded a document before a label was removed from it) must not
             # be able to reintroduce, drop, or otherwise affect a label by
             # calling this method — that was the exact lost-update path this

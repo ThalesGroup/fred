@@ -53,14 +53,9 @@ class _SpyMetadataService:
         self._persisted = persisted
         self.purged: list[str] = []
         self.checked_updates = 0
-        self.trusted_updates = 0
 
     async def update_document_metadata(self, user, metadata) -> bool:
         self.checked_updates += 1
-        return self._persisted
-
-    async def update_document_metadata_trusted(self, user, metadata) -> bool:
-        self.trusted_updates += 1
         return self._persisted
 
     async def purge_document_artifacts(self, document_uid: str) -> None:
@@ -89,14 +84,4 @@ async def test_a_lost_race_discards_the_artifacts_it_wrote():
     spy = _SpyMetadataService(persisted=False)
 
     assert await _service(spy).persist_progress(_user(), _doc()) is False
-    assert spy.purged == ["doc-1"]
-
-
-@pytest.mark.asyncio
-async def test_the_trusted_variant_skips_the_permission_check_and_still_compensates():
-    spy = _SpyMetadataService(persisted=False)
-
-    assert await _service(spy).persist_progress_trusted(_user(), _doc()) is False
-    assert spy.trusted_updates == 1
-    assert spy.checked_updates == 0
     assert spy.purged == ["doc-1"]

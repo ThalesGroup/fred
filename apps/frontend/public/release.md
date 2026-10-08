@@ -1,3 +1,65 @@
+**v3.3.0** — 2026-10-08
+
+- **Summary**
+
+  Choose whether an agent uses conversation attachments, team documents or both. Document-only answers include the enabled sources, and the agent setup form is easier to navigate.
+
+- **Features**
+
+  - Choose attachments, team documents or both for document-based answers (#2999)
+
+- **Improvements**
+
+  - Resources now focuses on document libraries; legacy personal, shared and agent file areas are retired (#2984)
+
+- **Bug Fixes**
+
+  - Reduced pauses while agents run tools or browse cloud folders (#2988)
+
+- **Deployment note**
+
+  Before upgrading, export needed files from retired areas, update custom integrations and remove retired settings. Follow the operator guide for the coordinated deployment. No document re-ingestion is required.
+
+**v3.2.0** - 2026-10-06
+
+- **Summary**
+
+  Copy agents between teams, keep favorite prompts close at hand and personalize Fred with new themes and a profile picture. Interrupted Graph conversations can now continue where they stopped.
+  Also added profile picture support for users.
+
+- **Features**
+
+  - Copy an agent to another team or your personal space (#2949)
+  - Star prompts and find them with the Favorites filter (#2901)
+  - Set, replace or remove your profile picture (#2977)
+  - Choose Cobalt or Cloud themes, with a platform default set by your administrator (#2915, #2933)
+  - Continue unfinished Graph conversations or choose to restart them (#2892)
+  - Query all sheets of an Excel file attached to a conversation (#2837)
+  - Sign in through your organization's configured identity provider (#2862)
+  - Publish updated terms using a configurable version identifier (#2972)
+
+- **Improvements**
+
+  - Navigate with a compact sidebar and denser agent, prompt and resource pages (#2915)
+  - Keep your chosen agent sort when returning to the page (#2959)
+  - Follow large document imports without leaving progress stuck (#2940)
+
+- **Security**
+
+  - Updated dependencies reduce reported vulnerabilities in Fred images and the interface (#2934, #2956)
+
+- **Bug Fixes**
+
+  - A custom answer takes precedence over a selected choice in agent questions (#2924)
+  - Documents containing literal comparisons open correctly in the rich-text editor (#2979)
+  - Agent lists update after an administrator enables or disables a capability (#2950)
+  - Revoking a person's sole elevated team role keeps them as a member (#2925)
+  - Marketplace cards show nominated team administrators before charter acceptance (#2968)
+
+- **Deployment note**
+
+  Follow the operator guide for a coordinated database upgrade and configuration cleanup. Built-in evaluations move to the external application; verify its permissions before rollout. No document re-ingestion is required.
+
 **v3.1.1** - 2026-10-02
 
 - **Summary**

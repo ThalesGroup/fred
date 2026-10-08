@@ -121,17 +121,11 @@ def _build_offline_agents_app(monkeypatch, tmp_path, factory) -> FastAPI:
         # connection this offline pod has no server to answer).
         "version: v1\n"
         "servers:\n"
-        '  - id: "mcp-knowledge-flow-fs"\n'
-        '    name: "mcp.servers.filesystem.name"\n'
-        "    enabled: false\n"
         '  - id: "mcp-knowledge-flow-mcp-tabular"\n'
         '    name: "mcp.servers.tabular.name"\n'
         "    enabled: false\n"
         '  - id: "mcp-knowledge-flow-opensearch-ops"\n'
         '    name: "mcp.servers.search_opensearch.name"\n'
-        "    enabled: false\n"
-        '  - id: "mcp-knowledge-flow-corpus"\n'
-        '    name: "mcp.servers.corpus.name"\n'
         "    enabled: false\n"
         '  - id: "mcp-knowledge-flow-prometheus-ops"\n'
         '    name: "mcp.servers.prometheus.name"\n'

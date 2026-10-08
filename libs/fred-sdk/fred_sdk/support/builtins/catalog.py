@@ -36,10 +36,7 @@ Exact built-in list today:
   execution trace of one Fred conversation.
 - `geo.render_points`: UI helper that turns latitude/longitude points into a map
   payload Fred can render.
-- `artifacts.publish_text`: output helper that creates a downloadable text
-  artifact for the user.
-- `resources.fetch_text`: configuration/support helper that loads a Fred-managed
-  text resource by key and scope.
+
 
 How to use it:
 - agent author:
@@ -73,8 +70,6 @@ TOOL_REF_KNOWLEDGE_SEARCH = "knowledge.search"
 TOOL_REF_SIMILARITY_SEARCH = "knowledge.similarity_search"
 TOOL_REF_TRACES_SUMMARIZE_CONVERSATION = "traces.summarize_conversation"
 TOOL_REF_GEO_RENDER_POINTS = "geo.render_points"
-TOOL_REF_ARTIFACTS_PUBLISH_TEXT = "artifacts.publish_text"
-TOOL_REF_RESOURCES_FETCH_TEXT = "resources.fetch_text"
 
 
 class BuiltinToolBackend(str, Enum):
@@ -89,13 +84,9 @@ class BuiltinToolBackend(str, Enum):
     Current mapping:
     - `TOOL_INVOKER`: `knowledge.search`, `knowledge.similarity_search`,
       `traces.summarize_conversation`, `geo.render_points`
-    - `WORKSPACE_WRITE`: `artifacts.publish_text`
-    - `WORKSPACE_READ`: `resources.fetch_text`
     """
 
     TOOL_INVOKER = "tool_invoker"
-    WORKSPACE_WRITE = "workspace_write"
-    WORKSPACE_READ = "workspace_read"
 
 
 class KnowledgeSearchToolArgs(BaseModel):
@@ -218,41 +209,6 @@ class GeoRenderPointsToolArgs(BaseModel):
     )
 
 
-class ArtifactPublishTextToolArgs(BaseModel):
-    file_name: str = Field(
-        ...,
-        min_length=1,
-        description=(
-            "File name (storage address) for the artifact in your workspace, for "
-            "example report.md or summary.txt. Writing an existing name overwrites it."
-        ),
-    )
-    content: str = Field(
-        ...,
-        min_length=1,
-        description="Full textual content to publish for the user.",
-    )
-    title: str | None = Field(
-        default=None,
-        description="Optional user-facing title shown for the returned download link.",
-    )
-    content_type: str = Field(
-        default="text/plain; charset=utf-8",
-        description="MIME type of the generated text artifact.",
-    )
-
-
-class ResourceFetchTextToolArgs(BaseModel):
-    path: str = Field(
-        ...,
-        min_length=1,
-        description=(
-            "Team-rooted file path to read. A bare path is your private space "
-            "(e.g. 'templates/notes.md'); prefix with 'shared/' for the team's shared space."
-        ),
-    )
-
-
 @dataclass(frozen=True)
 class BuiltinToolSpec:
     """
@@ -268,8 +224,6 @@ class BuiltinToolSpec:
     - `knowledge.similarity_search`: targeted document-to-document comparison
     - `traces.summarize_conversation`: conversation trace summary tool
     - `geo.render_points`: map-rendering helper
-    - `artifacts.publish_text`: text artifact publishing helper
-    - `resources.fetch_text`: Fred-managed text resource reader
 
     How to use it:
     - authors normally reference the `TOOL_REF_*` constants
@@ -320,20 +274,6 @@ _BUILTIN_TOOL_SPECS: dict[str, BuiltinToolSpec] = {
         args_schema=GeoRenderPointsToolArgs,
         backend=BuiltinToolBackend.TOOL_INVOKER,
         default_description="Render one or more latitude/longitude points as a map.",
-    ),
-    TOOL_REF_ARTIFACTS_PUBLISH_TEXT: BuiltinToolSpec(
-        tool_ref=TOOL_REF_ARTIFACTS_PUBLISH_TEXT,
-        args_schema=ArtifactPublishTextToolArgs,
-        backend=BuiltinToolBackend.WORKSPACE_WRITE,
-        default_description=(
-            "Publish a generated text artifact for the user and return a download link."
-        ),
-    ),
-    TOOL_REF_RESOURCES_FETCH_TEXT: BuiltinToolSpec(
-        tool_ref=TOOL_REF_RESOURCES_FETCH_TEXT,
-        args_schema=ResourceFetchTextToolArgs,
-        backend=BuiltinToolBackend.WORKSPACE_READ,
-        default_description="Fetch a Fred-managed text template or support resource.",
     ),
 }
 

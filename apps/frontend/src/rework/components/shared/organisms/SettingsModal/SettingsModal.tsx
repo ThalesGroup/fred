@@ -29,6 +29,8 @@ export interface SettingsModalProps {
   /** Left-aligned block below a rule, for an action set apart from the rest
    *  (a delete, typically). Omit to render no footer at all. */
   footer?: ReactNode;
+  /** Extra class on the card, e.g. to set the padding custom properties. */
+  cardClassName?: string;
   children: ReactNode;
 }
 
@@ -49,6 +51,7 @@ export default function SettingsModal({
   subtitle,
   actions,
   footer,
+  cardClassName,
   children,
 }: SettingsModalProps) {
   const card = useRef<HTMLDivElement>(null);
@@ -63,7 +66,7 @@ export default function SettingsModal({
 
   return (
     <FullPageModal isOpen={isOpen} onClose={onClose} id={id} background="container">
-      <div className={styles.card} ref={card} tabIndex={-1}>
+      <div className={cardClassName ? `${styles.card} ${cardClassName}` : styles.card} ref={card} tabIndex={-1}>
         <div className={styles.header}>
           <div className={styles.titleBlock}>
             <div id={`${id}-title`} className={styles.title}>

@@ -19,7 +19,7 @@ Keep only `enableApplications`, `enableAllResourceSpaces`, and `enableInformatio
 
 ## Upgrade
 
-Apply the overlay cleanup, validate the values against the new chart schema, then deploy the paired Fred chart and code normally. There is no data migration or special restart order.
+Apply the overlay cleanup and validate the values against the new chart schema before the [coordinated release upgrade](2972-configurable-gcu-versions.md). This flag cleanup adds no data migration of its own.
 
 ## Validation
 

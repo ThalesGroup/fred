@@ -19,6 +19,7 @@ import Switch from "@shared/atoms/Switch/Switch.tsx";
 import { IconType } from "@shared/utils/Type.ts";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router-dom";
 import { useDispatch } from "react-redux";
 import { setCapabilityBaseUrls } from "../../../../../common/capabilityRoutingSlice.ts";
 import type {
@@ -30,20 +31,21 @@ import { useUsersByIdsQuery } from "../../../../../slices/controlPlane/controlPl
 import { userDisplayName } from "@core/utils/userDisplayName.ts";
 import { reservedTagInPromptField } from "@rework/utils/promptValidation";
 import { TuningFieldRenderer } from "./TuningFieldRenderer.tsx";
-import { CapabilitiesInfoBanner } from "./CapabilitiesInfoBanner/CapabilitiesInfoBanner.tsx";
 import { CapabilityCard, CapabilityConfigForm } from "./CapabilityCard/CapabilityCard.tsx";
 import { SimpleCapabilitiesView } from "./SimpleCapabilitiesView/SimpleCapabilitiesView.tsx";
-import { applyResourceSearchScope, type CapabilitySelectionState } from "./toolPackLogic.ts";
+import type { CapabilitySelectionState } from "./toolPackLogic.ts";
 import {
   CAP_DOCUMENT_ACCESS,
   CAP_PPT_FILLER,
   CAP_TEAM_WIKI,
-  DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY,
+  DOC_ACCESS_TEAM_DOCUMENTS,
   type ToolPack,
 } from "./toolPacks.ts";
 import { PptFillerPackOptions } from "../../../../features/capabilities/ppt_filler/PptFillerPackOptions.tsx";
 import { DocumentAccessPackOptions } from "./DocumentAccessPackOptions/DocumentAccessPackOptions.tsx";
 import { SwitchRow } from "../AgentCreateEditModal/SwitchRow/SwitchRow.tsx";
+import { helpPagePath } from "@rework/features/helpCenter/content";
+import { isHelpLang } from "@rework/features/helpCenter/manifest";
 import styles from "./AgentFormBody.module.css";
 
 export type SectionKey = "general" | "prompts" | "tools" | "commitments";
@@ -167,7 +169,9 @@ export function AgentFormBody({
   onCapabilityAssetFileChange,
   onCapabilityBlockingErrorChange,
 }: AgentFormBodyProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const uiLang = i18n.language.split("-")[0];
+  const helpLang = isHelpLang(uiLang) ? uiLang : "fr";
   const dispatch = useDispatch();
   // Simple = new "capability packs" view (default); Advanced = the flat
   // per-capability list. UI-only, reset to Simple on each mount (#2220).
@@ -278,24 +282,12 @@ export function AgentFormBody({
   // capability config/asset state the Advanced view writes, so the two stay in
   // sync. Only offered when the team can actually use the backing capability.
   const renderPackOptions = (pack: ToolPack) => {
-    // Keep folder scoping available when the full resource bundle is on.
-    if (pack.resourceBundle && availableCapabilityIds.has(CAP_DOCUMENT_ACCESS)) {
+    // Library binding only narrows the team documents, so only that pack offers it.
+    if (pack.documentSource === DOC_ACCESS_TEAM_DOCUMENTS && availableCapabilityIds.has(CAP_DOCUMENT_ACCESS)) {
       return (
         <DocumentAccessPackOptions
           configValues={capabilityConfigValues[CAP_DOCUMENT_ACCESS] ?? {}}
-          onConfigChange={(key, value) => {
-            if (key === DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY) {
-              onCapabilitySelectionReplace(
-                applyResourceSearchScope(
-                  Boolean(value),
-                  { selectedCapabilityIds, capabilityConfigValues, reasoningEnabled },
-                  availableCapabilityIds,
-                ),
-              );
-            } else {
-              onCapabilityConfigChange(CAP_DOCUMENT_ACCESS, key, value);
-            }
-          }}
+          onConfigChange={(key, value) => onCapabilityConfigChange(CAP_DOCUMENT_ACCESS, key, value)}
           teamId={teamId}
           disabled={isSubmitting}
         />
@@ -377,44 +369,48 @@ export function AgentFormBody({
           )}
 
           <div className={styles.tabStrip}>
-            <ButtonGroup
-              key={visibleSections.join(",")}
-              size="medium"
-              color="secondary"
-              variant="radio"
-              fullWidth
-              aria-label={t("rework.teams.formAgent.sections.aria")}
-              selectedIndex={activeSectionIndex}
-              onSelectedIndexChange={(i) => onSectionChange(visibleSections[i] as SectionKey)}
-              items={visibleSections.map((s) => ({
-                label: t(SECTION_LABEL_KEYS[s]),
-                icon: SECTION_ICONS[s],
-                hasError: errorSections.has(s),
-                onClick: () => onSectionChange(s),
-              }))}
-            />
+            <div className={styles.tabGroup}>
+              <ButtonGroup
+                key={visibleSections.join(",")}
+                size="small"
+                color="secondary"
+                variant="radio"
+                fullWidth
+                aria-label={t("rework.teams.formAgent.sections.aria")}
+                selectedIndex={activeSectionIndex}
+                onSelectedIndexChange={(i) => onSectionChange(visibleSections[i] as SectionKey)}
+                items={visibleSections.map((s) => ({
+                  label: t(SECTION_LABEL_KEYS[s]),
+                  icon: SECTION_ICONS[s],
+                  hasError: errorSections.has(s),
+                  onClick: () => onSectionChange(s),
+                }))}
+              />
+            </div>
           </div>
 
           <div className={styles.sectionContent}>
             {effectiveSection === "general" && (
               <>
-                <TextInput
-                  label={t("rework.teams.formAgent.fields.name.label")}
-                  value={displayName}
-                  onChange={(e) => onDisplayNameChange(e.target.value)}
-                  maxLength={255}
-                  required
-                  disabled={isSubmitting}
-                  error={nameError}
-                />
-                <TextInput
-                  label={t("rework.teams.formAgent.fields.role.label")}
-                  placeholder={displayName}
-                  value={role}
-                  onChange={(e) => onRoleChange(e.target.value)}
-                  maxLength={255}
-                  disabled={isSubmitting}
-                />
+                <div className={styles.fieldRow}>
+                  <TextInput
+                    label={t("rework.teams.formAgent.fields.name.label")}
+                    value={displayName}
+                    onChange={(e) => onDisplayNameChange(e.target.value)}
+                    maxLength={255}
+                    required
+                    disabled={isSubmitting}
+                    error={nameError}
+                  />
+                  <TextInput
+                    label={t("rework.teams.formAgent.fields.role.label")}
+                    placeholder={displayName}
+                    value={role}
+                    onChange={(e) => onRoleChange(e.target.value)}
+                    maxLength={255}
+                    disabled={isSubmitting}
+                  />
+                </div>
                 <TextArea
                   label={t("rework.teams.formAgent.fields.description.label")}
                   value={description}
@@ -429,9 +425,18 @@ export function AgentFormBody({
             {effectiveSection === "prompts" && renderFieldList(promptFields)}
             {effectiveSection === "tools" && (
               <>
-                <CapabilitiesInfoBanner />
                 <div className={styles.capabilitiesHeader}>
-                  <h2 className={styles.capabilitiesTitle}>{t("rework.teams.formAgent.capabilities.header")}</h2>
+                  <div className={styles.capabilitiesTitleGroup}>
+                    <h2 className={styles.capabilitiesTitle}>{t("rework.teams.formAgent.capabilities.header")}</h2>
+                    <Link
+                      className={styles.learnMoreLink}
+                      to={helpPagePath(helpLang, "features", "capabilities")}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {t("rework.teams.formAgent.capabilities.learnMore")}
+                    </Link>
+                  </div>
                   <label className={styles.advancedToggle}>
                     <span>{t("rework.teams.formAgent.capabilities.viewToggle.advanced")}</span>
                     <Switch
@@ -467,6 +472,7 @@ export function AgentFormBody({
                       subForm={
                         reasoningEnabled && (
                           <SwitchRow
+                            size="small"
                             label={t("rework.teams.formAgent.fields.reasoningDefaultOn.label")}
                             description={t("rework.teams.formAgent.fields.reasoningDefaultOn.hint")}
                             checked={reasoningDefaultOn}

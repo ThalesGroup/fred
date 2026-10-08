@@ -4,7 +4,7 @@ title: "Control plane endpoints to copy an agent to other teams or the personal 
 impact: none
 configuration: none
 configuration_reason: "New API routes only; no configuration key, default or chart value changes."
-no_action_reason: "The endpoints are additive, store agents in the existing table and call the agent pods' copy-config operation shipped earlier; nothing calls them until the frontend change."
+no_action_reason: "Agent-copy endpoints are additive, use the existing agent table and call the matching pods' copy-config operation; the frontend copy action ships in this release."
 ---
 
 ## Applicability

@@ -19,7 +19,6 @@ from fred_core import (
     AuthorizationError,
     FilesystemResourceInfo,
     FilesystemResourceInfoResult,
-    FileTypeBucket,
     KeycloakUser,
 )
 from fred_core.security.models import Resource
@@ -231,17 +230,6 @@ async def test_list_stamps_agent_provenance(app_context):
 
 
 @pytest.mark.asyncio
-async def test_list_stamps_mon_espace_provenance(app_context):
-    service, _scoped_areas, _corpus_area = _service()
-
-    entries = await service.list(_user(), "/teams/acme/users/u-1")
-
-    assert entries[0].origin == "uploaded"
-    assert entries[0].producer == "human"
-    assert entries[0].created_by == "u-1"
-
-
-@pytest.mark.asyncio
 async def test_stat_stamps_provenance_from_requested_path(app_context):
     service, _scoped_areas, _corpus_area = _service()
 
@@ -381,56 +369,6 @@ async def test_read_file_remains_plain_text_compatible_when_page_metadata_exists
 
 
 @pytest.mark.asyncio
-async def test_copy_to_shared_places_file_and_tags_share_copy(app_context):
-    # G5: copy a private file into Espace d'equipe; it lands under shared/files and
-    # reads back as a share-copy (partagé).
-    service, scoped_areas, _corpus_area = _service()
-
-    entry = await service.copy_to_shared(_user(), "/teams/acme/users/u-1/outputs/q3.pptx")
-
-    writes = [c for c in scoped_areas.calls if c[0] == "write_bytes_area"]
-    assert writes[-1][1][1] == ("acme", "shared", "files", "q3.pptx")
-    assert entry.origin == "shared_copy"
-
-
-@pytest.mark.asyncio
-async def test_copy_to_shared_suffixes_on_name_collision(app_context):
-    # The stub's shared/files already contains "notes.txt", so a copy of the same
-    # name is placed as "notes (2).txt" (no-clobber).
-    service, scoped_areas, _corpus_area = _service()
-
-    await service.copy_to_shared(_user(), "/teams/acme/users/u-1/notes.txt")
-
-    writes = [c for c in scoped_areas.calls if c[0] == "write_bytes_area"]
-    assert writes[-1][1][1] == ("acme", "shared", "files", "notes (2).txt")
-
-
-@pytest.mark.asyncio
-async def test_copy_to_shared_rejects_corpus_source(app_context):
-    service, _scoped_areas, _corpus_area = _service()
-
-    with pytest.raises(PermissionError):
-        await service.copy_to_shared(_user(), "/corpus/CIR/report.md")
-
-
-def test_unique_name_suffixing():
-    from knowledge_flow_backend.features.filesystem.mcp_fs_service import _unique_name
-
-    assert _unique_name("a.txt", set()) == "a.txt"
-    assert _unique_name("a.txt", {"a.txt"}) == "a (2).txt"
-    assert _unique_name("a.txt", {"a.txt", "a (2).txt"}) == "a (3).txt"
-    assert _unique_name("noext", {"noext"}) == "noext (2)"
-
-
-@pytest.mark.asyncio
-async def test_write_rejects_corpus_area(app_context):
-    service, _scoped_areas, _corpus_area = _service()
-
-    with pytest.raises(PermissionError, match="Corpus area is read-only"):
-        await service.write(_user(), "/corpus/CIR/report.md", "hello")
-
-
-@pytest.mark.asyncio
 async def test_read_bytes_routes_teams_path_to_scoped_area(app_context):
     service, scoped_areas, _corpus_area = _service()
 
@@ -452,11 +390,11 @@ async def test_read_bytes_rejects_corpus_area(app_context):
 async def test_write_bytes_routes_teams_path_to_scoped_area(app_context):
     service, scoped_areas, _corpus_area = _service()
 
-    await service.write_bytes(_user(), "/teams/acme/users/u-1/outputs/q3.pptx", b"\x00\x01")
+    await service.write_bytes(_user(), "/teams/acme/agents/inst-7/users/u-1/outputs/q3.pptx", b"\x00\x01")
 
     assert scoped_areas.calls[-1] == (
         "write_bytes_area",
-        (_user(), ("acme", "users", "u-1", "outputs", "q3.pptx"), b"\x00\x01"),
+        (_user(), ("acme", "agents", "inst-7", "users", "u-1", "outputs", "q3.pptx"), b"\x00\x01"),
         {},
     )
 
@@ -498,77 +436,3 @@ async def test_glob_matches_against_visible_absolute_paths(app_context):
     matches = await service.glob(_user(), "**/*.md", path="/teams/acme/shared")
 
     assert matches == ["/teams/acme/shared/report.md", "/teams/acme/shared/archive/q1.md"]
-
-
-@pytest.mark.asyncio
-async def test_edit_file_rewrites_content_and_returns_occurrence_count(app_context):
-    service, _scoped_areas, _corpus_area = _service()
-
-    async def _cat(user, path):
-        del user, path
-        return "draft content"
-
-    captured: list[tuple[KeycloakUser, str, str]] = []
-
-    async def _write(user, path, data):
-        captured.append((user, path, data))
-
-    service.cat = _cat
-    service.write = _write
-
-    result = await service.edit_file(
-        _user(),
-        "/teams/acme/shared/note.md",
-        old_string="draft",
-        new_string="final",
-    )
-
-    assert result == {"path": "/teams/acme/shared/note.md", "occurrences": 1}
-    assert captured[0][1:] == ("/teams/acme/shared/note.md", "final content")
-
-
-@pytest.mark.asyncio
-async def test_rename_routes_teams_path_to_scoped_area(app_context):
-    service, scoped_areas, _corpus_area = _service()
-
-    result = await service.rename(_user(), "/teams/acme/shared/notes.txt", "meeting-notes.txt")
-
-    assert result.path == "renamed.txt"
-    call_name, args, kwargs = scoped_areas.calls[-1]
-    assert call_name == "rename_area"
-    assert args == (_user(), ("acme", "shared", "notes.txt"), "meeting-notes.txt")
-    assert kwargs == {}
-
-
-@pytest.mark.asyncio
-async def test_rename_rejects_corpus_area(app_context):
-    service, _scoped_areas, _corpus_area = _service()
-
-    with pytest.raises(PermissionError, match="Corpus area is read-only"):
-        await service.rename(_user(), "/corpus/CIR/report.md", "final.md")
-
-
-@pytest.mark.asyncio
-async def test_rename_rejects_root(app_context):
-    service, _scoped_areas, _corpus_area = _service()
-
-    with pytest.raises(PermissionError, match="Cannot rename root"):
-        await service.rename(_user(), "/", "anything")
-
-
-@pytest.mark.asyncio
-async def test_type_stats_buckets_files_by_extension_and_sums_size(app_context):
-    service, _scoped_areas, _corpus_area = _service()
-
-    stats = await service.type_stats(_user(), "/teams/acme/shared")
-
-    assert stats[FileTypeBucket.PDF] == (2, 150)
-    assert stats[FileTypeBucket.EXCEL] == (1, 10)
-
-
-@pytest.mark.asyncio
-async def test_type_stats_rejects_corpus_area(app_context):
-    service, _scoped_areas, _corpus_area = _service()
-
-    with pytest.raises(PermissionError, match="Use GET /tags/stats"):
-        await service.type_stats(_user(), "/corpus/CIR")

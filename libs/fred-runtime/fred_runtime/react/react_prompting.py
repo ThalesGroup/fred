@@ -446,8 +446,22 @@ def compose_system_prompt(
     resolved tools.
     """
 
+    document_only_instruction = (
+        "For this turn, answer factual questions only from document evidence "
+        "retrieved from the enabled sources (conversation attachments and/or "
+        "team documents). Do not supplement with general knowledge. If the "
+        "documents do not support an answer, say that the information is missing."
+        if binding.runtime_context.search_rag_scope == "corpus_only"
+        else ""
+    )
     tools_content = "\n\n".join(
-        part for part in (tool_suffix.strip(), GLOBAL_BASE_PROMPT_MARKDOWN) if part
+        part
+        for part in (
+            tool_suffix.strip(),
+            GLOBAL_BASE_PROMPT_MARKDOWN,
+            document_only_instruction,
+        )
+        if part
     )
     contents = (
         build_platform_instructions_prefix(),

@@ -85,7 +85,7 @@ export interface ResourceExplorerProps<T> {
  * page's tabs: a toolbar (back button, breadcrumb, caller-supplied actions,
  * an optional search box) above a DataTable, with loading/empty states in
  * between. Extracted from the Corpus d'équipe tab (FRONT-09.H/RFC §13.7) so
- * the other three tabs (Mon espace/Espace d'équipe/Agents) can eventually
+ * the other two tabs (Espace d'équipe/Agents) can eventually
  * get the same rich table instead of their current single-line rows —
  * this component itself has no idea what a "document" or a "tag" is:
  * rows, columns, and every cell's rendering are entirely caller-supplied.

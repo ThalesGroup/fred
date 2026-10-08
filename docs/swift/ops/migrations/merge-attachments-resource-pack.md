@@ -4,7 +4,7 @@ title: "Combine resource capabilities and enable tabular conversation attachment
 impact: none
 configuration: none
 configuration_reason: "The agent form and attachment ingestion change without new production configuration keys or defaults."
-no_action_reason: "Existing agent selections remain unchanged; new Excel attachments use the existing corpus Excel processors automatically."
+no_action_reason: "Existing agent selections remain unchanged; new Excel attachments use the existing processors automatically. Older Excel attachments stay text-backed; reattach a file only if its new tabular tools are wanted."
 ---
 ## Applicability
 

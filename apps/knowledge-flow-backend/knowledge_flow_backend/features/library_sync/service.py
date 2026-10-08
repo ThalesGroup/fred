@@ -387,8 +387,6 @@ class LibrarySyncService:
         a source watched for months grows an index of every revision it ever
         had — which is the defect this surface exists to remove, one layer down.
 
-        The same step the revectorize workflow takes before re-embedding a
-        document it is rebuilding from stored content.
         """
         context = ApplicationContext.get_instance()
         vector_store = context.get_create_vector_store(context.get_embedder())

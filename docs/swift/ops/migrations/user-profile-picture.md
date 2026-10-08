@@ -2,6 +2,7 @@
 schema: 1
 title: "People can set their own profile picture"
 impact: minor
+after: [2972-configurable-gcu-versions]
 configuration: none
 configuration_reason: "No configuration key, default or chart value changes; pictures use the existing control-plane content bucket and its credentials."
 ---
@@ -27,9 +28,11 @@ No configuration changes are required.
 
 ## Upgrade
 
-Deploy Fred normally. The control-plane Alembic migration `aac66348e27b` adds
-the nullable column `users.avatar_object_storage_key`; it runs with the usual
-migration step and needs no backfill, since everyone starts without a picture.
+The [coordinated database upgrade](2972-configurable-gcu-versions.md) includes
+`aac66348e27b`, which adds the nullable `users.avatar_object_storage_key`
+column. No separate migration run or backfill is needed; everyone starts
+without a picture. Check the delete permission above before enabling picture
+replacement and deletion.
 
 The crop editor now exports team avatars and profile pictures at 192x192
 (WebP, quality 0.85) instead of 320x320. Existing team avatars are unchanged.
@@ -42,8 +45,10 @@ bucket that no object remains under `users/<your user id>/`.
 
 ## Rollback
 
-Downgrade the control-plane migration to `ba2c3c7fd0c1` (drops the column),
-then roll back the images. Pictures already uploaded stay in the content bucket
+With traffic paused and updated readers stopped, downgrading to
+`ba2c3c7fd0c1` drops only the picture column. A full rollback to v3.1.1 must
+follow the [coordinated rollback](2972-configurable-gcu-versions.md), including
+the CGU guard, before restarting the previous images. Pictures already uploaded stay in the content bucket
 under `users/`, unreferenced; delete that prefix by hand if needed.
 
 ## Limitations

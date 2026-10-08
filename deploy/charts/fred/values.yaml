@@ -421,7 +421,6 @@ x-kf-mcp: &kf-mcp
   text_enabled: true
   templates_enabled: true
   resources_enabled: true
-  filesystem_enabled: false
   opensearch_ops_enabled: false
   prometheus_ops_enabled: false
 
@@ -2001,7 +2000,6 @@ applications:
             # Deployment-wide kill switch for the integrated Apps surface,
             # catalog/API, and frontend application-service gateway.
             enableApplications: false
-            enableAllResourceSpaces: false
             enableInformationSystems: false
           # Optional deployer-configured upload warning, shown on upload
           # surfaces (document upload drawer, chat attachments). Omit to show

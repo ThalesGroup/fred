@@ -180,6 +180,12 @@ the agent's `tools = (...)`. Its first parameter is always the `ToolContext`;
 the others are its inputs, and their type annotations become the schema the
 model sees.
 
+Synchronous handlers are also supported: Fred runs them in LangChain's shared
+executor with copied context variables, so blocking I/O does not stall the event
+loop. Use `async def` for handlers that need the runtime event loop or async
+clients. Cancellation stops awaiting a synchronous handler; it cannot terminate
+its running thread or undo side effects, and Fred does not replay the call.
+
 ```python
 from fred_sdk import ToolContext, ToolOutput, tool
 
@@ -228,25 +234,23 @@ The bank transfer sample in `fred-samples` has two such gates.
 
 ## MCP server references
 
-Declare which MCP servers an agent needs. The runtime wires the actual connection.
+Declare which capabilities or MCP servers an agent needs. The runtime wires them.
 
 ```python
-from fred_sdk import MCP_SERVER_KNOWLEDGE_FLOW_CORPUS, MCPServerRef, ReActAgent
+from fred_sdk import MCPServerRef, ReActAgent
 
 class DocumentAgent(ReActAgent):
     agent_id: str = "acme.docs.assistant"
     role: str = "Document assistant"
     description: str = "Answers from the team's documents."
     system_prompt_template: str = "Answer from the documents you find."
-    default_mcp_servers: tuple[MCPServerRef, ...] = (MCP_SERVER_KNOWLEDGE_FLOW_CORPUS,)
+    default_mcp_servers: tuple[MCPServerRef, ...] = (MCPServerRef(id="document_access"),)
 ```
 
 Built-in MCP server constants:
 
 | Constant                                   | Connects to                   |
 | ------------------------------------------ | ----------------------------- |
-| `MCP_SERVER_KNOWLEDGE_FLOW_CORPUS`         | Document search and retrieval |
-| `MCP_SERVER_KNOWLEDGE_FLOW_FS`             | Workspace file system         |
 | `MCP_SERVER_KNOWLEDGE_FLOW_TABULAR`        | Tabular data / CSV            |
 | `MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS` | OpenSearch operations         |
 
@@ -272,8 +276,6 @@ class SearchAgent(ReActAgent):
 | Constant                                 | What it does                                  |
 | ---------------------------------------- | --------------------------------------------- |
 | `TOOL_REF_KNOWLEDGE_SEARCH`              | Semantic/hybrid search over indexed documents |
-| `TOOL_REF_RESOURCES_FETCH_TEXT`          | Fetch document content as text                |
-| `TOOL_REF_ARTIFACTS_PUBLISH_TEXT`        | Publish a text artifact to the workspace      |
 | `TOOL_REF_GEO_RENDER_POINTS`             | Render geographic points on a map             |
 | `TOOL_REF_TRACES_SUMMARIZE_CONVERSATION` | Summarize conversation traces                 |
 

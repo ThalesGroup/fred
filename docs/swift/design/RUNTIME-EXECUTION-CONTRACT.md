@@ -670,16 +670,16 @@ OpenAI-style markdown-first message bodies.
 Do not introduce structured `code` or `diagram` parts unless a concrete UI
 need proves markdown is insufficient and the contract is extended by RFC.
 
-**2026-06-18 — MCP filesystem-first file exchange (AGENT-FILESYSTEM):**
-`ArtifactPublisherPort` and `ResourceReaderPort` in `RuntimeServices`, and the
-associated SDK types (`ArtifactPublishRequest`, `PublishedArtifact`,
-`ResourceFetchRequest`, `FetchedResource`, `ArtifactScope`, `ResourceScope`) are
-removed or no longer exported in the fresh Swift target. Agents and graph nodes use
-the authenticated Knowledge Flow MCP filesystem through SDK `ctx.fs` / `context.fs`
-helpers or direct MCP tools. Generated files are written to filesystem paths and
-returned to chat as safe Fred/Knowledge Flow `LinkPart` download references. The
-`LinkPart` / `ui_parts` SSE contract is unchanged; runtime history must persist those
-parts so live streaming and replay match. See `docs/swift/design/FILESYSTEM.md`.
+**2026-06-18 — historical file-exchange decision, retired by #2984/#2986:**
+The MCP filesystem and generic SDK `ctx.fs` / `context.fs` helpers described in
+the original decision are no longer available. The retained PPT Filler path uses
+`RuntimeServices.workspace_fs.write` for generated files and
+`RuntimeServices.agent_assets` for its configured template; the authenticated
+Knowledge Flow binary `/fs` transport supplies its download link. The
+`LinkPart` / `ui_parts` SSE contract is unchanged, and runtime history persists
+those parts so live streaming and replay match. Corpus documents, attachments,
+Deep conversation files, Wiki and writable documents use their separate
+contracts. See `docs/swift/design/FILESYSTEM.md`.
 
 ---
 
@@ -899,7 +899,10 @@ The Rico system prompt (`basic_react_rag_expert_system_prompt.md`) was also
 rewritten to add explicit `[N]` citation format rules, inline placement
 requirements, and a "never reproduce URLs" guardrail.
 
-### 8.8 ✅ `artifacts.publish_text` — `key` arg removed — FILES-04 (June 2026)
+### 8.8 Historical: `artifacts.publish_text` — retired by #2986
+
+The whole legacy tool was subsequently removed. The note below records its
+June 2026 schema correction and does not describe a current agent tool.
 
 **Was**: `ArtifactPublishTextToolArgs` (`fred-sdk` builtin catalog) exposed an
 optional `key` "logical storage key" field with the promise *"leave empty to let
@@ -1107,6 +1110,8 @@ class DocumentSearchPort(ABC):
         library_tag_ids: Sequence[str] | None = None,
         document_uids: Sequence[str] | None = None,
         search_policy: str | None = None,
+        include_attachments: bool = True,
+        include_team_documents: bool = True,
     ) -> DocumentSearchResult: ...
 
 @dataclass(frozen=True, slots=True)
@@ -1139,6 +1144,33 @@ conversation's attached files, never the corpus. First consumer:
 `document_access.search_attachments_only` (the capability also drops its
 scope-picker chat control when the flag is on). `general_only` RAG scope keeps
 precedence (no search at all).
+
+**Amendment (2026-10-07, split-attachments-and-team-documents).** `search()`
+takes two source ceilings, `include_attachments: bool = True` and
+`include_team_documents: bool = True`. The adapter ANDs them with the per-turn
+RAG scope (`session = turn_session and include_attachments`,
+`corpus = turn_corpus and include_team_documents`), so the turn can only narrow
+the agent's sources, and returns no hits without calling Knowledge Flow when
+neither scope remains. `document_access` now passes its
+`attachments` / `team_documents` config, which replaces
+`show_attach_files_control` / `search_attachments_only` (legacy keys are read
+through a before-validator). `RagScopeControlParams` gains an additive
+`options: list[RagScopeName] | None` (None = every choice).
+
+**Amendment (2026-10-08, reviewer decisions).** `attachments_only` is removed
+immediately, including its resolver and warning state; old callers must migrate
+to the two source keywords. The developer explicitly accepts this SDK break
+with library patch versions. `fred-sdk` and `fred-runtime` advance to `4.4.2`,
+and document access requires that SDK floor. Publish the libraries after merge
+before updating external consumers.
+
+`corpus_only` retains its wire name but means "Documents only": session
+attachments and team documents, intersected with the agent's ceilings and any
+explicit turn scope flags. It remains available when either source is enabled.
+The shared ReAct/Deep system prompt instructs this mode to use document evidence
+only and report missing information rather than supplement from general
+knowledge. Graph implementations remain responsible for their own prompts.
+There is no OpenAPI/wire-schema change.
 
 ---
 
@@ -3571,9 +3603,8 @@ route, no plumbing duplication.
 
 **Bounded context.** `CorpusTreeService` is a read-only projection over the
 already-ingested corpus — it stores no bytes, accepts no writes, and is
-intentionally distinct from the future `WorkspaceService` (mutable,
-persistent user/agent files, currently implemented under `/fs`). See
-`FILESYSTEM.md` "Business labels vs. scope tags".
+intentionally distinct from the retired general-purpose user/agent filesystem.
+See `FILESYSTEM.md` "Business labels vs. scope tags".
 
 Tests: `test_corpus_tree_builder.py` (renderer invariant),
 `test_corpus_tree_service.py`, `test_metadata_service_labels.py` +
@@ -4953,6 +4984,10 @@ inspection.
 ---
 
 ### 8.69 ✅ MCP tool descriptions stop carrying response schemas — issue #2412 item 2 (2026-08-28)
+
+This section records the August 2026 measurements. The filesystem and corpus
+MCP mounts, and later the corpus-manager HTTP API, were retired by #2984;
+the corresponding follow-up findings below are historical.
 
 **What changed.** No MCP tool description carries response documentation any
 more. Two steps, landed together in knowledge-flow's `main.py`:

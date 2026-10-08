@@ -24,7 +24,10 @@ import type {
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import { AgentFormBody, type SectionKey } from "./AgentFormBody.tsx";
 import { TemplateBrowser } from "./TemplateBrowser/TemplateBrowser.tsx";
+import { applyDocumentAccessConfigChange, normalizeDocumentAccessConfig } from "./toolPackLogic.ts";
+import { CAP_DOCUMENT_ACCESS } from "./toolPacks.ts";
 import { reservedTagInPromptField } from "@rework/utils/promptValidation";
+import styles from "./AgentFormModal.module.css";
 
 export type AgentFormPayload = {
   templateId: string;
@@ -206,17 +209,33 @@ export function buildAgentFormSubmitPayload(
 /**
  * Unwraps the persisted per-capability `{schema_version, config}` envelopes into
  * the flat `{ [capabilityId]: config }` shape the edit form renders and mutates.
+ * Legacy `document_access` keys are read as its two sources.
  */
 export function extractCapabilityConfigValues(
   storedConfig: ManagedAgentInstanceSummary["capability_config"],
 ): Record<string, Record<string, unknown>> {
   if (!storedConfig) return {};
   return Object.fromEntries(
-    Object.entries(storedConfig).map(([id, envelope]) => [
-      id,
-      (envelope as { config?: Record<string, unknown> })?.config ?? {},
-    ]),
+    Object.entries(storedConfig).map(([id, envelope]) => {
+      const config = (envelope as { config?: Record<string, unknown> })?.config ?? {};
+      return [id, id === CAP_DOCUMENT_ACCESS ? normalizeDocumentAccessConfig(config) : config];
+    }),
   );
+}
+
+/** Turning reasoning on also turns it on by default for new conversations;
+ *  the member can still untick that afterwards. */
+export function withReasoning(
+  prev: Pick<FormState, "reasoningEnabled" | "reasoningDefaultOn">,
+  enabled: boolean,
+): Pick<FormState, "reasoningEnabled" | "reasoningDefaultOn"> {
+  const turnedOn = enabled && !prev.reasoningEnabled;
+  return { reasoningEnabled: enabled, reasoningDefaultOn: turnedOn || prev.reasoningDefaultOn };
+}
+
+/** Save-blocking problems reported by config widgets. Only ACTIVE capabilities count. */
+function isCapabilityBlocked(form: Pick<FormState, "selectedCapabilityIds" | "capabilityBlockingErrors">): boolean {
+  return form.selectedCapabilityIds.some((id) => !!form.capabilityBlockingErrors[id]);
 }
 
 export default function AgentFormModal({
@@ -331,6 +350,10 @@ export default function AgentFormModal({
   };
 
   const handleCapabilityConfigChange = (capabilityId: string, key: string, value: unknown) => {
+    if (capabilityId === CAP_DOCUMENT_ACCESS) {
+      setForm((prev) => ({ ...prev, ...applyDocumentAccessConfigChange(prev, key, value) }));
+      return;
+    }
     setForm((prev) => ({
       ...prev,
       capabilityConfigValues: {
@@ -371,7 +394,7 @@ export default function AgentFormModal({
   );
   // A capability config widget may block the save (e.g. ppt_filler while its
   // mandatory template is missing, #1903) — only ACTIVE capabilities count.
-  const capabilityBlocked = form.selectedCapabilityIds.some((id) => !!form.capabilityBlockingErrors[id]);
+  const capabilityBlocked = isCapabilityBlocked(form);
   const isFormValid =
     !!form.templateId &&
     !!form.displayName.trim() &&
@@ -419,6 +442,7 @@ export default function AgentFormModal({
       isOpen={isOpen}
       onClose={onClose}
       id="agent-form-modal"
+      cardClassName={styles.card}
       title={title}
       subtitle={subtitle}
       actions={
@@ -474,7 +498,7 @@ export default function AgentFormModal({
           onRoleChange={(v) => setForm((prev) => ({ ...prev, role: v }))}
           onDescriptionChange={(v) => setForm((prev) => ({ ...prev, description: v }))}
           onUsageStatementChange={(v) => setForm((prev) => ({ ...prev, usageStatement: v }))}
-          onReasoningEnabledChange={(v) => setForm((prev) => ({ ...prev, reasoningEnabled: v }))}
+          onReasoningEnabledChange={(v) => setForm((prev) => ({ ...prev, ...withReasoning(prev, v) }))}
           onReasoningDefaultOnChange={(v) => setForm((prev) => ({ ...prev, reasoningDefaultOn: v }))}
           onTuningChange={handleTuningChange}
           onCapabilitySelectionChange={(ids) => setForm((prev) => ({ ...prev, selectedCapabilityIds: ids }))}
@@ -483,7 +507,7 @@ export default function AgentFormModal({
               ...prev,
               selectedCapabilityIds: next.selectedCapabilityIds,
               capabilityConfigValues: next.capabilityConfigValues,
-              reasoningEnabled: next.reasoningEnabled,
+              ...withReasoning(prev, next.reasoningEnabled),
             }))
           }
           onCapabilityConfigChange={handleCapabilityConfigChange}

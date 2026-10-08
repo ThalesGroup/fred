@@ -40,15 +40,11 @@ function render(configValues: Record<string, unknown>): string {
 }
 
 describe("DocumentAccessPackOptions", () => {
-  it("shows the attachment-only switch below library scoping", () => {
-    const html = render({ bind_libraries: true, search_attachments_only: true });
-    const scoping = "capability.document_access.fields.bind_libraries.title";
-    const attachmentsOnly = "capability.document_access.fields.search_attachments_only.title";
-
-    expect(html.indexOf(scoping)).toBeLessThan(html.indexOf(attachmentsOnly));
-    expect(html.indexOf("folder-tree")).toBeLessThan(html.indexOf(attachmentsOnly));
-    expect(html).toContain(`data-checked="true">${attachmentsOnly}`);
-    expect(render({})).toContain(`data-checked="false">${attachmentsOnly}`);
+  it("offers library scoping only, with no attachments switch", () => {
+    const html = render({ bind_libraries: true });
+    expect(html).toContain("capability.document_access.fields.bind_libraries.title");
+    expect(html).not.toContain("search_attachments_only");
+    expect(html).not.toContain("capability.document_access.fields.attachments");
   });
 
   it("hides the folder tree until libraries are bound", () => {

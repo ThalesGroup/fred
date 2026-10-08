@@ -159,7 +159,7 @@ def test_context_aware_tool_injects_document_filters_for_mcp_search_tools() -> N
     assert injected["session_id"] == "session-1"
     assert injected["team_id"] == "team-1"
     assert injected["owner_filter"] == "team"
-    assert injected["include_session_scope"] is False
+    assert injected["include_session_scope"] is True
     assert injected["include_corpus_scope"] is True
 
 

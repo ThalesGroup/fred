@@ -719,28 +719,19 @@ POST /knowledge-flow/v1/storage/user/upload   (knowledge-flow-backend, existing 
   Response: { download_url, key, file_name, size, … }
 ```
 
-The control-plane does not proxy or store binary content. File identity is a path in
-the Knowledge Flow virtual filesystem. Users see four team-scoped roots:
-`Resources`, `Mon espace`, `Espace d'equipe`, and `Agents`. Those map server-side to
-canonical paths such as `/corpus/...`,
-`/teams/{team}/users/{uid}/...`, `/teams/{team}/shared/...`, and
-`/teams/{team}/agents/{agent_instance_id}/users/{uid}/...`. The agent uses the Knowledge
-Flow MCP filesystem to read/write those paths through the simplified SDK/MCP
-surface. The control-plane's role is session and instance management only; file
-storage is `knowledge-flow-backend`'s responsibility.
-
-This boundary is intentionally simple so that future skills can treat files as a
-basic filesystem capability rather than a special control-plane feature. A skill
-should only need to know the path model and the MCP filesystem primitives; it should
-not need to learn a second storage abstraction owned by control-plane.
+The control-plane does not proxy or store binary content. Users browse corpus
+documents in Resources; conversation attachments use their existing document
+path. Knowledge Flow retains technical `/fs` paths for capability configuration
+assets and generated PPT outputs under
+`/teams/{team}/agents/{agent_instance_id}/...`. The runtime writes PPT outputs
+through `workspace_fs.write` and returns a Knowledge Flow download link. The
+control-plane manages sessions and agent instances, not file bytes.
 
 Implementation note: the system must stay compatible with open-source storage stacks
 without hard-coding MinIO, OpenSearch, or any other specific vendor service into the
 contract. Browser-facing download references remain Fred/Knowledge Flow links represented
 as `LinkPart`; storage-provider URLs and credentials are implementation details.
 
-Attachment metadata (filename, size, MIME type) may appear in `SessionListItem`
-as display-only fields once CHAT-04 (attachment picker) is implemented.
 See `docs/swift/design/FILESYSTEM.md`.
 
 ---
@@ -1859,62 +1850,12 @@ silently-partial `succeeded`):
    already hold `team_admin` on every touched team). Idempotent — re-running
    an already-reconciled bundle re-writes the same tuples with no error.
 
-## 28. Contract Notes — MIGR-07, corpus re-vectorization (finalized 2026-07-25)
+## 28. Contract Notes — MIGR-07 corpus re-vectorization (retired)
 
-MIGR-07 backend is built (issue #2111). No knowledge-flow-backend equivalent
-of this contract doc exists yet (checked `docs/swift/design/` and
-`docs/swift/platform/` — nothing covers corpus/ingestion endpoint contracts);
-this section is the interim canonical record for the shape below until one is
-created — **flagged to Dimitri, not unilaterally created here.**
-
-**Endpoint:** `POST /knowledge-flow/v1/corpus/revectorize` (admin/owner-only,
-`RevectorizeCorpusRequestV1`: `scope` + `mode`/`force`) — starts a real
-`task_run` (`kind="ingestion"`, not a new `"revectorize"` kind — reuses
-`emit_ingestion_task_event`/`IngestionTaskEvent` verbatim so `TaskService`'s
-terminal-event reconciliation emits the right event type) and a Temporal
-workflow, `202 { task_id }`.
-
-**Temporal workflow shape** (`features/scheduler/workflow.py`, mirrors the
-`ProcessPull`/`ProcessPullFile` parent/child pattern):
-
-- `RevectorizeCorpusWorkflow.run(payload)` — resolves `scope` to
-  `document_uids` via the `list_documents_in_scope` activity, then batches
-  `RevectorizeDocument` children at `scheduler.temporal.ingestion_workflow_parallelism`
-  (reused, not a new request field), emitting one running/succeeded task
-  event with `processed`/`total`/`failed` counts.
-- `RevectorizeDocument.run(document_uid, options, user, task_id)` — skips a
-  document already vectorized under `mode: incremental` + no `force`
-  (`get_chunk_count` == 0 check); otherwise deletes existing vectors (if any)
-  and re-runs `output_process` (reused verbatim — restores from the mirrored
-  `output.md` in object storage, no re-extraction). Catches its own
-  exceptions and returns `{"failed": true}` rather than raising, so one bad
-  document cannot abort the whole corpus batch — the entire body from the
-  initial `get_chunk_count` call onward must stay inside the `try` (a gap in
-  the first cut, where `get_chunk_count` sat outside the `try`, was found and
-  fixed in review — see PR #2106).
-- `list_documents_in_scope` activity resolves a `CorpusScopeV1`-shaped dict:
-  `document_uids` wins outright; otherwise `tag_ids`/`source_tag` query the
-  raw metadata store directly (not per-user READ-filtered — the scope was
-  already authorized at the platform/team level by
-  `corpus_manager_controller._authorize_scope`).
-
-**Scope semantics:** `mode: full` → delete + re-embed every in-scope doc.
-`mode: incremental` → only docs with 0 vectors. `force: true` → always
-re-embed regardless of mode. `embedding_model` is advisory only (not wired
-into `prepare_revectorize_file`, which always uses
-`IngestionProcessingProfile.medium`; this repair path does not yet use the
-optional `DocumentMetadata.processing.profile`). Migration default scope: all migrated
-documents (by `source_tag`), `mode: full`.
-
-**Authorization:** a `source_tag`-only scope spans arbitrary teams (it's the
-migration's default scope) and requires `OrganizationPermission.CAN_MANAGE_PLATFORM`
-— same gate as `/documents/audit` and the import-export reset endpoints — not
-just per-tag/per-document ReBAC checks. Fixed alongside this build (the field
-existed but wasn't authorized before).
-
-**Remaining open item:** MIGR-07.04, the migration UI's "Rebuild embeddings"
-final-step trigger button (reuse the same task atoms already used by import)
-— a real future item, not yet built.
+The `/knowledge-flow/v1/corpus/*` maintenance API and its dedicated Temporal
+revectorization and vector-metadata repair workflows were retired with #2984.
+The independent document tree and ordinary ingestion APIs remain available.
+See the [migration note](../ops/migrations/retire-corpus-filesystem-mcp.md).
 
 ## 29. Contract Notes — TEAM-09 amendment, `joining_mode` narrowed to 2 states (2026-07-26, #2084)
 

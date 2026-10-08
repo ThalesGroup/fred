@@ -8,8 +8,8 @@ license = { text = "Apache-2.0" }
 authors = [{ name = "Fredlab", email = "contact@fredlab.com" }]
 dependencies = [
   "fred-core>=4.4.0",
-  "fred-sdk[agents]>=4.4.0",
-  "fred-runtime[app]>=4.4.0",
+  "fred-sdk[agents]>=4.4.2",
+  "fred-runtime[app]>=4.4.2",
   # First-party capabilities installed on this pod: installing the package IS
   # the registration (AGENT-CAPABILITY-RFC §4/§7, fred.capabilities entry point).
   "fred-capability-writable-document>=0.1.0",
@@ -18,7 +18,7 @@ dependencies = [
   "fred-capability-html-artifact>=0.1.0",
   "fred-capability-team-wiki>=0.1.0",
   "fred-capability-documents>=0.1.0",
-  "fred-capability-document-access>=0.1.0",
+  "fred-capability-document-access>=0.1.2",
   # Default MCP catalog and instructions, discovered through fred.mcp_catalogs.
   "fred-capability-mcp>=0.1.0",
   "fred-capability-web-research>=0.1.0",

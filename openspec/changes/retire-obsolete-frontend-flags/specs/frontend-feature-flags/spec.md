@@ -6,7 +6,7 @@ Defines the supported deployment-wide frontend feature flags and their fail-clos
 
 ### Requirement: Supported frontend flags remain typed and configurable
 
-The platform SHALL expose a typed `feature_flags` object containing `enableApplications`, `enableAllResourceSpaces`, and `enableInformationSystems` in the authenticated frontend bootstrap. Each flag SHALL be independently configurable and default to `false` when omitted. The frontend SHALL resolve absent values as disabled through the shared flag hook.
+The platform SHALL expose a typed `feature_flags` object containing `enableApplications` and `enableInformationSystems` in the authenticated frontend bootstrap. Each flag SHALL be independently configurable and default to `false` when omitted. The frontend SHALL resolve absent values as disabled through the shared flag hook.
 
 #### Scenario: Configured supported flag
 

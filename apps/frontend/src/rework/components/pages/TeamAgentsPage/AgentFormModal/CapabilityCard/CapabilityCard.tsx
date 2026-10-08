@@ -42,13 +42,13 @@ interface CapabilityCardProps {
  */
 export function CapabilityCard({ name, description, checked, disabled, onToggle, subForm }: CapabilityCardProps) {
   return (
-    <li className={styles.card}>
+    <li className={styles.card} data-checked={checked}>
       {/* The whole header is the click target, padding included — <label>
           wrapping the Switch as a descendant (same pattern as SwitchRow), not
           a plain <div> whose padding sits outside a smaller inner <label>'s
           box and swallows clicks near the card's edges. */}
       <label className={styles.header}>
-        <Switch checked={checked} onChange={onToggle} disabled={disabled} aria-label={name} />
+        <Switch size="small" checked={checked} onChange={onToggle} disabled={disabled} aria-label={name} />
         <div className={styles.meta}>
           <span className={`${styles.name} ${checked ? styles.nameActive : ""}`}>{name}</span>
           {description && <span className={styles.description}>{description}</span>}
@@ -100,9 +100,19 @@ export function CapabilityConfigForm({
 }) {
   const { t } = useTranslation();
   const effectiveValues = Object.fromEntries(configFields.map((f) => [f.key, configValues[f.key] ?? f.default]));
-  const visibleFields = configFields.filter(
-    (f) => !f.ui?.hide && (!f.ui?.visible_when || Boolean(effectiveValues[f.ui.visible_when])),
-  );
+  // A gate hidden by its own gate hides its dependants too (a stored
+  // `bind_libraries` must not show the picker while team documents is off).
+  const fieldsByKey = new Map(configFields.map((f) => [f.key, f]));
+  const isVisible = (field: (typeof configFields)[number], depth = 0): boolean => {
+    if (field.ui?.hide) return false;
+    const gate = field.ui?.visible_when;
+    if (!gate) return true;
+    const gateField = fieldsByKey.get(gate);
+    return (
+      Boolean(effectiveValues[gate]) && (!gateField || depth > configFields.length || isVisible(gateField, depth + 1))
+    );
+  };
+  const visibleFields = configFields.filter((f) => isVisible(f));
   const mainFields = visibleFields.filter((f) => !f.ui?.advanced);
   const advancedFields = visibleFields.filter((f) => f.ui?.advanced);
 
@@ -146,6 +156,7 @@ export function CapabilityConfigForm({
               disabled={disabled}
               teamId={teamId}
               allValues={effectiveValues}
+              switchSize="small"
             />
           </div>
         </Fragment>

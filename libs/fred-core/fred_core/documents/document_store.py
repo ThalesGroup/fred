@@ -236,12 +236,6 @@ class BaseDocumentMetadataStore:
         return result
 
     @abstractmethod
-    async def list_by_source_tag(
-        self, source_tag: str, session: AsyncSession | None = None
-    ) -> List[DocumentMetadata]:
-        """Return all metadata entries originating from a specific pull source."""
-
-    @abstractmethod
     async def list_by_source_library(
         self,
         source_library_id: str,

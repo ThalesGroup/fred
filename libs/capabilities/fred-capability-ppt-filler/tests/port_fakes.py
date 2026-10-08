@@ -91,9 +91,6 @@ class FakeWorkspace(WorkspaceFsPort):
     async def read_text(self, path: str) -> str:  # pragma: no cover
         raise NotImplementedError
 
-    async def read_user_bytes(self, path: str) -> bytes:  # pragma: no cover
-        raise NotImplementedError
-
     async def read_team_bytes(self, path: str) -> bytes:  # pragma: no cover
         raise NotImplementedError
 

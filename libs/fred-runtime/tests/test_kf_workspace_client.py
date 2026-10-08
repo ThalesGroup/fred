@@ -21,7 +21,6 @@ import pytest
 from fred_runtime.common.kf_workspace_client import (
     KfWorkspaceClient,
     UserStorageBlob,
-    UserStorageResourceInfo,
     UserStorageUploadResult,
     WorkspaceRetrievalError,
     WorkspaceUploadError,
@@ -213,29 +212,20 @@ async def test_fs_download_blob_uses_fs_download_route():
 
 
 @pytest.mark.asyncio
-async def test_fs_read_text_decodes_downloaded_bytes():
-    client = _make_client()
-    blob = UserStorageBlob("héllo".encode("utf-8"), "text/plain", "x.md", 6)
-    with patch.object(client, "fs_download_blob", return_value=blob):
-        text = await client.fs_read_text("teams/acme/shared/notes.md")
-    assert text == "héllo"
-
-
-@pytest.mark.asyncio
 async def test_fs_upload_uses_fs_upload_route():
     client = _make_client()
     expected = UserStorageUploadResult(key="k", file_name="d.pptx", size=4)
     with patch.object(client, "_upload_blob", return_value=expected) as m:
         result = await client.fs_upload(
-            "teams/acme/users/u-1/outputs/d.pptx",
+            "teams/acme/agents/report-writer/users/u-1/outputs/d.pptx",
             b"data",
             "d.pptx",
             "application/octet-stream",
         )
     assert result is expected
     m.assert_awaited_once_with(
-        "/fs/upload/teams/acme/users/u-1/outputs/d.pptx",
-        "teams/acme/users/u-1/outputs/d.pptx",
+        "/fs/upload/teams/acme/agents/report-writer/users/u-1/outputs/d.pptx",
+        "teams/acme/agents/report-writer/users/u-1/outputs/d.pptx",
         b"data",
         "d.pptx",
         "application/octet-stream",
@@ -247,9 +237,9 @@ def test_fs_path_percent_encodes_reserved_chars_preserving_separators():
     # truncated, while "/" separators stay literal.
     assert (
         KfWorkspaceClient._fs_path(
-            "download", "teams/acme/users/u-1/outputs/Q3 #1?.txt"
+            "download", "teams/acme/agents/report-writer/users/u-1/outputs/Q3 #1?.txt"
         )
-        == "/fs/download/teams/acme/users/u-1/outputs/Q3%20%231%3F.txt"
+        == "/fs/download/teams/acme/agents/report-writer/users/u-1/outputs/Q3%20%231%3F.txt"
     )
 
 
@@ -272,80 +262,6 @@ async def test_fs_delete_calls_delete_route():
     args, _kwargs = m.call_args
     assert args[0] == "DELETE"
     assert args[1] == "/fs/delete/teams/acme/shared/x.txt"
-
-
-@pytest.mark.asyncio
-async def test_fs_list_parses_entries_and_passes_path():
-    client = _make_client()
-    mock_response = MagicMock()
-    mock_response.raise_for_status = MagicMock()
-    mock_response.json = MagicMock(
-        return_value=[
-            {"path": "deck.pptx", "size": 10, "type": "file", "modified": None}
-        ]
-    )
-    with patch.object(
-        client, "_request_with_token_refresh", return_value=mock_response
-    ) as m:
-        entries = await client.fs_list("teams/acme/shared")
-    assert len(entries) == 1
-    assert entries[0].is_file()
-    args, kwargs = m.call_args
-    assert args[0] == "GET"
-    assert args[1] == "/fs/list"
-    assert kwargs["params"] == {"path": "teams/acme/shared"}
-
-
-# ---------------------------------------------------------------------------
-# _normalize_resource_type
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    "value,expected",
-    [
-        ("file", "file"),
-        ("FileSystemResourceInfo.File", "file"),
-        ("directory", "directory"),
-        ("dir", "directory"),
-        ("FileSystemResourceInfo.Directory", "directory"),
-        ("unknown_type", "unknown"),
-        (None, "unknown"),
-        ("", "unknown"),
-    ],
-)
-def test_normalize_resource_type(value: object, expected: str):
-    assert KfWorkspaceClient._normalize_resource_type(value) == expected
-
-
-# ---------------------------------------------------------------------------
-# _parse_user_storage_resource
-# ---------------------------------------------------------------------------
-
-
-def test_parse_user_storage_resource_returns_none_for_non_dict():
-    assert KfWorkspaceClient._parse_user_storage_resource("not a dict") is None
-    assert KfWorkspaceClient._parse_user_storage_resource(None) is None
-
-
-def test_parse_user_storage_resource_returns_none_for_missing_path():
-    assert KfWorkspaceClient._parse_user_storage_resource({"size": 1}) is None
-
-
-def test_parse_user_storage_resource_parses_full_entry():
-    result = KfWorkspaceClient._parse_user_storage_resource(
-        {
-            "path": "/foo/bar.txt",
-            "size": "1024",
-            "type": "file",
-            "modified": "2026-01-01T00:00:00Z",
-        }
-    )
-    assert result is not None
-    assert isinstance(result, UserStorageResourceInfo)
-    assert result.path == "/foo/bar.txt"
-    assert result.size == 1024
-    assert result.is_file()
 
 
 # ---------------------------------------------------------------------------

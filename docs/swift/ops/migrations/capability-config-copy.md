@@ -3,8 +3,8 @@ schema: 1
 title: "Capabilities classify their settings by scope and can prepare a copy of their configuration"
 impact: none
 configuration: production
-configuration_reason: "The bundled MCP catalog in deploy/charts/fred/values.yaml marks chat_options.bound_library_ids with the new optional scope_private: true; no other key or default changes."
-no_action_reason: "The new pod endpoint is additive and nothing calls it yet; existing agents, stored configurations and MCP catalogs keep working unchanged."
+configuration_reason: "The bundled MCP catalog marks chat_options.bound_library_ids with scope_private: true. In the final release it is delivered by fred-capability-mcp; custom servers use the chart external catalog described in the MCP migration note."
+no_action_reason: "The copy-config endpoint is additive and is used by agent copying in this release; normal deployment keeps existing agent configurations valid. Custom catalogs should mark team-private library fields before cross-team copies."
 ---
 
 ## Applicability
@@ -22,15 +22,16 @@ No additional prerequisites beyond the normal deployment procedure.
 boolean. When omitted, the field is treated as public. The bundled catalog sets
 `scope_private: true` on `chat_options.bound_library_ids`.
 
-Deployments that maintain their own MCP catalog can add the same line to their
-`chat_options.bound_library_ids` fields now. It only matters once copying agents
-between teams is released; that release's note will say so again.
+In the external catalog prepared during the
+[MCP migration](extract-mcp-agent-instructions.md), mark custom
+`chat_options.bound_library_ids` fields with `scope_private: true` before copying
+agents across teams. Without it, copies retain origin-team library identifiers.
+The bundled catalog already carries this marker.
 
 ## Upgrade
 
-Deploy Fred normally; no additional operator action is required. The agent pods
-expose `POST /agents/capabilities/{id}/copy-config`, which no component calls in
-this release.
+Deploy matching agent pods, control plane and frontend. The agent copy flow
+uses `POST /agents/capabilities/{id}/copy-config` in this release.
 
 ## Validation
 
