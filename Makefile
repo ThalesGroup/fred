@@ -232,7 +232,7 @@ _pypi-pending:
 
 .PHONY: publish-libs
 publish-libs: ## Build every PyPI package, then publish, in order, each version PyPI does not have yet (requires PYPI_TOKEN)
-	@test -n "$(PYPI_TOKEN)" || { echo "PYPI_TOKEN is not set: nothing was built or uploaded."; exit 1; }
+	@test -n "$$PYPI_TOKEN" || { echo "PYPI_TOKEN is not set: nothing was built or uploaded."; exit 1; }
 	$(MAKE) publish-libs-dry-run
 	@set -e; \
 	pending=$$($(MAKE) -s _pypi-pending); \
