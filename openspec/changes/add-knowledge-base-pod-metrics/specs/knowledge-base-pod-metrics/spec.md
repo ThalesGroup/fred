@@ -82,13 +82,22 @@ that implementation's own version.
 
 ### Requirement: Structured logs
 
-A pod serving runs SHALL write its log records to standard output, one JSON
-object per line, each with at least `ts` (Unix time), `level`, `logger`, `msg`,
+A pod SHALL write its log records to standard output, one JSON object per
+line, from its first record — including those emitted while its configuration
+loads — each with at least `ts` (Unix time), `level`, `logger`, `msg`,
 `service` (the runtime id) and `knowledge_base` (the definition id). The
 configuration key `observability.logs.format` SHALL accept `json` (default)
 and `text`; `text` is for local work and SHALL still carry the runtime id on
 every line. Log records SHALL follow the same exclusions as other Fred logs:
 no secret, no token, no document content.
+
+#### Scenario: Configuration loading is logged as the pod
+- **WHEN** the pod logs while loading its configuration, then starts
+- **THEN** those lines are JSON objects carrying the runtime id, like every later line
+
+#### Scenario: Configuration that cannot load
+- **WHEN** the configuration cannot be loaded, so the pod has no identity
+- **THEN** the records emitted so far are written as text on standard error before the pod exits
 
 #### Scenario: Log line joins its metric
 - **WHEN** a run fails and the pod logs the failure in the default format
@@ -198,10 +207,12 @@ The pod SHALL measure every HTTP call it makes to Fred:
 | `fred_kb_requests_total` | counter | `knowledge_base`, `target`, `operation`, `status` |
 | `fred_kb_request_duration_seconds` | histogram | `knowledge_base`, `target`, `operation` |
 
-`target` SHALL be `control_plane` or `knowledge_flow`. `operation` SHALL be one
-of `publish`, `run_context` (control plane) or `declare_synchronized`,
-`publish`, `task_status`, `list`, `retract`, `source_version_get`,
-`source_version_put` (knowledge flow). `status` SHALL be the HTTP status class
+`target` SHALL be `control_plane` or `knowledge_flow`. `operation` SHALL be
+`run_context` (control plane) or one of `declare_synchronized`, `publish`,
+`task_status`, `list`, `retract`, `source_version_get`, `source_version_put`
+(knowledge flow). The declaration's publication to the control plane is not
+measured: it runs as a one-shot deployment hook that no scraper reaches, and its
+exit status and logs are its outcome. `status` SHALL be the HTTP status class
 (`2xx`, `4xx`, `5xx`, …), `transport_error` when no answer arrived because of
 the network, or `error` otherwise. Durations SHALL include failed calls and
 any credential acquisition the call needed, so an unreachable identity

@@ -55,8 +55,10 @@ class ControlPlaneClient:
 
     async def publish(self, declaration: KnowledgeBaseDeclaration) -> None:
         """Upsert this definition's declaration. Idempotent, so a redeploy replays."""
+        # Not measured: `publish` runs as a one-shot deployment hook that no
+        # scraper ever reaches. Its exit status and logs are its outcome.
         await self._request(
-            "publish",
+            None,
             "PUT",
             f"/knowledge-bases/definitions/{declaration.id}",
             json={"prefix": self._prefix, **declaration.to_payload()},
@@ -83,17 +85,21 @@ class ControlPlaneClient:
 
     async def _request(
         self,
-        operation: str,
+        operation: str | None,
         method: str,
         path: str,
         json: object | None = None,
         params: dict[str, str] | None = None,
     ) -> dict:
-        with telemetry.observing_request("control_plane", operation) as answered:
-            response = await self._client.request(
-                method, f"{self._base_url}{path}", json=json, params=params
-            )
-            answered(response.status_code)
+        url = f"{self._base_url}{path}"
+        if operation is None:
+            response = await self._client.request(method, url, json=json, params=params)
+        else:
+            with telemetry.observing_request("control_plane", operation) as answered:
+                response = await self._client.request(
+                    method, url, json=json, params=params
+                )
+                answered(response.status_code)
         response.raise_for_status()
         if not response.content:
             return {}

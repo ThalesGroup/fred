@@ -262,7 +262,11 @@ class DocumentPublisher:
             data={
                 "path": relative_path,
                 "source_key": relative_path,
-                **({"source_tag": self._source_tag} if self._source_tag else {}),
+                **(
+                    {"source_tag": self._source_tag}
+                    if self._source_tag is not None
+                    else {}
+                ),
                 "profile": profile,
                 **({"document_version": version} if version else {}),
             },

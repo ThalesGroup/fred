@@ -631,3 +631,14 @@ def test_an_explicit_source_tag_is_still_sent(monkeypatch):
     asyncio.run(publisher.publish(relative_path="docs/a.md", content=b"# A"))
 
     assert fred.calls[0][2]["data"]["source_tag"] == "archive"
+
+
+def test_an_explicit_empty_source_tag_is_sent_not_replaced(monkeypatch):
+    """Only an absent tag is left to Knowledge Flow; an empty one is its to refuse."""
+    fred = _Fred().answers("POST", (202, ACCEPTED))
+    fred.install(monkeypatch)
+    publisher = DocumentPublisher(_configuration(), library_id=LIBRARY, source_tag="")
+
+    asyncio.run(publisher.publish(relative_path="docs/a.md", content=b"# A"))
+
+    assert fred.calls[0][2]["data"]["source_tag"] == ""

@@ -402,7 +402,7 @@ off cannot host one — including for local development.
 **Metrics and logs come with the SDK; you write no code for them.** Name the pod
 with `app.runtime_id` in its `configuration.yaml` (a lowercase slug, chosen by
 whoever deploys it — the pod refuses to start without one). Every run, every call
-to Fred and every ingestion wait is then measured as `fred_kb_*` series labelled
+a run makes to Fred and every ingestion wait is then measured as `fred_kb_*` series labelled
 `service=<runtime_id>`, served read-only on `observability.kpi.prometheus` (port
 9000, loopback until bound outward), and every log line is JSON on standard
 output carrying the same `service` (`observability.logs.format: text` for a

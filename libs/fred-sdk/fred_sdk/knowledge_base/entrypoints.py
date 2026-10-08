@@ -35,14 +35,22 @@ from fred_sdk.knowledge_base.configuration import (
 )
 from fred_sdk.knowledge_base.declaration import KnowledgeBaseDeclaration
 from fred_sdk.knowledge_base.knowledge_base import KnowledgeBase
-from fred_sdk.knowledge_base.logs import configure_logging
+from fred_sdk.knowledge_base.logs import (
+    configure_logging,
+    hold_until_configured,
+    release_unconfigured,
+)
 
 logger = logging.getLogger(__name__)
 
 
 def _load(knowledge_base: KnowledgeBase) -> PodConfiguration:
     """Read the configuration once: log as the pod it names, and hand it to runs."""
-    configuration = PodConfiguration.load()
+    try:
+        configuration = PodConfiguration.load()
+    except BaseException:
+        release_unconfigured()
+        raise
     bind_active_configuration(configuration)
     configure_logging(
         service=configuration.runtime_id,
@@ -113,7 +121,8 @@ def knowledge_base_main(
     commands.add_parser("run", help="serve runs until stopped")
 
     arguments = parser.parse_args(argv)
-    logging.basicConfig(level=logging.INFO, format="%(levelname)-7s %(message)s")
+    # Nothing is written until the configuration names the pod: see logs.py.
+    hold_until_configured()
 
     if arguments.command == "publish":
         publish_knowledge_base(knowledge_base)

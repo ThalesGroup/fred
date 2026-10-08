@@ -22,7 +22,11 @@ from collections.abc import Iterator
 
 import pytest
 from fred_sdk.knowledge_base.configuration import PodConfiguration
-from fred_sdk.knowledge_base.logs import configure_logging
+from fred_sdk.knowledge_base.logs import (
+    configure_logging,
+    hold_until_configured,
+    release_unconfigured,
+)
 from pydantic import ValidationError
 
 
@@ -116,3 +120,28 @@ def test_logs_default_to_json_and_refuse_an_unknown_format():
     )
     with pytest.raises(ValidationError, match="format"):
         PodConfiguration.model_validate(_payload(logs={"format": "xml"}))
+
+
+def test_lines_logged_while_the_configuration_loads_are_written_as_the_pod(capsys):
+    """The first lines of a pod are JSON with its service, like every other."""
+    hold_until_configured()
+    logging.getLogger("fred_pod.config").info("Loaded configuration from: %s", "x.yaml")
+    assert _lines(capsys) == []
+
+    configure_logging(service="webdav-kb", knowledge_base="k.b", log_format="json")
+
+    [line] = _lines(capsys)
+    record = json.loads(line)
+    assert record["service"] == "webdav-kb"
+    assert record["msg"] == "Loaded configuration from: x.yaml"
+
+
+def test_a_configuration_that_cannot_load_still_shows_why(capsys):
+    hold_until_configured()
+    logging.getLogger("fred_pod.config").error("No configuration at %s", "x.yaml")
+
+    release_unconfigured()
+
+    captured = capsys.readouterr()
+    assert "No configuration at x.yaml" in captured.err
+    assert captured.out == ""

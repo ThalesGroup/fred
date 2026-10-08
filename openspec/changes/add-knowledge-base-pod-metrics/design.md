@@ -98,9 +98,12 @@ what makes `service` filterable. Field names follow `fred_core`'s
 `CompactJsonFormatter` (`ts`, `level`, `logger`, `msg`, `service`) so one
 query reads both; the formatter is re-implemented in the SDK in a few lines
 rather than imported from `fred-core`. `observability.logs.format: text`
-keeps local work readable. Note, out of scope: native backends' console
-output is text without `service` — only their store handler writes it — a
-divergence for a separate change.
+keeps local work readable. Records emitted while the configuration loads are
+held and replayed once the pod knows its `runtime_id`, so the stream is JSON
+from its first line; if loading fails they are written as text on stderr, so
+the reason is never lost. Note, out of scope: native backends' console output
+is text without `service` — only their store handler writes it — a divergence
+for a separate change.
 
 **D11. Reconciliation is three-valued in the result itself.** A boolean
 `reconciliation_complete` could not say "nothing to do": an incremental source

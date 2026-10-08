@@ -42,7 +42,8 @@ from prometheus_client import REGISTRY
 IDENTITY = {"service", "knowledge_base"}
 
 OPERATIONS = {
-    "control_plane": {"publish", "run_context"},
+    # The declaration's `publish` is a one-shot hook nobody scrapes: unmeasured.
+    "control_plane": {"run_context"},
     "knowledge_flow": {
         "declare_synchronized",
         "publish",
