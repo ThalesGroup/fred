@@ -431,3 +431,192 @@ class TestBuildForChatUsableModelIdsGateSkip:
 
         assert selection.source == ModelSelectionSource.DEFAULT
         assert isinstance(model, BaseChatModel)
+
+
+# ---------------------------------------------------------------------------
+# build_chat_for_profile() — platform helpers outside any agent turn
+# ---------------------------------------------------------------------------
+
+
+def _helper_policy() -> ModelRoutingPolicy:
+    return ModelRoutingPolicy(
+        default_profile_by_capability={ModelCapability.CHAT: "default.chat"},
+        profiles=(
+            ModelProfile(
+                profile_id="default.chat",
+                capability=ModelCapability.CHAT,
+                model=_model_config(
+                    name="gpt-5", settings={"reasoning_effort": "high"}
+                ),
+                supports_thinking=True,
+            ),
+            _profile("rico.chat", name="other"),
+            _profile("embed", name="embedder", capability=ModelCapability.EMBEDDING),
+        ),
+        agent_profile_overrides={"rico": "rico.chat"},
+    )
+
+
+class TestBuildChatForProfile:
+    def test_none_builds_the_pod_default_without_reasoning(self) -> None:
+        provider = _RecordingProvider()
+        factory = _factory(
+            resolver=ModelRoutingResolver(_helper_policy()), provider=provider
+        )
+
+        model, name, plain = factory.build_chat_for_profile(None)
+
+        assert isinstance(model, BaseChatModel)
+        assert name == "gpt-5"
+        assert plain is None
+        assert len(provider.calls) == 1
+        built_config, built_capability = provider.calls[0]
+        assert built_capability == ModelCapability.CHAT
+        assert "reasoning_effort" not in (built_config.settings or {})
+
+    def test_a_known_chat_profile_is_built(self) -> None:
+        provider = _RecordingProvider()
+        factory = _factory(
+            resolver=ModelRoutingResolver(_helper_policy()), provider=provider
+        )
+
+        _model, name, _plain = factory.build_chat_for_profile("rico.chat")
+
+        assert name == "other"
+        assert provider.calls[0][0].name == "other"
+
+    @pytest.mark.parametrize(
+        ("profile_id", "reason"),
+        [
+            ("gone.chat", "not in this pod's catalog"),
+            ("embed", "not a chat profile (embedding)"),
+        ],
+    )
+    def test_unknown_or_non_chat_profile_falls_back_to_the_default(
+        self, profile_id: str, reason: str, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        factory = _factory(
+            resolver=ModelRoutingResolver(_helper_policy()),
+            provider=_RecordingProvider(),
+        )
+
+        _model, name, plain = factory.build_chat_for_profile(
+            profile_id, reasoning_effort="high"
+        )
+
+        assert name == "gpt-5"
+        assert plain is not None  # the reasoning model and its fallback
+        (warning,) = [
+            r.getMessage() for r in caplog.records if profile_id in r.getMessage()
+        ]
+        assert reason in warning
+
+    def test_on_keeps_an_on_off_profile_setting(self) -> None:
+        provider = _RecordingProvider()
+        factory = _factory(
+            resolver=ModelRoutingResolver(_helper_policy()), provider=provider
+        )
+
+        # No declared levels: any non-off choice means "on" at the profile's value.
+        _m, _n, plain = factory.build_chat_for_profile(
+            "default.chat", reasoning_effort="low"
+        )
+        factory.build_chat_for_profile(None, reasoning_effort="medium")
+
+        sent = [(c.settings or {}).get("reasoning_effort") for c, _ in provider.calls]
+        # Each build: the plain fallback first, then the reasoning model.
+        assert sent == [None, "high", None, "high"]
+        assert plain is not None
+
+    def test_reasoning_is_ignored_without_supports_thinking(self) -> None:
+        policy = _helper_policy()
+        no_aptitude = ModelProfile(
+            profile_id="plain.chat",
+            capability=ModelCapability.CHAT,
+            model=_model_config(name="plain"),
+        )
+        policy = policy.model_copy(update={"profiles": (*policy.profiles, no_aptitude)})
+        provider = _RecordingProvider()
+        factory = _factory(resolver=ModelRoutingResolver(policy), provider=provider)
+
+        _m, _n, plain = factory.build_chat_for_profile(
+            "plain.chat", reasoning_effort="high"
+        )
+
+        assert "reasoning_effort" not in (provider.calls[0][0].settings or {})
+        assert plain is None
+        assert (
+            factory.build_chat_for_profile("rico.chat", reasoning_effort="high")[2]
+            is None
+        )
+
+    @pytest.mark.parametrize(
+        ("levels", "sent"), [(("high",), "high"), (None, None)], ids=["one", "none"]
+    )
+    def test_thinking_profile_without_own_effort(
+        self, levels: tuple[str, ...] | None, sent: str | None
+    ) -> None:
+        # One declared level is "on"; with neither a level nor its own value
+        # there is nothing to send, so any choice builds without reasoning.
+        thinking = ModelProfile(
+            profile_id="think.chat",
+            capability=ModelCapability.CHAT,
+            model=_model_config(name="think"),
+            supports_thinking=True,
+            reasoning_efforts=levels,  # type: ignore[arg-type]
+        )
+        policy = _helper_policy()
+        policy = policy.model_copy(update={"profiles": (*policy.profiles, thinking)})
+        provider = _RecordingProvider()
+        factory = _factory(resolver=ModelRoutingResolver(policy), provider=provider)
+
+        _m, _n, plain = factory.build_chat_for_profile(
+            "think.chat", reasoning_effort="low"
+        )
+
+        assert (provider.calls[-1][0].settings or {}).get("reasoning_effort") == sent
+        assert (plain is not None) == (sent is not None)
+        assert thinking.reasoning_on_effort == sent
+
+    @pytest.mark.parametrize(
+        ("levels", "choice", "sent"),
+        [
+            (("low", "medium", "high"), "low", "low"),
+            (("low", "medium", "high"), "off", None),
+            (("low", "high"), "medium", "high"),  # tie: the stronger level
+            (("medium", "high"), "low", "medium"),
+            (("low", "medium"), "high", "medium"),
+        ],
+    )
+    def test_declared_levels_clamp_the_choice_for_this_call_only(
+        self, levels: tuple[str, ...], choice: str, sent: str | None
+    ) -> None:
+        levelled = ModelProfile(
+            profile_id="gpt.levels",
+            capability=ModelCapability.CHAT,
+            model=_model_config(
+                name="gpt-5.1", settings={"reasoning_effort": levels[-1]}
+            ),
+            supports_thinking=True,
+            reasoning_efforts=levels,  # type: ignore[arg-type]
+        )
+        policy = _helper_policy()
+        policy = policy.model_copy(update={"profiles": (*policy.profiles, levelled)})
+        provider = _RecordingProvider()
+        factory = _factory(resolver=ModelRoutingResolver(policy), provider=provider)
+
+        _m, _n, plain = factory.build_chat_for_profile(
+            "gpt.levels", reasoning_effort=choice
+        )
+
+        assert (provider.calls[-1][0].settings or {}).get("reasoning_effort") == sent
+        assert (plain is not None) == (sent is not None)
+        # The shared catalog config is never mutated.
+        assert levelled.model.settings == {"reasoning_effort": levels[-1]}
+
+    def test_missing_chat_default_raises(self) -> None:
+        resolver = ModelRoutingResolver(
+            _policy(profile_id="embed", capability=ModelCapability.EMBEDDING)
+        )
+        with pytest.raises(ValueError):
+            _factory(resolver=resolver).build_chat_for_profile(None)

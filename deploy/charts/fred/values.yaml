@@ -909,6 +909,12 @@ applications:
           capability: chat
           model_display_name: "GPT-5.1"
           description: "Default balanced chat model for production conversations."
+          # Selectable reasoning effort (optional): list the levels the provider
+          # really accepts, e.g. for GPT-5.1 (with supports_thinking: true):
+          #   reasoning_efforts: [low, medium, high]
+          # Absent or one level means on/off only: "on" sends settings.reasoning_effort,
+          # else the single listed level (neither: the assistant cannot reason with it).
+          # Never declare levels Mistral rejects: its models take only `high` (or none).
           model:
             provider: openai
             name: gpt-5.1

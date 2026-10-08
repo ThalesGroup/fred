@@ -94,6 +94,10 @@ from fred_core.security.rebac.rebac_engine import (
 )
 from fred_core.security.rebac.rebac_factory import rebac_factory
 from fred_core.security.structure import KeycloakUser, is_service_agent
+from fred_sdk.contracts.agent_draft import (
+    AgentDraftPodRequest,
+    AgentDraftResult,
+)
 from fred_sdk.contracts.capability import (
     CapabilityCatalogEntry,
     CapabilityConfigCopyRequest,
@@ -105,6 +109,7 @@ from fred_sdk.contracts.capability import (
     StoredCapabilityConfig,
     UploadedFile,
 )
+from fred_sdk.contracts.capability.manifest import ReasoningEffortLevel
 from fred_sdk.contracts.context import (
     AgentInvocationRequest,
     AgentInvocationResult,
@@ -258,6 +263,7 @@ from ..runtime_support.run_scope import (
     reset_owner_execution,
     set_owner_execution,
 )
+from . import creation_assistant
 from .chat_input_limit import validate_runtime_request
 from .config import AgentPodConfig, ConversationFilesystemQuotaConfig
 from .container import build_pod_container
@@ -1329,6 +1335,13 @@ class _ModelCatalogEntry(BaseModel):
     shows no reasoning control at all — aptitude is not a choice, an
     administrator cannot make a model reason. Non-empty means the row carries
     the toggle. Same established join as `profile_ids` above."""
+    reasoning_efforts: dict[str, list[ReasoningEffortLevel]] = Field(
+        default_factory=dict
+    )
+    """Selectable reasoning levels per profile id of `thinking_profile_ids`,
+    for profiles declaring two or more (`ModelProfile.reasoning_levels`).
+    Absent: that thinking profile is on/off only. Empty: no level a platform
+    helper can send (`ModelProfile.reasoning_on_effort` is None)."""
     display_name: str | None = None
     """The ops-authored `model_display_name` of this model's first profile that
     declares one — the label the composer shows instead of splitting the
@@ -1358,6 +1371,11 @@ class _PlatformPromptFileResponse(BaseModel):
     """The read-only block, rendered directly under the one above on every turn.
     Nothing can edit it; the admin UI displays it so an admin can see exactly
     what agents are told alongside their own prompt."""
+    creation_assistant_prompt: str
+    """The built-in meta-prompt of `POST /agents/creation-assistant/draft`, shown
+    as the default of the admin editor that can override it."""
+    creation_assistant_prompt_revised_at: str
+    """ISO date of the last edit of `creation_assistant_prompt`."""
 
 
 def _platform_prompt_file_field(config: AgentPodConfig, field: str) -> str | None:
@@ -1459,6 +1477,13 @@ def _project_model_catalog_entries(catalog: Any) -> list[_ModelCatalogEntry]:
         # this one condition is the whole projection between them.
         if profile.supports_thinking:
             existing.thinking_profile_ids.append(profile.profile_id)
+            if profile.reasoning_levels:
+                existing.reasoning_efforts[profile.profile_id] = list(
+                    profile.reasoning_levels
+                )
+            elif profile.reasoning_on_effort is None:
+                # Nothing a platform helper could send: reported as no levels.
+                existing.reasoning_efforts[profile.profile_id] = []
     return list(seen.values())
 
 
@@ -5044,7 +5069,8 @@ def _build_agent_router(
     @router.get("/platform-prompt")
     async def get_platform_prompt_file() -> _PlatformPromptFileResponse:
         """
-        Return the two head blocks this pod ships in `config/platform_prompt.json`.
+        Return the two head blocks this pod ships in `config/platform_prompt.json`,
+        plus the creation assistant's built-in meta-prompt.
 
         Why this endpoint exists:
         - the admin UI shows both: the platform prompt an admin edits (this file
@@ -5075,6 +5101,24 @@ def _build_agent_router(
         return _PlatformPromptFileResponse(
             platform_prompt=runtime_config.default_platform_prompt or "",
             platform_instructions=runtime_config.platform_instructions or "",
+            creation_assistant_prompt=creation_assistant.CREATION_ASSISTANT_SYSTEM_PROMPT,
+            creation_assistant_prompt_revised_at=creation_assistant.CREATION_ASSISTANT_REVISED_AT,
+        )
+
+    @router.post("/creation-assistant/draft")
+    async def draft_agent(
+        body: AgentDraftPodRequest,
+        http_request: Request,
+        caller: KeycloakUser | None = Depends(_authenticated_user),
+    ) -> AgentDraftResult:
+        """
+        Draft an agent system prompt and capability selection from a user's
+        plain-language description (`creation_assistant.py`).
+        """
+        return await creation_assistant.handle_draft_request(
+            body,
+            caller=caller,
+            authorization=http_request.headers.get("Authorization"),
         )
 
     @router.post("/capabilities/{capability_id}/validate-config")
