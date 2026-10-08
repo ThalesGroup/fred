@@ -52,6 +52,8 @@ web_research:
   max_results: 5 # Results sent to the model per search
   max_chars_per_page: 6000 # Text sent to the model per read page
   activity_retention_days: 30
+  max_searches_per_user_per_day: 50 # Optional daily cap per user (UTC day); omit for no quota
+  max_fetches_per_user_per_day: 200 # Optional daily cap on page reads per user
 ```
 
 `provider` selects the search engine: `duckduckgo` (SDK default, keyless, no
@@ -94,7 +96,13 @@ model context, at most `max_results` (default 5) results and `max_chars_per_page
 arguments request. For longer pages the model passes `focus` to get the relevant
 passages, or reads without `focus` and continues with `offset` from the previous
 `next_offset` (the two are mutually exclusive); each
-continuation re-downloads the page and adds tokens, but is not billed by the provider. Configure these, `max_bytes`, `retries` and the `safesearch`
+continuation re-downloads the page and adds tokens, but is not billed by the provider. Optional per-user caps, `max_searches_per_user_per_day` and
+`max_fetches_per_user_per_day` (unset by default: no quota), count the user's
+requests per UTC calendar day from the activity table; any dispatched request
+counts, whatever its outcome. Over a cap the tool returns `quota_exceeded`
+before any network access, and each capped result shows the remaining count in
+the trace detail. Erasing a user's activity also resets their quota for the day.
+Configure these, `max_bytes`, `retries` and the `safesearch`
 floor at deployment level. Direct access pins vetted public DNS addresses to connections.
 All modes check redirects, refuse binary/compressed responses and isolate cookies.
 Extraction/focus runs in bounded worker threads.
