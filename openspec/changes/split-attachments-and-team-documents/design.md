@@ -27,11 +27,9 @@ Current state:
 
 ## Decisions
 
-### D1. Compatibility through the existing before-validator, no manifest version bump
+### D1. Compatibility through the existing before-validator
 
-Extend `_upgrade_legacy_slices` with the mapping in `specs/document-access-sources`. Mapping applies only when neither new key is present. The legacy keys are then popped so that they never round-trip. The manifest `version` stays `0.1.0`.
-
-Why not bump the version and override `upgrade_config`? That hook runs only on a `schema_version` mismatch at read time. Legacy keys also arrive in values submitted by the form on an unrelated save, in imported bundles stored verbatim, and in chat-controls evaluation of same-version slices. The before-validator covers all of these paths in one place. `AUTHORING.md` currently says that a rename should bump the version and override `upgrade_config`, and keeps an explicit pre-GA "no bump" policy. This change follows the no-bump policy and adds one sentence to `AUTHORING.md`: a same-version rename may be absorbed by a before-validator when submitted values can still carry old keys.
+Extend `_upgrade_legacy_slices` with the mapping in `specs/document-access-sources`. Mapping applies only when neither new key is present; legacy keys are removed on validation. This covers stored values, imports and submitted legacy form values. The manifest version is `0.2.0` to invalidate the control-plane chat-controls cache. This manifest version is separate from the distribution package version.
 
 ### D2. Both sources off: rejected by the backend, prevented by the form
 
@@ -62,19 +60,13 @@ Alternatives considered:
 - Keep `attachments_only` and add `corpus_only`: two negative flags plus an invalid combination.
 - Pass the config to the adapter: this breaks the port doctrine, under which the capability passes scope parameters only.
 
-`attachments_only` stays accepted as a deprecated alias: `True` keeps the caller's `include_attachments` and sets `include_team_documents=False`, so it can only narrow, and logs a deprecation warning once per process. No caller breaks, so the change stays `patch`. The alias is temporary; when to remove it is a reviewer decision (see "Reviewer decisions").
+`attachments_only` is removed now, including the resolver and warning state. The developer explicitly accepts that old callers fail and requests patch increments for all publishable libraries. Use `include_attachments=True, include_team_documents=False` for an attachments-only call. Preserve stored-config compatibility in D1.
 
-### D4. Filter `rag_scope` choices in the capability, honour them in the composer
+### D4. Document-only answers use every enabled document source
 
-`RagScopeControlParams` gains an additive `options: list[RagScopeName] | None` field (`None` means all choices). `chat_controls()` drops `corpus_only` when `team_documents` is off and clamps a `default_rag_scope` that is no longer offered to `hybrid`.
+Keep the wire value `corpus_only`, but label it "Documents only" / "Documents uniquement". Like `hybrid`, it searches session attachments and the team corpus, bounded by explicit turn flags and the agent's source ceilings. `general_only` skips document search. Document-only mode asks the agent to answer from document evidence without filling gaps from general knowledge.
 
-`RagScopeControl.tsx` renders only the offered options. `useComposerSettings` resets a persisted per-session `ragScope` that is no longer offered to the control's default. Without that reset, a remembered `corpus_only` on an attachments-only agent would search nothing under D3.
-
-No other choice becomes impossible:
-
-- `hybrid` covers whichever sources are on.
-- `general_only` never searches.
-- With attachments on and team documents on, `corpus_only` ("Your documents") excludes attachments today. Whether it should include them is a reviewer decision (see "Reviewer decisions"); the implementation follows that decision before merge.
+Change the shared `get_vector_search_scopes` default so the document-access adapter, builtin search and MCP search agree. The existing explicit turn scope overrides remain intact. Offer all three choices for attachments-only, team-only and both-source agents. Keep the generic optional `RagScopeControlParams.options` contract and composer support for restricted controls from other providers.
 
 ### D5. Advanced field order and visibility come from the manifest
 
@@ -111,24 +103,21 @@ Alternatives considered:
 
 ## Risks / Trade-offs
 
-- [Risk] SDK consumers outside this repo call `DocumentSearchPort.search(attachments_only=...)`. → Mitigation: the keyword stays as a deprecated alias with a warning, so callers keep working. Out-of-tree implementers of the port would need the two new keywords; none is known.
-- [Risk] The alias stays forever. → Mitigation: its removal is an explicit reviewer decision recorded in the PR, and the migration note announces the deprecation.
+- [Risk] External SDK callers using `attachments_only` break immediately. → Required action: migrate to the two source keywords and upgrade SDK/runtime together; dependency floors and the migration note make this requirement explicit.
 - [Risk] Legacy `show_attach_files_control=false` agents stop searching the session scope. → Mitigation: those agents never had a paperclip. Session-scoped documents could only come from earlier turns under another configuration. The migration note states the change.
 - [Risk] The mapping exists in two places (Python validator, TypeScript helper). → Mitigation: both carry the same table-driven tests over the three legacy shapes. A follow-up removes both once no stored legacy keys remain. A control-plane query can count these agents.
 - [Risk] The control-plane chat-controls cache key `(capability_id, version, config_hash)` would stay unchanged for legacy envelopes while the computed controls change (the `rag_scope` options), and the control plane is not restarted when only the agent pod is deployed. → Mitigation: the manifest version moves to 0.2.0, which changes the key; stored slices still validate through the default `upgrade_config`.
-- [Trade-off] With both sources on, "Your documents" still excludes attachments, which is the existing behavior. The label is not changed here.
+- [Trade-off] `corpus_only` is retained as the wire value for compatibility, while its user-facing meaning becomes all enabled document sources.
 
 ## Migration Plan
 
-Deploy normally. There is no database or Knowledge Flow change and no operator action. Stored agents keep working through D1. Each agent is rewritten to the new keys on its next save. Rolling back to the previous version is safe for agents that were not re-saved. A re-saved agent stores only the new keys, which the previous version ignores, so it falls back to the defaults (paperclip on, corpus and attachments searched) until it is re-saved. The migration note records this rollback caveat. The version impact is `none` (patch): the SDK keyword is kept as a deprecated alias.
+Upgrade SDK/runtime and document-access consumers together. Migrate external `attachments_only` calls before deployment. Stored agents keep working through D1 and are rewritten on their next save. There is no database or Knowledge Flow migration. On rollback, revert the library set and adapted callers together; re-saved agents need their document-source settings checked because the old runtime ignores the new keys.
 
-## Reviewer decisions (must be settled in PR review, expected reviewer: dimitri-tombroff)
+## Reviewer decisions (confirmed by dimitri-tombroff, 2026-10-08)
 
-The PR description asks the reviewer to decide these points. No half-decision is merged: the implementation is adjusted to the answer before merge, and this section records it.
-
-1. **When to remove the deprecated `attachments_only` alias.** It is kept now so nothing breaks (patch). Options: remove it in the next minor release with an announcement in its migration note, or keep it until a named major release. Developer's opinion: do not leave it long.
-2. **Should "Your documents" (`corpus_only`) include attachments when both sources are on?** Today it excludes them, and its label does not say so. Developer's opinion: include attachments. If the reviewer agrees, `corpus_only` on a both-sources agent maps to `(session=True, corpus=True)` minus the general answer, and the label and Help Center wording follow; this changes the per-turn semantics described in D4.
-3. **Raise the `fred-sdk` floor of `fred-capability-document-access` in this PR, or at release preparation?** The capability calls the port with `include_attachments` / `include_team_documents`, which only this release's SDK and runtime accept. Library versions are bumped by release PRs, and the needed SDK version is not published yet, so this PR only states the requirement in the migration note. Developer's opinion: none, defers to the reviewer.
+1. Remove `attachments_only` in this PR. The developer explicitly accepts this API break and requests patch version increments rather than waiting for a minor or major release.
+2. Include attachments in `corpus_only` when both sources are enabled. Use all enabled sources, preserve source ceilings, and update the labels and Help Center to describe document-only answers.
+3. Raise dependency floors in this PR. Increase every publishable library under `libs/` by one patch (Python core `4.4.2`, each capability's next patch, frontend `0.1.1-alpha.0` retaining its alpha channel), refresh consumer lockfiles and require the new SDK/runtime where the changed contract needs them. This prepares versions; it does not publish packages or tag a code/chart release.
 
 ## Deferred (separate issues)
 

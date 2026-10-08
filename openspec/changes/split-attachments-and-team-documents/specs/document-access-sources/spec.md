@@ -108,7 +108,7 @@ The document search SHALL include the conversation's attached files only when `a
 #### Scenario: Per-turn scope narrows within the agent's sources
 
 - **WHEN** an agent with both sources on searches during a turn whose RAG scope is "Your documents"
-- **THEN** the searched scopes are those the per-turn scope selects, as before this change
+- **THEN** both the session attachments and team corpus are searched, and the answer uses document evidence without supplementation from general knowledge
 
 #### Scenario: General knowledge only
 
@@ -117,17 +117,17 @@ The document search SHALL include the conversation's attached files only when `a
 
 ### Requirement: Per-turn scope choices match the agent's sources
 
-The RAG scope chat control SHALL offer only choices that can return documents from the agent's enabled sources. When `team_documents` is off, the "Your documents" choice SHALL NOT be offered. When a configured default is no longer offered, the control's default SHALL fall back to the combined choice.
+The RAG scope chat control SHALL offer document-only, combined and general-knowledge choices when either document source is enabled. The document-only choice SHALL be labelled "Documents only" in English and "Documents uniquement" in French, retaining the wire value `corpus_only`. Both document-only and combined choices SHALL search only sources enabled by the agent and the explicit per-turn scope flags.
 
-#### Scenario: Attachments-only agent hides the corpus-only choice
+#### Scenario: Attachments-only agent offers document-only answers
 
-- **WHEN** the composer controls are computed for an agent with team documents off
-- **THEN** the RAG scope control lists "General knowledge + your documents" and "General knowledge" only
+- **WHEN** the composer controls are computed for an agent with attachments on and team documents off
+- **THEN** the document-only choice is offered and searches only session attachments
 
-#### Scenario: Impossible stored default falls back
+#### Scenario: Stored document-only default stays valid
 
-- **WHEN** an agent with team documents off has a stored default RAG scope of `corpus_only`
-- **THEN** the control's default is the combined choice
+- **WHEN** an attachments-only agent has a stored default RAG scope of `corpus_only`
+- **THEN** the control preserves that default
 
 ### Requirement: The capability is presented as "Documents"
 
@@ -138,11 +138,16 @@ The user-facing name of the `document_access` capability SHALL be "Documents" in
 - **WHEN** a member opens the Advanced capabilities view in English or French
 - **THEN** the document access card is titled "Documents"
 
-### Requirement: Deprecated search keyword stays accepted
+### Requirement: Search uses explicit source keywords
 
-The document search port SHALL keep accepting the `attachments_only` keyword as a deprecated alias of `include_team_documents=False`, and SHALL log a deprecation warning at most once per process. Its removal SHALL be decided in review and announced in a migration note.
+The document search port and runtime adapter SHALL accept `include_attachments` and `include_team_documents` and SHALL NOT accept the removed `attachments_only` keyword. No alias resolver or deprecation-warning state SHALL remain. The migration note SHALL describe the immediate API break and replacement arguments.
 
-#### Scenario: Caller still uses the old keyword
+#### Scenario: Caller uses the removed keyword
 
-- **WHEN** a capability calls the document search port with `attachments_only=True`
-- **THEN** only the conversation's attachments are searched, and a deprecation warning is logged once
+- **WHEN** a capability calls the runtime document search adapter with `attachments_only=True`
+- **THEN** the call fails with an unexpected-keyword error before any search occurs
+
+#### Scenario: Migrated attachments-only caller
+
+- **WHEN** a capability calls with `include_attachments=True, include_team_documents=False`
+- **THEN** no team corpus search occurs
