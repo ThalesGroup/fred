@@ -133,6 +133,8 @@ type AgentFormBodyProps = {
   onCapabilityConfigChange: (capabilityId: string, key: string, value: unknown) => void;
   onCapabilityAssetFileChange: (capabilityId: string, slotKey: string, file: File | null) => void;
   onCapabilityBlockingErrorChange: (capabilityId: string, message: string | null) => void;
+  /** Bumped when the creation assistant fills the form: prompt fields show the editor again. */
+  draftRevision?: number;
 };
 
 export function AgentFormBody({
@@ -168,6 +170,7 @@ export function AgentFormBody({
   onCapabilityConfigChange,
   onCapabilityAssetFileChange,
   onCapabilityBlockingErrorChange,
+  draftRevision = 0,
 }: AgentFormBodyProps) {
   const { t, i18n } = useTranslation();
   const uiLang = i18n.language.split("-")[0];
@@ -181,6 +184,9 @@ export function AgentFormBody({
   // section switches) so a field the user emptied doesn't auto-reopen the
   // library when they leave and return to the Prompts section (#bug).
   const [promptPickerExplicit, setPromptPickerExplicit] = useState<Record<string, boolean | null>>({});
+  useEffect(() => {
+    if (draftRevision > 0) setPromptPickerExplicit({});
+  }, [draftRevision]);
 
   // Resolve audit uids (created_by / updated_by) to display names (#1952).
   const auditUids = Array.from(

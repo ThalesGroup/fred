@@ -23,11 +23,19 @@ import type {
   ManagedAgentInstanceSummary,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import { AgentFormBody, type SectionKey } from "./AgentFormBody.tsx";
+import { CreationAssistantDialog } from "./CreationAssistantDialog/CreationAssistantDialog.tsx";
+import {
+  type AppliedDraft,
+  applyRecommendedCapabilities,
+  type DraftTargets,
+  findSystemPromptField,
+  isReasoningOffered,
+} from "./CreationAssistantDialog/creationAssistant.ts";
+import styles from "./AgentFormModal.module.css";
 import { TemplateBrowser } from "./TemplateBrowser/TemplateBrowser.tsx";
 import { applyDocumentAccessConfigChange, normalizeDocumentAccessConfig } from "./toolPackLogic.ts";
 import { CAP_DOCUMENT_ACCESS } from "./toolPacks.ts";
 import { reservedTagInPromptField } from "@rework/utils/promptValidation";
-import styles from "./AgentFormModal.module.css";
 
 export type AgentFormPayload = {
   templateId: string;
@@ -161,6 +169,49 @@ export function defaultReasoningSelection(template: AgentTemplateSummary | undef
   };
 }
 
+/** Tuning values a NEW instance of `template` starts with, in the UI language. */
+function defaultTuningValues(template: AgentTemplateSummary | undefined, lang: string): Record<string, unknown> {
+  return Object.fromEntries(
+    (template?.default_tuning_fields ?? [])
+      .filter((f) => f.default_by_lang?.[lang] != null || (f.default !== null && f.default !== undefined))
+      .map((f) => [f.key, f.default_by_lang?.[lang] ?? f.default]),
+  );
+}
+
+/**
+ * What the creation assistant would replace. On create, a value still equal to
+ * the template's seed counts as empty: the user did not write it, so replacing
+ * it needs no confirmation. On edit, every value is the saved agent's.
+ */
+export function draftTargets(
+  form: Pick<
+    FormState,
+    "displayName" | "role" | "description" | "tuningValues" | "selectedCapabilityIds" | "capabilityConfigValues"
+  >,
+  template: AgentTemplateSummary | undefined,
+  lang: string,
+  promptKey: string | undefined,
+  mode: "create" | "edit",
+): DraftTargets {
+  const unlessSeed = (value: string, seed: string | undefined) =>
+    mode === "create" && value.trim() === (seed ?? "").trim() ? "" : value;
+  const seedPrompt = promptKey ? defaultTuningValues(template, lang)[promptKey] : undefined;
+  const prompt = promptKey ? String(form.tuningValues[promptKey] ?? "") : "";
+  const seedCapabilities = defaultCapabilitySelection(template);
+  const sameAsSeed =
+    mode === "create" &&
+    form.selectedCapabilityIds.length === seedCapabilities.length &&
+    seedCapabilities.every((id) => form.selectedCapabilityIds.includes(id));
+  return {
+    name: unlessSeed(form.displayName, template?.display_name),
+    role: form.role,
+    description: unlessSeed(form.description, template?.description_by_lang?.[lang] ?? template?.description ?? ""),
+    systemPrompt: unlessSeed(prompt, seedPrompt === undefined || seedPrompt === null ? "" : String(seedPrompt)),
+    capabilityIds: sameAsSeed ? [] : form.selectedCapabilityIds,
+    capabilityConfigValues: form.capabilityConfigValues,
+  };
+}
+
 /**
  * Builds the submit payload using the selected template contract so stale
  * capability keys from previous UI versions cannot leak into create or edit
@@ -272,11 +323,14 @@ export default function AgentFormModal({
   });
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [activeSection, setActiveSection] = useState<SectionKey>("general");
+  const [assistantOpen, setAssistantOpen] = useState(false);
+  const [draftRevision, setDraftRevision] = useState(0);
 
   useEffect(() => {
     if (!isOpen) {
       setSubmitAttempted(false);
       setActiveSection("general");
+      setAssistantOpen(false);
       return;
     }
     if (mode === "edit" && editInstance) {
@@ -319,11 +373,6 @@ export default function AgentFormModal({
   const handleTemplateSelect = (id: string) => {
     const tpl = templates.find((t) => t.template_id === id);
     const lang = i18n.language.split("-")[0];
-    const defaultTuningValues = Object.fromEntries(
-      (tpl?.default_tuning_fields ?? [])
-        .filter((f) => f.default_by_lang?.[lang] != null || (f.default !== null && f.default !== undefined))
-        .map((f) => [f.key, f.default_by_lang?.[lang] ?? f.default]),
-    );
     setForm({
       templateId: id,
       displayName: tpl?.display_name ?? "",
@@ -334,7 +383,7 @@ export default function AgentFormModal({
       // instead of the hardcoded `false` pair that made a template's declared
       // reasoning defaults unreachable.
       ...defaultReasoningSelection(tpl),
-      tuningValues: defaultTuningValues,
+      tuningValues: defaultTuningValues(tpl, lang),
       selectedCapabilityIds: defaultCapabilitySelection(tpl),
       capabilityConfigValues: {},
       capabilityAssetFiles: {},
@@ -427,6 +476,58 @@ export default function AgentFormModal({
     await onSubmit(buildAgentFormSubmitPayload(form, selectedTemplate));
   };
 
+  // The assistant drafts the template's main prompt field and picks among the
+  // capabilities the template advertises to this team.
+  const lang = i18n.language.split("-")[0];
+  const promptField = findSystemPromptField((selectedTemplate?.default_tuning_fields ?? []).filter((f) => !f.ui?.hide));
+  const templateCapabilities = selectedTemplate?.available_capabilities ?? [];
+  const assistantReady = !!selectedTemplate && !!teamId;
+
+  const applyDraft = (draft: AppliedDraft) => {
+    setForm((prev) => {
+      const next = { ...prev };
+      if (draft.name !== undefined) next.displayName = draft.name;
+      if (draft.role !== undefined) next.role = draft.role;
+      if (draft.description !== undefined) next.description = draft.description;
+      if (draft.systemPrompt !== undefined && promptField) {
+        next.tuningValues = { ...prev.tuningValues, [promptField.key]: draft.systemPrompt };
+      }
+      if (draft.capabilityIds) {
+        Object.assign(
+          next,
+          applyRecommendedCapabilities(
+            draft.capabilityIds,
+            {
+              selectedCapabilityIds: prev.selectedCapabilityIds,
+              capabilityConfigValues: prev.capabilityConfigValues,
+              reasoningEnabled: prev.reasoningEnabled,
+            },
+            advertisedCapabilityIds(selectedTemplate),
+          ),
+        );
+      }
+      // Last and on `next`: the capability step carries the old reasoningEnabled,
+      // and merging from prev would copy every other old field back.
+      return draft.reasoning ? { ...next, ...withReasoning(next, true) } : next;
+    });
+    setDraftRevision((revision) => revision + 1);
+    setAssistantOpen(false);
+  };
+
+  const assistantButton = (
+    <Button
+      color="primary"
+      variant="tonal"
+      size="small"
+      icon={{ category: "outlined", type: "auto_awesome" }}
+      className={styles.assistantButton}
+      onClick={() => setAssistantOpen(true)}
+      disabled={!assistantReady || isSubmitting}
+    >
+      {t("rework.teams.formAgent.creationAssistant.open")}
+    </Button>
+  );
+
   const title =
     mode === "edit"
       ? t("rework.teams.formAgent.titleEdit", { agent: editInstance?.display_name ?? "" })
@@ -447,7 +548,9 @@ export default function AgentFormModal({
       subtitle={subtitle}
       actions={
         <>
-          <Button color="primary" variant="text" size="medium" onClick={onClose}>
+          {/* Not on the template step: the assistant cannot pick a template from a description yet. */}
+          {step === 2 && selectedTemplate && assistantButton}
+          <Button color="primary" variant="outlined" size="medium" onClick={onClose}>
             {t("rework.cancel")}
           </Button>
           {step === 2 && (
@@ -513,6 +616,20 @@ export default function AgentFormModal({
           onCapabilityConfigChange={handleCapabilityConfigChange}
           onCapabilityAssetFileChange={handleCapabilityAssetFileChange}
           onCapabilityBlockingErrorChange={handleCapabilityBlockingErrorChange}
+          draftRevision={draftRevision}
+        />
+      )}
+      {assistantReady && teamId && (
+        <CreationAssistantDialog
+          open={assistantOpen}
+          teamId={teamId}
+          templateId={form.templateId}
+          capabilities={templateCapabilities}
+          hasPromptField={!!promptField}
+          offersReasoning={isReasoningOffered(advertisedCapabilityIds(selectedTemplate))}
+          current={draftTargets(form, selectedTemplate, lang, promptField?.key, mode)}
+          onApply={applyDraft}
+          onClose={() => setAssistantOpen(false)}
         />
       )}
     </SettingsModal>
