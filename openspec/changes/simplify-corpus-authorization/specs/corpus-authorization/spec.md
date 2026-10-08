@@ -317,6 +317,16 @@ mutation boundary during re-import. Unsupported old-format bundles SHALL be refu
 - **THEN** its organization, teams, admitted memberships, local roles and personal spaces are established through the shared services
 - **AND** deliberately unassigned identities remain outside workspaces
 
+#### Scenario: Platform bootstrap precedes organization provisioning
+- **WHEN** an authenticated user without an organization completes the existing bootstrap-token flow
+- **THEN** that user becomes platform admin and can import the initial organization bundle
+- **AND** this grants neither organization administration nor descendant membership
+
+#### Scenario: The demo declares organization administration separately
+- **WHEN** the demo bundle provisions organization `fredlab`
+- **THEN** its three existing collaborative teams belong to that organization and Priya receives its admin role
+- **AND** the team named `fredlab` remains distinct from the organization
+
 #### Scenario: Existing demo test habits are preserved
 - **WHEN** the existing demo fixture is adapted to the organization-aware bundle
 - **THEN** its accounts, credentials, team names, memberships and local/platform roles are preserved, including accounts without teams
