@@ -28,7 +28,7 @@
 - [x] 4.3 Run targeted frontend tests for pack logic, Simple view rendering, and form payloads; verify all pass.
 - [x] 4.4 Run root `make code-quality` once before push and the required frontend test suite; record the actual outputs in this change and the PR.
 - [x] 4.5 Review the implementation diff, reconcile this change's artifacts with delivered behavior, and run `openspec validate merge-attachments-into-team-resources --strict`; record the prior unarchived delta for post-merge reconciliation in 4.6.
-- [ ] 4.6 After merge, reconcile and archive `retire-document-reading-pack` before archiving this change; verify the durable `agent-capability-packs` spec describes one combined Simple pack and independent Advanced settings.
+- [x] 4.6 After merge, reconcile and archive `retire-document-reading-pack` before archiving this change; verify the durable `agent-capability-packs` spec describes one combined Simple pack and independent Advanced settings.
 
 - [x] 4.7 Update English and French Help Center, UX, migration guidance, and this change's artifacts for the new scope switch; validate the OpenSpec change and migration declaration.
 - [x] 4.8 Run focused and full frontend tests plus root code-quality for this follow-up, review the diff, and record results in the draft PR.

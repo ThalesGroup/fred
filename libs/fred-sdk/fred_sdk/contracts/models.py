@@ -195,13 +195,15 @@ class SearchPolicyControlParams(BaseModel):
 
 class RagScopeControlParams(BaseModel):
     """
-    Params for the `rag_scope` enum-row widget: its default value.
+    Params for the `rag_scope` enum-row widget: its default value and, when
+    narrowed, the choices offered (None = all of them).
 
     Same split as `SearchPolicyControlParams` — default here, chosen value on
     `RuntimeContext`.
     """
 
     default: RagScopeName = "hybrid"
+    options: list[RagScopeName] | None = None
 
 
 class ClientAuthMode(str, Enum):

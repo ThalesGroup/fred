@@ -2,6 +2,7 @@
 schema: 1
 title: "Correction: enableAllResourceSpaces is no longer a supported frontend flag"
 impact: none
+after: [retire-mon-espace]
 configuration: none
 configuration_reason: "No configuration key, default or chart value changes in this correction; it only supersedes a sentence of the published 2910 note. The flag's removal itself is declared by retire-mon-espace."
 no_action_reason: "Nothing to do beyond retire-mon-espace, which already tells operators to remove enableAllResourceSpaces from their overlays."

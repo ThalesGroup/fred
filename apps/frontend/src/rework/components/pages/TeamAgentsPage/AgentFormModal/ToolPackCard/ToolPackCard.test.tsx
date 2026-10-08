@@ -58,3 +58,42 @@ describe("ToolPackCard options slot", () => {
     expect(render(true)).toContain("pack-options");
   });
 });
+
+describe("ToolPackCard compact header", () => {
+  const withIncluded: ToolPack = {
+    ...pack,
+    includes: [
+      { capabilityId: "ppt_filler", labelKey: "cap.ppt" },
+      { capabilityId: "missing_cap", labelKey: "cap.missing" },
+    ],
+  };
+
+  const html = renderToStaticMarkup(
+    <ToolPackCard
+      pack={withIncluded}
+      checked={false}
+      disabled={false}
+      availableIds={new Set(["ppt_filler"])}
+      activeIds={new Set()}
+      onToggle={() => {}}
+    />,
+  );
+
+  it("makes the card body the pack switch and keeps the expand zone apart", () => {
+    const body = html.slice(html.indexOf('role="switch"'), html.indexOf("</button>"));
+    expect(html).toContain('aria-checked="false"');
+    expect(body).not.toContain("aria-expanded");
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).not.toContain("cap.ppt");
+  });
+
+  it("flags a capability the admin has not enabled as a description of the switch", () => {
+    expect(html).toMatch(/role="switch"[^>]*aria-describedby=/);
+    expect(html).toContain("rework.teams.formAgent.capabilities.included.missing");
+    expect(html).not.toContain('aria-label="rework.teams.formAgent.capabilities.included.missing"');
+  });
+
+  it("names the expand button after its pack", () => {
+    expect(html).toContain('aria-label="rework.teams.formAgent.capabilities.included.expandLabel"');
+  });
+});
