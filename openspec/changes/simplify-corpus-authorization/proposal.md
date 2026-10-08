@@ -1,41 +1,54 @@
 ## Why
 
-Corpus authorization currently duplicates membership and performs work proportional
-to document counts. The correct boundary is the owning collaboration space, not
-an individual folder: teams and projects hold rights; folders organize documents
-and narrow searches. Introduce usable projects now to avoid a temporary folder-ACL
-architecture that must later be replaced.
+Fred needs explicit organizations and projects while reducing the code and work
+required to authorize its corpus. A major-version cutover lets one space-owned
+model replace folder/document ACLs without carrying two runtime architectures.
 
-Tracking: [#2938](https://github.com/ThalesGroup/fred/issues/2938);
-organization/project context: [#2921](https://github.com/ThalesGroup/fred/issues/2921).
+Tracking: [#2921](https://github.com/ThalesGroup/fred/issues/2921).
+The earlier planning issue [#2938](https://github.com/ThalesGroup/fred/issues/2938)
+is historical; this change incorporates the developer decisions of 2026-10-08.
 
 ## What Changes
 
-- **BREAKING**: corpus folders have one owning space and no independent grants,
-  restrictions or cross-space sharing. Each document has one immutable folder.
-- Introduce projects under teams in the existing single organization: explicit
-  membership, scoped roles, project administration and a usable project context.
-- Keep authentication in the IdP and authorization in ReBAC. Team editor/analyst
-  roles grant no implicit access to projects; equivalent project roles are explicit.
-- Bind each conversation permanently to its team or project. Reuse team agents
-  in projects; intersect contextual access with configured and supported chat scope.
-- Authorize spaces before corpus retrieval; remove document authorization lists
-  and corpus folder/document ACL duplication. Folder selection includes descendants.
-- Keep project conversations, evaluation datasets and generated content in their
-  originating space. Audit role changes and effective execution context.
-- Align corpus writers, reads, generated clients and UI; validate from scratch
-  and consolidate documentation around one target contract.
+- **BREAKING**: introduce explicit organization/team/project ownership and four
+  cumulative local roles: member, editor, analyst and admin. Each user belongs to
+  exactly one organization, at least one collaborative team, and one private
+  personal team. Organization assignment is explicit, not inferred at first join.
+- **BREAKING**: corpus documents have one immutable folder and owning space;
+  folders classify content without independent grants or cross-space sharing.
+  Remove corpus document/folder FGA tuples and global authorization ID lists.
+- Preserve the distinction between governance and content. Only team admins
+  create projects; they can nominate themselves at creation. Admission to an
+  existing closed descendant requires its local admin. Local admins may grant
+  themselves editor/analyst, with audit. Existing open teams remain joinable
+  within their organization; projects require explicit admission.
+- Bind conversations to their initial team/project. Reuse organization/team
+  agents in descendant execution spaces; scope reads to local and ancestor-common
+  content, narrowed by agent configuration. Personal content stays private;
+  personal spaces may consume organization-common corpus and agents.
+- Authorize before retrieval with work independent of corpus size. Recheck access
+  on the next protected request after revocation, including open conversations;
+  do not add interruption of already-authorized work.
+- Deliver a separate offline migration tool: configurable organizations and team
+  assignments, no initial projects, preserved identities, coordinated backup and
+  restore. No compatibility switches, dual reads/writes or rolling mixed versions.
+- Deliver in one topic branch and one PR, through precise commits and six
+  validated stages. Measure production additions/deletions separately from tests,
+  generated files and migration tooling; run broad final checks once unless a
+  subsequent change or failure invalidates their evidence.
 
-Multiple-organization administration, offline data translation/rollout, new scope
-widget variants, detailed revocation mechanisms, graph checkpoints and unidentified
-MCP removals are excluded. This is not the Monday validation branch. Team administration grants no implicit project-content access.
+Organization-creation UI, new organization wiki/analytics workflows, document
+moves/sharing, new scope widgets, tenant transfers, automatic allocation-conflict
+resolution, live-operation cancellation and unrelated cleanups are out of scope.
+Required existing UI and generated-client consumers are adapted; no new organization
+administration journey is required to validate the backend/tooling foundation.
 
 ## Capabilities
 
 ### New Capabilities
 
-- `corpus-authorization`: team/project ownership and roles, conversation-bound
-  corpus access, immutable document membership and bounded authorization work.
+- `corpus-authorization`: organization/team/project ownership, local roles,
+  isolation, conversation-bound access, bounded authorization and offline cutover.
 
 ### Modified Capabilities
 
@@ -44,8 +57,12 @@ MCP removals are excluded. This is not the Monday validation branch. Team admini
 
 ## Impact
 
-fred-core ReBAC and membership models; control-plane project management, sessions,
-agent ownership and evaluation; Knowledge Flow corpus lifecycle/search;
-runtime context and ReAct/Deep tools; frontend space navigation and generated APIs.
-The project slice refines the existing organizations/projects RFC; multi-tenant
-onboarding and administration remain separate. This PR contains planning only.
+fred-core models and ReBAC; control-plane registry, users, membership, agents,
+sessions and evaluation; Knowledge Flow corpus lifecycle/search and indexes;
+SDK/runtime context and ReAct/Deep tools; generated APIs and frontend consumers;
+Alembic, offline translation and operator documentation. Authentication remains
+in the IdP; Fred/OpenFGA owns authorization.
+
+This is the target for one major-release implementation PR, not a declaration
+that these behaviors have shipped. Review the reconciled artifacts before code;
+fresh-install, migrated-install and restore evidence are required before release.

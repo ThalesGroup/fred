@@ -1,26 +1,59 @@
-This PR records the target design only. The agreed admin policy separates governance
-from project content access; implementation starts in a separate authorized task.
-All validation uses isolated fresh data; migration and Monday validation are separate.
+## 0. Planning and reference measurements
 
-## 1. Project and ownership foundations
+One topic branch and one implementation PR target `swift`. Commit completed
+single-purpose blocks within the six stages below; no dependent PRs or separate
+planning PR. Record each stage's commit, targeted checks and production additions/
+deletions in this task file or the PR, separating tests, generated files, migrations/
+tooling and docs. Do not create another status ledger. Run broad suites/reviews at
+integration, repeating only evidence invalidated by subsequent changes or failures.
 
-- [ ] 1.1 Agree dependent PR boundaries and explicit role-assignment/self-assignment rules before coding; verify they preserve the decided governance/content separation and canonical charter rules.
-- [ ] 1.2 Add explicit project/parent identities, membership and scoped ReBAC roles using existing services; verify creation/bootstrap, team-membership constraints and no implicit editor/analyst project access.
-- [ ] 1.3 Provide project creation, membership/role management and navigation with generated clients and audit events; verify a team can create and administer Atlas without treating it as a folder.
+- [ ] 0.1 Obtain developer confirmation of the reconciled proposal, design and acceptance scenarios before implementation; record the confirmed planning commit in the PR.
+- [ ] 0.2 Capture the starting commit, relevant production LOC/concepts and a repeatable isolated performance baseline using existing fixtures/metrics; verify recorded requests, whole-turn tool counts, FGA operations/attempts, SQL rows and latency for fixed contexts at increasing corpus sizes, with real PostgreSQL/OpenFGA and controlled model behavior.
 
-## 2. Corpus conversion
+## 1. SQL and ReBAC foundation
 
-- [ ] 2.1 Enforce space-owned folders and single document membership; remove corpus folder ACLs/document tuples and writers while preserving non-corpus policies; verify fresh schema, name conflicts and no per-folder grants.
-- [ ] 2.2 Update ingestion/sync, overwrite, deletion, team quota accounting and clean import/export; verify reparenting rejection, round-trip space roles and no orphan access under retry/concurrency.
-- [ ] 2.3 Gate metadata/content/vector/tabular/filesystem access by contextual spaces before retrieval; verify subtree scope, stale-index rejection, bounded calls and summary-only folder reads.
+- [ ] 1.1 Introduce the bounded space identity and explicit organization/team/project parentage, personal-team kind and user organization; verify database constraints reject invalid kinds/parents and permit same team names in distinct organizations without changing existing IDs.
+- [ ] 1.2 Separate platform anchors from organizations and implement four cumulative local roles plus parent-team-dependent project permissions in the existing FGA facade; verify the allow/deny matrix with real OpenFGA, including local-admin-without-analyst and organization-analyst-without-descendant-access.
+- [ ] 1.3 Add linear, correctly owned Alembic migrations and target-schema installation/provisioning inputs, preserving shared-table ownership; verify one head per backend, empty-database upgrade, schema checks and explicit initial organization/team/personal assignment.
+- [ ] 1.4 Establish protected-request authorization and canonical ancestry resolution with existing higher-consistency/batch support; verify revoked access is denied on the next request and request-local reuse does not become a cross-request positive cache.
 
-## 3. Conversation and consumer integration
+## 2. Administration and membership
 
-- [ ] 3.1 Carry immutable team/project context through sessions, history, runtime grants, delegated tools and attachments; verify server-side ancestry, no context switching and no sibling access for multi-project users.
-- [ ] 3.2 Enable team-agent reuse and project-owned agents with existing fixed/selectable scope controls; regenerate APIs and verify ReAct/Deep scoped and unscoped behavior without new picker variants.
-- [ ] 3.3 Scope analyst history, datasets and generated content to their origin and expose effective context in UI/audit; verify retrospective analyst access, ordinary conversation privacy and no cross-space publication.
+- [ ] 2.1 Adapt organization/team administration and add admin-only project creation with one-shot initial nomination, including creator self-nomination; verify editors cannot create projects and bootstrap cannot replace an existing project's admins.
+- [ ] 2.2 Reuse role administration/audit for local self-grant of editor/analyst and local admission to existing closed spaces; verify outside parent admins cannot self-admit or nominate themselves and existing pending charter nominees gain no active-admin authority.
+- [ ] 2.3 Scope user/team discovery, default-team enrollment and existing open-team joining to explicit organization ownership; verify same-organization member-only join and cross-organization denial without a new organization-creation UI.
+- [ ] 2.4 Preserve the collaborative-team prerequisite, last-membership/account-removal lifecycle and owner-only personal teams; verify team removal denies all its projects immediately, cleans project roles, and does not affect unrelated memberships or expose personal content.
+- [ ] 2.5 Regenerate changed API contracts and adapt existing membership consumers in the same stage; verify representative existing team/personal flows and record removed/retained governance paths.
 
-## 4. Validation and close-out
+## 3. Corpus conversion and deletion
 
-- [ ] 4.1 Validate fresh setup with real OpenFGA, 200 teams/2,000 members, multiple projects and increasing folder/document counts; record whole-turn and request check counts, transport attempts, rows read and latency against fixed-context bounds, plus agreed manual scenarios.
-- [ ] 4.2 Complete documentation dispositions, root quality/migration checks and independent full-branch review; record evidence in the PR, then sync/archive shipped specs only after complete integration. Keep offline translation and detailed revocation design separately tracked.
+- [ ] 3.1 Replace corpus membership arrays with canonical folder ownership and scalar constrained names; verify one-folder/one-space membership, same-folder conflict handling and valid folder hierarchy while preserving non-corpus tags and folderless session attachment metadata.
+- [ ] 3.2 Convert upload/overwrite, source synchronization and import/export writers; verify stable UID/folder on overwrite, rejection of reparenting, synchronized-source restrictions and new-format ownership/role round trips.
+- [ ] 3.3 Convert deletion, retries and quota accounting through existing lifecycle services; verify no stale/orphan hit is served, concurrent/retried mutations preserve constraints, and project storage is charged once to its parent team.
+- [ ] 3.4 Gate metadata, direct content, vector and tabular retrieval by canonical contextual spaces before retrieval/ranking; verify ancestor-common reach, explicit folder subtree/document restrictions, empty intersection and stale-index rejection.
+- [ ] 3.5 Replace folder item-ID payloads and per-folder permission projections with summaries and paginated document reads; verify lists/counts/deletion consumers no longer enumerate every document merely to render folders.
+- [ ] 3.6 Remove corpus FGA tuples/writers, document permission loops/global lists and competing personal ownership paths after checking static/dynamic consumers; verify fixed-context authorization counts do not grow with corpus size and report gross production additions/deletions separately from generated churn.
+
+## 4. Execution context and affected consumers
+
+- [ ] 4.1 Separate agent owning space from immutable conversation execution space in control-plane, SDK and runtime resolution; verify organization/team agent reuse, project-local agents, server-validated ancestry and rejection of session context changes.
+- [ ] 4.2 Carry context through ReAct/Deep tools, delegated calls, content URLs and service-identity evaluation paths; verify an unauthorized caller-supplied space cannot grant access and existing capability/model policies use the validated execution team.
+- [ ] 4.3 Adapt history, memory, attachments, filesystem outputs and evaluation datasets to their execution space; verify ordinary conversation privacy, retrospective local analyst access, no inherited-author access and no upward publication of private outputs.
+- [ ] 4.4 Preserve existing agent restrictions and fixed/selectable chat scope modes; verify team context excludes all projects, project context excludes siblings, and personal context sees only personal plus organization-common corpus.
+- [ ] 4.5 Regenerate backend-derived clients and adapt required existing navigation, project/member operations and chat consumers using the design system; verify representative team/project/personal journeys without organization-creation UI, new scope widgets or document movement.
+- [ ] 4.6 Expose effective context and source references through existing UI/audit surfaces; verify a new conversation is required after switching space and run only affected consumer checks before recording the stage's simplification evidence.
+
+## 5. Offline cutover tooling
+
+- [ ] 5.1 Complete the separate migration command around the target DDL with organization definitions, team allocation and initial organization-role inputs; verify installation and translation use the same schema and there is no translator/compatibility switch in serving code.
+- [ ] 5.2 Translate supported existing users, personal teams, memberships, corpus, agents, conversations and evaluation references while preserving IDs; verify the supplied multi-organization allocation, zero initial projects and explicit reporting of the evaluation-role change.
+- [ ] 5.3 Check source ownership/ACL representability before conversion, convert FGA platform/space relations and prepare index ownership metadata from SQL; verify intended role/content access, canonical counts/quotas and rejection of ambiguous/multi-folder data or exceptional legacy sharing without automatic reassignment.
+- [ ] 5.4 Rehearse stop, coordinated backup, translation, validation and restart on an isolated representative copy; verify existing user journeys after restart and that no old runtime or worker remains active during cutover.
+- [ ] 5.5 Rehearse restoration of old binaries/configuration, SQL, FGA and relevant file/index state; verify old-version access and content, and document exact commands, backup boundaries and loss of post-reopening writes in the PR's major-impact operator note.
+
+## 6. Final integration and close-out
+
+- [ ] 6.1 Run root code quality and the complete applicable offline suites, required real-store authorization/migration checks and agreed manual scenarios; verify fresh and migrated installs against the same acceptance requirements and record exact base/head and limitations.
+- [ ] 6.2 Run the matched final performance workload across organizations/projects and increasing corpus sizes; verify the bounded authorization criteria, report request/whole-turn attempts, rows and latency against the baseline, and explain material regressions rather than hide them behind averages.
+- [ ] 6.3 Perform one full author and independent read-only branch review, including applicable performance/contract/minimality/frontend checks; disposition all actionable findings in a batch, rerun affected evidence and record cumulative production LOC/concept reduction or any shortfall requiring developer decision.
+- [ ] 6.4 Reconcile the RFC, shipped ReBAC/product/runtime contracts, relevant corpus/help docs and major-release operator note with the implementation; run migration-policy validation, sync/archive this change only after all tasks are complete, and make the single PR reviewable with no compatibility paths or unsupported readiness claims.

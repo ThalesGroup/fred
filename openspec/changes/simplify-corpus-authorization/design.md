@@ -1,191 +1,273 @@
 ## Context
 
-See [proposal](proposal.md). The target is space-owned authorization, replacing
-this change's earlier folder-owned draft. Current `schema.fga` has team roles,
-folder grants and document-parent tuples; corpus metadata stores `tag_ids`.
-`SessionMetadataRow` has mandatory `team_id`, with no project context.
-`DocumentScopeControlParams.bound_library_ids` already pins the chat picker
-read-only; preserve existing modes rather than invent a nested-picker feature.
+See [proposal](proposal.md). Inspection of `swift` at
+`6a0c3e8963fdcf6e1fcef7498f5c2dbfa19dc957` found:
+`metadata.tag_ids` plus FGA document-parent tuples; tag listings loading item IDs;
+document permission lookups in metadata/search; mandatory `team_id` on managed
+agents and sessions; runtime validation equating agent ownership with execution
+team; and platform roles/catalog anchors on singleton `organization:fred`.
+The existing [organization RFC](../../../docs/swift/rfc/ORGANIZATIONS-AND-PROJECTS-RFC.md)
+describes the earlier split delivery. This change supersedes that split for the
+scope below; neither document is a claim about shipped behavior.
 
 ## Goals / Non-Goals
 
-**Goals:** usable projects within the current organization; uniform space rights;
-authorization cost independent of documents and folders inside a fixed context.
-**Non-goals:** multiple-organization administration, arbitrary sharing, folder ACLs,
-links/moves, new scope controls, online compatibility or detailed revocation design.
-Personal spaces and session attachments retain their existing isolation.
+**Goals:** one explicit ownership model; uniform space permissions; less owned
+production code and fewer live authorization paths; bounded authorization;
+organizations and usable projects delivered in one major-version PR with offline
+translation and a rehearsed restore.
 
-Existing contracts remain authoritative: [admin charter](../add-team-admin-charter/design.md)
-(pending nominees have only member rights), [conversation filesystem](../add-deep-agent-conversation-filesystem/design.md)
-(session ID remains its physical ownership key), and [application entitlement](../first-class-application-rebac/design.md)
-(corpus authorization does not redefine application grants). The older
-[version-retirement migration](../retire-document-versioning/specs/document-import-conflicts/spec.md)
-handles legacy multi-folder input; it is not a permission model for this target.
+**Non-goals:** arbitrary container hierarchies, document movement/sharing, a second
+permission engine, old/new runtime compatibility, organization-creation UI,
+new organization wiki or analytics workflows, tenant transfers, cancellation of
+in-flight operations, and automatic resolution of inconsistent migration mappings.
+
+Keep [team admin charter](../add-team-admin-charter/design.md) behavior (pending
+nominees are not active admins), [conversation filesystem](../add-deep-agent-conversation-filesystem/design.md)
+session ownership, and [application entitlement](../first-class-application-rebac/design.md)
+policies. Adapt their context where needed rather than duplicating their services.
+The IdP supplies identity; Fred/OpenFGA supplies authorization.
 
 ## Decisions
 
-### 1. An explicit ownership tree, not projects disguised as folders
+### 1. One bounded SQL ownership identity
 
-Use the hierarchy `current organization → team → project`. A project has one
-immutable team parent and its own registry, members and roles. Project members
-must belong to its team; team membership alone grants no project access.
-Keep team organization ancestry explicit so a future tenant boundary can be
-introduced without deriving ownership from names or identifiers. This prepares
-an extension point, not a claim that multi-tenant onboarding/isolation is solved.
+Use a shared `space` identity/ancestry table with a closed discriminator:
+organization, team or project. An organization is a root, a team has an organization
+parent, and a project has a collaborative-team parent. Existing team-specific
+settings remain a one-to-one extension; personal is an explicit team kind with one
+owner and no projects. Preserve existing IDs. This replaces ambiguous ownership
+references instead of adding a second tree beside `teammetadata`.
 
-Each corpus folder belongs to exactly one space; nested folders remain in that
-space. Each document references one folder in canonical SQL metadata. Indexes
-carry derived space/folder filters, never an independent authorization authority.
-Remove corpus folder grants and document tuples from OpenFGA, retaining relations
-needed for non-corpus resources. Reuse typed team/project ReBAC relations and the
-existing facade; do not build a generic parallel authorization framework.
-
-Organization-common resources, where exposed, are readable by all organization
-members, never selected teams only. No new organization-management UI or role
-redesign is included. Preserve existing personal and platform resource policies.
-
-### 2. Roles stay at their assigned level
-
-| Role | Team scope | Project scope |
-| --- | --- | --- |
-| Member | Reads common team corpus | Reads all corpus of projects joined |
-| Editor | Manages team corpus/agents | Requires explicit project editor role |
-| Analyst | Analyzes team conversations/datasets | Requires explicit project analyst role |
-| Admin | Team/project governance and habilitations | No implicit content access; explicit project roles required |
-
-Project roles have the corresponding scoped responsibilities; being a project
-member does not make every conversation visible to every other member. Project
-analysts can analyze project history, including conversations predating their
-appointment; derived datasets remain in that project. One person can be analyst
-in multiple projects and several analysts can serve the same project.
-Role grants/removals record actor, subject, role, space and time in existing audit
-infrastructure, without introducing another approval workflow.
-
-Carry forward the RFC's project bootstrap: team admin/editor creates a project
-and nominates project admins among team members; creation grants no implicit
-project content role. Project admins manage its membership. Read inherited common
-resources does not confer write rights at their owning level.
-
-### 3. Conversation space determines reach; agent configuration narrows it
-
-An agent defined at team level can be used in that team's projects without being
-copied. A project-defined agent stays in that project. A conversation has an
-immutable, server-validated space; entering another space starts a new conversation.
-Propagate that context through session metadata/history, execution/delegation,
-attachments, tools and evaluation; a caller-provided project ID is not authority.
-
-For a project conversation, contextual corpus = that project + its parent team's
-common resources + applicable existing organization/platform common resources.
-For a team conversation, it excludes all project content, including projects the
-user belongs to. Governance permissions must not silently broaden ordinary chat.
-Intersect this envelope with agent configuration and the current chat selection
-where that control is enabled. Folder selection includes descendants. A configured
-fixed scope remains fixed; no scope selection means the contextual envelope,
-subject to agent restrictions. Preserve document selection where already supported.
-Agent configuration can reference its owning level or ancestors, never a sibling
-or descendant project. Empty intersections never fall back to global search.
-
-Outputs, memory and evaluation datasets stay in the conversation space; inherited
-agent authorship conveys no access to project conversations. User-visible context
-and audit evidence identify user, space, agent/configuration, effective scope and
-source references, reusing existing observability rather than logging content twice.
-
-### 4. Authorize spaces before searching
-
-Resolve canonical ancestry and check the required ReBAC permission once per
-relevant distinct space within a request. Then constrain SQL/vector/tabular queries
-by authorized space and selected folder subtree/document IDs before ranking.
-This replaces the earlier proposal to rank globally and discard unauthorized
-candidates: that approach risks starving relevant authorized results.
-Validate returned hits against canonical membership in bulk to reject stale or
-missing rows. This is integrity checking, not per-document permission evaluation.
-Use the same gate for corpus metadata, content, counters and service
-identities. This change does not restore the retired general-purpose agent
-filesystem. Folder summaries never load item IDs; document pages are separate.
-
-Let E be the fixed number of applicable ancestor/current spaces, P a finite page
-of candidate projects, B the check batch size and A the finite attempt budget.
-For a fixed relation, corpus access checks at most E spaces and project discovery
-at most P candidates; transport calls are bounded by `ceil(checks / B) * A`.
-No bound depends on folder/document count. E does not include sibling projects.
-Discovery uses stable cursors and explicit continuation, including empty authorized
-pages; it does not replace document ListObjects with unlimited project ListObjects.
-Enforce input/page/retry limits and measure whole-turn tool invocations as well as
-individual requests. SQL/vector cost and total multi-tool turn cost are separate
-from the permission bound; never claim constant overall query latency.
-
-### 5. Single membership across the lifecycle
-
-Creation needs one authorized destination; overwrite preserves UID, folder and
-space. Reject reparenting, multi-folder/unfiled corpus input and source-sync path
-moves before mutation. Enforce same-folder name conflicts transactionally.
-Keep session attachments separate. Clean-format import/export preserves ownership
-and space roles; old archives require the separate translator. Project corpus is
-charged once to the parent team's existing quota; no separate project quota UI.
-Deletion and retried ingestion must not expose orphan rows or stale index content;
-reuse existing lifecycle machinery and specify its detailed sequencing later.
-Project access removal follows the team-removal principle; invalidating active
-sessions, caches or streams is deferred to a focused revocation design.
-
-### 6. Documentation consolidation
-
-This change is the proposed authority for the scoped team/project target; it is
-not a description of shipped behavior. The broader RFC now links here for project rules and retains only the future
-organization extension. Current-behavior docs are explicitly distinguished from
-this proposal; replace their obsolete implementation details only when code lands.
-Paths below are relative to `docs/swift/`.
-
-| Document | Disposition |
+| Record | Canonical structural information |
 | --- | --- |
-| `rfc/ORGANIZATIONS-AND-PROJECTS-RFC.md` | Project rules replaced by links to this change; only future organization work remains. |
-| `platform/REBAC.md` | Keep canonical cross-capability overview; link shipped corpus rules and describe the space boundary. Preserve non-corpus policies. |
-| `platform/CONFIGURATION_AND_POLICY_CONVENTIONS.md` | Stale global app-role guidance replaced by the canonical ReBAC reference. |
-| `design/INGESTION.md` | Keep operations; replace duplicated import rules with spec links and remove multiple-membership assumptions. |
-| `design/KNOWLEDGE-BASE.md`, `design/RESOURCES-DASHBOARD.md` | Update sync moves, space ownership and eager item-list assumptions. |
-| `backlog/AUTHZ-MIGRATION-BACKLOG.md` | Retain unresolved Step 6 obligations and historical references; scope clarified and dead registry link removed. Retirement requires their disposition first. |
-| `rfc/RESOURCE-INGESTION-UX-RFC.md` | Trim settled portions after checking its remaining questions; retire only if none remains. |
-| `rfc/DOCUMENT-VIEWER-AI-PANEL-RFC.md` | Keep unrelated open product decisions. |
+| Space | ID, kind, name, immutable typed parent; root organizations have no parent |
+| User | Explicit organization reference; never selected from first joined team or an IdP role |
+| Team settings | Team-space reference, collaborative/personal kind, unique personal owner, existing settings |
+| Corpus folder | Space reference, local parent folder and name |
+| Corpus document | One folder reference and scalar document name; no membership array |
+| Managed agent | Owning space reference, existing runtime binding and tuning |
+| Conversation | Immutable execution-space reference and owner; existing session ID retained |
 
-No new RFC/status report or blanket deletion of historical documents.
+Use foreign keys, shape checks and scoped uniqueness for collocated tables.
+A composite parent reference including the parent's kind can enforce the closed
+space hierarchy; ordinary service conventions are not a substitute. Folder
+parentage must preserve space identity. Document names are unique within a folder;
+team names are scoped to the organization and project names to their parent team.
+Keep expandable metadata in JSON, but not the authoritative ownership keys.
+Across separately owned runtime/evaluation databases, propagate validated IDs and
+enforce the contract at the boundary; do not promise cross-database foreign keys.
+Preserve per-backend Alembic ownership and one linear head.
 
-## Risks / Trade-offs
+Every provisioned user has one organization, one or more collaborative teams and
+one personal team in that organization. Installation/provisioning tooling supplies
+the explicit organization and initial team assignment before workspace use;
+identity synchronization must not guess them. Default-team enrollment and open-team
+discovery are restricted to the user's organization. Removing the last collaborative
+membership requires an explicit replacement or the existing account-removal path.
 
-- Larger product scope → include project UI, conversations and evaluation in
-  acceptance, not just a new FGA type. Preserve ordinary conversation privacy.
-- Hidden team-only assumptions → trace SDK/runtime grants, session stores, tools,
-  quotas and generated APIs; explicit project context must survive every boundary.
-- Governance versus content access → test admin-only callers as well as ordinary
-  members; role-management authority must not bypass content checks.
-- Multiple organizations later → explicit ancestry helps, but tenant isolation and
-  onboarding remain separate work requiring their own validation.
+Alternative rejected: three nullable owner columns or an untyped owner kind/ID on
+every consumer. A small common structural identity avoids repeated ownership
+branches and provides a real FK target. It is not a configurable tenancy framework.
+
+### 2. ReBAC roles and structural ownership have named owners
+
+SQL owns object existence and parentage; FGA owns role grants. Parent relations
+required by FGA are projections of canonical SQL, not an independently editable
+tree. Role writes validate the subject's organization and the target's ancestry.
+Do not introduce a SQL role mirror or a generic synchronization service.
+
+Separate `platform` from `organization`: platform roles and catalog anchors leave
+the historical singleton. Organization/team/project support member, editor,
+analyst and admin, cumulatively; elevated local roles include local member rights.
+Organization member rights permit common corpus/agent use. Organization analyst
+does not grant descendant analysis or create a new analytics workflow.
+Editor/analyst authority is explicit: local admin may self-grant either with audit.
+Organization admin creates teams; team admin alone creates projects. New-space
+bootstrap may nominate its creator; existing closed-space admission and admin
+nomination belong to an active local admin. Parent governance must not expose a
+standing role-write bypass. Existing open teams permit ordinary member self-join
+inside one organization, including by someone who also holds an admin role.
+
+Project permissions require both local project roles and parent-team membership.
+Team removal therefore denies the next project request even before remaining
+project tuples are cleaned; the removal lifecycle also deletes those roles.
+Personal spaces admit only their owner; no organization/team administration
+path may grant another person access. Provision their structural and role records
+explicitly rather than maintaining personal-user versus personal-team corpus models.
+
+Keep existing platform-only operational functions distinct from content access.
+Translate old platform roles and organization assignments explicitly; do not turn
+`platform_admin` into a descendant member. Consolidate overlapping team-governance
+roles rather than retain a parallel global team-manager path.
+
+Alternative rejected: blanket descendant role inheritance. It conflicts with
+local analysis/editing and turns governance into content access.
+
+### 3. Conversation context, not agent ownership, determines execution reach
+
+An organization agent can serve its organization's teams/personal teams/projects;
+a team agent can serve its own team and projects; a project agent stays local.
+Resolve the agent owner and conversation space separately, validating ancestry
+server-side. The current runtime owner-team equality check becomes this explicit
+compatibility rule, not an unchecked removal of the guard.
+
+| Conversation space | Maximum corpus envelope |
+| --- | --- |
+| Collaborative team | That team's corpus and organization-common corpus |
+| Project | That project, parent team's common corpus and organization-common corpus |
+| Personal team | Its private corpus and organization-common corpus |
+
+Retain already-supported platform-common resources where applicable; no
+platform-owned agents are introduced. Intersect this envelope with agent restrictions
+and existing chat scope controls. Folder selection includes descendants. Omitted
+selection means the contextual envelope; an explicit empty/invalid intersection
+never means global access. No new scope widget variants.
+
+Session metadata, runtime history, tool/delegation requests, memory, generated
+content and evaluation carry the immutable execution context. Changing space means
+another conversation. Agent authorship grants no access to descendant conversations.
+Keep attachments session-owned. Model/capability entitlement, routing and quota
+consumers use the validated execution team (project's parent team when needed);
+common agent ownership must not lend another team's entitlements.
+
+Alternative rejected: copying an inherited agent into each project. It duplicates
+configuration and lifecycle rather than representing reuse.
+
+### 4. A small permission decision before retrieval
+
+Resolve canonical context, check each required permission on each relevant space
+once per protected request, then constrain SQL/vector/tabular candidates before
+ranking. Direct content, metadata, counts, citations and tools use the same gate.
+Service identities carry a server-validated execution scope; a supplied team or
+project ID alone is never authority. Validate returned index hits against canonical
+SQL membership in a batch; that is integrity checking, not document ACL evaluation.
+
+For E applicable spaces, R required relations, batch capacity B and finite attempt
+budget A, logical space checks are bounded by E * R and transport attempts by
+ceil((E * R) / B) * A when batched. Current/ancestor business spaces are at most
+three; account/platform admission is accounted for separately. Existing batching
+may need its existing facade extended across objects, not a parallel engine.
+No bound depends on document count, folder count or folder depth. Paginated
+discovery is measured separately; never replace unlimited document ListObjects
+with unlimited project ListObjects.
+
+After a successful revocation, the next protected request must observe it,
+including requests from an open conversation. Use authoritative FGA reads through
+the existing higher-consistency support; do not reuse positive authorization
+decisions across requests. Request-local reuse is allowed. Already-authorized
+operations may finish; subsequent tool HTTP requests reauthorize. No stream
+cancellation system or distributed permission cache is added.
+
+Alternative rejected: caching growing document permission lists or discarding
+unauthorized hits after global ranking. Both preserve the expensive model.
+
+### 5. Converge live consumers before deleting old paths
+
+| Current path | Replacement and deletion condition |
+| --- | --- |
+| Corpus document-parent tuples and their writers | SQL folder membership; remove only after every corpus writer/read is converted |
+| Document permission loops/global readable-ID lists | Space gate and bounded SQL/index filtering; include direct-ID and service callers |
+| Folder grants and permission projections | Local space role permissions; retain FGA tag/resource behavior still used by non-corpus resources |
+| Document `tag_ids` arrays and membership diffs | One corpus folder; retain unrelated descriptive labels |
+| Folder responses containing every item ID | Folder summaries plus paginated documents; adapt deletion/list consumers together |
+| Personal user-owned versus team-owned corpus branches | Explicit personal-team space and owner-only permissions |
+| Agent owner team used as conversation context | Separate canonical owner and immutable execution space |
+
+Preserve synchronized-source write restrictions, overwrite identity, transactional
+name-conflict handling and deletion/ingestion lifecycle. No new document move is
+introduced. Project storage is charged once to its parent team's existing quota;
+no project quota UI. Corpus ownership changes must preserve personal/platform
+resource policies and avoid charging inherited reads to the consuming space.
+
+`tag` also serves non-corpus resources. Some CSV/Excel attachments occupy metadata
+rows with no corpus folder. Model that existing distinction explicitly; do not
+force attachments into the corpus or delete all tag/resource authorization.
+Candidate deletions are not savings until static and dynamic consumers are checked.
 
 ## Governance decision and delivery
 
-Team administration grants no implicit access to project documents, conversations
-or evaluation datasets. Project membership permits corpus reading; analysis of
-other members' conversations requires an explicit project analyst role. Roles may
-be combined, but assignment remains explicit and audited. Administrating structure
-and habilitations is distinct from exercising those content permissions.
+Use one topic branch and one draft implementation PR targeting `swift`.
+A planning commit precedes six implementation stages in [tasks](tasks.md):
+SQL/FGA foundation; administration; corpus conversion; execution/consumers;
+offline cutover; close-out. Commit completed single-purpose blocks within a stage;
+do not create a stack or a separate planning PR. Intermediate commits stay on the
+topic branch; merge only the fully integrated major-version outcome.
 
-This is Fred's design application of least privilege, not a claim that ANSSI
-prescribes these exact product roles: see [ANSSI measures 0098/0101](https://monservicesecurise.cyber.gouv.fr/referentiel-mesures)
-and [CNIL habilitation guidance](https://www.cnil.fr/fr/securite-gerer-les-habilitations).
-Audit does not substitute for limiting access. Self-assignment rules need separate
-specification before implementing role-management paths; explicit assignment alone
-is not a barrier against a malicious administrator who can grant themselves roles.
-Detailed revocation mechanisms also remain deferred.
+Before code, capture the baseline commit, corpus sizes, permissions, request/turn
+call counts, transport attempts, rows read and latency under the same controlled
+workload used at the end. Reuse existing fixtures/metrics/campaign tooling.
+Include real OpenFGA/PostgreSQL, multiple organizations, 200 teams/2,000 users and
+growing document/folder counts; isolate this from developer/customer environments.
 
-Keep this PR specification-only. Subsequent dependent PRs should group coherent
-project foundations, corpus conversion, then context/consumer integration, with
-checks in each layer. Final boundaries require a dependency review before coding;
-a broken intermediate layer must not land on Swift merely because it is reviewable.
-The whole project feature requires end-to-end validation before release. Do not
-create stack branches until the user selects their names.
+Each stage records its commit, targeted verification and gross production
+additions/deletions plus net change in the existing task/PR evidence. Separate
+tests, generated files, schema/migration/tooling and documentation. Also record
+removed concepts/paths. The cumulative goal is less owned production code; an
+unmet goal needs an explicit disposition, never compressed code or removed tests.
+
+Run only risk-directed checks during implementation. At integration, run root
+quality, the complete applicable offline suites, real-store authorization/migration
+scenarios, matched performance measurements and one full author/independent branch
+review. Fix findings together and rerun affected checks; broaden only when impact
+or failures invalidate prior evidence. A focused stage review is not a full PR
+review and a changed commit does not inherit invalidated evidence.
+
+## Risks / Trade-offs
+
+- Shared space identity touches many consumers -> migrate existing owners in the
+  same branch; retain useful team settings and shared primitives, not duplicate APIs.
+- SQL/FGA span stores -> admission validates canonical objects and ancestry;
+  successful mutations require their relevant writes to complete. Reuse existing
+  lifecycle handling; no unreviewed recovery framework.
+- Organization isolation extends beyond documents -> scope user directories,
+  team discovery/default enrollment, content URLs, history, evaluation and service
+  calls; restrict platform administration to its established operational surfaces.
+- Current admins can run/manage evaluations without analyst -> align content-bearing
+  evaluation actions with the agreed explicit analyst role and document the break.
+- Source data outside the target invariants -> report unsupported data and stop the
+  offline procedure; never invent projects, duplicate accounts or widen access.
+- Existing charter/rescue behavior -> retain its legitimate account/lifecycle
+  handling, but do not use rescue as self-admission to an occupied closed space.
 
 ## Migration Plan
 
-Validate against isolated empty data, without resetting Monday's environment.
-The separate offline translator, with the platform stopped, must reconcile old
-grants and memberships explicitly; this target must not silently widen access to
-formerly restricted folders. Fresh-install success is not upgrade approval.
-Backup/restore and release impact classification belong to that later delivery.
+This same major-release PR delivers the separate operator tool. Alembic owns
+relational DDL; the tool coordinates data translation, FGA model/tuple conversion
+and index preparation. Do not add startup translators, feature switches,
+legacy fallbacks, dual writes/reads or mixed-version deployment support.
+
+1. Stop ingress, backends and workers that can mutate the affected stores.
+2. Take and verify a coordinated backup of application/runtime/evaluation
+   PostgreSQL, FGA model/tuples, relevant content and index state, and the old
+   binaries/configuration. Existing application export excludes FGA/files and is
+   not a complete backup.
+3. Supply organizations to create, team-to-organization assignments and initial
+   organization role assignments. Derive each existing user's unique organization
+   from the supplied team allocation and attach its personal team there. Allocation
+   coherence is an operator precondition; no automatic conflict resolver.
+4. Before conversion, verify source ownership and grants are representable by
+   the target roles. Refuse unsupported multi-folder/ambiguous ownership or
+   exceptional folder ACLs, including a private personal folder shared with another
+   user; never silently discard or widen a grant. Translate supported source rows
+   preserving document/session/agent IDs, memberships, privacy and corpus role
+   permissions. Create no projects. Apply the evaluation-role change explicitly, with affected
+   grants reported; do not silently manufacture analyst access.
+5. Convert FGA platform/space relations; remove corpus ACL state. Populate the
+   new index filters from canonical SQL, preserving vectors where possible.
+   Validate structural constraints, authorization samples, quotas and counts before
+   restart. Installation uses the same target schema with empty data.
+6. Restart one new version and run the agreed acceptance scenarios. On failure,
+   remain stopped until explicitly repaired or restore the whole previous snapshot
+   and old version. No automatic retry/compensation or reverse semantic migration.
+
+Rehearse both migration and restore on an isolated representative copy. Restore
+returns to the pre-cutover snapshot; writes made after reopening are not preserved
+by that rollback. Record exact tool commands once implemented, input format,
+backup boundaries and results in the PR's major-impact operator migration note.
+
+At close-out, reconcile the organization RFC, ReBAC overview, product/runtime
+contracts, ingestion/resource docs, supported frontend help and source-sync
+guidance. Keep current-behavior docs truthful until implementation lands; remove
+superseded planning rules rather than maintaining two authorities. Sync/archive
+the change only after implementation, verification and review are complete.

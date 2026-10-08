@@ -30,3 +30,10 @@ adopt a document from another folder or space.
   name exists elsewhere
 - **THEN** it creates an independent document in the destination folder
 - **AND** the other document's identity, content and folder remain unchanged
+
+#### Scenario: An overwrite names a document in another space
+
+- **WHEN** a caller provides an existing document UID from another team, project,
+  personal space or organization as the overwrite target
+- **THEN** the system rejects the request before changing either document
+- **AND** editor authority in the destination does not authorize adopting that UID

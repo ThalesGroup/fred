@@ -1,61 +1,37 @@
 # RFC: Future organization administration
 
-**Status:** future multi-organization target, not shipped; project delivery is
-specified separately below. Organization onboarding remains open.
+**Status:** organization UI and further onboarding design remain deferred.
+The major-release backend, ownership and offline-cutover target is specified in
+the OpenSpec change below; it is not shipped by these planning documents.
 **Author:** Dimitri Tombroff
 **Related:** [#2921](https://github.com/ThalesGroup/fred/issues/2921)
 
 ## Scope and authoritative references
 
-[Team/project authorization OpenSpec](../../../openspec/changes/simplify-corpus-authorization/proposal.md)
-is the proposed authority for projects, local roles, corpus ownership, agent reach
-and conversation context in the current single organization. This RFC no longer
-maintains parallel project rules. Its former transversal editor/analyst access and
-folder-parent permission model are superseded by that proposal. The governance/content-access decision is recorded in its
-[canonical design](../../../openspec/changes/simplify-corpus-authorization/design.md#governance-decision-and-delivery).
+The [organization/team/project authorization change](../../../openspec/changes/simplify-corpus-authorization/proposal.md)
+is the proposed authority for the ownership model, four local roles, corpus,
+agent reach, immutable conversation context and offline migration.
+Its [design](../../../openspec/changes/simplify-corpus-authorization/design.md)
+and [acceptance scenarios](../../../openspec/changes/simplify-corpus-authorization/specs/corpus-authorization/spec.md)
+incorporate the developer decisions of 2026-10-08.
 
-[REBAC.md](../platform/REBAC.md) describes the shipped authorization model.
-Neither this RFC nor the OpenSpec changes runtime behavior by being merged.
+That scope replaces this RFC's earlier single-organization project delivery,
+two-role organization proposal and separate later migration. It is delivered
+through one implementation PR with precise commits, not dependent PRs.
+Do not use historical RFC wording as a parallel permission contract.
 
-## Remaining future target
+[REBAC.md](../platform/REBAC.md) describes the shipped model until implementation
+and verification justify updating it. Planning does not establish tenant safety.
 
-Several organizations may eventually share an instance with tenant isolation,
-in place of today's singleton `organization:fred`. Extend the explicit ownership
-tree above teams; do not infer organization identity from naming conventions.
-Each person belongs to exactly one organization; a team never changes organization.
-Organizations are visible to platform/organization administrators, not ordinary
-users. A deployment with one user is data, not a separate operating mode.
+## Remaining future design
 
-The future `platform` ReBAC type holds platform roles and catalog anchors;
-`organization` denotes a tenant only. Platform and organization governance grant
-no implicit access to team or project content. Organization-level resources and
-prompts are common to that organization's members; organization-defined agents
-can serve its descendant spaces under the contextual-access contract linked above.
-That contract also governs inherited read versus local write authority and keeps
-conversation outputs and memory in their execution space.
-Existing platform-common resources/prompts remain above the tenant boundary;
-there are no platform-owned agents in this target.
+The current target provisions organizations through installation/migration
+tooling. These questions remain outside that delivery:
 
-Two proposed organization roles:
+- An organization-creation and administration UI.
+- A richer organization onboarding/invitation experience beyond explicit
+  provisioning.
+- Additional organization-level product workflows, such as wiki or analytics.
 
-- `org_admin` manages organization membership, team creation and nomination of
-  initial team administrators, without implicit access to their content.
-- `org_editor` manages organization-common prompts and resources.
-
-A `platform_admin` creates organizations and nominates their first `org_admin`.
-The future organization administration replaces `team_manager`; that role remains
-unchanged in the current single-organization project delivery.
-A personal space remains a one-member team under its owner's organization;
-its kind is explicit data and it holds no project.
-
-## Remaining design and delivery work
-
-- Decide how an account joins its organization: invitation or an external request
-  reached from a landing page outside any organization.
-- Specify organization administration and membership lifecycle, tenant isolation
-  validation, and the separation of platform anchors from the current singleton.
-- Scope existing-data translation and rollout independently, including an explicit
-  assignment of existing teams/users and backup/restore behavior.
-
-Explicit ancestry in the project change prepares this extension; it does not
-establish multi-tenant safety or deliver the administration above.
+Scope those only when requested; the presence of organization ownership and
+four roles is not authorization to build every organization-level workflow.
