@@ -615,6 +615,15 @@ The [academy](./academy/README.md) contains sample MCP servers and standalone ap
 | fred-core    | `./libs/fred-core`    | Shared infrastructure — SQL, KPI, security               |
 | fred-sdk     | `./libs/fred-sdk`     | Agent authoring SDK — contracts, graph, tools, HITL      |
 | fred-runtime | `./libs/fred-runtime` | Pod factory — FastAPI, SSE streaming, checkpointing, CLI |
+| fred-capability-* | `./libs/capabilities` | First-party capabilities, one package each — a pod installs those it offers |
+
+All of them carry one version. A release, from the repository root:
+
+```bash
+make libs-version VERSION=x.y.z      # set it everywhere, with the floors between packages, and relock
+make publish-libs-dry-run            # build every package in dependency order, upload nothing
+PYPI_TOKEN=... make publish-libs     # publish; a version already on PyPI is skipped, so a rerun resumes
+```
 
 > `agentic-backend` (`./agentic-backend`) remains during migration. Do not add new features there.
 
