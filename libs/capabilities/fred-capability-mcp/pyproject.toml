@@ -8,6 +8,11 @@ license = { text = "Apache-2.0" }
 authors = [{ name = "Thales", email = "noreply@thalesgroup.com" }]
 dependencies = ["fred-sdk[agents]>=4.3.0"]
 
+[project.optional-dependencies]
+# Empty on purpose: python-deps.mk syncs `--extra dev`, and this package has no
+# tests or tooling of its own.
+dev = []
+
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
@@ -20,3 +25,10 @@ fred_capability_mcp = ["mcp_catalog.yaml", "prompts/*.md"]
 
 [project.entry-points."fred.mcp_catalogs"]
 mcp = "fred_capability_mcp:load_catalog"
+
+[tool.uv.sources]
+# Local path overrides for mono-repo development only. Ignored when the package
+# is built and published: the published wheel resolves fred-sdk from PyPI.
+fred-pod = { path = "../../fred-pod", editable = true }
+fred-core = { path = "../../fred-core", editable = true }
+fred-sdk = { path = "../../fred-sdk", editable = true }

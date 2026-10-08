@@ -771,7 +771,8 @@ dependencies = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "fred-sdk", extras = ["agents"], specifier = ">=4.3.0" }]
+requires-dist = [{ name = "fred-sdk", extras = ["agents"], editable = "../../libs/fred-sdk" }]
+provides-extras = ["dev"]
 
 [[package]]
 name = "fred-capability-platform-ops"
