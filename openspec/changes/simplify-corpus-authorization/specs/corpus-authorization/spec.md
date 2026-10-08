@@ -300,6 +300,32 @@ once to the parent team's quota, not again for inherited reads.
 - **WHEN** both projects use a document in their parent team's common corpus
 - **THEN** reading does not duplicate the document or its storage charge
 
+### Requirement: Organization bundles reuse provisioning services
+
+An empty target platform SHALL support the existing demo-bundle build and import
+workflow to provision an organization, its teams, admitted users and explicit local
+roles. Each bundle SHALL identify exactly one organization. Import and export SHALL
+require platform administration in this version. Export SHALL preserve the local
+membership and role declarations accepted by import and SHALL exclude another
+organization's data and owner-only personal content. The importer SHALL reuse the
+control-plane's creation/admission services rather than maintain a second set of
+membership rules. Existing closed-space roles SHALL retain their local-admin
+mutation boundary during re-import. Unsupported old-format bundles SHALL be refused.
+
+#### Scenario: The demo populates an empty platform
+- **WHEN** a platform admin imports the newly built demo bundle on an empty target platform
+- **THEN** its organization, teams, admitted memberships, local roles and personal spaces are established through the shared services
+- **AND** deliberately unassigned identities remain outside workspaces
+
+#### Scenario: An organization bundle round-trips
+- **WHEN** a platform admin exports one organization and imports the bundle into a fresh target
+- **THEN** its supported structure and local memberships/roles are preserved
+- **AND** no foreign-organization or owner-only personal content is exported
+
+#### Scenario: Organization administration is insufficient for export
+- **WHEN** an organization admin without platform administration requests an organization export
+- **THEN** the operation is denied
+
 ### Requirement: Offline cutover replaces the old runtime model
 
 The major release SHALL include a separate offline tool accepting organization

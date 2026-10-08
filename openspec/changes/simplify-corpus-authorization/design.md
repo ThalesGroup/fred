@@ -211,6 +211,22 @@ Candidate deletions are not savings until static and dynamic consumers are check
 
 ## Governance decision and delivery
 
+The first integrated milestone is now empty-platform deployment followed by the
+existing `make build-demo-bundle` and import flow. The command builds the ZIP;
+import performs provisioning through control-plane services. One bundle names one
+organization. Import/export remain platform-admin operations for this version;
+organization-scoped data is not permission for an organization admin to export
+closed descendants. Replace the old bundle contract without an old-format serving
+fallback and make export preserve the local membership/role declarations consumed
+by import. Organization exports exclude owner-only personal content. Re-import
+must distinguish initial creation from mutation of existing closed-space roles;
+the latter remains subject to the agreed local administration boundary.
+
+Advance the existing import/export work alongside the SQL/membership foundation
+so that this path exercises the real services early. It does not replace the
+separate stopped-platform translator or coordinated backup/restore. Confirm demo
+organization/role assignments before editing its configuration data.
+
 Use one topic branch and one draft implementation PR targeting `swift`.
 A planning commit precedes six implementation stages in [tasks](tasks.md):
 SQL/FGA foundation; administration; corpus conversion; execution/consumers;
