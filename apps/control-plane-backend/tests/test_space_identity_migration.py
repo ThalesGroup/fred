@@ -212,3 +212,103 @@ def test_user_organization_upgrade_preserves_an_unassigned_identity() -> None:
             assert connection.scalar(sa.select(legacy_users.c.username)) == "alice"
     finally:
         engine.dispose()
+
+
+def _team_settings_migration():
+    path = _PATH.with_name("de43f61a23c9_link_team_settings_to_spaces.py")
+    spec = spec_from_file_location("team_settings_migration", path)
+    assert spec is not None and spec.loader is not None
+    module = module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _legacy_team_settings(database: Connection, identifier: str = "team-a") -> None:
+    table = sa.Table(
+        "teammetadata",
+        sa.MetaData(),
+        sa.Column("id", sa.String(), primary_key=True),
+        sa.Column("name", sa.String(180), nullable=False),
+        sa.Column("description", sa.String(180)),
+        sa.UniqueConstraint("name", name="uq_teammetadata_name"),
+    )
+    table.create(database)
+    database.execute(
+        sa.insert(table),
+        {
+            "id": identifier,
+            "name": "Research",
+            "description": "Preserved settings",
+        },
+    )
+    database.commit()
+
+
+def test_team_settings_upgrade_preserves_identity_and_settings(
+    database: Connection,
+) -> None:
+    _legacy_team_settings(database)
+    with Operations.context(MigrationContext.configure(database)):
+        _team_settings_migration().upgrade()
+    assert database.execute(
+        sa.text(
+            "SELECT t.id, s.name, t.description FROM teammetadata t JOIN space s ON s.id = t.id"
+        )
+    ).one() == ("team-a", "Research", "Preserved settings")
+    assert "name" not in {
+        c["name"] for c in sa.inspect(database).get_columns("teammetadata")
+    }
+    database.execute(sa.text("INSERT INTO teammetadata (id) VALUES ('team-b')"))
+    assert (
+        database.execute(sa.text("SELECT count(*) FROM teammetadata")).scalar_one() == 2
+    )
+
+
+@pytest.mark.parametrize(
+    "identifier,kind",
+    [
+        ("org-a", "team"),
+        ("project-a", "team"),
+        ("missing", "team"),
+        ("team-b", "organization"),
+    ],
+)
+def test_settings_require_a_team_space(
+    database: Connection, identifier: str, kind: str
+) -> None:
+    _legacy_team_settings(database)
+    with Operations.context(MigrationContext.configure(database)):
+        _team_settings_migration().upgrade()
+    with pytest.raises(sa.exc.IntegrityError), database.begin_nested():
+        database.execute(
+            sa.text("INSERT INTO teammetadata (id, space_kind) VALUES (:id, :kind)"),
+            {"id": identifier, "kind": kind},
+        )
+
+
+def test_team_settings_upgrade_requires_explicit_translation(
+    database: Connection,
+) -> None:
+    _legacy_team_settings(database, "unmapped-team")
+    with Operations.context(MigrationContext.configure(database)):
+        with pytest.raises(RuntimeError, match="Translate existing team identities"):
+            _team_settings_migration().upgrade()
+    assert (
+        database.execute(sa.text("SELECT name FROM teammetadata")).scalar_one()
+        == "Research"
+    )
+    assert "space_kind" not in {
+        c["name"] for c in sa.inspect(database).get_columns("teammetadata")
+    }
+
+
+def test_team_settings_downgrade_restores_names(database: Connection) -> None:
+    _legacy_team_settings(database)
+    with Operations.context(MigrationContext.configure(database)):
+        migration = _team_settings_migration()
+        migration.upgrade()
+        migration.downgrade()
+    assert database.execute(sa.text("SELECT id, name FROM teammetadata")).one() == (
+        "team-a",
+        "Research",
+    )

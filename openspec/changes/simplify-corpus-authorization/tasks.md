@@ -56,6 +56,21 @@ integration, repeating only evidence invalidated by subsequent changes or failur
   metadata projections into one helper: production +19/-49 (net -30), unchanged
   SQL statements and public shape, six existing store checks passed and raw
   basedpyright reported zero diagnostics. No new tests or configuration added.
+  Team-settings schema block now removes its duplicated name and adds a typed
+  team-space FK. The store creates identity/settings in one transaction, reads
+  names through one join and scopes name lookup/uniqueness to the organization.
+  Upgrade refuses existing teams lacking explicitly translated space identities;
+  the stopped-platform translator remains pending. New sole head:
+  `de43f61a23c9`. A fresh PostgreSQL upgrade and schema drift check passed.
+  Checks: 63 SQLite/PostgreSQL migration cases, 24 metadata-store cases and
+  7 quota cases passed; raw store/model typing reported zero diagnostics.
+  Independent review of `964c71f4a` plus this storage diff found no actionable
+  defect, passed 15 focused SQLite cases and independently checked rollback and
+  one-query reads with foreign keys enabled. It excludes PostgreSQL reruns,
+  bundle/service changes, remaining consumers and full-branch readiness.
+  Storage production +59/-64 (net -5); model +20/-9, migration +65/-0 and
+  tests +187/-12 are separate. Application callers and bundle adaptation remain
+  in progress; this is not a completed provisioning milestone or ownership cutover.
 - [x] 1.2 Separate platform anchors from organizations and implement four cumulative local roles plus parent-team-dependent project permissions in the existing FGA facade; verify the allow/deny matrix with real OpenFGA, including local-admin-without-analyst and organization-analyst-without-descendant-access.
   Real OpenFGA suite: 42 passed, including all four roles in each space kind,
   parent-admin isolation and immediate project denial after parent membership

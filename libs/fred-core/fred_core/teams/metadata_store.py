@@ -28,6 +28,7 @@ from fred_core.common.team_id import TeamId
 from fred_core.sql.async_session import make_session_factory, use_session
 from fred_core.sql.base_sql import advisory_lock_key
 from fred_core.teams.team_metatada_models import TeamMetadataRow
+from fred_core.teams.space_models import SpaceRow, SpaceKind, TeamKind
 
 logger = logging.getLogger(__name__)
 
@@ -64,9 +65,7 @@ class TeamVisibility(str, Enum):
 
 
 class TeamMetadataPatch(BaseModel):
-    # A rename rides the same patch as every other mutable field. The unique
-    # constraint on `teammetadata.name` is what actually rejects a collision -
-    # callers map the resulting IntegrityError to their own 409.
+    # Names are unique within the canonical organization parent.
     name: str | None = Field(default=None, min_length=1, max_length=180)
     description: str | None = Field(default=None, max_length=180)
     joining_mode: JoiningMode | None = None
@@ -104,9 +103,7 @@ class TeamMetadataPatch(BaseModel):
 
 class TeamMetadata(BaseModel):
     id: TeamId
-    # The team's identity lives here - no Keycloak group backs it anymore.
-    # Set at creation and renameable afterwards by a team_admin through the
-    # team PATCH surface; globally unique either way.
+    # Identity is projected from space; settings remain in teammetadata.
     name: str
     description: str | None = None
     joining_mode: JoiningMode = JoiningMode.INVITE_ONLY
@@ -129,10 +126,10 @@ class TeamMetadataStore:
         self._sessions = make_session_factory(engine)
 
     @staticmethod
-    def _metadata(row: TeamMetadataRow) -> TeamMetadata:
+    def _metadata(row: TeamMetadataRow, name: str) -> TeamMetadata:
         return TeamMetadata(
             id=TeamId(row.id),
-            name=row.name,
+            name=name,
             description=row.description,
             joining_mode=JoiningMode(row.joining_mode),
             visibility=TeamVisibility(row.visibility),
@@ -178,15 +175,13 @@ class TeamMetadataStore:
             return {}
         async with use_session(self._sessions, session) as s:
             rows = (
-                (
-                    await s.execute(
-                        select(TeamMetadataRow).where(TeamMetadataRow.id.in_(team_ids))
-                    )
+                await s.execute(
+                    select(TeamMetadataRow, SpaceRow.name)
+                    .join(SpaceRow, SpaceRow.id == TeamMetadataRow.id)
+                    .where(TeamMetadataRow.id.in_(team_ids))
                 )
-                .scalars()
-                .all()
-            )
-        return {TeamId(row.id): self._metadata(row) for row in rows}
+            ).all()
+        return {TeamId(row.id): self._metadata(row, name) for row, name in rows}
 
     async def get_by_team_id(
         self,
@@ -200,59 +195,67 @@ class TeamMetadataStore:
         self,
         team_id: TeamId,
         name: str,
+        organization_id: str,
         session: AsyncSession | None = None,
     ) -> TeamMetadata:
-        """Create one team's metadata row (AUTHZ-05 review item 9).
-
-        `name` can be changed afterwards through `upsert` (a team_admin
-        rename); it stays globally unique either way, enforced by the column's
-        own constraint. Callers must ensure `team_id` does not already exist
-        (`create_team`'s own name-uniqueness check does this); a duplicate
-        id raises the underlying integrity error rather than silently
-        overwriting an existing team.
-        """
+        """Create a collaborative identity and its settings in one transaction."""
         async with use_session(self._sessions, session) as s:
-            s.add(TeamMetadataRow(id=str(team_id), name=name))
-
-        created = await self.get_by_team_id(team_id, session=session)
-        if created is None:
-            raise RuntimeError(
-                f"Failed to read metadata for team '{team_id}' after create"
+            s.add(
+                SpaceRow(
+                    id=str(team_id),
+                    name=name,
+                    kind=SpaceKind.TEAM,
+                    parent_id=organization_id,
+                    parent_kind=SpaceKind.ORGANIZATION,
+                    team_kind=TeamKind.COLLABORATIVE,
+                )
             )
-        return created
+            await s.flush()
+            row = TeamMetadataRow(id=str(team_id))
+            s.add(row)
+            await s.flush()
+            return self._metadata(row, name)
 
     async def list_all(self, session: AsyncSession | None = None) -> list[TeamMetadata]:
-        """Return every team's metadata (AUTHZ-05 review item 9: the registry
-        source of truth, replacing the Keycloak root-group enumeration)."""
         async with use_session(self._sessions, session) as s:
-            rows = (await s.execute(select(TeamMetadataRow))).scalars().all()
-        return [self._metadata(row) for row in rows]
+            rows = (
+                await s.execute(
+                    select(TeamMetadataRow, SpaceRow.name).join(
+                        SpaceRow, SpaceRow.id == TeamMetadataRow.id
+                    )
+                )
+            ).all()
+        return [self._metadata(row, name) for row, name in rows]
 
     async def get_by_name(
         self,
         name: str,
+        organization_id: str,
         session: AsyncSession | None = None,
     ) -> TeamMetadata | None:
-        """Look up one team by its (unique) name — used by `create_team` to
-        reject a colliding name before writing a new row."""
         async with use_session(self._sessions, session) as s:
             row = (
                 await s.execute(
-                    select(TeamMetadataRow).where(TeamMetadataRow.name == name)
+                    select(TeamMetadataRow, SpaceRow.name)
+                    .join(SpaceRow, SpaceRow.id == TeamMetadataRow.id)
+                    .where(SpaceRow.name == name, SpaceRow.parent_id == organization_id)
                 )
-            ).scalar_one_or_none()
-        return None if row is None else self._metadata(row)
+            ).one_or_none()
+        return None if row is None else self._metadata(*row)
 
     async def delete(
         self,
         team_id: TeamId,
         session: AsyncSession | None = None,
     ) -> None:
-        """Delete one team's metadata row (AUTHZ-05 review item 9, `can_delete_team`)."""
         async with use_session(self._sessions, session) as s:
             row = await s.get(TeamMetadataRow, str(team_id))
             if row is not None:
                 await s.delete(row)
+                await s.flush()
+                space = await s.get(SpaceRow, str(team_id))
+                if space is not None:
+                    await s.delete(space)
 
     async def upsert(
         self,
@@ -260,30 +263,22 @@ class TeamMetadataStore:
         patch: TeamMetadataPatch,
         session: AsyncSession | None = None,
     ) -> TeamMetadata | None:
-        """Patch an existing team's mutable metadata fields.
-
-        Returns `None` when the row does not exist — `upsert` never creates a
-        team (`create` is the only path that does, and it requires `name`,
-        which a patch does not carry). AUTHZ-05 post-implementation review
-        finding: this used to fall through to constructing a `TeamMetadataRow`
-        with no `name` when the row was missing, which is `NOT NULL` — a
-        concurrent `delete_team` landing between a caller's existence check
-        and this call would turn into a raw `IntegrityError` (500) instead of
-        the graceful "nothing to update" every other caller already expects.
-        """
-        update_values = patch.to_store_values()
-        if not update_values:
-            return await self.get_by_team_id(team_id, session=session)
-
+        """Update mutable fields; this cannot create or reparent a team."""
         async with use_session(self._sessions, session) as s:
-            existing_row = await s.get(TeamMetadataRow, str(team_id))
-            if existing_row is None:
+            existing = (
+                await s.execute(
+                    select(TeamMetadataRow, SpaceRow)
+                    .join(SpaceRow, SpaceRow.id == TeamMetadataRow.id)
+                    .where(TeamMetadataRow.id == str(team_id))
+                )
+            ).one_or_none()
+            if existing is None:
                 return None
-            for k, v in update_values.items():
-                setattr(existing_row, k, v)
-            await s.merge(existing_row)
-
-        return await self.get_by_team_id(team_id, session=session)
+            row, space = existing
+            for key, value in patch.to_store_values().items():
+                setattr(space if key == "name" else row, key, value)
+            await s.flush()
+            return self._metadata(row, space.name)
 
     async def increment_current_storage_size(
         self,

@@ -46,6 +46,9 @@ from fred_core.teams.metadata_store import (
     TeamMetadataPatch,
     TeamMetadataStore,
 )
+from fred_core.teams.space_models import SpaceRow
+from sqlalchemy import event, insert, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 
 
@@ -69,6 +72,13 @@ async def _make_sqlite_engine(tmp_path: Path, filename: str) -> AsyncEngine:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         await conn.run_sync(CoreBase.metadata.create_all)
+        await conn.execute(
+            insert(SpaceRow),
+            [
+                {"id": "org-a", "kind": "organization", "name": "Organization A"},
+                {"id": "org-b", "kind": "organization", "name": "Organization B"},
+            ],
+        )
     return engine
 
 
@@ -148,21 +158,21 @@ async def test_team_metadata_store_create_list_all_get_by_name_and_delete(
     try:
         store = TeamMetadataStore(engine)
 
-        created = await store.create(TeamId("team-alpha"), "Alpha")
+        created = await store.create(TeamId("team-alpha"), "Alpha", "org-a")
         assert created.id == "team-alpha"
         assert created.name == "Alpha"
         assert created.description is None
 
-        await store.create(TeamId("team-beta"), "Beta")
+        await store.create(TeamId("team-beta"), "Beta", "org-a")
 
         all_teams = await store.list_all()
         assert {t.id for t in all_teams} == {"team-alpha", "team-beta"}
         assert {t.name for t in all_teams} == {"Alpha", "Beta"}
 
-        found = await store.get_by_name("Alpha")
+        found = await store.get_by_name("Alpha", "org-a")
         assert found is not None
         assert found.id == "team-alpha"
-        assert await store.get_by_name("nonexistent") is None
+        assert await store.get_by_name("nonexistent", "org-a") is None
 
         await store.delete(TeamId("team-alpha"))
         # Deleting a nonexistent id is a no-op, not an error.
@@ -228,7 +238,7 @@ async def test_team_metadata_store_upsert_persists_and_updates_records(
 
     try:
         store = TeamMetadataStore(engine)
-        await store.create(TeamId("fredlab"), "Fredlab")
+        await store.create(TeamId("fredlab"), "Fredlab", "org-a")
         created = await store.upsert(
             TeamId("fredlab"),
             TeamMetadataPatch(
@@ -397,7 +407,7 @@ async def test_team_metadata_retention_round_trips(
         # No row yet → retention fields default to None.
         assert await store.get_by_team_id(team) is None
 
-        await store.create(team, "Swiftpost")
+        await store.create(team, "Swiftpost", "org-a")
 
         created = await store.upsert(
             team,
@@ -1192,5 +1202,68 @@ async def test_platform_bootstrap_store_advisory_lock_is_a_no_op_on_sqlite(
         async with store.advisory_lock():
             entered = True
         assert entered
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_team_names_are_scoped_and_bulk_reads_remain_one_query(
+    tmp_path: Path,
+) -> None:
+    engine = await _make_sqlite_engine(tmp_path, "team-organizations.sqlite3")
+    try:
+        store = TeamMetadataStore(engine)
+        await store.create(TeamId("first"), "Research", "org-a")
+        await store.create(TeamId("second"), "Research", "org-b")
+        await store.create(TeamId("third"), "Other", "org-a")
+        assert (await store.get_by_name("Research", "org-a")).id == "first"
+        assert (await store.get_by_name("Research", "org-b")).id == "second"
+        assert await store.get_by_name("Research", "missing") is None
+        with pytest.raises(IntegrityError):
+            await store.create(TeamId("duplicate"), "Research", "org-a")
+        with pytest.raises(IntegrityError):
+            await store.upsert(TeamId("third"), TeamMetadataPatch(name="Research"))
+        assert (await store.get_by_team_id(TeamId("third"))).name == "Other"
+        statements: list[str] = []
+
+        @event.listens_for(engine.sync_engine, "before_cursor_execute")
+        def record(_connection, _cursor, statement, _parameters, _context, _many):
+            statements.append(statement)
+
+        rows = await store.get_by_team_ids(
+            [TeamId("first"), TeamId("second"), TeamId("missing")]
+        )
+        assert set(rows) == {"first", "second"}
+        assert len(statements) == 1
+        assert "JOIN space" in statements[0]
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_team_creation_and_rename_follow_the_callers_transaction(
+    tmp_path: Path,
+) -> None:
+    engine = await _make_sqlite_engine(tmp_path, "team-transaction.sqlite3")
+    try:
+        store = TeamMetadataStore(engine)
+        async with AsyncSession(engine) as session:
+            await session.begin()
+            await store.create(TeamId("rolled-back"), "Research", "org-a", session)
+            await store.upsert(
+                TeamId("rolled-back"), TeamMetadataPatch(name="Renamed"), session
+            )
+            assert (
+                await store.get_by_team_id(TeamId("rolled-back"), session)
+            ).name == "Renamed"
+            await session.rollback()
+        assert await store.get_by_team_id(TeamId("rolled-back")) is None
+        async with AsyncSession(engine) as session:
+            assert (
+                await session.scalar(
+                    select(SpaceRow).where(SpaceRow.id == "rolled-back")
+                )
+                is None
+            )
     finally:
         await engine.dispose()

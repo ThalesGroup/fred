@@ -36,6 +36,7 @@ from fred_core.models.base import Base
 from fred_core.sql.async_session import make_session_factory
 from fred_core.teams.metadata_store import TeamMetadataStore
 from fred_core.teams.team_metatada_models import TeamMetadataRow
+from fred_core.teams.space_models import SpaceRow
 from fred_core.users.store.postgres_user_store import PostgresUserStore
 from fred_core.users.user_models import UserRow
 from pydantic import ValidationError
@@ -54,13 +55,14 @@ async def _seed_team(engine: AsyncEngine, team_id: str, current: int) -> None:
     sessions = make_session_factory(engine)
     async with sessions() as s:
         async with s.begin():
-            s.add(
-                TeamMetadataRow(
-                    id=team_id,
-                    name=f"name-{team_id}",
-                    current_resources_storage_size=current,
-                )
+            s.add(SpaceRow(id="org", name="Organization", kind="organization"))
+            await s.flush()
+            await TeamMetadataStore(engine).create(
+                TeamId(team_id), f"name-{team_id}", "org", s
             )
+            row = await s.get(TeamMetadataRow, team_id)
+            assert row is not None
+            row.current_resources_storage_size = current
 
 
 async def _read_team(engine: AsyncEngine, team_id: str) -> int | None:
