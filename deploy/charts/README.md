@@ -48,6 +48,21 @@ profile (`c3`) is described in `deploy/README.md` → "Security profiles & class
 tiers". To brand the frontend without rebuilding it, see "Theme overlay" in
 `apps/frontend/README.md`.
 
+## Horizontal Pod Autoscaling
+
+Applications can opt into an `autoscaling/v2` HorizontalPodAutoscaler under
+`applications.<name>.autoscaling`. Set `enabled: true`, `minReplicas`, `maxReplicas`,
+and a Kubernetes resource `metrics` list. Optional `behavior.scaleUp` and
+`behavior.scaleDown` values use the Kubernetes HPA behavior fields directly. The chart
+ships disabled CPU policy examples for every Deployment. The four Knowledge Flow worker
+examples preserve their separate queue-specific limits; the other applications have
+conservative starting values. Adjust each policy and set CPU requests for its container
+before enabling it. An enabled HPA requires that application's Deployment to be enabled,
+CPU requests on its container, and the cluster's Kubernetes metrics API. While an HPA is
+active, the chart leaves `spec.replicas` unset so the HPA can own the Deployment's replica
+count. `fred-agents` must use shared storage (`gcs` or `minio`) if its autoscaling
+`maxReplicas` is greater than one.
+
 With `storage.*_store.type: opensearch` in `fred-agents` or `knowledge-flow-backend`, the
 application creates its indexes at startup.
 
