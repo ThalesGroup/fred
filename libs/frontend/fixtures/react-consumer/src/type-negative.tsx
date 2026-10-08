@@ -167,11 +167,11 @@ export {
 };
 
 const invalidDialogScroll = (
-  // @ts-expect-error Only body or child-owned scrolling is supported.
   <Dialog
     open
     title="Bad"
     confirmLabel="Done"
+    // @ts-expect-error Only body or child-owned scrolling is supported.
     scrollMode="none"
     onConfirm={() => {}}
     onCancel={() => {}}
