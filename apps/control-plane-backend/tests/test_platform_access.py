@@ -563,17 +563,21 @@ async def test_policy_save_revision_and_atomic_self_lockout(access):
 
 
 @pytest.mark.asyncio
-async def test_unseeded_policy_requires_explicit_rule_before_activation(access):
+async def test_unseeded_policy_supports_explicit_exception_only_activation(access):
     actor = user()
     async with access.store.mutation() as session:
         state = await access.store.settings(session)
         state.policy, state.revision = None, 0
     await access.observe(actor)
-    await service.set_user(access, actor, UUID(actor.uid), True)
     with pytest.raises(HTTPException, match="platform_access_policy_required"):
         await service.set_filtering(access, actor, True)
-    await service.save_policy(access, actor, draft(), 0)
+    await service.set_user(access, actor, UUID(actor.uid), True)
+    assert (
+        await service.state_view(access, await access.state())
+    ).has_admission_sources
     await service.set_filtering(access, actor, True)
+    assert (await access.state()).policy is None
+    assert not await access.admitted(user())
     assert await access.admitted(actor)
 
 
@@ -1361,7 +1365,82 @@ async def test_large_bulk_grants_and_late_batch_unknown_roll_back(access):
     )
 
 
+@pytest.mark.asyncio
+async def test_population_preview_distinguishes_fresh_denial_and_uncertain_evidence(
+    access,
+):
+    actor, blocked, stale, granted = user("accepted"), user(), user(), user()
+    for person in (actor, blocked, stale, granted):
+        await access.observe(person)
+    async with access.store.mutation() as session:
+        row = await access.store.user(UUID(stale.uid), session)
+        row.admission_expires_at = time.time() - 1
+    await service.set_user(access, actor, UUID(granted.uid), True)
+    before = await access.state()
+    preview = await service.activation_preview(access)
+    outcomes = {person.user_id: person.outcome for person in preview.users}
+    assert outcomes == {
+        actor.uid: "allowed",
+        blocked.uid: "blocked",
+        stale.uid: "unknown",
+        granted.uid: "allowed",
+    }
+    assert (preview.allowed, preview.blocked, preview.unknown) == (2, 1, 1)
+    assert not (await access.state()).filtering_enabled
+    assert (await access.state()).revision == before.revision
+    await service.save_policy(access, actor, draft(), before.revision)
+    with pytest.raises(HTTPException, match="platform_access_policy_conflict"):
+        await service.set_filtering(access, actor, True, preview.revision)
+    assert not (await access.state()).filtering_enabled
 
 
+@pytest.mark.asyncio
+async def test_population_preview_live_free_membership_and_conflicted_evidence(access):
+    actor, member = user("accepted"), user()
+    await access.observe(actor)
+    await access.observe(member)
+    async with access.store.mutation() as session:
+        (await access.store.user(UUID(member.uid), session)).admission_conflicted = True
+    access.rebac.members[member.uid] = {"demo"}
+    await service.set_team(access, actor, "demo", False, True)
+    preview = await service.activation_preview(access)
+    assert (
+        next(row for row in preview.users if row.user_id == member.uid).outcome
+        == "allowed"
+    )
+    access.rebac.members[member.uid].clear()
+    preview = await service.activation_preview(access)
+    assert (
+        next(row for row in preview.users if row.user_id == member.uid).outcome
+        == "unknown"
+    )
 
 
+@pytest.mark.asyncio
+async def test_population_preview_suspension_overrides_exception_and_requires_admin(
+    access,
+):
+    from unittest.mock import AsyncMock
+
+    from fred_core.security.models import AccountStatusError
+
+    actor = user("accepted")
+    await access.observe(actor)
+    await service.set_user(access, actor, UUID(actor.uid), True)
+    access.rebac.require_active_account = AsyncMock(side_effect=AccountStatusError())
+    assert (await service.activation_preview(access)).blocked == 1
+    access.rebac.require_active_account.side_effect = AccountStatusError(
+        unavailable=True
+    )
+    assert (await service.activation_preview(access)).unknown == 1
+    app = FastAPI()
+    app.include_router(api.router)
+    app.dependency_overrides[get_platform_access] = lambda: access
+    app.dependency_overrides[api.get_current_user] = lambda: actor
+    access.rebac.admin = False
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        assert (
+            await client.get("/admin/platform/access/activation-preview")
+        ).status_code == 403

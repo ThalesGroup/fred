@@ -23,6 +23,7 @@ import {
   useImportPlatformT0Mutation,
   useSetPlatformTeamMutation,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import PlatformAccessActivationDialog from "./PlatformAccessActivationDialog";
 import PlatformAccessLinkManager from "./PlatformAccessLinkManager";
 import PlatformAccessRuleEditor from "./PlatformAccessRuleEditor";
 import styles from "./PlatformAccessPage.module.css";
@@ -39,6 +40,7 @@ export default function PlatformAccessPage() {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const [filterConfirmation, setFilterConfirmation] = useState<boolean>();
   const [linkTeam, setLinkTeam] = useState<string>();
   const state = usePlatformAccessStateQuery(undefined, { skip: !enabled });
   const users = usePlatformAccessUsersQuery({ offset, limit: 25, query }, { skip: !enabled });
@@ -344,21 +346,48 @@ export default function PlatformAccessPage() {
           >
             <section className={styles.section}>
               <h2>{t("rework.platformAccess.tabs.activation")}</h2>
-              <label className={styles.row}>
-                <Switch
-                  aria-label={t("rework.platformAccess.filter")}
-                  checked={state.data?.filtering_enabled ?? false}
-                  disabled={locked}
-                  onChange={(event) =>
-                    void run(() =>
-                      filter({ setPlatformFiltering: { filtering_enabled: event.target.checked } }).unwrap(),
-                    )
-                  }
-                />
-                {t("rework.platformAccess.filter")}
-              </label>
+              <p>
+                {t(
+                  state.data?.filtering_enabled
+                    ? "rework.platformAccess.activation.active"
+                    : "rework.platformAccess.activation.inactive",
+                )}
+              </p>
+              <p>{t("rework.platformAccess.activation.savedOnly")}</p>
             </section>
           </div>
+          <div className={styles.floatingAction}>
+            <Button
+              color="primary"
+              variant="filled"
+              size="medium"
+              disabled={locked || (!state.data?.filtering_enabled && !state.data?.has_admission_sources)}
+              onClick={() => setFilterConfirmation(!state.data?.filtering_enabled)}
+            >
+              {t(
+                state.data?.filtering_enabled
+                  ? "rework.platformAccess.activation.disable"
+                  : "rework.platformAccess.activation.enable",
+              )}
+            </Button>
+          </div>
+          {filterConfirmation !== undefined && state.data && (
+            <PlatformAccessActivationDialog
+              enabling={filterConfirmation}
+              revision={state.data.revision}
+              configured={state.data.has_admission_sources}
+              busy={locked}
+              onClose={() => setFilterConfirmation(undefined)}
+              onConfirm={(revision) =>
+                void run(async () => {
+                  await filter({
+                    setPlatformFiltering: { filtering_enabled: filterConfirmation, expected_revision: revision },
+                  }).unwrap();
+                  setFilterConfirmation(undefined);
+                })
+              }
+            />
+          )}
           {linkTeam && teams.data?.find((team) => team.team_id === linkTeam) && (
             <PlatformAccessLinkManager
               team={teams.data.find((team) => team.team_id === linkTeam)!}

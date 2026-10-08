@@ -30,6 +30,7 @@ from control_plane_backend.platform_access.schemas import (
     CreatePlatformEnrollmentLink,
     FreeEnrollmentPreview,
     GrantPlatformAccessUsers,
+    PlatformAccessActivationPreview,
     PlatformAccessOwnClaims,
     PlatformAccessPolicyPreview,
     PlatformAccessState,
@@ -67,20 +68,37 @@ Admin = Annotated[KeycloakUser, Depends(require_access_admin)]
 
 @router.get("/admin/platform/access", response_model=PlatformAccessState)
 async def get_platform_access_state(access: Access, user: Admin) -> PlatformAccessState:
-    return service.state_view(await access.state())
+    return await service.state_view(access, await access.state())
 
 
 @router.patch("/admin/platform/access", response_model=PlatformAccessState)
 async def set_platform_access_filtering(
     body: SetPlatformFiltering, access: Access, user: Admin
 ) -> PlatformAccessState:
-    result = await service.set_filtering(access, user, body.filtering_enabled)
+    result = await service.set_filtering(
+        access, user, body.filtering_enabled, body.expected_revision
+    )
     emit_audit_log(
         "platform.access.filtering.updated",
         actor_uid=user.uid,
         filtering_enabled=body.filtering_enabled,
     )
     return result
+
+
+@router.get(
+    "/admin/platform/access/activation-preview",
+    response_model=PlatformAccessActivationPreview,
+)
+async def preview_platform_access_activation(
+    access: Access, user: Admin, response: Response
+) -> PlatformAccessActivationPreview:
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        async with asyncio.timeout(120):
+            return await service.activation_preview(access)
+    except TimeoutError:
+        raise HTTPException(503, "platform_access_unavailable") from None
 
 
 @router.get("/admin/platform/access/own-claims", response_model=PlatformAccessOwnClaims)

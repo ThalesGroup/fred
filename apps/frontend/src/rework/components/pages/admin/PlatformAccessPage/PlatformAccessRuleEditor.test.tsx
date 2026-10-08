@@ -38,7 +38,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   state = {
     filtering_enabled: false,
-      t0_completed_at: null,
+    has_admission_sources: true,
+    t0_completed_at: null,
     revision: 1,
     policy: {
       combination: "all",

@@ -82,8 +82,6 @@ class PlatformAccess:
 
             if state.filtering_enabled and is_whitelist_active():
                 raise ValueError("Conflicting legacy admission gate")
-            if state.filtering_enabled and state.policy is None:
-                raise ValueError("Active filtering requires a policy")
         except ValueError:
             raise HTTPException(503, "platform_access_unavailable") from None
         return state
@@ -146,8 +144,7 @@ class PlatformAccess:
     async def admitted(self, user: Principal) -> bool:
         try:
             state = await self.state()
-            if isinstance(user, KeycloakUser):
-                    if not state.filtering_enabled:
+            if not state.filtering_enabled:
                 if isinstance(user, KeycloakUser):
                     await self.store.observe(user, self.policy(state))
                 return True

@@ -3,6 +3,7 @@ import asyncio
 import hashlib
 import json
 import secrets
+import time
 from datetime import datetime, timezone
 from typing import Literal, cast
 from uuid import UUID, uuid4
@@ -11,13 +12,19 @@ from fastapi import HTTPException
 from fred_core.common import TeamId
 from fred_core.logs.audit_log import emit_audit_log
 from fred_core.security.delegation import require_active_subject
+from fred_core.security.models import AccountStatusError
 from fred_core.security.platform_access.access_control import PlatformAccess
 from fred_core.security.platform_access.models import (
     PlatformAccessLinkRow,
     PlatformAccessSettingsRow,
     PlatformAccessUserRow,
 )
-from fred_core.security.platform_access.rules import evaluate, extract_claims
+from fred_core.security.platform_access.rules import (
+    allows,
+    evaluate,
+    extract_claims,
+    path_key,
+)
 from fred_core.teams.team_metatada_models import TeamMetadataRow
 from fred_core.users.user_models import UserRow
 from fred_pod.security.platform_access import PlatformAccessPolicy
@@ -30,6 +37,8 @@ from control_plane_backend.platform_access.schemas import (
     AdmissionSource,
     CreatePlatformEnrollmentLink,
     FreeEnrollmentPreview,
+    PlatformAccessActivationPreview,
+    PlatformAccessActivationUser,
     PlatformAccessOwnClaims,
     PlatformAccessPolicyPreview,
     PlatformAccessState,
@@ -45,12 +54,42 @@ from control_plane_backend.teams.schemas import UserTeamRelation
 from control_plane_backend.teams.service import _add_team_member_relation
 
 
-def state_view(state: PlatformAccessSettingsRow) -> PlatformAccessState:
+async def has_admission_sources(
+    access: PlatformAccess,
+    state: PlatformAccessSettingsRow,
+    session: AsyncSession | None = None,
+) -> bool:
+    if state.policy is not None:
+        return True
+    async with access.store.read(session) as active:
+        if await active.scalar(select(select(PlatformAccessUserRow.user_id).exists())):
+            return True
+        return bool(
+            await active.scalar(
+                select(
+                    select(TeamMetadataRow.id)
+                    .where(
+                        ~TeamMetadataRow.id.startswith("personal-"),
+                        TeamMetadataRow.platform_access_allowed
+                        | TeamMetadataRow.platform_access_free,
+                    )
+                    .exists()
+                )
+            )
+        )
+
+
+async def state_view(
+    access: PlatformAccess,
+    state: PlatformAccessSettingsRow,
+    session: AsyncSession | None = None,
+) -> PlatformAccessState:
     return PlatformAccessState(
         filtering_enabled=state.filtering_enabled,
         t0_completed_at=state.t0_completed_at,
         policy=PlatformAccess.policy(state),
         revision=state.revision,
+        has_admission_sources=await has_admission_sources(access, state, session),
     )
 
 
@@ -73,7 +112,10 @@ async def preserve_actor(
 
 
 async def set_filtering(
-    access: PlatformAccess, actor: KeycloakUser, enabled: bool
+    access: PlatformAccess,
+    actor: KeycloakUser,
+    enabled: bool,
+    expected_revision: int | None = None,
 ) -> PlatformAccessState:
     async with access.store.mutation() as session:
         state = await access.state(session)
@@ -83,11 +125,13 @@ async def set_filtering(
 
         if enabled and is_whitelist_active():
             raise HTTPException(409, "platform_access_legacy_gate_conflict")
-        if enabled and state.policy is None:
+        if expected_revision is not None and expected_revision != state.revision:
+            raise HTTPException(409, "platform_access_policy_conflict")
+        if enabled and not await has_admission_sources(access, state, session):
             raise HTTPException(409, "platform_access_policy_required")
         state.filtering_enabled = enabled
         await preserve_actor(access, actor, session)
-        return state_view(state)
+        return await state_view(access, state, session)
 
 
 async def grant_users(
@@ -190,6 +234,112 @@ async def users_page(
     items = await asyncio.gather(*(project(row) for row in rows))
     return PlatformAccessUsersPage(
         items=items, total=await access.store.user_count(query)
+    )
+
+
+async def activation_preview(access: PlatformAccess) -> PlatformAccessActivationPreview:
+    async with access.store.read() as session:
+        state = await access.state(session)
+        policy, revision = access.policy(state), state.revision
+        rows = list((await session.scalars(select(UserRow).order_by(UserRow.id))).all())
+        exceptions = {
+            row.user_id: row
+            for row in (await session.scalars(select(PlatformAccessUserRow))).all()
+        }
+        teams = await access.store.teams(session, eligible_only=True)
+    slots = asyncio.Semaphore(8)
+
+    async def project(row: UserRow) -> PlatformAccessActivationUser:
+        async with slots:
+            uid = str(row.id)
+            outcome: Literal["allowed", "blocked", "unknown"] = "unknown"
+            sources: list[AdmissionSource] = []
+            try:
+                await access.rebac.require_active_account(uid)
+            except AccountStatusError as error:
+                outcome = "unknown" if error.unavailable else "blocked"
+            else:
+                exception = exceptions.get(UUID(uid))
+                if exception:
+                    sources.append(
+                        AdmissionSource(
+                            kind="t0" if exception.source == "t0" else "manual",
+                            granted_by=exception.granted_by,
+                            granted_at=exception.granted_at,
+                        )
+                    )
+                if sources:
+                    outcome = "allowed"
+                elif policy is None:
+                    outcome = "blocked"
+                elif (
+                    not row.admission_conflicted
+                    and row.admission_expires_at is not None
+                    and row.admission_expires_at > time.time()
+                    and all(
+                        path_key(condition.claim) in (row.admission_attribute or {})
+                        for condition in policy.conditions
+                    )
+                ):
+                    result = await asyncio.to_thread(
+                        evaluate, policy, row.admission_attribute or {}
+                    )
+                    if not any(
+                        reason in ("timeout", "unavailable")
+                        for reason in result.reasons
+                    ):
+                        outcome = "allowed" if allows(policy, result) else "blocked"
+                        if outcome == "allowed":
+                            sources.append(AdmissionSource(kind="attribute"))
+                if outcome != "allowed":
+                    for start in range(0, len(teams), 8):
+                        batch = teams[start : start + 8]
+                        memberships = await access.rebac.has_team_memberships(
+                            uid, [team.id for team in batch]
+                        )
+                        if len(memberships) != len(batch) or any(
+                            type(value) is not bool for value in memberships
+                        ):
+                            raise HTTPException(503, "platform_access_unavailable")
+                        for team, member in zip(batch, memberships, strict=True):
+                            if member:
+                                sources.append(
+                                    AdmissionSource(
+                                        kind="free"
+                                        if team.platform_access_free
+                                        else "team",
+                                        team_id=team.id,
+                                        team_name=team.name,
+                                    )
+                                )
+                        if sources:
+                            outcome = "allowed"
+                            break
+            return PlatformAccessActivationUser(
+                user_id=uid,
+                username=row.username,
+                email=row.email,
+                first_name=row.first_name,
+                last_name=row.last_name,
+                sources=sources,
+                outcome=outcome,
+            )
+
+    # Queue work in bounded batches as well as limiting in-flight authority calls.
+    items: list[PlatformAccessActivationUser] = []
+    for start in range(0, len(rows), 100):
+        items.extend(
+            await asyncio.gather(*(project(row) for row in rows[start : start + 100]))
+        )
+    if (await access.state()).revision != revision:
+        raise HTTPException(409, "platform_access_policy_conflict")
+    return PlatformAccessActivationPreview(
+        users=items,
+        allowed=sum(row.outcome == "allowed" for row in items),
+        blocked=sum(row.outcome == "blocked" for row in items),
+        unknown=sum(row.outcome == "unknown" for row in items),
+        revision=revision,
+        checked_at=datetime.now(timezone.utc),
     )
 
 
@@ -585,4 +735,4 @@ async def save_policy(
         state.policy = policy.model_dump()
         state.revision += 1
         await preserve_actor(access, actor, session)
-        return state_view(state)
+        return await state_view(access, state, session)

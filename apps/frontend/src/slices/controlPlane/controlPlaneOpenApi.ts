@@ -54,6 +54,12 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.setPlatformFiltering,
       }),
     }),
+    previewPlatformAccessActivationControlPlaneV1AdminPlatformAccessActivationPreviewGet: build.query<
+      PreviewPlatformAccessActivationControlPlaneV1AdminPlatformAccessActivationPreviewGetApiResponse,
+      PreviewPlatformAccessActivationControlPlaneV1AdminPlatformAccessActivationPreviewGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/access/activation-preview` }),
+    }),
     getPlatformAccessOwnClaimsControlPlaneV1AdminPlatformAccessOwnClaimsGet: build.query<
       GetPlatformAccessOwnClaimsControlPlaneV1AdminPlatformAccessOwnClaimsGetApiResponse,
       GetPlatformAccessOwnClaimsControlPlaneV1AdminPlatformAccessOwnClaimsGetApiArg
@@ -1836,6 +1842,9 @@ export type SetPlatformAccessFilteringControlPlaneV1AdminPlatformAccessPatchApiR
 export type SetPlatformAccessFilteringControlPlaneV1AdminPlatformAccessPatchApiArg = {
   setPlatformFiltering: SetPlatformFiltering;
 };
+export type PreviewPlatformAccessActivationControlPlaneV1AdminPlatformAccessActivationPreviewGetApiResponse =
+  /** status 200 Successful Response */ PlatformAccessActivationPreview;
+export type PreviewPlatformAccessActivationControlPlaneV1AdminPlatformAccessActivationPreviewGetApiArg = void;
 export type GetPlatformAccessOwnClaimsControlPlaneV1AdminPlatformAccessOwnClaimsGetApiResponse =
   /** status 200 Successful Response */ PlatformAccessOwnClaims;
 export type GetPlatformAccessOwnClaimsControlPlaneV1AdminPlatformAccessOwnClaimsGetApiArg = void;
@@ -3061,9 +3070,35 @@ export type PlatformAccessState = {
   t0_completed_at: string | null;
   policy: PlatformAccessPolicy | null;
   revision: number;
+  has_admission_sources: boolean;
 };
 export type SetPlatformFiltering = {
   filtering_enabled: boolean;
+  expected_revision?: number | null;
+};
+export type AdmissionSource = {
+  kind: "attribute" | "manual" | "t0" | "team" | "free";
+  team_id?: string | null;
+  team_name?: string | null;
+  granted_by?: string | null;
+  granted_at?: string | null;
+};
+export type PlatformAccessActivationUser = {
+  user_id: string;
+  username: string | null;
+  email: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  sources: AdmissionSource[];
+  outcome: "allowed" | "blocked" | "unknown";
+};
+export type PlatformAccessActivationPreview = {
+  users: PlatformAccessActivationUser[];
+  allowed: number;
+  blocked: number;
+  unknown: number;
+  revision: number;
+  checked_at: string;
 };
 export type JsonValue = any;
 export type PlatformAccessOwnClaims = {
@@ -3081,13 +3116,6 @@ export type PlatformAccessPolicyPreview = {
 export type SetPlatformAccessPolicy = {
   expected_revision: number;
   policy: PlatformAccessPolicy;
-};
-export type AdmissionSource = {
-  kind: "attribute" | "manual" | "t0" | "team" | "free";
-  team_id?: string | null;
-  team_name?: string | null;
-  granted_by?: string | null;
-  granted_at?: string | null;
 };
 export type PlatformAccessUser = {
   user_id: string;
@@ -4827,6 +4855,8 @@ export const {
   useGetPlatformAccessStateControlPlaneV1AdminPlatformAccessGetQuery,
   useLazyGetPlatformAccessStateControlPlaneV1AdminPlatformAccessGetQuery,
   useSetPlatformAccessFilteringControlPlaneV1AdminPlatformAccessPatchMutation,
+  usePreviewPlatformAccessActivationControlPlaneV1AdminPlatformAccessActivationPreviewGetQuery,
+  useLazyPreviewPlatformAccessActivationControlPlaneV1AdminPlatformAccessActivationPreviewGetQuery,
   useGetPlatformAccessOwnClaimsControlPlaneV1AdminPlatformAccessOwnClaimsGetQuery,
   useLazyGetPlatformAccessOwnClaimsControlPlaneV1AdminPlatformAccessOwnClaimsGetQuery,
   usePreviewPlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPreviewPostMutation,

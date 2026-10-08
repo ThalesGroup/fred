@@ -917,6 +917,8 @@ export const useAcceptFreeCguMutation =
 export const useEnrollFreeTeamMutation =
   enhancedControlPlaneApi.useEnrollFreeTeamControlPlaneV1PlatformAccessFreeTokenEnrollPostMutation;
 
+export const usePlatformAccessActivationPreviewQuery =
+  enhancedControlPlaneApi.usePreviewPlatformAccessActivationControlPlaneV1AdminPlatformAccessActivationPreviewGetQuery;
 export const usePlatformAccessOwnClaimsQuery =
   enhancedControlPlaneApi.useGetPlatformAccessOwnClaimsControlPlaneV1AdminPlatformAccessOwnClaimsGetQuery;
 export const usePreviewPlatformPolicyMutation =

@@ -13,15 +13,22 @@ const state = vi.hoisted(() => ({
     },
   ],
   completed: false,
+  configured: true,
+  filter: vi.fn(() => ({ unwrap: async () => undefined })),
   bulk: vi.fn((_arg: { grantPlatformAccessUsers: { user_ids: string[] } }) => ({ unwrap: async () => undefined })),
   grant: vi.fn(() => ({ unwrap: async () => undefined })),
   importT0: vi.fn(() => ({ unwrap: async () => undefined })),
 }));
-vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }) }));
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({ showError: vi.fn() }) }));
 vi.mock("../../../../../common/config", () => ({ getConfig: () => ({ platform_access_enabled: true }) }));
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
-  usePlatformAccessStateQuery: () => ({ data: { filtering_enabled: false } }),
+  usePlatformAccessStateQuery: () => ({
+    data: { filtering_enabled: false, revision: 1, has_admission_sources: state.configured },
+  }),
+  usePlatformAccessActivationPreviewQuery: () => ({
+    data: { revision: 1, allowed: 1, blocked: 0, unknown: 0, checked_at: "2026-10-08T12:00:00Z", users: [] },
+  }),
   usePlatformAccessUsersQuery: () => ({
     data: {
       total: state.users.length,
@@ -34,7 +41,7 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
   usePlatformAccessTeamsQuery: () => ({
     data: [{ team_id: "demo", name: "Demo", allowed: false, free: true, has_enrollment_link: true }],
   }),
-  useSetPlatformFilteringMutation: () => [vi.fn()],
+  useSetPlatformFilteringMutation: () => [state.filter],
   useGrantPlatformUsersMutation: () => [state.bulk],
   useGrantPlatformUserMutation: () => [state.grant],
   useRevokePlatformUserMutation: () => [vi.fn()],
@@ -68,6 +75,7 @@ beforeEach(() => {
     },
   ];
   state.completed = false;
+  state.configured = true;
   vi.clearAllMocks();
   host = document.createElement("div");
   document.body.append(host);
@@ -102,7 +110,9 @@ it("exposes only the selected panel and supports keyboard section navigation", (
   expect(panels.filter((panel) => !panel.hidden)).toEqual([panels[1]]);
   openTab("activation");
   expect(panels.filter((panel) => !panel.hidden)).toEqual([panels[3]]);
-  expect(panels[3].querySelector('[aria-label="rework.platformAccess.filter"]')).not.toBeNull();
+  expect(
+    [...host.querySelectorAll("button")].find((node) => node.textContent === "rework.platformAccess.activation.enable"),
+  ).toBeDefined();
 });
 
 it("preserves rule drafts and user selections across tabs without mutations", async () => {
@@ -208,4 +218,35 @@ it("grants more than 100 selections without a product cap", async () => {
       .click(),
   );
   expect(state.bulk.mock.calls[0][0].grantPlatformAccessUsers.user_ids).toHaveLength(101);
+});
+
+it("requires configuration and confirmation across all tabs before activating", async () => {
+  state.configured = false;
+  render();
+  const action = () =>
+    [...host.querySelectorAll<HTMLButtonElement>("button")].find(
+      (node) => node.textContent === "rework.platformAccess.activation.enable",
+    )!;
+  expect(action().disabled).toBe(true);
+  state.configured = true;
+  render();
+  for (const tab of ["rules", "users", "teams", "activation"]) {
+    openTab(tab);
+    expect(action().disabled).toBe(false);
+  }
+  act(() => action().click());
+  expect(state.filter).not.toHaveBeenCalled();
+  const dialog = document.querySelector('[role="dialog"]')!;
+  expect(dialog.textContent).toContain("rework.platformAccess.activation.summary");
+  act(() => [...dialog.querySelectorAll("button")].find((node) => node.textContent === "common.cancel")!.click());
+  expect(state.filter).not.toHaveBeenCalled();
+  act(() => action().click());
+  await act(async () =>
+    [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')]
+      .find((node) => node.textContent === "rework.platformAccess.activation.enable")!
+      .click(),
+  );
+  expect(state.filter).toHaveBeenCalledWith({
+    setPlatformFiltering: { filtering_enabled: true, expected_revision: 1 },
+  });
 });

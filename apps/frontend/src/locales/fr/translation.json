@@ -3409,6 +3409,25 @@
         "copied": "URL copiée dans le presse-papier.",
         "copyFailed": "Le presse-papier est inaccessible. Sélectionnez l'URL ci-dessus pour la copier manuellement, ou réessayez.",
         "createdSuccess": "Lien créé"
+      },
+      "activation": {
+        "enable": "Activer le filtrage",
+        "disable": "Désactiver le filtrage",
+        "enableTitle": "Activer le filtrage de la plateforme ?",
+        "disableTitle": "Désactiver le filtrage de la plateforme ?",
+        "savedOnly": "Ce récapitulatif utilise la règle enregistrée et les autorisations actuelles. Les modifications non enregistrées ne sont pas appliquées.",
+        "disableHint": "Les utilisateurs ne seront plus filtrés. L'authentification et les droits sur les ressources restent contrôlés.",
+        "previewFailed": "Le récapitulatif est indisponible ou obsolète. Réessayez avant de confirmer.",
+        "summary": "Autorisés : {{allowed}}. Bloqués : {{blocked}}. Incertains : {{unknown}}.",
+        "checkedAt": "Vérifié le {{date}}. Les accès sont revérifiés à chaque requête.",
+        "unknownHint": "Certains utilisateurs ont des données de claims absentes ou expirées. Une nouvelle connexion est nécessaire pour évaluer leur règle. Cet aperçu ne donne aucun accès.",
+        "groups": "Résultat par utilisateur",
+        "allowed": "Autorisés",
+        "blocked": "Bloqués",
+        "unknown": "Incertains",
+        "email": "E-mail",
+        "active": "Le filtrage est actif.",
+        "inactive": "Le filtrage est inactif."
       }
     }
   },

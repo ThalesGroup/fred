@@ -19,11 +19,13 @@ class PlatformAccessState(BaseModel):
     t0_completed_at: datetime | None
     policy: PlatformAccessPolicy | None
     revision: int
+    has_admission_sources: bool
 
 
 class SetPlatformFiltering(BaseModel):
     model_config = ConfigDict(extra="forbid")
     filtering_enabled: bool
+    expected_revision: int | None = Field(default=None, ge=0)
 
 
 class AdmissionSource(BaseModel):
@@ -46,6 +48,19 @@ class PlatformAccessUser(BaseModel):
 class PlatformAccessUsersPage(BaseModel):
     items: list[PlatformAccessUser]
     total: int
+
+
+class PlatformAccessActivationUser(PlatformAccessUser):
+    outcome: Literal["allowed", "blocked", "unknown"]
+
+
+class PlatformAccessActivationPreview(BaseModel):
+    users: list[PlatformAccessActivationUser]
+    allowed: int
+    blocked: int
+    unknown: int
+    revision: int
+    checked_at: datetime
 
 
 class PlatformAccessTeam(BaseModel):

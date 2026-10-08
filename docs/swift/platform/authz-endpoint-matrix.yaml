@@ -29,6 +29,11 @@ operations:
     required_permission: can_manage_platform
   - service: control-plane
     method: GET
+    path: /control-plane/v1/admin/platform/access/activation-preview
+    review_status: approved
+    required_permission: can_manage_platform
+  - service: control-plane
+    method: GET
     path: /control-plane/v1/admin/platform/access/own-claims
     review_status: approved
     required_permission: can_manage_platform_and_authenticated_own_human_credential
