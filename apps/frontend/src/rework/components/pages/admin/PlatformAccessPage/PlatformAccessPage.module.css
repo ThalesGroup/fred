@@ -1,10 +1,31 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 .page {
+  --font-body-small: var(--font-body-medium);
   display: flex;
   flex-direction: column;
   gap: var(--spacing-m);
   padding: var(--spacing-m);
   overflow: auto;
+  font: var(--font-body-large);
+}
+.navigation {
+  flex-shrink: 0;
+  min-width: 0;
+  overflow-x: auto;
+}
+.panel {
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: column;
+  gap: var(--spacing-m);
+  min-width: 0;
+}
+.panel[hidden] {
+  display: none;
+}
+.dialogBody {
+  --font-body-small: var(--font-body-medium);
+  font: var(--font-body-large);
 }
 .section {
   display: flex;
@@ -37,14 +58,17 @@
   container-type: inline-size;
   max-width: 72rem;
 }
-.ruleEditor > h2 {
+.section > h2 {
   margin: 0;
-  font: var(--font-title-medium);
+  font: var(--font-title-large);
 }
 .ruleEditor > p,
 .condition > p {
   margin: 0;
   color: var(--on-surface-retreat);
+  font: var(--font-body-large);
+}
+.ruleEditor > .hint {
   font: var(--font-body-medium);
 }
 .conditionHeader {
@@ -52,7 +76,7 @@
   justify-content: space-between;
   align-items: center;
   gap: var(--spacing-s);
-  font: var(--font-title-small);
+  font: var(--font-title-medium);
 }
 .conditionGrid {
   display: grid;

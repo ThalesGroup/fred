@@ -3238,6 +3238,13 @@
       "infoLabel": "What a copy does"
     },
     "platformAccess": {
+      "tabs": {
+        "label": "Platform access sections",
+        "rules": "Rules",
+        "users": "Users",
+        "teams": "Teams and links",
+        "activation": "Activation"
+      },
       "bulkHint": "Select up to 100 Fred users across searches or pages to add independent manual exceptions. Team authorization follows current membership; leaving the team removes that source.",
       "allowSelected": "Allow selected users ({{count}})",
       "clearSelection": "Clear selection",
@@ -3288,7 +3295,7 @@
       "actorLockout": "First grant yourself another admission source before enabling filtering or removing your last authorization.",
       "rule": {
         "title": "Admission rule",
-        "hint": "Choose whether matching users are allowed or blocked. Individual exceptions and authorized teams always allow access.",
+        "hint": "Individual exceptions and authorized teams always allow access.",
         "discoveryHint": "These names were observed in verified human tokens. This is not the complete identity-provider schema; some users may lack a claim.",
         "claimsFailed": "Claim discovery is unavailable. Choose a field from your account using the explorer.",
         "combination": "Combine conditions",
@@ -3345,7 +3352,7 @@
         },
         "invalidRegex": "Invalid regular expression. Check its syntax.",
         "invalidCondition": "Invalid condition. Check its keys and value.",
-        "delegatedHint": "Changing a claim path may refuse delegated requests until the user makes a new direct request. Independent exceptions and teams remain valid."
+        "delegatedHint": "After a field change, delegated requests may require a new direct user request. Exceptions and teams remain valid."
       },
       "picker": {
         "choose": "Choose an account field",

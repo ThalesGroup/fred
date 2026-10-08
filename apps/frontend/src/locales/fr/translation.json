@@ -3238,6 +3238,13 @@
       "infoLabel": "Ce que fait une copie"
     },
     "platformAccess": {
+      "tabs": {
+        "label": "Sections de l'accès plateforme",
+        "rules": "Règles",
+        "users": "Utilisateurs",
+        "teams": "Équipes et liens",
+        "activation": "Activation"
+      },
       "bulkHint": "Sélectionnez jusqu'à 100 utilisateurs Fred, même sur plusieurs recherches ou pages, pour ajouter des exceptions manuelles indépendantes. L'autorisation d'une équipe suit ses membres actuels ; quitter l'équipe retire cette source.",
       "allowSelected": "Autoriser les utilisateurs sélectionnés ({{count}})",
       "clearSelection": "Effacer la sélection",
@@ -3288,7 +3295,7 @@
       "actorLockout": "Accordez-vous d'abord une autre source d'accès avant d'activer le filtrage ou de retirer votre dernière autorisation.",
       "rule": {
         "title": "Règle d'accès",
-        "hint": "Choisissez si les utilisateurs correspondants sont autorisés ou bloqués. Les exceptions individuelles et les équipes autorisées permettent toujours l'accès.",
+        "hint": "Les exceptions individuelles et les équipes autorisées permettent toujours l'accès.",
         "discoveryHint": "Ces noms ont été observés dans des tokens humains vérifiés. La liste ne décrit pas tout le fournisseur d'identité ; certains utilisateurs peuvent ne pas avoir un claim.",
         "claimsFailed": "La découverte des claims est indisponible. Choisissez un champ de votre compte dans l'explorateur.",
         "combination": "Combiner les conditions",
@@ -3345,7 +3352,7 @@
         },
         "invalidRegex": "Expression régulière invalide. Vérifiez sa syntaxe.",
         "invalidCondition": "Condition invalide. Vérifiez ses clés et sa valeur.",
-        "delegatedHint": "Changer un chemin de claim peut refuser les requêtes déléguées jusqu'à une nouvelle requête directe de l'utilisateur. Les exceptions et les équipes restent valides."
+        "delegatedHint": "Après un changement de champ, les requêtes déléguées peuvent nécessiter une nouvelle requête directe. Les exceptions et les équipes restent valides."
       },
       "picker": {
         "choose": "Choisir un champ de mon compte",

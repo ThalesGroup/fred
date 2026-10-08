@@ -193,8 +193,7 @@ export default function PlatformAccessRuleEditor({
         onChange={(mode) => edit({ ...draft, mode: mode === "block" ? "block" : "allow" })}
       />
       <p>{t("rework.platformAccess.rule.hint")}</p>
-      <p>{t("rework.platformAccess.rule.discoveryHint")}</p>
-      <p>{t("rework.platformAccess.rule.delegatedHint")}</p>
+      <p className={styles.hint}>{t("rework.platformAccess.rule.delegatedHint")}</p>
       {claims.isError && <p role="alert">{t("rework.platformAccess.rule.claimsFailed")}</p>}
       <div className={styles.row} role="group" aria-label={t("rework.platformAccess.rule.combination")}>
         <span>{t("rework.platformAccess.rule.combination")}</span>

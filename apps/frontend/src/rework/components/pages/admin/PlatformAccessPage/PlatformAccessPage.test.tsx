@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // @vitest-environment happy-dom
-import { act } from "react";
+import { act, useState } from "react";
 import { createRoot, Root } from "react-dom/client";
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
 const state = vi.hoisted(() => ({
@@ -42,7 +42,19 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
   useSetPlatformTeamMutation: () => [vi.fn()],
   useGeneratePlatformLinkMutation: () => [vi.fn()],
 }));
-vi.mock("./PlatformAccessRuleEditor", () => ({ default: () => <div>Rule editor</div> }));
+vi.mock("./PlatformAccessRuleEditor", () => ({
+  default: function RuleEditor() {
+    const [draft, setDraft] = useState("Rule editor");
+    return (
+      <div>
+        <span>{draft}</span>
+        <button type="button" onClick={() => setDraft("Unsaved rule")}>
+          Edit draft
+        </button>
+      </div>
+    );
+  },
+}));
 import PlatformAccessPage from "./PlatformAccessPage";
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 let host: HTMLDivElement, root: Root;
@@ -65,7 +77,49 @@ afterEach(() => {
   act(() => root.unmount());
   host.remove();
 });
-const render = () => act(() => root.render(<PlatformAccessPage />));
+const openTab = (tab: string) =>
+  act(() =>
+    [...host.querySelectorAll<HTMLButtonElement>('[role="tab"]')]
+      .find((node) => node.textContent === `rework.platformAccess.tabs.${tab}`)!
+      .click(),
+  );
+const render = () => {
+  act(() => root.render(<PlatformAccessPage />));
+  openTab("users");
+};
+
+it("exposes only the selected panel and supports keyboard section navigation", () => {
+  act(() => root.render(<PlatformAccessPage />));
+  const tabs = [...host.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
+  const panels = [...host.querySelectorAll<HTMLDivElement>('[role="tabpanel"]')];
+  expect(tabs).toHaveLength(4);
+  expect(panels.filter((panel) => !panel.hidden)).toEqual([panels[0]]);
+  expect(panels[0].getAttribute("aria-labelledby")).toBe(tabs[0].id);
+  expect(tabs[0].getAttribute("aria-controls")).toBe(panels[0].id);
+  act(() => tabs[0].dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })));
+  expect(document.activeElement).toBe(tabs[1]);
+  expect(tabs[1].getAttribute("aria-selected")).toBe("true");
+  expect(panels.filter((panel) => !panel.hidden)).toEqual([panels[1]]);
+  openTab("activation");
+  expect(panels.filter((panel) => !panel.hidden)).toEqual([panels[3]]);
+  expect(panels[3].querySelector('[aria-label="rework.platformAccess.filter"]')).not.toBeNull();
+});
+
+it("preserves rule drafts and user selections across tabs without mutations", async () => {
+  act(() => root.render(<PlatformAccessPage />));
+  act(() => [...host.querySelectorAll("button")].find((node) => node.textContent === "Edit draft")!.click());
+  openTab("users");
+  const selection = host.querySelector<HTMLInputElement>('input[aria-label="rework.platformAccess.selectUser"]')!;
+  await act(async () => selection.click());
+  openTab("teams");
+  openTab("rules");
+  expect(host.querySelector('[role="tabpanel"]:not([hidden])')?.textContent).toContain("Unsaved rule");
+  openTab("users");
+  expect(selection.checked).toBe(true);
+  expect(state.bulk).not.toHaveBeenCalled();
+  expect(state.grant).not.toHaveBeenCalled();
+  expect(state.importT0).not.toHaveBeenCalled();
+});
 it("shows Free team provenance and offers an independent individual grant", async () => {
   render();
   expect(host.textContent).toContain("rework.platformAccess.source.free: Demo");

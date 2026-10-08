@@ -51,25 +51,27 @@ export default function PlatformAccessValuePrompt({
         if (value !== undefined && value.length > 0 && value.length <= limit) onSelect(value);
       }}
     >
-      <p className={styles.exampleValue}>{claim.map((key) => JSON.stringify(key)).join(" > ")}</p>
-      <p>{t("rework.platformAccess.picker.valueHint")}</p>
-      {own.isFetching && <p role="status">{t("rework.platformAccess.loading")}</p>}
-      {own.isError && <p role="alert">{t("rework.platformAccess.picker.failed")}</p>}
-      {!own.isFetching && !own.isError && !examples.length && <p>{t("rework.platformAccess.picker.noValue")}</p>}
-      {examples.length > 1 ? (
-        <Select
-          size="small"
-          label={t("rework.platformAccess.rule.value")}
-          value={chosen}
-          onChange={setChosen}
-          options={examples.map((example, index) => ({ key: String(index), value: index, label: example }))}
-        />
-      ) : (
-        examples.length === 1 && <p className={styles.exampleValue}>{examples[0]}</p>
-      )}
-      {value !== undefined && value.length > limit && (
-        <p role="alert">{t("rework.platformAccess.picker.valueTooLong")}</p>
-      )}
+      <div className={styles.dialogBody}>
+        <p className={styles.exampleValue}>{claim.map((key) => JSON.stringify(key)).join(" > ")}</p>
+        <p>{t("rework.platformAccess.picker.valueHint")}</p>
+        {own.isFetching && <p role="status">{t("rework.platformAccess.loading")}</p>}
+        {own.isError && <p role="alert">{t("rework.platformAccess.picker.failed")}</p>}
+        {!own.isFetching && !own.isError && !examples.length && <p>{t("rework.platformAccess.picker.noValue")}</p>}
+        {examples.length > 1 ? (
+          <Select
+            size="small"
+            label={t("rework.platformAccess.rule.value")}
+            value={chosen}
+            onChange={setChosen}
+            options={examples.map((example, index) => ({ key: String(index), value: index, label: example }))}
+          />
+        ) : (
+          examples.length === 1 && <p className={styles.exampleValue}>{examples[0]}</p>
+        )}
+        {value !== undefined && value.length > limit && (
+          <p role="alert">{t("rework.platformAccess.picker.valueTooLong")}</p>
+        )}
+      </div>
     </Dialog>
   );
 }
