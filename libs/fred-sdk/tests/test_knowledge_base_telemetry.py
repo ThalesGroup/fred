@@ -38,7 +38,6 @@ from fred_sdk.knowledge_base.models import (
 )
 from prometheus_client import REGISTRY
 
-
 # The pod every test is bound as; the definition label alone keeps tests apart.
 SERVICE = "acme-kb"
 
@@ -425,6 +424,8 @@ def _free_port() -> int:
         return probe.getsockname()[1]
 
 
+# Opens a real loopback port: the exporter is an HTTP server.
+@pytest.mark.allow_hosts(["127.0.0.1"])
 def test_an_authors_own_series_are_served_beside_the_sdks():
     """No metrics API in the SDK: an author uses the library's default registry."""
     from prometheus_client import Counter
@@ -444,6 +445,8 @@ def test_an_authors_own_series_are_served_beside_the_sdks():
     assert "fred_kb_info" in body
 
 
+# Opens a real loopback port: the exporter is an HTTP server.
+@pytest.mark.allow_hosts(["127.0.0.1"])
 def test_a_taken_metrics_port_stops_the_pod_naming_it():
     import socket
 

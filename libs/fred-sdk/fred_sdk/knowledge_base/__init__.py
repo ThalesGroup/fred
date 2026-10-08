@@ -53,7 +53,6 @@ deployment time, `run` serves runs. Configuration is declared with the same
 # The form vocabulary agents use too, re-exported so an author imports from one
 # place. Same objects, not copies: `fred_sdk.contracts.models` keeps working.
 from fred_sdk.contracts.models import FieldSpec, TuningValue, UIHints
-
 from fred_sdk.knowledge_base.configuration import MissingPodConfiguration
 from fred_sdk.knowledge_base.declaration import KnowledgeBaseDeclaration
 from fred_sdk.knowledge_base.documents import (
