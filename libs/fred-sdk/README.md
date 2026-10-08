@@ -180,6 +180,12 @@ the agent's `tools = (...)`. Its first parameter is always the `ToolContext`;
 the others are its inputs, and their type annotations become the schema the
 model sees.
 
+Synchronous handlers are also supported: Fred runs them in LangChain's shared
+executor with copied context variables, so blocking I/O does not stall the event
+loop. Use `async def` for handlers that need the runtime event loop or async
+clients. Cancellation stops awaiting a synchronous handler; it cannot terminate
+its running thread or undo side effects, and Fred does not replay the call.
+
 ```python
 from fred_sdk import ToolContext, ToolOutput, tool
 

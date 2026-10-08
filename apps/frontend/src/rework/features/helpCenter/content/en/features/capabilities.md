@@ -20,39 +20,52 @@ useful.
 
 ## Data and knowledge
 
-### Access to team resources
+### Documents
 
-**What it does** - the agent consults the team's corpus and files attached
-to the current conversation. It searches for useful passages, cites them,
-reads a document verbatim, or extracts information exhaustively. The ways of
-reading are detailed on [Resources](/help/en/features/resources).
+**What it does** - the agent reads and searches the documents you give it.
+Two packs choose where it looks; turn on one or both:
 
-**Its limits** - corpus search sees only the libraries attached to the agent.
-A conversation attachment stays in that conversation and does not enter the
-team's corpus. Search returns the passages it judges relevant: it is fast, but
-not exhaustive.
+- **Attachments** - users can attach files to the conversation (a paperclip
+  appears in the chat). The agent reads them, summarizes them and answers
+  questions about them.
+- **Team documents** - the agent searches the team's documents and cites the
+  useful passages. You can restrict it to specific folders.
 
-**Examples** - ask what the team's procedures say about incident response, or
-attach a contract and ask the agent to list its deadlines.
+With either pack, the agent can also read a document word for word or extract
+information from it without omitting anything. The ways of reading are
+detailed on [Resources](/help/en/features/resources).
+
+**Its limits** - the search in team documents sees only the libraries attached
+to the agent. An attachment stays in its conversation and is never added to
+the team's documents. Search returns the passages it judges relevant: it is
+fast, but not exhaustive. Comparing documents only works on team documents, so
+it comes with the **Team documents** pack.
+
+The **Documents only** conversation mode uses whichever document sources the agent allows, including attachments. See [Conversations](/help/en/features/chat#choosing-the-answer-sources).
+
+**Examples** - with **Attachments** only, attach a contract and ask the agent
+to list its deadlines. With **Team documents**, ask what the team's procedures
+say about incident response.
 
 This capability groups several functions, which the **Advanced** view separates:
 
-| Function                  | What it does                                                         | Worth knowing                                                                                         |
-| ------------------------- | -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| Search team resources     | Finds the relevant passages and cites them                           | May show a library or document selector in the conversation                                           |
-| Attach conversation files | Adds files to the conversation for the agent to read                 | Files stay in that conversation, outside the team corpus                                              |
-| Use tabular files         | Queries tabular files from libraries and attached CSV or Excel files | New CSV and Excel attachments are SQL-queryable; older Excel attachments may have only a text preview |
-| Summarize a document      | Produces a document's summary                                        | Asks for your confirmation before each summary; adjustable length                                     |
-| Compare documents         | Finds the passages closest to a given passage                        | Works on the corpus, never on an attachment                                                           |
-| Read a document verbatim  | Returns the exact text, page by page                                 | The pages returned have a limited length                                                              |
-| Extract information       | Goes through the whole document, omitting nothing                    | The slowest and most expensive; confirmation asked by default                                         |
+| Function                 | What it does                                                         | Worth knowing                                                                                         |
+| ------------------------ | -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Documents                | Searches the attachments, the team documents, or both                | May show a paperclip and a library or document selector in the conversation                           |
+| Use tabular files        | Queries tabular files from libraries and attached CSV or Excel files | New CSV and Excel attachments are SQL-queryable; older Excel attachments may have only a text preview |
+| Summarize a document     | Produces a document's summary                                        | Asks for your confirmation before each summary; adjustable length                                     |
+| Compare documents        | Finds the passages closest to a given passage                        | Works on team documents, never on an attachment                                                       |
+| Read a document verbatim | Returns the exact text, page by page                                 | The pages returned have a limited length                                                              |
+| Extract information      | Goes through the whole document, omitting nothing                    | The slowest and most expensive; confirmation asked by default                                         |
 
-In **Simple**, this one pack initially enables team resources and conversation
-attachments together. Below the library scope, switch on **Search in attachments
-only** to stop corpus document search and turn off the comparison tool. Tabular
-analysis remains available for attached CSV and Excel files. Use tabular analysis to read their complete tables; document reading tools are for text attachments. Switch the scope off to restore both sources. In **Advanced**, you can select attachments
-without enabling the other resource tools. Existing agents keep their selected
-capabilities until you change them.
+Use tabular analysis to read the complete tables of attached CSV and Excel
+files; the document reading tools are meant for text attachments.
+
+In **Simple**, turning off one pack keeps what the other one still uses;
+turning off both removes the **Documents** capability. In **Advanced**, the
+**Documents** card starts with the **Attachments** and **Team documents**
+switches: turning off both turns the card off. Existing agents keep
+their settings until you change them.
 
 ### Access to the team wiki
 
@@ -128,15 +141,10 @@ lookup, more to a multi-step analysis.
 **An example** — comparing two offers across a dozen criteria and justifying a
 ranking.
 
-## Actions and integration
-
-This section of the **Capabilities** tab is meant for capabilities acting on
-systems outside the platform. It is empty today.
-
 ## Outside the packs
 
-The **Simple** view presents packs: coherent sets, enabled with a single
-toggle. The **Advanced** view may reveal capabilities belonging to no pack —
+The **Simple** view presents packs: coherent sets, enabled with one
+click on their card. The **Advanced** view may reveal capabilities belonging to no pack —
 notably administration capabilities reserved for operations agents. They follow
 the same rule as the others: your team only sees them if the administrator
 opened them to it.

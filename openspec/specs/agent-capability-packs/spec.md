@@ -1,8 +1,25 @@
+# agent-capability-packs Specification
+
 ## Purpose
+Defines the capability packs offered by the agent form's Simple view: which
+packs a team member can switch on, which backend capabilities each one grants,
+and how a pack's displayed state is derived from the agent's stored capability
+selection so the Simple and Advanced views never disagree.
 
-Defines the Simple agent form's capability packs, their relationship to the stored capability selection, and the boundary between bundled Simple actions and independent Advanced settings.
+## Requirements
 
-## ADDED Requirements
+### Requirement: Similarity search stays scoped to the team corpus
+
+Similarity search SHALL be granted only while the "Team resources" pack
+searches the team corpus. The Simple view SHALL withdraw it in attachments-only
+mode, because similarity search does not cover the files attached to a
+conversation and would return no result for them.
+
+#### Scenario: Attachments-only agent does not get similarity search
+
+- **WHEN** a member selects attachments-only search in the active "Team
+  resources" pack
+- **THEN** similarity search is not enabled on that agent
 
 ### Requirement: One Simple pack grants the resource and attachment bundle
 
@@ -75,3 +92,66 @@ Advanced SHALL allow a member to select document access and its attachment and c
 
 - **WHEN** a member enables the combined pack in Simple while an agent has only a partial Advanced or legacy selection
 - **THEN** the full available bundle is selected and document access is configured for both corpus and attachments
+
+### Requirement: Document reading is granted by the Team resources pack
+
+The Simple view SHALL NOT offer a standalone pack whose only purpose is to
+enable verbatim document reading and exhaustive extraction. Both capabilities
+SHALL instead be granted by the "Team resources" pack, which also covers
+conversation attachments, and SHALL stay enabled while that pack is on,
+including in attachments-only mode.
+
+#### Scenario: Enabling team resources grants the reading capabilities
+
+- **WHEN** a member switches on "Team resources" on an agent with no capability
+  selected
+- **THEN** verbatim reading and exhaustive extraction are enabled on that agent,
+  alongside the pack's other capabilities
+
+#### Scenario: Reading survives attachments-only search
+
+- **WHEN** a member selects attachments-only search in the active "Team
+  resources" pack
+- **THEN** verbatim reading and exhaustive extraction remain enabled
+
+#### Scenario: No standalone document-reading pack is offered
+
+- **WHEN** a member opens the Simple capabilities view
+- **THEN** no pack card offers document reading on its own
+
+### Requirement: Each pack lists the capabilities it grants
+
+Each pack SHALL display, in its expandable list of included capabilities, the
+backend capabilities that switching the pack on enables, each with its
+availability status for the team.
+
+#### Scenario: Team resources lists its granted capabilities
+
+- **WHEN** a member expands the "Team resources" pack
+- **THEN** the list shows document access, tabular data, summarization,
+  similarity search, verbatim reading, and exhaustive extraction
+
+#### Scenario: A capability the platform admin has not enabled is marked unavailable
+
+- **WHEN** a pack grants a capability that the platform administrator has not
+  enabled for the team
+- **THEN** that capability is shown as unavailable in the pack's list, and
+  switching the pack on does not enable it
+
+### Requirement: Pack state follows the stored capability selection
+
+A pack's on/off state SHALL be derived from the agent's stored capability
+selection rather than held separately, so the Simple and Advanced views cannot
+disagree. Toggling a pack SHALL leave every capability the pack does not grant
+untouched.
+
+#### Scenario: Clearing document access in the Advanced view turns the pack off
+
+- **WHEN** a member clears the document-access capability in the Advanced view
+  and returns to the Simple view
+- **THEN** the "Team resources" pack is shown as off
+
+#### Scenario: Toggling a pack preserves unrelated capabilities
+
+- **WHEN** a member switches a pack on or off
+- **THEN** capabilities granted by no pack keep their previous state

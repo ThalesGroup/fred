@@ -563,7 +563,7 @@ wheels = [
 
 [[package]]
 name = "fred-capability-documents"
-version = "0.1.1"
+version = "0.1.2"
 source = { editable = "." }
 dependencies = [
     { name = "fred-core" },
@@ -629,7 +629,7 @@ dev = [
 
 [[package]]
 name = "fred-core"
-version = "4.4.1"
+version = "4.4.2"
 source = { editable = "../../fred-core" }
 dependencies = [
     { name = "aiosqlite" },
@@ -729,7 +729,7 @@ dev = [
 
 [[package]]
 name = "fred-pod"
-version = "4.4.1"
+version = "4.4.2"
 source = { editable = "../../fred-pod" }
 dependencies = [
     { name = "httpx" },
@@ -769,7 +769,7 @@ dev = [
 
 [[package]]
 name = "fred-runtime"
-version = "4.4.1"
+version = "4.4.2"
 source = { editable = "../../fred-runtime" }
 dependencies = [
     { name = "alembic" },

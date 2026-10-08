@@ -1,6 +1,6 @@
 [project]
 name = "fred-capability-document-access"
-version = "0.1.1"
+version = "0.1.2"
 description = "Fred agent capability: scoped vector search and document-tree listing over the Knowledge Flow corpus (document_access)."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
@@ -8,7 +8,7 @@ license = { text = "Apache-2.0" }
 authors = [{ name = "Thales", email = "noreply@thalesgroup.com" }]
 dependencies = [
   "fred-core>=4.0.0",
-  "fred-sdk[agents]>=4.2.0",
+  "fred-sdk[agents]>=4.4.2",
   "pydantic>=2.7.0,<3.0.0",
   "langchain-core>=0.3.0",
 ]
@@ -73,5 +73,5 @@ dev = [
   # Test-only: the tests exercise entry-point discovery through fred-runtime's
   # CapabilityRegistry, build their CapabilityContext with its helper, and
   # pin the session-binding seam against the real DocumentSearchAdapter.
-  "fred-runtime>=4.0.0",
+  "fred-runtime>=4.4.2",
 ]

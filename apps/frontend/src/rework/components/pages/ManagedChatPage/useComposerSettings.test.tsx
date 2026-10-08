@@ -185,4 +185,21 @@ describe("useComposerSettings — defaults never clobber an explicit pick", () =
 
     expect(latest.reasoning).toBe(false);
   });
+
+  it("falls back to the control default when a remembered scope is no longer offered", () => {
+    const narrowed: ChatControlDescriptor[] = [
+      {
+        capability_id: "document_access",
+        widget: "rag_scope",
+        params: { default: "hybrid", options: ["hybrid", "general_only"] },
+      },
+    ];
+    sessionStorage.setItem("chat.composer.sid-4", JSON.stringify({ ragScope: "corpus_only" }));
+
+    render("sid-4", narrowed);
+    expect(latest.ragScope).toBe("hybrid");
+
+    act(() => latest.setRagScope("general_only"));
+    expect(latest.ragScope).toBe("general_only");
+  });
 });

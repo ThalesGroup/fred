@@ -30,7 +30,7 @@ The decisive factors, in order of importance:
 
 On the [Agents](/help/en/features/agents) page, create an agent from a template
 able to search documents. Attach the library from step 1 — **without that
-attachment it will see no document** — and enable the team-resources pack.
+attachment it will see no document** — and turn on the **Team documents** pack.
 
 ## 3. Write the instructions
 

@@ -16,10 +16,10 @@
 
 import {
   CAP_DOCUMENT_ACCESS,
-  CAP_DOCUMENT_SIMILARITY,
-  CAP_TABULAR,
-  DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY,
-  DOC_ACCESS_SHOW_ATTACH_FILES_CONTROL,
+  DOC_ACCESS_ATTACHMENTS,
+  DOC_ACCESS_TEAM_DOCUMENTS,
+  TOOL_PACK_SECTIONS,
+  type DocumentSource,
   type ToolPack,
 } from "./toolPacks";
 
@@ -30,12 +30,57 @@ export interface CapabilitySelectionState {
   reasoningEnabled: boolean;
 }
 
-const CORPUS_ONLY_IDS = [CAP_DOCUMENT_SIMILARITY];
+const DOCUMENT_PACKS = TOOL_PACK_SECTIONS.flatMap((section) => section.packs).filter((pack) => pack.documentSource);
+
+/** A source absent from the config is on, the backend default. */
+function sourceOn(config: Record<string, unknown> | undefined, source: DocumentSource): boolean {
+  return config?.[source] !== false;
+}
+
+/**
+ * Read legacy `document_access` keys as the two sources, mirroring the backend
+ * before-validator. Only key names change, so no access is granted on load.
+ */
+export function normalizeDocumentAccessConfig(config: Record<string, unknown>): Record<string, unknown> {
+  const { show_attach_files_control: paperclip, search_attachments_only: onlyAttached, ...rest } = config;
+  if (paperclip === undefined && onlyAttached === undefined) return config;
+  if (DOC_ACCESS_ATTACHMENTS in rest || DOC_ACCESS_TEAM_DOCUMENTS in rest) return rest;
+  const attachments = paperclip === undefined || Boolean(paperclip);
+  return {
+    ...rest,
+    [DOC_ACCESS_ATTACHMENTS]: attachments,
+    [DOC_ACCESS_TEAM_DOCUMENTS]: !(attachments && Boolean(onlyAttached)),
+  };
+}
+
+/**
+ * Apply one `document_access` config edit. Turning off the last source
+ * deselects the capability instead (the backend rejects both off); the sources
+ * reset to their defaults so turning the card back on starts with both.
+ */
+export function applyDocumentAccessConfigChange(
+  state: Pick<CapabilitySelectionState, "selectedCapabilityIds" | "capabilityConfigValues">,
+  key: string,
+  value: unknown,
+): Pick<CapabilitySelectionState, "selectedCapabilityIds" | "capabilityConfigValues"> {
+  const next = { ...state.capabilityConfigValues[CAP_DOCUMENT_ACCESS], [key]: value };
+  const noSource = !sourceOn(next, DOC_ACCESS_ATTACHMENTS) && !sourceOn(next, DOC_ACCESS_TEAM_DOCUMENTS);
+  if (!noSource) {
+    return { ...state, capabilityConfigValues: { ...state.capabilityConfigValues, [CAP_DOCUMENT_ACCESS]: next } };
+  }
+  return {
+    selectedCapabilityIds: state.selectedCapabilityIds.filter((id) => id !== CAP_DOCUMENT_ACCESS),
+    capabilityConfigValues: {
+      ...state.capabilityConfigValues,
+      [CAP_DOCUMENT_ACCESS]: { ...next, [DOC_ACCESS_ATTACHMENTS]: true, [DOC_ACCESS_TEAM_DOCUMENTS]: true },
+    },
+  };
+}
 
 /** Hide a pack if its switch cannot enable anything for this team. */
 export function isPackSelectable(pack: ToolPack, availableIds: ReadonlySet<string>): boolean {
   if (pack.kind === "reasoning") return true;
-  if (pack.resourceBundle) return availableIds.has(CAP_DOCUMENT_ACCESS);
+  if (pack.documentSource) return availableIds.has(CAP_DOCUMENT_ACCESS);
   return pack.enablesCapabilityIds.some((id) => availableIds.has(id));
 }
 
@@ -46,23 +91,14 @@ export function derivePackChecked(
   availableIds: ReadonlySet<string>,
 ): boolean {
   if (pack.kind === "reasoning") return state.reasoningEnabled;
-
+  if (pack.documentSource) {
+    return (
+      state.selectedCapabilityIds.includes(CAP_DOCUMENT_ACCESS) &&
+      sourceOn(state.capabilityConfigValues[CAP_DOCUMENT_ACCESS], pack.documentSource)
+    );
+  }
   const selectable = pack.enablesCapabilityIds.filter((id) => availableIds.has(id));
-  const membersSelected = selectable.length > 0 && selectable.every((id) => state.selectedCapabilityIds.includes(id));
-  if (!pack.resourceBundle) return membersSelected;
-
-  const config = state.capabilityConfigValues[CAP_DOCUMENT_ACCESS];
-  if (!availableIds.has(CAP_DOCUMENT_ACCESS) || config?.[DOC_ACCESS_SHOW_ATTACH_FILES_CONTROL] !== true) return false;
-
-  const searchAttachmentsOnly = config?.[DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY] === true;
-  if (!searchAttachmentsOnly) return membersSelected;
-
-  return (
-    selectable
-      .filter((id) => !CORPUS_ONLY_IDS.includes(id) && id !== CAP_TABULAR)
-      .every((id) => state.selectedCapabilityIds.includes(id)) &&
-    CORPUS_ONLY_IDS.every((id) => !state.selectedCapabilityIds.includes(id))
-  );
+  return selectable.length > 0 && selectable.every((id) => state.selectedCapabilityIds.includes(id));
 }
 
 /** Toggle a pack's available members while preserving unrelated selections. */
@@ -75,7 +111,7 @@ export function applyPackToggle(
   if (pack.kind === "reasoning") {
     return { ...state, reasoningEnabled: nextOn };
   }
-  if (pack.resourceBundle && nextOn && !availableIds.has(CAP_DOCUMENT_ACCESS)) return state;
+  if (pack.documentSource) return applyDocumentPackToggle(pack, pack.documentSource, nextOn, state, availableIds);
 
   const ids = new Set(state.selectedCapabilityIds);
   for (const id of pack.enablesCapabilityIds) {
@@ -85,48 +121,48 @@ export function applyPackToggle(
       ids.delete(id);
     }
   }
-
-  if (pack.resourceBundle && nextOn) {
-    return {
-      ...state,
-      selectedCapabilityIds: [...ids],
-      capabilityConfigValues: {
-        ...state.capabilityConfigValues,
-        [CAP_DOCUMENT_ACCESS]: {
-          ...state.capabilityConfigValues[CAP_DOCUMENT_ACCESS],
-          [DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY]: false,
-          [DOC_ACCESS_SHOW_ATTACH_FILES_CONTROL]: true,
-        },
-      },
-    };
-  }
   return { ...state, selectedCapabilityIds: [...ids] };
 }
 
-/** Switch the active Simple pack between corpus plus attachments and attachments only. */
-export function applyResourceSearchScope(
-  searchAttachmentsOnly: boolean,
+/**
+ * A document pack sets its own source. Shared members stay while the other pack
+ * is on; turning off the last pack deselects document access rather than
+ * saving both sources off, and resets both sources like the Advanced view.
+ * The rest of the stored config (library binding) is kept.
+ */
+function applyDocumentPackToggle(
+  pack: ToolPack,
+  source: DocumentSource,
+  nextOn: boolean,
   state: CapabilitySelectionState,
   availableIds: ReadonlySet<string>,
 ): CapabilitySelectionState {
+  const config = state.capabilityConfigValues[CAP_DOCUMENT_ACCESS] ?? {};
+  const selected = state.selectedCapabilityIds.includes(CAP_DOCUMENT_ACCESS);
   const ids = new Set(state.selectedCapabilityIds);
-  if (availableIds.has(CAP_TABULAR)) ids.add(CAP_TABULAR);
-  for (const id of CORPUS_ONLY_IDS) {
-    if (searchAttachmentsOnly) ids.delete(id);
-    else if (availableIds.has(id)) ids.add(id);
-  }
-  return {
+  const withConfig = (next: Record<string, unknown>): CapabilitySelectionState => ({
     ...state,
     selectedCapabilityIds: [...ids],
-    capabilityConfigValues: {
-      ...state.capabilityConfigValues,
-      [CAP_DOCUMENT_ACCESS]: {
-        ...state.capabilityConfigValues[CAP_DOCUMENT_ACCESS],
-        [DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY]: searchAttachmentsOnly,
-        [DOC_ACCESS_SHOW_ATTACH_FILES_CONTROL]: true,
-      },
-    },
-  };
+    capabilityConfigValues: { ...state.capabilityConfigValues, [CAP_DOCUMENT_ACCESS]: next },
+  });
+
+  if (nextOn) {
+    if (!availableIds.has(CAP_DOCUMENT_ACCESS)) return state;
+    for (const id of pack.enablesCapabilityIds) if (availableIds.has(id)) ids.add(id);
+    const sources = selected ? {} : { [DOC_ACCESS_ATTACHMENTS]: false, [DOC_ACCESS_TEAM_DOCUMENTS]: false };
+    return withConfig({ ...config, ...sources, [source]: true });
+  }
+
+  const others = DOCUMENT_PACKS.filter(
+    (other) => other !== pack && selected && other.documentSource && sourceOn(config, other.documentSource),
+  );
+  if (others.length > 0) {
+    const kept = new Set(others.flatMap((other) => other.enablesCapabilityIds));
+    for (const id of pack.enablesCapabilityIds) if (!kept.has(id)) ids.delete(id);
+    return withConfig({ ...config, [source]: false });
+  }
+  for (const id of DOCUMENT_PACKS.flatMap((documentPack) => documentPack.enablesCapabilityIds)) ids.delete(id);
+  return withConfig({ ...config, [DOC_ACCESS_ATTACHMENTS]: true, [DOC_ACCESS_TEAM_DOCUMENTS]: true });
 }
 
 /** Tri-state of an included capability, driving its badge in the pack card. */

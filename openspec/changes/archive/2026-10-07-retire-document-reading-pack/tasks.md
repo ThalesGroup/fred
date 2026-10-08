@@ -27,7 +27,7 @@
 - [x] 5.1 Run `make code-quality` and `make test` in `apps/frontend`; verify both pass
 - [x] 5.2 Run `/code-review` on the diff and address findings; verify no correctness finding remains open
 - [x] 5.3 Record verification evidence in this change; verify `openspec validate` passes
-- [ ] 5.4 Archive the change once the implementation has merged; verify the capability spec lands under `openspec/specs/agent-capability-packs/`
+- [x] 5.4 Archive the change once the implementation has merged; verify the capability spec lands under `openspec/specs/agent-capability-packs/`
 
 ## Verification evidence
 

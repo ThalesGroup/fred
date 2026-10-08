@@ -1399,10 +1399,17 @@ class DocumentSearchAdapter(DocumentSearchPort):
         library_tag_ids: Sequence[str] | None = None,
         document_uids: Sequence[str] | None = None,
         search_policy: str | None = None,
-        attachments_only: bool = False,
+        include_attachments: bool = True,
+        include_team_documents: bool = True,
     ) -> DocumentSearchResult:
         runtime_context = self._binding.runtime_context
         if get_rag_knowledge_scope(runtime_context) == "general_only":
+            return DocumentSearchResult(hits=())
+        # The agent's sources are ceilings: the per-turn scope only narrows them.
+        turn_session, turn_corpus = get_vector_search_scopes(runtime_context)
+        include_session_scope = turn_session and include_attachments
+        include_corpus_scope = turn_corpus and include_team_documents
+        if not (include_session_scope or include_corpus_scope):
             return DocumentSearchResult(hits=())
 
         top_k = top_k if isinstance(top_k, int) and top_k > 0 else 8
@@ -1419,13 +1426,6 @@ class DocumentSearchAdapter(DocumentSearchPort):
 
         team_id = self._settings.team_id
         scoped_team = bool(team_id) and not is_personal_team_id(team_id)
-        include_session_scope, include_corpus_scope = get_vector_search_scopes(
-            runtime_context
-        )
-        if attachments_only:
-            # Capability-pinned scope: the conversation's session-scoped
-            # documents (attached files) only, never the corpus.
-            include_session_scope, include_corpus_scope = True, False
 
         try:
             hits = await self._search_client.search(
