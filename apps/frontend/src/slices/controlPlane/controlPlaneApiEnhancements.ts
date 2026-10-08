@@ -57,6 +57,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     "ControlPlaneAgentInstance",
     "ControlPlanePlatformModelBinding",
     "ControlPlanePlatformPrompt",
+    "ControlPlaneCreationAssistantSettings",
     "ControlPlanePlatformUiSettings",
     "ControlPlanePlatformDefaultTeams",
     "ControlPlanePlatformRole",
@@ -698,6 +699,16 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     putPlatformPromptControlPlaneV1AdminPlatformPromptPut: {
       invalidatesTags: [{ type: "ControlPlanePlatformPrompt", id: "LIST" }],
     },
+    // Creation assistant settings (meta-prompt override, model): one row too.
+    getCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantGet: {
+      providesTags: [{ type: "ControlPlaneCreationAssistantSettings" as const, id: "LIST" }],
+    },
+    putCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantPut: {
+      invalidatesTags: [{ type: "ControlPlaneCreationAssistantSettings", id: "LIST" }],
+    },
+    deleteCreationAssistantPromptControlPlaneV1AdminPlatformCreationAssistantDelete: {
+      invalidatesTags: [{ type: "ControlPlaneCreationAssistantSettings", id: "LIST" }],
+    },
     // Platform UI theme settings: a single row, one LIST tag.
     getPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGet: {
       providesTags: [{ type: "ControlPlanePlatformUiSettings" as const, id: "LIST" }],
@@ -724,6 +735,8 @@ export const {
   useListKnowledgeBaseDefinitionsControlPlaneV1KnowledgeBasesDefinitionsGetQuery: useKnowledgeBaseDefinitionsQuery,
   useGetDefinitionFieldsControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdFieldsGetQuery: useKnowledgeBaseFieldsQuery,
   useListUsersControlPlaneV1UsersGetQuery: useListUsersQuery,
+  // Creation assistant: drafts an agent from a plain description; nothing is saved.
+  usePostDraftAgentControlPlaneV1TeamsTeamIdAgentTemplatesTemplateIdDraftAgentPostMutation: useDraftAgentMutation,
   // Platform-role management (PLATFORM-ADMIN-DELEGATION-RFC.md, #2405).
   useListPlatformRolesControlPlaneV1UsersPlatformRolesGetQuery: usePlatformRolesQuery,
   useGrantPlatformRoleControlPlaneV1UsersUserIdPlatformRolesPostMutation: useGrantPlatformRoleMutation,
@@ -803,6 +816,7 @@ export const {
   useHandlerControlPlaneV1KpiPresetsTokenUsageOverTimeGetQuery: useTokenUsageOverTimeQuery,
   useHandlerControlPlaneV1KpiPresetsTokenUsageByAgentGetQuery: useTokenUsageByAgentQuery,
   useHandlerControlPlaneV1KpiPresetsTokenUsageByModelGetQuery: useTokenUsageByModelQuery,
+  useHandlerControlPlaneV1KpiPresetsCreationAssistantUsageGetQuery: useCreationAssistantUsageQuery,
   useHandlerControlPlaneV1KpiPresetsStorageByTeamGetQuery: useStorageByTeamQuery,
   useHandlerControlPlaneV1KpiPresetsWebResearchSummaryGetQuery: useWebResearchSummaryQuery,
   // Persisted task acknowledgement (OPS-04, TASK-EVENT-STREAM-RFC.md §2.10 rev 3).
@@ -835,6 +849,13 @@ export const {
   // Platform-wide platform prompt — the first block of every agent's system prompt.
   useGetPlatformPromptControlPlaneV1AdminPlatformPromptGetQuery: usePlatformPromptQuery,
   usePutPlatformPromptControlPlaneV1AdminPlatformPromptPutMutation: useSetPlatformPromptMutation,
+  // Creation assistant settings (meta-prompt override + reset, model).
+  useGetCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantGetQuery:
+    useCreationAssistantSettingsQuery,
+  usePutCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantPutMutation:
+    useSetCreationAssistantSettingsMutation,
+  useDeleteCreationAssistantPromptControlPlaneV1AdminPlatformCreationAssistantDeleteMutation:
+    useResetCreationAssistantPromptMutation,
   // Platform UI theme settings (default theme, hidden themes).
   useGetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetQuery: usePlatformUiSettingsQuery,
   usePutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutMutation: useSetPlatformUiSettingsMutation,

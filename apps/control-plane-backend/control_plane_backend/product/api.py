@@ -43,12 +43,21 @@ from fred_core import (
 from fred_core.common import TeamId
 from fred_core.kpi import runtime_stage_timer
 from fred_core.security.structure import PrincipalContext
+from fred_sdk.contracts.agent_draft import (
+    AgentDraftRequest,
+    AgentDraftResult,
+    CreationAssistantRuntimeSettings,
+)
 from pydantic import ValidationError
 
 from control_plane_backend.agent_instances.store import AgentInstanceRecord
 from control_plane_backend.product.agent_copy import (
     copy_agent_instance,
     list_agent_copy_targets,
+)
+from control_plane_backend.product.creation_assistant import (
+    creation_assistant_runtime_settings,
+    draft_agent,
 )
 from control_plane_backend.product.dependencies import (
     ProductServiceDependencies,
@@ -360,6 +369,66 @@ async def post_team_agent_instance(
         )
     except EnrollmentError as exc:
         raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
+
+
+@router.post(
+    "/teams/{team_id}/agent-templates/{template_id}/draft-agent",
+    response_model=AgentDraftResult,
+    summary="Draft an agent system prompt and capability selection from a description.",
+)
+async def post_draft_agent(
+    team_id: Annotated[TeamId, Path()],
+    template_id: Annotated[str, Path(min_length=3)],
+    body: AgentDraftRequest,
+    deps: ProductDependencies,
+    http_request: Request,
+    user: KeycloakUser = Depends(require_own_credential),
+) -> AgentDraftResult:
+    """
+    Turn a plain-language description into a system prompt for an agent built
+    on `template_id`, and recommend capabilities among those the team may use.
+    Nothing is saved: the agent form applies the result.
+    """
+    team_id = await require_team_access(
+        user,
+        team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_UPDATE_AGENTS],
+    )
+    try:
+        return await draft_agent(
+            user=user,
+            team_id=team_id,
+            template_id=template_id,
+            request=body,
+            deps=deps,
+            authorization=http_request.headers.get("Authorization"),
+        )
+    except EnrollmentError as exc:
+        raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
+
+
+@router.get(
+    "/teams/{team_id}/creation-assistant/settings",
+    response_model=CreationAssistantRuntimeSettings,
+    summary="Admin settings a pod applies to a creation assistant draft.",
+)
+async def get_creation_assistant_runtime_settings(
+    team_id: Annotated[TeamId, Path()],
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> CreationAssistantRuntimeSettings:
+    """
+    Called by the pod while drafting, with the caller's token: the pod is
+    browser-reachable, so it never takes these settings from a request body.
+    """
+    await require_team_access(
+        user,
+        team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_UPDATE_AGENTS],
+    )
+    return await creation_assistant_runtime_settings(deps)
 
 
 @router.patch(

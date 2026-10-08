@@ -15,17 +15,31 @@
 from __future__ import annotations
 
 import logging
+from collections import Counter
 from dataclasses import dataclass
+from datetime import date
 
 import httpx
+from fastapi import HTTPException
 from fred_core import KeycloakUser
+from fred_sdk.contracts.agent_draft import CreationAssistantReasoningEffort
 
+from control_plane_backend.capabilities.catalog import (
+    aggregate_capability_catalog,
+    universally_available_chat_model_profile_ids,
+)
 from control_plane_backend.organization_authz import require_edit_platform_prompt
 from control_plane_backend.platform_prompt.schemas import (
+    CREATION_ASSISTANT_LANGUAGE_PLACEHOLDER,
+    CreationAssistantModelOption,
+    CreationAssistantSettings,
     PlatformInstructions,
     PlatformPrompt,
 )
-from control_plane_backend.platform_prompt.store import StoredPlatformPrompt
+from control_plane_backend.platform_prompt.store import (
+    StoredCreationAssistantSettings,
+    StoredPlatformPrompt,
+)
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 
 logger = logging.getLogger(__name__)
@@ -42,6 +56,16 @@ class PodPlatformPromptFile:
 
     platform_prompt: str
     platform_instructions: str
+    # None for a pod that predates the creation assistant override.
+    creation_assistant_prompt: str | None = None
+    creation_assistant_prompt_revised_at: date | None = None
+
+
+def _parse_revision_date(value: object) -> date | None:
+    try:
+        return date.fromisoformat(str(value)) if value else None
+    except ValueError:
+        return None
 
 
 async def fetch_pod_platform_prompt_file(
@@ -87,6 +111,14 @@ async def fetch_pod_platform_prompt_file(
         return PodPlatformPromptFile(
             platform_prompt=str(payload.get("platform_prompt", "")),
             platform_instructions=str(payload.get("platform_instructions", "")),
+            creation_assistant_prompt=(
+                str(payload["creation_assistant_prompt"])
+                if payload.get("creation_assistant_prompt") is not None
+                else None
+            ),
+            creation_assistant_prompt_revised_at=_parse_revision_date(
+                payload.get("creation_assistant_prompt_revised_at")
+            ),
         )
     return None
 
@@ -204,3 +236,178 @@ async def get_platform_instructions(
     if pod_file is None:
         return PlatformInstructions(text="", source_unavailable=True)
     return PlatformInstructions(text=pod_file.platform_instructions)
+
+
+async def get_creation_assistant_settings(
+    *, user: KeycloakUser, deps: ProductServiceDependencies
+) -> CreationAssistantSettings:
+    """`can_edit_platform_prompt`-gated read of the creation assistant settings.
+
+    Always asks the pods, even with an override saved: the editor shows the
+    default it would reset to and the models it may choose."""
+
+    await require_edit_platform_prompt(deps.team_dependencies.rebac, user)
+    return await _project_creation_assistant_settings(deps)
+
+
+async def set_creation_assistant_settings(
+    *,
+    user: KeycloakUser,
+    text: str | None,
+    model_profile_id: str | None,
+    reasoning_effort: CreationAssistantReasoningEffort = "off",
+    deps: ProductServiceDependencies,
+) -> CreationAssistantSettings:
+    await require_edit_platform_prompt(deps.team_dependencies.rebac, user)
+    store = deps.get_creation_assistant_settings_store()
+    stored = await store.get()
+    # The stored choice stays valid as is: a catalog change, or no pod
+    # answering, must not block saving the text. The reasoning effort is not
+    # checked against the model: the pod clamps it (design.md decision 14).
+    unchanged = stored is not None and stored.model_profile_id == model_profile_id
+    if model_profile_id is not None and not unchanged:
+        options = await creation_assistant_model_options(deps)
+        if model_profile_id not in {o.profile_id for o in options}:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Unknown chat model profile {model_profile_id!r}.",
+            )
+    await store.set(
+        text=text,
+        model_profile_id=model_profile_id,
+        reasoning_effort=reasoning_effort,
+        updated_by=user.uid,
+    )
+    return await _project_creation_assistant_settings(deps)
+
+
+async def reset_creation_assistant_prompt(
+    *, user: KeycloakUser, deps: ProductServiceDependencies
+) -> CreationAssistantSettings:
+    """Clears the meta-prompt override; the model and reasoning are kept."""
+    await require_edit_platform_prompt(deps.team_dependencies.rebac, user)
+    store = deps.get_creation_assistant_settings_store()
+    stored = await store.get()
+    if stored is not None and stored.text is not None:
+        await store.set(
+            text=None,
+            model_profile_id=stored.model_profile_id,
+            reasoning_effort=stored.reasoning_effort,
+            updated_by=user.uid,
+        )
+    return await _project_creation_assistant_settings(deps)
+
+
+async def creation_assistant_model_options(
+    deps: ProductServiceDependencies,
+) -> list[CreationAssistantModelOption]:
+    """Chat profiles every enabled pod advertises, the same set team routing
+    may pick from, named after their catalog model."""
+    return (await _creation_assistant_models(deps))[0]
+
+
+async def _creation_assistant_models(
+    deps: ProductServiceDependencies,
+) -> tuple[list[CreationAssistantModelOption], str | None]:
+    """The model options and the pods' common default chat profile, if any."""
+
+    # Lazy: product.service imports this package's dependencies.
+    from control_plane_backend.product.service import (
+        _model_capabilities_for_source,
+        _pod_catalog_fetch_scope,
+    )
+
+    with _pod_catalog_fetch_scope():
+        catalog = await aggregate_capability_catalog(deps)
+        universal = await universally_available_chat_model_profile_ids(deps)
+        defaults: set[str | None] = set()
+        for source in deps.configuration.platform.runtime_catalog_sources:
+            if source.enabled:
+                pod = await _model_capabilities_for_source(source.base_url)
+                if pod is not None and pod.entries:
+                    defaults.add(pod.default_chat_profile_id)
+    named = {
+        profile_id: entry.model_display_name or entry.name
+        for entry in catalog.values()
+        if entry.kind == "model"
+        for profile_id in entry.model_chat_profile_ids
+        if profile_id in universal
+    }
+    thinking = {
+        profile_id
+        for entry in catalog.values()
+        if entry.kind == "model"
+        for profile_id in entry.model_thinking_profile_ids
+    }
+    levels = {
+        profile_id: list(profile_levels)
+        for entry in catalog.values()
+        if entry.kind == "model"
+        for profile_id, profile_levels in entry.model_reasoning_efforts.items()
+    }
+    names = Counter(named.values())
+    options = sorted(
+        (
+            CreationAssistantModelOption(
+                profile_id=profile_id,
+                # Two profiles of one model are told apart by their id.
+                name=name if names[name] == 1 else f"{name} ({profile_id})",
+                # Empty levels: a thinking profile the pod cannot make reason.
+                supports_reasoning=profile_id in thinking
+                and levels.get(profile_id) != [],
+                reasoning_efforts=levels.get(profile_id, [])
+                if profile_id in thinking
+                else [],
+            )
+            for profile_id, name in named.items()
+        ),
+        key=lambda option: option.name.lower(),
+    )
+    # Pods disagreeing (or none answering) leave the default unknown.
+    default = defaults.pop() if len(defaults) == 1 else None
+    return options, default
+
+
+async def _project_creation_assistant_settings(
+    deps: ProductServiceDependencies,
+) -> CreationAssistantSettings:
+    stored = await deps.get_creation_assistant_settings_store().get()
+    override = stored.text if stored is not None else None
+    pod_file = await fetch_pod_platform_prompt_file(deps)
+    default = pod_file.creation_assistant_prompt if pod_file else None
+    revised_at = pod_file.creation_assistant_prompt_revised_at if pod_file else None
+    text = override if override is not None else (default or "")
+    model_options, default_profile_id = await _creation_assistant_models(deps)
+    # Day granularity: the pod only dates its default, not the hour of the edit.
+    changed = (
+        override is not None
+        and stored is not None
+        and stored.updated_at is not None
+        and revised_at is not None
+        and revised_at > stored.updated_at.date()
+    )
+    return CreationAssistantSettings(
+        text=text,
+        default_text=default,
+        default_revised_at=revised_at,
+        default_changed_since_override=changed,
+        is_default=override is None,
+        source_unavailable=default is None,
+        missing_language_placeholder=bool(text)
+        and CREATION_ASSISTANT_LANGUAGE_PLACEHOLDER not in text,
+        model_profile_id=stored.model_profile_id if stored else None,
+        reasoning_effort=stored.reasoning_effort if stored else "off",
+        default_model_profile_id=default_profile_id,
+        model_options=model_options,
+        updated_by=stored.updated_by if stored else None,
+        updated_at=stored.updated_at if stored else None,
+    )
+
+
+async def resolve_creation_assistant_settings(
+    deps: ProductServiceDependencies,
+) -> StoredCreationAssistantSettings | None:
+    """The saved settings for the pod, or None (pod defaults). Not user-gated:
+    any agent editor's draft must use the admin's settings."""
+
+    return await deps.get_creation_assistant_settings_store().get()
