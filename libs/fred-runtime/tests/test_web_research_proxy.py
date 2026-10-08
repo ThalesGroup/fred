@@ -257,3 +257,20 @@ async def test_direct_mode_still_requires_dns(no_dns, connections):
     assert await search(None) == []
     assert connections == []
     assert no_dns
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://keycloak/",
+        "http://app-keycloak/realms/app",
+        "http://localhost/",
+        "http://127.1/",
+    ],
+)
+async def test_direct_mode_refuses_internal_names_before_dns(no_dns, connections, url):
+    with pytest.raises(WebResearchError, match="unsafe_destination"):
+        await fetch(url, proxy_url=None)
+    assert connections == []
+    assert no_dns == []

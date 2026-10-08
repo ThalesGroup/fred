@@ -1,6 +1,7 @@
 # Copyright Thales 2026
 # SPDX-License-Identifier: Apache-2.0
 import asyncio
+import logging
 from datetime import timedelta
 
 import httpx
@@ -173,17 +174,32 @@ async def test_busy_call_is_recorded_without_dispatch(service):
         ("502 Bad Gateway", "unavailable"),
     ],
 )
-async def test_only_a_proxy_403_is_a_refusal(service, monkeypatch, answer, code):
+async def test_only_a_proxy_403_is_a_refusal(
+    service, monkeypatch, caplog, answer, code
+):
     backend, _ = service
 
     async def tunnel(request):
         raise httpx.ProxyError(answer)
 
     monkeypatch.setattr(backend.research, "execute", tunnel)
-    with pytest.raises(WebResearchError, match=code):
-        await backend.bind(binding()).execute(WebSearchRequest(query="query"))
+    with caplog.at_level(logging.INFO, logger="fred_runtime.app.web_research"):
+        with pytest.raises(WebResearchError, match=code):
+            await backend.bind(binding()).execute(
+                WebSearchRequest(query="PRIVATE-QUERY")
+            )
     rows = await backend.store.list(user_id="user", limit=10)
     assert rows[0].error_code == code
+    # One content-free line: code, cause and request_id, never the query.
+    [record] = [r for r in caplog.records if "event=web_research " in r.getMessage()]
+    line = record.getMessage()
+    assert f"error_code={code}" in line
+    assert f"cause=ProxyError status={answer[:3]}" in line
+    assert f"request_id={rows[0].request_id}" in line
+    assert "PRIVATE-QUERY" not in line
+    assert record.levelno == (
+        logging.INFO if code == "proxy_refused" else logging.WARNING
+    )
 
 
 @pytest.mark.asyncio

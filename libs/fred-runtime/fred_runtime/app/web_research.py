@@ -30,6 +30,19 @@ from fred_runtime.app.web_research_activity import (
 from fred_runtime.runtime_context import get_runtime_context_or_none
 
 logger = logging.getLogger(__name__)
+# Refusals that policy or the target site explain; anything else is worth a warning.
+EXPECTED_REFUSALS = frozenset(
+    {
+        "unsafe_destination",
+        "proxy_refused",
+        "http_error",
+        "unsupported_content",
+        "too_many_redirects",
+        "response_too_large",
+        "quota_exceeded",
+        "busy",
+    }
+)
 REQUESTS = Counter(
     "fred_web_research_requests_total",
     "Web research calls",
@@ -133,10 +146,16 @@ class WebResearchAdapter(WebResearchPort):
             ACTIVITY_FAILURES.labels(
                 service=self._service.service_name, stage="begin"
             ).inc()
+            logger.error(
+                "event=web_activity_write outcome=failed stage=begin operation=%s",
+                request.operation,
+            )
             raise WebResearchError("activity_unavailable") from None
         result: WebResearchResult | None = None
         error: WebResearchError | None = None
         cancelled = False
+        # Exception class (and proxy status) only: messages may carry URLs or queries.
+        cause = "-"
         try:
             async with asyncio.timeout(service.config.timeout_seconds):
                 quota = await service.quota(portable.user_id, request.operation)
@@ -145,20 +164,22 @@ class WebResearchAdapter(WebResearchPort):
                 async with service._slots:
                     result = await service.research.execute(request)
                 result = result.model_copy(update={"daily_quota": quota})
-        except (TimeoutError, httpx.TimeoutException):
-            error = WebResearchError("timed_out")
+        except (TimeoutError, httpx.TimeoutException) as exc:
+            error, cause = WebResearchError("timed_out"), type(exc).__name__
         except httpx.ProxyError as exc:
             # Only a 403 tunnel answer is a policy refusal; 407 and 5xx are outages.
-            refused = str(exc).startswith("403")
+            status = str(exc)[:3]
+            refused = status == "403"
             error = WebResearchError("proxy_refused" if refused else "unavailable")
-        except httpx.HTTPError:
-            error = WebResearchError("unavailable")
+            cause = f"ProxyError status={status if status.isdigit() else '-'}"
+        except httpx.HTTPError as exc:
+            error, cause = WebResearchError("unavailable"), type(exc).__name__
         except WebResearchError as exc:
             error = exc
         except asyncio.CancelledError:
             cancelled = True
-        except Exception:
-            error = WebResearchError("invalid_response")
+        except Exception as exc:
+            error, cause = WebResearchError("invalid_response"), type(exc).__name__
 
         async def finish() -> None:
             async with asyncio.timeout(5):
@@ -191,6 +212,17 @@ class WebResearchAdapter(WebResearchPort):
                 "event=web_activity_write outcome=failed reason=storage_unavailable"
             )
             raise WebResearchError("activity_unavailable") from None
+        if error:
+            # Content-free: the activity row behind request_id holds the target.
+            logger.log(
+                logging.INFO if error.code in EXPECTED_REFUSALS else logging.WARNING,
+                "event=web_research outcome=failed operation=%s error_code=%s cause=%s duration_ms=%d request_id=%s",
+                request.operation,
+                error.code,
+                cause,
+                int((time.monotonic() - started) * 1000),
+                request_id,
+            )
         REQUESTS.labels(
             service=service.service_name,
             operation=request.operation,

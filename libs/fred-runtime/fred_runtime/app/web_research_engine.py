@@ -56,6 +56,8 @@ def is_public(address: str) -> bool:
 
 
 async def resolve_public(host: str, port: int) -> str:
+    # Internal names are refused as such, not reported unreachable when DNS cannot find them.
+    check_literal(host)
     try:
         records = await asyncio.get_running_loop().getaddrinfo(
             host,
