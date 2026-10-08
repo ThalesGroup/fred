@@ -3378,18 +3378,23 @@
       "links": {
         "manage": "Gérer les liens",
         "title": "Invitations pour {{team}}",
-        "hint": "Générez un lien puis partagez-le manuellement. Créer un autre lien conserve les invitations existantes. Le compteur suit les ouvertures après connexion, pas les personnes uniques ni les messages envoyés.",
+        "hint": "Partagez les liens manuellement. Les clics comptent les ouvertures après connexion.",
         "suspendedHint": "Free est désactivé. Les invitations sont suspendues ; les liens non révoqués et non expirés refonctionneront à sa réactivation.",
         "note": "Note (facultative)",
         "expiry": "Expiration (facultative)",
+        "expiryDate": "Date d'expiration",
+        "expiryPresets": {
+          "days1": "Dans 24 heures",
+          "days7": "Dans 7 jours",
+          "days30": "Dans 30 jours"
+        },
         "futureExpiry": "Choisissez une date et une heure futures.",
         "never": "Sans expiration",
         "untitled": "Sans note",
         "created": "Création",
         "statusLabel": "Statut",
-        "openings": "Ouvertures après connexion",
+        "openings": "Clics",
         "actions": "Actions",
-        "showUrl": "Afficher l'URL",
         "revoke": "Révoquer",
         "revokeTitle": "Révoquer cette invitation ?",
         "revokeHint": "Ce lien ne permettra plus de nouvelles inscriptions. Les autres liens et les membres actuels restent inchangés. Retirez un membre ou désactivez Free pour retirer son accès plateforme lié à cette équipe.",
@@ -3399,7 +3404,11 @@
           "suspended": "Suspendu",
           "expired": "Expiré",
           "revoked": "Révoqué"
-        }
+        },
+        "copyUrl": "Copier l'URL",
+        "copied": "URL copiée dans le presse-papier.",
+        "copyFailed": "Le presse-papier est inaccessible. Sélectionnez l'URL ci-dessus pour la copier manuellement, ou réessayez.",
+        "createdSuccess": "Lien créé"
       }
     }
   },

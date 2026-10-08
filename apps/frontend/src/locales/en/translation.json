@@ -3378,18 +3378,23 @@
       "links": {
         "manage": "Manage links",
         "title": "Invitations for {{team}}",
-        "hint": "Generate a link, then share it manually. Creating another link keeps existing invitations valid. Openings count authenticated page visits, not unique people or message delivery.",
+        "hint": "Share links manually. Clicks count page openings after sign-in.",
         "suspendedHint": "Free is disabled. Invitations are suspended; unrevoked, unexpired links resume when Free is enabled again.",
         "note": "Note (optional)",
         "expiry": "Expiration (optional)",
+        "expiryDate": "Expiration date",
+        "expiryPresets": {
+          "days1": "In 24 hours",
+          "days7": "In 7 days",
+          "days30": "In 30 days"
+        },
         "futureExpiry": "Choose a future date and time.",
         "never": "No expiration",
         "untitled": "No note",
         "created": "Created",
         "statusLabel": "Status",
-        "openings": "Authenticated openings",
+        "openings": "Clicks",
         "actions": "Actions",
-        "showUrl": "Show URL",
         "revoke": "Revoke",
         "revokeTitle": "Revoke this invitation?",
         "revokeHint": "This link will permanently stop accepting new enrollments. Other links and existing team members remain unchanged. Remove a member or disable Free to withdraw team-derived platform access.",
@@ -3399,7 +3404,11 @@
           "suspended": "Suspended",
           "expired": "Expired",
           "revoked": "Revoked"
-        }
+        },
+        "copyUrl": "Copy URL",
+        "copied": "URL copied to clipboard.",
+        "copyFailed": "Clipboard access failed. Select the URL above and copy it manually, or retry.",
+        "createdSuccess": "Link created"
       }
     }
   },

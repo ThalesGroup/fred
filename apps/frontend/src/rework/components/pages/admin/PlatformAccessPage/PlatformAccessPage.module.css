@@ -135,7 +135,7 @@
 }
 .linkCreation {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--spacing-s);
 }
 .linkOutput {
@@ -185,4 +185,38 @@
 .fieldChoice:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
+}
+
+.linkCreation .expirationPicker {
+  flex-direction: column;
+  align-items: stretch;
+  font: var(--font-body-medium);
+}
+.expirationPicker button:focus-visible {
+  outline: 2px solid var(--primary);
+}
+.expirationPicker .expirationTrigger {
+  justify-content: space-between;
+  font: var(--font-body-medium);
+}
+.expirationPicker .expirationPanel {
+  position: relative;
+  z-index: auto;
+  margin-top: var(--spacing-xs);
+  inset: auto;
+}
+.expirationOptions > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+@media (max-width: 600px) {
+  .expirationOptions {
+    flex-direction: column;
+  }
+  .expirationOptions > :nth-child(2) {
+    display: none;
+  }
+  .expirationOptions > :last-child {
+    border-top: 1px solid var(--outline-muted);
+  }
 }

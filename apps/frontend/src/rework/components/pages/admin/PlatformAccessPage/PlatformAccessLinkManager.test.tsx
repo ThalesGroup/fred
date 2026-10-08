@@ -48,6 +48,10 @@ beforeEach(() => {
   hooks.generate.mockReturnValue({ unwrap: async () => ({ token: "fixture-generated-token" }) });
   hooks.reveal.mockReturnValue({ unwrap: async () => ({ token: "fixture-original-token" }) });
   hooks.revoke.mockReturnValue({ unwrap: async () => undefined });
+  Object.defineProperty(navigator, "clipboard", {
+    configurable: true,
+    value: { writeText: vi.fn().mockResolvedValue(undefined) },
+  });
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -85,6 +89,7 @@ it("keeps history available while Free is suspended and prevents link creation",
 });
 it("creates a noted link without an implicit expiry and clears reusable mutation data", async () => {
   render();
+  act(() => button("createLink").click());
   change(input("links.note"), "Demo workshop");
   await act(async () => button("createLink").click());
   expect(hooks.generate).toHaveBeenCalledWith({
@@ -92,15 +97,16 @@ it("creates a noted link without an implicit expiry and clears reusable mutation
     createPlatformEnrollmentLink: { note: "Demo workshop", expires_at: null },
   });
   expect(input("copyLink").value).toContain("/join-free/fixture-generated-token");
-  expect(input("links.note").value).toBe("");
+  expect(input("links.note")).toBeUndefined();
   expect(hooks.reset).toHaveBeenCalled();
 });
 it("recovers an existing URL without creating another invitation and confirms revocation", async () => {
   render();
-  await act(async () => button("links.showUrl").click());
+  await act(async () => button("links.copyUrl").click());
   expect(hooks.reveal).toHaveBeenCalledWith({ teamId: "demo", linkId: "invitation" });
   expect(hooks.generate).not.toHaveBeenCalled();
-  expect(input("copyLink").value).toContain("/join-free/fixture-original-token");
+  expect(navigator.clipboard.writeText).toHaveBeenCalledWith("http://localhost:5173/join-free/fixture-original-token");
+  expect(document.body.textContent).toContain("rework.platformAccess.links.copied");
   act(() => button("links.revoke").click());
   expect(hooks.revoke).not.toHaveBeenCalled();
   expect(document.body.textContent).toContain("rework.platformAccess.links.revokeHint");
@@ -110,8 +116,19 @@ it("recovers an existing URL without creating another invitation and confirms re
 });
 it("rejects a past local expiry before requesting a link and preserves the note", () => {
   render();
+  act(() => button("createLink").click());
   change(input("links.note"), "Future demo");
-  change(input("links.expiry"), "2020-01-01T12:00");
+  act(() =>
+    [...document.querySelectorAll<HTMLButtonElement>("button")]
+      .find((node) => node.getAttribute("aria-expanded") === "false")!
+      .click(),
+  );
+  change(input("links.expiryDate"), "2020-01-01T12:00");
+  expect(
+    [...document.querySelectorAll<HTMLButtonElement>("button")].find(
+      (node) => node.textContent === "rework.analytics.timeRange.apply",
+    )!.disabled,
+  ).toBe(true);
   expect(button("createLink").disabled).toBe(true);
   expect(document.body.textContent).toContain("rework.platformAccess.links.futureExpiry");
   expect(input("links.note").value).toBe("Future demo");
@@ -130,11 +147,95 @@ it("keeps revocation failure visible inside the confirmation", async () => {
   const dialog = document.querySelector('[role="dialog"]')!;
   expect(dialog.querySelector('[role="alert"]')?.textContent).toContain("rework.platformAccess.failed");
 });
-it("does not dismiss note or expiry drafts when Enter is pressed", () => {
+it("shows history first and returns without generation when creation is canceled", () => {
   render();
-  for (const key of ["links.note", "links.expiry"]) {
-    const event = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
-    act(() => input(key).dispatchEvent(event));
-    expect(event.defaultPrevented).toBe(true);
-  }
+  expect(input("links.note")).toBeUndefined();
+  act(() => button("createLink").click());
+  act(() =>
+    [...document.querySelectorAll<HTMLButtonElement>("button")]
+      .find((node) => node.getAttribute("aria-expanded") === "false")!
+      .click(),
+  );
+  expect(input("links.expiryDate").lang).toBe("en-GB");
+  act(() => input("links.expiryDate").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+  expect(input("links.expiryDate")).toBeUndefined();
+  expect(input("links.note")).toBeDefined();
+  expect(button("createLink").disabled).toBe(false);
+  act(() =>
+    [...document.querySelectorAll<HTMLButtonElement>("button")]
+      .find((node) => node.textContent === "common.cancel")!
+      .click(),
+  );
+  expect(document.body.textContent).toContain("Workshop");
+  expect(hooks.generate).not.toHaveBeenCalled();
+});
+it("retains an existing recovered URL when clipboard access fails without generating", async () => {
+  vi.mocked(navigator.clipboard.writeText).mockRejectedValue(new Error("permission"));
+  render();
+  await act(async () => button("links.copyUrl").click());
+  expect(input("copyLink").value).toContain("/join-free/fixture-original-token");
+  expect(document.body.textContent).toContain("rework.platformAccess.links.copyFailed");
+  expect(document.body.textContent).not.toContain("rework.platformAccess.failed");
+  expect(hooks.generate).not.toHaveBeenCalled();
+  vi.mocked(navigator.clipboard.writeText).mockResolvedValue(undefined);
+  await act(async () => button("links.copyUrl").click());
+  expect(document.body.textContent).toContain("rework.platformAccess.links.copied");
+  expect(hooks.reveal).toHaveBeenCalledTimes(1);
+});
+
+it("applies a custom future expiration before creation and converts local time to UTC", async () => {
+  render();
+  act(() => button("createLink").click());
+  act(() =>
+    [...document.querySelectorAll<HTMLButtonElement>("button")]
+      .find((node) => node.getAttribute("aria-expanded") === "false")!
+      .click(),
+  );
+  change(input("links.expiryDate"), "2099-01-01T12:34");
+  expect(button("createLink").disabled).toBe(true);
+  act(() =>
+    [...document.querySelectorAll<HTMLButtonElement>("button")]
+      .find((node) => node.textContent === "rework.analytics.timeRange.apply")!
+      .click(),
+  );
+  expect(input("links.expiryDate")).toBeUndefined();
+  await act(async () => button("createLink").click());
+  expect(hooks.generate).toHaveBeenCalledWith({
+    teamId: "demo",
+    createPlatformEnrollmentLink: { note: null, expires_at: new Date("2099-01-01T12:34").toISOString() },
+  });
+});
+it("uses future duration shortcuts and can remove expiration without closing creation", () => {
+  render();
+  act(() => button("createLink").click());
+  const open = () =>
+    act(() =>
+      [...document.querySelectorAll<HTMLButtonElement>("button")]
+        .find((node) => node.getAttribute("aria-expanded") === "false")!
+        .click(),
+    );
+  open();
+  act(() => button("links.expiryPresets.days7").click());
+  open();
+  expect(new Date(input("links.expiryDate").value).getTime()).toBeGreaterThan(Date.now() + 6 * 86400000);
+  act(() => button("links.never").click());
+  expect(document.querySelector('[aria-expanded="false"]')?.textContent).toContain("rework.platformAccess.links.never");
+  expect(button("createLink").disabled).toBe(false);
+});
+
+it("consumes Escape before the parent dialog even when focus has returned to the note", () => {
+  render();
+  act(() => button("createLink").click());
+  act(() =>
+    [...document.querySelectorAll<HTMLButtonElement>("button")]
+      .find((node) => node.getAttribute("aria-expanded") === "false")!
+      .click(),
+  );
+  act(() => {
+    input("links.note").focus();
+    input("links.note").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  expect(input("links.expiryDate")).toBeUndefined();
+  expect(input("links.note")).toBeDefined();
+  expect(document.activeElement?.getAttribute("aria-expanded")).toBe("false");
 });
