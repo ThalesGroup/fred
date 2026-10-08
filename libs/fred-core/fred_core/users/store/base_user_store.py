@@ -32,7 +32,20 @@ class AmbiguousUsernameError(ValueError):
         )
 
 
+class OrganizationAssignmentError(ValueError):
+    """An unknown person or an existing assignment prevents organization admission."""
+
+
 class BaseUserStore(ABC):
+    @abstractmethod
+    async def assign_organization(
+        self,
+        user_id: UUID,
+        organization_id: str,
+        session: AsyncSession | None = None,
+    ) -> None:
+        """Assign an existing identity once; repeating the same assignment is allowed."""
+
     @abstractmethod
     async def update_gcu_version(
         self,

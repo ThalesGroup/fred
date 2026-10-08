@@ -14,20 +14,45 @@
 
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, Index, String, Text, Uuid, text
+from sqlalchemy import (
+    BigInteger,
+    CheckConstraint,
+    DateTime,
+    ForeignKeyConstraint,
+    Index,
+    String,
+    Text,
+    Uuid,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from fred_core.models import Base
+from fred_core.teams.space_models import SpaceRow
 
 
 class UserRow(Base):
     __tablename__ = "users"
     __table_args__ = (
         Index("ix_users_lower_username", text("lower(username)")),
+        CheckConstraint(
+            "organization_kind = 'organization'", name="ck_users_organization_kind"
+        ),
+        ForeignKeyConstraint(
+            ["organization_id", "organization_kind"],
+            [SpaceRow.id, SpaceRow.kind],
+            name="fk_users_organization",
+            use_alter=True,
+        ),
         {"extend_existing": True},
     )
 
     id: Mapped[Uuid] = mapped_column(Uuid, primary_key=True)
+    # NULL identifies a newcomer awaiting admission, not an implicit organization.
+    organization_id: Mapped[str | None] = mapped_column(String, index=True)
+    organization_kind: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default="organization"
+    )
     username: Mapped[str | None] = mapped_column(String, nullable=True)
     email: Mapped[str | None] = mapped_column(String, nullable=True)
     first_name: Mapped[str | None] = mapped_column(String, nullable=True)

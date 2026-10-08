@@ -20,6 +20,8 @@ import pytest
 import pytest_asyncio
 from fred_core.users.store.postgres_user_store import PostgresUserStore
 from fred_core.users.user_models import UserRow
+from sqlalchemy import MetaData
+from fred_core.teams.space_models import SpaceRow
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -41,15 +43,11 @@ async def store(tmp_path, request):
             pytest.skip("Set FRED_GCU_TEST_POSTGRES_URL to an isolated test database")
         assert (make_url(url).database or "").startswith("fred_gcu_test_")
     engine = create_async_engine(url)
+    metadata = MetaData()
+    UserRow.__table__.to_metadata(metadata)
+    SpaceRow.__table__.to_metadata(metadata)
     async with engine.begin() as conn:
-        await conn.run_sync(
-            lambda sync: UserRow.metadata.create_all(
-                sync,
-                tables=[
-                    UserRow.metadata.tables[UserRow.__tablename__],
-                ],
-            )
-        )
+        await conn.run_sync(metadata.create_all)
     yield PostgresUserStore(engine)
     await engine.dispose()
 

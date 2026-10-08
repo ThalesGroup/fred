@@ -33,6 +33,25 @@ integration, repeating only evidence invalidated by subsequent changes or failur
   real PostgreSQL). Fresh PostgreSQL `alembic upgrade head` passed; `alembic check`
   found no drift; sole head `bc21d49e01a7`. These checks concern the structural
   table, not the complete offline translator or final PR readiness.
+  Next SQL block adds nullable newcomer organization assignment with a typed FK
+  restricted to organization spaces and an indexed lookup. One conditional
+  `UPDATE ... RETURNING` assigns an existing identity, permits a same-target
+  repeat and refuses replacement by another organization without a preliminary
+  read. It participates in the caller's transaction; this storage primitive is
+  not the complete admission service or a workspace-access gate.
+  Checks: 29 user-store tests passed, including 16 SQLite/PostgreSQL organization
+  cases; the two GCU PostgreSQL cases skipped in that run passed separately.
+  Existing space/ownership checks: 50 passed. SQLite migration upgrade/downgrade
+  preserved an existing identity; a full fresh PostgreSQL chain followed by the
+  new revision preserved a seeded pre-assignment identity, with no schema drift.
+  New sole control-plane head: `cd32e50f12b8`. Raw basedpyright: zero diagnostics.
+  Independent focused review of `ecb5f8b1a` plus this SQL/store block found no
+  actionable defect and independently passed 8 SQLite cases. It excludes pending
+  admission APIs, team linkage, personal-team organization validation, SQL/FGA
+  coordination, UI, translation and full-branch readiness.
+  This block adds 42/removes 1 production-store lines (net +41); schema/migration
+  +73/-1 and tests +232/-11. It adds the required assignment invariant, not a
+  second admission implementation; the cumulative reduction target remains.
 - [x] 1.2 Separate platform anchors from organizations and implement four cumulative local roles plus parent-team-dependent project permissions in the existing FGA facade; verify the allow/deny matrix with real OpenFGA, including local-admin-without-analyst and organization-analyst-without-descendant-access.
   Real OpenFGA suite: 42 passed, including all four roles in each space kind,
   parent-admin isolation and immediate project denial after parent membership

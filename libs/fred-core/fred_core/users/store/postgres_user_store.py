@@ -27,7 +27,11 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from fred_core.sql import make_session_factory, use_session
 from fred_core.users.user_models import UserRow
 
-from .base_user_store import AmbiguousUsernameError, BaseUserStore
+from .base_user_store import (
+    AmbiguousUsernameError,
+    BaseUserStore,
+    OrganizationAssignmentError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +60,30 @@ def get_user_store() -> BaseUserStore:
 class PostgresUserStore(BaseUserStore):
     def __init__(self, engine: AsyncEngine):
         self._sessions = make_session_factory(engine)
+
+    async def assign_organization(
+        self,
+        user_id: UUID,
+        organization_id: str,
+        session: AsyncSession | None = None,
+    ) -> None:
+        async with use_session(self._sessions, session) as s:
+            assigned = await s.scalar(
+                update(UserRow)
+                .where(
+                    UserRow.id == user_id,
+                    or_(
+                        UserRow.organization_id.is_(None),
+                        UserRow.organization_id == organization_id,
+                    ),
+                )
+                .values(organization_id=organization_id)
+                .returning(UserRow.id)
+            )
+            if assigned is None:
+                raise OrganizationAssignmentError(
+                    "Identity is missing or already belongs to another organization"
+                )
 
     async def save(self, user: UserRow) -> None:
         pass

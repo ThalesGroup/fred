@@ -159,12 +159,56 @@ def test_parent_cannot_be_deleted_while_referenced(database: Connection) -> None
 
 
 def test_migration_matches_orm(database: Connection) -> None:
-    assert (
-        autogenerate_diffs(database, Base.metadata, frozenset({"space", "users"})) == []
-    )
+    assert autogenerate_diffs(database, Base.metadata, frozenset({"space"})) == []
 
 
 def test_schema_downgrade(database: Connection) -> None:
     with Operations.context(MigrationContext.configure(database)):
         migration.downgrade()
     assert not sa.inspect(database).has_table("space")
+
+
+def test_user_organization_upgrade_preserves_an_unassigned_identity() -> None:
+    path = _PATH.with_name("cd32e50f12b8_add_user_organization.py")
+    spec = spec_from_file_location("user_organization_migration", path)
+    assert spec is not None and spec.loader is not None
+    assignment_migration = module_from_spec(spec)
+    spec.loader.exec_module(assignment_migration)
+    legacy_users = sa.Table(
+        "users",
+        sa.MetaData(),
+        sa.Column("id", sa.Uuid(), primary_key=True),
+        sa.Column("username", sa.String()),
+    )
+    engine = sa.create_engine("sqlite://")
+    try:
+        with engine.begin() as connection:
+            connection.execute(sa.text("PRAGMA foreign_keys = ON"))
+            legacy_users.create(connection)
+            connection.execute(
+                sa.insert(legacy_users), {"id": _OWNER, "username": "alice"}
+            )
+            with Operations.context(MigrationContext.configure(connection)):
+                migration.upgrade()
+                assignment_migration.upgrade()
+            row = connection.execute(
+                sa.text(
+                    "SELECT username, organization_id, organization_kind FROM users"
+                )
+            ).one()
+            assert row == ("alice", None, "organization")
+            connection.execute(sa.insert(SpaceRow), space("org", "organization"))
+            with pytest.raises(sa.exc.IntegrityError), connection.begin_nested():
+                connection.execute(
+                    sa.text("UPDATE users SET organization_id = 'missing'")
+                )
+            connection.execute(sa.text("UPDATE users SET organization_id = 'org'"))
+            with Operations.context(MigrationContext.configure(connection)):
+                assignment_migration.downgrade()
+                migration.downgrade()
+            assert {
+                column["name"] for column in sa.inspect(connection).get_columns("users")
+            } == {"id", "username"}
+            assert connection.scalar(sa.select(legacy_users.c.username)) == "alice"
+    finally:
+        engine.dispose()

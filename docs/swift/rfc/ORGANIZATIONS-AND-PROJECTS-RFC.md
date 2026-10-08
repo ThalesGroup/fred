@@ -1,6 +1,6 @@
 # RFC: Future organization administration
 
-**Status:** organization UI and further onboarding design remain deferred.
+**Status:** organization-creation UI and further onboarding design remain deferred.
 The major-release backend, ownership and offline-cutover target is specified in
 the OpenSpec change below; it is not shipped by these planning documents.
 **Author:** Dimitri Tombroff
@@ -14,6 +14,8 @@ agent reach, immutable conversation context and offline migration.
 Its [design](../../../openspec/changes/simplify-corpus-authorization/design.md)
 and [acceptance scenarios](../../../openspec/changes/simplify-corpus-authorization/specs/corpus-authorization/spec.md)
 incorporate the developer decisions of 2026-10-08.
+The scope now includes newcomer organization requests and closed-team requests
+through one shared admission flow; their contracts live in that change.
 
 That scope replaces this RFC's earlier single-organization project delivery,
 two-role organization proposal and separate later migration. It is delivered
@@ -29,8 +31,7 @@ The current target provisions organizations through installation/migration
 tooling. These questions remain outside that delivery:
 
 - An organization-creation and administration UI.
-- A richer organization onboarding/invitation experience beyond explicit
-  provisioning.
+- Onboarding/invitation features beyond the agreed shared admission requests.
 - Additional organization-level product workflows, such as wiki or analytics.
 
 Scope those only when requested; the presence of organization ownership and
