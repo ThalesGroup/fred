@@ -68,14 +68,12 @@ export function SimpleCapabilitiesView({
         // An agent still carrying a withdrawn capability is not left
         // unexplained: the form's suspension banner names it.
         const visiblePacks = section.packs.filter((pack) => isPackSelectable(pack, availableIds));
-        if (!section.emptyState && !showNotSupported && visiblePacks.length === 0) return null;
+        if (!showNotSupported && visiblePacks.length === 0) return null;
 
         return (
           <section key={section.id} className={styles.section}>
             <h3 className={styles.sectionHeader}>{t(section.titleKey)}</h3>
-            {section.emptyState ? (
-              <p className={styles.emptyState}>{t("rework.teams.formAgent.capabilities.actionsIntegrationEmpty")}</p>
-            ) : showNotSupported ? (
+            {showNotSupported ? (
               <p className={styles.emptyState}>{t("rework.teams.formAgent.capabilities.notSupported")}</p>
             ) : (
               <ul className={styles.packList}>

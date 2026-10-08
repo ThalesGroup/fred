@@ -75,7 +75,7 @@ def test_mcp_stored_controls_and_registration() -> None:
         "bound_library_ids": ["library-a"],
     }
     assert controls["search_policy"] == {"default": "strict"}
-    assert controls["rag_scope"] == {"default": "corpus_only"}
+    assert controls["rag_scope"] == {"default": "corpus_only", "options": None}
 
     class Registry:
         def __init__(self) -> None:

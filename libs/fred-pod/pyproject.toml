@@ -1,6 +1,6 @@
 [project]
 name = "fred-pod"
-version = "4.4.1"
+version = "4.4.2"
 description = "What a Fred component needs to be a pod: configuration, identity, naming."
 readme = "README.md"
 requires-python = ">=3.12"
