@@ -46,17 +46,23 @@ from control_plane_backend.capabilities.schemas import (
     CapabilityEnablementList,
     CapabilityImpactPreview,
     CapabilityPersonalScopeResult,
+    CapabilityTeamSettingsMap,
     EnableTeamCapabilityRequest,
     ModelReasoningResult,
     SetCapabilityDefaultOnRequest,
     SetCapabilityPersonalScopeRequest,
     SetModelReasoningRequest,
+    SetTeamCapabilitySettingsRequest,
     TeamCapabilityEnablementResult,
+    TeamCapabilitySettingsView,
 )
 from control_plane_backend.product.dependencies import (
     ProductServiceDependencies,
     get_product_service_dependencies,
 )
+from control_plane_backend.teams.schemas import TeamPermission
+from control_plane_backend.teams.service import require_team_access
+from control_plane_backend.teams.system import resolve_system_team_id
 
 router = APIRouter(tags=["Capabilities"])
 ProductDependencies = Annotated[
@@ -105,6 +111,127 @@ async def get_capability_revoke_impact(
             capability_id=capability_id,
             team_id=team_id,
             deps=deps,
+        )
+    except (AuthorizationError, CapabilityNotFound) as exc:
+        raise _map_error(exc) from exc
+
+
+@router.get(
+    "/admin/capabilities/{capability_id}/teams/{team_id}/settings",
+    response_model=TeamCapabilitySettingsView,
+    summary="Read one team's effective settings for a capability.",
+)
+async def get_admin_team_capability_settings(
+    capability_id: Annotated[str, Path(min_length=1)],
+    team_id: Annotated[TeamId, Path()],
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> TeamCapabilitySettingsView:
+    """Seed the enable-with-settings form for a team that is ALREADY enabled.
+
+    Without it the form can only be opened on the disabled -> enabled
+    transition, so changing one setting means disabling the capability first.
+    """
+    try:
+        await capability_service.require_can_manage_capability(
+            user=user, capability_id=capability_id, deps=deps
+        )
+        return await capability_service.read_team_capability_settings(
+            capability_id=capability_id,
+            team_id=resolve_system_team_id(user, team_id) or team_id,
+            deps=deps,
+        )
+    except (AuthorizationError, CapabilityNotFound) as exc:
+        raise _map_error(exc) from exc
+
+
+@router.get(
+    "/admin/capabilities/{capability_id}/teams/settings",
+    response_model=CapabilityTeamSettingsMap,
+    summary="Read every team's effective settings for a capability.",
+)
+async def get_admin_capability_team_settings_map(
+    capability_id: Annotated[str, Path(min_length=1)],
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> CapabilityTeamSettingsMap:
+    """One round trip for the whole team matrix.
+
+    The drawer marks each row whose options are set; asking per row would be one
+    request per team in the organization.
+    """
+    try:
+        await capability_service.require_can_manage_capability(
+            user=user, capability_id=capability_id, deps=deps
+        )
+        return await capability_service.read_capability_team_settings_map(
+            capability_id=capability_id, deps=deps
+        )
+    except (AuthorizationError, CapabilityNotFound) as exc:
+        raise _map_error(exc) from exc
+
+
+@router.put(
+    "/admin/capabilities/{capability_id}/teams/{team_id}/settings",
+    response_model=TeamCapabilitySettingsView,
+    summary="Change one team's capability settings without changing its enablement.",
+)
+async def put_team_capability_settings(
+    capability_id: Annotated[str, Path(min_length=1)],
+    team_id: Annotated[TeamId, Path()],
+    body: SetTeamCapabilitySettingsRequest,
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> TeamCapabilitySettingsView:
+    """Settings only — the enablement tri-state is left exactly where it was.
+
+    The enable-with-settings PUT on the sibling path writes the `enabled` tuple,
+    so reusing it to edit an option would promote a team that merely INHERITS a
+    default-on capability to an explicit grant.
+    """
+    try:
+        return await capability_service.write_team_capability_settings(
+            user=user,
+            capability_id=capability_id,
+            team_id=team_id,
+            settings=body.settings,
+            deps=deps,
+        )
+    except (AuthorizationError, CapabilityNotFound, CapabilitySettingsInvalid) as exc:
+        raise _map_error(exc) from exc
+
+
+@router.get(
+    "/teams/{team_id}/capabilities/{capability_id}/settings",
+    response_model=TeamCapabilitySettingsView,
+    summary="Read my team's effective settings for a capability.",
+)
+async def get_team_capability_settings(
+    team_id: Annotated[TeamId, Path()],
+    capability_id: Annotated[str, Path(min_length=1)],
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> TeamCapabilitySettingsView:
+    """The posture a team was given, for the team's own members.
+
+    Deliberately NOT the admin route above: a capability's runtime behaviour can
+    depend on a team setting (html_artifact's JavaScript posture), and the
+    surface rendering it must be able to read the CURRENT value without holding
+    an administrative role. Gated on ordinary team-agent access, and limited to
+    the keys the capability declares.
+    """
+    try:
+        # Use the CANONICAL id it returns, not the path parameter: the frontend
+        # can send the "personal" alias before bootstrap has resolved the real
+        # space, and that alias is not the key the settings row is stored under.
+        resolved_team_id = await require_team_access(
+            user,
+            team_id,
+            deps.team_dependencies,
+            required_permissions=[TeamPermission.CAN_USE_TEAM_AGENTS],
+        )
+        return await capability_service.read_team_capability_settings(
+            capability_id=capability_id, team_id=resolved_team_id, deps=deps
         )
     except (AuthorizationError, CapabilityNotFound) as exc:
         raise _map_error(exc) from exc

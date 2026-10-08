@@ -774,6 +774,26 @@ operations:
     review_status: approved
     required_permission: can_manage # Capability rows use capability#can_manage (can_manage_capabilities from organization); app__ rows use the equivalent organization#can_manage_capabilities gate before exact configured-app resolution; kb__ rows use the organization#can_manage_platform gate before published-definition resolution. app__ and kb__ grants are written on their own ReBAC type.
   - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/capabilities/{capability_id}/teams/settings
+    review_status: pending_review
+    required_permission: can_manage # Every team's effective settings for one capability, so the admin drawer can mark the rows whose options are set without one request per team row. Same capability#can_manage gate as the per-team read below.
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/admin/capabilities/{capability_id}/teams/{team_id}/settings
+    review_status: pending_review
+    required_permission: can_manage # Settings-only write: it does NOT touch the enablement tuple, so editing an option cannot promote a team that merely inherits a default-on capability to an explicit grant. Same gate as the enable/disable writes.
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/capabilities/{capability_id}/teams/{team_id}/settings
+    review_status: pending_review
+    required_permission: can_manage # Reads one team's effective settings so the admin form can be reopened for an already-enabled team. Same capability#can_manage gate as the enable/disable writes on the sibling path.
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/teams/{team_id}/capabilities/{capability_id}/settings
+    review_status: pending_review
+    required_permission: can_use_team_agents # NOT an admin route: a capability's runtime behaviour can depend on a team setting (html_artifact's JavaScript posture), and the surface rendering it must read the current value as an ordinary member. Returns only keys the manifest declares, so a capability must never declare a secret-bearing team setting.
+  - service: control-plane
     method: PUT
     path: /control-plane/v1/admin/capabilities/{capability_id}/teams/{team_id}
     review_status: approved

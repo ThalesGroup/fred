@@ -77,6 +77,7 @@ from control_plane_backend.capabilities.authz import (
     filter_entries_by_usable,
     usable_capability_ids,
 )
+from control_plane_backend.capabilities.settings_store import settings_scope_id
 from control_plane_backend.common.field_values import validate_field_values
 from control_plane_backend.config.models import (
     ManagedAgentFieldSpec,
@@ -3538,7 +3539,11 @@ async def get_runtime_binding_for_team(
         platform_chat_model_binding,
         platform_prompt,
     ) = await asyncio.gather(
-        deps.get_team_capability_settings_store().list_for_team(team_id),
+        # Personal spaces share one settings record: their access is granted as
+        # a class, so their options are a class decision too.
+        deps.get_team_capability_settings_store().list_for_team(
+            settings_scope_id(team_id)
+        ),
         deps.get_model_reasoning_store().list_enabled_model_ids(),
         resolve_platform_chat_model_binding(deps),
         resolve_platform_prompt_text(deps),

@@ -109,16 +109,48 @@ remplit chaque mois à partir des documents de la période.
 ### Générer une page web (HTML/CSS)
 
 **Ce qu'elle fait** — l'agent produit une page ou un composant web, affiché
-dans un aperçu à côté de la conversation. L'aperçu se télécharge en HTML, PDF
-ou image.
+dans un aperçu à côté de la conversation. L'aperçu se télécharge en HTML,
+PDF ou image.
 
-**Ses limites** — HTML et CSS uniquement : pas de JavaScript, donc rien
-d'interactif. L'aperçu est en lecture seule et la page produite reste de taille
-modeste ; au-delà, l'agent doit l'alléger. Ce n'est pas un outil de publication :
-rien n'est mis en ligne.
+**Les pages interactives s'autorisent équipe par équipe.** Les onglets, accordéons,
+animations et graphiques qui réagissent au clic reposent sur du JavaScript, et un
+administrateur de la plateforme décide quelles équipes peuvent l'exécuter. Les
+espaces personnels se décident d'un bloc : l'autorisation est active pour
+l'espace personnel de tout le monde, ou pour aucun. Sans
+cette autorisation, vos agents produisent toujours des pages : elles sont
+simplement statiques, et l'agent organise le contenu pour qu'il se lise sans
+interaction. Si une page que vous aviez produite était interactive et ne réagit
+plus, c'est que cette autorisation a été retirée à votre équipe ; l'aperçu vous
+l'indique au-dessus de la page.
+
+**Ses limites** — la page doit être **autonome** : rien ne peut être chargé
+depuis Internet (ni bibliothèque, ni police, ni image distante) et la page ne
+peut faire aucun appel réseau. Les images sont donc intégrées directement dans
+le fichier, et les données dont le JavaScript a besoin doivent y être écrites.
+La page ne peut rien mémoriser d'une visite à l'autre : elle repart de son état
+initial à chaque ouverture. Le fichier **HTML téléchargé** s'ouvre et s'affiche
+normalement, mais il enveloppe la page dans une coquille de sécurité : ce n'est
+pas du code source à retoucher. Pour récupérer le source, utilisez les onglets
+**HTML** et **CSS** de l'aperçu, ou le bouton **Copier**.
+Les exports PDF et image capturent la page **avant l'exécution du JavaScript** :
+les parties interactives y apparaissent dans leur état initial. La page reste de
+taille modeste ; au-delà, l'agent doit l'alléger. Ce n'est pas un outil de
+publication : rien n'est mis en ligne.
+
+Quand vous demandez à l'agent de **modifier** la page, il remplace celle qui est
+déjà à l'écran plutôt que d'en ouvrir une seconde. Vous n'obtenez un nouvel aperçu
+que si vous demandez une page sans rapport avec la précédente. Chaque aperçu se
+ferme par la croix de son onglet, et se rouvre depuis le bouton **Ouvrir l'aperçu**
+de sa carte dans la conversation.
+
+Si une page interactive se comporte mal — elle ralentit votre navigateur, ou elle
+affiche quelque chose qui vous semble douteux — l'aperçu propose un bouton
+**Arrêter la page**, qui interrompt son exécution immédiatement. Un bouton
+**Relancer la page** la remet en marche si vous le souhaitez. Une page statique n'a
+rien à arrêter : le bouton n'apparaît pas.
 
 **Un exemple** — « Présente ces indicateurs sous forme d'un tableau de bord
-d'une page, que je puisse exporter en PDF. »
+d'une page, avec un onglet par région. »
 
 ## Intelligence et orchestration
 

@@ -77,6 +77,7 @@ from control_plane_backend.agent_instances.suspension import (
 from control_plane_backend.capabilities.authz import usable_capability_ids
 from control_plane_backend.capabilities.settings_store import (
     TeamCapabilitySettingsStore,
+    settings_scope_id,
 )
 from control_plane_backend.common.field_values import validate_field_values
 
@@ -522,7 +523,7 @@ async def enable_capability_for_team(
         if settings_store is None:
             raise RuntimeError("settings_store is required for agent-capability kinds")
         await settings_store.upsert(
-            team_id=team_id,
+            team_id=settings_scope_id(team_id),
             capability_id=catalog_entry.id,
             settings=validated,
             updated_by=updated_by,

@@ -63,6 +63,10 @@ function badge(): HTMLElement | null {
   return container.querySelector(`.${styles.badge}`);
 }
 
+function dot(): HTMLElement | null {
+  return container.querySelector(`.${styles.badgeDot}`);
+}
+
 describe("IconButton badge", () => {
   const base = { variant: "icon", size: "small", icon: { category: "outlined", type: "attach_file" } } as const;
 
@@ -193,5 +197,47 @@ describe("IconButton loading state", () => {
 
     expect(button().disabled).toBe(true);
     expect(spinner()).toBeNull(); // disabled alone, not loading — icon still shows
+  });
+});
+
+describe("IconButton dot badge", () => {
+  const base = { variant: "icon", size: "small", icon: { category: "outlined", type: "tune" } } as const;
+
+  it("renders nothing when badgeDot is omitted", () => {
+    render(<IconButton {...base} aria-label="Options" />);
+
+    expect(dot()).toBeNull();
+    expect(container.firstElementChild?.tagName).toBe("BUTTON");
+  });
+
+  it("renders a bare dot with no label", () => {
+    render(<IconButton {...base} aria-label="Options" badgeDot />);
+
+    expect(dot()).not.toBeNull();
+    expect(dot()?.textContent).toBe("");
+    // Hidden from assistive tech: the meaning belongs in the button's label,
+    // where it can actually be read out.
+    expect(dot()?.getAttribute("aria-hidden")).toBe("true");
+  });
+
+  it("renders nothing when badgeDot is false", () => {
+    render(<IconButton {...base} aria-label="Options" badgeDot={false} />);
+
+    expect(dot()).toBeNull();
+  });
+
+  it("yields to a count badge rather than stacking two on one corner", () => {
+    render(<IconButton {...base} aria-label="Options" badgeDot badgeCount={3} />);
+
+    expect(badge()?.textContent).toBe("3");
+    expect(dot()).toBeNull();
+  });
+
+  it("shows the dot when a count badge is present but below one", () => {
+    // `badgeCount={0}` renders no pill, so the dot is what is left to show.
+    render(<IconButton {...base} aria-label="Options" badgeDot badgeCount={0} />);
+
+    expect(badge()).toBeNull();
+    expect(dot()).not.toBeNull();
   });
 });

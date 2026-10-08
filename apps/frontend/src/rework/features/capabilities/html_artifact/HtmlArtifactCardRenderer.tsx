@@ -37,6 +37,7 @@ import type { UiPartRendererProps } from "../types";
 import { CAPABILITY_ID, type HtmlArtifactPartData } from "./types";
 import { selectHtmlArtifact, upsertFromPart } from "./htmlArtifactSlice";
 import HtmlArtifactDownloadButton from "./HtmlArtifactDownloadButton";
+import { useHtmlArtifactJavaScriptAllowed } from "./useHtmlArtifactJavaScript";
 import styles from "./HtmlArtifactCardRenderer.module.css";
 
 // Module-level so the heuristic survives card remounts within one page load.
@@ -46,6 +47,9 @@ const AUTO_OPEN_MIN_AGE_MS = 5000;
 
 export function HtmlArtifactCardRenderer({ part }: UiPartRendererProps) {
   const { t } = useTranslation();
+  // The card offers the same download as the viewer, so it needs the same
+  // posture: the saved file runs outside the app, where nothing denies script.
+  const allowJavaScript = useHtmlArtifactJavaScriptAllowed();
   const dispatch = useDispatch();
   const sessionId = useMountSessionId();
   const art = part as unknown as HtmlArtifactPartData;
@@ -91,7 +95,7 @@ export function HtmlArtifactCardRenderer({ part }: UiPartRendererProps) {
         <span className={styles.title} title={title}>
           {title}
         </span>
-        <HtmlArtifactDownloadButton html={art.html} css={art.css} title={title} />
+        <HtmlArtifactDownloadButton html={art.html} css={art.css} title={title} allowJavaScript={allowJavaScript} />
       </div>
       <div className={styles.footer}>
         <Button

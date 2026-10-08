@@ -17,14 +17,35 @@
 // render, so what you get is exactly the preview — background included, and none
 // of the browser print chrome (headers/footers/margins).
 //
-// SECURITY: the render uses `composeHtmlDocument`, already sanitized (Layer A: no
-// <script>/on*-handlers) and CSP-locked (Layer C). We lay it out in an off-screen
-// iframe (no allow-scripts) purely to size it, then rasterize its serialized DOM
-// through an `<svg><foreignObject>` loaded as an <img>. An SVG loaded via <img>
-// runs in the browser's "secure static mode": no scripts, and NO external resource
-// loads at all — the same "data: only" footprint as the live preview's CSP.
+// The document is laid out off-screen to size it, then its serialized DOM is
+// rasterized through an `<svg><foreignObject>` loaded as an <img> — which runs in
+// the browser's "secure static mode": no scripts, no external loads. Hence the
+// pre-script capture the viewer warns about. Sandbox rationale: RFC §4.7.
 
 import { composeHtmlDocument, artifactFileName } from "./htmlArtifactDocument";
+
+/**
+ * The measuring frame's sandbox: `allow-same-origin` alone. Rasterizing has to read
+ * `contentDocument`, and that permission may NEVER be paired with `allow-scripts` —
+ * together they let untrusted content clear its own sandbox and reach the app origin.
+ */
+export const MEASURE_SANDBOX = "allow-same-origin";
+
+/**
+ * A transient off-screen frame for read-only layout measurement. BOTH callers build
+ * their frame here on purpose: with two independent `setAttribute("sandbox", …)`
+ * call sites, adding `allow-scripts` to one of them is a one-line mistake nothing
+ * catches. Exported so a test asserts the real element, not just the constant.
+ */
+export function createMeasuringFrame(composed: string, width: number, opaqueBackground = false): HTMLIFrameElement {
+  const iframe = document.createElement("iframe");
+  iframe.setAttribute("sandbox", MEASURE_SANDBOX);
+  iframe.setAttribute("referrerpolicy", "no-referrer");
+  const background = opaqueBackground ? ";background:#fff" : "";
+  iframe.style.cssText = `position:fixed;left:-99999px;top:0;width:${width}px;height:10px;border:0${background}`;
+  iframe.srcdoc = composed;
+  return iframe;
+}
 
 // Off-screen render width (px) — a desktop-ish canvas so responsive artifacts lay
 // out sensibly; the capture then grows to the content's full height.
@@ -49,12 +70,7 @@ function triggerDownload(url: string, filename: string): void {
  * cannot see an iframe's nodes.
  */
 async function renderArtifactToCanvas(html: string, css: string): Promise<HTMLCanvasElement> {
-  const composed = composeHtmlDocument(html, css);
-  const iframe = document.createElement("iframe");
-  iframe.setAttribute("sandbox", "allow-same-origin");
-  iframe.setAttribute("referrerpolicy", "no-referrer");
-  iframe.style.cssText = `position:fixed;left:-99999px;top:0;width:${PNG_RENDER_WIDTH}px;height:10px;border:0;background:#fff`;
-  iframe.srcdoc = composed;
+  const iframe = createMeasuringFrame(composeHtmlDocument(html, css), PNG_RENDER_WIDTH, true);
   document.body.appendChild(iframe);
   try {
     await new Promise<void>((resolve, reject) => {
@@ -106,17 +122,13 @@ async function renderArtifactToCanvas(html: string, css: string): Promise<HTMLCa
 /**
  * Measure the artifact's laid-out content width at a given container width — the
  * `scrollWidth` includes anything overflowing (a fixed-width layout wider than the
- * panel). The live preview is `sandbox=""` (unreadable), so we lay the composed
- * document out in a transient off-screen `allow-same-origin` frame just to measure.
- * The caller turns this into a "fit width" zoom (containerWidth / contentWidth).
+ * panel). The live preview grants no same-origin access, so its content is
+ * unreadable from the app; we lay the composed document out in a transient
+ * off-screen frame just to measure it. The caller turns this into a "fit width"
+ * zoom (containerWidth / contentWidth).
  */
 export async function measureArtifactWidth(html: string, css: string, containerWidth: number): Promise<number> {
-  const composed = composeHtmlDocument(html, css);
-  const iframe = document.createElement("iframe");
-  iframe.setAttribute("sandbox", "allow-same-origin");
-  iframe.setAttribute("referrerpolicy", "no-referrer");
-  iframe.style.cssText = `position:fixed;left:-99999px;top:0;width:${containerWidth}px;height:10px;border:0`;
-  iframe.srcdoc = composed;
+  const iframe = createMeasuringFrame(composeHtmlDocument(html, css), containerWidth);
   document.body.appendChild(iframe);
   try {
     await new Promise<void>((resolve, reject) => {
