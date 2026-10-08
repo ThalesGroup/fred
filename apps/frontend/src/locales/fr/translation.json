@@ -3288,7 +3288,7 @@
       "actorLockout": "Accordez-vous d'abord une autre source d'accès avant d'activer le filtrage ou de retirer votre dernière autorisation.",
       "rule": {
         "title": "Règle d'accès",
-        "hint": "Les utilisateurs qui satisfont cette règle peuvent accéder à la plateforme. Les exceptions individuelles et les équipes autorisées restent indépendantes.",
+        "hint": "Choisissez si les utilisateurs correspondants sont autorisés ou bloqués. Les exceptions individuelles et les équipes autorisées permettent toujours l'accès.",
         "discoveryHint": "Ces noms ont été observés dans des tokens humains vérifiés. La liste ne décrit pas tout le fournisseur d'identité ; certains utilisateurs peuvent ne pas avoir un claim.",
         "claimsFailed": "La découverte des claims est indisponible. Choisissez un champ de votre compte dans l'explorateur.",
         "combination": "Combiner les conditions",
@@ -3313,6 +3313,11 @@
         "actorLockout": "Cette règle retirerait votre dernière autorisation d'accès. Conservez une règle qui vous accepte ou ajoutez-vous d'abord une exception indépendante.",
         "invalidOrFailed": "Impossible de valider ou d'enregistrer la règle. Vérifiez les clés, les valeurs et les expressions régulières, puis réessayez.",
         "required": "Enregistrez une règle d'accès avant d'activer le filtrage.",
+        "mode": "Mode de filtrage",
+        "modeLabel": {
+          "allow": "Autoriser les utilisateurs correspondant à la règle",
+          "block": "Bloquer les utilisateurs correspondant à la règle"
+        },
         "testAllowed": "Résultat du test : accès autorisé",
         "testDenied": "Résultat du test : accès refusé",
         "ruleMatches": "Votre token satisfait la règle proposée.",
@@ -3335,6 +3340,7 @@
           "not_matching": "La condition n'est pas satisfaite.",
           "missing": "Ce claim est absent de votre token.",
           "incompatible": "Ce claim est vide, trop volumineux ou de type incompatible.",
+          "unavailable": "Ce champ n'a pas pu être vérifié dans les limites de lecture du token.",
           "timeout": "L'expression régulière a dépassé son délai maximal."
         },
         "invalidRegex": "Expression régulière invalide. Vérifiez sa syntaxe.",

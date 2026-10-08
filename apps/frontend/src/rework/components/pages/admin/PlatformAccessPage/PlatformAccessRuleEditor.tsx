@@ -180,6 +180,18 @@ export default function PlatformAccessRuleEditor({
   return (
     <section className={`${styles.section} ${styles.ruleEditor}`}>
       <h2>{t("rework.platformAccess.rule.title")}</h2>
+      <Select
+        label={t("rework.platformAccess.rule.mode")}
+        size="medium"
+        value={draft.mode ?? "allow"}
+        disabled={locked}
+        options={(["allow", "block"] as const).map((mode) => ({
+          key: mode,
+          value: mode,
+          label: t(`rework.platformAccess.rule.modeLabel.${mode}`),
+        }))}
+        onChange={(mode) => edit({ ...draft, mode: mode === "block" ? "block" : "allow" })}
+      />
       <p>{t("rework.platformAccess.rule.hint")}</p>
       <p>{t("rework.platformAccess.rule.discoveryHint")}</p>
       <p>{t("rework.platformAccess.rule.delegatedHint")}</p>

@@ -3248,7 +3248,7 @@
       "disabled": "Platform access administration requires authenticated Fred with enforced authorization.",
       "filter": "Enable filtering",
       "t0Hint": "Import existing users once before activating filtering. Individual entries can be removed afterward.",
-      "t0Preview": "{{count}} users to import; {{matching}} current attribute matches.",
+      "t0Preview": "{{count}} users to import; {{matching}} currently allowed by the rule.",
       "t0Done": "Initial import completed",
       "t0Import": "Import existing users (T0)",
       "users": "Users",
@@ -3288,7 +3288,7 @@
       "actorLockout": "First grant yourself another admission source before enabling filtering or removing your last authorization.",
       "rule": {
         "title": "Admission rule",
-        "hint": "Users matching this rule can enter the platform. Individual exceptions and authorized teams remain independent.",
+        "hint": "Choose whether matching users are allowed or blocked. Individual exceptions and authorized teams always allow access.",
         "discoveryHint": "These names were observed in verified human tokens. This is not the complete identity-provider schema; some users may lack a claim.",
         "claimsFailed": "Claim discovery is unavailable. Choose a field from your account using the explorer.",
         "combination": "Combine conditions",
@@ -3310,9 +3310,14 @@
         "reload": "Discard draft and reload",
         "saved": "Rule saved. It applies to subsequent requests.",
         "conflict": "Another administrator saved a newer rule. Your draft is preserved. Discard it and reload before saving again.",
-        "actorLockout": "This rule would remove your last admission source. Keep a matching rule or grant yourself an independent exception first.",
+        "actorLockout": "This rule would remove your last admission source. Keep a rule that allows you or grant yourself an independent exception first.",
         "invalidOrFailed": "The rule could not be validated or saved. Check the claim keys, values and regular expressions, then try again.",
         "required": "Save an admission rule before activating filtering.",
+        "mode": "Filter mode",
+        "modeLabel": {
+          "allow": "Allow users matching the rule",
+          "block": "Block users matching the rule"
+        },
         "testAllowed": "Test result: access would be allowed",
         "testDenied": "Test result: access would be refused",
         "ruleMatches": "Your token matches the draft rule.",
@@ -3335,6 +3340,7 @@
           "not_matching": "Condition does not match.",
           "missing": "This claim is missing from your token.",
           "incompatible": "This claim is empty, too large or has an incompatible type.",
+          "unavailable": "This field could not be inspected within the token limits.",
           "timeout": "Regular expression exceeded its time budget."
         },
         "invalidRegex": "Invalid regular expression. Check its syntax.",

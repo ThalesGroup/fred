@@ -3061,6 +3061,7 @@ export type PlatformAccessCondition = {
   case_sensitive?: boolean;
 };
 export type PlatformAccessPolicy = {
+  mode?: "allow" | "block";
   combination?: "all" | "any";
   conditions: PlatformAccessCondition[];
 };
@@ -3088,7 +3089,7 @@ export type PlatformAccessOwnClaims = {
 export type PlatformAccessPolicyPreview = {
   matched: boolean;
   admitted: boolean;
-  conditions: ("matched" | "not_matching" | "missing" | "incompatible" | "timeout")[];
+  conditions: ("matched" | "not_matching" | "missing" | "incompatible" | "timeout" | "unavailable")[];
 };
 export type SetPlatformAccessPolicy = {
   expected_revision: number;

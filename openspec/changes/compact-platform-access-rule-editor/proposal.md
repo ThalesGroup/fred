@@ -11,6 +11,7 @@ Each admission condition currently stacks a selected-path summary, a full-width 
 - Use an accessible condition-specific removal icon, preserve at least one condition, and separate adding a condition from testing/saving.
 - Hide operand counters until 90% of the existing limit, without hiding validation errors or changing input limits.
 
+- Add a persisted allow/block mode at the top of the editor. Existing policies default to allow; block mode permits nonmatches, including missing/empty/incompatible claims. Independent user and team sources remain sufficient.
 - Make preview outcomes readable with green/red semantic accents and a larger access-result heading.
 
 ## Capabilities
@@ -25,4 +26,4 @@ None.
 
 ## Impact
 
-Frontend rule editor, its layout/translations and tests, an opt-in shared TextInput counter control, and existing UX guidance. No backend, authorization, persistence, API or dependency change. Delivery continues on issue #2965 and PR #2966. The developer approved this scope and the interactive proposal before implementation.
+Frontend rule editor, its layout/translations and tests, an opt-in shared TextInput counter control, and existing UX guidance. The mode extends the shared policy contract and admission evaluation without new deployment configuration or migration. Delivery continues on issue #2965 and PR #2966. The developer approved this scope and the interactive proposal before implementation.

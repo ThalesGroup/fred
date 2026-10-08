@@ -143,6 +143,7 @@ class PlatformAccessPolicyPreview(BaseModel):
             "missing",
             "incompatible",
             "timeout",
+            "unavailable",
         ]
     ]
 

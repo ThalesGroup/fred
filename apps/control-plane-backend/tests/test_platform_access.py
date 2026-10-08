@@ -1230,3 +1230,98 @@ async def test_pg_concurrent_openings_and_revocation_are_serialized(pg_access):
     with pytest.raises(HTTPException):
         await enrolling
     assert not pg_access.rebac.writes
+
+
+@pytest.mark.asyncio
+async def test_block_policy_preserves_exceptions_and_live_team_revocation(access):
+    actor, blocked, other = user("other"), user("accepted"), user("other")
+    policy = draft().model_copy(update={"mode": "block"})
+    await service.save_policy(access, actor, policy, 1)
+    await service.set_filtering(access, actor, True)
+    assert not await access.admitted(blocked)
+    assert await access.admitted(other)
+    assert (await service.preview_policy(access, blocked, policy)).matched
+    assert not (await service.preview_policy(access, blocked, policy)).admitted
+    await service.set_user(access, actor, UUID(blocked.uid), True)
+    assert await access.admitted(blocked)
+    await service.set_user(access, actor, UUID(blocked.uid), False)
+    assert not await access.admitted(blocked)
+    await service.set_team(access, actor, "demo", False, True)
+    access.rebac.members[blocked.uid] = {"demo"}
+    assert await access.admitted(blocked)
+    access.rebac.members[blocked.uid].clear()
+    assert not await access.admitted(blocked)
+    assert (await access.state()).policy["mode"] == "block"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("value", [None, "", 17, [], {"nested": "value"}])
+async def test_block_policy_admits_verified_nonmatching_unusable_claims(access, value):
+    policy = draft().model_copy(update={"mode": "block"})
+    actor = user("other")
+    await service.save_policy(access, actor, policy, 1)
+    person = user()
+    person.admission_claims, person.admission_invalid_claims = extract_claims(
+        {} if value is None else {"profile": {"attribute": value}}
+    )
+    assert await access.eligible(person)
+    assert (await service.preview_policy(access, person, policy)).admitted
+    delegated = cast(Principal, SimpleNamespace(uid=person.uid))
+    assert await access.eligible(delegated)
+    async with access.store.mutation() as session:
+        row = await session.get(UserRow, UUID(person.uid))
+        row.admission_expires_at = time.time() - 1
+    assert not await access.eligible(delegated)
+
+
+@pytest.mark.asyncio
+async def test_block_policy_requires_selected_delegated_evidence_and_rejects_lockout(
+    access,
+):
+    actor = user("other")
+    await access.observe(actor)
+    delegated = cast(Principal, SimpleNamespace(uid=actor.uid))
+    policy = draft(claim=["new"]).model_copy(update={"mode": "block"})
+    await service.save_policy(access, actor, policy, 1)
+    assert not await access.eligible(delegated)
+    assert await access.eligible(actor)
+    assert await access.eligible(delegated)
+    await service.set_filtering(access, actor, True)
+    with pytest.raises(HTTPException, match="platform_access_actor_lockout"):
+        await service.save_policy(
+            access, actor, draft("other").model_copy(update={"mode": "block"}), 2
+        )
+
+
+def test_policy_modes_keep_literal_match_distinct_and_timeout_fail_closed():
+    from fred_core.security.platform_access.rules import Evaluation, allows, evaluate
+
+    allow = draft()
+    assert (
+        PlatformAccessPolicy.model_validate(
+            {"conditions": allow.model_dump()["conditions"]}
+        ).mode
+        == "allow"
+    )
+    block = allow.model_copy(update={"mode": "block"})
+    matched = evaluate(block, extract_claims({"profile": {"attribute": "accepted"}})[0])
+    assert matched.matched and not allows(block, matched)
+    assert allows(allow, matched)
+    assert not allows(block, Evaluation(False, ["timeout"]))
+    assert not allows(None, Evaluation(False, []))
+
+
+@pytest.mark.asyncio
+async def test_block_policy_never_admits_uninspected_truncated_claims(access):
+    policy = draft().model_copy(update={"mode": "block"})
+    actor, person = user("other"), user("accepted")
+    await service.save_policy(access, actor, policy, 1)
+    payload: dict[str, object] = {str(index): "value" for index in range(256)}
+    payload["profile"] = {"attribute": "accepted"}
+    person.admission_claims, person.admission_invalid_claims = extract_claims(payload)
+    assert not await access.eligible(person)
+    assert not await access.eligible(cast(Principal, SimpleNamespace(uid=person.uid)))
+    preview = await service.preview_policy(access, person, policy)
+    assert preview.conditions == ["unavailable"] and not preview.admitted
+    row = await access.store.user(UUID(person.uid))
+    assert path_key(["profile", "attribute"]) not in row.admission_attribute

@@ -18,7 +18,7 @@ from fred_pod.security.structure import (
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from fred_core.security.platform_access.models import PlatformAccessSettingsRow
-from fred_core.security.platform_access.rules import evaluate
+from fred_core.security.platform_access.rules import allows, evaluate, path_key
 from fred_core.security.platform_access.store import PlatformAccessStore
 from fred_core.security.rebac.rebac_engine import RebacEngine
 from fred_core.sql.schema_guard import require_tables
@@ -52,7 +52,12 @@ class PlatformAccess:
             and not row.admission_conflicted
             and row.admission_expires_at is not None
             and row.admission_expires_at > time.time()
-            and evaluate(policy, row.admission_attribute or {}).matched
+            and policy is not None
+            and all(
+                path_key(condition.claim) in (row.admission_attribute or {})
+                for condition in policy.conditions
+            )
+            and allows(policy, evaluate(policy, row.admission_attribute or {}))
         )
 
     @staticmethod
@@ -122,7 +127,7 @@ class PlatformAccess:
             result = await asyncio.to_thread(
                 evaluate, policy, user.admission_claims, user.admission_invalid_claims
             )
-            if result.matched and (
+            if allows(policy, result) and (
                 row is None
                 or row.admission_issued_at != user.admission_issued_at
                 or not row.admission_conflicted

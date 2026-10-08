@@ -12,7 +12,9 @@ from fred_pod.security.platform_access import (
 )
 
 Fact = str | list[str]
-Reason = Literal["matched", "not_matching", "missing", "incompatible", "timeout"]
+Reason = Literal[
+    "matched", "not_matching", "missing", "incompatible", "timeout", "unavailable"
+]
 
 
 def path_key(path: list[str]) -> str:
@@ -37,10 +39,12 @@ def extract_claims(
     facts: dict[str, Fact] = {}
     invalid: set[str] = set()
     visited = 0
+    truncated = False
 
     def visit(value: object, path: list[str]) -> None:
-        nonlocal visited
+        nonlocal visited, truncated
         if visited >= 1024 or len(facts) + len(invalid) >= 256:
+            truncated = True
             return
         visited += 1
         if isinstance(value, Mapping) and len(path) < 16:
@@ -48,6 +52,7 @@ def extract_claims(
                 invalid.add(path_key(path))
             for key, child in value.items():
                 if visited >= 1024 or len(facts) + len(invalid) >= 256:
+                    truncated = True
                     break
                 if isinstance(key, str) and key.strip() and len(key) <= 256:
                     visit(child, [*path, key])
@@ -60,6 +65,8 @@ def extract_claims(
             facts[key] = normalized
 
     visit(payload, [])
+    if truncated:
+        invalid.add(path_key([]))
     return facts, frozenset(invalid)
 
 
@@ -76,6 +83,14 @@ class Evaluation:
     reasons: list[Reason]
 
 
+def allows(policy: PlatformAccessPolicy | None, result: Evaluation) -> bool:
+    if policy is None or any(
+        reason in ("timeout", "unavailable") for reason in result.reasons
+    ):
+        return False
+    return not result.matched if policy.mode == "block" else result.matched
+
+
 def evaluate(
     policy: PlatformAccessPolicy | None,
     facts: Mapping[str, object],
@@ -90,7 +105,13 @@ def evaluate(
         key = path_key(condition.claim)
         value = normalize_attribute(facts.get(key))
         if value is None:
-            reasons.append("incompatible" if key in invalid else "missing")
+            reasons.append(
+                "incompatible"
+                if key in invalid
+                else "unavailable"
+                if path_key([]) in invalid
+                else "missing"
+            )
             continue
         values = [value] if isinstance(value, str) else value
         operand = (

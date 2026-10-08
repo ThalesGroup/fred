@@ -444,6 +444,24 @@ it("preserves a confirmed field draft while its current-value prompt is open", (
   expect(input("value").value).toBe("accepted");
 });
 
+it("places persisted allow/block mode before conditions and submits the selected draft mode", async () => {
+  render();
+  const mode = [...host.querySelectorAll<HTMLButtonElement>('button[aria-haspopup="listbox"]')].find((node) =>
+    node.textContent?.includes("rework.platformAccess.rule.modeLabel.allow"),
+  )!;
+  expect(mode).toBeDefined();
+  expect(mode.compareDocumentPosition(host.querySelector("fieldset")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  act(() => mode.click());
+  act(() =>
+    [...document.querySelectorAll<HTMLElement>('[role="option"]')]
+      .find((node) => node.textContent?.trim() === "rework.platformAccess.rule.modeLabel.block")!
+      .click(),
+  );
+  expect(hooks.save).not.toHaveBeenCalled();
+  await act(async () => button("test").click());
+  expect(hooks.preview.mock.calls[0][0].platformAccessPolicy.mode).toBe("block");
+  expect(host.querySelector('[data-outcome="allowed"] h3')?.textContent).toContain("rule.testAllowed");
+});
 it("shows an explicit readable refusal when preview denies effective admission", async () => {
   hooks.preview.mockReturnValue({ unwrap: async () => ({ matched: false, admitted: false, conditions: ["missing"] }) });
   render();

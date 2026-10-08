@@ -471,7 +471,8 @@ def test_policy_validation_and_claim_capture_bounds():
         with pytest.raises(ValidationError):
             PlatformAccessPolicy.model_validate(data)
     facts, invalid = extract_claims({str(i): "value" for i in range(1000)})
-    assert len(facts) + len(invalid) == 256
+    assert len(facts) + len(invalid - {path_key([])}) == 256
+    assert path_key([]) in invalid
 
 
 @pytest.mark.asyncio

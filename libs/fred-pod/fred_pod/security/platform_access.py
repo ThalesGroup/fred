@@ -35,5 +35,6 @@ class PlatformAccessCondition(BaseModel):
 class PlatformAccessPolicy(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    mode: Literal["allow", "block"] = "allow"
     combination: Literal["all", "any"] = "all"
     conditions: list[PlatformAccessCondition] = Field(min_length=1, max_length=16)

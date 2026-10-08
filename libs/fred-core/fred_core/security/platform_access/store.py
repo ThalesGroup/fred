@@ -19,7 +19,7 @@ from fred_core.security.platform_access.models import (
     PlatformAccessSettingsRow,
     PlatformAccessUserRow,
 )
-from fred_core.security.platform_access.rules import path_key
+from fred_core.security.platform_access.rules import Fact, path_key
 from fred_core.sql import make_session_factory, use_session
 from fred_core.sql.base_sql import advisory_lock_key
 from fred_core.teams.team_metatada_models import TeamMetadataRow
@@ -27,6 +27,16 @@ from fred_core.users.user_models import UserRow
 
 
 class PlatformAccessStore:
+    @staticmethod
+    def projection(user: KeycloakUser, selected: set[str]) -> dict[str, Fact | None]:
+        return {
+            key: user.admission_claims.get(key)
+            for key in sorted(selected)
+            if path_key([]) not in user.admission_invalid_claims
+            or key in user.admission_claims
+            or key in user.admission_invalid_claims
+        }
+
     def __init__(self, engine: AsyncEngine):
         self.engine = engine
         self.sessions = make_session_factory(engine)
@@ -195,7 +205,7 @@ class PlatformAccessStore:
             if policy
             else set()
         )
-        projection = {key: user.admission_claims.get(key) for key in sorted(selected)}
+        projection = self.projection(user, selected)
         row = await self.user(uid)
         issued = user.admission_issued_at
         if row is not None and row.admission_issued_at is not None:
@@ -222,9 +232,7 @@ class PlatformAccessStore:
                 if current
                 else set()
             )
-            projection = {
-                key: user.admission_claims.get(key) for key in sorted(selected)
-            }
+            projection = self.projection(user, selected)
             path = hashlib.sha256(json.dumps(sorted(selected)).encode()).hexdigest()
             row = await self.user(uid, session)
             if row is None:

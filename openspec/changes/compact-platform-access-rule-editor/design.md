@@ -17,6 +17,8 @@ See proposal.md for motivation. The existing editor already owns bounded conditi
 - Use localized all/any choices, condition-specific removal labels and a separate add action. Keep test/save/reload together below the list.
 - Add an opt-in TextInput counter visibility flag, defaulting to existing behavior. The editor shows the operand counter at 90% of its existing limit; compact mode removes an empty hint row only when no error is present.
 
+- Persist `mode` as allow/block in the existing policy JSON, defaulting absent mode to allow. Keep condition matching separate from rule-derived admission. Block mode admits nonmatches, including verified missing/empty/incompatible claims; independent exceptions and teams remain sufficient. Regex timeouts never establish rule-derived admission.
+- Delegated admission still requires fresh, unconflicted evidence covering every selected path; unknown/unobserved paths must not become admission through negation. Preview, actor lockout, T0 classification and user source projections share the same evaluation.
 - Show a green/red result panel based on effective admission, with a larger heading and a separate condition-match explanation.
 
 ## Risks / Trade-offs

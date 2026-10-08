@@ -4,7 +4,7 @@
 
 The editor SHALL support one to sixteen conditions combined by either all (AND) or any (OR), with localized labels. Each condition SHALL select an unambiguous claim path, operator, operand and explicit case handling. Operators SHALL include literal equals/not-equals, contains/not-contains, and advanced whole-value regex. Literal metacharacters SHALL NOT be interpreted as regex. Literal comparison SHALL default to ignoring case; administrators SHALL be able to select case-sensitive comparison. For nonempty string arrays, positive predicates SHALL match any element and negative predicates SHALL require all elements to satisfy the negation. Missing, empty, incompatible and oversized values SHALL fail every predicate. Invalid input SHALL be rejected before saving; bounded regex timeouts SHALL NOT establish rule-derived admission.
 
-Preview SHALL show effective admission with readable green/red accents and a larger heading while separately explaining condition matching.
+The policy SHALL expose allow/block mode above the conditions and persist it in the shared authority; absent mode SHALL retain allow behavior. Allow mode SHALL derive admission from matching rules. Block mode SHALL derive admission from nonmatching rules, including verified missing, empty or incompatible claims. Independent user/team admission sources SHALL remain sufficient in either mode. A timeout SHALL NOT derive admission. Delegated rule-derived admission SHALL require fresh, unconflicted evidence covering all selected claim paths. Preview SHALL show effective admission with readable green/red accents and a larger heading while separately explaining condition matching.
 
 Condition controls SHALL share a compact row when space permits and reflow without horizontal overflow on narrow screens. A labeled left-aligned dropdown SHALL expose root text field names and the exact selected path, with an entry for the detailed session explorer. After field confirmation a separate popup SHALL offer explicit reuse of the current verified account value or retention of the existing operand; copying SHALL respect operand bounds and regex literal escaping. A small case toggle SHALL remain directly visible, and manual path entry SHALL NOT be shown. Validation feedback SHALL remain visible and associated with its input. Operand counters SHALL appear at 90% of the existing limit without relaxing that limit. Condition removal SHALL identify the affected condition and SHALL preserve at least one condition. Adding a condition SHALL be separate from testing/saving the whole draft.
 
@@ -92,3 +92,19 @@ The rule editor SHALL offer observed root text attribute names in its dropdown, 
 
 - **WHEN** an administrator selects an advanced field and switches back to simple fields
 - **THEN** the hidden selection and copied operand SHALL be cleared, while saved rules and the existing draft SHALL remain unchanged
+
+
+#### Scenario: Block mode with independent exception
+
+- **WHEN** a person matches a block rule and has a current user exception or authorized/Free membership
+- **THEN** the independent source SHALL admit them
+
+#### Scenario: Block mode with absent claim
+
+- **WHEN** the verified token lacks the selected claim and the combined block rule does not match
+- **THEN** the rule SHALL permit admission
+
+#### Scenario: Block mode with unobserved delegated path
+
+- **WHEN** delegated evidence does not cover a newly selected claim path
+- **THEN** that evidence SHALL NOT establish rule-derived admission until a fresh direct observation
