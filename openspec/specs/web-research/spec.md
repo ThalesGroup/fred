@@ -57,6 +57,10 @@ Fred SHALL execute research internally, directly or through an explicitly config
 - **WHEN** the configured proxy is unavailable
 - **THEN** Fred returns a bounded error without opening a direct Internet connection
 
+#### Scenario: Internal platform names
+- **WHEN** a URL targets an internal name such as `keycloak`, `localhost` or `*.svc`, or a numeric host, in direct or proxy mode
+- **THEN** Fred refuses it as `unsafe_destination` before any DNS lookup or connection, rather than reporting it unreachable
+
 #### Scenario: Network without external DNS
 - **WHEN** Fred runs behind a configured proxy on a network without external DNS
 - **THEN** fetches and search results with public host names go to the proxy unresolved
@@ -104,6 +108,10 @@ Fred SHALL provide content-free counts, latency, failure and saturation signals 
 #### Scenario: DMZ outage
 - **WHEN** the configured proxy is unreachable
 - **THEN** an operator sees research failure signals and can correlate them with failed tool requests
+
+#### Scenario: Failure log line
+- **WHEN** a research request fails
+- **THEN** Fred logs one line with the operation, error code, exception class (and proxy status), duration and request ID, at info level for expected refusals and warning otherwise, never the query, URL or exception message
 
 ### Requirement: Configurable search provider
 

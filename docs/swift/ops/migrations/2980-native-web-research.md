@@ -104,6 +104,9 @@ before any network access, and each capped result shows the remaining count in
 the trace detail. Erasing a user's activity also resets their quota for the day.
 Configure these, `max_bytes`, `retries` and the `safesearch`
 floor at deployment level. Direct access pins vetted public DNS addresses to connections.
+In every mode, internal names (single-label such as `keycloak`, `localhost`,
+`.local`, `.internal`, `.svc`) and numeric hosts are refused as
+`unsafe_destination` before any DNS lookup.
 All modes check redirects, refuse binary/compressed responses and isolate cookies.
 Extraction/focus runs in bounded worker threads.
 
@@ -139,6 +142,10 @@ Each probe leaves a record in the restricted activity log.
 Use Fred's existing Prometheus exporter and runtime dashboard: operation counts,
 latency, failure/busy outcomes and activity-sink failures. Load the rules in
 [deploy/web-research/alerts.yaml](../../../../deploy/web-research/alerts.yaml).
+Each failed request also logs one content-free line, for example
+`event=web_research outcome=failed operation=fetch_url error_code=proxy_refused cause=ProxyError status=403 duration_ms=212 request_id=…`
+(info for expected refusals, warning for outages and unexpected errors); the
+`request_id` leads to the restricted activity row holding the target.
 No extra `/health` or `/metrics` research server is exposed, and no periodic
 public Internet probe runs; provider/proxy outages appear on attempted operations.
 
