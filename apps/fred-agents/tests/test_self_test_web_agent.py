@@ -233,7 +233,7 @@ class _BehindProxy(_ProtectiveEngine):
     async def execute(self, request: WebResearchRequest) -> WebResearchResult:
         if isinstance(request, FetchRequest) and (
             urlsplit(request.url).hostname or ""
-        ).endswith("nip.io"):
+        ).endswith(".nip.io"):
             raise WebResearchError("proxy_refused")
         return await super().execute(request)
 
