@@ -52,6 +52,10 @@ integration, repeating only evidence invalidated by subsequent changes or failur
   This block adds 42/removes 1 production-store lines (net +41); schema/migration
   +73/-1 and tests +232/-11. It adds the required assignment invariant, not a
   second admission implementation; the cumulative reduction target remains.
+  Preparation for organization joins also consolidates the three identical team
+  metadata projections into one helper: production +19/-49 (net -30), unchanged
+  SQL statements and public shape, six existing store checks passed and raw
+  basedpyright reported zero diagnostics. No new tests or configuration added.
 - [x] 1.2 Separate platform anchors from organizations and implement four cumulative local roles plus parent-team-dependent project permissions in the existing FGA facade; verify the allow/deny matrix with real OpenFGA, including local-admin-without-analyst and organization-analyst-without-descendant-access.
   Real OpenFGA suite: 42 passed, including all four roles in each space kind,
   parent-admin isolation and immediate project denial after parent membership

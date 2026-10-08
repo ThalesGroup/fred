@@ -128,6 +128,22 @@ class TeamMetadataStore:
         self._engine = engine
         self._sessions = make_session_factory(engine)
 
+    @staticmethod
+    def _metadata(row: TeamMetadataRow) -> TeamMetadata:
+        return TeamMetadata(
+            id=TeamId(row.id),
+            name=row.name,
+            description=row.description,
+            joining_mode=JoiningMode(row.joining_mode),
+            visibility=TeamVisibility(row.visibility),
+            banner_object_storage_key=row.banner_object_storage_key,
+            max_resources_storage_size=row.max_resources_storage_size,
+            current_resources_storage_size=row.current_resources_storage_size,
+            team_delete_grace=row.team_delete_grace,
+            max_idle=row.max_idle,
+            retention_updated_by=row.retention_updated_by,
+        )
+
     @asynccontextmanager
     async def advisory_lock(self, key: str) -> AsyncIterator[None]:
         """Hold a Postgres transaction-scoped advisory lock for `key` for the
@@ -170,22 +186,7 @@ class TeamMetadataStore:
                 .scalars()
                 .all()
             )
-        return {
-            TeamId(row.id): TeamMetadata(
-                id=TeamId(row.id),
-                name=row.name,
-                description=row.description,
-                joining_mode=JoiningMode(row.joining_mode),
-                visibility=TeamVisibility(row.visibility),
-                banner_object_storage_key=row.banner_object_storage_key,
-                max_resources_storage_size=row.max_resources_storage_size,
-                current_resources_storage_size=row.current_resources_storage_size,
-                team_delete_grace=row.team_delete_grace,
-                max_idle=row.max_idle,
-                retention_updated_by=row.retention_updated_by,
-            )
-            for row in rows
-        }
+        return {TeamId(row.id): self._metadata(row) for row in rows}
 
     async def get_by_team_id(
         self,
@@ -225,22 +226,7 @@ class TeamMetadataStore:
         source of truth, replacing the Keycloak root-group enumeration)."""
         async with use_session(self._sessions, session) as s:
             rows = (await s.execute(select(TeamMetadataRow))).scalars().all()
-        return [
-            TeamMetadata(
-                id=TeamId(row.id),
-                name=row.name,
-                description=row.description,
-                joining_mode=JoiningMode(row.joining_mode),
-                visibility=TeamVisibility(row.visibility),
-                banner_object_storage_key=row.banner_object_storage_key,
-                max_resources_storage_size=row.max_resources_storage_size,
-                current_resources_storage_size=row.current_resources_storage_size,
-                team_delete_grace=row.team_delete_grace,
-                max_idle=row.max_idle,
-                retention_updated_by=row.retention_updated_by,
-            )
-            for row in rows
-        ]
+        return [self._metadata(row) for row in rows]
 
     async def get_by_name(
         self,
@@ -255,23 +241,7 @@ class TeamMetadataStore:
                     select(TeamMetadataRow).where(TeamMetadataRow.name == name)
                 )
             ).scalar_one_or_none()
-        return (
-            None
-            if row is None
-            else TeamMetadata(
-                id=TeamId(row.id),
-                name=row.name,
-                description=row.description,
-                joining_mode=JoiningMode(row.joining_mode),
-                visibility=TeamVisibility(row.visibility),
-                banner_object_storage_key=row.banner_object_storage_key,
-                max_resources_storage_size=row.max_resources_storage_size,
-                current_resources_storage_size=row.current_resources_storage_size,
-                team_delete_grace=row.team_delete_grace,
-                max_idle=row.max_idle,
-                retention_updated_by=row.retention_updated_by,
-            )
-        )
+        return None if row is None else self._metadata(row)
 
     async def delete(
         self,
