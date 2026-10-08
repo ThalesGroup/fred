@@ -60,12 +60,35 @@ Across separately owned runtime/evaluation databases, propagate validated IDs an
 enforce the contract at the boundary; do not promise cross-database foreign keys.
 Preserve per-backend Alembic ownership and one linear head.
 
-Every provisioned user has one organization, one or more collaborative teams and
-one personal team in that organization. Installation/provisioning tooling supplies
-the explicit organization and initial team assignment before workspace use;
-identity synchronization must not guess them. Default-team enrollment and open-team
+Every admitted user has one organization, one or more collaborative teams and
+one personal team in that organization. An authenticated newcomer may have an
+identity with no organization; this is not workspace admission. Such a person can
+request organization membership through restricted onboarding and cannot use a
+personal workspace, corpus, agents or conversations before admission. The missing
+organization represents non-admission; do not add a parallel user-status model.
+Explicit provisioning or approved admission supplies the organization and initial
+team assignment before workspace use; identity synchronization must not guess them.
+Default-team enrollment and open-team
 discovery are restricted to the user's organization. Removing the last collaborative
 membership requires an explicit replacement or the existing account-removal path.
+
+Organization requests use the same membership service, request lifecycle and UI
+pattern as team admission, owned by the control-plane. Reuse its audited role
+writes; SQL request records are not a role mirror. Approval belongs to an active
+admin of the requested organization and admits the person as member, joins an
+explicit open welcome team in that organization and establishes their personal
+team. This does not authorize admission to a closed team by a parent admin.
+An incomplete admission grants no workspace access. A competing approval cannot
+assign a second organization. Keep this a bounded membership feature, not a generic
+workflow/notification framework, and add no checks to the corpus hot path merely
+to consult request status.
+
+Deliver the shared request/approval flow for organizations and closed collaborative
+teams in this version. A team request requires existing membership of its
+organization and is decided by its active local team admin. Existing direct admin
+admission remains available; open-team joining remains immediate. Do not extend
+requests to projects or personal teams. Reuse one request representation and
+decision path, with target-specific eligibility and admission rules.
 
 Alternative rejected: three nullable owner columns or an untyped owner kind/ID on
 every consumer. A small common structural identity avoids repeated ownership
@@ -237,6 +260,9 @@ This same major-release PR delivers the separate operator tool. Alembic owns
 relational DDL; the tool coordinates data translation, FGA model/tuple conversion
 and index preparation. Do not add startup translators, feature switches,
 legacy fallbacks, dual writes/reads or mixed-version deployment support.
+Its organization/allocation/initial-role inputs are supplied in an explicit
+external JSON file, as approved by the developer; this is not service startup
+configuration. Further configuration choices require developer confirmation.
 
 1. Stop ingress, backends and workers that can mutate the affected stores.
 2. Take and verify a coordinated backup of application/runtime/evaluation

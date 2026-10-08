@@ -8,7 +8,7 @@ delivered through one offline major-version cutover.
 
 ### Requirement: Ownership has one explicit organization boundary
 
-Each provisioned user SHALL belong to exactly one organization, at least one
+Each admitted user SHALL belong to exactly one organization, at least one
 collaborative team in it, and one owner-only personal team in it. Organization
 assignment SHALL be explicit rather than inferred from first join or IdP roles.
 Each collaborative team SHALL have one immutable organization parent; each project
@@ -27,6 +27,50 @@ team. Ordinary discovery and membership operations SHALL respect this boundary.
 #### Scenario: Invalid parentage is written
 - **WHEN** a project is assigned an organization directly or a personal-team parent
 - **THEN** the invalid structure is rejected
+
+### Requirement: Newcomer admission shares the team membership flow
+
+An authenticated person without organization membership SHALL be able to request
+admission through a restricted onboarding surface. An active local organization
+admin SHALL approve or reject the request. The request lifecycle, admission code
+and interaction pattern SHALL be shared with team membership rather than duplicated
+for organizations. Request state SHALL NOT itself confer a role.
+
+This version SHALL also support requests to closed collaborative teams, using the
+same request representation and decision path. Only a member of the team's own
+organization SHALL request admission, and only an active local team admin SHALL
+decide it. Approval SHALL grant member only. Existing direct local-admin admission
+SHALL remain available. Requests SHALL NOT apply to projects or personal teams.
+
+Successful admission SHALL establish exactly one organization, ordinary membership
+of an explicitly designated open welcome team in it, and one owner-only personal
+team. Pending, rejected or incomplete admission SHALL NOT authorize corpus, agents,
+conversations or personal workspace use. Organization approval SHALL NOT bypass
+local administration of closed teams. Existing open-team joining SHALL remain
+immediate.
+
+#### Scenario: An unknown organization at first sign-in
+- **WHEN** Alice authenticates without an organization assignment
+- **THEN** she can request organization admission but cannot use any workspace
+- **AND** her identity does not silently select an organization or create a personal team
+
+#### Scenario: Organization admission succeeds
+- **WHEN** the requested organization's active admin approves Alice's admission
+- **THEN** Alice becomes its member and an ordinary member of its open welcome team, with one personal team
+- **AND** she receives no editor, analyst or admin role from that approval
+
+#### Scenario: Two organizations approve the same newcomer
+- **WHEN** a second organization's approval attempts to admit an already admitted Alice
+- **THEN** it is refused without granting roles or moving her existing organization, teams or personal space
+
+#### Scenario: A member requests admission to a closed team
+- **WHEN** Alice requests a closed collaborative team in her organization
+- **THEN** its active local admin can approve or reject the request through the shared decision flow
+- **AND** the pending request grants no team access and approval grants member only
+
+#### Scenario: A parent admin attempts to approve a team request
+- **WHEN** an organization admin without local team admin tries to approve Alice's request to that closed team
+- **THEN** the decision is denied without granting membership
 
 ### Requirement: Four cumulative roles remain local
 

@@ -9,6 +9,10 @@ integration, repeating only evidence invalidated by subsequent changes or failur
 
 - [x] 0.1 Obtain developer confirmation of the reconciled proposal, design and acceptance scenarios before implementation; record the confirmed planning commit in the PR.
   Confirmed in conversation on 2026-10-08: planning commit `58e0eeb07f6127b6425e741998da847091f5aa97`. Carry this reference into the single implementation PR when opened.
+  Subsequent approved additions: restricted newcomer organization requests,
+  shared admission code/pattern with teams and an open welcome team; explicit
+  external JSON inputs for the separate installation/migration tool. These do not
+  change delivery order: converge Fred before completing the offline translator.
 - [ ] 0.2 Capture the starting commit, relevant production LOC/concepts and a repeatable isolated performance baseline using existing fixtures/metrics; verify recorded requests, whole-turn tool counts, FGA operations/attempts, SQL rows and latency for fixed contexts at increasing corpus sizes, with real PostgreSQL/OpenFGA and controlled model behavior.
   Initial evidence at `58e0eeb`: 28 existing real-OpenFGA tests passed. An isolated
   PostgreSQL 17/OpenFGA 1.15.1 primitive probe with 200 teams/2,000 users measured
@@ -66,6 +70,7 @@ integration, repeating only evidence invalidated by subsequent changes or failur
 - [ ] 2.3 Scope user/team discovery, default-team enrollment and existing open-team joining to explicit organization ownership; verify same-organization member-only join and cross-organization denial without a new organization-creation UI.
 - [ ] 2.4 Preserve the collaborative-team prerequisite, last-membership/account-removal lifecycle and owner-only personal teams; verify team removal denies all its projects immediately, cleans project roles, and does not affect unrelated memberships or expose personal content.
 - [ ] 2.5 Regenerate changed API contracts and adapt existing membership consumers in the same stage; verify representative existing team/personal flows and record removed/retained governance paths.
+- [ ] 2.6 Implement shared membership requests for newcomer organizations and closed collaborative teams in this version; verify local-admin approval, pending/denied requests grant no access, organization admission establishes one organization plus initial open-team/personal membership, and competing organization approvals cannot create cross-organization membership. Reuse one request representation, decision service, audit and UI pattern; retain immediate open-team joining and direct local-admin admission, with no project/personal request flow.
 
 ## 3. Corpus conversion and deletion
 

@@ -11,12 +11,19 @@ is historical; this change incorporates the developer decisions of 2026-10-08.
 ## What Changes
 
 - **BREAKING**: introduce explicit organization/team/project ownership and four
-  cumulative local roles: member, editor, analyst and admin. Each user belongs to
+  cumulative local roles: member, editor, analyst and admin. Each admitted user belongs to
   exactly one organization, at least one collaborative team, and one private
   personal team. Organization assignment is explicit, not inferred at first join.
 - **BREAKING**: corpus documents have one immutable folder and owning space;
   folders classify content without independent grants or cross-space sharing.
   Remove corpus document/folder FGA tuples and global authorization ID lists.
+- Allow an authenticated newcomer without an organization to request admission.
+  Until approval, expose only the restricted onboarding flow, with no personal
+  workspace or corpus access. Organization admission establishes membership,
+  an initial open welcome-team membership and the owner-only personal team.
+  Include requests to closed teams in the same version and share the admission
+  implementation and interaction pattern with team joining;
+  do not introduce an organization-specific request engine.
 - Preserve the distinction between governance and content. Only team admins
   create projects; they can nominate themselves at creation. Admission to an
   existing closed descendant requires its local admin. Local admins may grant
@@ -40,8 +47,9 @@ is historical; this change incorporates the developer decisions of 2026-10-08.
 Organization-creation UI, new organization wiki/analytics workflows, document
 moves/sharing, new scope widgets, tenant transfers, automatic allocation-conflict
 resolution, live-operation cancellation and unrelated cleanups are out of scope.
-Required existing UI and generated-client consumers are adapted; no new organization
-administration journey is required to validate the backend/tooling foundation.
+Required existing UI and generated-client consumers are adapted. The restricted
+newcomer/request/approval journey is included; organization creation and broader
+organization administration UI remain deferred.
 
 ## Capabilities
 
