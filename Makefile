@@ -205,6 +205,43 @@ libs-version: ## Set one version on every PyPI package, their floors on each oth
 libs-version-tests: ## Test the libs-version rewrite offline
 	python3 -m unittest discover -s scripts/tests -p 'test_libs_version.py'
 
+.PHONY: publish-libs-dry-run
+publish-libs-dry-run: ## Build every PyPI package in dependency order, stop at the first failure, upload nothing
+	@set -e; \
+	for dir in $(PYPI_PACKAGES); do \
+		echo "************ Building $$dir ************"; \
+		env -u VIRTUAL_ENV $(MAKE) -C $$dir publish-dry-run; \
+	done
+
+# The packages whose version is not on PyPI yet, one directory per line; a
+# package already there is reported on stderr. PyPI answers 200 for a release
+# it has and 404 for one it has not: any other answer stops the release rather
+# than guess.
+.PHONY: _pypi-pending
+_pypi-pending:
+	@set -e; \
+	for dir in $(PYPI_PACKAGES); do \
+		set -- $$(python3 -c "import tomllib; p = tomllib.load(open('$$dir/pyproject.toml', 'rb'))['project']; print(p['name'], p['version'])"); \
+		code=$$(curl -s -o /dev/null -w '%{http_code}' "https://pypi.org/pypi/$$1/$$2/json"); \
+		case "$$code" in \
+			200) echo "$$1 $$2 is already on PyPI: skipped." >&2 ;; \
+			404) echo "$$dir" ;; \
+			*) echo "PyPI answered $$code for $$1 $$2: stopping." >&2; exit 1 ;; \
+		esac; \
+	done
+
+.PHONY: publish-libs
+publish-libs: ## Build every PyPI package, then publish, in order, each version PyPI does not have yet (requires PYPI_TOKEN)
+	@test -n "$(PYPI_TOKEN)" || { echo "PYPI_TOKEN is not set: nothing was built or uploaded."; exit 1; }
+	$(MAKE) publish-libs-dry-run
+	@set -e; \
+	pending=$$($(MAKE) -s _pypi-pending); \
+	for dir in $$pending; do \
+		echo "************ Publishing $$dir ************"; \
+		env -u VIRTUAL_ENV $(MAKE) -C $$dir publish; \
+	done; \
+	echo "Every PyPI package is published."
+
 .PHONY: set-version
 set-version: ## Update the chart and application versions; the PyPI packages have libs-version (usage: make set-version VERSION=x.y.z)
 	@if [ -z "$(VERSION)" ]; then echo "ERROR: VERSION is required. Usage: make set-version VERSION=x.y.z"; exit 1; fi
