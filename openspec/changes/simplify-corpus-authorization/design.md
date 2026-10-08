@@ -225,7 +225,11 @@ the latter remains subject to the agreed local administration boundary.
 Advance the existing import/export work alongside the SQL/membership foundation
 so that this path exercises the real services early. It does not replace the
 separate stopped-platform translator or coordinated backup/restore. Confirm demo
-organization/role assignments before editing its configuration data.
+organization/role additions before editing its configuration data. Preserve the
+existing demo accounts, credentials, team names, memberships, local and platform
+roles, including accounts without teams; keep the build command and archive path.
+Add only explicit organization declarations/assignments needed by the new model.
+Do not infer organization administration from platform or team administration.
 
 Use one topic branch and one draft implementation PR targeting `swift`.
 A planning commit precedes six implementation stages in [tasks](tasks.md):

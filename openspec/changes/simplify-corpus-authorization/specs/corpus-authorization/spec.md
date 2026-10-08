@@ -317,6 +317,12 @@ mutation boundary during re-import. Unsupported old-format bundles SHALL be refu
 - **THEN** its organization, teams, admitted memberships, local roles and personal spaces are established through the shared services
 - **AND** deliberately unassigned identities remain outside workspaces
 
+#### Scenario: Existing demo test habits are preserved
+- **WHEN** the existing demo fixture is adapted to the organization-aware bundle
+- **THEN** its accounts, credentials, team names, memberships and local/platform roles are preserved, including accounts without teams
+- **AND** the build command and output archive path remain unchanged
+- **AND** new organization declarations and role assignments are explicit, not inferred from existing administrative roles
+
 #### Scenario: An organization bundle round-trips
 - **WHEN** a platform admin exports one organization and imports the bundle into a fresh target
 - **THEN** its supported structure and local memberships/roles are preserved
