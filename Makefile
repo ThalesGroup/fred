@@ -46,7 +46,7 @@ clean: ## Clean all submodules
 ##@ Tests
 
 .PHONY: test
-test: k3d-tests ## Run non-integration test suites in all submodules and print coverage summary
+test: k3d-tests libs-version-tests ## Run non-integration test suites in all submodules and print coverage summary
 	@set -e; \
 	for dir in $(TEST_DIRS); do \
 		echo "************ Running tests in $$dir ************"; \
@@ -180,20 +180,39 @@ install-wtf: ## Install the wtf worktree CLI locally (uv tool install, or fallba
 
 VERSION ?=
 
+# The Python packages published to PyPI, in dependency order: the libs, then
+# the capabilities. All of them carry one version, set by `libs-version`.
+PYPI_PACKAGES := \
+	libs/fred-pod \
+	libs/fred-core \
+	libs/fred-sdk \
+	libs/fred-runtime \
+	libs/capabilities/fred-capability-document-access \
+	libs/capabilities/fred-capability-documents \
+	libs/capabilities/fred-capability-html-artifact \
+	libs/capabilities/fred-capability-mcp \
+	libs/capabilities/fred-capability-platform-ops \
+	libs/capabilities/fred-capability-ppt-filler \
+	libs/capabilities/fred-capability-team-wiki \
+	libs/capabilities/fred-capability-writable-document
+
+.PHONY: libs-version
+libs-version: ## Set one version on every PyPI package, their floors on each other, and relock (usage: make libs-version VERSION=x.y.z)
+	@test -n "$(VERSION)" || { echo "Usage: make libs-version VERSION=x.y.z"; exit 1; }
+	python3 scripts/libs_version.py --version "$(VERSION)" $(PYPI_PACKAGES)
+
+.PHONY: libs-version-tests
+libs-version-tests: ## Test the libs-version rewrite offline
+	python3 -m unittest discover -s scripts/tests -p 'test_libs_version.py'
+
 .PHONY: set-version
-set-version: ## Update project version everywhere (usage: make set-version VERSION=x.y.z)
+set-version: ## Update the chart and application versions; the PyPI packages have libs-version (usage: make set-version VERSION=x.y.z)
 	@if [ -z "$(VERSION)" ]; then echo "ERROR: VERSION is required. Usage: make set-version VERSION=x.y.z"; exit 1; fi
 	$(eval PY_VERSION := $(shell echo "$(VERSION)" | sed 's/-/+/'))
 	@echo "Setting version to $(VERSION) (Python: $(PY_VERSION))..."
 	@echo "--- Helm chart ---"
 	sed -i 's/^version: .*/version: $(VERSION)/' deploy/charts/fred/Chart.yaml
 	sed -i 's/^appVersion: .*/appVersion: $(VERSION)/' deploy/charts/fred/Chart.yaml
-	@echo "--- libs/fred-pod ---"
-	sed -i 's/^version = .*/version = "$(PY_VERSION)"/' libs/fred-pod/pyproject.toml
-	cd libs/fred-pod && uv lock
-	@echo "--- libs/fred-core ---"
-	sed -i 's/^version = .*/version = "$(PY_VERSION)"/' libs/fred-core/pyproject.toml
-	cd libs/fred-core && uv lock
 	@echo "--- fred-agents ---"
 	sed -i 's/^version = .*/version = "$(PY_VERSION)"/' apps/fred-agents/pyproject.toml
 	cd apps/fred-agents && uv lock
