@@ -93,4 +93,3 @@ The page SHALL offer a bottom-right filtering action across every tab with expli
 
 - **WHEN** selected claim evidence is missing, expired or conflicted and no independent source applies
 - **THEN** the preview SHALL mark that person uncertain without inventing token values or granting access
-

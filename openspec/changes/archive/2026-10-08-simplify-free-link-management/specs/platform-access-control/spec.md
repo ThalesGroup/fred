@@ -69,4 +69,3 @@ The opening-count column SHALL use the short localized label Clicks and explain 
 
 - **WHEN** expiration is invalid or no longer in the future, or generation fails
 - **THEN** the creation form SHALL retain the note and date with actionable feedback, without closing the manager
-
