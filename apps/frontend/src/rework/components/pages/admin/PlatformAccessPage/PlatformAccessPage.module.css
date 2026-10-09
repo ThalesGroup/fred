@@ -301,6 +301,15 @@
   color: var(--on-surface-retreat);
   font: var(--font-body-medium);
 }
+.activationBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+  padding: var(--spacing-s);
+}
+.activationBody > p {
+  margin: 0;
+}
 .reviewHeader {
   display: flex;
   flex-wrap: wrap;
@@ -317,7 +326,7 @@
 .reviewTable {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-s);
+  gap: var(--spacing-m);
 }
 .unverifiedUsers {
   margin-top: var(--spacing-m);

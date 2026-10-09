@@ -87,7 +87,7 @@ export default function PlatformAccessActivationDialog({
       }}
       onConfirm={() => onConfirm(enabling ? preview.data!.revision : revision)}
     >
-      <div className={styles.dialogBody}>
+      <div className={`${styles.dialogBody} ${styles.activationBody}`}>
         <p>{t(`rework.platformAccess.activation.${enabling ? "savedOnly" : "disableHint"}`)}</p>
         {enabling && (
           <>
