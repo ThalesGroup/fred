@@ -95,13 +95,16 @@ class CreatePlatformEnrollmentLink(BaseModel):
         return value
 
 
+PlatformEnrollmentLinkStatus = Literal["active", "suspended", "expired", "revoked"]
+
+
 class PlatformEnrollmentLinkInfo(BaseModel):
     id: UUID
     note: str | None
     created_at: datetime
     expires_at: datetime | None
     revoked_at: datetime | None
-    status: Literal["active", "suspended", "expired", "revoked"]
+    status: PlatformEnrollmentLinkStatus
     opening_count: int
     last_opened_at: datetime | None
     recoverable: bool
@@ -110,6 +113,11 @@ class PlatformEnrollmentLinkInfo(BaseModel):
 class PlatformEnrollmentLinksPage(BaseModel):
     items: list[PlatformEnrollmentLinkInfo]
     total: int
+    inactive_count: int
+
+
+class DeletedPlatformEnrollmentLinks(BaseModel):
+    deleted_count: int
 
 
 class PlatformT0Preview(BaseModel):

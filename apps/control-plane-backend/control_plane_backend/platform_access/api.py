@@ -28,6 +28,7 @@ from control_plane_backend.platform_access import service
 from control_plane_backend.platform_access.schemas import (
     AcceptFreeEnrollmentCgu,
     CreatePlatformEnrollmentLink,
+    DeletedPlatformEnrollmentLinks,
     FreeEnrollmentPreview,
     GrantPlatformAccessUsers,
     PlatformAccessActivationPreview,
@@ -39,6 +40,7 @@ from control_plane_backend.platform_access.schemas import (
     PlatformAccessUsersPage,
     PlatformEnrollmentLink,
     PlatformEnrollmentLinksPage,
+    PlatformEnrollmentLinkStatus,
     PlatformT0Preview,
     SetPlatformAccessPolicy,
     SetPlatformAccessTeam,
@@ -256,8 +258,26 @@ async def list_platform_enrollment_links(
     user: Admin,
     offset: int = Query(0, ge=0),
     limit: int = Query(25, ge=1, le=100),
+    status: PlatformEnrollmentLinkStatus | None = None,
 ) -> PlatformEnrollmentLinksPage:
-    return await service.list_links(access, team_id, offset, limit)
+    return await service.list_links(access, team_id, offset, limit, status)
+
+
+@router.delete(
+    "/admin/platform/access/teams/{team_id}/enrollment-links/inactive",
+    response_model=DeletedPlatformEnrollmentLinks,
+)
+async def delete_inactive_platform_enrollment_links(
+    team_id: str, access: Access, user: Admin
+) -> DeletedPlatformEnrollmentLinks:
+    deleted = await service.delete_inactive_links(access, team_id)
+    emit_audit_log(
+        "platform.access.links.deleted",
+        actor_uid=user.uid,
+        team_id=team_id,
+        deleted_count=deleted,
+    )
+    return DeletedPlatformEnrollmentLinks(deleted_count=deleted)
 
 
 @router.post(

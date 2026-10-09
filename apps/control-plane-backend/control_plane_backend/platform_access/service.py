@@ -5,7 +5,7 @@ import json
 import secrets
 import time
 from datetime import datetime, timezone
-from typing import Literal, cast
+from typing import Any, Literal, cast
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException
@@ -30,8 +30,10 @@ from fred_core.users.user_models import UserRow
 from fred_pod.security.platform_access import PlatformAccessPolicy
 from fred_pod.security.structure import KeycloakUser, is_service_agent
 from pydantic import JsonValue
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from control_plane_backend.platform_access.schemas import (
     AdmissionSource,
@@ -48,6 +50,7 @@ from control_plane_backend.platform_access.schemas import (
     PlatformAccessUsersPage,
     PlatformEnrollmentLinkInfo,
     PlatformEnrollmentLinksPage,
+    PlatformEnrollmentLinkStatus,
     PlatformT0Preview,
 )
 from control_plane_backend.teams.schemas import UserTeamRelation
@@ -425,13 +428,15 @@ def utc(value: datetime | None) -> datetime | None:
     )
 
 
-def link_view(link: PlatformAccessLinkRow, free: bool) -> PlatformEnrollmentLinkInfo:
+def link_view(
+    link: PlatformAccessLinkRow, free: bool, now: datetime
+) -> PlatformEnrollmentLinkInfo:
     expires = utc(link.expires_at)
-    status: Literal["active", "suspended", "expired", "revoked"] = (
+    status: PlatformEnrollmentLinkStatus = (
         "revoked"
         if link.revoked_at
         else "expired"
-        if expires is not None and expires <= datetime.now(timezone.utc)
+        if expires is not None and expires <= now
         else "suspended"
         if not free
         else "active"
@@ -482,12 +487,32 @@ async def generate_link(
 
 
 async def list_links(
-    access: PlatformAccess, team_id: str, offset: int, limit: int
+    access: PlatformAccess,
+    team_id: str,
+    offset: int,
+    limit: int,
+    status: PlatformEnrollmentLinkStatus | None = None,
 ) -> PlatformEnrollmentLinksPage:
     async with access.store.read() as session:
         await access.state(session)
         team = await require_team(access, team_id, session)
+        now = datetime.now(timezone.utc)
         predicate = PlatformAccessLinkRow.team_id == team_id
+        if status == "revoked":
+            predicate &= PlatformAccessLinkRow.revoked_at.is_not(None)
+        elif status == "expired":
+            predicate &= PlatformAccessLinkRow.revoked_at.is_(None) & (
+                PlatformAccessLinkRow.expires_at <= now
+            )
+        elif status in ("active", "suspended"):
+            predicate &= (
+                PlatformAccessLinkRow.revoked_at.is_(None)
+                & or_(
+                    PlatformAccessLinkRow.expires_at.is_(None),
+                    PlatformAccessLinkRow.expires_at > now,
+                )
+                & (team.platform_access_free == (status == "active"))
+            )
         rows = await session.scalars(
             select(PlatformAccessLinkRow)
             .where(predicate)
@@ -498,7 +523,7 @@ async def list_links(
             .limit(limit)
         )
         return PlatformEnrollmentLinksPage(
-            items=[link_view(link, team.platform_access_free) for link in rows],
+            items=[link_view(link, team.platform_access_free, now) for link in rows],
             total=int(
                 await session.scalar(
                     select(func.count())
@@ -507,7 +532,38 @@ async def list_links(
                 )
                 or 0
             ),
+            inactive_count=int(
+                await session.scalar(
+                    select(func.count())
+                    .select_from(PlatformAccessLinkRow)
+                    .where(
+                        PlatformAccessLinkRow.team_id == team_id,
+                        obsolete_links(now),
+                    )
+                )
+                or 0
+            ),
         )
+
+
+def obsolete_links(now: datetime) -> ColumnElement[bool]:
+    return or_(
+        PlatformAccessLinkRow.revoked_at.is_not(None),
+        PlatformAccessLinkRow.expires_at <= now,
+    )
+
+
+async def delete_inactive_links(access: PlatformAccess, team_id: str) -> int:
+    async with access.store.mutation() as session:
+        await access.state(session)
+        await require_team(access, team_id, session)
+        result = await session.execute(
+            delete(PlatformAccessLinkRow).where(
+                PlatformAccessLinkRow.team_id == team_id,
+                obsolete_links(datetime.now(timezone.utc)),
+            )
+        )
+        return cast(CursorResult[Any], result).rowcount
 
 
 async def owned_link(

@@ -171,9 +171,20 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           offset: queryArg.offset,
           limit: queryArg.limit,
+          status: queryArg.status,
         },
       }),
     }),
+    deleteInactivePlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksInactiveDelete:
+      build.mutation<
+        DeleteInactivePlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksInactiveDeleteApiResponse,
+        DeleteInactivePlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksInactiveDeleteApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/control-plane/v1/admin/platform/access/teams/${queryArg.teamId}/enrollment-links/inactive`,
+          method: "DELETE",
+        }),
+      }),
     revealPlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdRevealPost:
       build.mutation<
         RevealPlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdRevealPostApiResponse,
@@ -1917,7 +1928,14 @@ export type ListPlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTea
   teamId: string;
   offset?: number;
   limit?: number;
+  status?: ("active" | "suspended" | "expired" | "revoked") | null;
 };
+export type DeleteInactivePlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksInactiveDeleteApiResponse =
+  /** status 200 Successful Response */ DeletedPlatformEnrollmentLinks;
+export type DeleteInactivePlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksInactiveDeleteApiArg =
+  {
+    teamId: string;
+  };
 export type RevealPlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdRevealPostApiResponse =
   /** status 200 Successful Response */ PlatformEnrollmentLink;
 export type RevealPlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdRevealPostApiArg =
@@ -3191,6 +3209,10 @@ export type PlatformEnrollmentLinkInfo = {
 export type PlatformEnrollmentLinksPage = {
   items: PlatformEnrollmentLinkInfo[];
   total: number;
+  inactive_count: number;
+};
+export type DeletedPlatformEnrollmentLinks = {
+  deleted_count: number;
 };
 export type PlatformAccessStatus = {
   admitted: boolean;
@@ -4913,6 +4935,7 @@ export const {
   useGeneratePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinkPostMutation,
   useListPlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksGetQuery,
   useLazyListPlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksGetQuery,
+  useDeleteInactivePlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksInactiveDeleteMutation,
   useRevealPlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdRevealPostMutation,
   useRevokePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdDeleteMutation,
   useGetPlatformAccessStatusControlPlaneV1PlatformAccessStatusGetQuery,

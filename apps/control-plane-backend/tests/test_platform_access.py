@@ -1181,6 +1181,7 @@ async def test_link_admin_history_and_tokens_are_guarded(access):
                 f"/admin/platform/access/teams/demo/enrollment-links/{link_id}/reveal",
             ),
             ("DELETE", f"/admin/platform/access/teams/demo/enrollment-links/{link_id}"),
+            ("DELETE", "/admin/platform/access/teams/demo/enrollment-links/inactive"),
         ):
             assert (await client.request(method, path)).status_code == 403
         access.rebac.admin = True
