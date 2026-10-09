@@ -603,7 +603,11 @@
       "empty": "No prompts in this space.",
       "emptyFilters": "No prompts match these filters.",
       "categoryLabel": "Category"
-    }
+    },
+    "readOnlyComposerPlaceholder": "Read-only conversation",
+    "deletedAgentTooltip": "{{agentsNicknameSingular}} deleted - read-only conversation",
+    "deletedAgentSuffix": "(deleted)",
+    "historyUnavailable": "Conversation history is unavailable. Please try again later."
   },
   "comingSoon": {
     "description": "Empowering your daily work through this innovation platform: gain clarity and make smarter decisions. A new service tailored to support your daily tasks and address your operational needs.",
@@ -2269,11 +2273,11 @@
           "confirm": "Delete",
           "cancel": "Cancel"
         },
-        "emptyManaged": "No conversations yet. Start a new chat with a managed agent.",
-        "groupByAgent": "Group by agent",
+        "emptyManaged": "No conversations yet. Start a new chat with a managed {{agentsNicknameSingular}}.",
+        "groupByAgent": "Group by {{agentsNicknameSingular}}",
         "loading": "Loading...",
         "title": "Chat",
-        "unknownAgent": "Unknown agent"
+        "unknownAgent": "Unknown {{agentsNicknameSingular}}"
       },
       "marketplace": {
         "menu": {

@@ -134,6 +134,7 @@ type ActivePushDrawer =
 
 export default function ManagedChatPage() {
   const { t, i18n } = useTranslation();
+  const { agentsNicknameSingular } = useFrontendProperties();
   const { teamId, agentInstanceId } = useParams<{ teamId: string; agentInstanceId: string }>();
   const { showError } = useToast();
 
@@ -259,12 +260,20 @@ export default function ManagedChatPage() {
   // fetches, while resolving the pod-owned precedence levels needs one.
   // Tagged ControlPlaneRoutingPolicy/teamId, so saving a routing policy
   // refetches this instead of leaving a stale model name on screen.
-  const { data: effectiveChatModel } = useEffectiveChatModelQuery({ teamId, agentInstanceId });
+  const { data: effectiveChatModel } = useEffectiveChatModelQuery(
+    { teamId, agentInstanceId },
+    { skip: chat.executionDisabled },
+  );
   const [transcribeAudio] = useTranscribeAudioKnowledgeFlowV1AudioTranscriptionsPostMutation();
   // Re-resolved every render from the live messages so the open drawer streams.
   const selectedTraceEntry = selectedTraceKey ? findTraceEntry(chat.messages, selectedTraceKey) : null;
   const isInitialState =
-    chat.threadMessages.length === 0 && !chat.waitResponse && !conversationUnresolved && chat.pendingHitl == null;
+    chat.threadMessages.length === 0 &&
+    !chat.waitResponse &&
+    !conversationUnresolved &&
+    chat.pendingHitl == null &&
+    !chat.executionDisabled &&
+    !chat.historyUnavailable;
 
   const attachmentsCount = chat.persistedAttachments.length;
 
@@ -342,7 +351,8 @@ export default function ManagedChatPage() {
   // CAPAB-01 #1976: attachments are allowed when the resolved chat controls
   // (ExecutionPreparation.chat_controls) include an `attach_files` descriptor —
   // supersedes the retired `EffectiveChatOptions.attach_files`.
-  const allowChatAttachments = chat.chatControls.some((control) => control.widget === "attach_files");
+  const allowChatAttachments =
+    !chat.executionDisabled && chat.chatControls.some((control) => control.widget === "attach_files");
 
   // The rail's attachments launcher. Offered when the agent still exposes
   // attaching OR the conversation already holds files: an older session whose
@@ -364,15 +374,20 @@ export default function ManagedChatPage() {
             },
           ]
         : []),
-      {
-        key: "prompt-library",
-        label: t("chatbot.promptSelectionPanel.menuRow"),
-        icon: "edit_note" as const,
-        selected: activePushDrawer?.kind === "prompt-library",
-        onOpen: () => setActivePushDrawer((v) => (v?.kind === "prompt-library" ? null : { kind: "prompt-library" })),
-      },
+      ...(!chat.executionDisabled
+        ? [
+            {
+              key: "prompt-library",
+              label: t("chatbot.promptSelectionPanel.menuRow"),
+              icon: "edit_note" as const,
+              selected: activePushDrawer?.kind === "prompt-library",
+              onOpen: () =>
+                setActivePushDrawer((v) => (v?.kind === "prompt-library" ? null : { kind: "prompt-library" })),
+            },
+          ]
+        : []),
     ],
-    [allowChatAttachments, attachmentsCount, attachmentsDrawerOpen, activePushDrawer, t],
+    [chat.executionDisabled, allowChatAttachments, attachmentsCount, attachmentsDrawerOpen, activePushDrawer, t],
   );
   // The composer options menu always renders: even when an agent exposes no
   // search options, the prompt-library row is always available (personal +
@@ -400,13 +415,17 @@ export default function ManagedChatPage() {
   // Resolves true once the text is in the composer. The prompt panel closes on
   // true only, so a failed fetch leaves the user where they were instead of
   // dismissing the list under them.
+  const executionDisabledRef = useRef(chat.executionDisabled);
+  executionDisabledRef.current = chat.executionDisabled;
   const insertContextPrompt = async (prompt: ContextPromptSummary): Promise<boolean> => {
+    if (executionDisabledRef.current) return false;
     const promptTeamId = prompt.scope === "personal" ? activeTeam?.id : teamId;
     try {
       // No owning team means no way to fetch the text — the same dead end as a
       // failed request, so it gets the same toast rather than a silent no-op.
       if (!promptTeamId) throw new Error("unknown prompt team");
       const detail = await fetchPrompt({ teamId: promptTeamId, promptId: prompt.id }).unwrap();
+      if (executionDisabledRef.current) return false;
       const text = detail.text?.trim();
       // An empty record is a failed insert from the user's side, not a no-op:
       // without the toast the click would look ignored.
@@ -434,6 +453,7 @@ export default function ManagedChatPage() {
   };
 
   const handleTranscribeAudio = async (file: File): Promise<string> => {
+    if (executionDisabledRef.current) return "";
     const language = i18n.language?.split("-")[0] || undefined;
     return transcribeAudioClip(
       (formData) =>
@@ -535,7 +555,8 @@ export default function ManagedChatPage() {
   const awaitingAgentQuestion =
     (chat.pendingHitl?.session_id === chat.sessionId && chat.pendingHitl.payload.stage === "agent_question") ||
     (chat.sessionId !== null && chat.resumingAgentQuestionSessionId === chat.sessionId);
-  const composerControlsDisabled = chat.waitResponse || chat.isLoadingHistory || awaitingAgentQuestion;
+  const composerControlsDisabled =
+    chat.executionDisabled || chat.waitResponse || chat.isLoadingHistory || awaitingAgentQuestion;
 
   // `/` at the start of an empty composer. Owns the menu and resolves the
   // first token on submit, so `Tab` then `Enter` and `Enter` from the open
@@ -559,12 +580,14 @@ export default function ManagedChatPage() {
       onChange={chat.setInput}
       onSend={commands.submit}
       onInterrupt={chat.waitResponse ? chat.handleAbort : undefined}
-      placeholder={t("chatbot.composerPlaceholder")}
-      accessibleDescription={t("chatbot.composerPlaceholder")}
+      placeholder={t(chat.isReadOnly ? "chatbot.readOnlyComposerPlaceholder" : "chatbot.composerPlaceholder")}
+      accessibleDescription={t(chat.isReadOnly ? "chatbot.deletedAgentTooltip" : "chatbot.composerPlaceholder", {
+        agentsNicknameSingular,
+      })}
       commandTrigger={commands.trigger}
-      aboveFieldSlot={commands.menu ? <CommandMenu {...commands.menu} /> : undefined}
+      aboveFieldSlot={!chat.executionDisabled && commands.menu ? <CommandMenu {...commands.menu} /> : undefined}
       disabled={composerControlsDisabled}
-      sendDisabled={chat.attachmentsUploading || chat.inputTooLong}
+      sendDisabled={composerControlsDisabled || chat.attachmentsUploading || chat.inputTooLong}
       characterCount={chat.inputCharacterCount}
       characterLimit={chat.maxChatInputChars}
       enableVoiceInput
@@ -708,7 +731,23 @@ export default function ManagedChatPage() {
                         </span>
                       </div>
                     )}
-                    <div className={styles.topBarAgentName}>{chat.agentDisplayName}</div>
+                    {chat.isReadOnly ? (
+                      <Tooltip
+                        text={`${chat.agentDisplayName} - ${t("chatbot.deletedAgentTooltip", { agentsNicknameSingular })}`}
+                      >
+                        <span
+                          className={styles.topBarAgentName}
+                          data-agent-deleted="true"
+                          tabIndex={0}
+                          aria-label={`${chat.agentDisplayName} - ${t("chatbot.deletedAgentTooltip", { agentsNicknameSingular })}`}
+                        >
+                          <span className={styles.deletedAgentName}>{chat.agentDisplayName}</span>
+                          <span className={styles.deletedAgentSuffix}> {t("chatbot.deletedAgentSuffix")}</span>
+                        </span>
+                      </Tooltip>
+                    ) : (
+                      <div className={styles.topBarAgentName}>{chat.agentDisplayName}</div>
+                    )}
                   </div>
                   <div className={styles.topBarRight}>
                     {conversationTokens.total_tokens > 0 && (
@@ -716,7 +755,7 @@ export default function ManagedChatPage() {
                         {t("chatbot.conversationTokenUsage.total", { count: conversationTokens.total_tokens })}
                       </span>
                     )}
-                    {chat.sessionId && (
+                    {chat.sessionId && !chat.executionDisabled && (
                       <Tooltip text={t("chatbot.newConversation")}>
                         <IconButton
                           variant="outlined"
@@ -764,6 +803,7 @@ export default function ManagedChatPage() {
                       </div>
                     ) : (
                       <ConversationThread
+                        readOnly={chat.executionDisabled}
                         messages={chat.threadMessages}
                         pendingHitl={chat.pendingHitl}
                         pendingHitlTabs={chat.pendingHitlTabs}
@@ -808,6 +848,11 @@ export default function ManagedChatPage() {
 
                 {!isInitialState && (
                   <div className={styles.inputOverlay}>
+                    {(chat.historyUnavailable || chat.sessionUnavailable) && (
+                      <p className={styles.conversationNotice} role="status">
+                        {t("chatbot.historyUnavailable")}
+                      </p>
+                    )}
                     {composer}
                     <div className={styles.aiDisclaimer}>{t("chatbot.aiDisclaimer")}</div>
                   </div>
@@ -847,7 +892,7 @@ export default function ManagedChatPage() {
           )}
 
           <PromptSelectionChatPanel
-            open={activePushDrawer?.kind === "prompt-library"}
+            open={!chat.executionDisabled && activePushDrawer?.kind === "prompt-library"}
             onClose={() => setActivePushDrawer((v) => (v?.kind === "prompt-library" ? null : v))}
             teamId={teamId}
             personalTeamId={activeTeam?.id}
@@ -858,6 +903,7 @@ export default function ManagedChatPage() {
           <SessionAttachmentsDrawer
             open={attachmentsDrawerOpen}
             onClose={() => setActivePushDrawer((v) => (v?.kind === "attachments" ? null : v))}
+            readOnly={chat.executionDisabled}
             attachments={chat.persistedAttachments}
             isLoading={chat.isHydratingAttachments}
             onDelete={(attachmentId) => {
@@ -869,7 +915,7 @@ export default function ManagedChatPage() {
             document_scope row, sharing the single push-drawer slot above so it
             never stacks with the attachments / capability panels. Only mounted
             when the agent exposes the control. */}
-          {documentScopeParams && (
+          {!chat.executionDisabled && documentScopeParams && (
             <DocumentScopePanel
               open={activePushDrawer?.kind === "document-scope"}
               onClose={() => setActivePushDrawer((v) => (v?.kind === "document-scope" ? null : v))}
@@ -907,7 +953,7 @@ export default function ManagedChatPage() {
           onClose={() => setSelectedTraceKey(null)}
         />
         <UploadWarningAckDialog
-          open={pendingAttachments !== null}
+          open={!chat.executionDisabled && pendingAttachments !== null}
           onConfirm={() => {
             acknowledge();
             if (pendingAttachments) chat.handleAddAttachments(pendingAttachments.files, pendingAttachments.source);

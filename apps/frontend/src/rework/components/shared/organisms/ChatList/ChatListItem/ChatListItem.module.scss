@@ -34,6 +34,7 @@
   cursor: pointer;
   border-radius: var(--radius-xs);
   padding: var(--spacing-2xs) var(--spacing-xs);
+  width: 100%;
   min-height: 2.5rem;
   color: var(--on-surface);
   text-decoration: none;
@@ -51,11 +52,20 @@
   }
 }
 
+:global([data-theme="dark"]) .chatItemContainer[data-selected="true"] {
+  --tile-hover-bg: color-mix(in srgb, var(--secondary) 8%, var(--surface-container-high));
+  background-color: color-mix(in srgb, var(--secondary), transparent 92%);
+}
+
 .chatDescription {
   display: flex;
   flex: 1;
   flex-direction: column;
   min-width: 0;
+
+  &[data-read-only="true"] {
+    opacity: 0.7;
+  }
 }
 
 .title {
@@ -84,12 +94,22 @@
  * them to the far right. It still shrinks (flex-shrink 1, min-width 0) so a
  * long name ellipsizes on the one line rather than wrapping the date onto a
  * second — the date then lands at the row's right edge, always visible. */
-.agentName {
+.agentLabel {
+  display: inline-flex;
   flex: 0 1 auto;
   min-width: 0;
-  overflow: hidden;
   color: var(--primary);
+}
+
+.agentName {
+  min-width: 0;
+  overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.deletedSuffix {
+  flex: 0 0 auto;
+  white-space: pre;
 }
 
 /* Separator and date keep their intrinsic width — the name absorbs the squeeze. */
@@ -125,4 +145,18 @@
   padding-right: var(--spacing-xs);
   padding-left: var(--spacing-xl);
   color: var(--error);
+}
+
+.agentLabel[data-agent-deleted="true"] {
+  color: var(--on-surface-muted);
+}
+
+.accessibleStatus {
+  position: absolute;
+  clip-path: inset(50%);
+  margin: -1px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  white-space: nowrap;
 }

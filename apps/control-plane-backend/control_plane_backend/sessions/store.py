@@ -23,6 +23,7 @@ from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
+from control_plane_backend.models.agent_instance_models import AgentInstanceRow
 from control_plane_backend.models.session_metadata_models import (
     SessionContextPromptRow,
     SessionMetadataRow,
@@ -35,6 +36,10 @@ def _utcnow() -> datetime:
 
 class SessionMetadataAlreadyExistsError(Exception):
     """Raised when one session metadata row already exists for the session id."""
+
+
+class SessionMetadataAgentMissingError(Exception):
+    """Raised when creating a managed conversation after its agent disappeared."""
 
 
 class SessionMetadataRecord:
@@ -54,6 +59,7 @@ class SessionMetadataRecord:
         user_id: str | None,
         title: str | None,
         source_runtime_id: str | None = None,
+        agent_display_name: str | None = None,
         context_prompt_ids: list[str] | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
@@ -62,6 +68,7 @@ class SessionMetadataRecord:
         self.team_id = team_id
         self.agent_instance_id = agent_instance_id
         self.source_runtime_id = source_runtime_id
+        self.agent_display_name = agent_display_name
         self.user_id = user_id
         self.title = title
         self.context_prompt_ids = context_prompt_ids or []
@@ -77,6 +84,7 @@ def _row_to_record(
         team_id=TeamId(row.team_id),
         agent_instance_id=row.agent_instance_id,
         source_runtime_id=row.source_runtime_id,
+        agent_display_name=row.agent_display_name,
         user_id=row.user_id,
         title=row.title,
         context_prompt_ids=context_prompt_ids or [],
@@ -129,6 +137,8 @@ class SessionMetadataStore:
         self,
         record: SessionMetadataRecord,
         session: AsyncSession | None = None,
+        *,
+        capture_agent_snapshot: bool = False,
     ) -> SessionMetadataRecord:
         """
         Persist one new control-plane session metadata record.
@@ -154,6 +164,7 @@ class SessionMetadataStore:
             team_id=str(record.team_id),
             agent_instance_id=record.agent_instance_id,
             source_runtime_id=record.source_runtime_id,
+            agent_display_name=record.agent_display_name,
             user_id=record.user_id,
             title=record.title,
             created_at=record.created_at or now,
@@ -161,12 +172,26 @@ class SessionMetadataStore:
         )
         try:
             async with use_session(self._sessions, session) as s:
+                if capture_agent_snapshot and record.agent_instance_id is not None:
+                    # The same lock as deletion keeps capture and insertion ordered.
+                    instance = await s.scalar(
+                        select(AgentInstanceRow)
+                        .where(
+                            AgentInstanceRow.agent_instance_id
+                            == record.agent_instance_id,
+                            AgentInstanceRow.team_id == str(record.team_id),
+                        )
+                        .with_for_update()
+                    )
+                    if instance is None:
+                        raise SessionMetadataAgentMissingError(record.agent_instance_id)
+                    row.source_runtime_id = instance.source_runtime_id
+                    row.agent_display_name = instance.display_name
                 s.add(row)
+                await s.flush()
         except IntegrityError as exc:
             raise SessionMetadataAlreadyExistsError(record.session_id) from exc
-        result = await self.get(record.session_id)
-        assert result is not None
-        return result
+        return _row_to_record(row)
 
     async def get(
         self,

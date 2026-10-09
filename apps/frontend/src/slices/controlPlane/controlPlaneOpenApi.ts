@@ -2000,7 +2000,7 @@ export type PostBulkDeleteMySessionsControlPlaneV1MeSessionsBulkDeletePostApiArg
   bulkDeleteSessionsRequest: BulkDeleteSessionsRequest;
 };
 export type GetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetApiResponse =
-  /** status 200 Successful Response */ SessionListItem;
+  /** status 200 Successful Response */ SessionDetails;
 export type GetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetApiArg = {
   teamId: string;
   sessionId: string;
@@ -3581,6 +3581,8 @@ export type SessionListItem = {
   session_id: string;
   team_id: string;
   agent_instance_id?: string | null;
+  /** Agent display name retained after deletion; legacy rows may have no snapshot. */
+  agent_display_name?: string | null;
   title?: string | null;
   /** Ordered prompt-library ids attached to this session as chat context (personal/team prompt UUIDs or 'default:{category}'). Empty when none are attached. Concatenated in order as conversation context at execution time. */
   context_prompt_ids?: string[];
@@ -3613,6 +3615,21 @@ export type BulkDeleteSessionRef = {
 };
 export type BulkDeleteSessionsRequest = {
   sessions: BulkDeleteSessionRef[];
+};
+export type SessionDetails = {
+  session_id: string;
+  team_id: string;
+  agent_instance_id?: string | null;
+  /** Agent display name retained after deletion; legacy rows may have no snapshot. */
+  agent_display_name?: string | null;
+  title?: string | null;
+  /** Ordered prompt-library ids attached to this session as chat context (personal/team prompt UUIDs or 'default:{category}'). Empty when none are attached. Concatenated in order as conversation context at execution time. */
+  context_prompt_ids?: string[];
+  created_at?: string | null;
+  updated_at?: string | null;
+  agent_deleted?: boolean;
+  /** Browser-facing history URL, independent of agent execution availability. */
+  messages_url?: string | null;
 };
 export type UpdateSessionRequest = {
   /** Frontend-observed last activity timestamp. Used only for control-plane session metadata freshness, not runtime message history. */

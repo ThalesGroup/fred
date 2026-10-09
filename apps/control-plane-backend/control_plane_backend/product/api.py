@@ -86,6 +86,7 @@ from control_plane_backend.product.schemas import (
     PromptSummary,
     RuntimeAgentExecutionPreparation,
     SessionAttachmentSummary,
+    SessionDetails,
     SessionListItem,
     UpdateAgentInstanceRequest,
     UpdatePromptCategoryRequest,
@@ -97,6 +98,7 @@ from control_plane_backend.product.service import (
     EnrollmentError,
     ExecutionPreparationError,
     PromptRequestError,
+    SessionAgentUnavailableError,
     SessionAlreadyExistsError,
     SessionAttachmentRequestError,
     build_frontend_bootstrap,
@@ -114,7 +116,6 @@ from control_plane_backend.product.service import (
     get_marketplace_prompt,
     get_prompt,
     get_runtime_binding_for_team,
-    get_session,
     import_published_prompt_into_team,
     list_agent_templates,
     list_context_prompts,
@@ -140,6 +141,7 @@ from control_plane_backend.product.service import (
     update_prompt_score,
     update_session_activity,
 )
+from control_plane_backend.product.session_details import get_session
 from control_plane_backend.teams.service import require_team_access
 
 router = APIRouter(tags=["Product"])
@@ -1667,7 +1669,7 @@ async def post_team_session(
     Called by the frontend after generating a session_id (before or just after
     the first SSE turn). Does not affect runtime execution or history.
 
-    Returns 409 if the session_id already exists.
+    Returns 409 if the session_id already exists, or 404 if its agent is gone.
     """
     team_id = await require_team_access(user, team_id, deps.team_dependencies)
     try:
@@ -1679,6 +1681,8 @@ async def post_team_session(
         )
     except SessionAlreadyExistsError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except SessionAgentUnavailableError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.get(
@@ -1756,7 +1760,7 @@ async def post_bulk_delete_my_sessions(
 
 @router.get(
     "/teams/{team_id}/sessions/{session_id}",
-    response_model=SessionListItem,
+    response_model=SessionDetails,
     response_model_exclude_none=True,
     summary="Fetch metadata for one team-scoped session.",
 )
@@ -1765,7 +1769,7 @@ async def get_team_session(
     session_id: Annotated[str, Path(min_length=1)],
     deps: ProductDependencies,
     user: KeycloakUser = Depends(get_current_user),
-) -> SessionListItem:
+) -> SessionDetails:
     """
     Return control-plane metadata for one session by ID, scoped to a team.
 
@@ -1775,7 +1779,9 @@ async def get_team_session(
     Returns 404 when the session does not exist for the given team.
     """
     team_id = await require_team_access(user, team_id, deps.team_dependencies)
-    item = await get_session(team_id=team_id, session_id=session_id, deps=deps)
+    item = await get_session(
+        team_id=team_id, session_id=session_id, user_id=user.uid, deps=deps
+    )
     if item is None:
         raise HTTPException(
             status_code=404,

@@ -62,7 +62,10 @@ from control_plane_backend.product.service import (
 from control_plane_backend.prompts.category_store import PromptCategoryRecord
 from control_plane_backend.prompts.store import PromptCommandRecord, PromptRecord
 from control_plane_backend.sessions.attachment_store import SessionAttachmentRecord
-from control_plane_backend.sessions.store import SessionMetadataRecord
+from control_plane_backend.sessions.store import (
+    SessionMetadataRecord,
+    SessionMetadataStore,
+)
 from control_plane_backend.teams.schemas import Team
 from control_plane_backend.users.schemas import PlatformRoleRelation, UserSummary
 from fred_core import (
@@ -269,7 +272,9 @@ class _FakeSessionMetadataStore:
     def __init__(self, records: list[SessionMetadataRecord] | None = None) -> None:
         self._records: list[SessionMetadataRecord] = list(records or [])
 
-    async def create(self, record: SessionMetadataRecord) -> SessionMetadataRecord:
+    async def create(
+        self, record: SessionMetadataRecord, *, capture_agent_snapshot: bool = False
+    ) -> SessionMetadataRecord:
         from control_plane_backend.sessions.store import (
             SessionMetadataAlreadyExistsError,
         )
@@ -373,7 +378,9 @@ class _FakeSessionMetadataStore:
 class _DuplicateSessionMetadataStore:
     """Offline stand-in that always reproduces one duplicate session conflict."""
 
-    async def create(self, _record: SessionMetadataRecord) -> SessionMetadataRecord:
+    async def create(
+        self, _record: SessionMetadataRecord, *, capture_agent_snapshot: bool = False
+    ) -> SessionMetadataRecord:
         """Raise the duplicate-session store error expected by the API layer."""
         from control_plane_backend.sessions.store import (
             SessionMetadataAlreadyExistsError,
@@ -3017,23 +3024,18 @@ async def test_delete_team_session_returns_404_for_other_user_session(
 
 
 @pytest.mark.asyncio
-async def test_create_session_persists_source_runtime_id_from_live_instance() -> None:
-    """`create_session` must capture `source_runtime_id` from the (currently
-    live) agent instance, so erasure can later resolve the runtime even if the
-    instance is deleted before the session is (issue #2089, RFC §7)."""
-    session_store = _FakeSessionMetadataStore([])
-    deps = _build_erasure_deps(
-        session_store,
-        _FakeSessionAttachmentStore([]),
-        agent_instance_store=_FakeAgentInstanceStore(
-            [
-                _make_record(
-                    agent_instance_id="instance-1", source_runtime_id="runtime-a"
-                )
-            ]
-        ),
+async def test_create_session_persists_source_runtime_id_from_live_instance(
+    control_plane_sql_engine,
+) -> None:
+    """Capture routing and name through the same transaction as session creation."""
+    session_store = SessionMetadataStore(control_plane_sql_engine)
+    agent_store = AgentInstanceStore(control_plane_sql_engine)
+    await agent_store.create(
+        _make_record(agent_instance_id="instance-1", source_runtime_id="runtime-a")
     )
-
+    deps = _build_erasure_deps(
+        session_store, _FakeSessionAttachmentStore([]), agent_instance_store=agent_store
+    )
     await product_service.create_session(
         KeycloakUser(uid="admin", username="admin", roles=[]),
         TeamId("personal"),
@@ -3042,9 +3044,9 @@ async def test_create_session_persists_source_runtime_id_from_live_instance() ->
         ),
         deps,
     )
-
-    assert len(session_store._records) == 1
-    assert session_store._records[0].source_runtime_id == "runtime-a"
+    stored = await session_store.get("session-1")
+    assert stored is not None and stored.source_runtime_id == "runtime-a"
+    assert stored.agent_display_name == "Echo Team Agent"
 
 
 @pytest.mark.asyncio
@@ -3273,10 +3275,10 @@ async def _no_temporal() -> Any:
 
 
 def _build_erasure_deps(
-    session_store: _FakeSessionMetadataStore,
+    session_store: _FakeSessionMetadataStore | SessionMetadataStore,
     attachment_store: _FakeSessionAttachmentStore,
     *,
-    agent_instance_store: _FakeAgentInstanceStore | None = None,
+    agent_instance_store: _FakeAgentInstanceStore | AgentInstanceStore | None = None,
     configuration: Any = None,
     kpi_store: _FakeKPIStore | None = None,
     policy_catalog: Any = None,

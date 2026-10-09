@@ -28,6 +28,7 @@ interface SessionAttachmentsDrawerProps {
   onClose: () => void;
   attachments: SessionAttachment[];
   isLoading?: boolean;
+  readOnly?: boolean;
   onDelete: (attachmentId: string) => void;
 }
 
@@ -48,6 +49,7 @@ export function SessionAttachmentsDrawer({
   onClose,
   attachments,
   isLoading = false,
+  readOnly = false,
   onDelete,
 }: SessionAttachmentsDrawerProps) {
   const { t } = useTranslation();
@@ -105,15 +107,17 @@ export function SessionAttachmentsDrawer({
                       <span className={styles.rowMeta}>{metaLabel}</span>
                     </span>
                   </button>
-                  <span className={styles.rowButtons}>
-                    <IconButton
-                      variant="icon"
-                      size="2xs"
-                      icon={{ category: "outlined", type: "delete" }}
-                      aria-label={t("chatbot.sessionAttachments.deleteAria", { name: attachment.name })}
-                      onClick={() => onDelete(attachment.attachmentId)}
-                    />
-                  </span>
+                  {!readOnly && (
+                    <span className={styles.rowButtons}>
+                      <IconButton
+                        variant="icon"
+                        size="2xs"
+                        icon={{ category: "outlined", type: "delete" }}
+                        aria-label={t("chatbot.sessionAttachments.deleteAria", { name: attachment.name })}
+                        onClick={() => onDelete(attachment.attachmentId)}
+                      />
+                    </span>
+                  )}
                 </div>
               );
             })

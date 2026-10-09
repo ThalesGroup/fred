@@ -429,3 +429,28 @@
   color: var(--error);
   font: var(--font-body-large);
 }
+
+.conversationNotice {
+  margin: 0 0 12px;
+  border-radius: 12px;
+  background: var(--surface-container);
+  padding: 12px 16px;
+  color: var(--on-surface);
+  font-size: 14px;
+}
+
+.topBarAgentName[data-agent-deleted="true"] {
+  display: inline-flex;
+  color: var(--on-surface-muted);
+}
+
+.deletedAgentName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.deletedAgentSuffix {
+  flex: 0 0 auto;
+  white-space: pre;
+}

@@ -14,6 +14,7 @@
 
 import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties";
 import { useNavigate } from "react-router-dom";
 import {
   useDeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteMutation,
@@ -26,6 +27,7 @@ import { ChatListItem } from "./ChatListItem/ChatListItem.tsx";
 import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
 import styles from "./ChatList.module.scss";
 import { KeyCloakService } from "../../../../../security/KeycloakService";
+import { crossSessionRefreshOptions, useRefetchOnWindowFocus } from "@core/hooks/crossSessionRefresh";
 import { clearToolApprovalGrants } from "@core/utils/toolApprovalGrants";
 
 type Session = NonNullable<
@@ -51,6 +53,7 @@ function formatSessionDate(dateStr: string | undefined): string {
 
 export default function ChatList({ teamId }: ChatListProps) {
   const { t } = useTranslation();
+  const { agentsNicknameSingular } = useFrontendProperties();
   const navigate = useNavigate();
   const { showConfirmationDialog } = useConfirmationDialog();
   const [groupByAgent, setGroupByAgent] = useState(false);
@@ -59,13 +62,26 @@ export default function ChatList({ teamId }: ChatListProps) {
     { teamId: teamId! },
     { skip: !teamId, pollingInterval: 30_000 },
   );
-  const { data: agentInstances } = useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery(
+  const {
+    currentData: agentInstances,
+    isSuccess: agentsResolved,
+    isError: agentsError,
+    refetch: refetchAgents,
+  } = useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery(
     { teamId: teamId! },
-    { skip: !teamId },
+    crossSessionRefreshOptions(!teamId),
   );
+  useRefetchOnWindowFocus(refetchAgents, !teamId);
   const agentNameByInstanceId = new Map(
     agentInstances?.map((instance) => [instance.agent_instance_id, instance.display_name]),
   );
+
+  const agentName = (session: Session) =>
+    agentNameByInstanceId.get(session.agent_instance_id!) ??
+    session.agent_display_name ??
+    t("rework.sidebar.chatList.unknownAgent", { agentsNicknameSingular });
+  const agentDeleted = (id: string) =>
+    Boolean(agentsResolved && !agentsError && agentInstances && !agentNameByInstanceId.has(id));
 
   const [deleteSession] = useDeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteMutation();
 
@@ -108,7 +124,8 @@ export default function ChatList({ teamId }: ChatListProps) {
         sessionId={session.session_id}
         href={href}
         label={label}
-        agentName={showAgentName ? agentNameByInstanceId.get(session.agent_instance_id) : undefined}
+        agentName={showAgentName ? agentName(session) : undefined}
+        agentDeleted={agentDeleted(session.agent_instance_id)}
         dateLabel={formatSessionDate(session.updated_at)}
         onDelete={handleDelete(session.session_id, session.agent_instance_id, href, label)}
       />
@@ -119,39 +136,49 @@ export default function ChatList({ teamId }: ChatListProps) {
     ? Array.from(
         managedSessions
           .reduce((byAgent, session) => {
-            const agentName =
-              agentNameByInstanceId.get(session.agent_instance_id) ?? t("rework.sidebar.chatList.unknownAgent");
-            (byAgent.get(agentName) ?? byAgent.set(agentName, []).get(agentName)!).push(session);
+            const id = session.agent_instance_id;
+            (byAgent.get(id) ?? byAgent.set(id, []).get(id)!).push(session);
             return byAgent;
           }, new Map<string, (Session & { agent_instance_id: string })[]>())
           .entries(),
-      ).sort(([a], [b]) => a.localeCompare(b, undefined, { sensitivity: "base" }))
+      ).sort(([, a], [, b]) => agentName(a[0]).localeCompare(agentName(b[0]), undefined, { sensitivity: "base" }))
     : null;
 
   return (
     <div className={styles.chatListContainer} data-team-id={teamId}>
       <div className={styles.chatListHeader}>
         {t("rework.sidebar.chatList.title")}
-        <Tooltip text={t("rework.sidebar.chatList.groupByAgent")}>
+        <Tooltip text={t("rework.sidebar.chatList.groupByAgent", { agentsNicknameSingular })}>
           <IconButton
             color={groupByAgent ? "primary" : "on-surface-retreat"}
             variant="icon"
             size="small"
             icon={{ category: "outlined", type: "category", filled: groupByAgent }}
             aria-pressed={groupByAgent}
-            aria-label={t("rework.sidebar.chatList.groupByAgent")}
+            aria-label={t("rework.sidebar.chatList.groupByAgent", { agentsNicknameSingular })}
             onClick={() => setGroupByAgent((value) => !value)}
           />
         </Tooltip>
       </div>
       <div className={styles.chatListItems}>
         {isLoading && <div className={styles.chatListPlaceholder}>{t("rework.sidebar.chatList.loading")}</div>}
-        {isEmpty && <div className={styles.chatListPlaceholder}>{t("rework.sidebar.chatList.emptyManaged")}</div>}
+        {isEmpty && (
+          <div className={styles.chatListPlaceholder}>
+            {t("rework.sidebar.chatList.emptyManaged", { agentsNicknameSingular })}
+          </div>
+        )}
         {groups
-          ? groups.map(([agentName, groupSessions]) => (
-              <div key={agentName}>
-                <div className={styles.groupHeader} title={agentName}>
-                  {agentName}
+          ? groups.map(([agentId, groupSessions]) => (
+              <div key={agentId} className={styles.agentGroup}>
+                <div
+                  className={styles.groupHeader}
+                  data-agent-deleted={agentDeleted(agentId)}
+                  title={agentName(groupSessions[0])}
+                >
+                  <span className={styles.groupName}>{agentName(groupSessions[0])}</span>
+                  {agentDeleted(agentId) && (
+                    <span className={styles.deletedSuffix}> {t("chatbot.deletedAgentSuffix")}</span>
+                  )}
                 </div>
                 {groupSessions.map((session) => renderItem(session, false))}
               </div>

@@ -494,7 +494,7 @@ Accessed via:
 - `GET /agents/sessions/{session_id}/messages` — full message list for one session
 - `GET /agents/sessions` — session list for one user (or all users for admin)
 
-**Control-plane must not proxy or cache message content.** If the frontend needs message history, it calls runtime directly using the `messages_url_template` from `ExecutionPreparation`.
+**Control-plane must not proxy or cache message content.** The frontend reads history directly from the runtime using `SessionDetails.messages_url`, independently of execution preparation.
 
 **Session Metadata — owned by `control-plane-backend`** _(target state — implementation pending Phase 3b/FRONT-04)_
 
@@ -530,7 +530,7 @@ Freeze session metadata as a control-plane contract separate from runtime histor
 - `SessionPreferences`
 - `UpdateSessionPreferencesRequest`
 
-`SessionListItem` may include: `session_id`, `team_id`, `title`, `updated_at`, `created_at`, `agent_instance_id`, `context_prompt_ids` (ordered chat-context prompts — see §13).
+`SessionListItem` may include: `session_id`, `team_id`, `title`, `updated_at`, `created_at`, `agent_instance_id`, `agent_display_name`, `context_prompt_ids` (ordered chat-context prompts - see §13).
 
 `SessionAttachmentSummary` is the dedicated persisted attachment projection for the
 managed chat drawer. Freeze it as:
@@ -552,6 +552,28 @@ Session attachment routes live under the existing session surface:
 - `DELETE /teams/{team_id}/sessions/{session_id}/attachments/{attachment_id}`
 
 It must not inline full message history.
+
+The single-session GET returns `SessionDetails`, extending `SessionListItem`
+with `agent_deleted` and optional `messages_url`. Team membership and session
+ownership are both required; unknown, foreign-team and foreign-owner IDs return
+404. List, create and update responses retain `SessionListItem`.
+
+`agent_display_name` is a nullable session snapshot captured at creation and
+refreshed to the latest instance name atomically at deletion, without advancing
+conversation activity dates. Session details prefer the live name while the agent
+exists; list consumers prefer the live catalog name and fall back to this snapshot.
+Creation captures routing and name in the insertion transaction using the same
+instance lock as deletion; a missing or foreign-team instance returns 404 without
+inserting a session. Inactive-conversation previews retain the name too. One
+migration backfills names from still-present agents; names deleted before that
+migration remain unavailable.
+
+History routing uses the session's captured runtime ID, with the current live
+instance as a fallback only for legacy sessions without that snapshot. The URL
+uses the configured browser ingress and never exposes an internal runtime
+address. No execution preparation or runtime catalog call is needed. Missing
+routing leaves history explicitly unavailable; it does not imply agent deletion.
+See the [managed-conversation lifecycle spec](../../../openspec/specs/managed-conversations/spec.md).
 
 #### 3.5.5 Admin observability requirements
 

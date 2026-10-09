@@ -13,7 +13,10 @@
 // limitations under the License.
 
 import { DeleteIconButton } from "@shared/atoms/DeleteIconButton/DeleteIconButton.tsx";
-import React from "react";
+import React, { useId } from "react";
+import { useTranslation } from "react-i18next";
+import { useFrontendProperties } from "../../../../../../hooks/useFrontendProperties";
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import { Link, useLocation } from "react-router-dom";
 import styles from "./ChatListItem.module.scss";
 
@@ -22,27 +25,47 @@ interface ChatListItemProps {
   href: string;
   label: string;
   agentName?: string;
+  agentDeleted?: boolean;
   dateLabel?: string;
   onDelete: (e: React.MouseEvent) => void;
 }
 
-export function ChatListItem({ sessionId, href, label, agentName, dateLabel, onDelete }: ChatListItemProps) {
+export function ChatListItem({
+  sessionId,
+  href,
+  label,
+  agentName,
+  agentDeleted,
+  dateLabel,
+  onDelete,
+}: ChatListItemProps) {
+  const { t } = useTranslation();
+  const { agentsNicknameSingular } = useFrontendProperties();
+  const statusId = useId();
+  const deletedStatus = t("chatbot.deletedAgentTooltip", { agentsNicknameSingular });
   const location = useLocation();
   const isSelected = location.search.includes(`session=${sessionId}`);
 
-  return (
-    <Link to={href} className={styles.chatItemContainer} data-selected={isSelected}>
-      <div className={styles.chatDescription}>
+  const item = (
+    <Link
+      to={href}
+      className={styles.chatItemContainer}
+      data-selected={isSelected}
+      aria-describedby={agentDeleted ? statusId : undefined}
+    >
+      <div className={styles.chatDescription} data-read-only={agentDeleted}>
         <div className={styles.title}>{label}</div>
-        {/* Meta line: the date is the fixed part and must stay whole ("18/08/26
-            - 09:42" split over two lines was unreadable), so only the agent
-            name gives way — it shrinks and ellipsizes, with the full name on
-            hover. */}
+        {/* Only the agent name shrinks so the date stays readable. */}
         {(agentName || dateLabel) && (
           <div className={styles.meta}>
             {agentName && (
-              <span className={styles.agentName} title={agentName}>
-                {agentName}
+              <span
+                className={styles.agentLabel}
+                data-agent-deleted={agentDeleted}
+                title={agentDeleted ? undefined : agentName}
+              >
+                <span className={styles.agentName}>{agentName}</span>
+                {agentDeleted && <span className={styles.deletedSuffix}> {t("chatbot.deletedAgentSuffix")}</span>}
               </span>
             )}
             {agentName && dateLabel && <span className={styles.metaSeparator}>·</span>}
@@ -50,9 +73,19 @@ export function ChatListItem({ sessionId, href, label, agentName, dateLabel, onD
           </div>
         )}
       </div>
+      {agentDeleted && (
+        <span id={statusId} className={styles.accessibleStatus}>
+          {deletedStatus}
+        </span>
+      )}
       <span className={styles.chatActions}>
         <DeleteIconButton size="small" onClick={onDelete} />
       </span>
     </Link>
+  );
+  return agentDeleted ? (
+    <Tooltip text={agentName ? `${agentName} - ${deletedStatus}` : deletedStatus}>{item}</Tooltip>
+  ) : (
+    item
   );
 }
