@@ -20,32 +20,30 @@ In a text box, write a **key** between single or double curly braces where a val
 {refCahierCharges}
 ```
 
-These are the three keys shown in the screenshot. Double braces also work: `{contexte}` and `{{contexte}}` identify the same key. You can use single braces on the slide and double braces in the notes, as the screenshots do, or mix both forms, including image keys. Key names are case-sensitive; spaces immediately inside the braces are ignored. Existing double-brace templates are recognized exactly as before.
+These are the three keys shown in the screenshot. The screenshots use single braces on the slide and in the notes. Double braces also work: `{contexte}` and `{{contexte}}` identify the same key. You can mix both forms, including image keys. Key names are case-sensitive; spaces immediately inside the braces are ignored. Existing double-brace templates are recognized exactly as before.
 
 You can reuse the same key several times on a slide to repeat the same value. The same key on another slide is independent.
 
 ### 2. Describe each key in the notes
 
-In the **Notes** pane below the slide, write a header followed by a description for each key. The screenshots use double-brace headers. For the three areas above, write:
+In the **Notes** pane below the slide, write a header followed by a description for each key. For the three areas above, write the following, as shown in the screenshots:
 
 ```
-{{contexte}}:
+{contexte}:
 The project context. One or two sentences.
 
-{{missions}}:
+{missions}:
 The assignments and objectives. One or two sentences.
 
-{{refCahierCharges}}:
+{refCahierCharges}:
 The name of the file from which the data is extracted.
 ```
 
-Each description tells the agent what to put in the corresponding area. A single-brace header such as `{missions}:` also works. The key name must be identical on the slide and in the notes.
-
-The screenshot contains a typo: `{{context}}:` in the notes corresponds to `{contexte}` on the slide. Use `{{contexte}}:` as in the example above.
+Each description tells the agent what to put in the corresponding area. A double-brace header such as `{{missions}}:` also works. The key name must be identical on the slide and in the notes.
 
 A line is a header only if it consists of one or more `{key}` or `{{key}}` keys, separated by commas and ending with a colon. A key quoted in the middle of a sentence stays ordinary text - so you can write naturally.
 
-![The "Enjeux & Besoins" slide with three single-brace keys and the Notes pane with their double-brace descriptions.](/ppt-filler/template.png)
+![The "Enjeux & Besoins" slide and Notes pane use the same three single-brace keys.](/ppt-filler/template.png)
 
 ## Advanced usage
 

@@ -20,32 +20,30 @@ Dans une zone de texte, écrivez une **clé** entre accolades simples ou doubles
 {refCahierCharges}
 ```
 
-Ce sont les trois clés visibles dans la capture. Les doubles accolades fonctionnent aussi : `{contexte}` et `{{contexte}}` désignent la même clé. Vous pouvez utiliser des accolades simples dans la diapositive et doubles dans les notes, comme sur les captures, ou mélanger les deux formes, y compris pour les images. Les noms de clés sont sensibles à la casse ; les espaces juste à l'intérieur des accolades sont ignorés. Les templates existants en doubles accolades sont reconnus exactement comme auparavant.
+Ce sont les trois clés visibles dans la capture. Les captures utilisent des accolades simples dans la diapositive et dans les notes. Les doubles accolades fonctionnent aussi : `{contexte}` et `{{contexte}}` désignent la même clé. Vous pouvez mélanger les deux formes, y compris pour les images. Les noms de clés sont sensibles à la casse ; les espaces juste à l'intérieur des accolades sont ignorés. Les templates existants en doubles accolades sont reconnus exactement comme auparavant.
 
 Vous pouvez réutiliser la même clé plusieurs fois sur une diapositive pour répéter la même valeur. La même clé sur une autre diapositive est, elle, indépendante.
 
 ### 2. Décrivez chaque clé dans les notes
 
-Dans le volet **Notes**, sous la diapositive, écrivez pour chaque clé un en-tête suivi d'une description. Les captures utilisent des en-têtes en doubles accolades. Pour les trois zones ci-dessus, écrivez :
+Dans le volet **Notes**, sous la diapositive, écrivez pour chaque clé un en-tête suivi d'une description. Pour les trois zones ci-dessus, écrivez comme dans les captures :
 
 ```
-{{contexte}}:
+{contexte}:
 Contexte du projet. Une à deux phrases.
 
-{{missions}}:
+{missions}:
 Ensemble des missions et objectifs. Une à deux phrases.
 
-{{refCahierCharges}}:
+{refCahierCharges}:
 Nom du fichier duquel les données sont extraites.
 ```
 
-Chaque description indique à l'agent quoi mettre dans la zone correspondante. Un en-tête en accolades simples, comme `{missions}:`, fonctionne également. Le nom de la clé doit être identique dans la diapositive et dans les notes.
-
-La capture contient une coquille : `{{context}}:` dans les notes correspond à `{contexte}` dans la diapositive. Utilisez `{{contexte}}:` comme dans l'exemple ci-dessus.
+Chaque description indique à l'agent quoi mettre dans la zone correspondante. Un en-tête en doubles accolades, comme `{{missions}}:`, fonctionne également. Le nom de la clé doit être identique dans la diapositive et dans les notes.
 
 Une ligne n'est un en-tête que si elle se compose d'une ou plusieurs clés `{clé}` ou `{{clé}}`, séparées par des virgules et terminées par deux-points. Une clé citée au milieu d'une phrase reste du texte ordinaire - vous pouvez donc écrire naturellement.
 
-![La diapositive "Enjeux & Besoins" avec trois clés en accolades simples et le volet Notes avec leurs descriptions en doubles accolades.](/ppt-filler/template.png)
+![La diapositive "Enjeux & Besoins" et le volet Notes utilisent les trois mêmes clés en accolades simples.](/ppt-filler/template.png)
 
 ## Utilisation avancée
 
