@@ -40,6 +40,7 @@ inspect safely before anything is executed.
 from __future__ import annotations
 
 import json
+import logging
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from enum import Enum
@@ -57,6 +58,8 @@ from typing import (
 )
 
 from pydantic import AliasChoices, AnyUrl, BaseModel, ConfigDict, Field, model_validator
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     # Method parameter annotations only, never Pydantic fields — `context`
@@ -381,29 +384,14 @@ class AgentTuning(BaseModel):
     )
     tags: List[str] = Field(default_factory=list)
     fields: List[FieldSpec] = Field(default_factory=list)
-    reasoning_enabled: bool = Field(
-        default=False,
+    recommended_chat_profile_id: str | None = Field(
+        default=None,
         description=(
-            "Does this agent OFFER per-question reasoning (REASON-01 level 3, "
-            "`MODEL-REASONING-ENABLEMENT-RFC.md` §6)? A first-class agent "
-            "property, deliberately NOT a capability: reasoning is a property "
-            "of how the model is called, not a tool the agent can use, so it "
-            "belongs next to role/description rather than in the tool picker.\n\n"
-            "True only means the chat composer OFFERS the toggle — it never "
-            "turns reasoning on by itself. The user still has to flip it per "
-            "question (level 4, default off), and a platform admin still has "
-            "to have enabled the model's reasoning (level 2, a ceiling)."
-        ),
-    )
-    reasoning_default_on: bool = Field(
-        default=False,
-        description=(
-            "Does a NEW conversation start with the composer's reasoning "
-            "toggle already ON (REASON-01 Amendment B)? Seeds `params.default` "
-            "on the emitted `reasoning_toggle` control — where the switch "
-            "starts, never where it stays. Inert unless `reasoning_enabled`; "
-            "kept rather than reset so withdrawing and restoring the offer "
-            "does not lose the author's choice."
+            "The chat profile this instance's conversations start on, set by "
+            "the agent's editor. `None` follows the team default, including "
+            "later changes to it. Ranks above the team default and below the "
+            "user's per-conversation choice; the pod ignores it when its "
+            "model is not usable by the team or is team-disabled."
         ),
     )
 
@@ -944,6 +932,23 @@ class ProxySpec(FrozenModel):
         return self
 
 
+_DEPRECATED_REASONING_WARNED: set[type] = set()
+
+
+def _warn_deprecated_reasoning_once(cls: type) -> None:
+    """One warning per definition class, not per instance or turn."""
+
+    if cls in _DEPRECATED_REASONING_WARNED:
+        return
+    _DEPRECATED_REASONING_WARNED.add(cls)
+    logger.warning(
+        "[fred-sdk] %s sets reasoning_enabled/reasoning_default_on: these "
+        "AgentDefinition fields are deprecated and ignored (reasoning follows "
+        "the model now); remove them before the next SDK minor.",
+        cls.__qualname__,
+    )
+
+
 class AgentDefinition(FrozenModel, ABC):
     """
     Pure declaration of a business-facing agent.
@@ -966,23 +971,6 @@ class AgentDefinition(FrozenModel, ABC):
             "Keyed by FieldSpec.key. Read via context.tuning_values in graph steps "
             "or via definition.tuning_values in react prompting. "
             "Populated by _apply_runtime_tuning; do not set manually in agent definitions."
-        ),
-    )
-    reasoning_enabled: bool = Field(
-        default=False,
-        description=(
-            "Does this template offer per-question reasoning (REASON-01 level "
-            "3)? Seeds the agent form's Reasoning card — a default the "
-            "operator can untick, never a lock. Levels 1-2 still gate whether "
-            "reasoning actually runs."
-        ),
-    )
-    reasoning_default_on: bool = Field(
-        default=False,
-        description=(
-            "Do new conversations start with the composer's reasoning toggle "
-            "already ON (REASON-01 Amendment B)? Inert unless "
-            "`reasoning_enabled` is also True."
         ),
     )
     execution_category: ExecutionCategory
@@ -1017,6 +1005,28 @@ class AgentDefinition(FrozenModel, ABC):
             "their own hardcoded tool needs) — do not conflate the two."
         ),
     )
+    reasoning_enabled: bool = Field(
+        default=False,
+        deprecated=True,
+        description=(
+            "Deprecated, ignored. Reasoning now follows the model: platform "
+            "admins enable it per model and teams set its default. Accepted "
+            "for one SDK minor so existing pods still load, then removed."
+        ),
+    )
+    reasoning_default_on: bool = Field(
+        default=False,
+        deprecated=True,
+        description="Deprecated, ignored. See `reasoning_enabled`.",
+    )
+
+    @model_validator(mode="after")
+    def _warn_deprecated_reasoning_fields(self) -> "AgentDefinition":
+        # Read through __dict__: attribute access on a deprecated field warns.
+        values = self.__dict__
+        if values.get("reasoning_enabled") or values.get("reasoning_default_on"):
+            _warn_deprecated_reasoning_once(type(self))
+        return self
 
     def preview(self) -> AgentPreview:
         return AgentPreview.none(note="No preview provided by this agent definition.")

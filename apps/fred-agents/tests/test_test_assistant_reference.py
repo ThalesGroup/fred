@@ -230,3 +230,36 @@ async def test_invoke_returns_the_output_model() -> None:
     )
     assert isinstance(output, GraphExecutionOutput)
     assert output.content.startswith("Echo: echo invoke")
+
+
+def test_http_driver_forwards_the_chat_choice_not_team_overrides(monkeypatch) -> None:
+    """The live driver sends what the frontend sends: prepare-execution's
+    `chat_profile_id` is forwarded and the retired overrides are not."""
+
+    import asyncio
+
+    from fred_agents.test_assistant import conformance
+
+    prep = {
+        "chat_default_profile_id": "chat.team",
+        "chat_profile_id": "chat.choice",
+        "agent_profile_overrides": {"rico": "chat.legacy"},
+    }
+    response = Mock(json=Mock(return_value=prep), raise_for_status=Mock())
+    client = AsyncMock()
+    client.post.return_value = response
+    client.__aenter__.return_value = client
+    monkeypatch.setattr(conformance.httpx, "AsyncClient", Mock(return_value=client))
+    driver = conformance.HttpDriver(
+        base_url="http://pod",
+        control_plane_url="http://cp",
+        access_token="t",
+        agent_instance_id="i",
+        team_id="team",
+    )
+
+    context = asyncio.run(driver._prepared_context("s"))
+
+    assert context["chat_profile_id"] == "chat.choice"
+    assert context["chat_default_profile_id"] == "chat.team"
+    assert "agent_profile_overrides" not in context

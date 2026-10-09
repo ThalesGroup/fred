@@ -225,9 +225,8 @@ def test_templates_advertise_pod_capabilities(tmp_path, monkeypatch) -> None:
         # environment.
         #
         # Reasoning is deliberately NOT here: it is a property of how the model
-        # is called, not a tool an agent uses, so it is a plain agent field
-        # (`AgentTuning.reasoning_enabled`) plus a platform-emitted composer
-        # control — never a capability (REASON-01 §6/§7).
+        # is called, not a tool an agent uses: it is chosen per turn on the
+        # model, through a platform-emitted composer control (REASON-01 §6/§7).
         assert [e["id"] for e in entries] == ["tracer_echo"]
         entry = entries[0]
         assert entry["version"] == TracerEchoCapability.manifest.version
@@ -487,48 +486,11 @@ def test_default_capability_ids_include_native_capability(
         assert response.json()[0]["default_capability_ids"] == ["tracer_echo"]
 
 
-def test_template_default_tuning_carries_reasoning_defaults(
+def test_template_default_tuning_carries_no_per_agent_reasoning(
     tmp_path, monkeypatch
 ) -> None:
-    """
-    #2473: a template's declared reasoning defaults reach control-plane on
-    `default_tuning`, so the agent form can pre-tick its Reasoning card.
-
-    `_definition_to_agent_tuning` projected only role/description/tags/fields
-    before this, so both fields were pinned False on the wire no matter what a
-    definition declared — one of the three independent reasons a template could
-    not express "this agent's job needs reasoning".
-    """
-    monkeypatch.setattr(
-        agent_app_module,
-        "_build_chat_model_factory",
-        lambda config: StaticChatModelFactory(
-            ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
-        ),
-        raising=True,
-    )
-    definition = _EchoAgent().model_copy(
-        update={"reasoning_enabled": True, "reasoning_default_on": True}
-    )
-    app = create_agent_app(
-        registry={definition.agent_id: definition},
-        config=_build_test_config(tmp_path),
-    )
-    with TestClient(app) as client:
-        response = client.get("/pod/v1/agents/templates")
-        assert response.status_code == 200
-        tuning = response.json()[0]["default_tuning"]
-        assert tuning["reasoning_enabled"] is True
-        assert tuning["reasoning_default_on"] is True
-
-
-def test_template_default_tuning_reasoning_off_by_default(
-    tmp_path, monkeypatch
-) -> None:
-    """
-    A definition declaring neither field advertises both False — the platform
-    default, so #2473 changes nothing for the templates that did not opt in.
-    """
+    """Reasoning follows the model, not the agent: a template advertises no
+    per-agent reasoning offer or default."""
     monkeypatch.setattr(
         agent_app_module,
         "_build_chat_model_factory",
@@ -546,8 +508,9 @@ def test_template_default_tuning_reasoning_off_by_default(
         response = client.get("/pod/v1/agents/templates")
         assert response.status_code == 200
         tuning = response.json()[0]["default_tuning"]
-        assert tuning["reasoning_enabled"] is False
-        assert tuning["reasoning_default_on"] is False
+        assert "reasoning_enabled" not in tuning
+        assert "reasoning_default_on" not in tuning
+        assert tuning["recommended_chat_profile_id"] is None
 
 
 # ---------------------------------------------------------------------------

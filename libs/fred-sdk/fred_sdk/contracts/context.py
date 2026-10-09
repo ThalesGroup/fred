@@ -435,7 +435,7 @@ class RuntimeContext(BaseModel):
     - Group C (per-turn retrieval selections): selected_document_libraries_ids,
       selected_document_uids, context_prompt_text, search_policy, search_rag_scope,
       include_session_scope, include_corpus_scope, deep_search, selected_chat_context_ids,
-      chat_default_profile_id, agent_profile_overrides,
+      chat_default_profile_id, chat_profile_id,
       reasoning_enabled_model_ids, reasoning.
       These are the core fields — set by the frontend per turn, read by retrieval logic.
       The platform-operator chat model binding is NOT here — it is never
@@ -482,21 +482,16 @@ class RuntimeContext(BaseModel):
             "remains an ops-level override this can never beat."
         ),
     )
-    agent_profile_overrides: dict[str, str] | None = Field(
+    chat_profile_id: str | None = Field(
         default=None,
         description=(
-            "Team-authored per-agent model-profile overrides (`agent_id -> "
-            "profile_id`), same resolution/precedence notes as "
-            "chat_default_profile_id above. `None`, not `{}`, when unset — matches "
-            "every other Group C field so `model_dump(exclude_none=True)` "
-            "(`to_legacy_context`) omits it for the common case of no team policy. "
-            "For the `chat` capability, a platform-operator binding "
-            "(`BoundRuntimeContext.platform_chat_model_binding`, resolved "
-            "trusted per turn — never on this client-forwarded context) wins "
-            "over this field unconditionally when set — that is the feature's "
-            "intended precedence, not a bug: the platform operator is the "
-            "authority on what is actually reachable/licensed in a given "
-            "deployment; a pod-local ops-authored override can never beat that."
+            "The user's per-conversation chat model choice: a chat profile id "
+            "picked in the composer and sent on every turn. Client-forwarded, "
+            "so the pod accepts it only if the profile is a known chat profile "
+            "whose model is in `usable_model_ids` and not in "
+            "`team_disabled_model_ids`; otherwise it is ignored and logged. "
+            "Ranks below the platform binding and the pod's per-agent override, "
+            "above the instance recommendation and the team default."
         ),
     )
     reasoning_enabled_model_ids: list[str] | None = Field(
@@ -517,13 +512,10 @@ class RuntimeContext(BaseModel):
             "does NOT run. A model reasons only by being named in this list "
             "(§5.6). RoutedChatModelFactory enforces it by STRIPPING the "
             "reasoning settings at client construction (§5.6.2).\n\n"
-            "As BOUND, this is the EFFECTIVE ceiling, not the raw platform "
-            "list: `agent_app` intersects it with level 3 (the agent's own "
-            "`AgentTuning.reasoning_enabled`, resolved server-side) before "
-            "building the RuntimeContext, so an agent whose author left "
-            "reasoning off carries an empty list whatever the request said "
-            "(§14.5). What the FRONTEND sends is the platform list alone — the "
-            "two differ on purpose, and the pod-side one is the one that counts."
+            "As BOUND on a managed instance turn, this is the platform list "
+            "resolved server-side on the runtime binding; a turn without a "
+            "managed instance binds an empty list. No agent-level setting "
+            "narrows it."
         ),
     )
     reasoning: bool | None = Field(
@@ -535,16 +527,11 @@ class RuntimeContext(BaseModel):
             "`search_policy`/`search_rag_scope` — reasoning is a property of "
             "the model call, not a tool, so it is a platform chat option and "
             "NOT a capability's `turn_options` slice.\n\n"
-            "TRI-STATE, and the distinction matters:\n"
-            "- `None` — the agent does not offer the choice (its author left "
-            "reasoning off), so no per-question decision was made and levels "
-            "1-2 alone decide. This is the default and the pre-REASON-01 "
-            "behaviour.\n"
-            "- `False` — the agent offers it and the user left it off: the "
-            "turn must NOT reason, even on a model whose reasoning is enabled "
-            "platform-wide.\n"
-            "- `True` — the user asked for it. Permission to reason, never a "
-            "guarantee: level 2 remains a ceiling this cannot raise (§5.3)."
+            "Only `True` reasons, and only on a model within "
+            "`reasoning_enabled_model_ids` (a ceiling this cannot raise). "
+            "`False` and `None` both mean no reasoning: callers that send "
+            "nothing (OpenAI-compatible, evaluation) never reason by accident. "
+            "Kept `bool | None` for wire compatibility."
         ),
     )
     ask_user: bool | None = Field(
@@ -575,16 +562,14 @@ class RuntimeContext(BaseModel):
 class ChatProfileOrigin(str, Enum):
     """Which precedence level produced an effective chat profile id.
 
-    The four *profile-valued* levels only. The platform binding
-    (`BoundRuntimeContext.platform_chat_model_binding`) outranks all of them but
-    is not a profile — it names a concrete `(provider, name)` directly — so its
-    callers short-circuit before consulting `resolve_effective_chat_profile`
-    rather than being handed a fifth member here that could never carry a
-    profile id.
+    Profile-valued levels only. The platform binding outranks all of them but
+    names a concrete `(provider, name)`, not a profile, so callers
+    short-circuit before consulting `resolve_effective_chat_profile`.
     """
 
     POD_AGENT_OVERRIDE = "pod_agent_override"
-    TEAM_AGENT_OVERRIDE = "team_agent_override"
+    USER_CHOICE = "user_choice"
+    INSTANCE_RECOMMENDATION = "instance_recommendation"
     TEAM_DEFAULT = "team_default"
     POD_DEFAULT = "pod_default"
 
@@ -601,80 +586,47 @@ def resolve_effective_chat_profile(
     agent_id: str | None,
     pod_agent_chat_profile_overrides: Mapping[str, str] | None,
     pod_default_chat_profile_id: str | None,
-    team_agent_profile_overrides: Mapping[str, str] | None,
+    user_chat_profile_id: str | None,
+    instance_chat_profile_id: str | None,
     team_chat_default_profile_id: str | None,
 ) -> ChatProfileResolution | None:
     """The single implementation of chat-profile precedence, shared by the pod
-    runtime and control-plane (`LLM_ROUTING_FRED.md` §Deterministic precedence).
+    runtime (per turn, to build the chat client) and control-plane (its
+    effective-chat-model read, to name the model in the composer).
 
-    Why this lives in the SDK rather than in fred-runtime, where the routing it
-    serves runs: two callers need the same answer at two different moments, and a
-    second implementation would drift.
+    Precedence, highest first; the platform binding sits above all of them and
+    is the caller's job (see `ChatProfileOrigin`):
 
-    - The pod resolves it per turn to build the actual chat client.
-    - Control-plane resolves it on its own
-      `GET /teams/{team_id}/routing-policy/effective-chat-model` read, to tell
-      the composer which model the next turn will use (#2387). NOT at
-      prepare-execution: that runs on every send and is contractually free of
-      pod-catalog fetches, which resolving the pod-owned levels requires.
-      Before this existed the composer named the single reasoning-enabled
-      model instead, which silently contradicted any platform binding or team
-      override in force.
+    1. `pod_agent_chat_profile_overrides[agent_id]`: the ops-authored
+       `models_catalog.yaml` override. Nothing beats it but the binding.
+    2. `user_chat_profile_id`: the user's per-conversation choice.
+    3. `instance_chat_profile_id`: the agent instance's recommended model.
+    4. `team_chat_default_profile_id`: the team's default.
+    5. `pod_default_chat_profile_id`: `default_profile_by_capability.chat`.
 
-    Precedence, highest first — the platform binding sits above all four and is
-    the caller's job (see `ChatProfileOrigin`):
+    Levels 2 and 3 must be validated by the caller BEFORE this call (known
+    chat profile, model usable and not team-disabled) and passed as `None`
+    when invalid, so resolution falls through to the next level. A team
+    default is not pre-validated: a stale one is a drift error the caller
+    raises. The pod override map must already be chat-only.
 
-    1. `pod_agent_chat_profile_overrides[agent_id]` — the ops-authored
-       `models_catalog.yaml` static override, the deployment's local escape
-       hatch. A team can never beat it.
-    2. `team_agent_profile_overrides[agent_id]` — the team's per-agent choice.
-    3. `team_chat_default_profile_id` — the team's default.
-    4. `pod_default_chat_profile_id` — `default_profile_by_capability.chat`.
-
-    `None` means no level produced anything: a pod whose catalog declares no
-    chat default, with no team policy. Callers treat that as "nothing to show /
-    nothing to route" rather than substituting a guess.
-
-    Capability filtering is deliberately NOT done here. Both override maps must
-    already be chat-only:
-
-    - the pod map is filtered where the catalog's per-profile capability is
-      known (`ModelRoutingResolver`, and the pod's `/agents/models-catalog`
-      projection), matching the runtime's long-standing rule that a static
-      override declaring the wrong capability is skipped, not fatal;
-    - a *team* profile that is unknown or non-chat is a drift error the caller
-      raises (`TeamRoutingProfileDriftError`) — it must never silently fall
-      through to the next level here, because a team's stored preference going
-      stale has to be visible, not papered over.
-
-    Pure: no I/O, no side effects, no ordering dependence on dict iteration.
+    `None` means no level produced anything. Pure: no I/O, no side effects.
     """
 
-    if agent_id is not None:
-        if pod_agent_chat_profile_overrides:
-            profile_id = pod_agent_chat_profile_overrides.get(agent_id)
-            if profile_id is not None:
-                return ChatProfileResolution(
-                    profile_id=profile_id,
-                    origin=ChatProfileOrigin.POD_AGENT_OVERRIDE,
-                )
-        if team_agent_profile_overrides:
-            profile_id = team_agent_profile_overrides.get(agent_id)
-            if profile_id is not None:
-                return ChatProfileResolution(
-                    profile_id=profile_id,
-                    origin=ChatProfileOrigin.TEAM_AGENT_OVERRIDE,
-                )
-    if team_chat_default_profile_id is not None:
-        return ChatProfileResolution(
-            profile_id=team_chat_default_profile_id,
-            origin=ChatProfileOrigin.TEAM_DEFAULT,
-        )
-    if pod_default_chat_profile_id is not None:
-        return ChatProfileResolution(
-            profile_id=pod_default_chat_profile_id,
-            origin=ChatProfileOrigin.POD_DEFAULT,
-        )
+    if agent_id is not None and pod_agent_chat_profile_overrides:
+        profile_id = pod_agent_chat_profile_overrides.get(agent_id)
+        if profile_id is not None:
+            return ChatProfileResolution(
+                profile_id=profile_id, origin=ChatProfileOrigin.POD_AGENT_OVERRIDE
+            )
+    for profile_id, origin in (
+        (user_chat_profile_id, ChatProfileOrigin.USER_CHOICE),
+        (instance_chat_profile_id, ChatProfileOrigin.INSTANCE_RECOMMENDATION),
+        (team_chat_default_profile_id, ChatProfileOrigin.TEAM_DEFAULT),
+        (pod_default_chat_profile_id, ChatProfileOrigin.POD_DEFAULT),
+    ):
+        if profile_id is not None:
+            return ChatProfileResolution(profile_id=profile_id, origin=origin)
     return None
 
 
@@ -974,16 +926,34 @@ class BoundRuntimeContext(FrozenModel):
             "only, and direct execution stays pod-local routing.\n\n"
             "When set, `RoutedChatModelFactory.select` returns it "
             "unconditionally for the `chat` capability, before the resolver "
-            "(and therefore the static `agent_profile_overrides` / team-policy "
-            "layers) is even consulted, and the resulting "
+            "(and therefore every profile-valued level) is even consulted, and the resulting "
             "`ModelSelectionSource.PLATFORM_BINDING` selection is exempted "
             "from the `usable_model_ids` ReBAC gate above — the platform "
             "operator is the authority on what is actually "
             "reachable/licensed, so a team-level `can_use` restriction cannot "
             "veto it. `None` means no platform binding is set for `chat`, "
             "which is every deployment before this feature — routing falls "
-            "through to `agent_profile_overrides`/team policy/pod default "
-            "exactly as before."
+            "through to the profile-valued levels exactly as before."
+        ),
+    )
+    team_disabled_model_ids: tuple[str, ...] = Field(
+        default=(),
+        description=(
+            'kind="model" capability ids the turn\'s team has disabled. '
+            "TRUSTED: resolved per managed turn on the server-to-server "
+            "`ManagedAgentRuntimeBinding` lookup, never read from request "
+            "content. `RoutedChatModelFactory` ignores a user choice or an "
+            "instance recommendation naming one of these models, and fails "
+            "closed on a team default naming one. Empty outside managed turns."
+        ),
+    )
+    recommended_chat_profile_id: str | None = Field(
+        default=None,
+        description=(
+            "The managed instance's recommended chat profile "
+            "(`AgentTuning.recommended_chat_profile_id`). TRUSTED: copied from "
+            "the server-resolved instance tuning, never from request content. "
+            "Validated like the user's choice; an invalid value is ignored."
         ),
     )
     platform_prompt: str | None = Field(
