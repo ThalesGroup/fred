@@ -4422,4 +4422,3 @@ references to the request's diagnostic context. Attachment persistence additiona
 binds attachment/document references after ownership validation. Generic completion
 uses a shared ASGI lifecycle event and never treats logging metadata as authority.
 See [observability §6/§7](../platform/OBSERVABILITY-AND-AUDIT.md).
-
