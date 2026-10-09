@@ -1512,7 +1512,7 @@ async def test_aggregation_unions_model_profile_ids_across_pods(monkeypatch) -> 
         aggregate_capability_catalog,
     )
 
-    def _model_entry(profile_ids, thinking_profile_ids=()):
+    def _model_entry(profile_ids, thinking_profile_ids=(), levels=None):
         return CapabilityCatalogEntry(
             id="model__openai__gpt-5.1",
             version="1",
@@ -1524,6 +1524,7 @@ async def test_aggregation_unions_model_profile_ids_across_pods(monkeypatch) -> 
             model_profile_ids=tuple(profile_ids),
             model_chat_profile_ids=tuple(profile_ids),
             model_thinking_profile_ids=tuple(thinking_profile_ids),
+            model_reasoning_efforts=levels or {},
         )
 
     async def _fake_fetch(base_url: str):
@@ -1535,9 +1536,17 @@ async def test_aggregation_unions_model_profile_ids_across_pods(monkeypatch) -> 
     async def _fake_fetch_models(base_url: str):
         if base_url == "http://pod-a":
             return PodModelCatalog(
-                entries=[_model_entry(["chat.pod-a.gpt5"], ["chat.pod-a.gpt5"])]
+                entries=[
+                    _model_entry(
+                        ["chat.pod-a.gpt5"],
+                        ["chat.pod-a.gpt5"],
+                        {"chat.pod-a.gpt5": ("low", "high")},
+                    )
+                ]
             )
-        return PodModelCatalog(entries=[_model_entry(["chat.pod-b.gpt5"])])
+        return PodModelCatalog(
+            entries=[_model_entry(["chat.pod-b.gpt5"], levels={"chat.pod-b.gpt5": ()})]
+        )
 
     monkeypatch.setattr(
         product_service, "_available_capabilities_for_source", _fake_fetch
@@ -1581,6 +1590,11 @@ async def test_aggregation_unions_model_profile_ids_across_pods(monkeypatch) -> 
     # pod-b never declared a thinking profile for this model; pod-a's must
     # still carry through rather than being wiped by pod-b's registration.
     assert entry.model_thinking_profile_ids == ("chat.pod-a.gpt5",)
+    # Reasoning levels are keyed per profile: both pods' entries survive.
+    assert entry.model_reasoning_efforts == {
+        "chat.pod-a.gpt5": ("low", "high"),
+        "chat.pod-b.gpt5": (),
+    }
 
 
 @pytest.mark.asyncio

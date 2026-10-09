@@ -4244,6 +4244,82 @@ display-name cache, so a change shows on the next call; presigns of one batch
 run concurrently, at most 8 at a time. Never exported or logged. Full behavior:
 OpenSpec `user-profile-picture`.
 
+## 60. Contract Notes — agent creation assistant (2026-10-08)
+
+**What it is.** In the agent form header, a user describes in plain words what
+the agent should do; the platform drafts a short name, role and description, a
+system prompt and a capability selection. Nothing is saved: the form applies
+the items the user ticks.
+
+**Endpoint.** `POST …/teams/{team_id}/agent-templates/{template_id}/draft-agent`,
+body `AgentDraftRequest` (`description` 1-4000 chars, `language`,
+optional `agent_name` / `agent_role`, `capabilities`: `{id, name, description}`
+already translated by the client) → `AgentDraftResult` (`name` ≤ 60,
+`role` ≤ 120, `description` ≤ 300 chars, each nullable; `system_prompt`,
+`capability_ids`). At most 500 candidate
+capabilities. Requires `team.can_update_agents`; the
+template is resolved exactly as for agent creation (404 when missing or not
+usable by the team). Only candidate ids the template advertises and the team
+`can_use` reach the pod, and only those can come back. Forwarded with the
+caller's token to the pod's `/agents/creation-assistant/draft`
+(`RUNTIME-EXECUTION-CONTRACT.md` §8.105); the pod reads the admin settings
+below itself. The 404 also covers edit mode when the agent's template is no
+longer usable; the frontend shows its "not available" copy for 404 and 501.
+Errors: 422 invalid body or pod 422; 403/503/504 passed through; 504 when the
+pod does not answer within 55 s; 503 unreachable pod, or no free connection
+to it within 5 s (shared runtime client pool); 501 pod without the
+operation; 502 otherwise, including a pod 401. Full behavior: OpenSpec
+`agent-creation-assistant`.
+
+**Admin settings.** `GET`/`PUT`/`DELETE
+/control-plane/v1/admin/platform/creation-assistant`, gated like the platform
+prompt (`can_edit_platform_prompt`). Stored in the single-row
+`creation_assistant_settings` table (Alembic `93427a5fe874`): `text` and
+`model_profile_id`, both nullable (`NULL` = pod default), and
+`reasoning_effort` (text not null, default `off`, check constraint
+`off`/`low`/`medium`/`high`). All three return
+`CreationAssistantSettings`: `text` (override or pod default), `default_text`
+(from the pod's `/agents/platform-prompt`), `default_revised_at`,
+`default_changed_since_override` (an override exists and the pod's revision
+date is later than the row's `updated_at` date; `updated_at`/`updated_by` date
+the meta-prompt, so a model-only or reasoning-only save leaves them unchanged),
+`is_default`, `source_unavailable`, `missing_language_placeholder`,
+`model_profile_id`, `reasoning_effort`, `default_model_profile_id` (the pods'
+default chat profile when every reachable pod names the same one, else
+`null`), `model_options` (`{profile_id, name, supports_reasoning,
+reasoning_efforts}`: the chat profiles every enabled pod advertises,
+`supports_reasoning` when the profile is among the catalog's
+`model_thinking_profile_ids` and `model_reasoning_efforts` does not map it to
+`[]` (nothing the pod can send), `reasoning_efforts` its selectable levels from
+`model_reasoning_efforts`, empty for on/off), `updated_by`, `updated_at`. PUT
+`{text, model_profile_id, reasoning_effort}` (`reasoning_effort` defaults to
+`off`) replaces all three: `text` is `null` (keep the built-in text) or non-blank, at most
+20,000 characters and free of reserved tags (422); a missing `{language}`
+placeholder is accepted and flagged; a new `model_profile_id` outside
+`model_options` is refused (422); the stored one is accepted without
+re-checking the catalog; a `reasoning_effort` outside the four values is
+refused (422), but it is never checked against the model: the pod clamps it
+(any non-`off` value is "on" for an on/off profile, the nearest declared level
+otherwise), so a catalog change cannot block a save. DELETE clears `text`
+only, keeping model and effort. The pod reads both from
+`GET /teams/{team_id}/creation-assistant/settings` (`can_update_agents`,
+returns `CreationAssistantRuntimeSettings`: `creation_assistant_prompt`,
+`model_profile_id`, `reasoning_effort`) with the caller's bearer while drafting; no request body,
+to the control plane or to the pod, can set them. The model only selects
+what the assistant calls; the drafted agent keeps its routed model.
+
+**Token usage.** The six token-usage KPI presets (`user_token_usage_*`,
+`token_usage_*`: over time, by model, by agent) sum `agent.turn_completed` and
+the pod's `agent.creation_assistant_completed` events that carry tokens (a
+timeout or provider error is emitted without them), so a draft counts for the
+calling user and the team in the path even if the agent is never saved.
+By-agent rows put these calls under `__creation_assistant__`, translated by the
+frontend. Turn, conversation and activity presets are unchanged. The platform
+preset `creation_assistant_usage` (`can_observe_platform`, no `team_id`)
+returns `CreationAssistantUsageResponse`: `total_tokens`, `input_tokens`,
+`output_tokens` and `drafts` (calls the provider answered, usable or not) for
+the period, read from `agent.creation_assistant_completed` only.
+
 ## Knowledge Flow ingestion cancellation — 2026-09-23
 
 `POST /knowledge-flow/v1/tasks/{task_id}/cancel` retains its existing task-mutation

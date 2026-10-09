@@ -14,7 +14,44 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import AwareDatetime, BaseModel
+
+# Token-usage presets sum both metrics (same `quantities.*_tokens` names);
+# turn, conversation and latency presets read `agent.turn_completed` only.
+TURN_COMPLETED_METRIC = "agent.turn_completed"
+CREATION_ASSISTANT_METRIC = "agent.creation_assistant_completed"
+# Creation assistant events are emitted for every outcome; only those the
+# provider answered carry tokens, so the others never open an empty bucket.
+CREATION_ASSISTANT_ANSWERED_FILTER: dict[str, Any] = {
+    "bool": {
+        "filter": [
+            {"term": {"metric.name": CREATION_ASSISTANT_METRIC}},
+            {"exists": {"field": "quantities.input_tokens"}},
+        ]
+    }
+}
+TOKEN_USAGE_FILTER: dict[str, Any] = {
+    "bool": {
+        "should": [
+            {"term": {"metric.name": TURN_COMPLETED_METRIC}},
+            CREATION_ASSISTANT_ANSWERED_FILTER,
+        ],
+        "minimum_should_match": 1,
+    }
+}
+# By-agent bucket of creation assistant calls, which have no agent; translated in the UI.
+CREATION_ASSISTANT_LABEL = "__creation_assistant__"
+BY_AGENT_SCOPE_FILTER: dict[str, Any] = {
+    "bool": {
+        "should": [
+            {"exists": {"field": "dims.agent_instance_name"}},
+            {"term": {"metric.name": CREATION_ASSISTANT_METRIC}},
+        ],
+        "minimum_should_match": 1,
+    }
+}
 
 
 class TimeSeriesPoint(BaseModel):
@@ -45,6 +82,17 @@ class ScalarResponse(BaseModel):
     """Single integer metric for the requested time range."""
 
     value: int
+    since: AwareDatetime
+    until: AwareDatetime
+
+
+class CreationAssistantUsageResponse(BaseModel):
+    """Creation assistant token consumption and call count for the time range."""
+
+    total_tokens: int
+    input_tokens: int
+    output_tokens: int
+    drafts: int
     since: AwareDatetime
     until: AwareDatetime
 

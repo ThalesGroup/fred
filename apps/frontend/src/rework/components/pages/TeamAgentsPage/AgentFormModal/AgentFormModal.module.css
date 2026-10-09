@@ -22,3 +22,8 @@
   --settings-modal-body-padding-inline: var(--spacing-l);
   --settings-modal-body-padding-bottom: var(--spacing-l);
 }
+
+/* Set apart from Cancel and Save: it opens a helper, it does not close the form. */
+.assistantButton {
+  margin-inline-end: var(--spacing-xs);
+}

@@ -47,6 +47,11 @@
   padding: var(--spacing-s) var(--spacing-m);
 }
 
+/* compactTitle: the body starts right under the title. */
+.titleContainer.compactTitle {
+  padding-bottom: 0;
+}
+
 .title {
   margin: 0;
   min-width: 0;
@@ -63,9 +68,17 @@
   overflow-y: auto;
 }
 
+/* Left-aligned content facing the buttons; it takes the free space and wraps. */
+.actionsStart {
+  flex: 1;
+  margin-right: auto;
+  min-width: 0;
+}
+
 .actions {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
   gap: var(--spacing-xs);
   border-top: 1px solid var(--outline-muted);
   padding: var(--spacing-m);

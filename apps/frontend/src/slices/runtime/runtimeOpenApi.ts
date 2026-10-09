@@ -73,6 +73,16 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/pod/v1/agents/checkpoints/${queryArg.sessionId}` }),
     }),
+    draftAgentPodV1AgentsCreationAssistantDraftPost: build.mutation<
+      DraftAgentPodV1AgentsCreationAssistantDraftPostApiResponse,
+      DraftAgentPodV1AgentsCreationAssistantDraftPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/creation-assistant/draft`,
+        method: "POST",
+        body: queryArg.agentDraftPodRequest,
+      }),
+    }),
     evaluateAgent: build.mutation<EvaluateAgentApiResponse, EvaluateAgentApiArg>({
       query: (queryArg) => ({
         url: `/pod/v1/agents/evaluate`,
@@ -224,6 +234,11 @@ export type GetCheckpointThreadPodV1AgentsCheckpointsSessionIdGetApiResponse =
   /** status 200 Successful Response */ CheckpointThreadDetail;
 export type GetCheckpointThreadPodV1AgentsCheckpointsSessionIdGetApiArg = {
   sessionId: string;
+};
+export type DraftAgentPodV1AgentsCreationAssistantDraftPostApiResponse =
+  /** status 200 Successful Response */ AgentDraftResult;
+export type DraftAgentPodV1AgentsCreationAssistantDraftPostApiArg = {
+  agentDraftPodRequest: AgentDraftPodRequest;
 };
 export type EvaluateAgentApiResponse = /** status 200 Successful Response */ EvalTrace;
 export type EvaluateAgentApiArg = {
@@ -419,6 +434,30 @@ export type CheckpointEntry = {
 export type CheckpointThreadDetail = {
   checkpoints: CheckpointEntry[];
   session_id: string;
+};
+export type AgentDraftResult = {
+  /** Recommended capabilities, always a subset of the request's. */
+  capability_ids?: string[];
+  /** One sentence; None when the model gave none. */
+  description?: string | null;
+  name?: string | null;
+  role?: string | null;
+  system_prompt: string;
+};
+export type AgentDraftCapabilityCandidate = {
+  description?: string;
+  id: string;
+  name: string;
+};
+export type AgentDraftPodRequest = {
+  agent_name?: string | null;
+  agent_role?: string | null;
+  capabilities?: AgentDraftCapabilityCandidate[];
+  /** The user's own words: role, mission, audience, constraints. */
+  description: string;
+  /** UI language (BCP 47, e.g. 'fr', 'en'); the prompt is written in it. */
+  language?: string;
+  team_id: string;
 };
 export type EvalStep = {
   arguments?: {
@@ -845,6 +884,9 @@ export type ModelCatalogEntry = {
   name: string;
   profile_ids?: string[];
   provider: string;
+  reasoning_efforts?: {
+    [key: string]: ("low" | "medium" | "high")[];
+  };
   thinking_profile_ids?: string[];
 };
 export type ModelCatalogResponse = {
@@ -855,6 +897,8 @@ export type ModelCatalogResponse = {
   models: ModelCatalogEntry[];
 };
 export type PlatformPromptFileResponse = {
+  creation_assistant_prompt: string;
+  creation_assistant_prompt_revised_at: string;
   platform_instructions: string;
   platform_prompt: string;
 };
@@ -1083,6 +1127,9 @@ export type CapabilityCatalogEntry = {
   model_chat_profile_ids?: string[];
   model_display_name?: string | null;
   model_profile_ids?: string[];
+  model_reasoning_efforts?: {
+    [key: string]: ("low" | "medium" | "high")[];
+  };
   model_thinking_profile_ids?: string[];
   /** i18n key */
   name: string;
@@ -1191,6 +1238,7 @@ export const {
   useDeleteCheckpointThreadPodV1AgentsCheckpointsSessionIdDeleteMutation,
   useGetCheckpointThreadPodV1AgentsCheckpointsSessionIdGetQuery,
   useLazyGetCheckpointThreadPodV1AgentsCheckpointsSessionIdGetQuery,
+  useDraftAgentPodV1AgentsCreationAssistantDraftPostMutation,
   useEvaluateAgentMutation,
   useExecuteAgentMutation,
   useExecuteAgentStreamMutation,

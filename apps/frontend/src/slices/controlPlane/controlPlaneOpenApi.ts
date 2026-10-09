@@ -330,6 +330,22 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.createAgentInstanceRequest,
       }),
     }),
+    postDraftAgentControlPlaneV1TeamsTeamIdAgentTemplatesTemplateIdDraftAgentPost: build.mutation<
+      PostDraftAgentControlPlaneV1TeamsTeamIdAgentTemplatesTemplateIdDraftAgentPostApiResponse,
+      PostDraftAgentControlPlaneV1TeamsTeamIdAgentTemplatesTemplateIdDraftAgentPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/agent-templates/${queryArg.templateId}/draft-agent`,
+        method: "POST",
+        body: queryArg.agentDraftRequest,
+      }),
+    }),
+    getCreationAssistantRuntimeSettingsControlPlaneV1TeamsTeamIdCreationAssistantSettingsGet: build.query<
+      GetCreationAssistantRuntimeSettingsControlPlaneV1TeamsTeamIdCreationAssistantSettingsGetApiResponse,
+      GetCreationAssistantRuntimeSettingsControlPlaneV1TeamsTeamIdCreationAssistantSettingsGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/creation-assistant/settings` }),
+    }),
     patchTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPatch: build.mutation<
       PatchTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPatchApiResponse,
       PatchTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPatchApiArg
@@ -1063,6 +1079,28 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/control-plane/v1/admin/platform/instructions` }),
     }),
+    getCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantGet: build.query<
+      GetCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantGetApiResponse,
+      GetCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/creation-assistant` }),
+    }),
+    putCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantPut: build.mutation<
+      PutCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantPutApiResponse,
+      PutCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/creation-assistant`,
+        method: "PUT",
+        body: queryArg.setCreationAssistantSettingsRequest,
+      }),
+    }),
+    deleteCreationAssistantPromptControlPlaneV1AdminPlatformCreationAssistantDelete: build.mutation<
+      DeleteCreationAssistantPromptControlPlaneV1AdminPlatformCreationAssistantDeleteApiResponse,
+      DeleteCreationAssistantPromptControlPlaneV1AdminPlatformCreationAssistantDeleteApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/creation-assistant`, method: "DELETE" }),
+    }),
     getPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGet: build.query<
       GetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetApiResponse,
       GetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetApiArg
@@ -1533,6 +1571,19 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    handlerControlPlaneV1KpiPresetsCreationAssistantUsageGet: build.query<
+      HandlerControlPlaneV1KpiPresetsCreationAssistantUsageGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsCreationAssistantUsageGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/creation_assistant_usage`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
     handlerControlPlaneV1KpiPresetsStorageByTeamGet: build.query<
       HandlerControlPlaneV1KpiPresetsStorageByTeamGetApiResponse,
       HandlerControlPlaneV1KpiPresetsStorageByTeamGetApiArg
@@ -1798,6 +1849,18 @@ export type PostTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesPostApiR
 export type PostTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesPostApiArg = {
   teamId: string;
   createAgentInstanceRequest: CreateAgentInstanceRequest;
+};
+export type PostDraftAgentControlPlaneV1TeamsTeamIdAgentTemplatesTemplateIdDraftAgentPostApiResponse =
+  /** status 200 Successful Response */ AgentDraftResult;
+export type PostDraftAgentControlPlaneV1TeamsTeamIdAgentTemplatesTemplateIdDraftAgentPostApiArg = {
+  teamId: string;
+  templateId: string;
+  agentDraftRequest: AgentDraftRequest;
+};
+export type GetCreationAssistantRuntimeSettingsControlPlaneV1TeamsTeamIdCreationAssistantSettingsGetApiResponse =
+  /** status 200 Successful Response */ CreationAssistantRuntimeSettings;
+export type GetCreationAssistantRuntimeSettingsControlPlaneV1TeamsTeamIdCreationAssistantSettingsGetApiArg = {
+  teamId: string;
 };
 export type PatchTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPatchApiResponse =
   /** status 200 Successful Response */ ManagedAgentInstanceSummary;
@@ -2277,6 +2340,17 @@ export type PutPlatformPromptControlPlaneV1AdminPlatformPromptPutApiArg = {
 export type GetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetApiResponse =
   /** status 200 Successful Response */ PlatformInstructions;
 export type GetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetApiArg = void;
+export type GetCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantGetApiResponse =
+  /** status 200 Successful Response */ CreationAssistantSettings;
+export type GetCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantGetApiArg = void;
+export type PutCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantPutApiResponse =
+  /** status 200 Successful Response */ CreationAssistantSettings;
+export type PutCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantPutApiArg = {
+  setCreationAssistantSettingsRequest: SetCreationAssistantSettingsRequest;
+};
+export type DeleteCreationAssistantPromptControlPlaneV1AdminPlatformCreationAssistantDeleteApiResponse =
+  /** status 200 Successful Response */ CreationAssistantSettings;
+export type DeleteCreationAssistantPromptControlPlaneV1AdminPlatformCreationAssistantDeleteApiArg = void;
 export type GetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetApiResponse =
   /** status 200 Successful Response */ PlatformUiSettings;
 export type GetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetApiArg = void;
@@ -2625,6 +2699,16 @@ export type HandlerControlPlaneV1KpiPresetsTokenUsageByAgentGetApiArg = {
 export type HandlerControlPlaneV1KpiPresetsTokenUsageByModelGetApiResponse =
   /** status 200 Successful Response */ LabelValueResponse;
 export type HandlerControlPlaneV1KpiPresetsTokenUsageByModelGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsCreationAssistantUsageGetApiResponse =
+  /** status 200 Successful Response */ CreationAssistantUsageResponse;
+export type HandlerControlPlaneV1KpiPresetsCreationAssistantUsageGetApiArg = {
   /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
@@ -3118,6 +3202,9 @@ export type CapabilityCatalogEntry = {
   model_profile_ids?: string[];
   model_chat_profile_ids?: string[];
   model_thinking_profile_ids?: string[];
+  model_reasoning_efforts?: {
+    [key: string]: ("low" | "medium" | "high")[];
+  };
   model_display_name?: string | null;
 };
 export type AgentTemplateSummary = {
@@ -3230,6 +3317,36 @@ export type CreateAgentInstanceRequest = {
   reasoning_enabled?: boolean;
   /** Start every new conversation with this agent's reasoning toggle already ON (REASON-01 Amendment B). Read only when `reasoning_enabled` is true; it seeds the composer's initial value and nothing more — the user can switch it off for any question. Defaults to False, the platform behaviour before this field existed. */
   reasoning_default_on?: boolean;
+};
+export type AgentDraftResult = {
+  name?: string | null;
+  role?: string | null;
+  /** One sentence; None when the model gave none. */
+  description?: string | null;
+  system_prompt: string;
+  /** Recommended capabilities, always a subset of the request's. */
+  capability_ids?: string[];
+};
+export type AgentDraftCapabilityCandidate = {
+  id: string;
+  name: string;
+  description?: string;
+};
+export type AgentDraftRequest = {
+  /** The user's own words: role, mission, audience, constraints. */
+  description: string;
+  /** UI language (BCP 47, e.g. 'fr', 'en'); the prompt is written in it. */
+  language?: string;
+  agent_name?: string | null;
+  agent_role?: string | null;
+  capabilities?: AgentDraftCapabilityCandidate[];
+};
+export type CreationAssistantRuntimeSettings = {
+  creation_assistant_prompt?: string | null;
+  /** Chat profile; one unknown to the pod uses the pod default. */
+  model_profile_id?: string | null;
+  /** Reasoning of the assistant's own call. The pod clamps it to the profile: any non-'off' value means on for an on/off profile, the nearest declared level otherwise. */
+  reasoning_effort?: "off" | "low" | "medium" | "high";
 };
 export type UpdateAgentInstanceRequest = {
   display_name?: string | null;
@@ -4027,6 +4144,49 @@ export type PlatformInstructions = {
   /** True when no runtime pod could be reached to report its shipped instructions. `text` is then empty for lack of an answer, not because agents receive no instructions — the UI must distinguish the two rather than render an empty read-only panel. */
   source_unavailable?: boolean;
 };
+export type CreationAssistantModelOption = {
+  profile_id: string;
+  /** Catalog model name, for display. */
+  name: string;
+  /** True when this profile declares `supports_thinking` and has a reasoning effort the pod can send. */
+  supports_reasoning?: boolean;
+  /** Selectable reasoning levels, weakest first; empty for an on/off profile (or one that cannot reason). */
+  reasoning_efforts?: ("low" | "medium" | "high")[];
+};
+export type CreationAssistantSettings = {
+  /** The meta-prompt in force: the saved override, or the pod default when `is_default` is true (empty if no pod could be reached). */
+  text: string;
+  /** The pod's built-in meta-prompt; None when no pod answered. */
+  default_text?: string | null;
+  /** Date of the last edit of the built-in meta-prompt; None for an older or unreachable pod. */
+  default_revised_at?: string | null;
+  /** True when an override is saved and the built-in meta-prompt was revised on a later date. The admin UI shows it as a warning. */
+  default_changed_since_override?: boolean;
+  /** True when no override is saved. */
+  is_default: boolean;
+  /** True when no runtime pod could report its built-in meta-prompt. */
+  source_unavailable?: boolean;
+  /** True when `text` lacks the `{language}` placeholder. Saving is allowed; the admin UI shows it as a warning. */
+  missing_language_placeholder?: boolean;
+  /** Chat profile the creation assistant uses; None = the pod default. */
+  model_profile_id?: string | null;
+  /** Reasoning of the assistant's own call. Any non-'off' value means on for an on/off profile; a level the profile does not offer is clamped by the pod to the nearest one. */
+  reasoning_effort?: "off" | "low" | "medium" | "high";
+  /** The pods' default chat profile, when every reachable pod names the same one; tells the UI which reasoning control the platform default offers. */
+  default_model_profile_id?: string | null;
+  /** Chat profiles every enabled pod advertises; empty when none answered. */
+  model_options?: CreationAssistantModelOption[];
+  updated_by?: string | null;
+  updated_at?: string | null;
+};
+export type SetCreationAssistantSettingsRequest = {
+  /** Meta-prompt override; None keeps the pod's built-in text. */
+  text?: string | null;
+  /** One of `model_options`; None uses the pod default. */
+  model_profile_id?: string | null;
+  /** Reasoning of the assistant's call; clamped to the model by the pod. */
+  reasoning_effort?: "off" | "low" | "medium" | "high";
+};
 export type PlatformUiSettings = {
   /** Theme new users get, or null to use the frontend's own default. */
   default_theme?: string | null;
@@ -4279,6 +4439,14 @@ export type UserRecentAgentsResponse = {
   since: string;
   until: string;
 };
+export type CreationAssistantUsageResponse = {
+  total_tokens: number;
+  input_tokens: number;
+  output_tokens: number;
+  drafts: number;
+  since: string;
+  until: string;
+};
 export type TeamStorageRow = {
   team_id: string;
   label: string;
@@ -4480,6 +4648,9 @@ export const {
   useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery,
   useLazyGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery,
   usePostTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesPostMutation,
+  usePostDraftAgentControlPlaneV1TeamsTeamIdAgentTemplatesTemplateIdDraftAgentPostMutation,
+  useGetCreationAssistantRuntimeSettingsControlPlaneV1TeamsTeamIdCreationAssistantSettingsGetQuery,
+  useLazyGetCreationAssistantRuntimeSettingsControlPlaneV1TeamsTeamIdCreationAssistantSettingsGetQuery,
   usePatchTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPatchMutation,
   useDeleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDeleteMutation,
   usePostTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesWithAssetsPostMutation,
@@ -4595,6 +4766,10 @@ export const {
   usePutPlatformPromptControlPlaneV1AdminPlatformPromptPutMutation,
   useGetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetQuery,
   useLazyGetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetQuery,
+  useGetCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantGetQuery,
+  useLazyGetCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantGetQuery,
+  usePutCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantPutMutation,
+  useDeleteCreationAssistantPromptControlPlaneV1AdminPlatformCreationAssistantDeleteMutation,
   useGetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetQuery,
   useLazyGetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetQuery,
   usePutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutMutation,
@@ -4669,6 +4844,8 @@ export const {
   useLazyHandlerControlPlaneV1KpiPresetsTokenUsageByAgentGetQuery,
   useHandlerControlPlaneV1KpiPresetsTokenUsageByModelGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsTokenUsageByModelGetQuery,
+  useHandlerControlPlaneV1KpiPresetsCreationAssistantUsageGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsCreationAssistantUsageGetQuery,
   useHandlerControlPlaneV1KpiPresetsStorageByTeamGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsStorageByTeamGetQuery,
   useCreateCampaignControlPlaneV1EvaluationCampaignsPostMutation,

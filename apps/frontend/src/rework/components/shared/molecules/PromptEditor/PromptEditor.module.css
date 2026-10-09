@@ -75,8 +75,13 @@
   font-size: 0.8125rem;
 }
 
-.editor:not(.error):not(.disabled) .host:hover {
+.editor:not(.error):not(.disabled):not(.readOnly) .host:hover {
   border-color: var(--outline);
+}
+
+/* highlighted: the caller marks this prompt as chosen (e.g. selected in a review). */
+.editor.highlighted:not(.error):not(.disabled) .host {
+  border-color: var(--primary);
 }
 
 .editor:not(.error) .host:has(:global(.cm-editor.cm-focused)) {
@@ -214,6 +219,15 @@
   font: var(--font-label-large);
 }
 
+.visuallyHidden {
+  position: absolute;
+  clip-path: inset(50%);
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
 .editor:focus-within .label {
   --label-color: var(--on-surface);
 }
@@ -233,4 +247,19 @@
   min-height: 1.25rem;
   color: var(--on-surface-retreat);
   font: var(--font-body-medium);
+}
+
+/* fillHeight: the field takes the parent's height and stops being resizable. */
+.editor.fill,
+.editor.fill .field {
+  flex: 1;
+  min-height: 0;
+}
+
+.editor.fill .host {
+  flex: 1;
+  height: auto;
+  min-height: 10rem;
+  max-height: none;
+  resize: none;
 }

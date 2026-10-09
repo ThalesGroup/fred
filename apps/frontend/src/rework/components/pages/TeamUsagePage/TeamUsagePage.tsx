@@ -34,6 +34,7 @@ import { refreshTimeRange, resolvePreset } from "@shared/molecules/TimeRangeSele
 import TimeSeriesLineChart from "@shared/molecules/TimeSeriesLineChart/TimeSeriesLineChart";
 import MultiSeriesLineChart from "@shared/molecules/MultiSeriesLineChart/MultiSeriesLineChart";
 import BarChart from "@shared/molecules/BarChart/BarChart";
+import { agentUsageRows } from "@rework/utils/agentUsageRows";
 import KpiStatCard from "@shared/molecules/KpiStatCard/LocalizedKpiStatCard";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
 import IconButton from "@shared/atoms/IconButton/IconButton";
@@ -247,7 +248,7 @@ export default function TeamUsagePage() {
             </div>
             <BarChart
               title={t("rework.analytics.tokenUsage.byAgent.title")}
-              rows={teamTokenByAgentData?.rows ?? []}
+              rows={agentUsageRows(teamTokenByAgentData?.rows, t)}
               valueLabel={t("rework.analytics.tokenUsage.byAgent.valueLabel")}
               emptyMessage={t("rework.analytics.tokenUsage.byAgent.empty")}
               isLoading={teamTokenByAgentIsLoading}
@@ -310,7 +311,7 @@ export default function TeamUsagePage() {
           </div>
           <BarChart
             title={t("rework.teamUsage.byAgent.title")}
-            rows={byAgentData?.rows ?? []}
+            rows={agentUsageRows(byAgentData?.rows, t)}
             valueLabel={t("rework.teamUsage.byAgent.valueLabel")}
             emptyMessage={t("rework.teamUsage.byAgent.empty")}
             isLoading={byAgentIsLoading}

@@ -16,14 +16,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import cast
 
 from fred_core.sql import make_session_factory, use_session
+from fred_sdk.contracts.agent_draft import CreationAssistantReasoningEffort
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from control_plane_backend.models.base import utcnow
 from control_plane_backend.models.platform_prompt_models import (
     PLATFORM_PROMPT_SINGLETON_ID,
+    CreationAssistantSettingsRow,
     PlatformPromptRow,
 )
 
@@ -118,3 +121,80 @@ class PlatformPromptStore:
         return StoredPlatformPrompt(
             text=text, updated_by=updated_by, updated_at=updated_at
         )
+
+
+@dataclass(frozen=True)
+class StoredCreationAssistantSettings:
+    """The stored creation assistant settings; None fields mean "pod default"."""
+
+    text: str | None
+    model_profile_id: str | None
+    reasoning_effort: CreationAssistantReasoningEffort
+    updated_by: str | None
+    updated_at: datetime | None
+
+
+class CreationAssistantSettingsStore:
+    """CRUD over the single ``creation_assistant_settings`` row. Authorization
+    is `platform_prompt/service.py`'s job."""
+
+    def __init__(self, engine: AsyncEngine) -> None:
+        self._sessions = make_session_factory(engine)
+
+    async def get(
+        self, *, session: AsyncSession | None = None
+    ) -> StoredCreationAssistantSettings | None:
+        async with use_session(self._sessions, session) as s:
+            row = await s.get(
+                CreationAssistantSettingsRow, PLATFORM_PROMPT_SINGLETON_ID
+            )
+            if row is None:
+                return None
+            return StoredCreationAssistantSettings(
+                text=row.text,
+                model_profile_id=row.model_profile_id,
+                reasoning_effort=cast(
+                    CreationAssistantReasoningEffort, row.reasoning_effort
+                ),
+                updated_by=row.updated_by,
+                updated_at=row.updated_at,
+            )
+
+    async def set(
+        self,
+        *,
+        text: str | None,
+        model_profile_id: str | None,
+        reasoning_effort: CreationAssistantReasoningEffort = "off",
+        updated_by: str | None,
+        session: AsyncSession | None = None,
+    ) -> StoredCreationAssistantSettings:
+        async with use_session(self._sessions, session) as s:
+            row = await s.get(
+                CreationAssistantSettingsRow, PLATFORM_PROMPT_SINGLETON_ID
+            )
+            created = row is None
+            if row is None:
+                row = CreationAssistantSettingsRow(id=PLATFORM_PROMPT_SINGLETON_ID)
+                s.add(row)
+            # `updated_*` date the meta-prompt: the admin page compares it with
+            # the pod's revision date, so a model or reasoning change must not move it.
+            settings_only = row.text == text and (
+                row.model_profile_id != model_profile_id
+                or row.reasoning_effort != reasoning_effort
+            )
+            if created or not settings_only:
+                row.updated_by = updated_by
+                row.updated_at = utcnow()
+            row.text = text
+            row.model_profile_id = model_profile_id
+            row.reasoning_effort = reasoning_effort
+            await s.flush()
+            stored = StoredCreationAssistantSettings(
+                text=text,
+                model_profile_id=model_profile_id,
+                reasoning_effort=reasoning_effort,
+                updated_by=row.updated_by,
+                updated_at=row.updated_at,
+            )
+        return stored

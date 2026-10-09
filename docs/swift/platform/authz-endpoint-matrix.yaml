@@ -128,6 +128,11 @@ operations:
     required_permission: pending_review
   - service: control-plane
     method: GET
+    path: /control-plane/v1/kpi/presets/creation_assistant_usage
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
     path: /control-plane/v1/kpi/presets/documents_total
     review_status: pending_review
     required_permission: pending_review
@@ -512,6 +517,16 @@ operations:
     required_permission: pending_review
   - service: control-plane
     method: POST
+    path: /control-plane/v1/teams/{team_id}/agent-templates/{template_id}/draft-agent
+    review_status: approved
+    required_permission: can_update_agents # same gate as creating an agent, whose form it serves; offered capabilities are narrowed to the team's can_use set and the pod re-checks can_update_agents on the team
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/teams/{team_id}/creation-assistant/settings
+    review_status: approved
+    required_permission: can_update_agents # read by the pod while drafting, with the caller's token, so a browser-reachable pod never takes the admin meta-prompt or model from a request body; returns only the saved override text, model profile id and reasoning effort
+  - service: control-plane
+    method: POST
     path: /control-plane/v1/teams/{team_id}/avatar
     review_status: pending_review
     required_permission: pending_review
@@ -863,6 +878,21 @@ operations:
     path: /control-plane/v1/admin/platform/prompt
     review_status: approved
     required_permission: can_edit_platform_prompt # organization_authz.require_edit_platform_prompt. Writes the FIRST block of every agent's system prompt platform-wide, so this gate is the only thing between an actor and prepending text ahead of every agent on the deployment. Carved out of can_manage_platform so this one surface can be delegated to a prompt_editor without import/export, tasks and platform reset coming with it. Body length-capped by SetPlatformPromptRequest (max_length) at parsing, before authz runs. Saving "" suppresses the block; there is no DELETE (row absence means "never set", which is a distinct state).
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/platform/creation-assistant
+    review_status: approved
+    required_permission: can_edit_platform_prompt # organization_authz.require_edit_platform_prompt, same gate as the platform prompt. Returns the creation assistant's settings: meta-prompt (saved override or the pod's built-in default, plus the default itself), the chosen model profile and reasoning effort, and the chat profiles it may use.
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/admin/platform/creation-assistant
+    review_status: approved
+    required_permission: can_edit_platform_prompt # organization_authz.require_edit_platform_prompt. Sets the meta-prompt override, the model profile and the reasoning effort every creation assistant draft uses; the pod reads them from GET /teams/{team_id}/creation-assistant/settings, never from a request body. A model profile equal to the stored one is kept without re-checking the catalog. SetCreationAssistantSettingsRequest rejects blank text, >20k chars and reserved tags at parsing; a missing {language} placeholder is accepted and flagged; a new model profile absent from the pods' chat catalog is refused (422); a reasoning effort outside off/low/medium/high is refused (422).
+  - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/admin/platform/creation-assistant
+    review_status: approved
+    required_permission: can_edit_platform_prompt # organization_authz.require_edit_platform_prompt. Clears the meta-prompt override so the pod's built-in text applies again; the chosen model and reasoning effort are kept.
   - service: control-plane
     method: GET
     path: /control-plane/v1/admin/platform/ui-settings

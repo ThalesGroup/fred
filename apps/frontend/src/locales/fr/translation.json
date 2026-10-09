@@ -1447,6 +1447,7 @@
       "tokenUsage": {
         "byAgent": {
           "empty": "Aucune consommation d'agent sur cette période.",
+          "creationAssistant": "Assistant de création",
           "title": "Consommation de tokens par agent",
           "valueLabel": "Tokens"
         },
@@ -1454,6 +1455,11 @@
           "empty": "Aucune consommation de modèle sur cette période.",
           "title": "Consommation de tokens par modèle",
           "valueLabel": "Tokens"
+        },
+        "creationAssistant": {
+          "drafts_one": "{{count, number}} utilisation",
+          "drafts_other": "{{count, number}} utilisations",
+          "label": "Assistant de création"
         },
         "overTime": {
           "title": "Consommation de tokens dans le temps",
@@ -2181,7 +2187,7 @@
           "selftest": "Auto-test",
           "tasks": "Activité",
           "teams": "Equipes",
-          "platformPrompt": "Prompt global de la plateforme",
+          "platformPrompt": "Prompts plateforme",
           "announcements": "Annonces",
           "uiSettings": "Interface utilisateur"
         },
@@ -2755,6 +2761,48 @@
           "removeTagAria": "Retirer {{tag}}",
           "tagsPlaceholder": "Saisissez puis appuyez sur Entrée pour ajouter des tags..."
         },
+        "creationAssistant": {
+          "open": "Assistant",
+          "title": "Assistant de création",
+          "intro": "Décrivez avec vos mots ce que votre agent doit faire : son rôle, sa mission, son public, ses contraintes… L'assistant propose un nom, un rôle, une description, des instructions (le prompt système) et des capacités. Vous choisissez ce que vous gardez.",
+          "descriptionLabel": "Ce que doit faire votre agent",
+          "descriptionPlaceholder": "Exemple : un assistant pour l'équipe RH qui répond aux questions des salariés sur les congés et la mutuelle à partir de nos documents internes. Ton cordial, réponses courtes, toujours citer le document source. Ne jamais donner d'avis juridique.",
+          "generate": "Proposer",
+          "loading": "Préparation des propositions…",
+          "apply": "Appliquer",
+          "editDescription": "Modifier la description",
+          "identityHeading": "Identité proposée",
+          "promptHeading": "Prompt système proposé",
+          "fields": {
+            "name": "Nom",
+            "role": "Rôle",
+            "description": "Description"
+          },
+          "capabilitiesHeading": "Capacités recommandées",
+          "noCapabilities": "Aucune capacité recommandée : l'agent répondra avec ses seules instructions.",
+          "selectHint": "Sélectionnez les propositions de l'assistant que vous souhaitez appliquer.",
+          "applyHint": "Appliquer remplit uniquement les éléments cochés ; les capacités cochées remplacent la sélection actuelle. Rien n'est enregistré tant que vous n'enregistrez pas l'agent.",
+          "overwrite": {
+            "title": "Remplacer ce qui est déjà rempli ?",
+            "message": "Appliquer remplace ces valeurs du formulaire :",
+            "confirm": "Remplacer",
+            "items": {
+              "systemPrompt": "Prompt système",
+              "name": "Nom",
+              "role": "Rôle",
+              "description": "Description",
+              "capabilities": "Sélection des capacités"
+            }
+          },
+          "errors": {
+            "forbidden": "Vous n'avez pas le droit de modifier les agents de cette équipe.",
+            "unsupported": "L'assistant de création n'est pas disponible pour ce modèle d'agent. Remplissez le formulaire vous-même ou contactez un administrateur.",
+            "timeout": "Les propositions ont pris trop de temps. Réessayez, éventuellement avec une description plus courte.",
+            "unavailable": "L'assistant de création est indisponible pour le moment. Réessayez dans quelques instants.",
+            "invalid": "La description n'a pas été acceptée. Vérifiez qu'elle n'est pas vide et ne dépasse pas 4000 caractères.",
+            "failed": "Les propositions n'ont pas pu être préparées. Votre description est conservée : vous pouvez réessayer."
+          }
+        },
         "sections": {
           "aria": "Sections du formulaire",
           "general": "Général",
@@ -2949,7 +2997,7 @@
       "unknownAuthor": "un administrateur"
     },
     "platformPrompt": {
-      "title": "Prompt global de la plateforme",
+      "title": "Prompts plateforme",
       "subtitle": "Les deux blocs communs à toute la plateforme que chaque agent reçoit, dans l'ordre où le modèle les lit : les instructions livrées avec la plateforme, puis votre prompt global. Viennent ensuite les règles des outils et les instructions propres à chaque agent.",
       "editor": {
         "title": "Prompt global",
@@ -2976,7 +3024,48 @@
         "note": "Ces instructions appartiennent à la plateforme elle-même : ce sont elles qui garantissent que tous les agents se comportent de la même façon — utiliser les outils réellement mis à leur disposition, ne jamais inventer un résultat, réagir correctement à un appel en échec. Elles sont livrées avec la plateforme et personne ne peut les modifier, afin qu'une modification de prompt ne puisse jamais affaiblir le fonctionnement de l'ensemble. Utilisez le prompt global, à côté, pour donner à votre plateforme sa personnalité et ses règles propres.",
         "unavailable": "Impossible de joindre un pod agent pour lire ces instructions. Elles s'appliquent toujours aux agents ; c'est leur affichage ici qui est indisponible."
       },
-      "sourceUnavailable": "Impossible de joindre un pod agent pour lire le prompt par défaut. Ce qui s'affiche ici n'est pas ce que reçoivent les agents — n'enregistrez rien tant que le pod n'a pas répondu."
+      "sourceUnavailable": "Impossible de joindre un pod agent pour lire le prompt par défaut. Ce qui s'affiche ici n'est pas ce que reçoivent les agents — n'enregistrez rien tant que le pod n'a pas répondu.",
+      "tabs": {
+        "aria": "Prompts de la plateforme",
+        "system": "Prompt système plateforme",
+        "creationAssistant": "Assistant de création"
+      },
+      "creationAssistant": {
+        "title": "Assistant de création",
+        "badgeDefault": "Par défaut",
+        "badgeCustom": "Personnalisé",
+        "subtitle": "L'assistant de création propose un agent (nom, rôle, description, instructions, capacités) à partir de la description saisie dans le formulaire d'un agent. Voici les instructions qu'il suit. Le texte {language} doit rester présent : il est remplacé par la langue de l'utilisateur.",
+        "hint": "Modifiez-les pour adapter les propositions au style de votre organisation. « Rétablir le texte par défaut » revient au texte livré avec la plateforme, sans changer le modèle.",
+        "missingLanguage": "Le texte {language} est absent : les propositions risquent de ne plus être écrites dans la langue de l'utilisateur. Vous pouvez quand même enregistrer.",
+        "defaultRevised": "Le prompt par défaut a été mis à jour le {{revised}}, après votre personnalisation du {{customized}}.",
+        "viewDefault": "Voir le défaut",
+        "hideDefault": "Masquer le défaut",
+        "empty": "La consigne ne peut pas être vide.",
+        "reset": "Rétablir le texte par défaut",
+        "resetConfirm": {
+          "title": "Rétablir le texte par défaut ?",
+          "message": "Vos instructions personnalisées seront supprimées et l'assistant de création utilisera de nouveau le texte livré avec la plateforme. Le modèle choisi est conservé."
+        },
+        "resetDone": "Texte par défaut rétabli.",
+        "resetFailed": "Impossible de rétablir le texte par défaut.",
+        "saved": "Réglages de l'assistant de création enregistrés.",
+        "saveFailed": "Impossible d'enregistrer les réglages de l'assistant de création.",
+        "model": {
+          "label": "Modèle",
+          "default": "Modèle par défaut de la plateforme",
+          "missing": "{{id}} (plus disponible, le modèle par défaut est utilisé)"
+        },
+        "reasoning": {
+          "label": "Raisonnement",
+          "unsupported": "Ce modèle ne sait pas raisonner.",
+          "levels": {
+            "off": "Désactivé",
+            "low": "Faible",
+            "medium": "Moyen",
+            "high": "Élevé"
+          }
+        }
+      }
     },
     "wiki": {
       "title": "Wiki",

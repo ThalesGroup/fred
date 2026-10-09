@@ -19,6 +19,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PromptEditor } from "./PromptEditor";
+import styles from "./PromptEditor.module.css";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -75,6 +76,12 @@ describe("PromptEditor", () => {
     const content = container.querySelector(".cm-content");
     const labelId = content?.getAttribute("aria-labelledby");
     expect(labelId).toBeTruthy();
+    expect(container.querySelector(`#${CSS.escape(labelId!)}`)?.textContent).toBe("System prompt");
+  });
+
+  it("still names the editing surface when the label is hidden", () => {
+    render({ label: "System prompt", hideLabel: true });
+    const labelId = container.querySelector(".cm-content")?.getAttribute("aria-labelledby");
     expect(container.querySelector(`#${CSS.escape(labelId!)}`)?.textContent).toBe("System prompt");
   });
 
@@ -192,6 +199,29 @@ describe("PromptEditor", () => {
 
     render({ value: "text", disabled: false });
     expect(view?.state.readOnly).toBe(false);
+  });
+
+  it("keeps a read-only editor focusable so keyboard users can scroll and read it", () => {
+    render({ value: "text", readOnly: true });
+    const content = container.querySelector<HTMLElement>(".cm-content")!;
+    const view = EditorView.findFromDOM(container.querySelector(".cm-editor") as HTMLElement);
+    expect(content.getAttribute("contenteditable")).toBe("true");
+    expect(content.getAttribute("aria-readonly")).toBe("true");
+    expect(content.getAttribute("aria-labelledby")).toBeTruthy();
+    expect(view?.state.readOnly).toBe(true);
+    act(() => content.focus());
+    expect(document.activeElement).toBe(content);
+
+    render({ value: "text", readOnly: true, disabled: true });
+    expect(content.getAttribute("contenteditable")).toBe("false");
+    expect(content.getAttribute("aria-readonly")).toBe("false");
+  });
+
+  it("marks the field as chosen only when highlighted", () => {
+    render({ value: "text", readOnly: true });
+    expect(container.firstElementChild?.classList.contains(styles.highlighted)).toBe(false);
+    render({ value: "text", readOnly: true, highlighted: true });
+    expect(container.firstElementChild?.classList.contains(styles.highlighted)).toBe(true);
   });
 
   const copyButton = () => container.querySelector<HTMLButtonElement>('button[aria-label="rework.promptEditor.copy"]');

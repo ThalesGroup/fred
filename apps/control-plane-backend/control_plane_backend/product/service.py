@@ -60,6 +60,10 @@ from fred_sdk.contracts.capability import (
     ChatControlsResponse,
     StoredCapabilityConfig,
 )
+from fred_sdk.contracts.capability.manifest import (
+    REASONING_EFFORT_LEVELS,
+    ReasoningEffortLevel,
+)
 from fred_sdk.contracts.models import TeamScopePolicy
 from fred_sdk.contracts.prompt_utils import find_reserved_prompt_tag
 from pydantic import ValidationError
@@ -81,6 +85,7 @@ from control_plane_backend.common.field_values import validate_field_values
 from control_plane_backend.config.models import (
     ManagedAgentFieldSpec,
     ManagedAgentTuning,
+    RuntimeCatalogSourceConfig,
 )
 from control_plane_backend.platform_prompt.service import resolve_platform_prompt_text
 from control_plane_backend.product.dependencies import ProductServiceDependencies
@@ -898,6 +903,21 @@ async def _model_capabilities_for_source(
     return await _model_capabilities_for_source_uncached(base_url)
 
 
+def _reasoning_efforts(raw: object) -> dict[str, tuple[ReasoningEffortLevel, ...]]:
+    """A pod's `reasoning_efforts` map, keeping known levels only; an empty
+    list (a thinking profile with nothing to send) is kept as is."""
+    if not isinstance(raw, dict):
+        return {}
+    known = set(REASONING_EFFORT_LEVELS)
+    return {
+        str(profile_id): tuple(
+            level for level in REASONING_EFFORT_LEVELS if level in levels
+        )
+        for profile_id, levels in raw.items()
+        if isinstance(levels, list) and (not levels or known.intersection(levels))
+    }
+
+
 async def _model_capabilities_for_source_uncached(
     base_url: str,
 ) -> PodModelCatalog | None:
@@ -969,6 +989,9 @@ async def _model_capabilities_for_source_uncached(
             # then reads as "no reasoning-capable profile" and shows no
             # reasoning control — the safe direction (§5.6).
             model_thinking_profile_ids=tuple(entry.get("thinking_profile_ids") or ()),
+            # Selectable levels per thinking profile; absent on an older pod,
+            # which then reads as on/off only.
+            model_reasoning_efforts=_reasoning_efforts(entry.get("reasoning_efforts")),
             # Ops-authored display label, carried verbatim. Absent on an older
             # pod, which reads as unnamed and leaves the frontend on its
             # id-splitting heuristic — the previous behaviour exactly.
@@ -2606,6 +2629,94 @@ async def _delete_knowledge_flow_attachment(
     )
 
 
+async def _resolve_enrollable_template(
+    *,
+    user: KeycloakUser,
+    team_id: TeamId,
+    template_id: str,
+    deps: ProductServiceDependencies,
+) -> tuple[RuntimeCatalogSourceConfig, _RuntimeTemplatePayload]:
+    """
+    Resolve `{source_runtime_id}:{source_agent_id}` to its enabled source and
+    the live template this team may use, raising `EnrollmentError` otherwise.
+    """
+    parts = template_id.split(":", 1)
+    if len(parts) != 2:
+        raise EnrollmentError(
+            f"Invalid template_id {template_id!r}. "
+            "Expected format: '{source_runtime_id}:{source_agent_id}'."
+        )
+    source_runtime_id, source_agent_id = parts
+
+    source = next(
+        (
+            s
+            for s in deps.configuration.platform.runtime_catalog_sources
+            if s.runtime_id == source_runtime_id and s.enabled
+        ),
+        None,
+    )
+    if source is None:
+        raise EnrollmentError(
+            f"Runtime source {source_runtime_id!r} is not available or not enabled.",
+            http_status=404,
+        )
+
+    # Internal (non-public) templates are admin-only to enroll: resolve with the
+    # caller's OpenFGA platform_admin privilege (same check as the read-side
+    # `get_team_agent_templates`'s `include_non_public`, api.py) so a Keycloak
+    # `admin` role alone is not sufficient and a non-admin who guesses a hidden
+    # template_id simply gets "template not found" (404) below, exactly as if
+    # it did not exist.
+    can_see_non_public_templates = (
+        await deps.team_dependencies.rebac.has_user_permission(
+            user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+        )
+    )
+    runtime_templates = await _fetch_runtime_templates(
+        source.base_url, include_non_public=can_see_non_public_templates
+    )
+    template = next(
+        (
+            item
+            for item in runtime_templates
+            if item.template_agent_id == source_agent_id
+        ),
+        None,
+    )
+    if template is None:
+        raise EnrollmentError(
+            f"Template {template_id!r} was not found on runtime source "
+            f"{source_runtime_id!r}.",
+            http_status=404,
+        )
+    # Defense in depth (CAPAB-01, RFC §8.6): `list_agent_templates` already
+    # hides a template the team isn't granted, but never trust the frontend
+    # filter alone — re-check here too, same pattern as every other ReBAC gate
+    # in this codebase. 404, not 403: a team that guesses a hidden
+    # `template_id` gets exactly the same response as a nonexistent one (RFC
+    # §7.2/§10 anti-guessing rule, matching the non-public-template check
+    # above).
+    #
+    # An explicitly allowlisted internal harness template (e.g. self-test) is
+    # exempt, same reasoning and same narrow allowlist as `list_agent_templates`
+    # above (`capability_gate_exempt`) — never any `public=False` template,
+    # which has its own, independent meaning.
+    gate_exempt = capability_gate_exempt(source_agent_id)
+    if not gate_exempt and not await can_team_use_capability(
+        deps.team_dependencies.rebac,
+        team_id,
+        capability_id=template_capability_id(source_runtime_id, source_agent_id),
+    ):
+        raise EnrollmentError(
+            f"Template {template_id!r} was not found on runtime source "
+            f"{source_runtime_id!r}.",
+            http_status=404,
+        )
+
+    return source, template
+
+
 async def enroll_agent_instance(
     *,
     user: KeycloakUser,
@@ -2634,81 +2745,10 @@ async def enroll_agent_instance(
     Example:
     - `item = await enroll_agent_instance(user=user, team_id=team_id, request=body, deps=deps)`
     """
-    parts = request.template_id.split(":", 1)
-    if len(parts) != 2:
-        raise EnrollmentError(
-            f"Invalid template_id {request.template_id!r}. "
-            "Expected format: '{source_runtime_id}:{source_agent_id}'."
-        )
-    source_runtime_id, source_agent_id = parts
-
-    source = next(
-        (
-            s
-            for s in deps.configuration.platform.runtime_catalog_sources
-            if s.runtime_id == source_runtime_id and s.enabled
-        ),
-        None,
+    source, template = await _resolve_enrollable_template(
+        user=user, team_id=team_id, template_id=request.template_id, deps=deps
     )
-    if source is None:
-        raise EnrollmentError(
-            f"Runtime source {source_runtime_id!r} is not available or not enabled.",
-            http_status=404,
-        )
-
     agent_instance_id = str(uuid4())
-    # Internal (non-public) templates are admin-only to enroll: resolve with the
-    # caller's OpenFGA platform_admin privilege (same check as the read-side
-    # `get_team_agent_templates`'s `include_non_public`, api.py) so a Keycloak
-    # `admin` role alone is not sufficient and a non-admin who guesses a hidden
-    # template_id simply gets "template not found" (404) below, exactly as if
-    # it did not exist.
-    can_see_non_public_templates = (
-        await deps.team_dependencies.rebac.has_user_permission(
-            user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
-        )
-    )
-    runtime_templates = await _fetch_runtime_templates(
-        source.base_url, include_non_public=can_see_non_public_templates
-    )
-    template = next(
-        (
-            item
-            for item in runtime_templates
-            if item.template_agent_id == source_agent_id
-        ),
-        None,
-    )
-    if template is None:
-        raise EnrollmentError(
-            f"Template {request.template_id!r} was not found on runtime source "
-            f"{source_runtime_id!r}.",
-            http_status=404,
-        )
-    # Defense in depth (CAPAB-01, RFC §8.6): `list_agent_templates` already
-    # hides a template the team isn't granted, but never trust the frontend
-    # filter alone — re-check here too, same pattern as every other ReBAC gate
-    # in this codebase. 404, not 403: a team that guesses a hidden
-    # `template_id` gets exactly the same response as a nonexistent one (RFC
-    # §7.2/§10 anti-guessing rule, matching the non-public-template check
-    # above).
-    #
-    # An explicitly allowlisted internal harness template (e.g. self-test) is
-    # exempt, same reasoning and same narrow allowlist as `list_agent_templates`
-    # above (`capability_gate_exempt`) — never any `public=False` template,
-    # which has its own, independent meaning.
-    gate_exempt = capability_gate_exempt(source_agent_id)
-    if not gate_exempt and not await can_team_use_capability(
-        deps.team_dependencies.rebac,
-        team_id,
-        capability_id=template_capability_id(source_runtime_id, source_agent_id),
-    ):
-        raise EnrollmentError(
-            f"Template {request.template_id!r} was not found on runtime source "
-            f"{source_runtime_id!r}.",
-            http_status=404,
-        )
-
     tuning = template.default_tuning.model_copy(
         update={
             "role": request.role or request.display_name,
@@ -2759,8 +2799,8 @@ async def enroll_agent_instance(
         agent_instance_id=agent_instance_id,
         team_id=team_id,
         template_id=request.template_id,
-        source_runtime_id=source_runtime_id,
-        source_agent_id=source_agent_id,
+        source_runtime_id=source.runtime_id,
+        source_agent_id=template.template_agent_id,
         display_name=request.display_name,
         description=request.description,
         enabled=True,

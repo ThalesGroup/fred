@@ -98,3 +98,12 @@ def escape_reserved_prompt_tags(text: str) -> str:
     """
 
     return _RESERVED_TAG_RE.sub(lambda match: "&lt;" + match.group(0)[1:], text)
+
+
+def strip_reserved_prompt_tags(text: str) -> str:
+    """
+    Remove reserved tag markup from model-written prompt text, keeping the
+    words between tags. For generated drafts only; authored prompts are refused.
+    """
+
+    return _RESERVED_TAG_RE.sub("", text)

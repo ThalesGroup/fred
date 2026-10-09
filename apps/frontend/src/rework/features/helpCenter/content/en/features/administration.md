@@ -28,7 +28,23 @@ do not necessarily reach the same page.
 - **Platform roles** — who holds which cross-cutting role.
 - **Users** — the platform's accounts.
 - **Features** — the catalogue of functions and their opening per team.
-- **Platform prompt** — the shared instructions prepended to every agent's own.
+- **Platform prompts** — two tabs: the **platform system prompt**, the shared
+  instructions prepended to every agent's own, and the **creation assistant**,
+  which helps users draft an agent from the agent form. For the assistant you
+  can adapt its instructions and restore the default at any time (keep the
+  `{language}` text, replaced with the user's language), and choose the model
+  it uses; by default, the platform's default model. The **Reasoning**
+  setting next to it lets that model think before answering when it can.
+  It is off by default: in our tests it made drafts slower and costlier
+  without clearly better results, so we recommend an intermediate model
+  without reasoning. Depending on the model it is a switch or a choice of levels from
+  Off to High; a higher level thinks longer. When reasoning is slow, the
+  assistant also asks the same model without it and keeps the first proposal
+  ready, which uses more tokens. This choice does not change the model of the
+  agents it drafts. If the default instructions change
+  after you customised them, a warning says so and lets you view them. Anyone
+  who can edit a team's agents can read these instructions and the chosen
+  model, so never put confidential notes in them.
 - **User interface** — the default theme and the themes available to users.
 - **Analytics** — platform-wide usage indicators.
 - **Activity** — running work and its history.

@@ -6559,3 +6559,93 @@ already applied before this combined cleanup must be reapplied as described in
 the operator migration note.
 See the migration note at `docs/swift/ops/migrations/extract-mcp-agent-instructions.md`
 and `openspec/specs/mcp-capabilities/spec.md` for the current contract.
+
+### 8.105 Agent creation assistant (2026-10-08)
+
+Additive. `POST /agents/creation-assistant/draft` (body `AgentDraftPodRequest`:
+the control plane's `AgentDraftRequest`, up to 500 capabilities, plus the
+canonical `team_id`; no admin setting, extra fields ignored) returns
+`AgentDraftResult` (`name`, `role`, `description`, `system_prompt`,
+`capability_ids`). With an enabled ReBAC engine the
+pod checks `team.can_update_agents` on `team_id`. The pod then reads the admin
+settings (`CreationAssistantRuntimeSettings`: `creation_assistant_prompt`,
+`model_profile_id`, `reasoning_effort`: `off`/`low`/`medium`/`high`,
+`off` when omitted) from the control plane's
+`GET /teams/{team_id}/creation-assistant/settings` (`team_id` URL-encoded,
+2 s read timeout) with the caller's bearer,
+since a browser can reach the pod directly; no `platform.control_plane_url`
+or any read failure means the pod defaults (warning log, error type only).
+Team editors can read the admin's meta-prompt override and model id there.
+One structured call (JSON schema, retried once with tool calling only when
+that call is refused for its shape: HTTP 400, or a client-side
+`ValueError`/`NotImplementedError`; never on 401/403/429, connection errors or
+timeouts), through the new
+`RoutedChatModelFactory.build_chat_for_profile(profile_id, reasoning_effort="off")`,
+which returns the model, its name and, when it reasons, the same model without
+reasoning: the admin's chat profile, or the pod default when none is set or
+this pod has no chat profile by that id (one warning log saying which); no
+agent definition, turn binding or team routing.
+The effort applies to this call only, on a copy of the profile config:
+`off` or no `supports_thinking` strips the reasoning settings; a profile
+declaring two or more `reasoning_efforts` gets the nearest declared level
+(ties to the stronger); any other thinking profile sends, for every non-`off`
+value, its own `settings.reasoning_effort`, else its single declared level
+(`ModelProfile.reasoning_on_effort`); with neither it does not reason. The per-model
+`model_reasoning` toggle of agent chat is not consulted. A reasoning call
+passes the schema as a JSON-schema dict (thinking blocks beside the JSON text
+break the OpenAI SDK's Pydantic parse) and is hedged, never cut: still running
+after 23 s (`REASONING_HEDGE_AFTER_S`), the same call without reasoning starts
+beside it, the first usable draft wins and the other is cancelled; an unusable
+answer or a request refused as above before then starts the call without
+reasoning at once. Neither start happens with less than 12 s
+(`MIN_PLAIN_CALL_S`) left before the deadline: the reasoning call is then
+awaited alone, or its early failure returned
+(`event=creation_assistant_plain_skipped`); after the hedge one failure waits for the other call
+(`event=creation_assistant_call_failed call=reasoning|plain`, error type only).
+The meta-prompt (`fred_runtime/app/creation_assistant.py`, overridable by
+`creation_assistant_prompt`, `{language}` substituted) describes the four-block
+prompt assembly so the draft covers only the agent's own block, and asks for a
+name of about 20, a role of at most 40 and a one-sentence description of at
+most 140 characters.
+The pod strips reserved tags (`fred_sdk.contracts.prompt_utils.strip_reserved_prompt_tags`),
+collapses whitespace and cuts name, role and description at a word boundary to
+60 / 120 / 300 characters (`null` when empty), and drops ids outside the
+offered capabilities. One 50 s deadline covers the settings read, the model
+build and the structured calls (retries included): 504; no routable chat model or any failure
+to build it: 503; model error, unparseable or schema-invalid answer, or empty
+prompt: 502. An empty prompt (or reserved tags only) is an unusable answer, so
+a reasoning call returning one never wins the hedge.
+
+Model catalog: `ModelProfile` gains optional `reasoning_efforts`
+(`low`/`medium`/`high`, stored weakest first), the levels the provider really
+accepts, declared explicitly (never inferred from `settings.reasoning_effort`:
+Mistral rejects `low`/`medium` with a 400). Absent or a single level means
+on/off. The pod refuses to boot when it is empty, set without
+`supports_thinking`, or leaves out the profile's own `reasoning_effort`.
+`GET /agents/models-catalog` entries add `reasoning_efforts`
+(`{profile_id: [levels]}`: profiles with two or more, and `[]` for a thinking
+profile with no level to send, neither its own `reasoning_effort` nor a single
+declared level, which the control plane reports as not supporting reasoning),
+carried by the
+control plane as `CapabilityCatalogEntry.model_reasoning_efforts` (fred-sdk);
+older pods omit it, read as on/off. Only the creation assistant reads it; agent
+chat reasoning is unchanged.
+
+`GET /agents/platform-prompt` adds `creation_assistant_prompt` (the built-in
+meta-prompt) and `creation_assistant_prompt_revised_at` (ISO date,
+`CREATION_ASSISTANT_REVISED_AT`, pinned to the text's hash by a unit test);
+older pods omit both.
+
+Observability: no `llm.call_latency_ms` (agent model calls only; the draft
+bypasses the tracing middleware) but an
+`event=creation_assistant_completed` log line of counts and timings, and for
+every outcome (timeout and provider error included) `agent.creation_assistant_completed`
+(timer, ms) with the caller as actor (system actor when security is off), dims
+`team_id`, `model_name`, `status`, `calls` (`1`/`2`), `hedged` (`true`/`false`),
+`winner` (`reasoning`/`plain`/`none`), quantities `input_tokens`/`output_tokens`
+only when the model answered (an unusable answer included; summed over every
+call that answered; a cancelled call counts none, though the
+provider may bill it). The log line adds the same fields and `reasoning`
+(`used`/`off`/`fallback`).
+Never the description or any drafted text. Acceptance:
+`openspec/changes/add-agent-creation-assistant/`.

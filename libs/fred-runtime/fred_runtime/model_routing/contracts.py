@@ -37,9 +37,13 @@ from __future__ import annotations
 from enum import Enum
 
 from fred_core.common import ModelConfiguration
-from fred_sdk.contracts.capability.manifest import model_capability_id
+from fred_sdk.contracts.capability.manifest import (
+    REASONING_EFFORT_LEVELS,
+    ReasoningEffortLevel,
+    model_capability_id,
+)
 from fred_sdk.contracts.context import FrozenModel, ModelCapability
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 
 # `FrozenModel` and `ModelCapability` are canonically defined in
 # `fred_sdk.contracts.context` (relocated there so control-plane, which
@@ -142,6 +146,26 @@ def without_reasoning_settings(model: ModelConfiguration) -> ModelConfiguration:
     )
 
 
+def clamp_reasoning_effort(
+    choice: str, levels: tuple[ReasoningEffortLevel, ...]
+) -> ReasoningEffortLevel | None:
+    """The offered level nearest `choice` (ties go to the stronger one); None
+    for "off". `levels` must be non-empty and in `REASONING_EFFORT_LEVELS`."""
+
+    if choice not in REASONING_EFFORT_LEVELS:
+        return None
+    if choice in levels:
+        return choice  # type: ignore[return-value]
+    wanted = REASONING_EFFORT_LEVELS.index(choice)  # type: ignore[arg-type]
+    return min(
+        levels,
+        key=lambda level: (
+            abs(REASONING_EFFORT_LEVELS.index(level) - wanted),
+            -REASONING_EFFORT_LEVELS.index(level),
+        ),
+    )
+
+
 class ModelProfile(FrozenModel):
     """
     Named model configuration.
@@ -199,6 +223,46 @@ class ModelProfile(FrozenModel):
         ),
     )
 
+    reasoning_efforts: tuple[ReasoningEffortLevel, ...] | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "Reasoning effort levels the provider accepts for this profile, "
+            "declared explicitly (never inferred: Mistral rejects low/medium). "
+            "Two or more make the effort selectable by the platform helpers "
+            "that offer it; absent or a single value means on/off only, on "
+            "being the profile's own `reasoning_effort`, else the single "
+            "declared level. Requires `supports_thinking`."
+        ),
+    )
+
+    @field_validator("reasoning_efforts")
+    @classmethod
+    def _order_levels(
+        cls, value: tuple[ReasoningEffortLevel, ...] | None
+    ) -> tuple[ReasoningEffortLevel, ...] | None:
+        if value is None:
+            return None
+        return tuple(level for level in REASONING_EFFORT_LEVELS if level in value)
+
+    @property
+    def reasoning_levels(self) -> tuple[ReasoningEffortLevel, ...]:
+        """The selectable levels: the declared ones when two or more, else ()."""
+        levels = self.reasoning_efforts or ()
+        return levels if len(levels) >= 2 else ()
+
+    @property
+    def reasoning_on_effort(self) -> str | None:
+        """What "on" sends for an on/off thinking profile: its own
+        `reasoning_effort`, else its single declared level; None when it has
+        neither, so a platform helper cannot make it reason."""
+        if not self.supports_thinking:
+            return None
+        own = (self.model.settings or {}).get("reasoning_effort")
+        if isinstance(own, str):
+            return own
+        return self.reasoning_efforts[0] if self.reasoning_efforts else None
+
     @property
     def capability_id(self) -> str:
         """This profile's model identity as a capability id — the ONE derivation
@@ -238,6 +302,19 @@ class ModelProfile(FrozenModel):
                 "'supports_thinking: true' on the profile (it declares the model's "
                 "aptitude), or remove the setting."
             )
+        if self.reasoning_efforts is not None:
+            if not self.supports_thinking:
+                raise ValueError(
+                    f"ModelProfile {self.profile_id!r} declares reasoning_efforts "
+                    "but supports_thinking is false."
+                )
+            own = (self.model.settings or {}).get("reasoning_effort")
+            if own is not None and own not in self.reasoning_efforts:
+                raise ValueError(
+                    f"ModelProfile {self.profile_id!r} sets reasoning_effort "
+                    f"{own!r}, which is not one of its reasoning_efforts "
+                    f"{list(self.reasoning_efforts)}."
+                )
         return self
 
 

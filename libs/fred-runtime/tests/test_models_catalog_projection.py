@@ -496,3 +496,43 @@ def test_response_models_match_the_entries_projection() -> None:
     catalog = _catalog((_profile("chat.a"), _profile("chat.b", name="gpt-4.1")))
     response = _project_model_catalog_response(catalog)
     assert response.models == _project_model_catalog_entries(catalog)
+
+
+def test_reasoning_efforts_lists_only_profiles_with_selectable_levels() -> None:
+    levelled = ModelProfile(
+        profile_id="chat.gpt.levels",
+        capability=ModelCapability.CHAT,
+        model=ModelConfiguration(provider="openai", name="gpt-5.1"),
+        supports_thinking=True,
+        reasoning_efforts=("high", "low"),
+    )
+    catalog = _catalog(
+        (
+            levelled,
+            _profile(
+                "chat.gpt.onoff",
+                supports_thinking=True,
+                settings={"reasoning_effort": "high"},
+            ),
+        )
+    )
+
+    entries = _project_model_catalog_entries(catalog)
+
+    assert entries[0].reasoning_efforts == {"chat.gpt.levels": ["low", "high"]}
+
+
+def test_thinking_profile_with_nothing_to_send_reports_no_levels() -> None:
+    single = ModelProfile(
+        profile_id="chat.gpt.single",
+        capability=ModelCapability.CHAT,
+        model=ModelConfiguration(provider="openai", name="gpt-5.1"),
+        supports_thinking=True,
+        reasoning_efforts=("high",),
+    )
+    catalog = _catalog((single, _profile("chat.gpt.bare", supports_thinking=True)))
+
+    (entry,) = _project_model_catalog_entries(catalog)
+
+    # A single level is on/off (absent); no level and no own value: empty.
+    assert entry.reasoning_efforts == {"chat.gpt.bare": []}

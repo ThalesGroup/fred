@@ -35,7 +35,11 @@ from fred_core.kpi import estimate_green_cost
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 
 from control_plane_backend.kpi.presets.base import PresetDef
-from control_plane_backend.kpi.presets.common import LabelValuePoint, LabelValueResponse
+from control_plane_backend.kpi.presets.common import (
+    TOKEN_USAGE_FILTER,
+    LabelValuePoint,
+    LabelValueResponse,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +67,7 @@ async def query_token_usage_by_model(
                 }
             }
         },
-        {"term": {"metric.name": "agent.turn_completed"}},
+        TOKEN_USAGE_FILTER,
         {"exists": {"field": "dims.model_name"}},
     ]
     if team_id is not None:

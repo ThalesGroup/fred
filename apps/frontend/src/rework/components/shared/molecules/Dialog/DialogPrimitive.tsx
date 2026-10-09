@@ -15,7 +15,7 @@
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import Button from "../../atoms/Button/Button";
 import { type ColorTheme } from "../../utils/Type";
-import { Portal, uiPortalRoot } from "../../utils/Portal";
+import { isTopmostModal, Portal, uiPortalRoot } from "../../utils/Portal";
 import styles from "./Dialog.module.css";
 
 const NON_TEXT_INPUT_TYPES = new Set([
@@ -57,8 +57,16 @@ export interface DialogProps {
   maxWidth?: number;
   /** Optional element shown right after the title, e.g. an info icon with a tooltip. */
   titleAddon?: ReactNode;
+  /** Optional element before the title, e.g. a back button in a multi-step dialog. */
+  titlePrefix?: ReactNode;
   /** Optional caller-owned portal container inside the themed .fred-ui root. */
   portalContainer?: HTMLElement | null;
+  /** Extra class on the dialog surface, e.g. to size it. */
+  className?: string;
+  /** Drop the space under the title, for a body that brings its own top spacing. */
+  compactTitle?: boolean;
+  /** Optional content on the left of the action bar, facing the buttons (e.g. a short hint). */
+  footerStart?: ReactNode;
 }
 
 export function DialogPrimitive({
@@ -74,7 +82,11 @@ export function DialogPrimitive({
   confirmColor = "primary",
   maxWidth,
   titleAddon,
+  titlePrefix,
   portalContainer,
+  className,
+  compactTitle = false,
+  footerStart,
 }: DialogProps) {
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement | null>(null);
@@ -114,8 +126,10 @@ export function DialogPrimitive({
     if (!open) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       const dialog = dialogRef.current;
-      if (!dialog) return;
+      // A dialog opened over this one (e.g. a confirmation) owns the keyboard.
+      if (!dialog || !isTopmostModal(dialog)) return;
       if (event.key === "Escape") {
+        if (event.defaultPrevented) return;
         event.preventDefault();
         callbacks.current.onCancel();
         return;
@@ -192,7 +206,7 @@ export function DialogPrimitive({
           >
             <div
               ref={attachDialog}
-              className={styles.dialog}
+              className={className ? `${styles.dialog} ${className}` : styles.dialog}
               role="dialog"
               aria-modal="true"
               aria-labelledby={titleId}
@@ -200,7 +214,8 @@ export function DialogPrimitive({
               style={maxWidth ? { width: `min(${maxWidth}px, 90vw)` } : undefined}
               onClick={(event) => event.stopPropagation()}
             >
-              <div className={styles.titleContainer}>
+              <div className={compactTitle ? `${styles.titleContainer} ${styles.compactTitle}` : styles.titleContainer}>
+                {titlePrefix}
                 <p id={titleId} className={styles.title}>
                   {title}
                 </p>
@@ -210,6 +225,7 @@ export function DialogPrimitive({
                 {children}
               </div>
               <div className={styles.actions}>
+                {footerStart && <div className={styles.actionsStart}>{footerStart}</div>}
                 {!hideCancel && (
                   <Button type="button" color="on-surface" variant="text" size="medium" onClick={onCancel}>
                     {cancelLabel}

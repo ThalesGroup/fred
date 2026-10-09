@@ -128,6 +128,47 @@ def test_the_validator_does_not_fire_on_unrelated_settings() -> None:
     assert profile.supports_thinking is False
 
 
+def _levelled(levels: Any, **kwargs: Any) -> ModelProfile:
+    return ModelProfile(
+        profile_id="chat.gpt",
+        capability=ModelCapability.CHAT,
+        model=ModelConfiguration(
+            provider="openai", name="gpt-5.1", settings=kwargs.get("settings", {})
+        ),
+        supports_thinking=kwargs.get("supports_thinking", True),
+        reasoning_efforts=levels,
+    )
+
+
+def test_reasoning_efforts_are_absent_by_default_meaning_on_off() -> None:
+    profile = _profile(supports_thinking=True, settings={"reasoning_effort": "high"})
+    assert profile.reasoning_efforts is None
+    assert profile.reasoning_levels == ()
+
+
+def test_declared_levels_are_ordered_and_a_single_one_is_on_off() -> None:
+    assert _levelled(["high", "low"]).reasoning_efforts == ("low", "high")
+    assert _levelled(["high", "low"]).reasoning_levels == ("low", "high")
+    assert _levelled(["high"]).reasoning_levels == ()
+
+
+@pytest.mark.parametrize(
+    ("levels", "kwargs", "fragment"),
+    [
+        (["low", "high"], {"supports_thinking": False}, "supports_thinking"),
+        (["max"], {}, "reasoning_efforts"),
+        ([], {}, "reasoning_efforts"),
+        (["low", "medium"], {"settings": {"reasoning_effort": "high"}}, "'high'"),
+    ],
+)
+def test_invalid_reasoning_efforts_fail_at_load(
+    levels: Any, kwargs: dict[str, Any], fragment: str
+) -> None:
+    with pytest.raises(ValueError) as excinfo:
+        _levelled(levels, **kwargs)
+    assert fragment in str(excinfo.value)
+
+
 # ---------------------------------------------------------------------------
 # without_reasoning_settings — the strip primitive (§5.6.2)
 # ---------------------------------------------------------------------------

@@ -59,3 +59,16 @@ it("retains neutral styling by default and accepts outcome tones", () => {
     act(() => root.unmount());
   }
 });
+
+it("shows the caption under the value, including a zero value, and hides it while loading", () => {
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  try {
+    act(() => root.render(<KpiStatCard label="Tokens" value={0} caption="0 runs" isLoading={false} isError={false} />));
+    expect(container.textContent).toBe("Tokens00 runs");
+    act(() => root.render(<KpiStatCard label="Tokens" caption="0 runs" isLoading isError={false} />));
+    expect(container.textContent).toBe("TokensLoading");
+  } finally {
+    act(() => root.unmount());
+  }
+});

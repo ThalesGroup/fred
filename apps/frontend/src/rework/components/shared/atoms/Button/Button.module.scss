@@ -59,6 +59,20 @@
       }
     }
 
+    // M3 filled tonal button, same tokens as IconButton's tonal variant.
+    &.btn-tonal {
+      --btn-background: #{map.get($scheme, "container")};
+      --btn-text-color: #{map.get($scheme, "on-container")};
+
+      &:hover:not(:disabled) {
+        --btn-background-surface: #{map.get($scheme, "on-container-hover")};
+      }
+
+      &:active:not(:disabled) {
+        --btn-background-surface: #{map.get($scheme, "on-container-pressed")};
+      }
+    }
+
     &.btn-outlined {
       // M3: the outlined variant's border is always the neutral `outline`
       // token, regardless of `color` — only the label/state-layer take the
