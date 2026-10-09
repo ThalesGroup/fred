@@ -23,3 +23,17 @@ The frontend SHALL read optional `theme-custom.css`, `theme-properties.json` and
 
 - **WHEN** the SeaweedFS ZIP object is replaced while frontend pods and clients remain running
 - **THEN** the current theme stays in effect until the pods restart and clients reload
+
+### Requirement: One deployment ZIP adds multiple selectable UI themes
+
+The frontend SHALL accept an optional `theme-catalog.json` with multiple distinct theme IDs, labels and bases from the three shipped themes. Each added theme SHALL inherit all tokens from its base and MAY override them by light or dark CSS in the same ZIP. Added themes SHALL appear in the user and admin selectors, including platform default and visibility controls. A removed or invalid selected ID SHALL fall back to an offered theme.
+
+#### Scenario: Two custom themes in one ZIP
+
+- **WHEN** the ZIP declares two valid additional themes with different shipped bases
+- **THEN** both appear alongside Pebble, Cobalt and Cloud, and each preview inherits its declared base with its own CSS overrides
+
+#### Scenario: Invalid catalog
+
+- **WHEN** the ZIP catalog duplicates an ID or declares an unknown base
+- **THEN** theme installation is refused and the configured stock/fail-closed behavior applies

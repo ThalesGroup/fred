@@ -5,6 +5,7 @@ The frontend already downloads a deployment theme ZIP from an S3-compatible stor
 ## What Changes
 
 - Accept `theme-custom.css`, a strictly allowlisted `theme-properties.json`, and English/French translation overrides in the ZIP.
+- Accept one optional `theme-catalog.json` with multiple additional selectable themes based on Pebble, Cobalt or Cloud.
 - Apply CSS before application content is painted and merge branding properties before frontend startup.
 - Keep the existing SeaweedFS URL, bounded download, archive path restrictions, stock fallback and restart-to-activate model.
 - Extend the sample bundle, documentation and container smoke checks.

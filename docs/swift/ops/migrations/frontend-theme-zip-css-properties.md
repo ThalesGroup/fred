@@ -18,6 +18,8 @@ The ZIP remains reachable by the frontend container. No database migration is re
 
 The existing SeaweedFS object may now include `theme-custom.css`, `theme-properties.json` and `theme-translations/en.json` or `fr.json`. Only branding labels and asset names are accepted in the properties JSON; see `apps/frontend/README.md`. No new environment variable is required.
 
+The ZIP may also include `theme-catalog.json` to declare several additional selectable themes. Each entry has a unique `id`, display `label`, and `base` (`pebble`, `cobalt`, or `cloud`). Add CSS under `[data-ui-theme="<id>"]` for light and dark overrides, without an `html` prefix so admin previews match. The new choices appear after frontend pods restart and browsers reload; existing platform defaults and hidden-theme settings can select them.
+
 ## Upgrade
 
 Deploy the new frontend image. To activate overrides, upload a ZIP with the optional files to the object configured by `FRONTEND_THEME_URL`, then restart the frontend pods. Existing ZIPs containing only images and Markdown continue to work.
