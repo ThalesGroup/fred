@@ -213,14 +213,28 @@ acme-theme-1.0.zip
 ├── images/acme-logo.svg             # new name, referenced from properties: logoName: "acme-logo"
 ├── images/icons/customAgent.svg     # agent icon silhouette (rendered as a CSS mask)
 ├── images/default-team-avatar.png   # same name as a stock file: shadows it
+├── theme-custom.css                 # theme token overrides and other CSS
+├── theme-properties.json            # branding labels and image names
+├── theme-translations/en.json        # English UI label overrides
+├── theme-translations/fr.json        # French UI label overrides
 ├── gcu.md  gcu.fr.md  gdpr.md  gdpr.fr.md
 ├── team-admin-charter.md  team-admin-charter.fr.md   # shown to team admins, see TERMS_OF_USE.md
 ├── release.md
 └── contrib/<brand>/...              # optional, the releaseBrand cascade still applies
 ```
 
-Only `/images/**`, `/contrib/**` and root `*.md` files can be overridden;
-`index.html`, `config.json` and the bundle never are. Symlinks are dropped and
+Only `/images/**`, `/contrib/**`, root `*.md`, `theme-custom.css`,
+`theme-properties.json` and `theme-translations/{en,fr}.json` can be overridden;
+`index.html`, `config.json` and the bundle never are. Translation JSON can
+override UI message keys; omitted keys keep the shipped text. Use CSS selectors such as
+`html[data-ui-theme="pebble"][data-theme="light"]` to override any token in
+Pebble, Cobalt or Cloud, including colors, fonts and radii. The JSON may set
+these branding keys: `siteDisplayName`, `siteTitle`, `siteSubtitle`,
+`agentsNicknameSingular`, `agentsNicknamePlural`, `logoName`, `logoNameDark`,
+`faviconName`, `faviconNameDark`, `defaultTeamAvatarFile`,
+`defaultPersonalAvatarFile`, `agentIconName`, `releaseBrand` and
+`contactSupportLink`. It cannot change authentication, feature flags or the
+frontend base path. See `theme/` for a working example. Symlinks are dropped and
 an archive with entries escaping its root is refused. A zip made from a folder
 (`zip -r acme-theme.zip acme-theme/`) is accepted: the wrapper folder is skipped.
 
@@ -237,8 +251,8 @@ Behaviour to keep in mind:
   their extension. A property pointing at a missing file renders a broken
   image, not a 404.
 - Browsers cache images: ship a new file name and update the property rather
-  than overwriting a file in place. Markdown is fetched with `cache: no-cache`,
-  so shadowing `gcu.md` in place is fine.
+  than overwriting a file in place. Theme CSS and properties are requested with
+  `no-cache`; translation JSON and Markdown are fetched with `no-cache` too.
 - A new `gcu.md` does not re-prompt users. Bump `gcu_version` in the
   control-plane configuration alongside it.
 - The archive is applied at container start. After replacing the zip under the
@@ -249,7 +263,7 @@ Behaviour to keep in mind:
   which holds the liveness probe off while the archive downloads.
 
 The archive is unpacked into `/var/lib/fred/theme`, outside the web root, and
-nginx tries it before the baked file for the three surfaces above.
+nginx tries it before the baked file for the supported surfaces above.
 
 Helm wiring is values only, no chart template change:
 
@@ -296,18 +310,26 @@ the URL is unset or an empty literal, the frontend is disabled, or either key is
 which is a hard failure for what is only branding. With it the fetch degrades to
 anonymous and the baked assets are served.
 
-The k3d values (`deploy/k3d/values.yaml`) carry this shape
-against the k3d seaweedfs, reusing the stack chart's own `fred-secrets`.
+The k3d values (`deploy/k3d/values.yaml`) use
+`http://seaweedfs:8333/fred-themes/theme.zip`, reusing the stack chart's own
+`fred-secrets`.
+Upload a new ZIP to the `fred-themes/theme.zip` object in SeaweedFS, then
+restart the frontend pods. For example, with an S3 client configured for your
+SeaweedFS endpoint and credentials:
+
+```sh
+aws --endpoint-url "$SEAWEED_S3_ENDPOINT" s3 cp theme.zip s3://fred-themes/theme.zip
+```
+
 `make theme-bundle` packages `theme/` into `theme.zip`, ready to upload. That
 directory is a complete working example - round logo and its dark variant, an
 agent icon silhouette, a team avatar, and the four legal files - so the target
 produces a verifiable archive out of the box; copy it and point `THEME_SRC` at
-your own. Two of its files need a property to be reached at all:
-`acme-team-avatar.svg` (`defaultTeamAvatarFile`) and `icons/customAgent.svg`
-(`agentIconName`); the logo and the markdown work on their file names alone.
+your own. Its `theme-properties.json` selects `acme-team-avatar.svg` and
+`icons/customAgent.svg`; its `theme-custom.css` overrides a Pebble color.
 
 The target also flags the two layout mistakes that are hard to spot from a
-running pod: entries outside the three served surfaces, and an English legal
+running pod: entries outside the supported surfaces, and an English legal
 file with no language variant beside it. `make theme-container-smoke` exercises the whole path against
 a locally built image.
 

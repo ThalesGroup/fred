@@ -1,0 +1,5 @@
+## Design
+
+The container downloads `FRONTEND_THEME_URL` at startup and extracts only its served allowlist. Add two exact root files and two optional translation JSON files. `theme-custom.css` is linked in `index.html`; the stock file is empty, and the theme file uses selectors with greater specificity than the shipped theme selectors. `theme-properties.json` is checked by `jq` in the entrypoint for exactly one object whose keys belong to the existing branding property set and whose values are short strings. The frontend fetches it before rendering, then merges those keys over static `config.json` properties. Authentication, feature flags and routing remain owned by existing configuration.
+
+Optional `theme-translations/en.json` and `fr.json` are validated as nested string maps, then merged into shipped i18next resources before React renders. The theme stays immutable for the life of each frontend pod. Replacing the SeaweedFS object takes effect after frontend pods restart. The browser requests CSS, properties and translations with `no-cache`; existing image versioning advice remains relevant.
