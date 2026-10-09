@@ -581,7 +581,7 @@ export default function ManagedChatPage() {
       onSend={commands.submit}
       onInterrupt={chat.waitResponse ? chat.handleAbort : undefined}
       placeholder={t(chat.isReadOnly ? "chatbot.readOnlyComposerPlaceholder" : "chatbot.composerPlaceholder")}
-      accessibleDescription={t(chat.isReadOnly ? "chatbot.deletedAgentReadOnly" : "chatbot.composerPlaceholder", {
+      accessibleDescription={t(chat.isReadOnly ? "chatbot.deletedAgentTooltip" : "chatbot.composerPlaceholder", {
         agentsNicknameSingular,
       })}
       commandTrigger={commands.trigger}

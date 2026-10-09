@@ -599,7 +599,6 @@
       "emptyFilters": "Aucun prompt ne correspond aux filtres.",
       "categoryLabel": "Catégorie"
     },
-    "deletedAgentReadOnly": "{{agentsNicknameSingular}} supprimé. Cette conversation est en lecture seule.",
     "readOnlyComposerPlaceholder": "Conversation en lecture seule",
     "deletedAgentTooltip": "{{agentsNicknameSingular}} supprimé - conversation en lecture seule",
     "deletedAgentSuffix": "(supprimé)",

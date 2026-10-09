@@ -5191,8 +5191,8 @@ the selected language; a durable
 accessible description carries the same state. Status text, generic name fallback,
 grouping and empty-list labels interpolate the configured `agentsNicknameSingular`.
 The suffix and disabled composer show read-only mode without a separate
-deletion banner. `chatbot.deletedAgentReadOnly` supplies the disabled composer's
-hidden accessible description, not a visible notice. Names are snapshotted in
+deletion banner. `chatbot.deletedAgentTooltip` is shared by tooltips and the
+disabled composer's hidden accessible description. Names are snapshotted in
 session metadata before deletion, including renamed agents.
 Legacy names already lost use the existing localized generic agent fallback.
 The composer stays visible and natively disabled with a read-only placeholder,

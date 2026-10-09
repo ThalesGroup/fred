@@ -599,7 +599,6 @@
       "emptyFilters": "No prompts match these filters.",
       "categoryLabel": "Category"
     },
-    "deletedAgentReadOnly": "This {{agentsNicknameSingular}} has been deleted. This conversation is read-only.",
     "readOnlyComposerPlaceholder": "Read-only conversation",
     "deletedAgentTooltip": "{{agentsNicknameSingular}} deleted - read-only conversation",
     "deletedAgentSuffix": "(deleted)",

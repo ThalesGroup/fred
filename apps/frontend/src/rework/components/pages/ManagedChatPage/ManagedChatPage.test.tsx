@@ -390,10 +390,10 @@ describe("ManagedChatPage deleted agent", () => {
     expect(html).toContain("chatbot.deletedAgentSuffix");
     expect(html).toContain('data-agent-deleted="true"');
     expect(html).toContain('data-placeholder="chatbot.readOnlyComposerPlaceholder"');
-    expect(html).toContain('data-description="chatbot.deletedAgentReadOnly"');
+    expect(html).toContain('data-description="chatbot.deletedAgentTooltip"');
     const rendered = document.createElement("div");
     rendered.innerHTML = html;
-    expect(rendered.textContent).not.toContain("chatbot.deletedAgentReadOnly");
+    expect(rendered.textContent).not.toContain("chatbot.deletedAgentTooltip");
     expect(html).toContain('data-composer-disabled="true"');
     expect(html).toContain('data-send-disabled="true"');
     expect(html).toContain('data-readonly="true"');
@@ -403,7 +403,7 @@ describe("ManagedChatPage deleted agent", () => {
     chatValue = { ...baseChatValue([]), historyUnavailable: true, isReadOnly: false, isHistorySettled: true };
     const html = renderToStaticMarkup(<ManagedChatPage />);
     expect(html).toContain("chatbot.historyUnavailable");
-    expect(html).not.toContain("chatbot.deletedAgentReadOnly");
+    expect(html).not.toContain("chatbot.deletedAgentTooltip");
   });
 });
 
