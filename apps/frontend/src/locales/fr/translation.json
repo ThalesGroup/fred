@@ -3351,9 +3351,9 @@
       "teams": "Équipes",
       "team": "Équipe",
       "allowTeam": "Ajouter cette équipe à la liste blanche",
-      "free": "Accès invité",
+      "free": "Accès par lien",
       "teamHint": "Autoriser une équipe donne accès à ses membres actuels. Retirer un membre lui enlève cette source d'accès.",
-      "freeHint": "L'accès invité autorise les membres de l'équipe à accéder à la plateforme. Le désactiver suspend les invitations et retire cette source d'accès.",
+      "freeHint": "L'accès par lien autorise les membres de l'équipe à accéder à la plateforme. Le désactiver suspend les invitations et retire cette source d'accès.",
       "link": "Invitations",
       "createLink": "Créer un lien",
       "copyLink": "URL d'invitation",
@@ -3374,7 +3374,7 @@
         "manual": "Exception manuelle",
         "t0": "Import initial",
         "team": "Équipe autorisée",
-        "free": "Accès invité"
+        "free": "Accès par lien"
       },
       "actorLockout": "Accordez-vous d'abord une autre source d'accès avant d'activer le filtrage ou de retirer votre dernière autorisation.",
       "rule": {
@@ -3465,7 +3465,7 @@
         "manage": "Gérer les liens",
         "title": "Invitations pour {{team}}",
         "hint": "Partagez les liens manuellement. Les clics comptent les ouvertures après connexion.",
-        "suspendedHint": "L'accès invité est désactivé. Les invitations sont suspendues ; les liens non révoqués et non expirés refonctionneront à sa réactivation.",
+        "suspendedHint": "L'accès par lien est désactivé. Les invitations sont suspendues ; les liens non révoqués et non expirés refonctionneront à sa réactivation.",
         "note": "Note (facultative)",
         "expiry": "Expiration (facultative)",
         "expiryDate": "Date d'expiration",
@@ -3483,7 +3483,7 @@
         "actions": "Actions",
         "revoke": "Révoquer",
         "revokeTitle": "Révoquer cette invitation ?",
-        "revokeHint": "Ce lien ne permettra plus de nouvelles inscriptions. Les autres liens et les membres actuels restent inchangés. Retirez un membre ou désactivez l'accès invité pour retirer cette source d'accès à la plateforme.",
+        "revokeHint": "Ce lien ne permettra plus de nouvelles inscriptions. Les autres liens et les membres actuels restent inchangés. Retirez un membre ou désactivez l'accès par lien pour retirer cette source d'accès à la plateforme.",
         "openingFailed": "Cette ouverture n'a pas pu être enregistrée. Vous pouvez tout de même essayer de rejoindre l'équipe.",
         "status": {
           "active": "Actif",

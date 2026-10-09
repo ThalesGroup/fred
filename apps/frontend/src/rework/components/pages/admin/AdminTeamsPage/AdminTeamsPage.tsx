@@ -140,7 +140,7 @@ export default function AdminTeamsPage() {
         ? [
             {
               label: t("rework.platformAccess.free"),
-              size: "1fr",
+              size: "minmax(9rem, 1fr)",
               cellRenderer: (team: Team) => {
                 const access = accessTeams.get(team.id);
                 return (

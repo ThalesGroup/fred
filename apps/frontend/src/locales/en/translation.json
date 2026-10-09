@@ -3351,9 +3351,9 @@
       "teams": "Teams",
       "team": "Team",
       "allowTeam": "Whitelist this team",
-      "free": "Guest access",
+      "free": "Link access",
       "teamHint": "Authorizing a team admits its current members. Removing a member withdraws that source of access.",
-      "freeHint": "Guest access admits team members to the platform. Disabling it suspends invitation links and withdraws this access source.",
+      "freeHint": "Link access admits team members to the platform. Disabling it suspends invitation links and withdraws this access source.",
       "link": "Invitations",
       "createLink": "Create link",
       "copyLink": "Invitation URL",
@@ -3374,7 +3374,7 @@
         "manual": "Manual exception",
         "t0": "Initial import",
         "team": "Authorized team",
-        "free": "Guest access"
+        "free": "Link access"
       },
       "actorLockout": "First grant yourself another admission source before enabling filtering or removing your last authorization.",
       "rule": {
@@ -3465,7 +3465,7 @@
         "manage": "Manage links",
         "title": "Invitations for {{team}}",
         "hint": "Share links manually. Clicks count page openings after sign-in.",
-        "suspendedHint": "Guest access is disabled. Invitations are suspended; unrevoked, unexpired links resume when guest access is enabled again.",
+        "suspendedHint": "Link access is disabled. Invitations are suspended; unrevoked, unexpired links resume when link access is enabled again.",
         "note": "Note (optional)",
         "expiry": "Expiration (optional)",
         "expiryDate": "Expiration date",
@@ -3483,7 +3483,7 @@
         "actions": "Actions",
         "revoke": "Revoke",
         "revokeTitle": "Revoke this invitation?",
-        "revokeHint": "This link will permanently stop accepting new enrollments. Other links and existing team members remain unchanged. Remove a member or disable guest access to withdraw that source of platform access.",
+        "revokeHint": "This link will permanently stop accepting new enrollments. Other links and existing team members remain unchanged. Remove a member or disable link access to withdraw that source of platform access.",
         "openingFailed": "The opening could not be recorded. You can still try to join.",
         "status": {
           "active": "Active",
