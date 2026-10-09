@@ -264,6 +264,22 @@ The chat also exposes `[data-chat-main]`, `[data-chat-welcome-agent]` and
 `[data-chat-agent-icon]` for theme-specific backgrounds and avatars. Scope
 these rules under `html[data-ui-theme="<id>"]` so other themes stay unchanged.
 
+To change UI text, copy a key's nesting from `src/locales/fr/translation.json`
+into `theme-translations/fr.json`, for example:
+
+```json
+{
+  "rework": {
+    "uiSettings": { "title": "Mon interface" }
+  }
+}
+```
+
+Use `theme-translations/en.json` for English. Only supplied keys change; the
+rest keep their shipped translations. These overrides apply to all themes in
+the ZIP. Use `theme-catalog.json` for each theme's display name and
+`theme-properties.json` for shared brand labels and image names.
+
 | Variable                                                        | Meaning                                                                                                                                                                                                                                  |
 | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `FRONTEND_THEME_URL`                                            | `https://` (public bucket, presigned URL, or plain S3 object URL) or `file://` (archive mounted from a ConfigMap or volume). Unset: feature off, nothing changes.                                                                        |
