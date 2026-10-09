@@ -17,7 +17,7 @@ In a text box, write a **key** between single or double curly braces where a val
 {{name}}
 ```
 
-`{name}` and `{{name}}` identify the same key. You can mix both forms on slides and in note headers, including image keys. The braces must be balanced: `{name}}`, `{{name}`, `{{{name}}}`, nested braces, and empty keys are not markers and stay unchanged. Key names are case-sensitive; spaces immediately inside the braces are ignored.
+`{name}` and `{{name}}` identify the same key. You can mix both forms on slides and in note headers, including image keys. Use `{key}` or `{{key}}` with a descriptive key name. Key names are case-sensitive; spaces immediately inside the braces are ignored. Existing double-brace templates are recognized exactly as before.
 
 You can reuse the same key several times on a slide to repeat the same value. The same key on another slide is independent.
 

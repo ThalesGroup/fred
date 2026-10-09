@@ -20,6 +20,7 @@ inspectable in the test that uses it. Style mirrors
 """
 
 import io
+import re
 from typing import List, Optional, Tuple
 
 import pytest
@@ -35,6 +36,7 @@ from fred_capability_ppt_filler.parser import (
     parse,
 )
 from fred_capability_ppt_filler.traversal import (
+    KEY_PATTERN,
     _iter_text_paragraphs,
     list_keys_on_slide,
     replace_keys_on_slide,
@@ -538,7 +540,7 @@ def test_parse_accepts_path(tmp_path):
         ("{name}}:", False),
         ("{{{name}}}:", False),
         ("{outer {inner}}:", False),
-        ("{ }:", False),
+        ("{ }:", True),
         ("{name},:", False),
         ("{a} {b}:", False),
         ("{a},,{b}:", False),
@@ -553,9 +555,73 @@ def test_parse_accepts_path(tmp_path):
     ],
 )
 def test_header_detection(line, is_header):
-    from fred_capability_ppt_filler.parser import _parse_header_keys
+    from fred_capability_ppt_filler.parser import _HEADER_PATTERN
 
-    assert (_parse_header_keys(line) is not None) is is_header
+    assert bool(_HEADER_PATTERN.match(line)) is is_header
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "{{name}}:",
+        "  {{name}}  :  ",
+        "{{first}},{{last}} , {{role}}:",
+        "{{ }}:",
+        "{{name{suffix}}:",
+        "{{{name}}:",
+        "Write {{name}} here:",
+        "{{name}}",
+        "{{name}}: extra text",
+        "{{first}} {{last}}:",
+        "{{first}},:",
+        "{{{name}}}:",
+    ],
+)
+def test_double_brace_header_detection_matches_legacy_regex(line: str) -> None:
+    from fred_capability_ppt_filler.parser import _HEADER_PATTERN
+
+    legacy = re.compile(r"^\s*\{\{[^}]+\}\}(\s*,\s*\{\{[^}]+\}\})*\s*:\s*$")
+    assert bool(_HEADER_PATTERN.match(line)) == bool(legacy.match(line))
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "{{name}}",
+        "{{ name }} and {{role}}",
+        "{literal prefix {{name}}",
+        "{{name}}}",
+        "{{{name}}}",
+        "{{name{suffix}}",
+        "{{ }}",
+    ],
+)
+def test_double_brace_discovery_and_replacement_match_legacy_regex(body: str) -> None:
+    legacy = re.compile(r"\{\{([^}]+)\}\}")
+    expected_keys = [key.strip() for key in legacy.findall(body)]
+    assert [key.strip() for key in KEY_PATTERN.findall(body)] == expected_keys
+    slide = Presentation(io.BytesIO(_build_deck([(body, "")]))).slides[0]
+    assert list_keys_on_slide(slide) == expected_keys
+    replace_keys_on_slide(slide, lambda key: "VALUE")
+    assert "".join(
+        run.text for paragraph in _iter_text_paragraphs(slide) for run in paragraph.runs
+    ) == legacy.sub("VALUE", body)
+
+
+def test_double_brace_legacy_note_block_ends_only_at_a_standalone_header() -> None:
+    description = "Mention {{name}} here.\n{{name}}: extra text\n\nLast line."
+    deck = _build_deck(
+        [
+            (
+                "{{name}} and {{role}}",
+                f"{{{{name}}}}:\n{description}\n{{{{role}}}}:\nTheir role",
+            )
+        ]
+    )
+    result = parse(deck)
+    assert result.errors == []
+    assert result.slides[0].keys[0].description == description
+    assert result.slides[0].keys[1].description == "Their role"
 
 
 @pytest.mark.parametrize("body", ["{name}", "{{name}}", "{ name } / {{name}}"])
@@ -612,13 +678,9 @@ def test_mixed_note_header_shares_image_metadata_and_preserves_inline_mentions()
         "name}",
         "{{name}",
         "{name}}",
-        "{{{name}}}",
         "{outer {inner}}",
-        "{{outer {inner}}}",
         "{}",
         "{{}}",
-        "{ }",
-        "{{ }}",
     ],
 )
 def test_malformed_markers_are_not_discovered_or_replaced(body: str) -> None:
@@ -656,19 +718,12 @@ def test_every_run_boundary_is_fillable(marker: str) -> None:
         )
 
 
-def test_adjacent_markers_and_invalid_sequences_use_one_recognition_pass() -> None:
+def test_adjacent_markers_preserve_literal_replacement_braces() -> None:
     body = "{first}{{last}} {bad}} {outer {inner}} {valid}"
     deck = _build_deck([(body, "{first}, {last}, {{valid}}:\nA value")])
     assert parse(deck).errors == []
     slide = Presentation(io.BytesIO(deck)).slides[0]
-    calls: List[str] = []
-
-    def value_for(key: str) -> str:
-        calls.append(key)
-        return "{literal}"
-
-    replace_keys_on_slide(slide, value_for)
-    assert calls == ["first", "last", "valid"]
+    replace_keys_on_slide(slide, lambda key: "{literal}")
     assert "".join(
         run.text for paragraph in _iter_text_paragraphs(slide) for run in paragraph.runs
     ) == ("{literal}{literal} {bad}} {outer {inner}} {literal}")

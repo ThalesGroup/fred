@@ -29,3 +29,23 @@
 - Final root `make code-quality`: passed all 17 configured modules, including frontend TypeScript, Prettier, and ESLint. Existing Python environments were reused with `UV_NO_SYNC=1`; `libs/frontend` dependencies were provisioned from the committed lockfile in this worktree.
 - Implementation commit: `9030949bc9d2c3e23fc775dbaf74738e1a5febe8`. Draft PR: https://github.com/ThalesGroup/fred/pull/3026, targeting `swift`; issue #3020 remains open until merge.
 - Delta/main spec equality verified before archival; all artifacts complete, all tasks complete. Archived on 2026-10-09 after tests, quality, reviews, and draft publication.
+
+## Compatibility correction - 2026-10-09
+
+The developer clarified that every historical double-brace match and note-header
+boundary must remain unchanged. The earlier stricter malformed-brace handling
+in this archive is superseded by the current `openspec/specs/ppt-filler/spec.md`.
+`_HEADER_PATTERN` and the original parsing/replacement paths are restored; only
+single-brace recognition is added. This localized correction restores the
+authorized compatibility contract and does not need a separate planning gate.
+
+- Direct legacy-regex regression tests cover header recognition, captures,
+  replacement output, and note-block boundaries. Offline package tests: 215
+  passed, with one existing Starlette deprecation warning.
+- Independent read-only review covers the full 17-file branch diff from
+  `9a57933e24325ae75ffb52e291aed44edf69c46d`, published HEAD `8b7665f47641cb4b35ef5858463b630d2acdf7a9`
+  plus the compatibility correction. No actionable findings; 87,381 generated
+  strings preserve all historical double-brace spans/captures and headers.
+- Current spec validation and migration-note checks pass. Final quality and
+  publication evidence is recorded in PR #3026. Browser and load checks remain
+  excluded because this correction changes only the existing marker grammar.

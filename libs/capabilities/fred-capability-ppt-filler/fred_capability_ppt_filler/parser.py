@@ -38,7 +38,8 @@ from pptx.oxml.ns import qn
 from pydantic import BaseModel, ConfigDict, Field, model_serializer
 
 from fred_capability_ppt_filler.traversal import (
-    iter_key_matches,
+    KEY_MARKER_PATTERN,
+    KEY_PATTERN,
     list_keys_on_slide,
 )
 
@@ -67,17 +68,10 @@ _METADATA_LINE_PATTERN = re.compile(r"^\s*-\s*(\w+)\s*:\s*(.*)$")
 _RECOGNIZED_METADATA_KEYS = frozenset({"type", "folder"})
 
 
-def _parse_header_keys(line: str) -> Optional[List[str]]:
-    """Read a header using exactly the marker grammar used on slides."""
-    keys: List[str] = []
-    pos = 0
-    for match in iter_key_matches(line):
-        if line[pos : match.start()].strip() != ("," if keys else ""):
-            return None
-        keys.append(match.group("key").strip())
-        pos = match.end()
-    return keys if keys and line[pos:].strip() == ":" else None
-
+# Only a comma-separated marker list followed by a colon introduces a notes block.
+_HEADER_PATTERN = re.compile(
+    rf"^\s*{KEY_MARKER_PATTERN}(\s*,\s*{KEY_MARKER_PATTERN})*\s*:\s*$"
+)
 
 # A "keep separator" line is a line of only dashes (>= 3). Everything in a slide's notes
 # AFTER the first such line is content the author wants kept verbatim in the FILLED deck
@@ -308,17 +302,18 @@ def _parse_notes_descriptions(notes_text: str) -> Dict[str, _ParsedKeyMeta]:
     n = len(lines)
     while i < n:
         line = lines[i]
-        header_keys = _parse_header_keys(line)
-        if header_keys is None:
+        if not _HEADER_PATTERN.match(line):
             # Stray description text with no preceding header: ignore it (only
             # described keys matter).
             i += 1
             continue
 
+        header_keys = [key.strip() for key in KEY_PATTERN.findall(line)]
+
         # Collect the block: every line until the next header or EOF.
         block: List[str] = []
         i += 1
-        while i < n and _parse_header_keys(lines[i]) is None:
+        while i < n and not _HEADER_PATTERN.match(lines[i]):
             block.append(lines[i])
             i += 1
 

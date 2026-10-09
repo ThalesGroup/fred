@@ -17,9 +17,10 @@ the folder-resolution / image-location validation layer.
 
 Single and double braces identify the same case-sensitive key. Mix either form
 between slides and notes, including multi-key headers such as `{first}, {{last}}:`
-and image markers. Leading/trailing key whitespace is ignored. Keys must contain
-non-whitespace text and no braces; unbalanced, nested, empty, or triple-brace
-sequences are left unchanged rather than partially filled.
+and image markers. Leading/trailing key whitespace is ignored. The single-brace
+form requires at least one character and no braces inside the key. Double-brace recognition retains its legacy rule: the key is everything
+up to the first closing brace, followed by two closing braces. No extra syntax
+validation is introduced for existing templates.
 
 Markers split across runs in one paragraph are supported in text boxes, table
 text, and grouped shapes. Images use the containing shape's placement box;

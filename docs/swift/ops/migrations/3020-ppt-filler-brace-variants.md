@@ -37,6 +37,7 @@ and upload the template again. No data migration is introduced.
 
 ## Limitations
 
-Only balanced single or double brace markers with non-empty keys are recognized.
-Malformed, nested, empty, and triple-brace sequences are left unchanged rather
-than partially filled. Such sequences were not valid template syntax.
+Existing double-brace recognition, note-header boundaries, and replacement
+behavior are unchanged. The additional single-brace syntax requires at least
+one character and no braces inside the key. No new validation or error codes
+are introduced.

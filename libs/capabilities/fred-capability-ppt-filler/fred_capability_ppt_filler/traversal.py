@@ -23,7 +23,7 @@ from __future__ import annotations
 import copy
 import re
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Callable, Iterator, List, Tuple
+from typing import TYPE_CHECKING, Callable, List, Tuple
 
 from pptx.oxml.ns import qn
 
@@ -34,39 +34,10 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
     from pptx.slide import Slide
     from pptx.text.text import _Paragraph
 
-# Keep the key as the sole capture for callers using group(1) or findall().
-KEY_PATTERN = re.compile(
-    r"(?<!\{)(?=\{\{[^{}]+\}\}|\{[^{}]+\}(?!\}))"
-    r"\{\{?(?P<key>[^{}]+)\}\}?(?!\})"
-)
-_BRACES_PATTERN = re.compile(r"\{+|\}+")
-
-
-def iter_key_matches(text: str) -> Iterator[re.Match[str]]:
-    """Find balanced markers without exposing keys inside malformed brace sequences."""
-    depth = 0
-    start = 0
-    nested = False
-    for braces in _BRACES_PATTERN.finditer(text):
-        if braces.group().startswith("{"):
-            if depth == 0:
-                start = braces.start()
-                nested = False
-            else:
-                nested = True
-            depth += len(braces.group())
-            continue
-
-        if depth == 0:
-            continue
-        depth -= len(braces.group())
-        if depth > 0:
-            continue
-        if depth == 0 and not nested:
-            match = KEY_PATTERN.fullmatch(text, start, braces.end())
-            if match is not None and match.group("key").strip():
-                yield match
-        depth = 0
+# Retain the legacy double-brace grammar and add a balanced single-brace form.
+KEY_MARKER_PATTERN = r"(?:\{\{[^}]+\}\}|(?<!\{)\{[^{}]+\}(?!\}))"
+# Keep the key as the sole capture for group(1) and findall() consumers.
+KEY_PATTERN = re.compile(rf"(?={KEY_MARKER_PATTERN})" r"\{\{?([^}]+)\}\}?")
 
 
 def _iter_shape_paragraphs(shape: "BaseShape") -> List["_Paragraph"]:
@@ -124,14 +95,14 @@ def list_keys_on_slide(slide: "Slide") -> List[str]:
     keys: List[str] = []
     for paragraph in _iter_text_paragraphs(slide):
         merged = "".join(run.text for run in paragraph.runs)
-        for match in iter_key_matches(merged):
-            keys.append(match.group("key").strip())
+        for match in KEY_PATTERN.finditer(merged):
+            keys.append(match.group(1).strip())
     return keys
 
 
 def _styled_spans_for_paragraph(
     merged: str, value_for: Callable[[str], str]
-) -> Tuple[str, List[Span]]:
+) -> List[Span]:
     """Build the styled spans for a paragraph after substitution.
 
     Inline Markdown is parsed from the SUBSTITUTED VALUES ONLY, never from the surrounding
@@ -143,22 +114,18 @@ def _styled_spans_for_paragraph(
     effect.
     """
     spans: List[Span] = []
-    replaced: List[str] = []
     pos = 0
-    for match in iter_key_matches(merged):
+    for match in KEY_PATTERN.finditer(merged):
         if match.start() > pos:
             # Static template text: kept verbatim, NOT parsed for markup.
             spans.append(Span(merged[pos : match.start()]))
-        replaced.append(merged[pos : match.start()])
-        value = value_for(match.group("key").strip())
-        replaced.append(value)
+        value = value_for(match.group(1).strip())
         # The substituted value is the only place inline markup is honored.
         spans.extend(parse_inline_markdown(value))
         pos = match.end()
     if pos < len(merged):
         spans.append(Span(merged[pos:]))
-    replaced.append(merged[pos:])
-    return "".join(replaced), spans
+    return spans
 
 
 def _styled_run_element(base_r, text: str, *, bold: bool, italic: bool):
@@ -256,8 +223,8 @@ def _write_spans_onto_paragraph(paragraph: "_Paragraph", spans: List[Span]) -> N
 def replace_keys_on_slide(slide: "Slide", value_for: Callable[[str], str]) -> None:
     """Replace every ``{key}`` or ``{{key}}`` occurrence in the text-frame shapes of ``slide``.
 
-    ``value_for`` maps a (stripped) key to its replacement string. It is called once per
-    placeholder occurrence; every occurrence of a key on the slide is filled
+    ``value_for`` maps a (stripped) key to its replacement string. It must return the same value on
+    repeated calls; every occurrence of a key on the slide is filled
     consistently as long as ``value_for`` is deterministic.
 
     The same run-merging logic as :func:`list_keys_on_slide` is used, so a key split
@@ -273,9 +240,16 @@ def replace_keys_on_slide(slide: "Slide", value_for: Callable[[str], str]) -> No
         if not runs:
             continue
         merged = "".join(run.text for run in runs)
-        replaced, spans = _styled_spans_for_paragraph(merged, value_for)
+        if not KEY_PATTERN.search(merged):
+            continue
+
+        replaced = KEY_PATTERN.sub(
+            lambda match: value_for(match.group(1).strip()), merged
+        )
         if replaced == merged:
             continue
+
+        spans = _styled_spans_for_paragraph(merged, value_for)
 
         # Fast path — no value carried emphasis: collapse onto the first run exactly as
         # before (one run, first run's formatting). This keeps a markup-free fill byte-for-
@@ -300,7 +274,7 @@ def replace_keys_on_slide(slide: "Slide", value_for: Callable[[str], str]) -> No
 # BOTH the analyze-time ``image_key_invalid_location`` check and the fill-time picture
 # insertion, so parse and fill can never diverge on geometry.
 #
-# It deliberately reuses ``iter_key_matches`` and the run-merging idiom (a key may be split
+# It deliberately reuses ``KEY_PATTERN`` and the run-merging idiom (a key may be split
 # across runs), but stays a separate function from the text seam: same merging, different
 # output (shape + geometry vs. text round-trip).
 # ---------------------------------------------------------------------------
@@ -344,8 +318,8 @@ def _merged_keys_of_shape(shape: "BaseShape") -> List[str]:
     keys: List[str] = []
     for paragraph in shape.text_frame.paragraphs:  # type: ignore[attr-defined]
         merged = "".join(run.text for run in paragraph.runs)
-        for match in iter_key_matches(merged):
-            keys.append(match.group("key").strip())
+        for match in KEY_PATTERN.finditer(merged):
+            keys.append(match.group(1).strip())
     return keys
 
 
@@ -480,10 +454,10 @@ def _collect_image_anchors(
             for cell in row.cells:
                 for paragraph in cell.text_frame.paragraphs:
                     merged = "".join(run.text for run in paragraph.runs)
-                    for match in iter_key_matches(merged):
+                    for match in KEY_PATTERN.finditer(merged):
                         out.append(
                             ImageAnchor(
-                                key=match.group("key").strip(),
+                                key=match.group(1).strip(),
                                 left=abs_box[0],
                                 top=abs_box[1],
                                 width=abs_box[2],

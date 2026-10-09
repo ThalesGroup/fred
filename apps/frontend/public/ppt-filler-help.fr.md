@@ -17,7 +17,7 @@ Dans une zone de texte, écrivez une **clé** entre accolades simples ou doubles
 {{nom}}
 ```
 
-`{nom}` et `{{nom}}` désignent la même clé. Vous pouvez mélanger les deux formes dans les diapositives et les en-têtes des notes, y compris pour les images. Les accolades doivent être équilibrées : `{nom}}`, `{{nom}`, `{{{nom}}}`, les accolades imbriquées et les clés vides ne sont pas des marqueurs et restent inchangés. Les noms de clés sont sensibles à la casse ; les espaces juste à l'intérieur des accolades sont ignorés.
+`{nom}` et `{{nom}}` désignent la même clé. Vous pouvez mélanger les deux formes dans les diapositives et les en-têtes des notes, y compris pour les images. Utilisez `{clé}` ou `{{clé}}` avec un nom de clé descriptif. Les noms de clés sont sensibles à la casse ; les espaces juste à l'intérieur des accolades sont ignorés. Les templates existants en doubles accolades sont reconnus exactement comme auparavant.
 
 Vous pouvez réutiliser la même clé plusieurs fois sur une diapositive pour répéter la même valeur. La même clé sur une autre diapositive est, elle, indépendante.
 

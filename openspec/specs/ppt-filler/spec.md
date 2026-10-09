@@ -6,7 +6,7 @@ PPT Filler lets authors define fields and instructions in PowerPoint templates a
 
 ### Requirement: Equivalent single and double brace markers
 
-PPT Filler SHALL recognize `{key}` and `{{key}}` as the same case-sensitive key in slide content and authoring notes. Leading and trailing key whitespace SHALL be trimmed. Keys SHALL contain non-whitespace content and no braces. Only balanced single or double brace delimiters SHALL be recognized; malformed delimiters SHALL NOT yield partial matches.
+PPT Filler SHALL recognize `{key}` and `{{key}}` as the same case-sensitive key in slide content and authoring notes. Leading and trailing key whitespace SHALL be trimmed. Existing double-brace recognition and replacement SHALL remain unchanged, including all keys previously accepted by the legacy matcher. Single-brace markers SHALL contain at least one character and no braces inside their key.
 
 #### Scenario: Syntax differs between slide and notes
 
@@ -20,10 +20,16 @@ PPT Filler SHALL recognize `{key}` and `{{key}}` as the same case-sensitive key 
 - **THEN** analysis returns one field named `name`
 - **AND** filling gives both occurrences the same value
 
-#### Scenario: Malformed sequences
+#### Scenario: Existing double-brace matching is preserved
 
-- **WHEN** slide content contains `{name`, `name}`, `{{name}`, `{name}}`, `{{{name}}}`, `{outer {inner}}`, `{}`, `{{}}`, or whitespace-only markers
-- **THEN** these sequences do not create fields and are left unchanged during text filling
+- **WHEN** an existing template contains double-brace markers, including markers beside literal braces or keys accepted by the legacy matcher
+- **THEN** discovery returns the same normalized keys as before
+- **AND** filling performs the same substitutions with the same surrounding text
+
+#### Scenario: Invalid single-brace forms
+
+- **WHEN** slide content contains `{name`, `name}`, `{name}}`, `{outer {inner}}`, or `{}`
+- **THEN** these sequences do not create new single-brace fields and are left unchanged during text filling
 
 ### Requirement: Notes headers use the same marker grammar
 
@@ -58,10 +64,10 @@ Both marker forms SHALL work in existing supported locations and when split acro
 
 ### Requirement: Author help matches supported syntax
 
-English and French PPT Filler help and the capability README SHALL document both marker forms, their equivalence across slide content and notes, mixed multi-key headers, image applicability, and balanced-delimiter limits. Existing examples using double braces SHALL remain valid.
+English and French PPT Filler help and the capability README SHALL document both marker forms, their equivalence across slide content and notes, mixed multi-key headers, image applicability, and unchanged legacy double-brace recognition. Existing examples using double braces SHALL remain valid.
 
 #### Scenario: Author follows either syntax
 
 - **WHEN** an author follows a documented single-brace or double-brace example for text or images
 - **THEN** analysis recognizes the fields and notes as documented
-- **AND** the documentation does not claim support for malformed or extra-brace markers
+- **AND** the documentation describes the preserved note-header boundaries and does not claim new validation of legacy double-brace markers
