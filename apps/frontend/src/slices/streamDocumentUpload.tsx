@@ -72,8 +72,13 @@ export async function streamUploadOrProcessDocument(
   onFileFailed?: (filename: string, message: string) => void,
   onFileResolved?: (filename: string) => void,
   onFileConflicted?: (filename: string) => void,
+  /** Runs once after renewal, while callers can still remove queued files. */
+  beforeSend?: (files: File[]) => File[],
 ): Promise<ScheduledTask[]> {
-  const token = KeyCloakService.GetToken();
+  await KeyCloakService.ensureFreshToken(30);
+  files = beforeSend?.(files) ?? files;
+  if (files.length === 0) return [];
+
   const formData = new FormData();
   for (const file of files) {
     formData.append("files", file, leafFileName(file));
@@ -83,13 +88,21 @@ export async function streamUploadOrProcessDocument(
   const endpoint =
     mode === "upload" ? "/knowledge-flow/v1/upload-documents" : "/knowledge-flow/v1/upload-process-documents";
 
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-    body: formData,
-  });
+  const send = () =>
+    fetch(endpoint, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${KeyCloakService.GetToken()}`,
+      },
+      body: formData,
+    });
+
+  let response = await send();
+  // Authentication is checked before ingestion starts, so only an HTTP 401
+  // refusal is safe to replay. An accepted stream must never be sent again.
+  if (response.status === 401 && (await KeyCloakService.ensureFreshToken(0))) {
+    response = await send();
+  }
 
   if (!response.ok || !response.body) {
     // The checks that run before the stream opens — storage quota, permissions
