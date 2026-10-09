@@ -18,8 +18,11 @@ import io
 import json
 import logging
 import uuid
+from collections import deque
 from collections.abc import Iterator
 from contextlib import contextmanager
+from pathlib import Path
+from typing import Literal
 
 import pytest
 from fred_core.logs.base_log_store import LogEventDTO
@@ -228,7 +231,6 @@ def _wired_uvicorn_logging() -> Iterator[tuple[_Sink, _Sink]]:
     finally:
         root.setLevel(saved_root[0])
         root.handlers[:] = saved_root[1]
-        delattr(root, f"_fred_handlers_{service_name}")
         for lg, filters, handlers, level, propagate in saved_uvicorn:
             lg.filters[:] = filters
             lg.handlers[:] = handlers
@@ -395,6 +397,17 @@ def test_log_setup_gives_audit_logger_a_dedicated_non_propagating_json_handler()
     assert len(audit_logger.handlers) == 1
     assert isinstance(audit_logger.handlers[0].formatter, CompactJsonFormatter)
 
+    from fred_core.logs.context import log_context
+    from fred_core.logs.processors import ContextSnapshot
+
+    with log_context(user_id="person-canary", tool_name="tool-canary"):
+        record = audit_logger.makeRecord(
+            AUDIT_LOGGER_NAME, logging.INFO, __file__, 1, "audit", (), None
+        )
+    snapshot = getattr(record, "_fred_snapshot")
+    assert isinstance(snapshot, ContextSnapshot)
+    assert snapshot.values == {}
+
 
 def test_store_emit_handler_hard_drops_audit_logger_records() -> None:
     """Issue #2009: belt-and-braces alongside AUDIT_LOGGER_NAME's own
@@ -485,3 +498,253 @@ def test_store_emit_handler_categorizes_reserved_kpi_logger_as_kpi() -> None:
 
     assert len(store.indexed) == 1
     assert store.indexed[0].category == "kpi"
+
+
+def test_shared_output_contract_and_repeat_setup(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from fred_core.logs.context import log_context
+
+    root = logging.getLogger()
+    saved = (root.level, list(root.handlers))
+    store = _StubLogStore()
+    try:
+        for _ in range(2):
+            log_setup(
+                service_name="contract-test",
+                store=store,
+                log_format="json",
+                service_role="api",
+                include_uvicorn=False,
+            )
+        with log_context(user_id="person-a", correlation_id="operation-a"):
+            logging.getLogger("contract.event").warning(
+                "first\nsecond",
+                extra={
+                    "count": 3,
+                    "user_id": "spoof",
+                    "severity": "spoof",
+                    # Synthetic credential tests that forged snapshots are ignored.
+                    "_fred_context": {"user_id": "spoof", "token": "SECRET-CANARY"},  # nosec B105
+                },
+            )
+        lines = capsys.readouterr().out.splitlines()
+        assert len(lines) == 1
+        event = json.loads(lines[0])
+        assert event["severity"] == "WARNING"
+        assert event["message"] == "first\nsecond"
+        assert event["user_id"] == "person-a"
+        assert event["count"] == 3
+        assert event["service_role"] == "api"
+        assert event["timestamp"]["seconds"] == int(store.indexed[0].ts)
+        assert 0 <= event["timestamp"]["nanos"] < 1_000_000_000
+        assert store.indexed[0].extra is not None
+        assert store.indexed[0].extra["correlation_id"] == "operation-a"
+        assert "\x1b" not in lines[0]
+        assert "SECRET-CANARY" not in lines[0]
+        log_setup(
+            service_name="contract-test",
+            store=store,
+            log_format="text",
+            include_uvicorn=False,
+        )
+        logging.getLogger("contract.event").info("intentional\nmultiline")
+        readable = capsys.readouterr().out
+        assert "intentional\nmultiline" in readable
+        assert "\x1b" not in readable
+    finally:
+        root.handlers[:] = saved[1]
+        root.setLevel(saved[0])
+
+
+@pytest.mark.parametrize("log_format", ["json", "text"])
+@pytest.mark.parametrize(
+    ("message", "args", "expected"),
+    [
+        ("pool_size=%s max_overflow=%d", (5, 10), "pool_size=5 max_overflow=10"),
+        ("pool_size=%(size)s", ({"size": 5},), "pool_size=5"),
+        ("Started server process [%d]", (123,), "Started server process [123]"),
+        ("literal 50% done", (), "literal 50% done"),
+        ("progress=%d%%", (50,), "progress=50%"),
+        ("first=%s\nsecond=%s", ("a", "b"), "first=a\nsecond=b"),
+    ],
+)
+def test_shared_output_preserves_legacy_arguments_and_structured_fields(
+    capsys: pytest.CaptureFixture[str],
+    log_format: Literal["json", "text"],
+    message: str,
+    args: tuple[object, ...],
+    expected: str,
+) -> None:
+    from fred_core.logs.context import log_context
+
+    with _wired_uvicorn_logging():
+        store = _StubLogStore()
+        log_setup(
+            service_name="legacy-compatibility",
+            store=store,
+            log_format=log_format,
+            use_rich=False,
+        )
+        logger = logging.getLogger("uvicorn.error")
+        with log_context(correlation_id="operation-a"):
+            record = logger.makeRecord(
+                logger.name,
+                logging.INFO,
+                __file__,
+                1,
+                message,
+                args,
+                None,
+                extra={"count": 3},
+            )
+            original_args = record.args
+            logger.handle(record)
+
+        output = capsys.readouterr().out
+        if log_format == "json":
+            assert len(output.splitlines()) == 1
+            event = json.loads(output)
+            assert event["message"] == expected
+            assert event["count"] == 3
+            assert event["correlation_id"] == "operation-a"
+        else:
+            assert expected in output
+            assert "count=3" in output
+            assert "correlation_id=operation-a" in output
+        assert len(store.indexed) == 1
+        assert store.indexed[0].msg == expected
+        assert store.indexed[0].extra == {"count": 3, "correlation_id": "operation-a"}
+        assert record.msg == message
+        assert record.args == original_args
+
+
+@pytest.mark.parametrize("delegation", [False, True])
+def test_dependency_child_diagnostics_remain_sanitized(
+    capsys: pytest.CaptureFixture[str],
+    delegation: bool,
+) -> None:
+    initialize_delegation(DelegationConfig(accept_delegated_calls=delegation))
+    log_setup(
+        service_name="dependency-contract",
+        store=_StubLogStore(),
+        log_format="json",
+        include_uvicorn=False,
+    )
+    logging.getLogger("httpx.transport").warning(
+        "SECRET-CANARY signed_url=%s",
+        "SECRET-CANARY",
+        extra={"detail": "SECRET-CANARY"},
+        exc_info=(ValueError, ValueError("SECRET-CANARY"), None),
+        stack_info=True,
+    )
+    output = capsys.readouterr().out
+    assert "SECRET-CANARY" not in output
+    assert json.loads(output)["severity"] == "WARNING"
+
+
+@pytest.mark.parametrize("delegation", [False, True])
+@pytest.mark.parametrize("log_format", ["json", "text"])
+def test_uvicorn_error_traceback_remains_sanitized(
+    capsys: pytest.CaptureFixture[str],
+    delegation: bool,
+    log_format: Literal["json", "text"],
+) -> None:
+    initialize_delegation(DelegationConfig(accept_delegated_calls=delegation))
+    with _wired_uvicorn_logging():
+        log_setup(
+            service_name="server-contract",
+            store=_StubLogStore(),
+            log_format=log_format,
+            use_rich=False,
+        )
+        try:
+            raise RuntimeError("SECRET-CANARY")
+        except RuntimeError:
+            logging.getLogger("uvicorn.error").exception(
+                "ASGI failure %s", "SECRET-CANARY", extra={"detail": "SECRET-CANARY"}
+            )
+        output = capsys.readouterr().out
+        assert "SECRET-CANARY" not in output
+        assert "server event=uvicorn outcome=failed reason=server_error" in output
+        if log_format == "json":
+            event = json.loads(output)
+            assert event["severity"] == "ERROR"
+            assert "exception" not in event
+
+
+def test_context_rejects_aggregate_metadata_without_stringifying_objects() -> None:
+    from fred_core.logs.context import log_context
+
+    with pytest.raises(ValueError):
+        with log_context(details=[["x" * 1024] * 32] * 32):
+            pass
+    with pytest.raises(ValueError):
+        with log_context(details=object()):
+            pass
+
+
+@pytest.mark.parametrize("log_format", ["json", "text"])
+def test_startup_diagnostics_wait_for_selected_output(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    log_format: Literal["json", "text"],
+) -> None:
+    from fred_pod.common import config_files
+    from fred_pod.common.config_files import ConfigFiles
+
+    # Simulate fresh startup, independent of logging initialized by other tests.
+    monkeypatch.setattr(config_files, "_logging_ready", False)
+    monkeypatch.setattr(config_files, "_startup_events", deque(maxlen=32))
+    files = ConfigFiles(logger=logging.getLogger("config-test"))
+    # Use a real dotenv file to distinguish its diagnostic path from its contents.
+    env_file = tmp_path / ".env"
+    env_file.write_text("FRED_TEST=private-value\n", encoding="utf-8")
+    monkeypatch.delenv("FRED_TEST", raising=False)
+    files.load_environment(str(env_file))
+    # Simulate successful YAML loading; this test exercises logging, not parsing.
+    config_file = str(tmp_path / "configuration.yaml")
+    files.mark_config_loaded(config_file)
+    # Both startup events must remain buffered until the output format is known.
+    assert not capsys.readouterr().out
+
+    # Real setup flushes the buffer through the selected formatter and fake store.
+    store = _StubLogStore()
+    log_setup(
+        service_name="bootstrap-test",
+        store=store,
+        log_format=log_format,
+        include_uvicorn=False,
+    )
+    output = capsys.readouterr().out
+    # Paths survive as structured metadata, while file contents stay out of output.
+    assert "private-value" not in output
+    assert store.indexed[-1].extra == {
+        "env_file": str(env_file),
+        "config_file": config_file,
+    }
+    if log_format == "json":
+        # The last line is the configuration event, queued after the environment event.
+        event = json.loads(output.splitlines()[-1])
+        assert event["service"] == "bootstrap-test"
+        assert event["severity"] == "INFO"
+        assert event["env_file"] == str(env_file)
+        assert event["config_file"] == config_file
+        assert config_file not in event["message"]
+    else:
+        assert f"env_file={env_file}" in output
+        assert f"config_file={config_file}" in output
+
+    # After setup, new events must emit immediately without another buffer flush.
+    lazy_config_file = str(tmp_path / "lazy-configuration.yaml")
+    files.mark_config_loaded(lazy_config_file)
+    output = capsys.readouterr().out
+    assert store.indexed[-1].extra == {
+        "env_file": str(env_file),
+        "config_file": lazy_config_file,
+    }
+    if log_format == "json":
+        assert json.loads(output)["config_file"] == lazy_config_file
+    else:
+        assert f"config_file={lazy_config_file}" in output
