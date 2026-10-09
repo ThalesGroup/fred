@@ -4,6 +4,8 @@ import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
 import PlatformAccessExpirationPicker from "./PlatformAccessExpirationPicker";
 import TextInput from "@shared/atoms/TextInput/TextInput";
+import { useCopyConfirmation } from "@hooks/useCopyConfirmation";
+import { ActionBar } from "@shared/molecules/ActionBar/ActionBar";
 import { Dialog } from "@shared/molecules/Dialog/Dialog";
 import DataTable from "@shared/molecules/DataTable/LocalizedDataTable";
 import { platformPath } from "../../../../../common/platformAccess";
@@ -39,6 +41,8 @@ export default function PlatformAccessLinkManager({
   const [copying, setCopying] = useState(false);
   const [created, setCreated] = useState(false);
   const [copyStatus, setCopyStatus] = useState<"copied" | "failed">();
+  const [copiedLinkId, setCopiedLinkId] = useState<string>();
+  const { copied, confirmCopied } = useCopyConfirmation();
   const [note, setNote] = useState("");
   const [expiry, setExpiry] = useState("");
   const [choosingExpiry, setChoosingExpiry] = useState(false);
@@ -57,12 +61,20 @@ export default function PlatformAccessLinkManager({
     }
   };
   const linkUrl = (token: string) => new URL(platformPath(`join-free/${token}`), window.location.origin).toString();
-  const copy = async (value: string) => {
+  const copyConfirmed = (linkId?: string) => copied && copyStatus === "copied" && copiedLinkId === linkId;
+  const copyAnnouncement = (
+    <span className={styles.copyAnnouncement} role="status">
+      {copied && copyStatus === "copied" ? t("rework.platformAccess.links.copied") : ""}
+    </span>
+  );
+  const copy = async (value: string, linkId?: string) => {
     setCopyStatus(undefined);
     setCopying(true);
     try {
       await navigator.clipboard.writeText(value);
+      setCopiedLinkId(linkId);
       setCopyStatus("copied");
+      confirmCopied();
     } catch {
       setCopyStatus("failed");
       setUrl(value);
@@ -120,6 +132,7 @@ export default function PlatformAccessLinkManager({
         }}
       >
         <div className={styles.dialogBody}>
+          {copyAnnouncement}
           <div className={styles.linkToolbar}>
             <p>{t("rework.platformAccess.links.hint")}</p>
             <Button
@@ -137,7 +150,6 @@ export default function PlatformAccessLinkManager({
             </Button>
           </div>
           {!team.free && <p role="status">{t("rework.platformAccess.links.suspendedHint")}</p>}
-          {copyStatus === "copied" && <p role="status">{t("rework.platformAccess.links.copied")}</p>}
           {failed && <p role="alert">{t("rework.platformAccess.failed")}</p>}
           {links.isError && (
             <div role="alert">
@@ -177,38 +189,38 @@ export default function PlatformAccessLinkManager({
               {
                 label: t("rework.platformAccess.links.openings"),
                 size: "1fr",
-                cellRenderer: (link) => (
-                  <span>
-                    {link.opening_count}
-                    <br />
-                    {link.last_opened_at && date(link.last_opened_at)}
-                  </span>
-                ),
+                cellRenderer: (link) => link.opening_count,
               },
               {
                 label: t("rework.platformAccess.links.actions"),
                 size: "2fr",
                 cellRenderer: (link) => (
                   <div className={styles.row}>
-                    <Button
-                      color="primary"
-                      variant="outlined"
-                      size="small"
-                      disabled={busy || links.isFetching || !link.recoverable}
-                      onClick={() =>
-                        void run(async () => {
-                          try {
-                            const result = await reveal({ teamId: team.team_id, linkId: link.id }).unwrap();
-                            setCreated(false);
-                            await copy(linkUrl(result.token));
-                          } finally {
-                            revealing.reset();
-                          }
-                        })
-                      }
-                    >
-                      {t("rework.platformAccess.links.copyUrl")}
-                    </Button>
+                    <ActionBar
+                      alwaysVisible
+                      actions={[
+                        {
+                          id: "copy",
+                          icon: copyConfirmed(link.id) ? "check" : "content_copy",
+                          label: t(
+                            copyConfirmed(link.id)
+                              ? "rework.platformAccess.links.copied"
+                              : "rework.platformAccess.links.copyUrl",
+                          ),
+                          disabled: busy || links.isFetching || !link.recoverable,
+                          onClick: () =>
+                            void run(async () => {
+                              try {
+                                const result = await reveal({ teamId: team.team_id, linkId: link.id }).unwrap();
+                                setCreated(false);
+                                await copy(linkUrl(result.token), link.id);
+                              } finally {
+                                revealing.reset();
+                              }
+                            }),
+                        },
+                      ]}
+                    />
                     <Button
                       color="error"
                       variant="outlined"
@@ -276,14 +288,22 @@ export default function PlatformAccessLinkManager({
               readOnly
               onFocus={(event) => event.target.select()}
             />
-            <Button color="primary" variant="filled" size="medium" disabled={busy} onClick={() => void copy(url)}>
-              {t("rework.platformAccess.links.copyUrl")}
-            </Button>
-            {copyStatus && (
-              <p role={copyStatus === "failed" ? "alert" : "status"}>
-                {t(`rework.platformAccess.links.${copyStatus === "failed" ? "copyFailed" : "copied"}`)}
-              </p>
-            )}
+            <ActionBar
+              alwaysVisible
+              actions={[
+                {
+                  id: "copy",
+                  icon: copyConfirmed() ? "check" : "content_copy",
+                  label: t(
+                    copyConfirmed() ? "rework.platformAccess.links.copied" : "rework.platformAccess.links.copyUrl",
+                  ),
+                  disabled: busy,
+                  onClick: () => void copy(url),
+                },
+              ]}
+            />
+            {copyStatus === "failed" && <p role="alert">{t("rework.platformAccess.links.copyFailed")}</p>}
+            {copyAnnouncement}
           </div>
         </Dialog>
       )}

@@ -3464,7 +3464,7 @@
       "links": {
         "manage": "Manage links",
         "title": "Invitations for {{team}}",
-        "hint": "Share links manually. Clicks count page openings after sign-in.",
+        "hint": "Share links manually. Accesses count page openings after sign-in.",
         "suspendedHint": "Link access is disabled. Invitations are suspended; unrevoked, unexpired links resume when link access is enabled again.",
         "note": "Note (optional)",
         "expiry": "Expiration (optional)",
@@ -3479,7 +3479,7 @@
         "untitled": "No note",
         "created": "Created",
         "statusLabel": "Status",
-        "openings": "Clicks",
+        "openings": "Accesses",
         "actions": "Actions",
         "revoke": "Revoke",
         "revokeTitle": "Revoke this invitation?",

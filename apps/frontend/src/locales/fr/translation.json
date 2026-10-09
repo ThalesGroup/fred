@@ -3464,7 +3464,7 @@
       "links": {
         "manage": "Gérer les liens",
         "title": "Invitations pour {{team}}",
-        "hint": "Partagez les liens manuellement. Les clics comptent les ouvertures après connexion.",
+        "hint": "Partagez les liens manuellement. Les accès comptent les ouvertures après connexion.",
         "suspendedHint": "L'accès par lien est désactivé. Les invitations sont suspendues ; les liens non révoqués et non expirés refonctionneront à sa réactivation.",
         "note": "Note (facultative)",
         "expiry": "Expiration (facultative)",
@@ -3479,7 +3479,7 @@
         "untitled": "Sans note",
         "created": "Création",
         "statusLabel": "Statut",
-        "openings": "Clics",
+        "openings": "Accès",
         "actions": "Actions",
         "revoke": "Révoquer",
         "revokeTitle": "Révoquer cette invitation ?",

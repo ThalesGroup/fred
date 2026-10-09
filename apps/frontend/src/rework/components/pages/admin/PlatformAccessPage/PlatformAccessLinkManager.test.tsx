@@ -27,7 +27,7 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
             revoked_at: null,
             status: "active",
             opening_count: 7,
-            last_opened_at: null,
+            last_opened_at: "2026-10-02T12:34:56Z",
             recoverable: true,
           },
         ],
@@ -68,7 +68,10 @@ const render = (free = true) =>
   );
 const button = (key: string) =>
   [...document.querySelectorAll<HTMLButtonElement>("button")].find(
-    (node) => node.textContent?.trim() === `rework.platformAccess.${key}`,
+    (node) =>
+      node.getAttribute("aria-label") === `rework.platformAccess.${key}` ||
+      (key === "links.copyUrl" && node.getAttribute("aria-label") === "rework.platformAccess.links.copied") ||
+      node.textContent?.trim() === `rework.platformAccess.${key}`,
   )!;
 const input = (key: string) =>
   [...document.querySelectorAll<HTMLInputElement>("input")].find(
@@ -83,6 +86,7 @@ it("keeps history available while Free is suspended and prevents link creation",
   render(false);
   expect(document.body.textContent).toContain("Workshop");
   expect(document.body.textContent).toContain("7");
+  expect(document.body.textContent).not.toContain(new Date("2026-10-02T12:34:56Z").toLocaleString("en"));
   expect(document.body.textContent).toContain("rework.platformAccess.links.suspendedHint");
   expect(button("createLink").disabled).toBe(true);
   expect(button("links.revoke").disabled).toBe(false);
@@ -107,6 +111,8 @@ it("recovers an existing URL without creating another invitation and confirms re
   expect(hooks.generate).not.toHaveBeenCalled();
   expect(navigator.clipboard.writeText).toHaveBeenCalledWith("http://localhost:5173/join-free/fixture-original-token");
   expect(document.body.textContent).toContain("rework.platformAccess.links.copied");
+  expect(button("links.copyUrl").querySelector('[aria-hidden="true"]')?.textContent).toBe("check");
+  expect(document.querySelector('[role="dialog"] p[role="status"]')).toBeNull();
   act(() => button("links.revoke").click());
   expect(hooks.revoke).not.toHaveBeenCalled();
   expect(document.body.textContent).toContain("rework.platformAccess.links.revokeHint");

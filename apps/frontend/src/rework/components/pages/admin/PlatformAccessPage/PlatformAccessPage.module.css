@@ -364,3 +364,14 @@
   gap: var(--spacing-xs);
   min-width: 0;
 }
+
+.copyAnnouncement {
+  position: absolute;
+  clip-path: inset(50%);
+  margin: -1px;
+  padding: 0;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  white-space: nowrap;
+}
