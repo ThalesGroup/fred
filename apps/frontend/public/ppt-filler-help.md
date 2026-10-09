@@ -10,26 +10,28 @@ For your agent to fill in your PowerPoint, you need to identify each area it wil
 
 ### 1. Mark the areas to fill in
 
-In a text box, write a **key** between double curly braces where a value should appear:
+In a text box, write a **key** between single or double curly braces where a value should appear:
 
 ```
-{{name}}
+{contexte}
 ```
+
+The screenshots use single braces. `{contexte}` and `{{contexte}}` identify the same key: both forms can be mixed, including for images. The name must match on the slide and in the notes (case-sensitive, leading and trailing spaces ignored). Existing double-brace templates remain compatible.
 
 You can reuse the same key several times on a slide to repeat the same value. The same key on another slide is independent.
 
 ### 2. Describe each key in the notes
 
-In the slide's **notes** (View → Notes), write for each key a header line `{{key}}:` followed by a description. It tells the agent what to put in that spot:
+In the slide's **notes**, write for each key a header line `{key}:` or `{{key}}:` followed by a description. It tells the agent what to put in that spot:
 
 ```
-{{name}}:
-Name of the employee, to be found in the CV.
+{contexte}:
+The project context. One or two sentences.
 ```
 
-A line is a header only if it consists of one or more `{{key}}` keys ending with a colon. A key quoted in the middle of a sentence stays ordinary text — so you can write naturally.
+A line is a header only if it consists of one or more `{key}` or `{{key}}` keys, separated by commas and ending with a colon. A key quoted in the middle of a sentence stays ordinary text - so you can write naturally.
 
-![A slide with keys between double curly braces in its text boxes, and the slide notes describing each key.](/ppt-filler/template.png)
+![A slide with keys between single curly braces in its text boxes, and the slide notes describing each key.](/ppt-filler/template.png)
 
 ## Advanced usage
 
@@ -97,7 +99,7 @@ Pick the flag matching the country discussed.
 ```
 
 - `type: image` tells the agent to place a picture. The default is `text`, so ordinary keys need nothing.
-- `folder:` points at a folder of your uploaded resources — your personal space or your team's. Quotes are optional, and keywords and values are case-insensitive.
+- `folder:` points at a folder of your uploaded resources - your personal space or your team's. Quotes are optional. Metadata keywords and the `type` value are case-insensitive; keep the folder path as it appears in your resources.
 
 ### Offering several image slots
 
@@ -117,7 +119,7 @@ You can offer N image slots and tell the agent (in the description) to use only 
 - The image is scaled to **fit inside** the shape's box, with its aspect ratio preserved and centered — no distortion and no cropping.
 - A repeated image key (the same key in several shapes on one slide) gets the same image in every shape, just like repeated text keys.
 - Real presenter notes after the `---` separator are left untouched.
-- The folder must be a real folder in your space. It is checked when you pick the template and again when you save.
+- The folder must be a real folder in your space. Its existence is checked when you save the uploaded template.
 
 ## Errors
 

@@ -38,6 +38,7 @@ from pptx.oxml.ns import qn
 from pydantic import BaseModel, ConfigDict, Field, model_serializer
 
 from fred_capability_ppt_filler.traversal import (
+    KEY_MARKER_PATTERN,
     KEY_PATTERN,
     list_keys_on_slide,
 )
@@ -66,10 +67,11 @@ _METADATA_LINE_PATTERN = re.compile(r"^\s*-\s*(\w+)\s*:\s*(.*)$")
 # ``text`` / ``image`` (checked inline so the type narrows to the schema Literal).
 _RECOGNIZED_METADATA_KEYS = frozenset({"type", "folder"})
 
-# A notes line is a header ONLY if it is one or more comma-separated ``{{key}}`` tokens
-# ending in a colon, e.g. ``{{name}}:`` or ``{{a}}, {{b}}:``. Anything else (including a
-# line that merely mentions ``{{...}}`` inline) is description text.
-_HEADER_PATTERN = re.compile(r"^\s*\{\{[^}]+\}\}(\s*,\s*\{\{[^}]+\}\})*\s*:\s*$")
+
+# Only a comma-separated marker list followed by a colon introduces a notes block.
+_HEADER_PATTERN = re.compile(
+    rf"^\s*{KEY_MARKER_PATTERN}(\s*,\s*{KEY_MARKER_PATTERN})*\s*:\s*$"
+)
 
 # A "keep separator" line is a line of only dashes (>= 3). Everything in a slide's notes
 # AFTER the first such line is content the author wants kept verbatim in the FILLED deck
@@ -306,8 +308,7 @@ def _parse_notes_descriptions(notes_text: str) -> Dict[str, _ParsedKeyMeta]:
             i += 1
             continue
 
-        # The keys named on this header line (one or more).
-        header_keys = [m.strip() for m in KEY_PATTERN.findall(line)]
+        header_keys = [key.strip() for key in KEY_PATTERN.findall(line)]
 
         # Collect the block: every line until the next header or EOF.
         block: List[str] = []

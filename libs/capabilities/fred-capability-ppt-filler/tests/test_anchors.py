@@ -25,6 +25,7 @@ the expected absolute geometry is deterministic and the group transform is non-t
 import io
 from typing import List, Optional, Tuple
 
+import pytest
 from fred_capability_ppt_filler.traversal import (
     ImageAnchor,
     list_image_anchors_on_slide,
@@ -219,9 +220,10 @@ def _box(anchor: ImageAnchor) -> Box:
 # --- Top-level text box: the shape's own geometry, verbatim -----------------------------
 
 
-def test_top_level_textbox_reports_its_own_geometry():
+@pytest.mark.parametrize("marker", ["{logo}", "{{logo}}"])
+def test_top_level_textbox_reports_its_own_geometry(marker):
     box = (Inches(2), Inches(3), Inches(4), Inches(1))  # left/top/width/height EMU
-    deck = _build_textbox_deck("Our logo: {{logo}}", box)
+    deck = _build_textbox_deck(f"Our logo: {marker}", box)
 
     anchors = list_image_anchors_on_slide(_slide_of(deck))
 
@@ -234,7 +236,8 @@ def test_top_level_textbox_reports_its_own_geometry():
 # --- Group child: absolute geometry via the composed transform (HIGHEST-RISK) -----------
 
 
-def test_group_child_absolute_geometry_with_non_identity_scale():
+@pytest.mark.parametrize("marker", ["{flag}", "{{flag}}"])
+def test_group_child_absolute_geometry_with_non_identity_scale(marker):
     """Highest-risk geometry (RFC watch-point #2): a text box inside a group whose extent
     differs from its child-extent (a 2x scale on both axes), with the child *not* sitting
     at ``chOff`` so the offset term is also scaled.
@@ -248,7 +251,7 @@ def test_group_child_absolute_geometry_with_non_identity_scale():
             abs_h    = height * scale_y = 0.5in * 2 = 1in
     """
     deck = _build_group_deck(
-        "Flag here {{flag}}",
+        f"Flag here {marker}",
         child_box=(Inches(2), Inches(2), Inches(1), Inches(0.5)),
         off=(Inches(2), Inches(3)),
         ext=(Inches(8), Inches(4)),
@@ -322,9 +325,10 @@ def test_zero_child_extent_falls_back_to_unit_scale():
 # --- Table cell: invalid location, geometry irrelevant ----------------------------------
 
 
-def test_table_cell_key_is_invalid_location():
+@pytest.mark.parametrize("marker", ["{flag}", "{{flag}}"])
+def test_table_cell_key_is_invalid_location(marker):
     deck = _build_table_deck(
-        ["{{flag}}", "plain text"],
+        [marker, "plain text"],
         box=(Inches(1), Inches(1), Inches(8), Inches(1)),
     )
 
@@ -352,9 +356,10 @@ def test_same_key_in_two_shapes_yields_two_anchors():
 # --- Run-merging: a key split across runs is still anchored ------------------------------
 
 
-def test_key_split_across_runs_is_still_anchored():
+@pytest.mark.parametrize("runs", [["Our {lo", "go} here"], ["Our {{lo", "go}} here"]])
+def test_key_split_across_runs_is_still_anchored(runs):
     box = (Inches(2), Inches(2), Inches(3), Inches(1))
-    deck = _build_split_run_textbox_deck(["Our {{lo", "go}} here"], box)
+    deck = _build_split_run_textbox_deck(runs, box)
 
     anchor = _only(list_image_anchors_on_slide(_slide_of(deck)), "logo")
 

@@ -12,36 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Shared text-frame traversal for the PPT Filler toolkit.
+"""Shared discovery, replacement, and image geometry for PPT Filler markers.
 
-This is the single seam reused by BOTH directions of the feature:
-
-- **List** (used by the parser, PPTFILL-01): find every ``{{key}}`` occurrence on a
-  slide.
-- **Replace** (used by the filler, PPTFILL-05): replace every ``{{key}}`` occurrence on
-  a slide with a provided value.
-
-Both directions share the same run-merging logic so they can never diverge: any key the
-parser surfaces is guaranteed fillable, and vice versa. The round-trip test
-(``parse → fill → re-parse``) is the regression guard for that invariant.
-
-PowerPoint frequently splits a single ``{{key}}`` placeholder across several runs inside
-one paragraph (e.g. because of autocorrect or spell-check spans). Both directions
-therefore merge the run texts of a paragraph, operate on the merged string, and map the
-result back onto the runs.
-
-Shape coverage. A placeholder is fillable wherever python-pptx exposes a text frame, so
-the traversal walks, recursively:
-
-- plain text boxes, titles, and other placeholders (``has_text_frame`` shapes);
-- **table** cells (each cell is a text frame);
-- **grouped** shapes — recursing into the group, so a text box / table nested at any
-  depth is reached.
-
-Still out of scope (no clean ``text_frame`` API in python-pptx; text lives in low-level
-DrawingML XML): **SmartArt** (``DIAGRAM`` / ``IGX_GRAPHIC``) and **chart** text. Keys
-placed there are not seen by the parser and therefore not filled; this is documented in
-the RFC rather than silently mis-handled.
+Both ``{key}`` and ``{{key}}`` use the same recognition and paragraph run merging.
+Text boxes, tables, and groups are supported; chart text and SmartArt are not.
 """
 
 from __future__ import annotations
@@ -60,9 +34,10 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
     from pptx.slide import Slide
     from pptx.text.text import _Paragraph
 
-# A placeholder is ``{{key}}``. The key is everything between the braces that is not a
-# closing brace. This matches the RFC/issue contract exactly.
-KEY_PATTERN = re.compile(r"\{\{([^}]+)\}\}")
+# Retain the legacy double-brace grammar and add a balanced single-brace form.
+KEY_MARKER_PATTERN = r"(?:\{\{[^}]+\}\}|(?<!\{)\{[^{}]+\}(?!\}))"
+# Keep the key as the sole capture for group(1) and findall() consumers.
+KEY_PATTERN = re.compile(rf"(?={KEY_MARKER_PATTERN})" r"\{\{?([^}]+)\}\}?")
 
 
 def _iter_shape_paragraphs(shape: "BaseShape") -> List["_Paragraph"]:
@@ -110,7 +85,7 @@ def _iter_text_paragraphs(slide: "Slide") -> List["_Paragraph"]:
 
 
 def list_keys_on_slide(slide: "Slide") -> List[str]:
-    """Return every ``{{key}}`` key found in the text-frame shapes of ``slide``.
+    """Return every ``{key}`` or ``{{key}}`` key found in the text-frame shapes of ``slide``.
 
     Keys are returned in document order with duplicates preserved; de-duplication (when
     needed) is the caller's responsibility. Keys are reconstructed even when PowerPoint
@@ -246,10 +221,10 @@ def _write_spans_onto_paragraph(paragraph: "_Paragraph", spans: List[Span]) -> N
 
 
 def replace_keys_on_slide(slide: "Slide", value_for: Callable[[str], str]) -> None:
-    """Replace every ``{{key}}`` occurrence in the text-frame shapes of ``slide``.
+    """Replace every ``{key}`` or ``{{key}}`` occurrence in the text-frame shapes of ``slide``.
 
-    ``value_for`` maps a (stripped) key to its replacement string. It is called once per
-    placeholder occurrence; every occurrence of a key on the slide is filled
+    ``value_for`` maps a (stripped) key to its replacement string. It must return the same value on
+    repeated calls; every occurrence of a key on the slide is filled
     consistently as long as ``value_for`` is deterministic.
 
     The same run-merging logic as :func:`list_keys_on_slide` is used, so a key split
