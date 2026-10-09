@@ -1976,7 +1976,8 @@
     "profileMenu": {
       "contactSupport": "Contact support",
       "profile": "Profile",
-      "trigger": "{{name}}'s account"
+      "trigger": "{{name}}'s account",
+      "whatsNew": "What's new"
     },
     "promptCategories": {
       "pickerTitle": "Category",
@@ -3262,11 +3263,16 @@
       },
       "page": {
         "title": "Announcements",
-        "subtitle_one": "{{count}} announcement is live for every user.",
-        "subtitle_other": "{{count}} announcements are live for every user.",
-        "subtitle_zero": "Nothing is showing to users right now.",
-        "create": "New announcement",
-        "empty": "No announcement yet.\nCreate one to show a banner at the top of the app."
+        "subtitle_one": "{{count}} banner is live for every user.",
+        "subtitle_other": "{{count}} banners are live for every user.",
+        "subtitle_zero": "No banner is showing right now.",
+        "empty": "No announcement yet.\nCreate a banner, shown at the top of the app, or a patch note, shown to users when they arrive.",
+        "create": "New announcement"
+      },
+      "chooser": {
+        "title": "New announcement",
+        "bannerDescription": "A short message shown at the top of the app.",
+        "patchNoteDescription": "What's new in a release, shown to users when they arrive."
       },
       "severity": {
         "info": "Info",
@@ -3283,7 +3289,8 @@
         "enableHint": "Enable for all users",
         "disableHint": "Disable for all users",
         "edit": "Edit this announcement",
-        "delete": "Delete this announcement"
+        "delete": "Delete this announcement",
+        "preview": "Preview as users see it"
       },
       "editor": {
         "createTitle": "New announcement",
@@ -3307,6 +3314,73 @@
       "delete": {
         "title": "Delete this announcement?",
         "message": "\"{{title}}\" will be removed for good. Users who can see it will stop seeing it."
+      },
+      "kind": {
+        "banner": "Banner",
+        "patch_note": "Patch note"
+      },
+      "patchNote": {
+        "dialog": {
+          "dontShowAgain": "Don't show again"
+        },
+        "editor": {
+          "createTitle": "New patch note",
+          "editTitle": "Edit patch note",
+          "title": "Patch note title",
+          "titleRequired": "Give the patch note a title in this language.",
+          "body": "Content (Markdown)",
+          "placeholder": "Describe what's new in this release in Markdown…",
+          "hint": "Headings, lists, links and code are supported.",
+          "preview": "Preview",
+          "previewEmpty": "The preview appears here as you type.",
+          "previewAsUsers": "Preview as users see it",
+          "bodyRequired": "Write the content in this language.",
+          "tooLong": "The content is longer than {{max}} characters in one language.",
+          "incomplete": "The {{language}} version needs both a title and content, or neither.",
+          "saveAndActivate": "Save and activate"
+        },
+        "dismissFailed": "Your choice was not saved. This note may show again next time.",
+        "discard": {
+          "title": "Discard your changes?",
+          "message": "The patch note you are writing has not been saved.",
+          "confirm": "Discard changes",
+          "cancel": "Keep writing"
+        },
+        "activate": {
+          "title": "Switch the active patch note?",
+          "message": "Only one patch note can be active at a time: “{{title}}” will be switched off.",
+          "confirm": "Activate"
+        },
+        "savedActive": "Patch note saved. Users see it when they arrive.",
+        "savedInactive": "Patch note saved. It is not active: switch it on for users to see it.",
+        "dismissalCount_zero": "No user has chosen to hide this patch note",
+        "dismissalCount_one": "{{count}} user chose to hide this patch note",
+        "dismissalCount_other": "{{count}} users chose to hide this patch note"
+      },
+      "history": {
+        "empty": "No activation yet.",
+        "activated": "Activated",
+        "deactivated": "Deactivated",
+        "unknownActor": "Unknown author",
+        "error": "Could not load the activation history.",
+        "column": {
+          "announcement": "Announcement",
+          "type": "Type",
+          "action": "Action",
+          "date": "Date and time",
+          "by": "By"
+        },
+        "filter": {
+          "all": "All",
+          "activated": "Activations",
+          "deactivated": "Deactivations",
+          "group": "Filter by action"
+        }
+      },
+      "view": {
+        "group": "Announcements page view",
+        "announcements": "Announcements",
+        "history": "History"
       }
     },
     "copyToTeams": {

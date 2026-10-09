@@ -65,6 +65,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     "PlatformAccess",
     "PlatformAccessLinks",
     "ControlPlaneAnnouncement",
+    "ControlPlanePatchNote",
   ],
   endpoints: {
     validateGcuControlPlaneV1GcuPost: { invalidatesTags: ["PlatformAccess"] },
@@ -124,6 +125,17 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     },
     deleteAnnouncementControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdDelete: {
       invalidatesTags: [{ type: "ControlPlaneAnnouncement" as const, id: "LIST" }],
+    },
+    // The history moves with every admin mutation, so it rides the LIST tag. The
+    // patch-note read is per user and read once per load: only a dismissal refreshes it.
+    listActivationHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGet: {
+      providesTags: [{ type: "ControlPlaneAnnouncement" as const, id: "LIST" }],
+    },
+    getActivePatchNoteControlPlaneV1AnnouncementsPatchNoteGet: {
+      providesTags: [{ type: "ControlPlanePatchNote" as const, id: "ACTIVE" }],
+    },
+    dismissPatchNoteControlPlaneV1AnnouncementsAnnouncementIdDismissalPut: {
+      invalidatesTags: [{ type: "ControlPlanePatchNote" as const, id: "ACTIVE" }],
     },
     // Team wiki (WIKI-01/02). One tag per team carries the tree; one per PAGE ID
     // carries a page's content and its history.
@@ -868,6 +880,10 @@ export const {
     useSetAnnouncementEnabledMutation,
   useDeleteAnnouncementControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdDeleteMutation:
     useDeleteAnnouncementMutation,
+  useGetActivePatchNoteControlPlaneV1AnnouncementsPatchNoteGetQuery: useActivePatchNoteQuery,
+  useDismissPatchNoteControlPlaneV1AnnouncementsAnnouncementIdDismissalPutMutation: useDismissPatchNoteMutation,
+  useListActivationHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetQuery:
+    useAnnouncementActivationHistoryQuery,
   // Team administrator charter acceptance.
   useAcceptTeamAdminCharterControlPlaneV1TeamAdminCharterPostMutation: useAcceptTeamAdminCharterMutation,
   useGetTeamAdminCharterAcceptanceControlPlaneV1TeamAdminCharterGetQuery: useGetTeamAdminCharterAcceptanceQuery,

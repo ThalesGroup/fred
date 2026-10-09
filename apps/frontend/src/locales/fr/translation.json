@@ -1976,7 +1976,8 @@
     "profileMenu": {
       "contactSupport": "Contacter le support",
       "profile": "Profil",
-      "trigger": "Compte de {{name}}"
+      "trigger": "Compte de {{name}}",
+      "whatsNew": "Nouveautés"
     },
     "promptCategories": {
       "pickerTitle": "Catégorie",
@@ -3262,11 +3263,16 @@
       },
       "page": {
         "title": "Annonces",
-        "subtitle_one": "{{count}} annonce est affichée à tous les utilisateurs.",
-        "subtitle_other": "{{count}} annonces sont affichées à tous les utilisateurs.",
-        "subtitle_zero": "Aucune annonce n'est affichée aux utilisateurs actuellement.",
-        "create": "Nouvelle annonce",
-        "empty": "Aucune annonce pour l'instant.\nCréez-en une pour afficher un bandeau en haut de l'application."
+        "subtitle_one": "{{count}} bandeau est affiché à tous les utilisateurs.",
+        "subtitle_other": "{{count}} bandeaux sont affichés à tous les utilisateurs.",
+        "subtitle_zero": "Aucun bandeau n'est affiché actuellement.",
+        "empty": "Aucune annonce pour l'instant.\nCréez un bandeau, affiché en haut de l'application, ou un patch note, présenté aux utilisateurs à leur arrivée.",
+        "create": "Nouvelle annonce"
+      },
+      "chooser": {
+        "title": "Nouvelle annonce",
+        "bannerDescription": "Un message court, affiché en haut de l'application.",
+        "patchNoteDescription": "Les nouveautés d'une version, présentées aux utilisateurs à leur arrivée."
       },
       "severity": {
         "info": "Info",
@@ -3283,7 +3289,8 @@
         "enableHint": "Activer pour tous les utilisateurs",
         "disableHint": "Désactiver pour tous les utilisateurs",
         "edit": "Modifier cette annonce",
-        "delete": "Supprimer cette annonce"
+        "delete": "Supprimer cette annonce",
+        "preview": "Prévisualiser comme les utilisateurs"
       },
       "editor": {
         "createTitle": "Nouvelle annonce",
@@ -3307,6 +3314,73 @@
       "delete": {
         "title": "Supprimer cette annonce ?",
         "message": "« {{title}} » sera définitivement supprimée. Les utilisateurs qui la voient cesseront de la voir."
+      },
+      "kind": {
+        "banner": "Bandeau",
+        "patch_note": "Patch note"
+      },
+      "patchNote": {
+        "dialog": {
+          "dontShowAgain": "Ne plus afficher"
+        },
+        "editor": {
+          "createTitle": "Nouveau patch note",
+          "editTitle": "Modifier le patch note",
+          "title": "Titre du patch note",
+          "titleRequired": "Donnez un titre au patch note dans cette langue.",
+          "body": "Contenu (Markdown)",
+          "placeholder": "Décrivez les nouveautés de cette version en Markdown…",
+          "hint": "Titres, listes, liens et code sont pris en charge.",
+          "preview": "Aperçu",
+          "previewEmpty": "L'aperçu apparaît ici dès que vous écrivez.",
+          "previewAsUsers": "Aperçu côté utilisateurs",
+          "bodyRequired": "Rédigez le contenu dans cette langue.",
+          "tooLong": "Le contenu dépasse {{max}} caractères dans une langue.",
+          "incomplete": "La version {{language}} doit avoir un titre et un contenu, ou aucun des deux.",
+          "saveAndActivate": "Enregistrer et activer"
+        },
+        "dismissFailed": "Votre choix n'a pas été enregistré. Cette note pourra s'afficher à nouveau.",
+        "discard": {
+          "title": "Abandonner vos modifications ?",
+          "message": "Le patch note que vous rédigez n'a pas été enregistré.",
+          "confirm": "Abandonner les modifications",
+          "cancel": "Continuer la rédaction"
+        },
+        "activate": {
+          "title": "Changer de patch note actif ?",
+          "message": "Un seul patch note peut être actif à la fois : « {{title}} » sera désactivé.",
+          "confirm": "Activer"
+        },
+        "savedActive": "Patch note enregistré. Les utilisateurs le voient à leur arrivée.",
+        "savedInactive": "Patch note enregistré. Il n'est pas actif : activez-le pour que les utilisateurs le voient.",
+        "dismissalCount_zero": "Aucun utilisateur n'a masqué ce patch note",
+        "dismissalCount_one": "{{count}} utilisateur a masqué ce patch note",
+        "dismissalCount_other": "{{count}} utilisateurs ont masqué ce patch note"
+      },
+      "history": {
+        "empty": "Aucune activation pour l'instant.",
+        "activated": "Activation",
+        "deactivated": "Désactivation",
+        "unknownActor": "Auteur inconnu",
+        "error": "Impossible de charger l'historique des activations.",
+        "column": {
+          "announcement": "Annonce",
+          "type": "Type",
+          "action": "Action",
+          "date": "Date et heure",
+          "by": "Par"
+        },
+        "filter": {
+          "all": "Tout",
+          "activated": "Activations",
+          "deactivated": "Désactivations",
+          "group": "Filtrer par action"
+        }
+      },
+      "view": {
+        "group": "Vue de la page des annonces",
+        "announcements": "Annonces",
+        "history": "Historique"
       }
     },
     "copyToTeams": {

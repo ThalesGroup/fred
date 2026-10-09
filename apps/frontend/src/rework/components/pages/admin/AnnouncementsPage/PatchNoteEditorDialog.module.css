@@ -1,0 +1,132 @@
+/*
+ * Copyright Thales 2026
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/* Patch-note compose/edit form, see PatchNoteEditorDialog.tsx */
+
+/* Fluid, never a fixed width: the Dialog molecule owns the outer size. */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+  width: 100%;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-s);
+}
+
+.spacer {
+  flex: 1;
+}
+
+/* `minmax(0, 1fr)`: a track's default `min-width: auto` would let a long
+   unwrapped markdown line push the dialog sideways. */
+.split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--spacing-m);
+}
+
+.editorColumn {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  min-width: 0;
+}
+
+/* `contain: size` keeps the preview from adding its own height to the row:
+   the editor sets the height and the preview scrolls inside it. */
+.previewColumn {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  contain: size;
+  min-width: 0;
+}
+
+.previewLabel {
+  margin: 0;
+  padding-left: var(--spacing-xs);
+  color: var(--on-surface-retreat);
+  font: var(--font-label-large);
+}
+
+.previewBody {
+  flex: 1;
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-s);
+  background: var(--surface-container-lowest);
+  padding: var(--spacing-m);
+  min-height: 0;
+  overflow-y: auto;
+  color: var(--on-surface);
+}
+
+.previewEmpty {
+  margin: 0;
+  color: var(--on-surface-muted);
+  font: var(--font-body-medium);
+}
+
+.editorFooter {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--spacing-s);
+}
+
+.hint {
+  margin: 0;
+  min-width: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.counter {
+  flex: none;
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.counterOver {
+  color: var(--error);
+}
+
+.error {
+  color: var(--error);
+  font: var(--font-body-small);
+}
+
+/* Stacked: the preview follows the editor and gets a height of its own. */
+@media (max-width: 900px) {
+  .split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .previewColumn {
+    contain: none;
+  }
+
+  .previewBody {
+    max-height: 24rem;
+  }
+}
