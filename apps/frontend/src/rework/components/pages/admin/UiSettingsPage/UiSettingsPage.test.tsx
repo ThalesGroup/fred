@@ -99,11 +99,22 @@ describe("UiSettingsPage", () => {
     expect(previews.map((element) => element.getAttribute("data-ui-base-theme"))).toEqual(["pebble", "pebble"]);
     expect(previews.map((element) => element.getAttribute("data-theme"))).toEqual(["light", "dark"]);
     const exampleCss = readFileSync(path.resolve(__dirname, "../../../../../../theme/theme-custom.css"), "utf8");
+    const shippedCss = readFileSync(path.resolve(__dirname, "../../../../../styles/themes/pebble.css"), "utf8");
+    const customStyle = document.createElement("style");
+    const shippedStyle = document.createElement("style");
+    customStyle.textContent = exampleCss;
+    shippedStyle.textContent = shippedCss;
+    document.head.append(customStyle, shippedStyle);
     for (const preview of previews) {
-      const selector = `[data-ui-theme="acme"][data-theme="${preview.getAttribute("data-theme")}"]`;
+      const selector = `[data-ui-theme="acme"][data-ui-base-theme="pebble"][data-theme="${preview.getAttribute("data-theme")}"]`;
       expect(exampleCss).toContain(`${selector} {`);
       expect(preview.matches(selector)).toBe(true);
+      expect(window.getComputedStyle(preview).getPropertyValue("--primary").trim()).toBe(
+        preview.getAttribute("data-theme") === "light" ? "#2844a0" : "#a6b8ff",
+      );
     }
+    customStyle.remove();
+    shippedStyle.remove();
     await act(async () => defaultButton("Acme").click());
     expect(h.save).toHaveBeenCalledWith({
       setPlatformUiSettingsRequest: { default_theme: "acme", hidden_themes: [] },

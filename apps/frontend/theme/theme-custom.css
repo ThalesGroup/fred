@@ -1,10 +1,10 @@
 /* Acme inherits all Pebble tokens; override only the values that differ. */
-[data-ui-theme="acme"][data-theme="light"] {
+[data-ui-theme="acme"][data-ui-base-theme="pebble"][data-theme="light"] {
   --primary: #2844a0;
   --on-primary: #ffffff;
 }
 
-[data-ui-theme="acme"][data-theme="dark"] {
+[data-ui-theme="acme"][data-ui-base-theme="pebble"][data-theme="dark"] {
   --primary: #a6b8ff;
   --on-primary: #122562;
 }
