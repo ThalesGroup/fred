@@ -93,3 +93,34 @@ def test_child_workflow_retry_limit_does_not_claim_activity_attempts_exhausted()
     assert "content extraction" in args[4]
     assert "Invalid PDF" in args[4]
     assert "exhausted" not in args[4]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("push", [True, False])
+@pytest.mark.parametrize("envelope", [None, "opaque-safe-envelope"])
+async def test_extraction_handoff_preserves_legacy_args_and_carries_optional_context(monkeypatch, push, envelope):
+    import logging
+
+    from knowledge_flow_backend.features.scheduler import workflow as scoped
+
+    calls = []
+
+    async def execute(name, **kwargs):
+        calls.append((name, kwargs))
+        return {"document_uid": "doc-a"}
+
+    monkeypatch.setattr(scoped.workflow, "execute_activity", execute)
+    monkeypatch.setattr(scoped.workflow, "logger", logging.getLogger("test.workflow"))
+    file = {"extraction_task_queue": "ingestion-fast", "task_id": "task-a"}
+    if envelope is not None:
+        file["logging_context"] = envelope
+    user, metadata = {"uid": "person-a"}, {"document_uid": "doc-a"}
+    if push:
+        await scoped.PushInputProcess().run(file, user, "", metadata, "fast")
+        expected = [user, metadata, "", "fast"]
+    else:
+        await scoped.PullInputProcess().run(file, user, metadata, "fast")
+        expected = [user, metadata, "fast"]
+    if envelope is not None:
+        expected += [envelope, "task-a"]
+    assert len(calls) == 1 and calls[0][1]["args"] == expected

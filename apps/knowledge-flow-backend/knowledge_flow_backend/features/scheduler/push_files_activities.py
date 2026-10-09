@@ -33,6 +33,7 @@ from knowledge_flow_backend.features.scheduler.kpi_utils import (
     emit_temporal_activity_queue_wait_kpi,
     emit_temporal_activity_result_kpis,
 )
+from knowledge_flow_backend.features.scheduler.logging_context import ingestion_activity
 from knowledge_flow_backend.features.scheduler.scheduler_structures import FileToProcess
 
 logger = logging.getLogger(__name__)
@@ -59,6 +60,7 @@ async def resolve_push_input_file_for_worker(
 
 
 @activity.defn
+@ingestion_activity
 async def get_push_file_metadata(file: FileToProcess) -> DocumentMetadata:
     """
     Why:
@@ -70,7 +72,7 @@ async def get_push_file_metadata(file: FileToProcess) -> DocumentMetadata:
     """
     logger = activity.logger
     started_at = asyncio.get_running_loop().time()
-    logger.info(f"[SCHEDULER][ACTIVITY][GET_PUSH_FILE_METADATA] Starting file={file}")
+    logger.info("Push metadata activity started")
     emit_temporal_activity_queue_wait_kpi(phase="metadata")
     from knowledge_flow_backend.features.ingestion.ingestion_service import get_ingestion_service
 
@@ -97,11 +99,14 @@ async def get_push_file_metadata(file: FileToProcess) -> DocumentMetadata:
 
 
 @activity.defn
+@ingestion_activity
 async def push_input_process(
     user: KeycloakUser,
     metadata: DocumentMetadata,
     input_file: str = "",
     profile: IngestionProcessingProfile | str | None = None,
+    logging_context: str | None = None,
+    task_id: str | None = None,
 ) -> DocumentMetadata:
     """
     Process push-file input and persist generated output in content storage.
