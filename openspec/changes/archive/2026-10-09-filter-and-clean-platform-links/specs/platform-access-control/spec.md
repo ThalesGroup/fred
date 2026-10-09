@@ -2,7 +2,7 @@
 
 ### Requirement: Administrators filter invitation history by lifecycle status
 
-Platform administrators SHALL be able to filter one team's complete invitation history by All, Active, Revoked, Expired or Suspended. All SHALL be the default. Results and pagination totals SHALL reflect the selected status across the entire history, not only loaded rows. Revoked SHALL take precedence over Expired, which SHALL take precedence over Suspended; unrevoked, unexpired links SHALL be Active when Link access is enabled and Suspended otherwise. Changing the filter SHALL start at the first page and SHALL NOT display rows from the previous filter as current results. Filtering SHALL NOT change validity, membership, counters or access settings.
+Platform administrators SHALL be able to filter one team's complete invitation history by All, Active, Revoked, Expired or Suspended. All SHALL be the default. Results and pagination totals SHALL reflect the selected status across the entire history, not only loaded rows. Revoked SHALL take precedence over Expired, which SHALL take precedence over Suspended; unrevoked, unexpired links SHALL be Active when Link access is enabled and Suspended otherwise. Changing the filter SHALL start at the first page and SHALL NOT display rows from the previous filter as current results. Filtering SHALL NOT change validity, membership, counters or access settings. The history table SHALL have a bounded fixed height with internal row scrolling, while its header, pagination and surrounding controls remain visible.
 
 #### Scenario: Filter beyond the first page
 

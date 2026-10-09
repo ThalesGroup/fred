@@ -26,3 +26,5 @@ See proposal.md for motivation. The current control-plane list returns bounded p
 ## Migration Plan
 
 Regenerate the control-plane OpenAPI client with `make update-control-plane-api`. Deploy the API and frontend together; no migration or operator configuration is required. Rolling back the feature restores the previous listing but cannot restore deleted history without a database backup. Update the existing PR migration guide and product contract with that consequence.
+
+The history table reuses the shared DataTable scroll body inside a 26rem container capped at 45dvh. Its header and pagination stay fixed. Retaining prior query totals during an uncached page request prevents DataTable from clamping the offset to zero; only current results supply rows.
