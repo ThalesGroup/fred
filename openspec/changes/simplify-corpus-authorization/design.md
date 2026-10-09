@@ -128,6 +128,18 @@ roles rather than retain a parallel global team-manager path.
 Alternative rejected: blanket descendant role inheritance. It conflicts with
 local analysis/editing and turns governance into content access.
 
+Service-account behavior is outside this authorization redesign, as explicitly
+confirmed by the developer. KB pods and applications such as the evaluator retain
+their existing authentication, access, HTTP contracts and deployment configuration.
+Keep the current KB library-scoped write authorization and the current technical
+execution/read allowances. Do not enroll these accounts as people or require new
+organization/team/project roles. An application token still identifies the calling
+application; this work does not redesign how it obtains authority to execute.
+Backend ownership/storage changes must preserve these existing machine paths. The
+removal of corpus ACLs concerns human access, not the technical grants still needed
+by KB pods. Delegated calls for a person retain that person's existing checks;
+this decision introduces no new service-account bypass.
+
 ### 3. Conversation context, not agent ownership, determines execution reach
 
 An organization agent can serve its organization's teams/personal teams/projects;
@@ -192,7 +204,7 @@ unauthorized hits after global ranking. Both preserve the expensive model.
 | --- | --- |
 | Corpus document-parent tuples and their writers | SQL folder membership; remove only after every corpus writer/read is converted |
 | Document permission loops/global readable-ID lists | Space gate and bounded SQL/index filtering; include direct-ID and service callers |
-| Folder grants and permission projections | Local space role permissions; retain FGA tag/resource behavior still used by non-corpus resources |
+| Human folder grants and permission projections | Local space role permissions; retain existing KB library write grants and non-corpus tag/resource authorization |
 | Document `tag_ids` arrays and membership diffs | One corpus folder; retain unrelated descriptive labels |
 | Folder responses containing every item ID | Folder summaries plus paginated documents; adapt deletion/list consumers together |
 | Personal user-owned versus team-owned corpus branches | Explicit personal-team space and owner-only permissions |
@@ -327,7 +339,8 @@ configuration. Further configuration choices require developer confirmation.
    preserving document/session/agent IDs, memberships, privacy and corpus role
    permissions. Create no projects. Apply the evaluation-role change explicitly, with affected
    grants reported; do not silently manufacture analyst access.
-5. Convert FGA platform/space relations; remove corpus ACL state. Populate the
+5. Convert FGA platform/space relations; remove superseded human corpus ACL state
+   while preserving technical grants and access. Populate the
    new index filters from canonical SQL, preserving vectors where possible.
    Validate structural constraints, authorization samples, quotas and counts before
    restart. Installation uses the same target schema with empty data.

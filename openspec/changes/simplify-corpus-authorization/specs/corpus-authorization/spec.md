@@ -171,11 +171,12 @@ to those teams.
 ### Requirement: Spaces own corpus permissions
 
 All corpus folders SHALL have one owning space. Folder hierarchy SHALL remain
-inside that space and SHALL confer no independent grants, restrictions or
+inside that space and SHALL confer no independent human grants, restrictions or
 cross-space sharing. Organization-common corpus SHALL be readable by its
 organization's members; mutation SHALL require editor at the owning level.
 Authorization SHALL use canonical server-side ownership, never a caller or index
-label alone. Corpus folder/document ACL relations SHALL be removed from FGA.
+label alone. Human corpus folder/document ACL relations SHALL be removed from FGA;
+existing technical KB library grants SHALL remain effective.
 
 #### Scenario: Atlas contains a Confidential folder
 - **WHEN** an Atlas member reads its corpus
@@ -184,6 +185,25 @@ label alone. Corpus folder/document ACL relations SHALL be removed from FGA.
 #### Scenario: A project editor reads an organization procedure
 - **WHEN** the editor reads the inherited procedure and then attempts to overwrite it
 - **THEN** reading is allowed but mutation requires organization editor
+
+### Requirement: Existing service-account integrations remain unchanged
+
+KB pods and applications authenticated with service accounts SHALL retain their
+existing authentication, authorization and HTTP contracts. This change SHALL NOT
+require new human membership, local role assignments, tokens or deployment
+configuration for those accounts. Existing delegated calls for a person SHALL
+retain their authorization checks; preserving technical access SHALL NOT introduce
+a new bypass for those calls.
+
+#### Scenario: An existing KB pod synchronizes its library
+- **WHEN** the pod uses its existing service account and library write grant
+- **THEN** the same synchronization calls remain authorized on that library after the backend ownership conversion
+- **AND** neither its deployment configuration nor its existing access scope is changed
+
+#### Scenario: An existing evaluator calls an agent
+- **WHEN** the application uses its existing service account to prepare execution through control-plane and invoke the target agent over HTTP
+- **THEN** its existing technical access and call contracts remain supported
+- **AND** it is not required to become a human member of the execution space or receive new local roles
 
 ### Requirement: Corpus membership is exclusive
 
@@ -262,7 +282,9 @@ them upward.
 For fixed context and operation, corpus permission work SHALL NOT grow with
 document count, folder count or folder depth. Candidate SQL/vector/tabular
 retrieval SHALL be constrained before ranking. Direct content, metadata, counts,
-citations, service identities and agent tools SHALL enforce the same boundary.
+citations and agent tools acting for people SHALL enforce the same boundary.
+Existing service-account authorization SHALL remain unchanged; canonical storage
+filtering SHALL preserve the context of those technical operations.
 Folder summaries SHALL NOT enumerate contained document IDs or metadata.
 Discovery SHALL use finite pages and explicit continuation; inputs and transport
 attempts SHALL be bounded. Canonical membership checks SHALL reject stale index

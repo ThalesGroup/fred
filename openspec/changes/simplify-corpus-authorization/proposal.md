@@ -15,8 +15,9 @@ is historical; this change incorporates the developer decisions of 2026-10-08.
   exactly one organization, at least one collaborative team, and one private
   personal team. Organization assignment is explicit, not inferred at first join.
 - **BREAKING**: corpus documents have one immutable folder and owning space;
-  folders classify content without independent grants or cross-space sharing.
-  Remove corpus document/folder FGA tuples and global authorization ID lists.
+  folders classify content without independent human grants or cross-space sharing.
+  Remove human corpus document/folder ACLs and global authorization ID lists;
+  preserve existing KB library write grants and service-account behavior.
 - Allow an authenticated newcomer without an organization to request admission.
   Until approval, expose only the restricted onboarding flow, with no personal
   workspace or corpus access. Organization admission establishes membership,
@@ -36,6 +37,9 @@ is historical; this change incorporates the developer decisions of 2026-10-08.
 - Authorize before retrieval with work independent of corpus size. Recheck access
   on the next protected request after revocation, including open conversations;
   do not add interruption of already-authorized work.
+- Preserve existing KB pods and service-account applications, including evaluator
+  authentication, technical access and HTTP contracts. Do not require new local
+  roles, human admission, credentials or deployment configuration for them.
 - Deliver a separate offline migration tool: configurable organizations and team
   assignments, no initial projects, preserved identities, coordinated backup and
   restore. No compatibility switches, dual reads/writes or rolling mixed versions.

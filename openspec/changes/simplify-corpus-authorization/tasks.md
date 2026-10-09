@@ -172,18 +172,21 @@ preserve old behavior through adapters, compatibility switches or automatic repa
   Production store +85/-0; ownership registration +8/-6; model +85/-0;
   migration +42/-0; tests +191/-3. No consumer deletion is claimed yet.
   Document ownership, actual corpus consumers and legacy-tag retirement remain
-  pending; technical-identity rights need developer clarification before consumer
-  cutover. This schema/store block does not complete task 3.1 or the backend milestone.
+  pending. The developer subsequently confirmed that KB pods and all existing
+  service-account applications retain their behavior, access and call contracts;
+  no technical-account redesign or new local-role provisioning is authorized.
+  Consumer cutover must preserve those paths. This schema/store block does not
+  complete task 3.1 or the backend milestone.
 - [ ] 3.2 Convert upload/overwrite, source synchronization and import/export writers; verify stable UID/folder on overwrite, rejection of reparenting, synchronized-source restrictions and new-format ownership/role round trips.
 - [ ] 3.3 Convert deletion, retries and quota accounting through existing lifecycle services; verify no stale/orphan hit is served, concurrent/retried mutations preserve constraints, and project storage is charged once to its parent team.
 - [ ] 3.4 Gate metadata, direct content, vector and tabular retrieval by canonical contextual spaces before retrieval/ranking; verify ancestor-common reach, explicit folder subtree/document restrictions, empty intersection and stale-index rejection.
 - [ ] 3.5 Replace folder item-ID payloads and per-folder permission projections with summaries and paginated document reads; verify lists/counts/deletion consumers no longer enumerate every document merely to render folders.
-- [ ] 3.6 Remove corpus FGA tuples/writers, document permission loops/global lists and competing personal ownership paths after checking static/dynamic consumers; verify fixed-context authorization counts do not grow with corpus size and report gross production additions/deletions separately from generated churn.
+- [ ] 3.6 Remove superseded human corpus FGA tuples/writers, document permission loops/global lists and competing personal ownership paths after checking static/dynamic consumers; preserve existing KB technical grants and service-account behavior; verify fixed-context authorization counts do not grow with corpus size and report gross production additions/deletions separately from generated churn.
 
 ## 4. Execution context and affected consumers
 
 - [ ] 4.1 Separate agent owning space from immutable conversation execution space in control-plane, SDK and runtime resolution; verify organization/team agent reuse, project-local agents, server-validated ancestry and rejection of session context changes.
-- [ ] 4.2 Carry context through ReAct/Deep tools, delegated calls, content URLs and service-identity evaluation paths; verify an unauthorized caller-supplied space cannot grant access and existing capability/model policies use the validated execution team.
+- [ ] 4.2 Carry context through ReAct/Deep tools, delegated calls, content URLs and existing service-identity evaluation paths without changing their accounts, rights or call contracts; verify an unauthorized caller-supplied space cannot grant access and existing capability/model policies use the validated execution team.
 - [ ] 4.3 Adapt history, memory, attachments, filesystem outputs and evaluation datasets to their execution space; verify ordinary conversation privacy, retrospective local analyst access, no inherited-author access and no upward publication of private outputs.
 - [ ] 4.4 Preserve existing agent restrictions and fixed/selectable chat scope modes; verify team context excludes all projects, project context excludes siblings, and personal context sees only personal plus organization-common corpus.
 - [ ] 4.5 Regenerate backend-derived clients and adapt required existing navigation, project/member operations and chat consumers using the design system; verify representative team/project/personal journeys without organization-creation UI, new scope widgets or document movement.
