@@ -369,7 +369,7 @@ export default function PlatformAccessPage() {
               enabling={filterConfirmation}
               revision={state.data.revision}
               configured={state.data.has_admission_sources}
-              busy={locked}
+              busy={busy}
               onClose={() => setFilterConfirmation(undefined)}
               onImportUsers={() => {
                 setFilterConfirmation(undefined);

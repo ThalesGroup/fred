@@ -3,6 +3,7 @@
 import { act, useState } from "react";
 import { createRoot, Root } from "react-dom/client";
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
+import type { PlatformAccessActivationUser } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 const state = vi.hoisted(() => ({
   users: [
     {
@@ -18,6 +19,12 @@ const state = vi.hoisted(() => ({
   importError: false,
   importMissing: false,
   previewRevision: 1,
+  authorityRevision: 1,
+  authorityError: false,
+  authorityFetching: false,
+  refreshAuthority: vi.fn(),
+  previewUsers: [] as PlatformAccessActivationUser[],
+  refreshPreview: vi.fn(),
   previewFetching: false,
   previewError: false,
   retryImport: vi.fn(),
@@ -33,18 +40,26 @@ vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({ sho
 vi.mock("../../../../../common/config", () => ({ getConfig: () => ({ platform_access_enabled: true }) }));
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   usePlatformAccessStateQuery: () => ({
-    data: { filtering_enabled: state.filteringEnabled, revision: 1, has_admission_sources: state.configured },
+    refetch: state.refreshAuthority,
+    isError: state.authorityError,
+    isFetching: state.authorityFetching,
+    data: {
+      filtering_enabled: state.filteringEnabled,
+      revision: state.authorityRevision,
+      has_admission_sources: state.configured,
+    },
   }),
   usePlatformAccessActivationPreviewQuery: () => ({
+    refetch: state.refreshPreview,
     isFetching: state.previewFetching,
     isError: state.previewError,
     data: {
       revision: state.previewRevision,
-      allowed: 1,
-      blocked: 0,
-      unknown: 0,
+      allowed: state.previewUsers.length ? state.previewUsers.filter((u) => u.outcome === "allowed").length : 1,
+      blocked: state.previewUsers.filter((u) => u.outcome === "blocked").length,
+      unknown: state.previewUsers.filter((u) => u.outcome === "unknown").length,
       checked_at: "2026-10-08T12:00:00Z",
-      users: [],
+      users: state.previewUsers,
     },
   }),
   usePlatformAccessUsersQuery: () => ({
@@ -102,7 +117,11 @@ beforeEach(() => {
   state.importFetching = false;
   state.importError = false;
   state.importMissing = false;
+  state.previewUsers = [];
   state.previewRevision = 1;
+  state.authorityRevision = 1;
+  state.authorityError = false;
+  state.authorityFetching = false;
   state.previewFetching = false;
   state.previewError = false;
   state.configured = true;
@@ -326,7 +345,7 @@ it("requires configuration and confirmation across all tabs before activating", 
   act(() => action().click());
   expect(state.filter).not.toHaveBeenCalled();
   const dialog = document.querySelector('[role="dialog"]')!;
-  expect(dialog.textContent).toContain("rework.platformAccess.activation.summary");
+  expect(dialog.textContent).toContain("rework.platformAccess.activation.groups");
   expect(dialog.textContent).toContain("rework.platformAccess.activation.importWarning");
   act(() =>
     [...dialog.querySelectorAll("button")]
@@ -352,7 +371,9 @@ const filteringAction = () =>
     (node) => node.textContent === `rework.platformAccess.activation.${state.filteringEnabled ? "disable" : "enable"}`,
   )!;
 const dialogButton = (key: string) =>
-  [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find((node) => node.textContent === key)!;
+  [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(
+    (node) => node.textContent === key || node.getAttribute("aria-label") === key,
+  )!;
 
 it("uses normal activation confirmation after a completed import", async () => {
   state.completed = true;
@@ -407,6 +428,9 @@ it("retains preview safeguards when continuing without importing", () => {
   act(() => root.render(<PlatformAccessPage />));
   expect(dialogButton("rework.platformAccess.activation.continueWithoutImport").disabled).toBe(true);
   state.previewRevision = 1;
+  state.authorityRevision = 1;
+  state.authorityError = false;
+  state.authorityFetching = false;
   state.configured = false;
   act(() => root.render(<PlatformAccessPage />));
   expect(dialogButton("rework.platformAccess.activation.continueWithoutImport").disabled).toBe(true);
@@ -445,5 +469,110 @@ it("prevents double activation and dismissal during the activation mutation", as
   expect(document.querySelector('[role="dialog"]')).not.toBeNull();
   expect(state.filter).toHaveBeenCalledOnce();
   await act(async () => finish());
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+});
+
+it("refreshes the read-only review and hides stale users while loading", () => {
+  state.previewUsers = [{ user_id: "original", username: "Before", email: null, outcome: "allowed", sources: [] }];
+  render();
+  act(() => filteringAction().click());
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Before");
+  act(() => dialogButton("rework.platformAccess.activation.update").click());
+  expect(state.refreshPreview).toHaveBeenCalledOnce();
+  expect(state.refreshAuthority).toHaveBeenCalledOnce();
+  expect(state.retryImport).toHaveBeenCalledOnce();
+  expect(state.filter).not.toHaveBeenCalled();
+  expect(state.importT0).not.toHaveBeenCalled();
+  state.previewFetching = true;
+  act(() => root.render(<PlatformAccessPage />));
+  expect(dialogButton("rework.platformAccess.activation.update").disabled).toBe(true);
+  expect(dialogButton("rework.platformAccess.activation.continueWithoutImport").disabled).toBe(true);
+  expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("Before");
+  state.previewFetching = false;
+  state.previewUsers = [{ user_id: "latest", username: "Latest", email: null, outcome: "allowed", sources: [] }];
+  act(() => root.render(<PlatformAccessPage />));
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Latest");
+  expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("Before");
+});
+
+it("keeps unevaluable accounts outside the two main result lists", () => {
+  state.previewUsers = [
+    { user_id: "known", username: "Known", email: null, outcome: "allowed", sources: [] },
+    { user_id: "unverified", username: "Unverified", email: null, outcome: "unknown", sources: [] },
+  ];
+  render();
+  act(() => filteringAction().click());
+  expect(document.querySelector('[role="dialog"]')?.querySelectorAll('[role="tab"]')).toHaveLength(2);
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Known");
+  expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("Uncertain");
+  const details = document.querySelector<HTMLDetailsElement>('[role="dialog"] details')!;
+  expect(details.open).toBe(false);
+  expect(details.querySelector("summary")?.textContent).toContain("rework.platformAccess.activation.unverified");
+  expect(details.textContent).toContain("Unverified");
+  const summary = details.querySelector("summary")!;
+  summary.focus();
+  act(() => summary.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })));
+  expect(state.filter).not.toHaveBeenCalled();
+  expect(
+    document.querySelector('[role="dialog"]')?.querySelectorAll('[role="tab"]')[1].getAttribute("aria-selected"),
+  ).toBe("true");
+});
+
+it("starts with blocked users when present and omits unavailable verification when all are evaluated", () => {
+  state.previewUsers = [
+    { user_id: "admitted", username: "Admitted", email: null, outcome: "allowed", sources: [] },
+    { user_id: "refused", username: "Refused", email: null, outcome: "blocked", sources: [] },
+  ];
+  render();
+  act(() => filteringAction().click());
+  const dialog = document.querySelector('[role="dialog"]')!;
+  expect(dialog.textContent).toContain("Refused");
+  expect(dialog.textContent).not.toContain("Admitted");
+  expect(dialog.querySelector("details")).toBeNull();
+  expect(dialog.querySelectorAll('[role="tab"]')[0].getAttribute("aria-selected")).toBe("true");
+  act(() => (dialog.querySelectorAll('[role="tab"]')[1] as HTMLButtonElement).click());
+  expect(dialog.textContent).toContain("Admitted");
+  expect(dialog.textContent).not.toContain("Refused");
+});
+
+it("recovers a changed authority revision on Update before confirming the refreshed review", async () => {
+  render();
+  act(() => filteringAction().click());
+  state.previewRevision = 2;
+  act(() => root.render(<PlatformAccessPage />));
+  expect(dialogButton("rework.platformAccess.activation.continueWithoutImport").disabled).toBe(true);
+  act(() => dialogButton("rework.platformAccess.activation.update").click());
+  expect(state.refreshAuthority).toHaveBeenCalledOnce();
+  expect(state.refreshPreview).toHaveBeenCalledOnce();
+  expect(state.filter).not.toHaveBeenCalled();
+  state.authorityRevision = 2;
+  act(() => root.render(<PlatformAccessPage />));
+  expect(dialogButton("rework.platformAccess.activation.continueWithoutImport").disabled).toBe(false);
+  await act(async () => dialogButton("rework.platformAccess.activation.continueWithoutImport").click());
+  expect(state.filter).toHaveBeenCalledWith({
+    setPlatformFiltering: { filtering_enabled: true, expected_revision: 2 },
+  });
+});
+
+it("keeps authority read failures recoverable without allowing confirmation", () => {
+  state.completed = true;
+  render();
+  act(() => filteringAction().click());
+  act(() => dialogButton("rework.platformAccess.activation.update").click());
+  state.authorityError = true;
+  act(() => root.render(<PlatformAccessPage />));
+  expect(dialogButton("rework.platformAccess.activation.enable").disabled).toBe(true);
+  expect(dialogButton("rework.platformAccess.activation.update").disabled).toBe(false);
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain(
+    "rework.platformAccess.activation.previewFailed",
+  );
+  act(() => dialogButton("rework.platformAccess.retry").click());
+  expect(state.refreshAuthority).toHaveBeenCalledTimes(2);
+  expect(state.filter).not.toHaveBeenCalled();
+  act(() =>
+    document
+      .querySelector('[role="dialog"]')!
+      .dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })),
+  );
   expect(document.querySelector('[role="dialog"]')).toBeNull();
 });

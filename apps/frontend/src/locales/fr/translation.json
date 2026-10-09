@@ -3417,6 +3417,10 @@
         "createdSuccess": "Lien créé"
       },
       "activation": {
+        "emptyAllowed": "Aucun utilisateur n'est autorisé par cette évaluation.",
+        "emptyBlocked": "Aucun utilisateur n'est bloqué par cette évaluation.",
+        "unverified": "Vérification impossible ({{count}})",
+        "update": "Actualiser",
         "importWarning": "Les utilisateurs existants n'ont pas été importés",
         "importWarningHint": "Les utilisateurs sans règle correspondante ni exception dans la liste blanche risquent de perdre leur accès. Voulez-vous continuer sans les importer ou aller dans la liste blanche pour les importer d'abord ?",
         "continueWithoutImport": "Continuer sans importer",
@@ -3430,13 +3434,11 @@
         "savedOnly": "Ce récapitulatif utilise la règle enregistrée et les autorisations actuelles. Les modifications non enregistrées ne sont pas appliquées.",
         "disableHint": "Les utilisateurs ne seront plus filtrés. L'authentification et les droits sur les ressources restent contrôlés.",
         "previewFailed": "Le récapitulatif est indisponible ou obsolète. Réessayez avant de confirmer.",
-        "summary": "Autorisés : {{allowed}}. Bloqués : {{blocked}}. Incertains : {{unknown}}.",
-        "checkedAt": "Vérifié le {{date}}. Les accès sont revérifiés à chaque requête.",
-        "unknownHint": "Certains utilisateurs ont des données de claims absentes ou expirées. Une nouvelle connexion est nécessaire pour évaluer leur règle. Cet aperçu ne donne aucun accès.",
+        "checkedAt": "Dernier contrôle : {{date}}",
+        "unknownHint": "Ces comptes n'ont pas pu être évalués avec les données vérifiées disponibles. Les informations de token peuvent manquer, avoir expiré ou être incohérentes, ou le statut du compte peut être indisponible. Leur accès sera évalué lors de leur prochaine requête ; une clé absente dans un token vérifié est évaluée normalement.",
         "groups": "Résultat par utilisateur",
         "allowed": "Autorisés",
         "blocked": "Bloqués",
-        "unknown": "Incertains",
         "email": "E-mail"
       }
     }

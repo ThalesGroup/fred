@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import IconButton from "@shared/atoms/IconButton/IconButton";
 import Button from "@shared/atoms/Button/Button";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup";
 import { Dialog } from "@shared/molecules/Dialog/Dialog";
 import DataTable from "@shared/molecules/DataTable/LocalizedDataTable";
 import {
   usePlatformAccessActivationPreviewQuery,
+  usePlatformAccessStateQuery,
   usePlatformAccessT0Query,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import styles from "./PlatformAccessPage.module.css";
@@ -29,19 +31,44 @@ export default function PlatformAccessActivationDialog({
   onConfirm: (revision: number) => void;
 }) {
   const { t, i18n } = useTranslation();
-  const [group, setGroup] = useState(0);
+  const [group, setGroup] = useState<number>();
   const preview = usePlatformAccessActivationPreviewQuery(undefined, {
     skip: !enabling,
     refetchOnMountOrArgChange: true,
   });
+  const authority = usePlatformAccessStateQuery(undefined, { skip: !enabling });
   const initialImport = usePlatformAccessT0Query(undefined, {
     skip: !enabling,
     refetchOnMountOrArgChange: true,
   });
+  const refresh = () => void Promise.all([preview.refetch(), authority.refetch(), initialImport.refetch()]);
   const importKnown = !initialImport.isFetching && !initialImport.isError && !!initialImport.data;
   const missingImport = enabling && importKnown && !initialImport.data?.completed_at;
-  const fresh = !preview.isFetching && !preview.isError && preview.data?.revision === revision;
-  const outcomes = ["blocked", "unknown", "allowed"] as const;
+  const refreshing = preview.isFetching || authority.isFetching || initialImport.isFetching;
+  const fresh =
+    !preview.isFetching &&
+    !preview.isError &&
+    !authority.isFetching &&
+    !authority.isError &&
+    preview.data?.revision === revision;
+  const outcomes = ["blocked", "allowed"] as const;
+  const selectedGroup = group ?? (preview.data?.blocked ? 0 : 1);
+  const renderUsers = (outcome: "allowed" | "blocked" | "unknown") => (
+    <DataTable
+      data={(preview.data?.users ?? []).filter((user) => user.outcome === outcome)}
+      rowKey={(user) => user.user_id}
+      pageSize={25}
+      columns={[
+        {
+          label: t("rework.teamSettings.members.table.identifiant"),
+          cellRenderer: (user) => user.username || user.user_id,
+        },
+        { label: t("rework.teamSettings.members.table.firstName"), cellRenderer: (user) => user.first_name || "-" },
+        { label: t("rework.teamSettings.members.table.lastName"), cellRenderer: (user) => user.last_name || "-" },
+        { label: t("rework.platformAccess.activation.email"), cellRenderer: (user) => user.email || "-" },
+      ]}
+    />
+  );
   return (
     <Dialog
       open
@@ -79,53 +106,71 @@ export default function PlatformAccessActivationDialog({
                 </Button>
               </div>
             )}
-            {preview.isFetching && <p role="status">{t("rework.platformAccess.loading")}</p>}
-            {(preview.isError || (!preview.isFetching && preview.data && !fresh)) && (
+            {(preview.isFetching || authority.isFetching) && <p role="status">{t("rework.platformAccess.loading")}</p>}
+            {(preview.isError || authority.isError || (!refreshing && preview.data && !fresh)) && (
               <div role="alert">
                 <p>{t("rework.platformAccess.activation.previewFailed")}</p>
-                <Button color="primary" variant="outlined" size="small" onClick={() => void preview.refetch()}>
+                <Button color="primary" variant="outlined" size="small" disabled={busy || refreshing} onClick={refresh}>
                   {t("rework.platformAccess.retry")}
                 </Button>
               </div>
             )}
-            {fresh && preview.data && (
+            {preview.data && (
               <>
-                <p>{t("rework.platformAccess.activation.summary", preview.data)}</p>
-                <p className={styles.hint}>
-                  {t("rework.platformAccess.activation.checkedAt", {
-                    date: new Date(preview.data.checked_at).toLocaleString(i18n.language),
-                  })}
-                </p>
-                {!!preview.data.unknown && <p role="status">{t("rework.platformAccess.activation.unknownHint")}</p>}
-                <ButtonGroup
-                  size="small"
-                  color="secondary"
-                  variant="tabs"
-                  selectedIndex={group}
-                  onSelectedIndexChange={setGroup}
-                  aria-label={t("rework.platformAccess.activation.groups")}
-                  items={outcomes.map((outcome) => ({ label: t(`rework.platformAccess.activation.${outcome}`) }))}
-                />
-                <DataTable
-                  data={preview.data.users.filter((user) => user.outcome === outcomes[group])}
-                  rowKey={(user) => user.user_id}
-                  pageSize={25}
-                  columns={[
-                    {
-                      label: t("rework.teamSettings.members.table.identifiant"),
-                      cellRenderer: (user) => user.username || user.user_id,
-                    },
-                    {
-                      label: t("rework.teamSettings.members.table.firstName"),
-                      cellRenderer: (user) => user.first_name || "-",
-                    },
-                    {
-                      label: t("rework.teamSettings.members.table.lastName"),
-                      cellRenderer: (user) => user.last_name || "-",
-                    },
-                    { label: t("rework.platformAccess.activation.email"), cellRenderer: (user) => user.email || "-" },
-                  ]}
-                />
+                <h3 className={styles.reviewHeading}>{t("rework.platformAccess.activation.groups")}</h3>
+                <div className={styles.reviewHeader}>
+                  <p className={styles.hint}>
+                    {t("rework.platformAccess.activation.checkedAt", {
+                      date: new Date(preview.data.checked_at).toLocaleString(i18n.language),
+                    })}
+                  </p>
+                  <IconButton
+                    color="primary"
+                    variant="icon"
+                    size="small"
+                    icon={{ category: "outlined", type: "refresh" }}
+                    title={t("rework.platformAccess.activation.update")}
+                    aria-label={t("rework.platformAccess.activation.update")}
+                    loading={!!refreshing}
+                    disabled={busy}
+                    onClick={refresh}
+                  />
+                </div>
+                {fresh && (
+                  <>
+                    <div className={styles.reviewTable}>
+                      <ButtonGroup
+                        size="medium"
+                        color="secondary"
+                        variant="tabs"
+                        selectedIndex={selectedGroup}
+                        onSelectedIndexChange={setGroup}
+                        aria-label={t("rework.platformAccess.activation.groups")}
+                        items={outcomes.map((outcome) => ({
+                          label: `${t(`rework.platformAccess.activation.${outcome}`)} (${preview.data![outcome]})`,
+                        }))}
+                      />
+                      {preview.data[outcomes[selectedGroup]] ? (
+                        renderUsers(outcomes[selectedGroup])
+                      ) : (
+                        <p>
+                          {t(
+                            `rework.platformAccess.activation.${selectedGroup === 0 ? "emptyBlocked" : "emptyAllowed"}`,
+                          )}
+                        </p>
+                      )}
+                    </div>
+                    {!!preview.data.unknown && (
+                      <details className={styles.unverifiedUsers}>
+                        <summary role="button" tabIndex={0}>
+                          {t("rework.platformAccess.activation.unverified", { count: preview.data.unknown })}
+                        </summary>
+                        <p>{t("rework.platformAccess.activation.unknownHint")}</p>
+                        {renderUsers("unknown")}
+                      </details>
+                    )}
+                  </>
+                )}
               </>
             )}
           </>

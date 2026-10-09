@@ -3417,6 +3417,10 @@
         "createdSuccess": "Link created"
       },
       "activation": {
+        "emptyAllowed": "No users are allowed by this review.",
+        "emptyBlocked": "No users are blocked by this review.",
+        "unverified": "Verification unavailable ({{count}})",
+        "update": "Update",
         "importWarning": "Existing users have not been imported",
         "importWarningHint": "Users without a matching rule or a whitelist exception may lose access. Do you want to continue without importing them, or go to the whitelist to import them first?",
         "continueWithoutImport": "Continue without importing",
@@ -3430,13 +3434,11 @@
         "savedOnly": "This review uses the saved rule and current exceptions. Unsaved rule changes are not applied.",
         "disableHint": "Users will no longer be filtered. Authentication and resource permissions remain enforced.",
         "previewFailed": "The population review is unavailable or outdated. Retry before confirming.",
-        "summary": "Allowed: {{allowed}}. Blocked: {{blocked}}. Uncertain: {{unknown}}.",
-        "checkedAt": "Checked at {{date}}. Access is checked again on each request.",
-        "unknownHint": "Some users have missing or expired claim evidence. A fresh sign-in is needed to evaluate their rule. This preview does not grant access.",
+        "checkedAt": "Last checked: {{date}}",
+        "unknownHint": "These accounts could not be evaluated with the available verified data. Token information may be missing, expired or conflicting, or account status could not be checked. Their access will be evaluated on their next request; a missing field in a verified token is evaluated normally.",
         "groups": "Population outcome",
         "allowed": "Allowed",
         "blocked": "Blocked",
-        "unknown": "Uncertain",
         "email": "Email"
       }
     }

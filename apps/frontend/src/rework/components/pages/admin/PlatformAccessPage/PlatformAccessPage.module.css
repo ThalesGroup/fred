@@ -301,3 +301,30 @@
   color: var(--on-surface-retreat);
   font: var(--font-body-medium);
 }
+.reviewHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-s);
+}
+.reviewHeading {
+  margin: 0;
+  font: var(--font-title-medium);
+}
+.reviewHeader > p {
+  margin: 0;
+}
+.reviewTable {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+}
+.unverifiedUsers {
+  margin-top: var(--spacing-m);
+  border-top: 1px solid var(--outline-muted);
+  padding-top: var(--spacing-s);
+}
+.unverifiedUsers > summary {
+  cursor: pointer;
+  font: var(--font-body-large);
+}

@@ -257,7 +257,7 @@ An absent admission authority SHALL initialize with filtering inactive until exp
 - **WHEN** an administrator attempts activation while a nonempty legacy file gate is active
 - **THEN** activation SHALL be refused without changing state, and readers SHALL fail closed if conflicting active state exists
 
-The page SHALL offer a top-right filtering action in the page header across every tab with explicit confirmation. Before activation, a read-only population review SHALL show identifiable allowed, blocked and uncertain users under the saved rule and current independent sources, with counts and observation time. Stale/missing/conflicted evidence SHALL be uncertain rather than declared blocked. A preview SHALL NOT grant access or save drafts. Activation confirmation SHALL reject a changed policy revision and retain the actor safeguard.
+The page SHALL offer a top-right filtering action in the page header across every tab with explicit confirmation. Before activation, a read-only population review SHALL show identifiable users in counted Allowed and Blocked lists under the saved rule and current independent sources, with observation time. Stale/missing/conflicted evidence SHALL appear in a separate expandable Verification unavailable section rather than be declared allowed or blocked. A missing field in an available verified token SHALL be evaluated normally. The initial view SHALL show Blocked when that group is nonempty, otherwise Allowed; empty groups SHALL show a short message without table pagination. An Update action SHALL reread the database snapshot, reference policy and import status without changing admission state; stale rows SHALL be hidden and confirmation disabled during loading, failure or revision conflict. A preview SHALL NOT grant access or save drafts. Activation confirmation SHALL reject a changed policy revision and retain the actor safeguard.
 
 #### Scenario: Review before activating
 
@@ -274,7 +274,7 @@ The page SHALL offer a top-right filtering action in the page header across ever
 #### Scenario: Evidence cannot establish an outcome
 
 - **WHEN** selected claim evidence is missing, expired or conflicted and no independent source applies
-- **THEN** the preview SHALL mark that person uncertain without inventing token values or granting access
+- **THEN** the preview SHALL include that person under Verification unavailable without inventing token values or granting access
 
 Before enabling through the UI, the initial-import status SHALL be known. If existing-user import has not completed, the activation confirmation SHALL explicitly warn that existing users have not been imported and offer Continue without importing or Go to whitelist. Continuing SHALL remain subject to the saved-policy population review and existing activation safeguards. Choosing Go to whitelist SHALL send no activation mutation and open Whitelist > Users. A completed import SHALL use normal activation confirmation. Loading or failed import status SHALL prevent enabling confirmation until retried successfully; disabling SHALL NOT depend on import completion.
 
@@ -294,6 +294,7 @@ Before enabling through the UI, the initial-import status SHALL be known. If exi
 
 - **WHEN** the initial import has completed and an administrator requests activation
 - **THEN** normal population-review confirmation SHALL appear without the missing-import warning
+- **AND** Whitelist > Users SHALL present completed import as a discreet status without a repeat-import action
 
 #### Scenario: Import status unavailable
 
