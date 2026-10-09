@@ -115,6 +115,15 @@ it("exposes only the selected panel and supports keyboard section navigation", (
   ).toBeDefined();
 });
 
+it("leaves only independent team authorization in the Teams panel", () => {
+  act(() => root.render(<PlatformAccessPage />));
+  openTab("teams");
+  const panel = host.querySelector('[role="tabpanel"]:not([hidden])')!;
+  expect(panel.querySelectorAll('input[type="checkbox"]')).toHaveLength(1);
+  expect(panel.textContent).not.toContain("rework.platformAccess.links.manage");
+  expect(panel.textContent).not.toContain("rework.platformAccess.freeHint");
+});
+
 it("preserves rule drafts and user selections across tabs without mutations", async () => {
   act(() => root.render(<PlatformAccessPage />));
   act(() => [...host.querySelectorAll("button")].find((node) => node.textContent === "Edit draft")!.click());

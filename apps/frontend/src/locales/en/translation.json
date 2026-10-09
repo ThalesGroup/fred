@@ -3242,7 +3242,7 @@
         "label": "Platform access sections",
         "rules": "Rules",
         "users": "Users",
-        "teams": "Teams and links"
+        "teams": "Teams"
       },
       "bulkHint": "Select users across searches and pages to add independent exceptions. Team access follows current membership.",
       "allowSelected": "Allow selected users ({{count}})",
@@ -3268,6 +3268,7 @@
       "team": "Team",
       "allowTeam": "Authorize members",
       "free": "Free enrollment",
+      "teamHint": "Authorization follows current team membership. Manage Free enrollment and links on the Teams page.",
       "freeHint": "Free teams admit their members. The link only enrolls its signed-in caller as a member. Removing Free suspends its links and withdraws this access source.",
       "link": "Enrollment link",
       "createLink": "Create link",

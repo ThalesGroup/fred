@@ -17,6 +17,7 @@ import { useTranslation } from "react-i18next";
 import Autocomplete from "@shared/molecules/Autocomplete/Autocomplete.tsx";
 import AvatarGroup from "@shared/molecules/AvatarGroup/AvatarGroup.tsx";
 import Button from "@shared/atoms/Button/Button.tsx";
+import Switch from "@shared/atoms/Switch/Switch";
 import DataTable, { DataTableColumn } from "@shared/molecules/DataTable/LocalizedDataTable.tsx";
 import Chip from "@shared/atoms/Chip/Chip.tsx";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
@@ -27,25 +28,28 @@ import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
 import { useMutationAction } from "@core/hooks/useMutationAction.ts";
 import { useUserCapabilities } from "@core/hooks/useUserCapabilities.ts";
 import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
+import { getConfig } from "../../../../../common/config";
+import { normalizeApiError } from "@core/errors/normalizeApiError";
+import PlatformAccessLinkManager from "../PlatformAccessPage/PlatformAccessLinkManager";
 import {
   useCreateTeamMutation,
   useDefaultTeamsForNewUsersQuery,
   useListAllTeamsQuery,
   useSearchCandidateTeamAdminsQuery,
   useSetDefaultTeamsForNewUsersMutation,
+  usePlatformAccessStateQuery,
+  usePlatformAccessTeamsQuery,
+  useSetPlatformTeamMutation,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { Team, UserSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./AdminTeamsPage.module.css";
 
 // AUTHZ-05 (RFC §28): team creation is a one-shot bootstrap action — there is
-// no other way to give a freshly created team its first team_admin. Every call
-// this page fires is reachable by a `team_manager` who is not a platform_admin
-// (`can_create_team` / `can_list_all_teams`); the existing-teams list is a
-// read-only registry view, and delete/rescue stay platform_admin-only and have
-// no affordance here.
+// no other way to give a freshly created team its first team_admin.
+// Platform admission actions remain separately gated on platform-admin rights.
 export default function AdminTeamsPage() {
   const { t } = useTranslation();
-  const { showSuccess } = useToast();
+  const { showSuccess, showError } = useToast();
   const { notifyApiError } = useApiErrorToast();
   const { runMutationAction } = useMutationAction();
 
@@ -67,6 +71,23 @@ export default function AdminTeamsPage() {
 
   // Choosing where new users land is platform_admin-only, unlike the rest of this page.
   const { canAdmin } = useUserCapabilities();
+  const admissionEnabled = canAdmin && (getConfig()?.platform_access_enabled ?? false);
+  const admission = usePlatformAccessStateQuery(undefined, { skip: !admissionEnabled });
+  const admissionTeams = usePlatformAccessTeamsQuery(undefined, { skip: !admissionEnabled });
+  const [setAdmissionTeam, { isLoading: isSettingAdmissionTeam }] = useSetPlatformTeamMutation();
+  const [linkTeam, setLinkTeam] = useState<string>();
+  const accessTeams = useMemo(
+    () => new Map((admissionTeams.data ?? []).map((team) => [team.team_id, team])),
+    [admissionTeams.data],
+  );
+  const selectedLinkTeam = linkTeam ? accessTeams.get(linkTeam) : undefined;
+  const admissionLocked =
+    isSettingAdmissionTeam ||
+    admission.isFetching ||
+    admission.isError ||
+    !admission.data ||
+    admissionTeams.isFetching ||
+    admissionTeams.isError;
   // Membership is granted on GCU acceptance: without GCU the setting never applies.
   const { gcuVersion } = useFrontendProperties();
   const [setDefaultTeams, { isLoading: isSettingDefaultTeams }] = useSetDefaultTeamsForNewUsersMutation();
@@ -115,8 +136,59 @@ export default function AdminTeamsPage() {
           />
         ),
       },
+      ...(admissionEnabled
+        ? [
+            {
+              label: t("rework.platformAccess.free"),
+              size: "1fr",
+              cellRenderer: (team: Team) => {
+                const access = accessTeams.get(team.id);
+                return (
+                  <Switch
+                    aria-label={`${t("rework.platformAccess.free")} ${team.name}`}
+                    checked={access?.free ?? false}
+                    disabled={admissionLocked || !access}
+                    onChange={(event) => {
+                      if (!access || admissionLocked) return;
+                      void runMutationAction({
+                        action: () =>
+                          setAdmissionTeam({
+                            teamId: team.id,
+                            setPlatformAccessTeam: { allowed: access.allowed, free: event.target.checked },
+                          }).unwrap(),
+                        onError: (error) =>
+                          showError({
+                            summary: t(
+                              normalizeApiError(error).detail === "platform_access_actor_lockout"
+                                ? "rework.platformAccess.actorLockout"
+                                : "rework.platformAccess.failed",
+                            ),
+                          }),
+                      });
+                    }}
+                  />
+                );
+              },
+            },
+            {
+              label: t("rework.platformAccess.link"),
+              size: "1.5fr",
+              cellRenderer: (team: Team) => (
+                <Button
+                  color="primary"
+                  variant="outlined"
+                  size="small"
+                  disabled={admissionLocked || !accessTeams.has(team.id)}
+                  onClick={() => setLinkTeam(team.id)}
+                >
+                  {t("rework.platformAccess.links.manage")}
+                </Button>
+              ),
+            },
+          ]
+        : []),
     ],
-    [t],
+    [t, admissionEnabled, admissionLocked, accessTeams, runMutationAction, setAdmissionTeam, showError],
   );
 
   const suggestions = useMemo(() => {
@@ -250,12 +322,19 @@ export default function AdminTeamsPage() {
       <Separator />
       <section className={styles.existingTeamsSection}>
         <h2 className={styles.sectionTitle}>{t("rework.adminTeams.existingTeams.title")}</h2>
+        {admissionEnabled && <p className={styles.sectionDescription}>{t("rework.platformAccess.freeHint")}</p>}
+        {admissionEnabled && (admission.isError || admissionTeams.isError) && (
+          <p role="alert">{t("rework.platformAccess.failed")}</p>
+        )}
         {allTeams && allTeams.length > 0 ? (
           <DataTable columns={teamColumns} data={allTeams} />
         ) : (
           <p className={styles.emptyTeamsMessage}>{t("rework.adminTeams.existingTeams.empty")}</p>
         )}
       </section>
+      {admissionEnabled && selectedLinkTeam && (
+        <PlatformAccessLinkManager team={selectedLinkTeam} onClose={() => setLinkTeam(undefined)} />
+      )}
     </div>
   );
 }

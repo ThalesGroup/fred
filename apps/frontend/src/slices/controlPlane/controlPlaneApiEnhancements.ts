@@ -384,7 +384,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
       providesTags: (_, __, arg) => [{ type: "ControlPlaneTeam", id: arg.teamId }],
     },
     createTeamControlPlaneV1TeamsPost: {
-      invalidatesTags: [{ type: "ControlPlaneTeam", id: "LIST" }],
+      invalidatesTags: [{ type: "ControlPlaneTeam", id: "LIST" }, "PlatformAccess"],
     },
     // Platform-wide default teams for new users: replaced as a whole, one LIST tag.
     getDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsGet: {

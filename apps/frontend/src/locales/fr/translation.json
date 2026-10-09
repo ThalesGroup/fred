@@ -3242,7 +3242,7 @@
         "label": "Sections de l'accès plateforme",
         "rules": "Règles",
         "users": "Utilisateurs",
-        "teams": "Équipes et liens"
+        "teams": "Équipes"
       },
       "bulkHint": "Sélectionnez les utilisateurs sur plusieurs recherches et pages pour ajouter des exceptions indépendantes. L'accès par équipe suit ses membres actuels.",
       "allowSelected": "Autoriser les utilisateurs sélectionnés ({{count}})",
@@ -3268,6 +3268,7 @@
       "team": "Équipe",
       "allowTeam": "Autoriser les membres",
       "free": "Inscription Free",
+      "teamHint": "L'autorisation suit les membres actuels de l'équipe. Gérez l'inscription Free et les liens depuis la page Équipes.",
       "freeHint": "Les équipes Free autorisent leurs membres. Le lien inscrit uniquement la personne connectée comme membre. Retirer Free suspend les liens et retire cette source d'accès.",
       "link": "Lien d'inscription",
       "createLink": "Créer un lien",

@@ -163,3 +163,55 @@ describe("capability enablement invalidation", () => {
     release();
   });
 });
+
+describe("team creation admission invalidation", () => {
+  it("makes a newly created team available for Free enrollment without reloading", async () => {
+    const store = makeStore();
+    const teamsPath = "/control-plane/v1/teams/all";
+    const admissionPath = "/control-plane/v1/admin/platform/access/teams";
+    let created = false;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (request: Request) => {
+        requested.push(request.url);
+        const { pathname } = new URL(request.url);
+        if (pathname === "/control-plane/v1/teams" && request.method === "POST") {
+          created = true;
+          return json({ id: "new-team", name: "New team" });
+        }
+        if (pathname === teamsPath) return json(created ? [{ id: "new-team", name: "New team" }] : []);
+        if (pathname === admissionPath)
+          return json(created ? [{ team_id: "new-team", name: "New team", allowed: false, free: false }] : []);
+        return json([]);
+      }),
+    );
+    const teams = store.dispatch(
+      api.endpoints.listAllTeamsControlPlaneV1TeamsAllGet.initiate({ includeMembership: true }),
+    );
+    const admission = store.dispatch(
+      api.endpoints.listPlatformAccessTeamsControlPlaneV1AdminPlatformAccessTeamsGet.initiate(),
+    );
+    try {
+      await Promise.all([teams, admission]);
+      await store
+        .dispatch(
+          api.endpoints.createTeamControlPlaneV1TeamsPost.initiate({
+            createTeamRequest: { name: "New team", initial_team_admin_ids: ["admin"] },
+          }),
+        )
+        .unwrap();
+      await vi.waitFor(() => {
+        expect(callsTo(teamsPath)).toBe(2);
+        expect(callsTo(admissionPath)).toBe(2);
+        expect(
+          api.endpoints.listPlatformAccessTeamsControlPlaneV1AdminPlatformAccessTeamsGet.select()(store.getState())
+            .data,
+        ).toEqual([{ team_id: "new-team", name: "New team", allowed: false, free: false }]);
+      });
+    } finally {
+      teams.unsubscribe();
+      admission.unsubscribe();
+      store.dispatch(api.util.resetApiState());
+    }
+  });
+});

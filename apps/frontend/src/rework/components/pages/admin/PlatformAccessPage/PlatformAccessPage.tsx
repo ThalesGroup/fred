@@ -24,7 +24,6 @@ import {
   useSetPlatformTeamMutation,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import PlatformAccessActivationDialog from "./PlatformAccessActivationDialog";
-import PlatformAccessLinkManager from "./PlatformAccessLinkManager";
 import PlatformAccessRuleEditor from "./PlatformAccessRuleEditor";
 import styles from "./PlatformAccessPage.module.css";
 
@@ -41,7 +40,6 @@ export default function PlatformAccessPage() {
   const [selected, setSelected] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [filterConfirmation, setFilterConfirmation] = useState<boolean>();
-  const [linkTeam, setLinkTeam] = useState<string>();
   const state = usePlatformAccessStateQuery(undefined, { skip: !enabled });
   const users = usePlatformAccessUsersQuery({ offset, limit: 25, query }, { skip: !enabled });
   const t0 = usePlatformAccessT0Query(undefined, { skip: !enabled });
@@ -268,7 +266,7 @@ export default function PlatformAccessPage() {
           >
             <section className={styles.section}>
               <h2>{t("rework.platformAccess.teams")}</h2>
-              <p>{t("rework.platformAccess.freeHint")}</p>
+              <p>{t("rework.platformAccess.teamHint")}</p>
               <DataTable
                 data={teams.data ?? []}
                 rowKey={(team) => team.team_id}
@@ -296,40 +294,6 @@ export default function PlatformAccessPage() {
                           )
                         }
                       />
-                    ),
-                  },
-                  {
-                    label: t("rework.platformAccess.free"),
-                    size: "1fr",
-                    cellRenderer: (team) => (
-                      <Switch
-                        aria-label={`Free ${team.name || team.team_id}`}
-                        disabled={locked || teams.isFetching}
-                        checked={team.free}
-                        onChange={(event) => {
-                          void run(() =>
-                            setTeam({
-                              teamId: team.team_id,
-                              setPlatformAccessTeam: { allowed: team.allowed, free: event.target.checked },
-                            }).unwrap(),
-                          );
-                        }}
-                      />
-                    ),
-                  },
-                  {
-                    label: t("rework.platformAccess.link"),
-                    size: "2fr",
-                    cellRenderer: (team) => (
-                      <Button
-                        color="primary"
-                        variant="filled"
-                        size="medium"
-                        disabled={locked || teams.isFetching}
-                        onClick={() => setLinkTeam(team.team_id)}
-                      >
-                        {t("rework.platformAccess.links.manage")}
-                      </Button>
                     ),
                   },
                 ]}
@@ -366,12 +330,6 @@ export default function PlatformAccessPage() {
                   setFilterConfirmation(undefined);
                 })
               }
-            />
-          )}
-          {linkTeam && teams.data?.find((team) => team.team_id === linkTeam) && (
-            <PlatformAccessLinkManager
-              team={teams.data.find((team) => team.team_id === linkTeam)!}
-              onClose={() => setLinkTeam(undefined)}
             />
           )}
         </>
