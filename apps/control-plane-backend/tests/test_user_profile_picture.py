@@ -456,6 +456,9 @@ def _delete_user_app(content_store: _FakeContentStore, calls: list[str]) -> Fast
     async def no_favorites(_user_id: str) -> None:
         calls.append("delete_favorites")
 
+    async def no_dismissals(_user_id: str) -> None:
+        calls.append("delete_patch_note_dismissals")
+
     class _Identity:
         async def a_delete_user(self, _user_id: str) -> dict:
             calls.append("delete_identity_account")
@@ -470,6 +473,9 @@ def _delete_user_app(content_store: _FakeContentStore, calls: list[str]) -> Fast
         get_platform_bootstrap_store=lambda: SimpleNamespace(get_completed_by=root),
         get_prompt_store=lambda: SimpleNamespace(
             delete_favorites_for_user=no_favorites
+        ),
+        get_announcement_store=lambda: SimpleNamespace(
+            delete_dismissals_for_user=no_dismissals
         ),
     )
     app = FastAPI()
@@ -510,7 +516,11 @@ async def test_account_deletion_removes_the_picture_before_the_identity(
     assert response.status_code == 204
     assert user_store.keys == {}
     assert content_store.deleted == ["users/p/avatar.png"]
-    assert calls == ["delete_favorites", "delete_identity_account"]
+    assert calls == [
+        "delete_favorites",
+        "delete_patch_note_dismissals",
+        "delete_identity_account",
+    ]
 
 
 @pytest.mark.asyncio
