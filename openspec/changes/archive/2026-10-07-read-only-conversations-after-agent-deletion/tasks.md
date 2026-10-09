@@ -99,8 +99,9 @@ simulated deletion/invalidation, preserved history/draft, reload, computed name
 strikethrough with an unchanged title, hover/keyboard status, dark grouped list
 and restored live composer/send. No uncaught page errors, unexpected requests,
 deleted-agent preparation requests or execution requests occurred. Four reviewed
-captures are in `docs/swift/ux/screenshots/deleted-agent-read-only/` and embedded
-in the PR. This closes the browser-rendering gap for these frontend scenarios;
+captures are embedded in [PR #2993](https://github.com/ThalesGroup/fred/pull/2993)
+using immutable capture-commit URLs; PNG assets are excluded from the final source
+diff. This closes the browser-rendering gap for these frontend scenarios;
 production-backend deletion, database migration/concurrency and LLM execution
 were not exercised by this browser campaign.
 
