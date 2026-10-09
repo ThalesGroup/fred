@@ -173,27 +173,26 @@ export default function PlatformAccessPage() {
                     {t("rework.platformAccess.t0Done")}
                   </p>
                 ) : (
-                  <section className={styles.section}>
-                    <h2>{t("rework.platformAccess.t0Import")}</h2>
-                    <p>{t("rework.platformAccess.t0Hint")}</p>
-                    {t0.data && (
-                      <p>
-                        {t("rework.platformAccess.t0Preview", {
-                          count: t0.data.candidates,
-                          matching: t0.data.matching,
-                        })}
-                      </p>
-                    )}
+                  <div className={styles.importRow}>
                     <Button
                       color="primary"
-                      variant="filled"
-                      size="medium"
+                      variant="outlined"
+                      size="small"
+                      title={t("rework.platformAccess.t0Hint")}
                       disabled={locked || !t0.data || t0.isFetching || t0.isError}
                       onClick={() => void run(() => importT0().unwrap())}
                     >
                       {t("rework.platformAccess.t0Import")}
                     </Button>
-                  </section>
+                    {t0.data && (
+                      <span>
+                        {t("rework.platformAccess.t0Preview", {
+                          count: t0.data.candidates,
+                          matching: t0.data.matching,
+                        })}
+                      </span>
+                    )}
+                  </div>
                 )}
                 <section className={styles.section}>
                   <TextInput
