@@ -116,6 +116,10 @@
     }
   },
   "capability": {
+    "web_research": {
+      "name": "Search the web",
+      "description": "Search public sources and read web pages through controlled external access."
+    },
     "document_access": {
       "name": "Documents",
       "description": "What the agent can read and search: attachments, team documents, or both.",
@@ -385,7 +389,8 @@
       "ariaLabel": "Generated files",
       "downloadAria": "Download {{name}}",
       "downloadFailed": "Could not download {{name}}",
-      "fallbackName": "Download"
+      "fallbackName": "Download",
+      "citationAria": "Open source “{{name}}” ({{host}}) in a new tab"
     },
     "commandTurn": {
       "open": "Open the prompt behind the /{{command}} command",
@@ -1434,7 +1439,8 @@
         "overview": "Usage overview",
         "resources": "Resources",
         "tokenUsage": "Token usage",
-        "users": "Users"
+        "users": "Users",
+        "webResearch": "Web research"
       },
       "administration": {
         "modelsGovernanceLink": "Manage models",
@@ -1473,6 +1479,46 @@
         "empty": "No team conversations in this period.",
         "title": "Teams with most conversations",
         "valueLabel": "Conversations"
+      },
+      "webResearch": {
+        "estimatedCost": "Estimated provider cost ($)",
+        "blocked": "Blocked (security)",
+        "saturated": "Rejected (saturation)",
+        "failed": "Other failures",
+        "p95": "p95 latency (ms)",
+        "users": "Distinct users",
+        "reasonsTitle": "Rejected or failed requests by reason",
+        "noRefusal": "No rejected or failed request in this period.",
+        "reasons": {
+          "unsafe_destination": "Non-public address",
+          "too_many_redirects": "Too many redirects",
+          "unsupported_content": "Unsupported content",
+          "response_too_large": "Page too large",
+          "busy": "Saturation",
+          "timed_out": "Timed out",
+          "provider_failed": "Provider failed",
+          "http_error": "Site error",
+          "proxy_refused": "Refused by the proxy",
+          "quota_exceeded": "Daily quota reached",
+          "unavailable": "Unavailable",
+          "rejected": "Rejected",
+          "invalid_response": "Invalid response",
+          "activity_unavailable": "Activity log unavailable"
+        },
+        "toolCalls": "Tool calls",
+        "searches": "Searches",
+        "fetches": "Page reads",
+        "hints": {
+          "toolCalls": "Searches + page reads. Counted since this version was deployed.",
+          "searches": "web_search calls to the search provider: the only ones it bills.",
+          "fetches": "fetch_url calls: read the site directly, not billed by the provider (costs LLM tokens).",
+          "estimatedCost": "Successful searches × cost_per_1000_searches ÷ 1,000. Excludes retries, free tiers and LLM tokens.",
+          "blocked": "Refused for security: non-public address, redirects, content or size. Details: restricted activity API.",
+          "saturated": "Refused for lack of capacity (busy): raise max_concurrency or replicas.",
+          "failed": "Provider, proxy or site failure, or timeout.",
+          "p95": "95% of calls finish faster than this.",
+          "users": "Users who made at least one call."
+        }
       }
     },
     "imports": {
@@ -1695,7 +1741,36 @@
         "markdown": "Reading the workbook catalog",
         "schemas": "Reading tabular schemas",
         "descriptions": "Reading tabular documents",
-        "search": "Searching tabular values"
+        "search": "Searching tabular values",
+        "webSearch": "Searching the web",
+        "fetchUrl": "Reading a web page"
+      },
+      "webResearch": {
+        "query": "Search:",
+        "page": "Page:",
+        "noResults": "No result found.",
+        "extractedText_one": "Extracted text ({{count}} character)",
+        "extractedText_other": "Extracted text ({{count}} characters)",
+        "truncated": "truncated",
+        "quotaSearches": "Searches left today: {{remaining}} / {{limit}}",
+        "quotaFetches": "Page reads left today: {{remaining}} / {{limit}}",
+        "errors": {
+          "unavailable": "The site or the Internet could not be reached (network, DNS or proxy).",
+          "timed_out": "The request timed out.",
+          "rejected": "The request was rejected.",
+          "invalid_response": "The response could not be read.",
+          "activity_unavailable": "Web research is unavailable: its activity log cannot be written.",
+          "unsafe_destination": "Internal or non-public address: blocked for security.",
+          "too_many_redirects": "Too many redirects.",
+          "unsupported_content": "Not a readable text page (binary or compressed file).",
+          "response_too_large": "The page is too large.",
+          "provider_failed": "The search engine did not answer correctly.",
+          "busy": "Web research is busy, try again shortly.",
+          "http_error": "The site returned an HTTP error (missing page or access denied).",
+          "proxy_refused": "The network proxy refused this site (blocked by security policy).",
+          "quota_exceeded": "Daily web search quota reached, try again after midnight UTC.",
+          "quota_exceeded_fetch": "Daily page-read quota reached, try again after midnight UTC."
+        }
       }
     },
     "collapse": "Collapse",
@@ -2236,6 +2311,11 @@
         "title": "Functional self-test",
         "subtitle": "Create two folders in your personal space, ingest a marker document into one and a plain document into the other, then ask the real self-test agent a question scoped to each — the marker must come back from the first and be absent from the second. Everything is cleaned up at the end.",
         "run": "Run campaign"
+      },
+      "web": {
+        "title": "Web research self-test",
+        "subtitle": "Run the deterministic web research agent through the real execution pipeline. It fails first when web research is not enabled on this deployment; otherwise it proves each protection holds — refused schemes, ports and credentials, loopback, private, metadata and encoded addresses, platform service names, redirects to internal destinations, binary content, and a SafeSearch the model cannot weaken — then that search and page reading work. Probes that need an unreachable third-party endpoint are skipped, never passed. The temporary agent is deleted at the end.",
+        "run": "Run web research checks"
       },
       "authz": {
         "identityTitle": "JWT authentication self-test",

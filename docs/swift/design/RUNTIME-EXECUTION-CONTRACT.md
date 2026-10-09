@@ -6559,3 +6559,17 @@ already applied before this combined cleanup must be reapplied as described in
 the operator migration note.
 See the migration note at `docs/swift/ops/migrations/extract-mcp-agent-instructions.md`
 and `openspec/specs/mcp-capabilities/spec.md` for the current contract.
+
+### 2026-10-06 — Native web research (#2980)
+
+The optional `RuntimeServices.web_research` SDK port is bound by the existing
+agent runtime to the authenticated subject for each invocation. Native tools
+share the standard authorization and tool audit paths across ReAct, Deep and
+Graph. A pod-owned internal engine shares its outbound HTTP pool for direct
+public access or an explicitly configured forward proxy. No additional Fred
+service runs in the DMZ; the operator owns proxy/network enforcement. The runtime
+owns the restricted SQL activity sink, the engine and the search providers
+(`fred_runtime/app/web_research_*.py`, deps in the `app` extra); the capability
+package holds only the tools, and the runtime imports no capability package.
+The deployment is default-off. See the [activity contract](../platform/OBSERVABILITY-AND-AUDIT.md#restricted-web-research-activity)
+and [migration guide](../ops/migrations/2980-native-web-research.md).

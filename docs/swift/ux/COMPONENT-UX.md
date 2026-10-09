@@ -798,6 +798,16 @@ how `ThoughtTrace` trims the rail when a reasoning row opens or closes the seque
 
 - **Close affordance** — `InlineDrawer` already uses the `Icon`-atom close button.
 
+- **Native web research view (2026-10-06)** — `web_search` and `fetch_url`
+  get their own label, show the query or public URL on the row with
+  an `N sources` chip, and open `WebResearchToolDetail`: each page as an external
+  http(s)-only link with host, snippet, collapsible extracted text and localized per-page
+  or tool error codes. Query and URL are the step's user-facing subject, so they are the
+  one argument exception to the redacted row. Each successful call also emits
+  `LinkPart(kind="citation")` parts; `CitationLinkChip` renders them under the answer as
+  plain http(s) anchors (no Fred token), while every other link kind stays an
+  authenticated `ArtifactLinkChip` download.
+
 - **Curated tool-result views for SQL and RAG (2026-07-22)** — tool call/result entries no
   longer always render the blanket-redacted `{action, status, latency}` JSON (from
   #1774/CHAT-13). Two common, specifically useful content shapes are now recognized and

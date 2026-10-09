@@ -760,6 +760,7 @@ export const {
   useHandlerControlPlaneV1KpiPresetsTokenUsageByAgentGetQuery: useTokenUsageByAgentQuery,
   useHandlerControlPlaneV1KpiPresetsTokenUsageByModelGetQuery: useTokenUsageByModelQuery,
   useHandlerControlPlaneV1KpiPresetsStorageByTeamGetQuery: useStorageByTeamQuery,
+  useHandlerControlPlaneV1KpiPresetsWebResearchSummaryGetQuery: useWebResearchSummaryQuery,
   // Persisted task acknowledgement (OPS-04, TASK-EVENT-STREAM-RFC.md §2.10 rev 3).
   useAcknowledgeTaskControlPlaneV1TasksTaskIdAckPostMutation: useAcknowledgeTaskMutation,
   usePlatformStatsControlPlaneV1ImportExportStatsGetQuery: usePlatformStatsQuery,

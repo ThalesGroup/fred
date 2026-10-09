@@ -390,6 +390,29 @@ Browser renewal telemetry remains a separate gap. Before implementation, confirm
 the deployment's query endpoint, read credentials and component labels; test
 permissions, multi-replica aggregation, restarts and missing/stale data.
 
+## Restricted web research activity
+
+Native web research requires a separate runtime PostgreSQL product activity table.
+It stores the opaque user/team/agent/session/correlation identifiers, submitted
+query or public URL (without query parameters/fragments), outcome, duration and
+result count. It stores neither snippets nor downloaded page bodies. Ordinary
+logs, Prometheus labels and security audit remain content-free. Platform operators
+(`CAN_MANAGE_PLATFORM`) can read unexpired records; user administrators
+(`CAN_ADMINISTER_USERS`) can erase them. The default retention is 30 days,
+configurable from 1 to 365; reads exclude expired rows and a periodic worker
+physically purges them even after feature disablement.
+
+Deleting or suspending an account does not erase this activity: it stays a
+security trace until expiry, like conversation history. Erasure is an explicit
+administrator action for a right-to-erasure request:
+`DELETE /agents/web-research/activity/users/{user_id}` on Fred Agents
+(`CAN_ADMINISTER_USERS`) deletes every record of that user and returns
+`{"deleted": <count>}`; the call is itself audited (`web_research.activity.erased`).
+It does not block later use: an operation running during the call, or a later
+one by the same user, is recorded normally and expires with the retention.
+Activation requires the activity store and operator approval of query collection.
+See [deployment and migration instructions](../ops/migrations/2980-native-web-research.md).
+
 ## LLM streaming incident diagnosis
 
 The shared ReAct/Deep model middleware, including native Deep children, emits

@@ -430,3 +430,14 @@ if you touched the contract surface) — green before you claim done.
 - **Re-raise a run stop** — a tool that turns a failure into text first checks
   `unwrap_run_stop_error(exc)` from `fred_sdk.contracts.runtime` and re-raises what it
   finds, so a stopped run ends instead of reaching the model as tool text.
+
+### Native web research port
+
+`RuntimeServices.web_research` exposes the SDK `WebResearchPort` for bounded
+search/fetch requests. As for every runtime service, `fred-runtime` implements the
+port (engine and search providers in `fred_runtime/app/web_research_*.py`, bound to
+the authenticated subject and activity store); the native capability provides only
+its manifest, tools and citations. Proxy configuration, credentials,
+identity and retention are deployment/runtime data and never tool arguments.
+The engine runs inside Fred Agents with direct public access or an optional
+operator-owned forward proxy in a DMZ. No extra Fred service is needed. See [web research operations](../ops/migrations/2980-native-web-research.md).

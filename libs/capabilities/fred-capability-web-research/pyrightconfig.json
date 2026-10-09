@@ -1,0 +1,8 @@
+{
+  "include": ["fred_capability_web_research", "tests"],
+  "typeCheckingMode": "standard",
+  "reportMissingTypeStubs": false,
+  "venvPath": ".",
+  "venv": ".venv",
+  "extraPaths": ["../../fred-pod", "../../fred-core", "../../fred-sdk", "../../fred-runtime"]
+}

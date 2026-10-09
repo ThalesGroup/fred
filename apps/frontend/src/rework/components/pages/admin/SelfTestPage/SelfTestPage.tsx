@@ -20,6 +20,7 @@ import Select from "@shared/molecules/Select/Select.tsx";
 import type { OptionModel } from "@models/Option.model.ts";
 import { usePipelineRun } from "../../../../features/pipeline/usePipelineRun";
 import { selfTestScenario } from "../../../../features/pipeline/scenarios/selfTestScenario";
+import { webResearchScenario } from "../../../../features/pipeline/scenarios/webResearchScenario";
 import {
   credentialExpiryScenario,
   expiryWaitSeconds,
@@ -61,6 +62,33 @@ function FunctionalSelfTestSection({ busy, onRunningChange }: SectionProps) {
         </Button>
       </div>
       <p className={styles.subtitle}>{t("rework.selftest.functional.subtitle")}</p>
+      <StepReportPanel steps={steps} isRunning={isRunning} emptyLabel={t("rework.selftest.report.empty")} />
+    </section>
+  );
+}
+
+function WebResearchSelfTestSection({ busy, onRunningChange }: SectionProps) {
+  const { t } = useTranslation();
+  const { steps, isRunning, start } = usePipelineRun(webResearchScenario);
+
+  useEffect(() => onRunningChange(isRunning), [isRunning, onRunningChange]);
+
+  return (
+    <section className={styles.testSection}>
+      <div className={styles.header}>
+        <h2 className={styles.title}>{t("rework.selftest.web.title")}</h2>
+        <Button
+          color="primary"
+          variant="filled"
+          size="medium"
+          icon={{ category: "outlined", type: "travel_explore", filled: false }}
+          onClick={start}
+          disabled={busy}
+        >
+          {isRunning ? t("rework.selftest.report.running") : t("rework.selftest.web.run")}
+        </Button>
+      </div>
+      <p className={styles.subtitle}>{t("rework.selftest.web.subtitle")}</p>
       <StepReportPanel steps={steps} isRunning={isRunning} emptyLabel={t("rework.selftest.report.empty")} />
     </section>
   );
@@ -227,13 +255,15 @@ export default function SelfTestPage() {
   const { t } = useTranslation();
   const [functionalRunning, setFunctionalRunning] = useState(false);
   const [authzRunning, setAuthzRunning] = useState(false);
-  const busy = functionalRunning || authzRunning;
+  const [webRunning, setWebRunning] = useState(false);
+  const busy = functionalRunning || authzRunning || webRunning;
 
   return (
     <div className={styles.page}>
       <PageHeader title={t("rework.selftest.page.title")} />
       <FunctionalSelfTestSection busy={busy} onRunningChange={setFunctionalRunning} />
       <AuthzSelfTestSection busy={busy} onRunningChange={setAuthzRunning} />
+      <WebResearchSelfTestSection busy={busy} onRunningChange={setWebRunning} />
     </div>
   );
 }

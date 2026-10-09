@@ -26,10 +26,19 @@
 }
 
 .label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-3xs);
   color: var(--on-surface-retreat);
   font: var(--font-label-medium);
   letter-spacing: 0.06em;
   text-transform: uppercase;
+}
+
+.hint {
+  display: inline-flex;
+  cursor: help;
+  font-size: 1rem;
 }
 
 .value {

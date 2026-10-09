@@ -1,0 +1,83 @@
+/*
+ * Copyright Thales 2026
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+.query {
+  margin: 0;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-m);
+  background: var(--surface-container);
+  padding: var(--spacing-xs) var(--spacing-s);
+  color: var(--on-surface);
+  font: var(--font-body-medium-emphasized);
+  overflow-wrap: anywhere;
+}
+
+.link {
+  color: var(--primary);
+  font: var(--font-body-medium-emphasized);
+  overflow-wrap: anywhere;
+}
+
+.pages {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  margin: 0;
+  padding-left: var(--spacing-l);
+}
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+  color: var(--on-surface);
+}
+
+.host {
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+}
+
+.snippet {
+  margin: 0;
+  color: var(--on-surface);
+  font: var(--font-body-small);
+}
+
+.content summary {
+  cursor: pointer;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+}
+
+.contentText {
+  margin: var(--spacing-2xs) 0 0;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-m);
+  background: var(--surface-container);
+  padding: var(--spacing-xs) var(--spacing-s);
+  max-height: 320px;
+  overflow-y: auto;
+  font: var(--font-body-small);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.pageError,
+.empty {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
