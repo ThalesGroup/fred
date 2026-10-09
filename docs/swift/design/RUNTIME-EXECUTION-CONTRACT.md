@@ -6563,3 +6563,17 @@ and `openspec/specs/mcp-capabilities/spec.md` for the current contract.
 ### 8.105 Shared platform admission (2026-10-05)
 
 In authenticated deployments with enforced ReBAC, HTTP principal resolution checks suspension then live platform admission before legal/resource gates. This also covers runtime query-token resolution and cached verified JWTs. Pure service operations retain their existing checks; delegated people use their own live sources or compatible unexpired verified human evidence. Runtime startup requires the control-plane-owned migrated PostgreSQL authority. Each request reads the saved live policy, without a deployment flag or seed. Bounded internal verified human facts survive decoding-cache reuse; delegated callers use only current selected, unexpired, noncontradictory observations. Missing or incompatible authority fails closed with 503. See `openspec/specs/platform-access-control/spec.md` and the platform-access migration note for current contracts and rollout.
+
+### 2026-10-06 — Native web research (#2980)
+
+The optional `RuntimeServices.web_research` SDK port is bound by the existing
+agent runtime to the authenticated subject for each invocation. Native tools
+share the standard authorization and tool audit paths across ReAct, Deep and
+Graph. A pod-owned internal engine shares its outbound HTTP pool for direct
+public access or an explicitly configured forward proxy. No additional Fred
+service runs in the DMZ; the operator owns proxy/network enforcement. The runtime
+owns the restricted SQL activity sink, the engine and the search providers
+(`fred_runtime/app/web_research_*.py`, deps in the `app` extra); the capability
+package holds only the tools, and the runtime imports no capability package.
+The deployment is default-off. See the [activity contract](../platform/OBSERVABILITY-AND-AUDIT.md#restricted-web-research-activity)
+and [migration guide](../ops/migrations/2980-native-web-research.md).

@@ -116,6 +116,10 @@
     }
   },
   "capability": {
+    "web_research": {
+      "name": "Rechercher sur le Web",
+      "description": "Rechercher des sources publiques et lire des pages Web via un accès externe contrôlé."
+    },
     "document_access": {
       "name": "Documents",
       "description": "Ce que l'agent peut lire et rechercher : les pièces jointes, les documents de l'équipe, ou les deux.",
@@ -385,7 +389,8 @@
       "ariaLabel": "Fichiers générés",
       "downloadAria": "Télécharger {{name}}",
       "downloadFailed": "Téléchargement de {{name}} impossible",
-      "fallbackName": "Télécharger"
+      "fallbackName": "Télécharger",
+      "citationAria": "Ouvrir la source « {{name}} » ({{host}}) dans un nouvel onglet"
     },
     "commandTurn": {
       "open": "Ouvrir le prompt de la commande /{{command}}",
@@ -1434,7 +1439,8 @@
         "overview": "Vue d'ensemble",
         "resources": "Ressources",
         "tokenUsage": "Consommation de tokens",
-        "users": "Utilisateurs"
+        "users": "Utilisateurs",
+        "webResearch": "Recherche web"
       },
       "administration": {
         "modelsGovernanceLink": "Gérer les modèles",
@@ -1473,6 +1479,46 @@
         "empty": "Aucune conversation d'équipe sur cette période.",
         "title": "Équipes avec le plus de conversations",
         "valueLabel": "Conversations"
+      },
+      "webResearch": {
+        "estimatedCost": "Coût moteur estimé ($)",
+        "blocked": "Bloquées (sécurité)",
+        "saturated": "Refusées (saturation)",
+        "failed": "Autres échecs",
+        "p95": "Latence p95 (ms)",
+        "users": "Utilisateurs distincts",
+        "reasonsTitle": "Requêtes refusées ou en échec, par motif",
+        "noRefusal": "Aucune requête refusée ni en échec sur la période.",
+        "reasons": {
+          "unsafe_destination": "Adresse non publique",
+          "too_many_redirects": "Trop de redirections",
+          "unsupported_content": "Contenu non pris en charge",
+          "response_too_large": "Page trop volumineuse",
+          "busy": "Saturation",
+          "timed_out": "Délai dépassé",
+          "provider_failed": "Moteur en échec",
+          "http_error": "Erreur du site",
+          "proxy_refused": "Refusée par le proxy",
+          "quota_exceeded": "Quota journalier atteint",
+          "unavailable": "Indisponible",
+          "rejected": "Refusée",
+          "invalid_response": "Réponse invalide",
+          "activity_unavailable": "Journal d'activité indisponible"
+        },
+        "toolCalls": "Appels d'outil",
+        "searches": "Recherches",
+        "fetches": "Lectures de pages",
+        "hints": {
+          "toolCalls": "Recherches + lectures de pages. Compté depuis le déploiement de cette version.",
+          "searches": "Appels web_search au moteur de recherche : les seuls facturés par le fournisseur.",
+          "fetches": "Appels fetch_url : lecture directe du site, non facturée par le moteur (coûte des tokens LLM).",
+          "estimatedCost": "Recherches réussies × cost_per_1000_searches ÷ 1 000. Hors nouvelles tentatives, offres gratuites et tokens LLM.",
+          "blocked": "Refusées par sécurité : adresse non publique, redirections, contenu ou taille. Détail : API d'activité restreinte.",
+          "saturated": "Refusées faute de place (busy) : augmenter max_concurrency ou les réplicas.",
+          "failed": "Moteur, proxy ou site en échec, ou délai dépassé.",
+          "p95": "95 % des appels durent moins que cette valeur.",
+          "users": "Utilisateurs ayant lancé au moins un appel."
+        }
       }
     },
     "imports": {
@@ -1695,7 +1741,36 @@
         "markdown": "Lecture du catalogue du classeur",
         "schemas": "Lecture des schémas tabulaires",
         "descriptions": "Lecture des documents tabulaires",
-        "search": "Recherche d'une valeur tabulaire"
+        "search": "Recherche d'une valeur tabulaire",
+        "webSearch": "Recherche sur le web",
+        "fetchUrl": "Lecture d'une page web"
+      },
+      "webResearch": {
+        "query": "Recherche :",
+        "page": "Page :",
+        "noResults": "Aucun résultat.",
+        "extractedText_one": "Texte extrait ({{count}} caractère)",
+        "extractedText_other": "Texte extrait ({{count}} caractères)",
+        "truncated": "tronqué",
+        "quotaSearches": "Recherches restantes aujourd'hui : {{remaining}} / {{limit}}",
+        "quotaFetches": "Lectures de pages restantes aujourd'hui : {{remaining}} / {{limit}}",
+        "errors": {
+          "unavailable": "Site ou Internet injoignable (réseau, DNS ou proxy).",
+          "timed_out": "La requête a expiré.",
+          "rejected": "La requête a été refusée.",
+          "invalid_response": "La réponse est illisible.",
+          "activity_unavailable": "La recherche web est indisponible : son journal d'activité ne peut pas être écrit.",
+          "unsafe_destination": "Adresse interne ou non publique : bloquée par sécurité.",
+          "too_many_redirects": "Trop de redirections.",
+          "unsupported_content": "Ce n'est pas une page texte lisible (fichier binaire ou compressé).",
+          "response_too_large": "La page est trop volumineuse.",
+          "provider_failed": "Le moteur de recherche n'a pas répondu correctement.",
+          "busy": "La recherche web est saturée, réessayez dans un instant.",
+          "http_error": "Le site a renvoyé une erreur HTTP (page absente ou accès refusé).",
+          "proxy_refused": "Le proxy réseau a refusé ce site (bloqué par la politique de sécurité).",
+          "quota_exceeded": "Quota journalier de recherches web atteint, réessayez après minuit UTC.",
+          "quota_exceeded_fetch": "Quota journalier de lectures de pages atteint, réessayez après minuit UTC."
+        }
       }
     },
     "collapse": "Réduire",
@@ -2236,6 +2311,11 @@
         "title": "Auto-test fonctionnel",
         "subtitle": "Crée deux dossiers dans votre espace personnel, ingère un document marqueur dans l'un et un document neutre dans l'autre, puis interroge le vrai agent d'auto-test sur chacun - le marqueur doit revenir du premier et être absent du second. Tout est nettoyé à la fin.",
         "run": "Lancer la campagne"
+      },
+      "web": {
+        "title": "Auto-test de la recherche web",
+        "subtitle": "Exécute l'agent déterministe de recherche web à travers le vrai pipeline d'exécution. Il échoue d'emblée si la recherche web n'est pas activée sur ce déploiement ; sinon il prouve que chaque protection tient — schémas, ports et identifiants refusés, adresses loopback, privées, de métadonnées et encodées, noms des services de la plateforme, redirections vers des destinations internes, contenu binaire et un SafeSearch que le modèle ne peut pas affaiblir — puis que la recherche et la lecture de page fonctionnent. Les sondes qui dépendent d'un service tiers injoignable sont ignorées, jamais validées. L'agent temporaire est supprimé à la fin.",
+        "run": "Lancer les vérifications web"
       },
       "authz": {
         "identityTitle": "Auto-test d'authentification JWT",

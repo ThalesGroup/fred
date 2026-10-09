@@ -1,14 +1,14 @@
 [project]
 name = "fred-capability-team-wiki"
-version = "0.1.3"
+version = "4.4.3"
 description = "Fred agent capability for the team wiki: read the team's shared knowledge base (team_wiki)."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Thales", email = "noreply@thalesgroup.com" }]
 dependencies = [
-  "fred-core>=4.0.0",
-  "fred-sdk[agents]>=4.2.0",
+  "fred-core>=4.4.3",
+  "fred-sdk[agents]>=4.4.3",
   "pydantic>=2.7.0,<3.0.0",
   "langchain-core>=0.3.0",
   "langchain>=0.3.0",
@@ -69,5 +69,5 @@ dev = [
   "pytest-socket>=0.7.0",
   "ruff>=0.15.22,<0.16",
   # Test-only: the CapabilityRegistry boot-invariant test lives in fred-runtime.
-  "fred-runtime>=4.0.0",
+  "fred-runtime>=4.4.3",
 ]

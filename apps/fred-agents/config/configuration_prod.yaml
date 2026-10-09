@@ -118,3 +118,9 @@ scheduler:
 
 platform:
   control_plane_url: "http://localhost:8222/control-plane/v1"
+
+# Native web research for local testing (chat tools and the admin Self-test page).
+# Keyless DuckDuckGo with direct Internet access; production uses the Helm values.
+web_research:
+  enabled: true
+  provider: duckduckgo

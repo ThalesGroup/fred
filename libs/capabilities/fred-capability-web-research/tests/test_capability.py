@@ -1,0 +1,227 @@
+# Copyright Thales 2026
+# SPDX-License-Identifier: Apache-2.0
+import json
+from typing import cast
+
+import pytest
+from fred_capability_web_research.capability import WebResearchCapability
+from fred_capability_web_research.citations import citation_parts
+from fred_runtime.capabilities.registry import CapabilityRegistry
+from fred_sdk.contracts.capability import (
+    CapabilityContext,
+    CapabilityIdentity,
+    EmptyModel,
+    SaveContext,
+)
+from fred_sdk.contracts.context import LinkKind
+from fred_sdk.contracts.runtime import RuntimeServices
+from fred_sdk.contracts.web_research import (
+    WebPage,
+    WebResearchError,
+    WebResearchPort,
+    WebResearchResult,
+)
+from pydantic import BaseModel
+
+
+class Port(WebResearchPort):
+    def __init__(self, fail=False):
+        self.requests = []
+        self.fail = fail
+
+    async def check_ready(self):
+        if self.fail:
+            raise WebResearchError("activity_unavailable")
+
+    async def execute(self, request):
+        self.requests.append(request)
+        if self.fail:
+            raise WebResearchError("timed_out")
+        return WebResearchResult(
+            results=[WebPage(url="https://example.com", title="Source")]
+        )
+
+
+def context(port):
+    return CapabilityContext(
+        identity=CapabilityIdentity(user_id="user"),
+        config=EmptyModel(),
+        turn_options=EmptyModel(),
+        services=RuntimeServices(web_research=port),
+    )
+
+
+def test_registered_capability_is_native_and_execution_agnostic():
+    registry = CapabilityRegistry()
+    registry.register(WebResearchCapability())
+    registry.validate()
+    assert "web_research" in registry.ids()
+    assert registry.capability("web_research").manifest.execution_models == (
+        "react",
+        "graph",
+    )
+    tools = WebResearchCapability().tools(context(Port()))
+    assert {tool.name for tool in tools} == {
+        "web_search",
+        "fetch_url",
+    }
+    for tool in tools:
+        properties = cast(type[BaseModel], tool.args_schema).model_json_schema()[
+            "properties"
+        ]
+        assert (
+            not {"user_id", "headers", "token", "egress_url", "operation"}
+            & properties.keys()
+        )
+
+
+@pytest.mark.asyncio
+async def test_tool_result_has_sources_and_shared_error_signal():
+    port = Port()
+    tool = WebResearchCapability().tools(context(port))[0]
+    result = await tool.ainvoke(
+        {
+            "type": "tool_call",
+            "name": "web_search",
+            "id": "call",
+            "args": {"query": "evidence"},
+        }
+    )
+    assert json.loads(result.content)["results"][0]["url"] == "https://example.com"
+    assert not result.artifact.is_error
+    (citation,) = result.artifact.ui_parts
+    assert (citation.href, citation.title, citation.kind) == (
+        "https://example.com",
+        "Source",
+        LinkKind.citation,
+    )
+    port.fail = True
+    result = await tool.ainvoke(
+        {
+            "type": "tool_call",
+            "name": "web_search",
+            "id": "call-2",
+            "args": {"query": "evidence"},
+        }
+    )
+    assert result.artifact.is_error
+    assert json.loads(result.content) == {
+        "error_code": "timed_out",
+        "message": "The request timed out; retry at most once.",
+    }
+    assert result.artifact.ui_parts == ()
+
+
+@pytest.mark.asyncio
+async def test_absent_or_unready_sink_blocks_save_and_tool_construction():
+    capability = WebResearchCapability()
+    with pytest.raises(RuntimeError):
+        capability.tools(context(None))
+    with pytest.raises(WebResearchError, match="activity_unavailable"):
+        await capability.validate_config(
+            EmptyModel(),
+            {},
+            SaveContext(
+                identity=CapabilityIdentity(user_id="user"),
+                services=RuntimeServices(web_research=Port(True)),
+            ),
+        )
+
+
+@pytest.mark.asyncio
+async def test_graph_uses_same_native_tools_and_error_artifacts():
+    from fred_runtime.graph.node_context import NodeContext
+    from fred_sdk.contracts.context import (
+        BoundRuntimeContext,
+        PortableContext,
+        PortableEnvironment,
+        RuntimeContext,
+    )
+
+    capability = WebResearchCapability()
+    port = Port()
+    ctx = context(port)
+    graph = NodeContext(
+        binding=BoundRuntimeContext(
+            runtime_context=RuntimeContext(user_id="user"),
+            portable_context=PortableContext(
+                request_id="request",
+                correlation_id="correlation",
+                actor="user",
+                tenant="default",
+                environment=PortableEnvironment.DEV,
+                user_id="user",
+            ),
+        ),
+        services=ctx.services,
+        model=None,
+        graph_agent_id="graph",
+        node_id="web",
+        allowed_tool_refs=frozenset(),
+        tuning_values={},
+        sink=lambda event: None,
+        runtime_tools={tool.name: tool for tool in capability.tools(ctx)},
+    )
+    result = await graph.invoke_runtime_tool("web_search", {"query": "evidence"})
+    assert isinstance(result, dict)
+    assert result["is_error"] is False
+    text = result["blocks"][0]["text"]
+    assert json.loads(text)["results"][0]["url"] == "https://example.com"
+    port.fail = True
+    result = await graph.invoke_runtime_tool("web_search", {"query": "evidence"})
+    assert isinstance(result, dict)
+    assert result["is_error"] is True
+    carrier = capability.middleware(ctx)
+    assert {tool.name for tool in carrier[0].tools} == {
+        "web_search",
+        "fetch_url",
+    }
+
+
+def test_citations_skip_failed_duplicate_and_non_http_pages():
+    result = WebResearchResult(
+        results=[
+            WebPage(url="https://a.org/x", final_url="https://a.org/y", title="A"),
+            WebPage(url="https://a.org/y"),
+            WebPage(url="https://b.org", error_code="http_error"),
+            WebPage(url="ftp://c.org"),
+            WebPage(url="https://d.org/page"),
+        ]
+    )
+    assert [(p.href, p.title) for p in citation_parts(result)] == [
+        ("https://a.org/y", "A"),
+        ("https://d.org/page", "d.org"),
+    ]
+
+
+def test_fetch_tool_tells_the_model_to_focus_long_pages():
+    fetch = next(
+        t
+        for t in WebResearchCapability().tools(context(Port()))
+        if t.name == "fetch_url"
+    )
+    assert "Never combine focus and offset" in fetch.description
+    assert "without focus and with offset set to next_offset" in fetch.description
+    schema = cast(type[BaseModel], fetch.args_schema).model_json_schema()
+    assert "Never combine with offset" in schema["properties"]["focus"]["description"]
+
+
+class QuotaPort(Port):
+    async def execute(self, request):
+        raise WebResearchError("quota_exceeded")
+
+
+@pytest.mark.asyncio
+async def test_quota_guidance_names_the_spent_quota():
+    tools = {t.name: t for t in WebResearchCapability().tools(context(QuotaPort()))}
+    messages = {}
+    for name, args in (
+        ("web_search", {"query": "q"}),
+        ("fetch_url", {"url": "https://a.org/"}),
+    ):
+        result = await tools[name].ainvoke(
+            {"type": "tool_call", "name": name, "id": name, "args": args}
+        )
+        messages[name] = json.loads(result.content)["message"]
+    assert "web search quota" in messages["web_search"]
+    assert "page-read quota" in messages["fetch_url"]

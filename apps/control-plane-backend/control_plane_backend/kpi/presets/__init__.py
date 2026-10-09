@@ -88,6 +88,9 @@ from control_plane_backend.kpi.presets.user_top import (
     USER_TOP_AGENTS_PRESET,
     USER_TOP_TEAMS_PRESET,
 )
+from control_plane_backend.kpi.presets.web_research_summary import (
+    WEB_RESEARCH_SUMMARY_PRESET,
+)
 
 PRESETS: list[PresetDef] = [
     ACTIVE_USERS_OVER_TIME_PRESET,
@@ -119,6 +122,7 @@ PRESETS: list[PresetDef] = [
     TOKEN_USAGE_BY_AGENT_PRESET,
     TOKEN_USAGE_BY_MODEL_PRESET,
     STORAGE_BY_TEAM_PRESET,
+    WEB_RESEARCH_SUMMARY_PRESET,
 ]
 
 __all__ = ["PRESETS", "PresetDef"]

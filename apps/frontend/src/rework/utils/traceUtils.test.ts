@@ -1391,3 +1391,24 @@ describe("groupTraceEntries deduplication", () => {
     expect(entries).toHaveLength(2);
   });
 });
+
+describe("native web research trace rows", () => {
+  it("labels the step, shows its query or URL, and counts the sources found", () => {
+    const search = {
+      kind: "combo" as const,
+      call: toolCallMsg("w1", "web_search", { query: "fred agents" }),
+      result: toolResultMsg("w1", JSON.stringify({ results: [{ url: "https://a.org" }, { url: "https://b.org" }] })),
+    };
+    expect(entryLabel(search, (key) => key)).toBe("rework.chatTrace.toolLabels.webSearch");
+    expect(primaryTextForEntry(search)).toBe("fred agents");
+    expect(toolDiscriminator(search)).toEqual({ kind: "sources", count: 2 });
+
+    const fetch = {
+      kind: "combo" as const,
+      call: toolCallMsg("w2", "fetch_url", { url: "https://www.python.org/" }),
+      result: toolResultMsg("w2", JSON.stringify({ error_code: "timed_out" }), false),
+    };
+    expect(primaryTextForEntry(fetch)).toBe("https://www.python.org/");
+    expect(toolDiscriminator(fetch)).toBeNull();
+  });
+});

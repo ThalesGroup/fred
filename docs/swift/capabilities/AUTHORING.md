@@ -281,6 +281,11 @@ agent can do" belong outside the capability system.
 | Full vertical (`validate_config`, middleware, `router`, `tables`, team settings) | a **capability package** built on `fred-sdk` | the package only |
 | First-party | same package model, installed in the `fred-agents` pod via a `pyproject.toml` dependency (worked example: `libs/capabilities/fred-capability-ppt-filler`, #1903) | the package only |
 
+First-party capabilities (`libs/capabilities/*`) are published to PyPI with the
+libs, at the same version as `fred-runtime`, one package each. A third-party pod
+declares the ones it needs as dependencies, exactly as `fred-agents` does:
+installing a package registers its capabilities, so a pod carries only those.
+
 **Do not** build a "capability pod" and **do not** put capability runtime code in
 control-plane — it stays the proxy/registry/team-policy authority (RFC §7).
 
@@ -425,3 +430,14 @@ if you touched the contract surface) — green before you claim done.
 - **Re-raise a run stop** — a tool that turns a failure into text first checks
   `unwrap_run_stop_error(exc)` from `fred_sdk.contracts.runtime` and re-raises what it
   finds, so a stopped run ends instead of reaching the model as tool text.
+
+### Native web research port
+
+`RuntimeServices.web_research` exposes the SDK `WebResearchPort` for bounded
+search/fetch requests. As for every runtime service, `fred-runtime` implements the
+port (engine and search providers in `fred_runtime/app/web_research_*.py`, bound to
+the authenticated subject and activity store); the native capability provides only
+its manifest, tools and citations. Proxy configuration, credentials,
+identity and retention are deployment/runtime data and never tool arguments.
+The engine runs inside Fred Agents with direct public access or an optional
+operator-owned forward proxy in a DMZ. No extra Fred service is needed. See [web research operations](../ops/migrations/2980-native-web-research.md).

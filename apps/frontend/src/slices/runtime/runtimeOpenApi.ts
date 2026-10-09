@@ -178,6 +178,24 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    listWebResearchActivityPodV1AgentsWebResearchActivityGet: build.query<
+      ListWebResearchActivityPodV1AgentsWebResearchActivityGetApiResponse,
+      ListWebResearchActivityPodV1AgentsWebResearchActivityGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/web-research/activity`,
+        params: {
+          user_id: queryArg.userId,
+          limit: queryArg.limit,
+        },
+      }),
+    }),
+    eraseWebResearchActivityPodV1AgentsWebResearchActivityUsersUserIdDelete: build.mutation<
+      EraseWebResearchActivityPodV1AgentsWebResearchActivityUsersUserIdDeleteApiResponse,
+      EraseWebResearchActivityPodV1AgentsWebResearchActivityUsersUserIdDeleteApiArg
+    >({
+      query: (queryArg) => ({ url: `/pod/v1/agents/web-research/activity/users/${queryArg.userId}`, method: "DELETE" }),
+    }),
   }),
   overrideExisting: false,
 });
@@ -324,6 +342,19 @@ export type ListAgentTemplatesPodV1AgentsTemplatesGetApiResponse =
   /** status 200 Successful Response */ AgentTemplateSummary[];
 export type ListAgentTemplatesPodV1AgentsTemplatesGetApiArg = {
   includeNonPublic?: boolean;
+};
+export type ListWebResearchActivityPodV1AgentsWebResearchActivityGetApiResponse =
+  /** status 200 Successful Response */ WebResearchActivity[];
+export type ListWebResearchActivityPodV1AgentsWebResearchActivityGetApiArg = {
+  userId?: string | null;
+  limit?: number;
+};
+export type EraseWebResearchActivityPodV1AgentsWebResearchActivityUsersUserIdDeleteApiResponse =
+  /** status 200 Successful Response */ {
+    [key: string]: number;
+  };
+export type EraseWebResearchActivityPodV1AgentsWebResearchActivityUsersUserIdDeleteApiArg = {
+  userId: string;
 };
 export type AuditEventRecord = {
   agent_id?: string | null;
@@ -1176,6 +1207,24 @@ export type AgentTemplateSummary = {
   template_agent_id: string;
   title: string;
 };
+export type WebResearchActivity = {
+  agent_instance_id: string | null;
+  correlation_id: string;
+  created_at: string;
+  duration_ms: number | null;
+  error_code: string | null;
+  expires_at: string;
+  final_url: string | null;
+  operation: string;
+  outcome: string;
+  query: string | null;
+  request_id: string;
+  result_count: number | null;
+  session_id: string | null;
+  team_id: string | null;
+  url: string | null;
+  user_id: string;
+};
 export const {
   useListAgentsPodV1AgentsGetQuery,
   useLazyListAgentsPodV1AgentsGetQuery,
@@ -1210,4 +1259,7 @@ export const {
   useLazyGetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetQuery,
   useListAgentTemplatesPodV1AgentsTemplatesGetQuery,
   useLazyListAgentTemplatesPodV1AgentsTemplatesGetQuery,
+  useListWebResearchActivityPodV1AgentsWebResearchActivityGetQuery,
+  useLazyListWebResearchActivityPodV1AgentsWebResearchActivityGetQuery,
+  useEraseWebResearchActivityPodV1AgentsWebResearchActivityUsersUserIdDeleteMutation,
 } = injectedRtkApi;

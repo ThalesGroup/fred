@@ -826,6 +826,26 @@ applications:
             port: 9000
 
       # ── Storage backends — defaults to DuckDB, switch to postgres/opensearch for prod ──
+      web_research:
+        enabled: false # Off by default: provider and key below are read only when true
+        provider: brave # Keyed provider with SLA; duckduckgo is keyless and for local use only
+        provider_key_env: WEB_RESEARCH_PROVIDER_KEY # Value set in dotenv below (fred-agents-env Secret)
+        cost_per_1000_searches: 0 # Your contract price, used only for the admin cost estimate
+        proxy_url: null # Direct when null; e.g. https://proxy.dmz.example:3128
+        proxy_auth_env: null # Optional env var containing Basic username:password
+        proxy_ca_file: null # Optional private CA for an HTTPS proxy
+        max_bytes: 5242880
+        retries: 1
+        safesearch: "on"
+        max_results: 5 # Ceiling on search results sent to the model
+        max_chars_per_page: 6000 # Ceiling on text returned per read page
+        timeout_seconds: 60
+        max_concurrency: 4
+        activity_retention_days: 30
+        max_searches_per_user_per_day: null # Daily cap per user (UTC day); null = no quota
+        max_fetches_per_user_per_day: null # Daily cap on page reads per user; null = no quota
+        purge_interval_seconds: 60
+
       storage:
         # Default is a local filesystem for one-replica development. Production
         # deployments should select minio or gcs with a private runtime bucket.
@@ -866,6 +886,8 @@ applications:
       OPENFGA_API_TOKEN: ""
       FRED_POSTGRES_PASSWORD: ""
       MINIO_SECRET_KEY: "" # required when storage.object_store.type=minio
+      WEB_RESEARCH_PROVIDER_KEY: "" # Brave Search API key, required when web_research.enabled
+      WEB_RESEARCH_PROXY_AUTH: "" # Optional proxy Basic username:password
 
     # ── Catalog files (rendered as additional keys in the backend ConfigMap) ────
     # Model profiles and additional MCP servers are mounted from this ConfigMap.

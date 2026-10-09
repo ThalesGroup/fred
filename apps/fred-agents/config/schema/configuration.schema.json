@@ -1317,6 +1317,192 @@
       "title": "UserSecurity",
       "type": "object",
       "additionalProperties": false
+    },
+    "WebResearchDeploymentConfig": {
+      "additionalProperties": false,
+      "description": "Deployment policy; never editable by an agent or sent to the model.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "provider": {
+          "default": "duckduckgo",
+          "enum": [
+            "duckduckgo",
+            "fixture",
+            "brave"
+          ],
+          "title": "Provider",
+          "type": "string"
+        },
+        "provider_key_env": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Z][A-Z0-9_]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Provider Key Env"
+        },
+        "fixture_file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fixture File"
+        },
+        "cost_per_1000_searches": {
+          "default": 0.0,
+          "maximum": 1000,
+          "minimum": 0,
+          "title": "Cost Per 1000 Searches",
+          "type": "number"
+        },
+        "proxy_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Proxy Url"
+        },
+        "proxy_auth_env": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Z][A-Z0-9_]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Proxy Auth Env"
+        },
+        "proxy_ca_file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Proxy Ca File"
+        },
+        "max_bytes": {
+          "default": 5242880,
+          "maximum": 10485760,
+          "minimum": 1024,
+          "title": "Max Bytes",
+          "type": "integer"
+        },
+        "retries": {
+          "default": 1,
+          "maximum": 2,
+          "minimum": 0,
+          "title": "Retries",
+          "type": "integer"
+        },
+        "safesearch": {
+          "default": "on",
+          "enum": [
+            "on",
+            "moderate",
+            "off"
+          ],
+          "title": "Safesearch",
+          "type": "string"
+        },
+        "max_results": {
+          "default": 5,
+          "maximum": 30,
+          "minimum": 1,
+          "title": "Max Results",
+          "type": "integer"
+        },
+        "max_chars_per_page": {
+          "default": 6000,
+          "maximum": 50000,
+          "minimum": 500,
+          "title": "Max Chars Per Page",
+          "type": "integer"
+        },
+        "timeout_seconds": {
+          "default": 60,
+          "maximum": 120,
+          "minimum": 5,
+          "title": "Timeout Seconds",
+          "type": "number"
+        },
+        "max_concurrency": {
+          "default": 4,
+          "maximum": 32,
+          "minimum": 1,
+          "title": "Max Concurrency",
+          "type": "integer"
+        },
+        "activity_retention_days": {
+          "default": 30,
+          "maximum": 365,
+          "minimum": 1,
+          "title": "Activity Retention Days",
+          "type": "integer"
+        },
+        "max_searches_per_user_per_day": {
+          "anyOf": [
+            {
+              "maximum": 100000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Searches Per User Per Day"
+        },
+        "max_fetches_per_user_per_day": {
+          "anyOf": [
+            {
+              "maximum": 100000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Fetches Per User Per Day"
+        },
+        "purge_interval_seconds": {
+          "default": 60,
+          "maximum": 3600,
+          "minimum": 5,
+          "title": "Purge Interval Seconds",
+          "type": "integer"
+        }
+      },
+      "title": "WebResearchDeploymentConfig",
+      "type": "object"
     }
   },
   "description": "Complete structured configuration for a Fred agent pod.\n\nMirrors agentic-backend's `Configuration` model, scoped to what an agent\npod actually needs. All field types are reused from fred-core and fred-sdk\n\u2014 no new types invented here.\n\nHow to use it:\n- write a `config/configuration.yaml` alongside `config/models_catalog.yaml`\n  and, optionally, `config/mcp_catalog_external.yaml`\n- call `load_agent_pod_config()` at startup\n- pass the result to `create_agent_app(config=...)`\n\nThe `security` field is a `SecurityConfiguration` from fred-core, the same\ntype used in agentic-backend. When `security.user.enabled` is True,\n`create_agent_app` enforces Keycloak JWT validation on every endpoint.",
@@ -1341,6 +1527,9 @@
     },
     "platform": {
       "$ref": "#/$defs/PodPlatformConfig"
+    },
+    "web_research": {
+      "$ref": "#/$defs/WebResearchDeploymentConfig"
     }
   },
   "required": [

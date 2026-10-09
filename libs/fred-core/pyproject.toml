@@ -1,6 +1,6 @@
 [project]
 name = "fred-core"
-version = "4.4.2"
+version = "4.4.3"
 description = "Core shared utilities for Fred backends (config, storage, security, and runtime helpers)."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -17,7 +17,7 @@ dependencies = [
     "regex>=2025.1.0",
     # The pod floor: configuration, identity, naming. Every name it holds is
     # re-exported from here, so this library's own surface is unchanged.
-    "fred-pod>=4.4.0",
+    "fred-pod>=4.4.3",
     "fastapi==0.139.0",
     # Security floor: FastAPI 0.139 only requires starlette>=0.46, which still
     # admits versions vulnerable to the remediated CVEs. Pin the patched floor

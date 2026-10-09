@@ -4419,3 +4419,28 @@ on the next direct or delegated request, including with a cached human JWT and
 on another reader. Other valid sources remain independent. Deleting a team
 through registry administration refuses the acting administrator's last-source
 lockout before deleting relationships or metadata.
+
+### 2026-10-07 — Account deletion and web research activity (#2980)
+
+Account deletion does not touch restricted web research activity: it stays a
+security trace until its retention expires, and account deletion never depends on
+a runtime being reachable. Erasure is an explicit runtime administrator call, see
+the [activity contract](../platform/OBSERVABILITY-AND-AUDIT.md#restricted-web-research-activity).
+
+### 2026-10-07 — Web research self-test template (#2980)
+
+`fred.github.self_test_web` joins `fred.github.self_test` on the capability-gate
+exemption allowlist (`_CAPABILITY_GATE_EXEMPT_TEMPLATE_AGENT_IDS`): it is a
+non-public harness template that no admin can grant, provisioned only by the
+platform-admin Self-test page through `include_non_public`.
+
+### 2026-10-07 — Web research analytics preset (#2980)
+
+`GET /kpi/presets/web_research_summary` (platform admin, team-scopable) returns
+web research tool calls split into searches (`web_search`, billed by the
+provider) and page reads (`fetch_url`, not billed), estimated provider cost, blocked/saturated/failed counts,
+reason breakdown, p95 latency and distinct users for a time range. It reads the
+content-free `web_research.request` KPI event emitted by Fred Agents; the cost
+is `cost.usd` = `web_research.cost_per_1000_searches` / 1000 per successful
+search. Queries, URLs and per-user details stay in the restricted runtime
+activity API.

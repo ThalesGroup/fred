@@ -160,6 +160,7 @@ from starlette.datastructures import UploadFile as StarletteUploadFile
 from starlette.types import Receive, Scope, Send
 
 from fred_runtime.app.execution_diagnostics import report_execution_error
+from fred_runtime.app.web_research_activity import WebResearchActivity
 from fred_runtime.capabilities import (
     AssetSlotViolationError,
     CapabilityAgentBlock,
@@ -1087,6 +1088,11 @@ def _build_runtime_services(
         # checkpointer/kpi_writer, NOT per-turn) — read-only enforcement,
         # row cap and timeout clamp all live server-side in the adapter.
         platform_sql=runtime_config.platform_sql,
+        web_research=(
+            runtime_config.web_research_factory(binding)
+            if runtime_config.web_research_factory
+            else None
+        ),
         # The calling team's wiki (WIKI-03). Per-turn like the document ports —
         # it binds this turn's team and token privately — over the pod-lifetime
         # control-plane client.
@@ -3719,10 +3725,12 @@ def _build_capability_save_services(
         ),
     )
     settings = _PodAgentSettings(id=actor, name=actor, team_id=team_id, tuning=None)
+    web_factory = get_runtime_context().config.web_research_factory
     return RuntimeServices(
         workspace_fs=FredWorkspaceFs(binding=binding, settings=settings),
         agent_assets=AgentConfigAssetsAdapter(binding=binding, settings=settings),
         document_folders=DocumentFolderAdapter(binding=binding, settings=settings),
+        web_research=(web_factory(binding) if web_factory else None),
     )
 
 
@@ -3788,7 +3796,7 @@ def _effective_capability_ids(
 
 def _enforce_turn_options(
     request: RuntimeExecuteRequest,
-    target: "_ResolvedExecutionTarget",
+    target: _ResolvedExecutionTarget,
     capability_registry: CapabilityRegistry | None,
 ) -> None:
     """
@@ -4895,6 +4903,60 @@ def _build_agent_router(
             events = list(container.audit_events_buffer)
         events.reverse()
         return events[: max(1, limit)]
+
+    async def _web_activity_permission(
+        caller: KeycloakUser | None, permission: OrganizationPermission
+    ) -> None:
+        if not security_enabled:
+            return
+        rebac = get_runtime_context().config.rebac_engine
+        if caller is None or rebac is None or not rebac.enabled:
+            raise HTTPException(status_code=403, detail="web_activity_access_denied")
+        await rebac.check_user_permission_or_raise(caller, permission, ORGANIZATION_ID)
+
+    @router.get("/web-research/activity", response_model=list[WebResearchActivity])
+    async def list_web_research_activity(
+        user_id: str | None = Query(default=None, min_length=1, max_length=128),
+        limit: int = Query(default=50, ge=1, le=200),
+        caller: KeycloakUser | None = Depends(_authenticated_user),
+        container: PodApplicationContext = Depends(get_pod_container),
+    ) -> list[WebResearchActivity]:
+        await _web_activity_permission(
+            caller, OrganizationPermission.CAN_MANAGE_PLATFORM
+        )
+        _emit_audit_event(
+            container,
+            "info",
+            "web_research.activity.read",
+            outcome="accepted",
+            reason="authorized",
+            user_id=caller.uid if caller else None,
+        )
+        store = container.web_research_activity
+        return await store.list(user_id=user_id, limit=limit) if store else []
+
+    @router.delete("/web-research/activity/users/{user_id}")
+    async def erase_web_research_activity(
+        user_id: str,
+        caller: KeycloakUser | None = Depends(_authenticated_user),
+        container: PodApplicationContext = Depends(get_pod_container),
+    ) -> dict[str, int]:
+        await _web_activity_permission(
+            caller, OrganizationPermission.CAN_ADMINISTER_USERS
+        )
+        if len(user_id) > 128 or user_id == "*" or "#" in user_id:
+            raise HTTPException(status_code=422, detail="invalid_user_id")
+        store = container.web_research_activity
+        count = await store.erase_user(user_id) if store else 0
+        _emit_audit_event(
+            container,
+            "info",
+            "web_research.activity.erased",
+            outcome="succeeded",
+            reason="user_erasure",
+            user_id=caller.uid if caller else None,
+        )
+        return {"deleted": count}
 
     @router.get("/templates")
     async def list_agent_templates(
@@ -6329,6 +6391,7 @@ def create_agent_app(
                 await initialize_platform_access(
                     security, platform_engine, rebac_engine
                 )
+            await container.initialize_web_research()
             container.initialize_platform_sql()
             container.start_metrics_exporter()
             await container.start_kpi_tasks()
@@ -6367,6 +6430,11 @@ def create_agent_app(
                         ),
                         kpi_writer=container.get_kpi_writer(),
                         platform_sql=container.get_platform_sql(),
+                        web_research_factory=(
+                            container.web_research.bind
+                            if container.web_research
+                            else None
+                        ),
                     )
                 )
             )

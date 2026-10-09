@@ -22,6 +22,7 @@ import type {
 import type { RawUiPart } from "@rework/types/parts";
 import { failedToolCallIds, parseWriteTodosSnapshot } from "./agentTodo";
 import { parseTabularTraceResult, tabularToolKind } from "./tabularTrace";
+import { parseWebResearchResult, webResearchTarget, webResearchToolKind } from "./webResearchTrace";
 
 export const TRACE_CHANNELS: Channel[] = [
   "plan",
@@ -514,6 +515,8 @@ export function entryLabel(entry: TraceEntry, translate?: (key: string) => strin
       if (toolSlug(toolName(entry.call)) === "read_query" && translate) {
         return translate("rework.chatTrace.toolLabels.readQuery");
       }
+      const webKind = webResearchToolKind(toolName(entry.call));
+      if (webKind && translate) return translate(`rework.chatTrace.toolLabels.${webKind}`);
       const tabularKind = tabularToolKind(toolName(entry.call));
       if (tabularKind && translate) return translate(`rework.chatTrace.toolLabels.${tabularKind}`);
       return humanizeToolName(toolName(entry.call)) || "Tool";
@@ -541,9 +544,10 @@ export function primaryTextForEntry(entry: TraceEntry): string {
     }
     return textOf(entry.message);
   }
-  // combo: the humanized label from entryLabel() is sufficient.
-  // Raw tool name and arguments must not be shown to end users.
-  return "";
+  // combo: raw tool names and arguments stay hidden, except web research whose
+  // query or public URL is the user-facing subject of the step.
+  const webKind = webResearchToolKind(toolName(entry.call));
+  return webKind ? webResearchTarget(webKind, toolArgs(entry.call)) : "";
 }
 
 // Secondary text shown below primary (e.g., thought conclusion, tool latency)
@@ -1238,6 +1242,10 @@ export function toolDiscriminator(
     };
   }
   if (tabularToolKind(toolName(entry.call))) return null;
+  if (webResearchToolKind(toolName(entry.call))) {
+    const web = parseWebResearchResult(toolResultContent(entry.result));
+    return web?.kind === "pages" ? { kind: "sources", count: web.pages.length } : null;
+  }
   const data = parseToolResultContent(entry.result);
   const sql = asSqlQueryResult(data);
   if (sql) return sql.error ? null : { kind: "rows", count: sql.rows.length };

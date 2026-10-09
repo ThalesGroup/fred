@@ -7,20 +7,21 @@ requires-python = ">=3.12,<3.13"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Fredlab", email = "contact@fredlab.com" }]
 dependencies = [
-  "fred-core>=4.4.0",
-  "fred-sdk[agents]>=4.4.2",
-  "fred-runtime[app]>=4.4.2",
+  "fred-core>=4.4.3",
+  "fred-sdk[agents]>=4.4.3",
+  "fred-runtime[app]>=4.4.3",
   # First-party capabilities installed on this pod: installing the package IS
   # the registration (AGENT-CAPABILITY-RFC §4/§7, fred.capabilities entry point).
-  "fred-capability-writable-document>=0.1.0",
-  "fred-capability-ppt-filler>=0.1.0",
-  "fred-capability-platform-ops>=0.1.0",
-  "fred-capability-html-artifact>=0.1.0",
-  "fred-capability-team-wiki>=0.1.0",
-  "fred-capability-documents>=0.1.0",
-  "fred-capability-document-access>=0.1.2",
+  "fred-capability-writable-document>=4.4.3",
+  "fred-capability-ppt-filler>=4.4.3",
+  "fred-capability-platform-ops>=4.4.3",
+  "fred-capability-html-artifact>=4.4.3",
+  "fred-capability-team-wiki>=4.4.3",
+  "fred-capability-documents>=4.4.3",
+  "fred-capability-document-access>=4.4.3",
   # Default MCP catalog and instructions, discovered through fred.mcp_catalogs.
-  "fred-capability-mcp>=0.1.0",
+  "fred-capability-mcp>=4.4.3",
+  "fred-capability-web-research>=4.4.3",
   "uvicorn>=0.35",
 ]
 
@@ -67,6 +68,7 @@ fred-capability-team-wiki = { path = "../../libs/capabilities/fred-capability-te
 fred-capability-documents = { path = "../../libs/capabilities/fred-capability-documents", editable = true }
 fred-capability-document-access = { path = "../../libs/capabilities/fred-capability-document-access", editable = true }
 fred-capability-mcp = { path = "../../libs/capabilities/fred-capability-mcp", editable = true }
+fred-capability-web-research = { path = "../../libs/capabilities/fred-capability-web-research", editable = true }
 
 [dependency-groups]
 dev = [

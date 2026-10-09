@@ -6782,3 +6782,43 @@ def test_delegation_refuses_to_start_on_a_model_without_the_suspended_relation(
     ):
         with TestClient(app):
             pass
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "endpoint_name,permission",
+    [
+        ("list_web_research_activity", OrganizationPermission.CAN_MANAGE_PLATFORM),
+        ("erase_web_research_activity", OrganizationPermission.CAN_ADMINISTER_USERS),
+    ],
+)
+async def test_web_activity_endpoints_restrict_readers_and_erasers(
+    monkeypatch, minimal_config, endpoint_name, permission
+):
+    router = agent_app_module._build_agent_router(
+        registry={}, security_enabled=True, max_chat_input_chars=5_000
+    )
+    endpoint = next(
+        route.endpoint
+        for route in router.routes
+        if isinstance(route, APIRoute) and route.endpoint.__name__ == endpoint_name
+    )
+    container = PodApplicationContext(minimal_config)
+    kwargs = {"user_id": "other", "caller": _ALICE, "container": container}
+    if endpoint_name == "list_web_research_activity":
+        kwargs["limit"] = 10
+    denying = _FakePlatformRebacEngine(enabled=True, grant=False)
+    _wire_engine(monkeypatch, denying)
+    with pytest.raises(AuthorizationError):
+        await endpoint(**kwargs)
+    assert denying.calls == [("alice", permission, ORGANIZATION_ID)]
+    _wire_engine(monkeypatch, None)
+    with pytest.raises(agent_app_module.HTTPException) as error:
+        await endpoint(**kwargs)
+    assert error.value.status_code == 403
+    granting = _FakePlatformRebacEngine(enabled=True, grant=True)
+    _wire_engine(monkeypatch, granting)
+    result = await endpoint(**kwargs)
+    assert result == (
+        [] if endpoint_name == "list_web_research_activity" else {"deleted": 0}
+    )

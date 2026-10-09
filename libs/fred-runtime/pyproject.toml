@@ -1,14 +1,14 @@
 [project]
 name = "fred-runtime"
-version = "4.4.2"
+version = "4.4.3"
 description = "Runtime adapters and infrastructure wiring for Fred v2 agents."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Thales", email = "noreply@thalesgroup.com" }]
 dependencies = [
-  "fred-core>=4.4.0",
-  "fred-sdk[agents]>=4.4.2",
+  "fred-core>=4.4.3",
+  "fred-sdk[agents]>=4.4.3",
   "alembic>=1.18.4",
   "deepagents>=0.7.19",
   "httpx>=0.28.1",
@@ -49,8 +49,12 @@ fred-agents-cli = "fred_runtime.client:main"
 app = [
   "fastapi>=0.139.0",
   "starlette>=0.48.0",  # HTTP_422_UNPROCESSABLE_CONTENT
+  # Native web research engine, imported only when web_research is enabled.
+  "httpcore>=1.0.9,<2",
+  "trafilatura>=2.0,<3",
 ]
 dev = [
+  "fred-runtime[app]",  # the app server and web research engine are tested here
   "bandit>=1.8.6",
   "basedpyright==1.31.0",
   "detect-secrets>=1.5.0",

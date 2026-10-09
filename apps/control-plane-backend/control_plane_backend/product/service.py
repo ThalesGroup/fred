@@ -777,7 +777,9 @@ def template_capability_id(runtime_id: str, agent_id: str) -> str:
 # (AGENT-VISIBILITY-RFC §8, "public=True does NOT mean platform-approved" — the
 # converse holds too) and other non-public templates (e.g. a future internal/
 # review-pending agent) must still go through ordinary CAPAB-01 admission.
-_CAPABILITY_GATE_EXEMPT_TEMPLATE_AGENT_IDS = frozenset({"fred.github.self_test"})
+_CAPABILITY_GATE_EXEMPT_TEMPLATE_AGENT_IDS = frozenset(
+    {"fred.github.self_test", "fred.github.self_test_web"}
+)
 
 
 def capability_gate_exempt(source_agent_id: str) -> bool:

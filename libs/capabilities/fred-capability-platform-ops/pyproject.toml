@@ -1,14 +1,14 @@
 [project]
 name = "fred-capability-platform-ops"
-version = "0.1.3"
+version = "4.4.3"
 description = "Fred agent capabilities for platform introspection: read-only SQL over the platform database (platform_postgres)."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Thales", email = "noreply@thalesgroup.com" }]
 dependencies = [
-  "fred-core>=4.0.0",
-  "fred-sdk[agents]>=4.1.0",
+  "fred-core>=4.4.3",
+  "fred-sdk[agents]>=4.4.3",
   "pydantic>=2.7.0,<3.0.0",
   "langchain-core>=0.3.0",
   "langchain>=0.3.0",
@@ -73,5 +73,5 @@ dev = [
   # Test-only: the `CapabilityRegistry` boot-invariant test (spec §7.1) lives
   # in fred-runtime. NOT a [project.dependencies] entry — the capability's only
   # platform seam is the `PlatformSqlPort` contract in fred-sdk.
-  "fred-runtime>=4.0.0",
+  "fred-runtime>=4.4.3",
 ]
