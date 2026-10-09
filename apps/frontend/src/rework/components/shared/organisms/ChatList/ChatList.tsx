@@ -14,6 +14,7 @@
 
 import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties";
 import { useNavigate } from "react-router-dom";
 import {
   useDeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteMutation,
@@ -52,6 +53,7 @@ function formatSessionDate(dateStr: string | undefined): string {
 
 export default function ChatList({ teamId }: ChatListProps) {
   const { t } = useTranslation();
+  const { agentsNicknameSingular } = useFrontendProperties();
   const navigate = useNavigate();
   const { showConfirmationDialog } = useConfirmationDialog();
   const [groupByAgent, setGroupByAgent] = useState(false);
@@ -77,7 +79,7 @@ export default function ChatList({ teamId }: ChatListProps) {
   const agentName = (session: Session) =>
     agentNameByInstanceId.get(session.agent_instance_id!) ??
     session.agent_display_name ??
-    t("rework.sidebar.chatList.unknownAgent");
+    t("rework.sidebar.chatList.unknownAgent", { agentsNicknameSingular });
   const agentDeleted = (id: string) =>
     Boolean(agentsResolved && !agentsError && agentInstances && !agentNameByInstanceId.has(id));
 
@@ -146,21 +148,25 @@ export default function ChatList({ teamId }: ChatListProps) {
     <div className={styles.chatListContainer} data-team-id={teamId}>
       <div className={styles.chatListHeader}>
         {t("rework.sidebar.chatList.title")}
-        <Tooltip text={t("rework.sidebar.chatList.groupByAgent")}>
+        <Tooltip text={t("rework.sidebar.chatList.groupByAgent", { agentsNicknameSingular })}>
           <IconButton
             color={groupByAgent ? "primary" : "on-surface-retreat"}
             variant="icon"
             size="small"
             icon={{ category: "outlined", type: "category", filled: groupByAgent }}
             aria-pressed={groupByAgent}
-            aria-label={t("rework.sidebar.chatList.groupByAgent")}
+            aria-label={t("rework.sidebar.chatList.groupByAgent", { agentsNicknameSingular })}
             onClick={() => setGroupByAgent((value) => !value)}
           />
         </Tooltip>
       </div>
       <div className={styles.chatListItems}>
         {isLoading && <div className={styles.chatListPlaceholder}>{t("rework.sidebar.chatList.loading")}</div>}
-        {isEmpty && <div className={styles.chatListPlaceholder}>{t("rework.sidebar.chatList.emptyManaged")}</div>}
+        {isEmpty && (
+          <div className={styles.chatListPlaceholder}>
+            {t("rework.sidebar.chatList.emptyManaged", { agentsNicknameSingular })}
+          </div>
+        )}
         {groups
           ? groups.map(([agentId, groupSessions]) => (
               <div key={agentId}>

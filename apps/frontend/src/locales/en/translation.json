@@ -599,9 +599,9 @@
       "emptyFilters": "No prompts match these filters.",
       "categoryLabel": "Category"
     },
-    "deletedAgentReadOnly": "This agent has been deleted. This conversation is read-only.",
+    "deletedAgentReadOnly": "This {{agentsNicknameSingular}} has been deleted. This conversation is read-only.",
     "readOnlyComposerPlaceholder": "Read-only conversation",
-    "deletedAgentTooltip": "Agent deleted - read-only conversation",
+    "deletedAgentTooltip": "{{agentsNicknameSingular}} deleted - read-only conversation",
     "historyUnavailable": "Conversation history is unavailable. Please try again later."
   },
   "comingSoon": {
@@ -2198,11 +2198,11 @@
           "confirm": "Delete",
           "cancel": "Cancel"
         },
-        "emptyManaged": "No conversations yet. Start a new chat with a managed agent.",
-        "groupByAgent": "Group by agent",
+        "emptyManaged": "No conversations yet. Start a new chat with a managed {{agentsNicknameSingular}}.",
+        "groupByAgent": "Group by {{agentsNicknameSingular}}",
         "loading": "Loading...",
         "title": "Chat",
-        "unknownAgent": "Unknown agent"
+        "unknownAgent": "Unknown {{agentsNicknameSingular}}"
       },
       "marketplace": {
         "menu": {

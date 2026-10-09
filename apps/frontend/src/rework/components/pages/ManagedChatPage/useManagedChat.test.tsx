@@ -47,6 +47,9 @@ vi.mock("../../../../security/KeycloakService", () => ({
 }));
 
 const translate = vi.hoisted(() => (key: string) => key);
+vi.mock("../../../../hooks/useFrontendProperties", () => ({
+  useFrontendProperties: () => ({ agentsNicknameSingular: "Lumi" }),
+}));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: translate, i18n: { language: "en" } }),
 }));

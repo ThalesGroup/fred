@@ -31,6 +31,9 @@ let sessions = defaultSessions;
 let agents: { agent_instance_id: string; display_name: string }[] | undefined;
 let success = true;
 let error = false;
+vi.mock("../../../../../hooks/useFrontendProperties", () => ({
+  useFrontendProperties: () => ({ agentsNicknameSingular: "Lumi" }),
+}));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("react-router-dom", () => ({ useNavigate: () => vi.fn() }));
 vi.mock("@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider", () => ({

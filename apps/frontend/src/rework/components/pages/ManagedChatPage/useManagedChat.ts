@@ -14,6 +14,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useFrontendProperties } from "../../../../hooks/useFrontendProperties";
 import { useComposerSettings } from "./useComposerSettings";
 import { useSearchParams } from "react-router-dom";
 import { v4 as uuidv4 } from "uuid";
@@ -89,6 +90,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   const { showError } = useToast();
   const { notifyApiError } = useApiErrorToast();
   const { t } = useTranslation();
+  const { agentsNicknameSingular } = useFrontendProperties();
 
   const sessionId = searchParams.get("session");
   const [input, setInput] = useState("");
@@ -268,7 +270,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     useConversationAvailability(teamId, agentInstanceId, sessionId, locallyCreatingSession);
   const agentDisplayName =
     (isReadOnly ? sessionData?.agent_display_name : (agentInstance?.display_name ?? sessionData?.agent_display_name)) ??
-    t("rework.sidebar.chatList.unknownAgent");
+    t("rework.sidebar.chatList.unknownAgent", { agentsNicknameSingular });
   executionDisabledRef.current = executionDisabled;
   if (sessionData) {
     locallyCreatedSessionIdRef.current = null;

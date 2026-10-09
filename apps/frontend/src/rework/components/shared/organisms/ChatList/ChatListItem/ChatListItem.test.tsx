@@ -14,22 +14,31 @@
 // limitations under the License.
 
 import { act } from "react";
+import { createInstance } from "i18next";
+import en from "../../../../../../locales/en/translation.json";
+import fr from "../../../../../../locales/fr/translation.json";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { ChatListItem } from "./ChatListItem";
 
+const labels = createInstance();
+const branding = vi.hoisted(() => ({ agentsNicknameSingular: "Agent" }));
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({
-    t: (key: string) => (key === "chatbot.deletedAgentTooltip" ? "Agent deleted - read-only conversation" : key),
-  }),
+  useTranslation: () => ({ t: labels.t.bind(labels) }),
 }));
+vi.mock("../../../../../../hooks/useFrontendProperties", () => ({ useFrontendProperties: () => branding }));
+beforeAll(async () => {
+  await labels.init({ resources: { en: { translation: en }, fr: { translation: fr } }, lng: "en" });
+});
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 describe("ChatListItem deleted agent presentation", () => {
   let container: HTMLDivElement;
   let root: Root;
-  beforeEach(() => {
+  beforeEach(async () => {
+    branding.agentsNicknameSingular = "Agent";
+    await labels.changeLanguage("en");
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -77,6 +86,20 @@ describe("ChatListItem deleted agent presentation", () => {
     act(() => link.blur());
     act(() => link.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
     expect(document.querySelector('[role="tooltip"]')?.textContent).toBe("Agent deleted - read-only conversation");
+  });
+  it.each([
+    ["en", "Lumi deleted - read-only conversation"],
+    ["fr", "Lumi supprimé - conversation en lecture seule"],
+  ])("uses the deployment nickname in the %s deletion description and tooltip", async (language, status) => {
+    branding.agentsNicknameSingular = "Lumi";
+    await labels.changeLanguage(language);
+    show(true);
+    const link = container.querySelector("a")!;
+    const statusId = link.getAttribute("aria-describedby")!.split(" ")[0];
+    expect(document.getElementById(statusId)?.textContent).toBe(status);
+    act(() => link.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
+    expect(document.querySelector('[role="tooltip"]')?.textContent).toBe(status);
+    expect(container.textContent).not.toContain("{{");
   });
   it("keeps live agent names and entries free of deletion status", () => {
     show(false);

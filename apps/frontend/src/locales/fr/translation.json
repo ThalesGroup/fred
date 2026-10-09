@@ -599,10 +599,10 @@
       "emptyFilters": "Aucun prompt ne correspond aux filtres.",
       "categoryLabel": "Catégorie"
     },
-    "deletedAgentReadOnly": "Cet agent a été supprimé. Cette conversation est en lecture seule.",
+    "deletedAgentReadOnly": "{{agentsNicknameSingular}} supprimé. Cette conversation est en lecture seule.",
     "readOnlyComposerPlaceholder": "Conversation en lecture seule",
-    "deletedAgentTooltip": "Agent supprimé - conversation en lecture seule",
-    "historyUnavailable": "L’historique de la conversation est indisponible. Réessayez plus tard."
+    "deletedAgentTooltip": "{{agentsNicknameSingular}} supprimé - conversation en lecture seule",
+    "historyUnavailable": "L'historique de la conversation est indisponible. Réessayez plus tard."
   },
   "comingSoon": {
     "description": "La plateforme \n d'innovation au service de votre quotidien : gagnez en clarté et en pertinence décisionnelle. Un nouveau service conçu pour vous épauler chaque jour et répondre à vos enjeux métiers et opérationnels.",
@@ -2198,11 +2198,11 @@
           "confirm": "Supprimer",
           "cancel": "Annuler"
         },
-        "emptyManaged": "Aucune conversation pour l'instant. Démarrez un chat avec un agent géré.",
-        "groupByAgent": "Grouper par agent",
+        "emptyManaged": "Aucune conversation pour l'instant. Démarrez un chat avec un {{agentsNicknameSingular}} géré.",
+        "groupByAgent": "Grouper par {{agentsNicknameSingular}}",
         "loading": "Chargement...",
         "title": "Conversations",
-        "unknownAgent": "Agent inconnu"
+        "unknownAgent": "{{agentsNicknameSingular}} inconnu"
       },
       "marketplace": {
         "menu": {

@@ -5183,9 +5183,11 @@ permissions remain available; no evaluation data is removed.
 A saved conversation remains navigable after its managed agent is deleted. Its
 preserved agent name is struck through in the header and sidebar, including
 grouped headers. The conversation title stays readable. Hovering or focusing the
-entry explains "Agent deleted - read-only conversation"; a durable accessible
-description carries the same state. The struck name and disabled composer show
-read-only mode without a separate deletion banner. Names are snapshotted in
+entry explains the deleted/read-only state in the selected language; a durable
+accessible description carries the same state. Status text, generic name fallback,
+grouping and empty-list labels interpolate the configured `agentsNicknameSingular`.
+The struck name and disabled composer show read-only mode without a separate
+deletion banner. Names are snapshotted in
 session metadata before deletion, including renamed agents.
 Legacy names already lost use the existing localized generic agent fallback.
 The composer stays visible and natively disabled with a read-only placeholder,

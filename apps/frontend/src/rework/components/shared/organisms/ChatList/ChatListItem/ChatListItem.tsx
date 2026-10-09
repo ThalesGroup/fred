@@ -15,6 +15,7 @@
 import { DeleteIconButton } from "@shared/atoms/DeleteIconButton/DeleteIconButton.tsx";
 import React, { useId } from "react";
 import { useTranslation } from "react-i18next";
+import { useFrontendProperties } from "../../../../../../hooks/useFrontendProperties";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import { Link, useLocation } from "react-router-dom";
 import styles from "./ChatListItem.module.scss";
@@ -39,8 +40,9 @@ export function ChatListItem({
   onDelete,
 }: ChatListItemProps) {
   const { t } = useTranslation();
+  const { agentsNicknameSingular } = useFrontendProperties();
   const statusId = useId();
-  const deletedStatus = t("chatbot.deletedAgentTooltip");
+  const deletedStatus = t("chatbot.deletedAgentTooltip", { agentsNicknameSingular });
   const location = useLocation();
   const isSelected = location.search.includes(`session=${sessionId}`);
 

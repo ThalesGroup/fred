@@ -92,7 +92,7 @@ vi.mock("@shared/molecules/ThoughtTrace/traceDrawerContext", () => ({
   TraceDrawerProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 vi.mock("../../../../hooks/useFrontendProperties", () => ({
-  useFrontendProperties: () => ({ agentIconName: "person" }),
+  useFrontendProperties: () => ({ agentIconName: "person", agentsNicknameSingular: "Lumi" }),
 }));
 vi.mock("../../../../hooks/useFrontendBootstrap", () => ({
   useFrontendBootstrap: () => ({ activeTeam: { id: bootstrap.activeTeamId } }),

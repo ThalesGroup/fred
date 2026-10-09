@@ -134,6 +134,7 @@ type ActivePushDrawer =
 
 export default function ManagedChatPage() {
   const { t, i18n } = useTranslation();
+  const { agentsNicknameSingular } = useFrontendProperties();
   const { teamId, agentInstanceId } = useParams<{ teamId: string; agentInstanceId: string }>();
   const { showError } = useToast();
 
@@ -580,7 +581,9 @@ export default function ManagedChatPage() {
       onSend={commands.submit}
       onInterrupt={chat.waitResponse ? chat.handleAbort : undefined}
       placeholder={t(chat.isReadOnly ? "chatbot.readOnlyComposerPlaceholder" : "chatbot.composerPlaceholder")}
-      accessibleDescription={t(chat.isReadOnly ? "chatbot.deletedAgentReadOnly" : "chatbot.composerPlaceholder")}
+      accessibleDescription={t(chat.isReadOnly ? "chatbot.deletedAgentReadOnly" : "chatbot.composerPlaceholder", {
+        agentsNicknameSingular,
+      })}
       commandTrigger={commands.trigger}
       aboveFieldSlot={!chat.executionDisabled && commands.menu ? <CommandMenu {...commands.menu} /> : undefined}
       disabled={composerControlsDisabled}
@@ -729,12 +732,12 @@ export default function ManagedChatPage() {
                       </div>
                     )}
                     {chat.isReadOnly ? (
-                      <Tooltip text={t("chatbot.deletedAgentTooltip")}>
+                      <Tooltip text={t("chatbot.deletedAgentTooltip", { agentsNicknameSingular })}>
                         <span
                           className={styles.topBarAgentName}
                           data-agent-deleted="true"
                           tabIndex={0}
-                          aria-label={`${chat.agentDisplayName} - ${t("chatbot.deletedAgentTooltip")}`}
+                          aria-label={`${chat.agentDisplayName} - ${t("chatbot.deletedAgentTooltip", { agentsNicknameSingular })}`}
                         >
                           {chat.agentDisplayName}
                         </span>
