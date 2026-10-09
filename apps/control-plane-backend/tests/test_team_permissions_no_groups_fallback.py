@@ -53,8 +53,7 @@ class _FakeRebac:
     async def has_permissions(
         self,
         subject,
-        permissions,
-        resource,
+        checks,
         *,
         contextual_relations=None,
         consistency_token=None,
@@ -70,7 +69,7 @@ class _FakeRebac:
                 contextual_relations=contextual_relations,
                 consistency_token=consistency_token,
             )
-            for permission in permissions
+            for permission, resource in checks
         ]
 
 

@@ -503,38 +503,22 @@ class OpenFgaRebacEngine(RebacEngine):
 
             return response.allowed
 
-    async def _has_permissions_raw(
+    async def has_permissions(
         self,
         subject: RebacReference,
-        permissions: Sequence[RebacPermission],
-        resource: RebacReference,
+        checks: Sequence[tuple[RebacPermission, RebacReference]],
         *,
         contextual_relations: Iterable[Relation] | None = None,
         consistency_token: str | None = None,
     ) -> list[bool]:
-        """Check several permissions for one subject/resource pair with one
-        native OpenFGA `BatchCheck` HTTP call (the whole `TeamPermission` enum
-        fits in one request - the SDK's default `max_batch_size` is 50).
-
-        Explicit `correlation_id`s (the check's index) are set on every item
-        so the result can be reordered from `response.result` regardless of
-        server-side ordering — `OpenFgaClient.batch_check` folds its results
-        into a plain list via a dict keyed by `correlation_id`, so nothing
-        about input order survives into the response by default.
-
-        A per-check `error`, a missing correlation_id, an unrecognized one, or
-        a duplicate all raise `RuntimeError` — never silently downgraded to
-        `False` or silently dropped/overwritten, so a partial or malformed
-        OpenFGA response cannot be mistaken for "permission denied".
-        """
-        if not permissions:
+        """One native batch across objects; incomplete or malformed replies fail."""
+        if not checks:
             return []
 
         async with _rebac_timer(self._kpi, "check"):
             client = await self.get_client()
 
             subject_id = OpenFgaRebacEngine._reference_to_openfga_id(subject)
-            resource_id = OpenFgaRebacEngine._reference_to_openfga_id(resource)
             contextual_tuples = [
                 OpenFgaRebacEngine._relation_to_tuple(rel)
                 for rel in (contextual_relations or [])
@@ -545,27 +529,27 @@ class OpenFgaRebacEngine(RebacEngine):
             else:
                 logger.debug(
                     "BatchCheck %d permissions for subject %s",
-                    len(permissions),
+                    len(checks),
                     subject,
                 )
 
-            checks = [
+            items = [
                 ClientBatchCheckItem(
                     user=subject_id,
                     relation=permission.value,
-                    object=resource_id,
+                    object=OpenFgaRebacEngine._reference_to_openfga_id(resource),
                     correlation_id=str(index),
                     contextual_tuples=contextual_tuples,
                 )
-                for index, permission in enumerate(permissions)
+                for index, (permission, resource) in enumerate(checks)
             ]
 
             options = self._build_options(consistency=consistency_token)
             response = await client.batch_check(
-                ClientBatchCheckRequest(checks=checks), options
+                ClientBatchCheckRequest(checks=items), options
             )
 
-            expected_ids = {str(index) for index in range(len(permissions))}
+            expected_ids = {str(index) for index in range(len(checks))}
             allowed_by_correlation_id: dict[str, bool] = {}
             for single in response.result:
                 if single.error is not None:
@@ -593,8 +577,7 @@ class OpenFgaRebacEngine(RebacEngine):
                 )
 
             return [
-                allowed_by_correlation_id[str(index)]
-                for index in range(len(permissions))
+                allowed_by_correlation_id[str(index)] for index in range(len(checks))
             ]
 
     async def list_direct_relations(

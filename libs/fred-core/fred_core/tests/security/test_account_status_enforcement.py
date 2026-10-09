@@ -185,8 +185,10 @@ async def test_person_decisions_carry_no_account_status_item(
     )
     assert await engine.has_permissions(
         _PERSON,
-        [TeamPermission.CAN_READ, TeamPermission.CAN_UPDATE_INFO],
-        _TEAM,
+        [
+            (permission, _TEAM)
+            for permission in [TeamPermission.CAN_READ, TeamPermission.CAN_UPDATE_INFO]
+        ],
         consistency_token=consistency,
     ) == [True, True]
     assert (
@@ -222,7 +224,11 @@ async def test_a_store_without_tuples_leaves_every_person_active() -> None:
 
     assert await engine.has_permission(_PERSON, TeamPermission.CAN_READ, _TEAM)
     assert await engine.has_permissions(
-        _PERSON, [TeamPermission.CAN_READ, TeamPermission.CAN_UPDATE_INFO], _TEAM
+        _PERSON,
+        [
+            (permission, _TEAM)
+            for permission in [TeamPermission.CAN_READ, TeamPermission.CAN_UPDATE_INFO]
+        ],
     ) == [True, True]
     await engine.require_active_account(_PERSON.id)
     assert (
@@ -241,7 +247,11 @@ async def test_an_active_person_without_the_permission_is_denied_not_refused() -
 
     assert await engine.has_permission(_PERSON, TeamPermission.CAN_READ, _TEAM) is False
     assert await engine.has_permissions(
-        _PERSON, [TeamPermission.CAN_READ, TeamPermission.CAN_UPDATE_INFO], _TEAM
+        _PERSON,
+        [
+            (permission, _TEAM)
+            for permission in [TeamPermission.CAN_READ, TeamPermission.CAN_UPDATE_INFO]
+        ],
     ) == [False, False]
 
 
@@ -553,7 +563,9 @@ async def test_account_status_checks_do_not_log_subject_or_resource_identifiers(
     ):
         await engine.require_active_account(_PERSON.id)
         await engine.has_permission(_PERSON, TeamPermission.CAN_READ, _TEAM)
-        await engine.has_permissions(_PERSON, [TeamPermission.CAN_READ], _TEAM)
+        await engine.has_permissions(
+            _PERSON, [(permission, _TEAM) for permission in [TeamPermission.CAN_READ]]
+        )
     rendered = repr([record.__dict__ for record in caplog.records])
     assert _PERSON.id not in rendered
     assert _TEAM.id not in rendered
@@ -609,6 +621,12 @@ class _NonBatchingEngine(RebacEngine):
     async def lookup_subjects(self, *args, **kwargs):
         raise NotImplementedError
 
+    async def has_permissions(self, subject, checks, **kwargs):
+        return [
+            await self._has_permission_raw(subject, permission, resource, **kwargs)
+            for permission, resource in checks
+        ]
+
 
 class _RecordingDeletes(_NonBatchingEngine):
     """Deletes one relation at a time and records each, like a plain store."""
@@ -654,9 +672,9 @@ async def test_the_base_engine_refuses_only_a_suspended_person() -> None:
 
     # Its decisions about the suspended person ask their own question only.
     assert await engine.has_permission(_PERSON, TeamPermission.CAN_READ, _TEAM)
-    assert await engine.has_permissions(_PERSON, [TeamPermission.CAN_READ], _TEAM) == [
-        True
-    ]
+    assert await engine.has_permissions(
+        _PERSON, [(permission, _TEAM) for permission in [TeamPermission.CAN_READ]]
+    ) == [True]
     assert engine.checks[2:] == [
         (_PERSON, TeamPermission.CAN_READ, _TEAM, None),
         (_PERSON, TeamPermission.CAN_READ, _TEAM, None),

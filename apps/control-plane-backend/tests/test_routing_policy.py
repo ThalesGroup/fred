@@ -306,7 +306,8 @@ class _FakeRebacElevatedCheck:
         self.allowed = allowed
         self.calls = 0
 
-    async def has_permissions(self, subject, permissions, resource, **kwargs):
+    async def has_permissions(self, subject, checks, **kwargs):
+        assert kwargs["consistency_token"] == "HIGHER_CONSISTENCY"
         self.calls += 1
         return self.allowed
 

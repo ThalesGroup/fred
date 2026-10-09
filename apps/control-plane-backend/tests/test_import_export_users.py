@@ -210,17 +210,11 @@ class _FakeTeamRebac:
     ) -> bool:
         return subject.id in self.team_admins.get(str(resource.id), set())
 
-    async def has_permissions(
-        self,
-        subject: RebacReference,
-        permissions: Any,
-        resource: RebacReference,
-        **_kw: Any,
-    ) -> list[bool]:
-        # #2065 follow-up: `_get_team_permissions_for_user` now issues one
-        # `has_permissions` BatchCheck instead of 14 `has_permission` Checks.
-        is_admin = subject.id in self.team_admins.get(str(resource.id), set())
-        return [is_admin for _ in permissions]
+    async def has_permissions(self, subject, checks, **kwargs) -> list[bool]:
+        return [
+            await self.has_permission(subject, permission, resource, **kwargs)
+            for permission, resource in checks
+        ]
 
     async def lookup_subjects(
         self,

@@ -2003,8 +2003,10 @@ async def _get_team_permissions_for_user(
     permissions_to_check = list(TeamPermission)
     allowed = await rebac.has_permissions(
         RebacReference(Resource.USER, user.uid),
-        permissions_to_check,
-        RebacReference(Resource.TEAM, team_id),
+        [
+            (permission, RebacReference(Resource.TEAM, team_id))
+            for permission in permissions_to_check
+        ],
         consistency_token=consistency_token,
     )
     return [

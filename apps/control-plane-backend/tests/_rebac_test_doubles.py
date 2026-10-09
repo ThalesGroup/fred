@@ -46,7 +46,7 @@ class CountingRebacEngine(NoopRebacEngine):
     method a given test never exercises falls back to a real no-op instead
     of every test file re-implementing every abstract method. `enabled` is
     forced back to `True` (unlike the real no-op engine) so `add_relation`'s
-    audit trail and `RebacEngine._ensure_personal_team_editor`'s self-heal
+    audit trail and permission checks
     still run the same as production; `_persist_relation`/`delete_relation`
     return a sentinel token (mirrors `OpenFgaRebacEngine`, which always
     returns the same `HIGHER_CONSISTENCY` marker — OpenFGA has no per-write
@@ -282,17 +282,13 @@ class CountingRebacEngine(NoopRebacEngine):
     async def has_permissions(
         self,
         subject: RebacReference,
-        permissions: Iterable[RebacPermission],
-        resource: RebacReference,
+        checks: Iterable[tuple[RebacPermission, RebacReference]],
         *,
         contextual_relations: Iterable[Relation] | None = None,
         consistency_token: str | None = None,
     ) -> list[bool]:
-        # Real BatchCheck-shaped override (like `OpenFgaRebacEngine`) so
-        # budget tests prove exactly one logical batch call, not one Check
-        # per permission via the generic `RebacEngine.has_permissions`
-        # gather-fallback.
-        permissions_list = list(permissions)
+        # Record each logical batch separately from individual checks.
+        permissions_list = [permission for permission, _ in checks]
         self.has_permissions_calls.append(tuple(permissions_list))
         self.has_permissions_tokens.append(consistency_token)
         return [p in self.granted_permissions for p in permissions_list]

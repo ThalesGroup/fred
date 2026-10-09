@@ -734,8 +734,7 @@ async def test_async_context_manager_reuses_and_closes_the_sdk() -> None:
 async def test_application_grant_check_reads_at_higher_consistency() -> None:
     """A direct backend request must not be admitted by a stale read.
 
-    The membership check keeps the engine default; only the app grant, which
-    an administrator can revoke at any moment, is forced fresh.
+    Membership and application grants must both observe completed revocations.
     """
     rebac = FakeRebacEngine(permitted=True)
 
@@ -744,5 +743,5 @@ async def test_application_grant_check_reads_at_higher_consistency() -> None:
     )
 
     membership_token, grant_token = rebac.checked_consistency_tokens
-    assert membership_token is None
+    assert membership_token == RebacEngine.HIGHER_CONSISTENCY
     assert grant_token == RebacEngine.HIGHER_CONSISTENCY

@@ -27,6 +27,7 @@ from __future__ import annotations
 from fred_core import (
     AuthorizationError,
     KeycloakUser,
+    RebacEngine,
     RebacReference,
     Resource,
     TeamPermission,
@@ -76,32 +77,16 @@ _ELEVATED_TEAM_ROLE_PERMISSIONS = (
 async def _require_elevated_team_role(
     user: KeycloakUser, team_id: TeamId, deps: ProductServiceDependencies
 ) -> None:
-    """Narrower than the shared `can_read_members` permission
-    (`schema.fga`: `can_read_members: team_member`) `require_team_access`
-    already checked before this runs — that permission is wider on purpose
-    because it also backs unrelated surfaces (KPI scope, task activity,
-    corpus manager) this change must not touch. `require_team_access`'s
-    `required_permissions` list is AND-only
-    (`check_user_team_permissions_or_raise`), so it cannot express "holds any
-    one of these three roles" — one `has_permissions` BatchCheck instead,
-    OR'd locally.
-
-    Skipped for personal spaces: the owner holds `team_editor`
-    unconditionally (RFC §1) and `require_team_access` already let system
-    teams through without touching ReBAC at all; a second, independent ReBAC
-    round trip here could race the owner's lazily self-healed `team_editor`
-    tuple (`platform/REBAC.md` "Personal teams") and wrongly deny them.
-    `team_id` must be the canonical id `require_team_access` returned, not
-    the raw path param — `is_personal_team_id` only matches
-    `"personal-<uid>"`, never the `"personal"` alias.
-    """
-
+    """Require a local elevated role; personal ownership was already checked."""
     if is_personal_team_id(team_id):
         return
     allowed = await deps.team_dependencies.rebac.has_permissions(
         RebacReference(Resource.USER, user.uid),
-        list(_ELEVATED_TEAM_ROLE_PERMISSIONS),
-        RebacReference(Resource.TEAM, team_id),
+        [
+            (permission, RebacReference(Resource.TEAM, team_id))
+            for permission in _ELEVATED_TEAM_ROLE_PERMISSIONS
+        ],
+        consistency_token=RebacEngine.HIGHER_CONSISTENCY,
     )
     if not any(allowed):
         raise AuthorizationError(

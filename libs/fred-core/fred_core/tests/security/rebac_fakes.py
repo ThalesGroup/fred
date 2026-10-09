@@ -244,3 +244,9 @@ class FakeRebacEngine(RebacEngine):
         if permission in self._denied_permissions:
             return False
         return self._permitted
+
+    async def has_permissions(self, subject, checks, **kwargs):
+        return [
+            await self._has_permission_raw(subject, permission, resource, **kwargs)
+            for permission, resource in checks
+        ]

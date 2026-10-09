@@ -222,8 +222,9 @@ by import. Organization exports exclude owner-only personal content. Re-import
 must distinguish initial creation from mutation of existing closed-space roles;
 the latter remains subject to the agreed local administration boundary.
 
-Advance the existing import/export work alongside the SQL/membership foundation
-so that this path exercises the real services early. It does not replace the
+Complete the minimal SQL/authorization foundation and remove superseded serving
+paths before resuming bundle work. The demo is an integration check of the final
+foundation, not its design driver. It does not replace the
 separate stopped-platform translator or coordinated backup/restore. The approved
 demo organization is `fredlab`, containing the existing three collaborative teams;
 Priya receives its admin role. The existing team named `fredlab` remains a distinct

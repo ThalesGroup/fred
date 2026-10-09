@@ -163,16 +163,14 @@ class _FakeRebac:
             TeamPermission.CAN_READ_CONVERSATIONS_FOR_EVALUATION: is_analyst,
         }.get(permission, False)
 
-    async def has_permissions(
-        self, subject, permissions, resource, **kwargs
-    ) -> list[bool]:
+    async def has_permissions(self, subject, checks, **kwargs) -> list[bool]:
         # #2065 follow-up: `_get_team_permissions_for_user` now issues one
         # `has_permissions` BatchCheck instead of 14 `has_permission` Checks —
         # reuse the exact same per-permission logic above rather than
         # duplicating the dict.
         return [
             await self.has_permission(subject, permission, resource, **kwargs)
-            for permission in permissions
+            for permission, resource in checks
         ]
 
     async def list_relations(

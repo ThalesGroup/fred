@@ -128,7 +128,14 @@ def _client(store: AccountStatusStore, served: list[str]) -> TestClient:
         subject = RebacReference(Resource.USER, user.uid)
         await engine.has_permission(subject, TeamPermission.CAN_READ, _TEAM)
         await engine.has_permissions(
-            subject, [TeamPermission.CAN_READ, TeamPermission.CAN_UPDATE_INFO], _TEAM
+            subject,
+            [
+                (permission, _TEAM)
+                for permission in [
+                    TeamPermission.CAN_READ,
+                    TeamPermission.CAN_UPDATE_INFO,
+                ]
+            ],
         )
         await engine.lookup_resources(subject, TeamPermission.CAN_READ, Resource.TEAM)
         return {"subject": user.uid}

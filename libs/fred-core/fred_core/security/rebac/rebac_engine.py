@@ -915,16 +915,6 @@ class RebacEngine(ABC):
     ) -> list[RebacReference] | RebacDisabledResult:
         """List resources a user can access for one permission."""
         resource_type = _resource_for_permission(permission)
-        # Self-heal the caller's own personal-team tuple before enumerating
-        # (AUTHZ-08 follow-up): `lookup_resources`/OpenFGA `ListObjects` never
-        # goes through `has_user_permission`/`check_user_team_permission_or_raise`,
-        # so without this a first-touch user's own personal team was silently
-        # missing from "list my teams" results (e.g. the `/fs` virtual `/teams`
-        # directory) until some other check-triggering call happened to
-        # provision it first.
-        await self._ensure_personal_team_editor(
-            user, resource_type, personal_team_id(user.uid)
-        )
         return await self.lookup_resources(
             subject=RebacReference(Resource.USER, user.uid),
             permission=permission,
@@ -981,111 +971,16 @@ class RebacEngine(ABC):
             consistency_token=consistency_token,
         )
 
-    async def _has_permissions_raw(
-        self,
-        subject: RebacReference,
-        permissions: Sequence[RebacPermission],
-        resource: RebacReference,
-        *,
-        contextual_relations: Iterable[Relation] | None = None,
-        consistency_token: str | None = None,
-    ) -> list[bool]:
-        contextual_relations_seq = (
-            tuple(contextual_relations) if contextual_relations is not None else None
-        )
-        return list(
-            await asyncio.gather(
-                *(
-                    self._has_permission_raw(
-                        subject,
-                        permission,
-                        resource,
-                        contextual_relations=contextual_relations_seq,
-                        consistency_token=consistency_token,
-                    )
-                    for permission in permissions
-                )
-            )
-        )
-
+    @abstractmethod
     async def has_permissions(
         self,
         subject: RebacReference,
-        permissions: Sequence[RebacPermission],
-        resource: RebacReference,
+        checks: Sequence[tuple[RebacPermission, RebacReference]],
         *,
         contextual_relations: Iterable[Relation] | None = None,
         consistency_token: str | None = None,
     ) -> list[bool]:
-        """Check several permissions for the same subject/resource pair.
-
-        Why this function exists:
-        - a caller projecting a permission list (e.g. `TeamWithPermissions.
-          permissions`) needs one round-trip per permission set, not one
-          `has_permission` per permission — `OpenFgaRebacEngine` overrides
-          this with a native `BatchCheck` call; this default (concurrent
-          `has_permission`s) keeps every other engine and test fake working
-          without implementing a new abstract method.
-
-        How to use it:
-        - pass permissions in the order you want results back in; an empty
-          sequence returns `[]` without calling the engine at all
-
-        `contextual_relations` is materialized once, up front — if a caller
-        passed a generator, iterating it once per concurrent `has_permission`
-        call would exhaust it after the first and starve every other call
-        instead of raising, since `asyncio.gather` schedules them concurrently
-        with no guaranteed order.
-
-        Example:
-        - `allowed = await rebac.has_permissions(subject, list(TeamPermission), team_ref)`
-        """
-        permissions_list = list(permissions)
-        if not permissions_list:
-            return []
-        contextual_relations_seq = (
-            tuple(contextual_relations) if contextual_relations is not None else None
-        )
-        return await self._has_permissions_raw(
-            subject,
-            permissions_list,
-            resource,
-            contextual_relations=contextual_relations_seq,
-            consistency_token=consistency_token,
-        )
-
-    async def _ensure_personal_team_editor(
-        self, user: KeycloakUser, resource_type: Resource, resource_id: str
-    ) -> None:
-        """Self-heal a personal team's own `team_editor` tuple on first touch (AUTHZ-08).
-
-        Personal teams (`personal-<uid>`) are real ReBAC team objects, but carry
-        no tuple until the owner's first permission check touches one — this
-        lazily provisions exactly one (`user:<uid> team_editor team:personal-
-        <uid>`), matching `build_personal_team`'s hardcoded permission set
-        (`can_read`, `can_update_resources`, `can_update_agents`,
-        `can_access_files` - all implied by `team_editor`). Runs before every
-        `check_user_permission_or_raise`/`has_user_permission` call so it
-        applies uniformly across every backend, with no per-caller
-        special-casing.
-
-        Never provisions for another user's personal team — `add_relation`'s own
-        write-guard would refuse that shape regardless, but this check avoids
-        even attempting (and audit-logging) a doomed write on every such call.
-        """
-        if not self.enabled or resource_type != Resource.TEAM:
-            return
-        if not is_personal_team_id(resource_id):
-            return
-        if resource_id != personal_team_id(user.uid):
-            return
-        team_ref = RebacReference(Resource.TEAM, resource_id)
-        user_ref = RebacReference(Resource.USER, user.uid)
-        if await self.has_direct_relation(user_ref, RelationType.TEAM_EDITOR, team_ref):
-            return
-        await self.add_user_relation(
-            user, RelationType.TEAM_EDITOR, Resource.TEAM, resource_id
-        )
+        """Evaluate explicit (permission, object) pairs in input order, without writes."""
 
     async def has_user_permission(
         self,
@@ -1097,7 +992,6 @@ class RebacEngine(ABC):
     ) -> bool:
         """Check one permission for one user/resource pair."""
         resource_type = _resource_for_permission(permission)
-        await self._ensure_personal_team_editor(user, resource_type, resource_id)
         return await self.has_permission(
             RebacReference(Resource.USER, user.uid),
             permission,
@@ -1132,25 +1026,34 @@ class RebacEngine(ABC):
             contextual_relations=contextual_relations,
             consistency_token=consistency_token,
         ):
-            # Log fixed types and permission names without actor or resource identifiers.
-            logger.warning(
-                "ReBAC authorization denied: subject_type=%s permission=%s resource_type=%s",
-                subject.type.value,
-                permission.value,
-                resource.type.value,
-            )
-            denied_actor_uid = actor_uid
-            if denied_actor_uid is None and subject.type == Resource.USER:
-                denied_actor_uid = subject.id
-            raise AuthorizationError(
-                denied_actor_uid if denied_actor_uid is not None else subject.id,
-                permission.value,
-                resource.type,
-                f"Not authorized to {permission.value} {resource.type.value} {resource.id}",
-                actor_uid=denied_actor_uid,
-                subject_type=subject.type,
-                subject_id=subject.id,
-            )
+            self._deny(subject, permission, resource, actor_uid)
+
+    @staticmethod
+    def _deny(
+        subject: RebacReference,
+        permission: RebacPermission,
+        resource: RebacReference,
+        actor_uid: str | None = None,
+    ) -> None:
+        # Log fixed types and permission names without actor or resource identifiers.
+        logger.warning(
+            "ReBAC authorization denied: subject_type=%s permission=%s resource_type=%s",
+            subject.type.value,
+            permission.value,
+            resource.type.value,
+        )
+        denied_actor_uid = actor_uid
+        if denied_actor_uid is None and subject.type == Resource.USER:
+            denied_actor_uid = subject.id
+        raise AuthorizationError(
+            denied_actor_uid if denied_actor_uid is not None else subject.id,
+            permission.value,
+            resource.type,
+            f"Not authorized to {permission.value} {resource.type.value} {resource.id}",
+            actor_uid=denied_actor_uid,
+            subject_type=subject.type,
+            subject_id=subject.id,
+        )
 
     async def check_user_permission_or_raise(
         self,
@@ -1162,7 +1065,6 @@ class RebacEngine(ABC):
     ) -> None:
         """User-focused wrapper around `check_permission_or_raise`."""
         resource_type = _resource_for_permission(permission)
-        await self._ensure_personal_team_editor(user, resource_type, resource_id)
         await self.check_permission_or_raise(
             RebacReference(Resource.USER, user.uid),
             permission,
@@ -1191,19 +1093,18 @@ class RebacEngine(ABC):
         permissions: Iterable[TeamPermission],
     ) -> str | None:
         """Check requested team permissions without structural writes."""
-        permissions_to_check = list(permissions)
-        if not permissions_to_check:
-            return None
-
-        await asyncio.gather(
-            *(
-                self.check_user_permission_or_raise(
-                    user=user,
-                    permission=permission,
-                    resource_id=team_id,
-                )
-                for permission in permissions_to_check
-            ),
-            return_exceptions=False,
+        checks = [
+            (permission, RebacReference(Resource.TEAM, team_id))
+            for permission in dict.fromkeys(permissions)
+        ]
+        allowed = await self.has_permissions(
+            RebacReference(Resource.USER, user.uid),
+            checks,
+            consistency_token=self.HIGHER_CONSISTENCY,
         )
+        for (permission, resource), granted in zip(checks, allowed, strict=True):
+            if not granted:
+                self._deny(
+                    RebacReference(Resource.USER, user.uid), permission, resource
+                )
         return None

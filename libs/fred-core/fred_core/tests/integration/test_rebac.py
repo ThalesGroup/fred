@@ -2139,3 +2139,41 @@ async def test_project_revocation_denies_surviving_local_role_tuples(
             project,
             consistency_token=rebac_engine.HIGHER_CONSISTENCY,
         )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_space_batch_observes_parent_revocation_on_next_request(rebac_engine):
+    subject = _make_reference(Resource.USER)
+    organization = _make_reference(Resource.ORGANIZATION)
+    team = _make_reference(Resource.TEAM)
+    project = _make_reference(Resource.PROJECT)
+    membership = Relation(subject, RelationType.TEAM_MEMBER, team)
+    await rebac_engine.add_relations(
+        [
+            Relation(subject, RelationType.MEMBER, organization),
+            Relation(organization, RelationType.ORGANIZATION, team),
+            membership,
+            Relation(team, RelationType.PARENT, project),
+            Relation(subject, RelationType.MEMBER, project),
+        ]
+    )
+    checks = [
+        (SpacePermission.READ_CORPUS, space) for space in (project, team, organization)
+    ]
+    assert await rebac_engine.has_permissions(
+        subject,
+        checks,
+        consistency_token=rebac_engine.HIGHER_CONSISTENCY,
+    ) == [True, True, True]
+    await rebac_engine.delete_relation(membership)
+    assert await rebac_engine.has_permissions(
+        subject,
+        checks,
+        consistency_token=rebac_engine.HIGHER_CONSISTENCY,
+    ) == [False, False, True]
+    assert await rebac_engine.has_permissions(
+        _make_reference(Resource.USER),
+        checks,
+        consistency_token=rebac_engine.HIGHER_CONSISTENCY,
+    ) == [False, False, False]

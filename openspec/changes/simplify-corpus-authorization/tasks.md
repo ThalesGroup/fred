@@ -25,6 +25,11 @@ integration, repeating only evidence invalidated by subsequent changes or failur
 
 ## 1. SQL and ReBAC foundation
 
+Execution priority confirmed by the developer: establish the smallest correct target
+authorization/ownership code, replace its consumers and delete superseded paths.
+Complete this foundation before resuming demo import/export work (1.5); do not
+preserve old behavior through adapters, compatibility switches or automatic repair.
+
 - [ ] 1.1 Introduce the bounded space identity and explicit organization/team/project parentage, personal-team kind and user organization; verify database constraints reject invalid kinds/parents and permit same team names in distinct organizations without changing existing IDs.
   First schema block adds `space` and its typed parent/name/personal-owner
   constraints, owned by control-plane. User organization, existing-team linkage,
@@ -100,6 +105,25 @@ integration, repeating only evidence invalidated by subsequent changes or failur
   independent review inspected tests but did not rerun them.
 - [ ] 1.3 Add linear, correctly owned Alembic migrations and target-schema installation/provisioning inputs, preserving shared-table ownership; verify one head per backend, empty-database upgrade, schema checks and explicit initial organization/team/personal assignment.
 - [ ] 1.4 Establish protected-request authorization and canonical ancestry resolution with existing higher-consistency/batch support; verify revoked access is denied on the next request and request-local reuse does not become a cross-request positive cache.
+  First target-kernel block replaces the same-object batch API with explicit
+  `(permission, resource)` pairs across objects. Native OpenFGA batching is the
+  only active batch implementation; the base per-check fallback is deleted.
+  Team guards deduplicate checks, use higher consistency and make no role writes.
+  Personal checks/listing no longer provision or repair any grant. Both existing
+  production batch consumers use the new signature; routing-policy authorization
+  now explicitly requires higher consistency. No new configuration or cache.
+  Verification: 521 core security tests passed; 92 affected control-plane tests
+  passed (four creation/provisioning cases excluded from this focused block);
+  15 real OpenFGA cases passed, including a three-space batch followed by parent
+  membership revocation denying the team and project on the next request.
+  Focused independent read-only review against `f22868585` covered the kernel,
+  batch consumers, installed SDK and performance invariants. Its one finding,
+  stale elevated-role authorization on routing-policy reads, is fixed and the
+  consumer test asserts higher consistency. This is not a full-branch review.
+  Production Python +77/-196 (net -119, including comments); no schema or
+  generated-file churn in this block. Ruff and raw kernel typing passed.
+  Canonical SQL ancestry/admission gates, corpus conversion and removal of remaining
+  per-document checks are still pending; task 1.4 remains open.
 - [ ] 1.5 Deliver the first integrated path through the existing demo-bundle: deploy an empty target platform, build/import one organization with explicit users/teams/local roles through control-plane services, and export/re-import the same organization. Preserve the existing demo accounts, credentials, teams, memberships, local/platform roles and build workflow; confirm only new organization declarations/assignments. Keep import/export platform-admin-only, preserve organization boundaries and personal privacy, reject unsupported old bundles, and retain existing closed-space administration rules. Coordinate corpus-format completion with task 3.2; this task is not complete with only a parser or demo fixture.
 
 ## 2. Administration and membership

@@ -58,6 +58,7 @@ from fred_core import (
     AuthorizationError,
     KeycloakUser,
     PlatformPermission,
+    RebacEngine,
     RebacReference,
     Relation,
     RelationType,
@@ -185,7 +186,7 @@ def _editor_relation(team_id: str, user_id: str) -> Relation:
 
 @pytest.mark.asyncio
 async def test_collaborative_team_budget_is_exactly_three_logical_ops() -> None:
-    """1 + 2 + 3: 1 Check (access gate) + 1 exact Read (projection) + 1
+    """1 + 2 + 3: 1 BatchCheck (access gate) + 1 exact Read (projection) + 1
     BatchCheck of 14 — zero ListUsers/ListObjects, and zero `list_relations`
     (the org-link scan `ensure_team_platform_relations` used to add)."""
     engine = CountingRebacEngine(
@@ -201,11 +202,11 @@ async def test_collaborative_team_budget_is_exactly_three_logical_ops() -> None:
 
     assert team.id == TeamId("fredlab")
     assert engine.list_relations_calls == []
-    assert len(engine.has_permission_calls) == 1  # the CAN_READ access gate
-    assert engine.has_permission_calls[0][1] == TeamPermission.CAN_READ
+    assert engine.has_permission_calls == []
+    assert engine.has_permissions_calls[0] == (TeamPermission.CAN_READ,)
     assert len(engine.list_direct_relations_calls) == 1
-    assert len(engine.has_permissions_calls) == 1
-    assert len(engine.has_permissions_calls[0]) == len(_ALL_PERMISSIONS)
+    assert len(engine.has_permissions_calls) == 2
+    assert len(engine.has_permissions_calls[1]) == len(_ALL_PERMISSIONS)
     assert engine.lookup_resources_calls == 0
     assert engine.lookup_subjects_calls == 0
     assert engine.add_relations_calls == []  # org edge already existed
@@ -307,7 +308,7 @@ async def test_elevated_caller_without_direct_member_tuple_counts_as_member_only
 @pytest.mark.asyncio
 async def test_permission_denied_short_circuits_before_the_projection() -> None:
     """9: a denied access check must never reach the exact Read or the
-    BatchCheck — the expensive projection is never built for a denied caller."""
+    permission projection — the expensive projection is never built for a denied caller."""
     engine = CountingRebacEngine(
         org_linked_team_ids={"fredlab"}, granted_permissions=set()
     )
@@ -319,7 +320,7 @@ async def test_permission_denied_short_circuits_before_the_projection() -> None:
         await get_team_by_id(_user("alice"), TeamId("fredlab"), _deps(engine, store))
 
     assert engine.list_direct_relations_calls == []
-    assert engine.has_permissions_calls == []
+    assert engine.has_permissions_calls == [(TeamPermission.CAN_READ,)]
 
 
 @pytest.mark.asyncio
@@ -525,7 +526,7 @@ async def test_missing_organization_edge_is_never_read_or_repaired() -> None:
     assert engine.list_relations_calls == []
     assert engine.add_relations_calls == []
     assert engine.list_direct_relations_tokens == [None]
-    assert engine.has_permissions_tokens == [None]
+    assert engine.has_permissions_tokens == [RebacEngine.HIGHER_CONSISTENCY, None]
 
 
 @pytest.mark.asyncio
@@ -668,7 +669,10 @@ async def test_update_team_visibility_write_propagates_its_own_token() -> None:
 
     assert engine.add_relations_calls  # the public relation write actually happened
     assert engine.list_direct_relations_tokens == ["consistency-token"]
-    assert engine.has_permissions_tokens == ["consistency-token"]
+    assert engine.has_permissions_tokens == [
+        RebacEngine.HIGHER_CONSISTENCY,
+        "consistency-token",
+    ]
 
 
 @pytest.mark.asyncio
@@ -706,4 +710,4 @@ async def test_team_detail_keeps_only_active_admins_for_charter_gate(
     assert team.is_member is True
     assert team.permissions == [TeamPermission.CAN_READ]
     assert len(engine.list_direct_relations_calls) == 1
-    assert len(engine.has_permissions_calls) == 1
+    assert len(engine.has_permissions_calls) == 2

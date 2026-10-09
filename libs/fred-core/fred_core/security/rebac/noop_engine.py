@@ -16,7 +16,7 @@
 
 from __future__ import annotations
 
-from typing import Iterable
+from typing import Iterable, Sequence
 
 from fred_core.security.models import Resource
 from fred_core.security.rebac.rebac_engine import (
@@ -116,3 +116,13 @@ class NoopRebacEngine(RebacEngine):
         consistency_token: str | None = None,
     ) -> bool:
         return True
+
+    async def has_permissions(
+        self,
+        subject: RebacReference,
+        checks: Sequence[tuple[RebacPermission, RebacReference]],
+        *,
+        contextual_relations: Iterable[Relation] | None = None,
+        consistency_token: str | None = None,
+    ) -> list[bool]:
+        return [True] * len(checks)
