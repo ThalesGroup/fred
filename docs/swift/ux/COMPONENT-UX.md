@@ -126,7 +126,12 @@ Escape/scrim dismissal, and focus restoration. `Dialog.tsx` remains a thin FRED
 wrapper supplying its translated Cancel default; neutral callers supply their
 own labels. Consumer-root portals inherit light/dark theme; the application
 without `.fred-ui` retains its body portal. An open Select gets the first Escape
-inside Dialog, and option selection does not confirm the Dialog.
+inside Dialog, and option selection does not confirm the Dialog. Opt-in props:
+`actionsAddon` (e.g. a checkbox) renders in the action bar before the buttons;
+`dividers` rules off the header and action bar with `outline-variant`;
+`initialFocus="dialog"` focuses the dialog itself rather than its first
+control, so a long body opens at its top; `hideConfirm` leaves a text Cancel as
+the only action.
 
 Removable Chip controls are named `Remove <label>` unless a caller supplies
 `removeAriaLabel`. Tooltip preserves hover/keyboard descriptions and viewport
@@ -4344,7 +4349,7 @@ clears the binding back to "Using pod default".
 
 ---
 
-## Platform announcement banners (2026-08-19 as the config-driven info banner, replaced 2026-09-25, issue #2805)
+## Platform announcements: banners and patch notes (2026-08-19 as the config-driven info banner, replaced 2026-09-25, issue #2805; patch notes 2026-10-09)
 
 ### `AnnouncementStack` / `AnnouncementBanner`
 
@@ -4413,12 +4418,60 @@ work; what a WYSIWYG toolbar bought was not worth its weight for two fields
 that hold a sentence and a paragraph. Composing never publishes — an admin
 enables from the list once the wording is right.
 
+### `PatchNoteDialog` / `PatchNoteGate`
+
+**Location:** `src/rework/components/shared/molecules/PatchNoteDialog/` (the
+dialog and `PatchNoteBody`) and `src/rework/features/announcements/`
+(`PatchNoteGate`, `useActivePatchNote`)
+**Status:** `Functional`
+
+The shared `Dialog` at `maxWidth` 720, `dividers`, `initialFocus="dialog"`,
+one "Fermer" button, titled with the note's title. `PatchNoteBody` renders the
+markdown for both this dialog and the editor's inline preview: first heading
+on a neutral `surface-container` band, `h2` sections ruled with
+`outline-muted`, links in a new tab. "Ne plus afficher" sits in the action bar
+(`actionsAddon`); Escape and the scrim report it like "Fermer". The gate,
+mounted once in `App.tsx` above the router, opens the note at load unless the
+server flags it `dismissed` or it was closed during this sign-in (flag keyed by
+user, login session, note and `content_version`). The profile menu's
+"Nouveautés" entry reopens the active note on request, without the checkbox.
+The admin preview is this same component and records nothing.
+
+### Patch-note admin row, editor and activation history
+
+**Location:** `src/rework/components/pages/admin/AnnouncementsPage/`
+**Status:** `Functional`
+
+- **Header and views.** One filled "Nouvelle annonce" button opens
+  `AnnouncementKindChooser` (two `SelectableCard` tiles, text Cancel only;
+  `SelectableCard` gained optional `icon` and `selected`, additive in
+  `@fred-oss/ui`);
+  a `ButtonGroup` tabs switch shows "Annonces" or "Historique" (not remembered).
+- **Patch-note row.** Neutral `surface-container` card (`outline-*` border,
+  `new_releases` icon, title, the number of users who hid it in
+  `--font-body-small` / `on-surface-retreat`), then Preview, `Switch`, Edit,
+  Delete aligned with banner rows. Enabling a note while another is active
+  first confirms, naming the one switched off.
+- **`PatchNoteEditorDialog`.** `maxWidth` 1200; FR/EN tabs (opens on the first
+  language with content), title `TextInput`, `PromptEditor` beside the
+  `PatchNoteBody` preview (stacked under 900 px). Save needs a title and body
+  in the same languages. "Enregistrer et activer" (outlined, `actionsAddon`)
+  on an inactive note. Escape, scrim or Cancel with unsaved changes ask
+  through `ConfirmationDialog`. Other dialogs (preview, confirmations) replace
+  the editor rather than stack on it.
+- **History.** `LocalizedDataTable` (`size="small"`), newest first, sortable,
+  with `FilterChips` (named group; remembered per browser, unknown values
+  ignored). A banner's Type chip takes its severity tone. Client-side
+  pagination (20 per page) over the API's newest 100 events; the table fills
+  the page body and scrolls its rows, the page never scrolls (server-side
+  paging: #3015).
+
 #### Open UX issues
 
 - **No cap on the stack.** Four enabled announcements take real vertical space
   at the top of every page. Deliberate for now — silently truncating would hide
-  exactly the announcement someone published — and the enabled count in the
-  admin header is the mitigation. Revisit alongside scheduling, which will
+  exactly the announcement someone published — and the live banner count in
+  the admin header is the mitigation. Revisit alongside scheduling, which will
   bound how long a banner lingers.
 
 ---

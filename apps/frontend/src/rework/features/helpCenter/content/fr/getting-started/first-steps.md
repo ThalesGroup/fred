@@ -42,6 +42,20 @@ Trois zones :
 - **Le menu profil**, en bas à gauche : votre profil, le support, la
   déconnexion.
 
+## Les nouveautés après une mise à jour
+
+Après une mise à jour, une fenêtre peut s'ouvrir à votre arrivée sur
+l'application pour présenter les changements, sous un titre choisi par les
+administrateurs. Fermez-la avec **Fermer** : elle ne revient pas pendant que
+vous travaillez, mais elle s'affichera de nouveau à votre prochaine connexion.
+Si vous cochez **Ne plus afficher** avant de fermer, elle ne s'affichera plus,
+sur aucun de vos appareils, sauf si les administrateurs la publient à nouveau. Les nouveautés suivantes vous seront présentées à leur
+tour.
+
+Pour la relire à tout moment, ouvrez votre menu de profil, en bas de la barre
+latérale, et choisissez **Nouveautés**. Cette entrée est présente tant que des
+nouveautés sont publiées.
+
 ## Votre espace personnel
 
 Dès la première connexion vous avez un **espace personnel** : une équipe dont
