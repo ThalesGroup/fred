@@ -108,6 +108,11 @@ operations:
     review_status: approved
     required_permission: can_manage_platform
   - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/admin/platform/access/teams/{team_id}/enrollment-links/inactive
+    review_status: approved
+    required_permission: can_manage_platform
+  - service: control-plane
     method: POST
     path: /control-plane/v1/platform-access/free/{token}/opening
     review_status: approved
