@@ -205,7 +205,11 @@ independently drops any record from that logger by name.
 HTTP uses one shared ASGI completion event at response/stream termination. It carries
 method, safe route template when resolved, numeric duration, outcome and status only
 when a response was sent. Successful health/readiness probes are suppressed; failures
-remain visible. Raw paths, queries, client addresses, headers, bodies and redirect
+remain visible. The readable message summarizes `METHOD route → status | durationms`;
+non-responded outcomes are appended so an interrupted stream cannot look successful
+from its status alone. Missing routes use `<unmatched>` and absent status uses
+`no response`; the separate numeric duration and other structured fields are retained.
+Raw paths, queries, client addresses, headers, bodies and redirect
 locations are excluded. Each ingress creates fresh `request_id` and root `correlation_id`;
 `X-Request-ID` and `X-Correlation-ID` response headers are exposed through CORS.
 

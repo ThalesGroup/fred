@@ -947,6 +947,108 @@ async def test_interleaved_request_context_survives_stream_and_thread_then_retir
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("log_format", ["json", "text"])
+@pytest.mark.parametrize(
+    ("case", "status", "route", "summary"),
+    [
+        ("responded", 200, "/sessions/{session_id}/runs", "200 | 8ms"),
+        ("responded", 403, "/sessions/{session_id}/runs", "403 | 8ms"),
+        ("responded", 503, "/sessions/{session_id}/runs", "503 | 8ms"),
+        ("responded", 404, None, "404 | 8ms"),
+        ("responded", 404, "x" * 1025, "404 | 8ms"),
+        ("failed", None, None, "no response | 8ms | failed"),
+        ("cancelled", None, None, "no response | 8ms | cancelled"),
+        ("cancelled", 200, None, "200 | 8ms | cancelled"),
+        ("disconnected", 200, None, "200 | 8ms | disconnected"),
+        ("incomplete", 200, None, "200 | 8ms | incomplete"),
+    ],
+)
+async def test_http_completion_message_is_readable_and_retains_structured_fields(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    log_format: Literal["json", "text"],
+    case: str,
+    status: int | None,
+    route: str | None,
+    summary: str,
+) -> None:
+    import asyncio
+    from types import SimpleNamespace
+
+    from fred_core.logs import http as http_logging
+    from starlette.requests import ClientDisconnect
+
+    ticks = iter([10.0, 10.008])
+    monkeypatch.setattr(
+        http_logging, "time", SimpleNamespace(perf_counter=lambda: next(ticks))
+    )
+    store = _StubLogStore()
+    log_setup(
+        service_name="completion-test",
+        store=store,
+        log_format=log_format,
+        include_uvicorn=False,
+    )
+
+    async def app(scope, receive, send):
+        if status is not None:
+            await send({"type": "http.response.start", "status": status, "headers": []})
+        if case == "failed":
+            raise RuntimeError("exception-secret-canary")
+        if case == "cancelled":
+            raise asyncio.CancelledError()
+        if case == "disconnected":
+            raise ClientDisconnect()
+        if case != "incomplete":
+            await send({"type": "http.response.body", "body": b""})
+
+    async def receive():
+        return {"type": "http.request", "body": b""}
+
+    async def send(message):
+        pass
+
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": "/raw-secret-canary",
+        "query_string": b"token=query-secret-canary",
+    }
+    if route is not None:
+        scope["route"] = SimpleNamespace(path=route)
+    errors = {
+        "failed": RuntimeError,
+        "cancelled": asyncio.CancelledError,
+        "disconnected": ClientDisconnect,
+    }
+    if case in errors:
+        with pytest.raises(errors[case]):
+            await http_logging.RequestLoggingMiddleware(app)(scope, receive, send)
+    else:
+        await http_logging.RequestLoggingMiddleware(app)(scope, receive, send)
+
+    await asyncio.sleep(0)
+    output = capsys.readouterr().out
+    safe_route = route if route is not None and len(route) <= 1024 else "<unmatched>"
+    expected = f"POST {safe_route} → {summary}"
+    assert len(store.indexed) == 1
+    event = store.indexed[0]
+    assert event.msg == expected
+    assert event.extra is not None
+    assert event.extra["http_method"] == "POST"
+    assert event.extra["duration_ms"] == pytest.approx(8.0)
+    assert event.extra["outcome"] == case
+    assert event.extra.get("http_status") == status
+    assert event.extra.get("route") == (route if safe_route != "<unmatched>" else None)
+    if log_format == "json":
+        assert json.loads(output)["message"] == expected
+    else:
+        assert expected in output
+    assert "secret-canary" not in output
+    assert "x" * 1025 not in output
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "case", ["disconnect", "failed-probe", "successful-probe", "unmatched"]
 )

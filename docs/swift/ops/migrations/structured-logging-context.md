@@ -21,6 +21,12 @@ No new configuration. Keep the selected `app.log_format`; update collector queri
 
 Deploy after the shared output foundation. Update access-log queries to the `http` logger's single completion event (`http_method`, safe `route`, `http_status` when sent, `outcome`, `duration_ms`). Uvicorn access and the earlier Knowledge Flow request/response lines are suppressed. Successful probes are omitted; failures remain visible.
 
+The message summarizes `POST /sessions/{session_id}/runs → 403 | 8ms` instead of
+`HTTP request completed`. Interrupted processing appends its outcome (for example,
+`200 | 8ms | disconnected`); absent route/status displays `<unmatched>`/`no response`.
+Filter access events by `logger=http` and structured fields rather than the old
+message text. No Grafana dashboard change is required to display the summary.
+
 Use fresh `X-Request-ID` and `X-Correlation-ID` response headers to find a request. Generic diagnostic logs can now include admitted opaque person and resolved business references; review deployment log access and retention accordingly. Metric labels and audit restrictions remain as documented in observability §6/§7.
 
 ## Validation

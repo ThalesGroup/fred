@@ -119,4 +119,15 @@ class RequestLoggingMiddleware:
                         else logging.WARNING
                     )
                     with completion_log_scope(owner.values):
-                        logger.log(level, "HTTP request completed", extra=facts)
+                        logger.log(
+                            level,
+                            "%s %s → %s | %.0fms%s",
+                            facts["http_method"],
+                            facts.get("route", "<unmatched>"),
+                            response.status
+                            if response.status is not None
+                            else "no response",
+                            facts["duration_ms"],
+                            f" | {outcome}" if outcome != "responded" else "",
+                            extra=facts,
+                        )
