@@ -4156,7 +4156,7 @@ about prompts.
 
 **What it is.** A platform admin sets the UI theme users get by default and the
 themes withdrawn from their choice. Theme ids are opaque to the control plane:
-the frontend owns the theme catalog and ignores ids it does not ship.
+the frontend owns the theme catalog (shipped themes plus valid deployment ZIP entries) and ignores ids outside it.
 
 **Model.** One `platform_ui_settings` row at most (`id = 'default'`, CHECK
 constraint): `default_theme` (nullable), `hidden_themes` (JSON list),

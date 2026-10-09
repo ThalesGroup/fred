@@ -56,6 +56,10 @@ describe("theme-boot.js after a choice made in the app", () => {
       window: { localStorage: window.localStorage, matchMedia: () => ({ matches: false }) },
       document: { documentElement: { setAttribute: (name: string, value: string) => (attributes[name] = value) } },
     });
-    expect(attributes).toEqual({ "data-ui-theme": "cloud", "data-theme": "dark" });
+    expect(attributes).toEqual({
+      "data-ui-theme": "cloud",
+      "data-ui-base-theme": "cloud",
+      "data-theme": "dark",
+    });
   });
 });
