@@ -108,9 +108,6 @@ class PlatformOpsReActDefinition(ReActAgentDefinition):
         MCPServerRef(id="platform_postgres"),
     )
 
-    reasoning_enabled: bool = True
-    reasoning_default_on: bool = True
-
     fields: tuple[FieldSpec, ...] = (
         FieldSpec(
             key="prompts.system",

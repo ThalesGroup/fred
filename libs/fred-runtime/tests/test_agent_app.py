@@ -160,11 +160,11 @@ async def _demo_team_routing(ctx: ToolContext) -> str:
     Return the team routing policy fields bound to the current runtime context.
 
     Why this exists:
-    - control-plane resolves a team's chat_default_profile_id/agent_profile_overrides
-      at prepare-execution and the frontend forwards them unchanged, but the
-      runtime rebuilt RuntimeContext from the request and silently dropped both
-      fields — so no team's routing policy ever reached model selection
-      (fred_runtime.model_routing.provider.resolve_team_override always saw None)
+    - the team default and the user's per-conversation choice are forwarded by
+      the frontend, and the runtime rebuilds RuntimeContext field by field: a
+      field nobody names is silently dropped before model selection
+    - the team-disabled set and the instance recommendation are TRUSTED
+      binding fields: echoed so tests prove a request body cannot set them
     - the platform-operator `chat` model binding is different: it is NOT
       read from `runtime_context` at all — a request
       body must never be able to set it. It is TRUSTED, resolved by
@@ -179,10 +179,7 @@ async def _demo_team_routing(ctx: ToolContext) -> str:
     """
 
     rc = ctx.binding.runtime_context
-    overrides = ",".join(
-        f"{agent_id}={profile_id}"
-        for agent_id, profile_id in (rc.agent_profile_overrides or {}).items()
-    )
+    disabled = ",".join(ctx.binding.team_disabled_model_ids)
     platform_binding = ctx.binding.platform_chat_model_binding
     bindings = (
         f"chat={platform_binding.provider}/{platform_binding.name}"
@@ -191,7 +188,9 @@ async def _demo_team_routing(ctx: ToolContext) -> str:
     )
     return (
         f"profile:{rc.chat_default_profile_id or 'none'}"
-        f"|overrides:{overrides or 'none'}"
+        f"|choice:{rc.chat_profile_id or 'none'}"
+        f"|disabled:{disabled or 'none'}"
+        f"|recommended:{ctx.binding.recommended_chat_profile_id or 'none'}"
         f"|bindings:{bindings}"
     )
 
@@ -1310,8 +1309,9 @@ def test_execute_forwards_team_routing_policy_to_agent_binding(
     monkeypatch, tmp_path
 ) -> None:
     """
-    Regression: `runtime_context.chat_default_profile_id`/`agent_profile_overrides`
-    must reach the agent binding on DIRECT (raw `agent_id`) execution, and the
+    Regression: `runtime_context.chat_default_profile_id` must reach the agent
+    binding on DIRECT (raw `agent_id`) execution, the per-conversation
+    `chat_profile_id` (managed instances only) must not, and the
     platform-operator chat binding must NOT — the trusted platform binding
     is scoped to managed agent-instance execution only; direct execution has
     no per-turn control-plane lookup at all and stays pod-local routing.
@@ -1368,9 +1368,13 @@ def test_execute_forwards_team_routing_policy_to_agent_binding(
                 "runtime_context": {
                     "user_id": "alice",
                     "chat_default_profile_id": "chat.anthropic.claude-sonnet",
+                    "chat_profile_id": "chat.anthropic.claude-haiku",
+                    # Removed field and trusted-only fields: all ignored.
                     "agent_profile_overrides": {
-                        "rags.sample.team_routing": "chat.anthropic.claude-haiku"
+                        "rags.sample.team_routing": "chat.forged.override"
                     },
+                    "team_disabled_model_ids": ["model__forged"],
+                    "recommended_chat_profile_id": "chat.forged.recommendation",
                     # Forged: no longer a valid RuntimeContext field at all —
                     # a direct-execution caller trying the old attack (or a
                     # stale client) must have this silently ignored, not
@@ -1396,20 +1400,37 @@ def test_execute_forwards_team_routing_policy_to_agent_binding(
     # the agent at all (direct execution: no trusted per-turn lookup exists).
     echoed = " ".join(p.get("content", "") for p in tool_results)
     assert "profile:chat.anthropic.claude-sonnet" in echoed
-    assert "overrides:rags.sample.team_routing=chat.anthropic.claude-haiku" in echoed
+    # The per-conversation choice applies to managed instances only.
+    assert "choice:none" in echoed
+    assert "disabled:none" in echoed
+    assert "recommended:none" in echoed
+    assert "forged" not in echoed
     assert "bindings:none" in echoed
 
 
 def _run_managed_reasoning_turn(
-    monkeypatch, tmp_path, *, agent_reasoning_enabled: bool
+    monkeypatch,
+    tmp_path,
+    *,
+    legacy_agent_reasoning_enabled: bool | None = None,
+    definition_cls: type[_ReasoningAgent] = _ReasoningAgent,
 ) -> str:
     """Execute one managed-instance turn on `_ReasoningAgent` and return what the
     probe tool echoed about the reasoning activation it was bound with.
 
-    Managed, not raw `agent_id`, because level 3 lives on the instance tuning
-    control-plane resolves server-side — a raw-id turn has no author and so has
-    no level 3 to test.
+    Managed, not raw `agent_id`: only a managed turn carries the trusted
+    platform ceiling. `legacy_agent_reasoning_enabled` puts the retired
+    per-agent switch in the stored tuning, which must now be ignored.
     """
+
+    tuning: dict[str, object] = {
+        "role": "Reasoning activation probe",
+        "description": "Reports the activation it received.",
+        "tags": [],
+        "fields": [],
+    }
+    if legacy_agent_reasoning_enabled is not None:
+        tuning["reasoning_enabled"] = legacy_agent_reasoning_enabled
 
     class _FakeResponse:
         def __init__(self, payload: dict[str, object], status_code: int = 200) -> None:
@@ -1442,14 +1463,7 @@ def _run_managed_reasoning_turn(
                     "owner_scope": "team",
                     "owner_team_id": "fredlab",
                     "enabled": True,
-                    "tuning": {
-                        "role": "Reasoning activation probe",
-                        "description": "Reports the activation it received.",
-                        "tags": [],
-                        "fields": [],
-                        # The agent author's own switch, resolved server-side.
-                        "reasoning_enabled": agent_reasoning_enabled,
-                    },
+                    "tuning": tuning,
                     # The trusted, control-plane-resolved reasoning snapshot —
                     # deliberately different from whatever the request below
                     # claims, so a test that still reads the request's copy
@@ -1482,7 +1496,7 @@ def _run_managed_reasoning_turn(
     )
     monkeypatch.setattr(agent_app_module.httpx, "AsyncClient", _FakeAsyncClient)
 
-    definition = _ReasoningAgent()
+    definition = definition_cls()
     registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
     app = create_agent_app(
         registry=registry,
@@ -1551,9 +1565,7 @@ def test_execute_forwards_reasoning_activation_to_agent_binding(
     - run via the default offline `make test` suite in `fred-runtime`
     """
 
-    echoed = _run_managed_reasoning_turn(
-        monkeypatch, tmp_path, agent_reasoning_enabled=True
-    )
+    echoed = _run_managed_reasoning_turn(monkeypatch, tmp_path)
     # The tool echoed the bound activation — proving the field survived the
     # control-plane → RuntimeContext binding (not dropped → not "reasoning:none")
     # and that it came from control-plane, not the client's bogus request value.
@@ -1561,33 +1573,48 @@ def test_execute_forwards_reasoning_activation_to_agent_binding(
     assert "turn:true" in echoed
 
 
-def test_agent_with_reasoning_disabled_ignores_platform_activation(
+def test_legacy_agent_reasoning_switch_no_longer_narrows_the_ceiling(
     monkeypatch, tmp_path
 ) -> None:
-    """
-    Regression: an agent whose author left reasoning OFF must not reason, even
-    when the platform enabled the model and the request says so.
-
-    Why this exists:
-    - an earlier cut gated only the *composer control* on the author's switch,
-      so an agent with the switch off showed no toggle and reasoned anyway:
-      the snapshot list rode the request untouched and model routing saw an
-      open ceiling. Silent, and invisible in the UI by construction.
-    - the fix must live pod-side, on the server-resolved tuning, not in what
-      the request carries: `reasoning_enabled_model_ids` and `reasoning` below
-      are both exactly what a client would send with the toggle on.
-
-    How to use it:
-    - run via the default offline `make test` suite in `fred-runtime`
-    """
+    """The platform activation alone is the ceiling: a stored tuning row still
+    carrying the retired `reasoning_enabled: false` loads and narrows nothing."""
 
     echoed = _run_managed_reasoning_turn(
-        monkeypatch, tmp_path, agent_reasoning_enabled=False
+        monkeypatch, tmp_path, legacy_agent_reasoning_enabled=False
     )
-    assert "reasoning:none" in echoed
-    # Level 4 still travels — it is the user's answer, and it is not this level's
-    # job to rewrite it. The empty ceiling above is what makes the turn not reason.
+    assert "reasoning:model__openai__mistral-small-latest" in echoed
     assert "turn:true" in echoed
+
+
+class _LegacyReasoningAgent(_ReasoningAgent):
+    """A third-party definition still setting the deprecated reasoning fields."""
+
+    reasoning_enabled: bool = True
+    reasoning_default_on: bool = True
+
+
+def test_deprecated_definition_reasoning_fields_load_warn_and_change_nothing(
+    monkeypatch, tmp_path
+) -> None:
+    import fred_sdk.contracts.models as sdk_models
+
+    # The app's logging setup replaces root handlers, so record the call itself.
+    warned: list[str] = []
+    monkeypatch.setattr(
+        sdk_models.logger,
+        "warning",
+        lambda msg, *args: warned.append(msg % args),
+    )
+    baseline = _run_managed_reasoning_turn(monkeypatch, tmp_path / "baseline")
+    legacy = _run_managed_reasoning_turn(
+        monkeypatch, tmp_path / "legacy", definition_cls=_LegacyReasoningAgent
+    )
+    assert legacy == baseline
+    assert agent_app_module._definition_to_agent_tuning(
+        _LegacyReasoningAgent()
+    ) == agent_app_module._definition_to_agent_tuning(_ReasoningAgent())
+    assert len(warned) == 1
+    assert "_LegacyReasoningAgent" in warned[0]
 
 
 def test_managed_execution_uses_trusted_platform_chat_binding_not_forged_request(
@@ -1653,7 +1680,9 @@ def test_managed_execution_uses_trusted_platform_chat_binding_not_forged_request
                         "description": "Reports the team routing policy snapshot it received.",
                         "tags": [],
                         "fields": [],
+                        "recommended_chat_profile_id": "chat.trusted.recommendation",
                     },
+                    "team_disabled_model_ids": ["model__openai__gpt-4o"],
                     # The TRUSTED, control-plane-resolved platform chat
                     # binding — deliberately different from whatever the
                     # forged request below claims.
@@ -1715,6 +1744,10 @@ def test_managed_execution_uses_trusted_platform_chat_binding_not_forged_request
                     "platform_model_bindings": {
                         "chat": {"provider": "attacker", "name": "forged-model"}
                     },
+                    "team_disabled_model_ids": ["model__attacker__forged"],
+                    "recommended_chat_profile_id": "chat.attacker.forged",
+                    # The user's choice is client-forwarded on a managed turn.
+                    "chat_profile_id": "chat.user.choice",
                 },
             },
         )
@@ -1728,8 +1761,11 @@ def test_managed_execution_uses_trusted_platform_chat_binding_not_forged_request
     tool_results = [p for p in payloads if p.get("kind") == "tool_result"]
     assert tool_results, "expected a tool_result event"
     echoed = " ".join(p.get("content", "") for p in tool_results)
-    # The trusted control-plane binding reached the agent...
+    # The trusted control-plane values reached the agent...
     assert "bindings:chat=openai/gpt-4o-mini" in echoed
+    assert "disabled:model__openai__gpt-4o" in echoed
+    assert "recommended:chat.trusted.recommendation" in echoed
+    assert "choice:chat.user.choice" in echoed
     # ...and the forged request-body value never did.
     assert "attacker" not in echoed
     assert "forged-model" not in echoed
@@ -2950,6 +2986,56 @@ def test_local_registry_invoker_reuses_runtime_execute_projection(monkeypatch) -
     assert context["user_id"] == "alice"
     assert context["team_id"] == "fredlab"
     assert context["execution_action"] == "execute"
+
+
+def test_local_registry_child_never_receives_the_user_chat_choice(monkeypatch) -> None:
+    """A registry child gets only the parent's PortableContext: no user choice,
+    no instance tuning (so no recommendation) and no team-disabled set, so it
+    keeps its own model resolution."""
+
+    seen: dict[str, object] = {}
+
+    async def _fake_iterate_runtime_event_payloads(
+        definition, request, access_token=None, **kwargs
+    ):
+        seen["context"] = dict(request.context or {})
+        seen["kwargs"] = kwargs
+        yield {"kind": "final", "sequence": 0, "content": "ok"}
+
+    monkeypatch.setattr(
+        agent_app_module,
+        "_iterate_runtime_event_payloads",
+        _fake_iterate_runtime_event_payloads,
+    )
+
+    definition = _EchoAgent()
+    invoker = agent_app_module.LocalRegistryAgentInvoker(
+        registry={definition.agent_id: definition}, access_token=None
+    )
+    asyncio.run(
+        invoker.invoke(
+            AgentInvocationRequest(
+                agent_id=definition.agent_id,
+                message="hello",
+                context=PortableContext(
+                    request_id="req-1",
+                    correlation_id="corr-1",
+                    actor="alice",
+                    tenant="tenant-a",
+                    environment=PortableEnvironment.DEV,
+                    team_id="fredlab",
+                ),
+            )
+        )
+    )
+
+    context = seen["context"]
+    kwargs = seen["kwargs"]
+    assert isinstance(context, dict) and isinstance(kwargs, dict)
+    assert "chat_profile_id" not in context
+    assert kwargs.get("tuning") is None
+    assert not kwargs.get("team_disabled_model_ids")
+    assert not kwargs.get("reasoning_enabled_model_ids")
 
 
 def test_local_registry_invoker_drains_runtime_events_after_final(monkeypatch) -> None:

@@ -50,21 +50,28 @@ from .resolver import ModelRoutingResolver
 
 logger = logging.getLogger(__name__)
 
-# The `source` each precedence level reports. Kept as an explicit table rather
-# than derived from the origin name: `ModelSelectionSource` is the OBSERVABILITY
-# contract (it lands in the `[V2][MODEL_ROUTING]` log line operators grep and in
-# `RUNTIME-EXECUTION-CONTRACT.md` §8), while `ChatProfileOrigin` names the
-# precedence level. They are deliberately not one-to-one — both team levels
-# report `team_policy`, because an operator reading the log cares that the
-# team's policy decided, and the `profile=` field already says which of the two
-# it was. Collapsing them into one enum would leak a UI distinction into an
-# operator-facing signal, or force a log-format change on a frozen contract.
+# The `source` each precedence level reports in the `[V2][MODEL_ROUTING]` log
+# line. `ModelSelectionSource` is the operator-facing signal, `ChatProfileOrigin`
+# the precedence level; the explicit table keeps the two decoupled.
 _SOURCE_BY_CHAT_PROFILE_ORIGIN: dict[ChatProfileOrigin, ModelSelectionSource] = {
     ChatProfileOrigin.POD_AGENT_OVERRIDE: ModelSelectionSource.AGENT_OVERRIDE,
-    ChatProfileOrigin.TEAM_AGENT_OVERRIDE: ModelSelectionSource.TEAM_POLICY,
+    ChatProfileOrigin.USER_CHOICE: ModelSelectionSource.USER_CHOICE,
+    ChatProfileOrigin.INSTANCE_RECOMMENDATION: (
+        ModelSelectionSource.INSTANCE_RECOMMENDATION
+    ),
     ChatProfileOrigin.TEAM_DEFAULT: ModelSelectionSource.TEAM_POLICY,
     ChatProfileOrigin.POD_DEFAULT: ModelSelectionSource.DEFAULT,
 }
+
+# Sources logged at info level: anything a team, an editor or a user chose.
+_INFO_LOGGED_SOURCES = frozenset(
+    {
+        ModelSelectionSource.AGENT_OVERRIDE,
+        ModelSelectionSource.USER_CHOICE,
+        ModelSelectionSource.INSTANCE_RECOMMENDATION,
+        ModelSelectionSource.TEAM_POLICY,
+    }
+)
 
 
 class ModelProvider(Protocol):
@@ -181,23 +188,12 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         model — when `binding.usable_model_ids` is not `None` (ReBAC active)
         and the resolved model isn't in it.
 
-        Reasoning enforcement (REASON-01, `MODEL-REASONING-ENABLEMENT-RFC.md`) —
-        the SINGLE point where reasoning is turned off, for every level:
-
-        - **level 2**, the platform admin's per-model toggle, snapshotted at
-          session prep on `RuntimeContext.reasoning_enabled_model_ids`. Off by
-          default, so an absent list means no model reasons;
-        - **level 4**, the user's per-question choice, on
-          `RuntimeContext.reasoning`. `None` means the agent never offered the
-          choice, so levels 1-2 decide alone; `False` means this turn must not
-          reason whatever the platform allows.
-
-        Level 2 is a ceiling: `reasoning=True` on a model the admin has not
-        enabled still does not reason (§5.3). Both are enforced HERE, at client
-        construction, because the YAML has already put `reasoning_effort` in
-        `settings` — a switch that only declined to *add* it would never reach
-        the model (§5.6.2), which is precisely the failure mode this feature
-        exists to avoid.
+        Reasoning enforcement (REASON-01): the SINGLE point where reasoning is
+        turned off. A turn reasons only when `RuntimeContext.reasoning is True`
+        AND its model is in `reasoning_enabled_model_ids` (the platform
+        ceiling). `False` and `None` both strip. Enforced here, at client
+        construction, because the YAML already put `reasoning_effort` in
+        `settings`: declining to add it would never reach the model.
         """
         selection = self.select(
             definition=definition,
@@ -232,10 +228,9 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         platform_allows = capability_id in (
             binding.runtime_context.reasoning_enabled_model_ids or ()
         )
-        # `is False`, not falsy: `None` means "no per-question choice offered"
-        # and must NOT strip, while `False` means the user actively said no.
-        turn_declined = binding.runtime_context.reasoning is False
-        if not platform_allows or turn_declined:
+        # Only an explicit True reasons: callers that send nothing must not.
+        turn_requested = binding.runtime_context.reasoning is True
+        if not platform_allows or not turn_requested:
             model_config = without_reasoning_settings(model_config)
         model = self._provider.build_model(
             model_config, capability=selection.capability
@@ -244,10 +239,7 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
             raise TypeError(
                 "RoutedChatModelFactory expected a BaseChatModel for capability='chat'."
             )
-        if selection.source in (
-            ModelSelectionSource.AGENT_OVERRIDE,
-            ModelSelectionSource.TEAM_POLICY,
-        ):
+        if selection.source in _INFO_LOGGED_SOURCES:
             logger.info(
                 "[V2][MODEL_ROUTING] agent=%s source=%s profile=%s model=%s/%s team=%s user=%s",
                 definition.agent_id,
@@ -292,17 +284,13 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         - no side effects
 
         Fallback / errors:
-        - for `chat`, the four profile-valued precedence levels are decided by
-          `fred_sdk.contracts.context.resolve_effective_chat_profile` — the one
-          implementation of that rule, shared with control-plane so the composer
-          can name this same model on its own effective-chat-model read
-          (#2387). A static
-          `models_catalog.yaml` override always wins over team policy; team
-          policy only fills the gap a static override left open. Raises
-          `TeamRoutingProfileDriftError` if the team policy names a profile this
-          deployment's catalog doesn't have, or one declaring a non-chat
-          capability — never a silent fall-through to the pod default, because a
-          team's stored preference going stale has to be visible.
+        - for `chat`, the profile-valued levels are ordered by
+          `fred_sdk.contracts.context.resolve_effective_chat_profile`, shared
+          with control-plane. The user choice and the instance recommendation
+          are validated first (`_accepted_choice`) and ignored when invalid. A
+          team default that is unknown or non-chat raises
+          `TeamRoutingProfileDriftError`; one whose model is team-disabled
+          raises `ModelNotUsableError`. Never a silent substitution.
         - for every other capability, resolution stays pod-local and is handled
           by `ModelRoutingResolver.resolve` (no team layer exists for it: V1's
           only other capability, `embedding`, has no production consumer yet).
@@ -313,9 +301,7 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
 
         Platform binding precedence (unconditional): for the `chat`
         capability, when `binding.platform_chat_model_binding` is set, it is
-        returned immediately, before the resolver (and therefore before the
-        static `agent_profile_overrides` / team-policy layers below) is even
-        consulted. A team-level override still only ever names a profile from
+        returned immediately, before any profile-valued level is consulted. A team-level override still only ever names a profile from
         *some* pod's local menu — the exact limitation an operator-asserted
         binding exists to route around — so if a stale team choice could
         still win, the operator's fix for a broken deployment would be
@@ -367,7 +353,14 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
             pod_default_chat_profile_id=self._resolver.default_profile_id_for(
                 capability
             ),
-            team_agent_profile_overrides=binding.runtime_context.agent_profile_overrides,
+            user_chat_profile_id=self._accepted_choice(
+                binding.runtime_context.chat_profile_id, binding, level="user_choice"
+            ),
+            instance_chat_profile_id=self._accepted_choice(
+                binding.recommended_chat_profile_id,
+                binding,
+                level="instance_recommendation",
+            ),
             team_chat_default_profile_id=binding.runtime_context.chat_default_profile_id,
         )
         if resolution is None:
@@ -378,10 +371,7 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
             )
 
         profile = self._resolver.profile_or_none(resolution.profile_id)
-        team_origin = resolution.origin in (
-            ChatProfileOrigin.TEAM_AGENT_OVERRIDE,
-            ChatProfileOrigin.TEAM_DEFAULT,
-        )
+        team_origin = resolution.origin is ChatProfileOrigin.TEAM_DEFAULT
         if profile is None:
             if team_origin:
                 raise TeamRoutingProfileDriftError(profile_id=resolution.profile_id)
@@ -391,12 +381,27 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
             # team's stale choice, so it must not be reported as team drift.
             raise KeyError(resolution.profile_id)
         if profile.capability != capability:
-            # Only reachable for a team-origin id: the pod maps handed to the
-            # resolver above are capability-filtered at construction.
+            # Only reachable for a team-origin id: the pod maps are
+            # capability-filtered and the choice levels validated above.
             raise TeamRoutingProfileDriftError(
                 profile_id=resolution.profile_id,
                 expected_capability=capability,
                 actual_capability=profile.capability,
+            )
+        if team_origin and profile.capability_id in binding.team_disabled_model_ids:
+            # D4 forbids storing a disabled default; if one is seen, fail
+            # closed rather than silently substitute another model.
+            logger.warning(
+                "[V2][MODEL_ROUTING] denied: team=%s default profile=%s (%s) is "
+                "team-disabled",
+                binding.portable_context.team_id,
+                profile.profile_id,
+                profile.capability_id,
+            )
+            raise ModelNotUsableError(
+                capability_id=profile.capability_id,
+                provider=profile.model.provider or "",
+                name=profile.model.name or "",
             )
         return ModelSelection(
             source=_SOURCE_BY_CHAT_PROFILE_ORIGIN[resolution.origin],
@@ -405,6 +410,37 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
             model=profile.model.model_copy(deep=True),
             capability_id=profile.capability_id,
         )
+
+    def _accepted_choice(
+        self, profile_id: str | None, binding: BoundRuntimeContext, *, level: str
+    ) -> str | None:
+        """`profile_id` when it is a known chat profile whose model the team can
+        use and has not disabled, else `None`. A stale or spoofed choice must
+        never fail the turn, so it is logged and resolution falls through."""
+
+        if profile_id is None:
+            return None
+        profile = self._resolver.profile_or_none(profile_id)
+        if profile is None or profile.capability != ModelCapability.CHAT:
+            reason = "unknown or non-chat profile"
+        elif (
+            binding.usable_model_ids is not None
+            and profile.capability_id not in binding.usable_model_ids
+        ):
+            reason = "model not usable by the team"
+        elif profile.capability_id in binding.team_disabled_model_ids:
+            reason = "model disabled by the team"
+        else:
+            return profile_id
+        # Debug: `select` runs once per model call, and the id is client input.
+        logger.debug(
+            "[V2][MODEL_ROUTING] %s ignored: team=%s profile=%r reason=%s",
+            level,
+            binding.portable_context.team_id,
+            profile_id[:128],
+            reason,
+        )
+        return None
 
 
 # Backward-compatible aliases within the isolated slice.
