@@ -257,7 +257,7 @@ An absent admission authority SHALL initialize with filtering inactive until exp
 - **WHEN** an administrator attempts activation while a nonempty legacy file gate is active
 - **THEN** activation SHALL be refused without changing state, and readers SHALL fail closed if conflicting active state exists
 
-The page SHALL offer a bottom-right filtering action across every tab with explicit confirmation. Before activation, a read-only population review SHALL show identifiable allowed, blocked and uncertain users under the saved rule and current independent sources, with counts and observation time. Stale/missing/conflicted evidence SHALL be uncertain rather than declared blocked. A preview SHALL NOT grant access or save drafts. Activation confirmation SHALL reject a changed policy revision and retain the actor safeguard.
+The page SHALL offer a top-right filtering action in the page header across every tab with explicit confirmation. Before activation, a read-only population review SHALL show identifiable allowed, blocked and uncertain users under the saved rule and current independent sources, with counts and observation time. Stale/missing/conflicted evidence SHALL be uncertain rather than declared blocked. A preview SHALL NOT grant access or save drafts. Activation confirmation SHALL reject a changed policy revision and retain the actor safeguard.
 
 #### Scenario: Review before activating
 
@@ -449,7 +449,7 @@ Admission denial, invalid Free enrollment links and admission verification failu
 
 ### Requirement: Administrators manage independent Free-link history
 
-Only platform administrators SHALL create, list and revoke Free-team links. The platform administration Teams registry SHALL expose the Free toggle and Manage links action for each eligible team; ordinary team managers SHALL NOT see these controls or issue admission administration queries. Platform access SHALL retain independent team authorization and SHALL NOT duplicate Free/link controls. The bounded paginated history SHALL expose the link identifier, note, creation and expiry dates, revocation state, suspension state and authenticated opening count/last-opening time, without reusable tokens or visitor identity. Administrators SHALL be able to inspect and revoke links while Free is disabled. Manage links SHALL open on the bounded invitation list with a Create link action; note and expiry inputs SHALL appear only in a separate creation view. That view SHALL place the optional note before optional expiration and reuse the platform KPI selector presentation, with a single future date/time input, future duration shortcuts, a No expiration option and Apply. The date draft SHALL prevent creation until applied or dismissed; Escape SHALL close only the selector and restore trigger focus. Empty expiration SHALL mean no expiry; invalid or past expiration SHALL prevent creation without losing the note. Generation success SHALL show the original URL and an immediately available Copy URL action.
+Only platform administrators SHALL create, list and revoke Free-team links. The platform administration Teams registry SHALL expose the Free toggle and Manage links action for each eligible team; ordinary team managers SHALL NOT see these controls or issue admission administration queries. Platform access SHALL group individual exceptions and independent team authorization in its Whitelist panel and SHALL NOT duplicate Free/link controls. The bounded paginated history SHALL expose the link identifier, note, creation and expiry dates, revocation state, suspension state and authenticated opening count/last-opening time, without reusable tokens or visitor identity. Administrators SHALL be able to inspect and revoke links while Free is disabled. Manage links SHALL open on the bounded invitation list with a Create link action; note and expiry inputs SHALL appear only in a separate creation view. That view SHALL place the optional note before optional expiration and reuse the platform KPI selector presentation, with a single future date/time input, future duration shortcuts, a No expiration option and Apply. The date draft SHALL prevent creation until applied or dismissed; Escape SHALL close only the selector and restore trigger focus. Empty expiration SHALL mean no expiry; invalid or past expiration SHALL prevent creation without losing the note. Generation success SHALL show the original URL and an immediately available Copy URL action.
 
 History SHALL use an explicit Copy URL action that recovers the original token and attempts clipboard writing without generating another link. Clipboard success SHALL be announced only after the write succeeds. If clipboard writing is unavailable or rejected, the UI SHALL retain the usable URL with a clear manual-copy fallback; a copy failure SHALL NOT be presented as generation failure or cause another invitation to be created. Creation/recovery URL state SHALL remain transient and clear on manager dismissal, without logging URLs or retaining reusable mutation payloads.
 
@@ -538,7 +538,7 @@ The frontend SHALL record each authenticated enrollment-page opening using its o
 
 ### Requirement: Access administration has readable section navigation
 
-The page SHALL provide localized Rules, Users, and Teams tabs using the shared Fred navigation presentation. Only the active panel SHALL be exposed visually or to keyboard and assistive navigation. The rule draft, user selection and paging SHALL survive tab changes without implicit saving or admission mutations. Import existing users SHALL be grouped with users. A floating filtering action SHALL remain available across all tabs, without a separate Activation tab. Ordinary content, secondary explanations and section headings SHALL use a consistent readable typography scale across the page and its dialogs. Repeated explanations SHALL be removed while authorization exceptions, revocation consequences, validation and errors remain understandable.
+The page SHALL provide localized Rules and Whitelist tabs using the shared Fred navigation presentation. Only the active panel SHALL be exposed visually or to keyboard and assistive navigation. The rule draft, user selection and paging SHALL survive tab changes without implicit saving or admission mutations. Whitelist SHALL retain its heading and provide localized Users and Teams sub-tabs. Import existing users and individual exceptions SHALL appear in Users; independent team authorization SHALL appear in Teams, without a separate top-level Teams tab. A top-right filtering action in the page header SHALL remain available across all tabs, without a separate Activation tab. Ordinary content, secondary explanations and section headings SHALL use a consistent readable typography scale across the page and its dialogs. Repeated explanations SHALL be removed while authorization exceptions, revocation consequences, validation and errors remain understandable.
 
 #### Scenario: Return to an unsaved rule or selected users
 
@@ -554,3 +554,14 @@ The page SHALL provide localized Rules, Users, and Teams tabs using the shared F
 
 - **WHEN** an administrator reads conditions, selection dialogs or invitation history
 - **THEN** ordinary text and secondary help SHALL use consistent readable sizes, with errors and revocation guidance retained
+
+#### Scenario: Separate whitelist management
+
+- **WHEN** an administrator opens Whitelist
+- **THEN** its heading and Users/Teams sub-tabs SHALL be displayed
+- **AND** only the selected sub-panel SHALL be exposed, with import/individual controls in Users and live team authorization in Teams
+
+#### Scenario: Filtering action available in the header
+
+- **WHEN** an administrator changes top-level or whitelist sub-tabs
+- **THEN** the filtering action SHALL remain at the top right of the page header with the same activation guards

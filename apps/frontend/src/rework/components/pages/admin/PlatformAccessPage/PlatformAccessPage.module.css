@@ -5,7 +5,6 @@
   flex-direction: column;
   gap: var(--spacing-m);
   padding: var(--spacing-m);
-  padding-bottom: 6rem;
   overflow: auto;
   font: var(--font-body-large);
 }
@@ -261,15 +260,6 @@
 }
 .tokenValue > span {
   white-space: pre-wrap;
-}
-
-.floatingAction {
-  position: fixed;
-  right: var(--spacing-m);
-  bottom: var(--spacing-m);
-  z-index: 2;
-  box-shadow: var(--shadow-s);
-  border-radius: var(--radius-ms);
 }
 
 .linkCreation .expirationPicker {

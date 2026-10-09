@@ -3238,11 +3238,15 @@
       "infoLabel": "What a copy does"
     },
     "platformAccess": {
+      "whitelistTabs": {
+        "label": "Whitelist sections",
+        "users": "Users",
+        "teams": "Teams"
+      },
       "tabs": {
         "label": "Platform access sections",
         "rules": "Rules",
-        "users": "Users",
-        "teams": "Teams"
+        "users": "Whitelist"
       },
       "bulkHint": "Select users across searches and pages to add independent exceptions. Team access follows current membership.",
       "allowSelected": "Allow selected users ({{count}})",
@@ -3257,7 +3261,7 @@
       "t0Preview": "{{count}} users to import; {{matching}} currently allowed by the rule.",
       "t0Done": "Initial import completed",
       "t0Import": "Import existing users",
-      "users": "Users",
+      "users": "Whitelist",
       "search": "Search local users",
       "user": "User",
       "sources": "Admission sources",
@@ -3266,9 +3270,9 @@
       "allow": "Allow user",
       "teams": "Teams",
       "team": "Team",
-      "allowTeam": "Authorize members",
+      "allowTeam": "Whitelist this team",
       "free": "Free enrollment",
-      "teamHint": "Authorization follows current team membership. Manage Free enrollment and links on the Teams page.",
+      "teamHint": "Authorizing a team admits its current members. Removing a member withdraws that source of access.",
       "freeHint": "Free teams admit their members. The link only enrolls its signed-in caller as a member. Removing Free suspends its links and withdraws this access source.",
       "link": "Enrollment link",
       "createLink": "Create link",

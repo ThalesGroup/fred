@@ -18,6 +18,7 @@ const state = vi.hoisted(() => ({
   bulk: vi.fn((_arg: { grantPlatformAccessUsers: { user_ids: string[] } }) => ({ unwrap: async () => undefined })),
   grant: vi.fn(() => ({ unwrap: async () => undefined })),
   importT0: vi.fn(() => ({ unwrap: async () => undefined })),
+  setTeam: vi.fn(() => ({ unwrap: async () => undefined })),
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }) }));
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({ showError: vi.fn() }) }));
@@ -46,7 +47,7 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
   useGrantPlatformUserMutation: () => [state.grant],
   useRevokePlatformUserMutation: () => [vi.fn()],
   useImportPlatformT0Mutation: () => [state.importT0],
-  useSetPlatformTeamMutation: () => [vi.fn()],
+  useSetPlatformTeamMutation: () => [state.setTeam],
   useGeneratePlatformLinkMutation: () => [vi.fn()],
 }));
 vi.mock("./PlatformAccessRuleEditor", () => ({
@@ -91,6 +92,14 @@ const openTab = (tab: string) =>
       .find((node) => node.textContent === `rework.platformAccess.tabs.${tab}`)!
       .click(),
   );
+const openWhitelistTab = (tab: string) =>
+  act(() =>
+    [...host.querySelectorAll<HTMLButtonElement>('[role="tab"]')]
+      .find((node) => node.textContent === `rework.platformAccess.whitelistTabs.${tab}`)!
+      .click(),
+  );
+const visiblePanels = () =>
+  [...host.querySelectorAll<HTMLElement>('[role="tabpanel"]')].filter((p) => !p.closest("[hidden]"));
 const render = () => {
   act(() => root.render(<PlatformAccessPage />));
   openTab("users");
@@ -98,30 +107,65 @@ const render = () => {
 
 it("exposes only the selected panel and supports keyboard section navigation", () => {
   act(() => root.render(<PlatformAccessPage />));
-  const tabs = [...host.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
-  const panels = [...host.querySelectorAll<HTMLDivElement>('[role="tabpanel"]')];
-  expect(tabs).toHaveLength(3);
-  expect(panels.filter((panel) => !panel.hidden)).toEqual([panels[0]]);
+  const tabs = [
+    ...host
+      .querySelectorAll<HTMLButtonElement>('[role="tablist"]')[0]
+      .querySelectorAll<HTMLButtonElement>('[role="tab"]'),
+  ];
+  const panels = [...host.querySelectorAll<HTMLDivElement>('[role="tabpanel"]')].filter(
+    (p) => !p.id.includes("-whitelist-"),
+  );
+  expect(tabs).toHaveLength(2);
+  expect(visiblePanels()).toEqual([panels[0]]);
   expect(panels[0].getAttribute("aria-labelledby")).toBe(tabs[0].id);
   expect(tabs[0].getAttribute("aria-controls")).toBe(panels[0].id);
   act(() => tabs[0].dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })));
   expect(document.activeElement).toBe(tabs[1]);
   expect(tabs[1].getAttribute("aria-selected")).toBe("true");
-  expect(panels.filter((panel) => !panel.hidden)).toEqual([panels[1]]);
-  openTab("teams");
-  expect(panels.filter((panel) => !panel.hidden)).toEqual([panels[2]]);
+  expect(visiblePanels().map((p) => p.id)).toEqual([
+    panels[1].id,
+    `${panels[1].id.replace("-users-panel", "")}-whitelist-users-panel`,
+  ]);
   expect(
     [...host.querySelectorAll("button")].find((node) => node.textContent === "rework.platformAccess.activation.enable"),
   ).toBeDefined();
 });
 
-it("leaves only independent team authorization in the Teams panel", () => {
-  act(() => root.render(<PlatformAccessPage />));
-  openTab("teams");
-  const panel = host.querySelector('[role="tabpanel"]:not([hidden])')!;
-  expect(panel.querySelectorAll('input[type="checkbox"]')).toHaveLength(1);
-  expect(panel.textContent).not.toContain("rework.platformAccess.links.manage");
-  expect(panel.textContent).not.toContain("rework.platformAccess.freeHint");
+it("separates user and team whitelist controls with keyboard-accessible sub-tabs", () => {
+  render();
+  const userPanel = host.querySelector<HTMLElement>('[id$="-whitelist-users-panel"]')!;
+  const teamPanel = host.querySelector<HTMLElement>('[id$="-whitelist-teams-panel"]')!;
+  expect(userPanel.querySelector('input[aria-label="rework.platformAccess.selectUser"]')).not.toBeNull();
+  expect(userPanel.textContent).toContain("rework.platformAccess.t0Import");
+  expect(userPanel.hidden).toBe(false);
+  expect(teamPanel.hidden).toBe(true);
+  const tabs = [
+    ...host
+      .querySelectorAll<HTMLButtonElement>('[role="tablist"]')[1]
+      .querySelectorAll<HTMLButtonElement>('[role="tab"]'),
+  ];
+  act(() => tabs[0].dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })));
+  expect(document.activeElement).toBe(tabs[1]);
+  expect(userPanel.hidden).toBe(true);
+  expect(teamPanel.hidden).toBe(false);
+  expect(teamPanel.getAttribute("aria-labelledby")).toBe(tabs[1].id);
+  expect(tabs[1].getAttribute("aria-controls")).toBe(teamPanel.id);
+  expect(teamPanel.querySelector('input[aria-label="rework.platformAccess.allowTeam Demo"]')).not.toBeNull();
+  expect(teamPanel.textContent).not.toContain("rework.platformAccess.links.manage");
+  expect(teamPanel.textContent).not.toContain("rework.platformAccess.freeHint");
+});
+
+it("whitelists a whole team while retaining its independent Free enrollment flag", async () => {
+  render();
+  openWhitelistTab("teams");
+  const toggle = host.querySelector<HTMLInputElement>('input[aria-label="rework.platformAccess.allowTeam Demo"]')!;
+  await act(async () => toggle.click());
+  expect(state.setTeam).toHaveBeenCalledWith({
+    teamId: "demo",
+    setPlatformAccessTeam: { allowed: true, free: true },
+  });
+  expect(state.bulk).not.toHaveBeenCalled();
+  expect(state.grant).not.toHaveBeenCalled();
 });
 
 it("preserves rule drafts and user selections across tabs without mutations", async () => {
@@ -130,10 +174,12 @@ it("preserves rule drafts and user selections across tabs without mutations", as
   openTab("users");
   const selection = host.querySelector<HTMLInputElement>('input[aria-label="rework.platformAccess.selectUser"]')!;
   await act(async () => selection.click());
-  openTab("teams");
   openTab("rules");
   expect(host.querySelector('[role="tabpanel"]:not([hidden])')?.textContent).toContain("Unsaved rule");
   openTab("users");
+  expect(selection.checked).toBe(true);
+  openWhitelistTab("teams");
+  openWhitelistTab("users");
   expect(selection.checked).toBe(true);
   expect(state.bulk).not.toHaveBeenCalled();
   expect(state.grant).not.toHaveBeenCalled();
@@ -236,13 +282,16 @@ it("requires configuration and confirmation across all tabs before activating", 
     [...host.querySelectorAll<HTMLButtonElement>("button")].find(
       (node) => node.textContent === "rework.platformAccess.activation.enable",
     )!;
+  expect(host.querySelector("h1")?.parentElement?.parentElement?.parentElement?.contains(action())).toBe(true);
   expect(action().disabled).toBe(true);
   state.configured = true;
   render();
-  for (const tab of ["rules", "users", "teams"]) {
+  for (const tab of ["rules", "users"]) {
     openTab(tab);
     expect(action().disabled).toBe(false);
   }
+  openWhitelistTab("teams");
+  expect(action().disabled).toBe(false);
   act(() => action().click());
   expect(state.filter).not.toHaveBeenCalled();
   const dialog = document.querySelector('[role="dialog"]')!;

@@ -3238,11 +3238,15 @@
       "infoLabel": "Ce que fait une copie"
     },
     "platformAccess": {
+      "whitelistTabs": {
+        "label": "Sections de la liste blanche",
+        "users": "Utilisateurs",
+        "teams": "Équipes"
+      },
       "tabs": {
         "label": "Sections de l'accès plateforme",
         "rules": "Règles",
-        "users": "Utilisateurs",
-        "teams": "Équipes"
+        "users": "Liste blanche"
       },
       "bulkHint": "Sélectionnez les utilisateurs sur plusieurs recherches et pages pour ajouter des exceptions indépendantes. L'accès par équipe suit ses membres actuels.",
       "allowSelected": "Autoriser les utilisateurs sélectionnés ({{count}})",
@@ -3257,7 +3261,7 @@
       "t0Preview": "{{count}} utilisateurs à importer ; {{matching}} attributs actuellement acceptés.",
       "t0Done": "Import initial terminé",
       "t0Import": "Importer les utilisateurs existants",
-      "users": "Utilisateurs",
+      "users": "Liste blanche",
       "search": "Rechercher dans les utilisateurs locaux",
       "user": "Utilisateur",
       "sources": "Sources d'autorisation",
@@ -3266,9 +3270,9 @@
       "allow": "Autoriser l'utilisateur",
       "teams": "Équipes",
       "team": "Équipe",
-      "allowTeam": "Autoriser les membres",
+      "allowTeam": "Ajouter cette équipe à la liste blanche",
       "free": "Inscription Free",
-      "teamHint": "L'autorisation suit les membres actuels de l'équipe. Gérez l'inscription Free et les liens depuis la page Équipes.",
+      "teamHint": "Autoriser une équipe donne accès à ses membres actuels. Retirer un membre lui enlève cette source d'accès.",
       "freeHint": "Les équipes Free autorisent leurs membres. Le lien inscrit uniquement la personne connectée comme membre. Retirer Free suspend les liens et retire cette source d'accès.",
       "link": "Lien d'inscription",
       "createLink": "Créer un lien",
