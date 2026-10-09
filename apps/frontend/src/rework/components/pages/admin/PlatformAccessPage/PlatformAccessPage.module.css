@@ -339,6 +339,15 @@
   flex-direction: column;
   gap: var(--spacing-m);
 }
+.reviewUserTable {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: min(28rem, 40dvh);
+}
+.reviewUserTable > div {
+  max-height: inherit;
+}
 .unverifiedUsers {
   margin-top: var(--spacing-m);
   border-top: 1px solid var(--outline-muted);

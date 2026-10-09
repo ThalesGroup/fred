@@ -54,20 +54,22 @@ export default function PlatformAccessActivationDialog({
   const outcomes = ["blocked", "allowed"] as const;
   const selectedGroup = group ?? (preview.data?.blocked ? 0 : 1);
   const renderUsers = (outcome: "allowed" | "blocked" | "unknown") => (
-    <DataTable
-      data={(preview.data?.users ?? []).filter((user) => user.outcome === outcome)}
-      rowKey={(user) => user.user_id}
-      pageSize={25}
-      columns={[
-        {
-          label: t("rework.teamSettings.members.table.identifiant"),
-          cellRenderer: (user) => user.username || user.user_id,
-        },
-        { label: t("rework.teamSettings.members.table.firstName"), cellRenderer: (user) => user.first_name || "-" },
-        { label: t("rework.teamSettings.members.table.lastName"), cellRenderer: (user) => user.last_name || "-" },
-        { label: t("rework.platformAccess.activation.email"), cellRenderer: (user) => user.email || "-" },
-      ]}
-    />
+    <div className={styles.reviewUserTable}>
+      <DataTable
+        data={(preview.data?.users ?? []).filter((user) => user.outcome === outcome)}
+        rowKey={(user) => user.user_id}
+        pageSize={25}
+        columns={[
+          {
+            label: t("rework.teamSettings.members.table.identifiant"),
+            cellRenderer: (user) => user.username || user.user_id,
+          },
+          { label: t("rework.teamSettings.members.table.firstName"), cellRenderer: (user) => user.first_name || "-" },
+          { label: t("rework.teamSettings.members.table.lastName"), cellRenderer: (user) => user.last_name || "-" },
+          { label: t("rework.platformAccess.activation.email"), cellRenderer: (user) => user.email || "-" },
+        ]}
+      />
+    </div>
   );
   return (
     <Dialog
