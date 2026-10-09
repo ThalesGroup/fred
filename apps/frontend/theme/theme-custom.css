@@ -1,6 +1,10 @@
-/* Every CSS variable from Pebble, Cobalt and Cloud can be overridden here.
-   The editor generates the selectors for both light and dark modes. */
-html[data-ui-theme="pebble"][data-theme="light"] {
+/* Acme inherits all Pebble tokens; override only the values that differ. */
+[data-ui-theme="acme"][data-theme="light"] {
   --primary: #2844a0;
   --on-primary: #ffffff;
+}
+
+[data-ui-theme="acme"][data-theme="dark"] {
+  --primary: #a6b8ff;
+  --on-primary: #122562;
 }

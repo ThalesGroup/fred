@@ -16,6 +16,7 @@ it("loads branding from the deployment theme without accepting auth or feature o
           return { properties: { siteTitle: "Stock", faviconName: "fred" }, feature_flags: { chat: true } };
         if (url === "/theme-properties.json")
           return { siteTitle: "Acme", logoName: "acme", user_auth: { enabled: true }, feature_flags: { chat: false } };
+        if (url === "/theme-catalog.json") return { themes: [{ id: "acme", label: "Acme", base: "pebble" }] };
         return { user_auth: { enabled: false }, root_bootstrap_required: false };
       },
     })),

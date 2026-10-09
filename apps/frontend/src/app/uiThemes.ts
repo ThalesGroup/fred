@@ -21,10 +21,12 @@ import type { FrontendUiThemes } from "../slices/controlPlane/controlPlaneOpenAp
  * its own copy of this list; uiThemes.test.ts checks they match.
  */
 export const UI_THEMES = ["pebble", "cobalt", "cloud"] as const;
-export type UiTheme = (typeof UI_THEMES)[number];
+export type UiTheme = string;
+export type CustomUiTheme = { id: string; label: string; base: (typeof UI_THEMES)[number] };
+let customThemes: CustomUiTheme[] = [];
 
 /** i18n key of each theme's display name (profile picker, admin page). */
-export const UI_THEME_LABEL_KEYS: Record<UiTheme, string> = {
+export const UI_THEME_LABEL_KEYS: Record<string, string> = {
   pebble: "rework.userSettings.app.themePebble",
   cobalt: "rework.userSettings.app.themeCobalt",
   cloud: "rework.userSettings.app.themeCloud",
@@ -39,14 +41,30 @@ export type PlatformUiThemes = FrontendUiThemes;
 
 /** Last platform settings seen, read by theme-boot.js before the next load's config arrives. */
 export const PLATFORM_UI_THEMES_CACHE_KEY = localStorageKey("ApplicationContextProvider.platformUiThemes");
+export const CUSTOM_UI_THEMES_CACHE_KEY = localStorageKey("ApplicationContextProvider.customUiThemes");
 
-const isUiTheme = (value: unknown): value is UiTheme => (UI_THEMES as readonly unknown[]).includes(value);
+export function setCustomUiThemes(themes: CustomUiTheme[]): void {
+  customThemes = themes;
+  try {
+    window.localStorage.setItem(CUSTOM_UI_THEMES_CACHE_KEY, JSON.stringify(themes));
+  } catch {
+    // Storage is optional; the fresh catalog still applies to this page load.
+  }
+}
+
+export const availableUiThemes = (): UiTheme[] => [...UI_THEMES, ...customThemes.map((theme) => theme.id)];
+export const uiThemeBase = (id: UiTheme): string => customThemes.find((theme) => theme.id === id)?.base ?? id;
+export const uiThemeLabel = (id: UiTheme, t: (key: string) => string): string =>
+  customThemes.find((theme) => theme.id === id)?.label ?? t(UI_THEME_LABEL_KEYS[id] ?? id);
+
+const isUiTheme = (value: unknown): value is UiTheme =>
+  typeof value === "string" && availableUiThemes().includes(value);
 
 /** Shipped and not hidden; the hidden list is ignored if it would leave nothing. */
 export function offeredUiThemes(platform?: PlatformUiThemes | null): UiTheme[] {
   const hidden = Array.isArray(platform?.hidden_themes) ? platform.hidden_themes : [];
-  const offered = UI_THEMES.filter((theme) => !hidden.includes(theme));
-  return offered.length > 0 ? offered : [...UI_THEMES];
+  const offered = availableUiThemes().filter((theme) => !hidden.includes(theme));
+  return offered.length > 0 ? offered : availableUiThemes();
 }
 
 /** User's choice if offered, else the platform default if offered, else the first offered theme. */
@@ -90,5 +108,6 @@ export function applyResolvedTheme(platform: PlatformUiThemes | null): void {
   const systemDark = !!window.matchMedia?.("(prefers-color-scheme: dark)").matches;
   const dark = computeDarkMode(readStored(localStorageKey(THEME_MODE_STORAGE_KEY)), systemDark);
   document.documentElement.setAttribute("data-ui-theme", theme);
+  document.documentElement.setAttribute("data-ui-base-theme", uiThemeBase(theme));
   document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
 }

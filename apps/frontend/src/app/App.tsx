@@ -24,6 +24,7 @@ import { ToastProvider } from "@shared/molecules/Toast/ToastProvider";
 import { useFrontendProperties } from "../hooks/useFrontendProperties";
 import { AuthProvider } from "../security/AuthContext";
 import { ApplicationContext, ApplicationContextProvider } from "./ApplicationContextProvider";
+import { uiThemeBase } from "./uiThemes";
 import GcuGuard from "@core/guards/GcuGuard.tsx";
 import BootstrapGuard from "@core/guards/BootstrapGuard.tsx";
 import styles from "./App.module.css";
@@ -141,6 +142,7 @@ function AppWithTheme() {
   // up the right palette — set it synchronously during render instead.
   document.documentElement.setAttribute("data-theme", darkMode ? "dark" : "light");
   document.documentElement.setAttribute("data-ui-theme", uiTheme);
+  document.documentElement.setAttribute("data-ui-base-theme", uiThemeBase(uiTheme));
 
   useEffect(() => {
     // Chrome derives 12h/24h for datetime-local from <html lang>.

@@ -234,7 +234,20 @@ install_theme() {
                 fi
                 cp "${source_file}" "${staging}/theme-translations/" || { theme_failure "cannot read translation"; return 0; }
             done
-        elif [ -f "${entry}" ] && { [ "${name%.md}" != "${name}" ] || [ "${name}" = theme-custom.css ] || [ "${name}" = theme-properties.json ]; }; then
+        elif [ -f "${entry}" ] && { [ "${name%.md}" != "${name}" ] || [ "${name}" = theme-custom.css ] || [ "${name}" = theme-properties.json ] || [ "${name}" = theme-catalog.json ]; }; then
+            if [ "${name}" = theme-catalog.json ] && ! jq -es '
+                length == 1 and (.[0] | type == "object" and (keys == ["themes"]) and
+                (.themes | type == "array" and length <= 16 and
+                    all(.[]; type == "object" and (keys == ["base", "id", "label"]) and
+                        (.id | type == "string" and test("^[a-z][a-z0-9-]{0,31}$") and
+                            . != "pebble" and . != "cobalt" and . != "cloud") and
+                        (.label | type == "string" and length > 0 and length <= 80) and
+                        (.base | IN("pebble", "cobalt", "cloud")))) and
+                ((.themes | map(.id) | unique | length) == (.themes | length)))
+            ' "${entry}" >/dev/null 2>&1; then
+                theme_failure "invalid theme-catalog.json"
+                return 0
+            fi
             if [ "${name}" = theme-properties.json ] && ! jq -es '
                 length == 1 and (.[0] |
                     type == "object" and
@@ -494,6 +507,14 @@ cat <<'EOF'
     }
 
     location = /theme-properties.json {
+        add_header Cache-Control "no-cache";
+EOF
+printf '        root %s;\n' "${FRONTEND_THEME_DIR}"
+cat <<'EOF'
+        try_files $uri @stock;
+    }
+
+    location = /theme-catalog.json {
         add_header Cache-Control "no-cache";
 EOF
 printf '        root %s;\n' "${FRONTEND_THEME_DIR}"
