@@ -3417,6 +3417,12 @@
         "createdSuccess": "Link created"
       },
       "activation": {
+        "importWarning": "Existing users have not been imported",
+        "importWarningHint": "Users without a matching rule or a whitelist exception may lose access. Do you want to continue without importing them, or go to the whitelist to import them first?",
+        "continueWithoutImport": "Continue without importing",
+        "goToWhitelist": "Go to whitelist",
+        "importStatusFailed": "Unable to check whether existing users have been imported. Retry before enabling filtering.",
+
         "enable": "Enable filtering",
         "disable": "Disable filtering",
         "enableTitle": "Activate platform filtering?",

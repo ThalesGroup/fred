@@ -5,7 +5,10 @@ import Button from "@shared/atoms/Button/Button";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup";
 import { Dialog } from "@shared/molecules/Dialog/Dialog";
 import DataTable from "@shared/molecules/DataTable/LocalizedDataTable";
-import { usePlatformAccessActivationPreviewQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import {
+  usePlatformAccessActivationPreviewQuery,
+  usePlatformAccessT0Query,
+} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import styles from "./PlatformAccessPage.module.css";
 
 export default function PlatformAccessActivationDialog({
@@ -14,6 +17,7 @@ export default function PlatformAccessActivationDialog({
   busy,
   configured,
   onClose,
+  onImportUsers,
   onConfirm,
 }: {
   enabling: boolean;
@@ -21,6 +25,7 @@ export default function PlatformAccessActivationDialog({
   busy: boolean;
   configured: boolean;
   onClose: () => void;
+  onImportUsers: () => void;
   onConfirm: (revision: number) => void;
 }) {
   const { t, i18n } = useTranslation();
@@ -29,6 +34,12 @@ export default function PlatformAccessActivationDialog({
     skip: !enabling,
     refetchOnMountOrArgChange: true,
   });
+  const initialImport = usePlatformAccessT0Query(undefined, {
+    skip: !enabling,
+    refetchOnMountOrArgChange: true,
+  });
+  const importKnown = !initialImport.isFetching && !initialImport.isError && !!initialImport.data;
+  const missingImport = enabling && importKnown && !initialImport.data?.completed_at;
   const fresh = !preview.isFetching && !preview.isError && preview.data?.revision === revision;
   const outcomes = ["blocked", "unknown", "allowed"] as const;
   return (
@@ -36,10 +47,16 @@ export default function PlatformAccessActivationDialog({
       open
       title={t(`rework.platformAccess.activation.${enabling ? "enableTitle" : "disableTitle"}`)}
       maxWidth={1000}
-      confirmLabel={t(`rework.platformAccess.activation.${enabling ? "enable" : "disable"}`)}
-      confirmDisabled={busy || (enabling && (!fresh || !configured))}
+      confirmLabel={t(
+        `rework.platformAccess.activation.${missingImport ? "continueWithoutImport" : enabling ? "enable" : "disable"}`,
+      )}
+      cancelLabel={missingImport ? t("rework.platformAccess.activation.goToWhitelist") : undefined}
+      confirmDisabled={busy || (enabling && (!fresh || !configured || !importKnown))}
       onCancel={() => {
-        if (!busy) onClose();
+        if (!busy) {
+          if (missingImport) onImportUsers();
+          else onClose();
+        }
       }}
       onConfirm={() => onConfirm(enabling ? preview.data!.revision : revision)}
     >
@@ -47,6 +64,21 @@ export default function PlatformAccessActivationDialog({
         <p>{t(`rework.platformAccess.activation.${enabling ? "savedOnly" : "disableHint"}`)}</p>
         {enabling && (
           <>
+            {missingImport && (
+              <div role="alert" className={styles.section}>
+                <strong>{t("rework.platformAccess.activation.importWarning")}</strong>
+                <p>{t("rework.platformAccess.activation.importWarningHint")}</p>
+              </div>
+            )}
+            {initialImport.isFetching && <p role="status">{t("rework.platformAccess.loading")}</p>}
+            {(initialImport.isError || (!initialImport.isFetching && !initialImport.data)) && (
+              <div role="alert">
+                <p>{t("rework.platformAccess.activation.importStatusFailed")}</p>
+                <Button color="primary" variant="outlined" size="small" onClick={() => void initialImport.refetch()}>
+                  {t("rework.platformAccess.retry")}
+                </Button>
+              </div>
+            )}
             {preview.isFetching && <p role="status">{t("rework.platformAccess.loading")}</p>}
             {(preview.isError || (!preview.isFetching && preview.data && !fresh)) && (
               <div role="alert">

@@ -13,6 +13,14 @@ const state = vi.hoisted(() => ({
     },
   ],
   completed: false,
+  filteringEnabled: false,
+  importFetching: false,
+  importError: false,
+  importMissing: false,
+  previewRevision: 1,
+  previewFetching: false,
+  previewError: false,
+  retryImport: vi.fn(),
   configured: true,
   filter: vi.fn(() => ({ unwrap: async () => undefined })),
   bulk: vi.fn((_arg: { grantPlatformAccessUsers: { user_ids: string[] } }) => ({ unwrap: async () => undefined })),
@@ -25,10 +33,19 @@ vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({ sho
 vi.mock("../../../../../common/config", () => ({ getConfig: () => ({ platform_access_enabled: true }) }));
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   usePlatformAccessStateQuery: () => ({
-    data: { filtering_enabled: false, revision: 1, has_admission_sources: state.configured },
+    data: { filtering_enabled: state.filteringEnabled, revision: 1, has_admission_sources: state.configured },
   }),
   usePlatformAccessActivationPreviewQuery: () => ({
-    data: { revision: 1, allowed: 1, blocked: 0, unknown: 0, checked_at: "2026-10-08T12:00:00Z", users: [] },
+    isFetching: state.previewFetching,
+    isError: state.previewError,
+    data: {
+      revision: state.previewRevision,
+      allowed: 1,
+      blocked: 0,
+      unknown: 0,
+      checked_at: "2026-10-08T12:00:00Z",
+      users: [],
+    },
   }),
   usePlatformAccessUsersQuery: () => ({
     data: {
@@ -37,7 +54,12 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
     },
   }),
   usePlatformAccessT0Query: () => ({
-    data: { candidates: 1, matching: 0, completed_at: state.completed ? "2026-01-01" : null },
+    isFetching: state.importFetching,
+    isError: state.importError,
+    refetch: state.retryImport,
+    data: state.importMissing
+      ? undefined
+      : { candidates: 1, matching: 0, completed_at: state.completed ? "2026-01-01" : null },
   }),
   usePlatformAccessTeamsQuery: () => ({
     data: [{ team_id: "demo", name: "Demo", allowed: false, free: true, has_enrollment_link: true }],
@@ -76,6 +98,13 @@ beforeEach(() => {
     },
   ];
   state.completed = false;
+  state.filteringEnabled = false;
+  state.importFetching = false;
+  state.importError = false;
+  state.importMissing = false;
+  state.previewRevision = 1;
+  state.previewFetching = false;
+  state.previewError = false;
   state.configured = true;
   vi.clearAllMocks();
   host = document.createElement("div");
@@ -296,15 +325,123 @@ it("requires configuration and confirmation across all tabs before activating", 
   expect(state.filter).not.toHaveBeenCalled();
   const dialog = document.querySelector('[role="dialog"]')!;
   expect(dialog.textContent).toContain("rework.platformAccess.activation.summary");
-  act(() => [...dialog.querySelectorAll("button")].find((node) => node.textContent === "common.cancel")!.click());
+  expect(dialog.textContent).toContain("rework.platformAccess.activation.importWarning");
+  act(() =>
+    [...dialog.querySelectorAll("button")]
+      .find((node) => node.textContent === "rework.platformAccess.activation.goToWhitelist")!
+      .click(),
+  );
   expect(state.filter).not.toHaveBeenCalled();
+  expect(visiblePanels().some((p) => p.id.endsWith("-whitelist-users-panel"))).toBe(true);
+  expect(visiblePanels().some((p) => p.id.endsWith("-whitelist-teams-panel"))).toBe(false);
   act(() => action().click());
   await act(async () =>
     [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')]
-      .find((node) => node.textContent === "rework.platformAccess.activation.enable")!
+      .find((node) => node.textContent === "rework.platformAccess.activation.continueWithoutImport")!
       .click(),
   );
   expect(state.filter).toHaveBeenCalledWith({
     setPlatformFiltering: { filtering_enabled: true, expected_revision: 1 },
   });
+});
+
+const filteringAction = () =>
+  [...host.querySelectorAll<HTMLButtonElement>("button")].find(
+    (node) => node.textContent === `rework.platformAccess.activation.${state.filteringEnabled ? "disable" : "enable"}`,
+  )!;
+const dialogButton = (key: string) =>
+  [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find((node) => node.textContent === key)!;
+
+it("uses normal activation confirmation after a completed import", async () => {
+  state.completed = true;
+  render();
+  act(() => filteringAction().click());
+  expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain(
+    "rework.platformAccess.activation.importWarning",
+  );
+  await act(async () => dialogButton("rework.platformAccess.activation.enable").click());
+  expect(state.filter).toHaveBeenCalledWith({
+    setPlatformFiltering: { filtering_enabled: true, expected_revision: 1 },
+  });
+  expect(state.importT0).not.toHaveBeenCalled();
+});
+
+it("prevents unknown import status from bypassing consent and offers retry", async () => {
+  state.completed = true;
+  state.importError = true;
+  render();
+  act(() => filteringAction().click());
+  expect(dialogButton("rework.platformAccess.activation.enable").disabled).toBe(true);
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain(
+    "rework.platformAccess.activation.importStatusFailed",
+  );
+  act(() => dialogButton("rework.platformAccess.retry").click());
+  expect(state.retryImport).toHaveBeenCalledOnce();
+  state.importError = false;
+  state.importFetching = true;
+  act(() => root.render(<PlatformAccessPage />));
+  expect(dialogButton("rework.platformAccess.activation.enable").disabled).toBe(true);
+  state.importFetching = false;
+  state.importMissing = true;
+  act(() => root.render(<PlatformAccessPage />));
+  expect(dialogButton("rework.platformAccess.activation.enable").disabled).toBe(true);
+  state.importMissing = false;
+  state.completed = false;
+  act(() => root.render(<PlatformAccessPage />));
+  expect(dialogButton("rework.platformAccess.activation.continueWithoutImport").disabled).toBe(false);
+  expect(state.filter).not.toHaveBeenCalled();
+});
+
+it("retains preview safeguards when continuing without importing", () => {
+  render();
+  act(() => filteringAction().click());
+  for (const condition of ["previewFetching", "previewError"] as const) {
+    state[condition] = true;
+    act(() => root.render(<PlatformAccessPage />));
+    expect(dialogButton("rework.platformAccess.activation.continueWithoutImport").disabled).toBe(true);
+    state[condition] = false;
+  }
+  state.previewRevision = 2;
+  act(() => root.render(<PlatformAccessPage />));
+  expect(dialogButton("rework.platformAccess.activation.continueWithoutImport").disabled).toBe(true);
+  state.previewRevision = 1;
+  state.configured = false;
+  act(() => root.render(<PlatformAccessPage />));
+  expect(dialogButton("rework.platformAccess.activation.continueWithoutImport").disabled).toBe(true);
+  expect(state.filter).not.toHaveBeenCalled();
+});
+
+it("does not require import status to disable filtering", async () => {
+  state.filteringEnabled = true;
+  state.importError = true;
+  state.importMissing = true;
+  render();
+  act(() => filteringAction().click());
+  expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain(
+    "rework.platformAccess.activation.importWarning",
+  );
+  expect(dialogButton("rework.platformAccess.activation.disable").disabled).toBe(false);
+  await act(async () => dialogButton("rework.platformAccess.activation.disable").click());
+  expect(state.filter).toHaveBeenCalledWith({
+    setPlatformFiltering: { filtering_enabled: false, expected_revision: 1 },
+  });
+});
+
+it("prevents double activation and dismissal during the activation mutation", async () => {
+  let finish!: () => void;
+  state.filter.mockImplementationOnce(() => ({
+    unwrap: () =>
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+  }));
+  render();
+  act(() => filteringAction().click());
+  await act(async () => dialogButton("rework.platformAccess.activation.continueWithoutImport").click());
+  expect(dialogButton("rework.platformAccess.activation.continueWithoutImport").disabled).toBe(true);
+  act(() => dialogButton("rework.platformAccess.activation.goToWhitelist").click());
+  expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+  expect(state.filter).toHaveBeenCalledOnce();
+  await act(async () => finish());
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
 });

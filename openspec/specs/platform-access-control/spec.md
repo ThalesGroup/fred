@@ -276,6 +276,31 @@ The page SHALL offer a top-right filtering action in the page header across ever
 - **WHEN** selected claim evidence is missing, expired or conflicted and no independent source applies
 - **THEN** the preview SHALL mark that person uncertain without inventing token values or granting access
 
+Before enabling through the UI, the initial-import status SHALL be known. If existing-user import has not completed, the activation confirmation SHALL explicitly warn that existing users have not been imported and offer Continue without importing or Go to whitelist. Continuing SHALL remain subject to the saved-policy population review and existing activation safeguards. Choosing Go to whitelist SHALL send no activation mutation and open Whitelist > Users. A completed import SHALL use normal activation confirmation. Loading or failed import status SHALL prevent enabling confirmation until retried successfully; disabling SHALL NOT depend on import completion.
+
+#### Scenario: Continue without initial import
+
+- **WHEN** an administrator reviews activation with an incomplete initial import
+- **THEN** the modal SHALL explicitly present the missing-import warning and both choices
+- **WHEN** they choose Continue without importing with valid fresh preview and admission sources
+- **THEN** the UI SHALL request activation using the reviewed revision without importing users
+
+#### Scenario: Navigate to import instead of activating
+
+- **WHEN** an administrator chooses Go to whitelist in the missing-import confirmation
+- **THEN** filtering SHALL remain unchanged, no activation mutation SHALL be sent and Whitelist > Users SHALL open
+
+#### Scenario: Import already completed
+
+- **WHEN** the initial import has completed and an administrator requests activation
+- **THEN** normal population-review confirmation SHALL appear without the missing-import warning
+
+#### Scenario: Import status unavailable
+
+- **WHEN** initial-import status is loading or fails while enabling is being reviewed
+- **THEN** activation confirmation SHALL remain unavailable with loading or retry feedback
+- **AND** unavailable import status SHALL NOT prevent disabling filtering
+
 ### Requirement: Administrators compose understandable bounded predicates
 
 Saved rules SHALL contain one to sixteen conditions; the editor SHALL support an empty local draft when no policy exists or all draft conditions have been removed. Testing and saving SHALL require a valid nonempty rule. Activation SHALL require a saved rule or an independent configured admission source. Existing saved conditions SHALL be loaded without fabrication or omission. The editor SHALL support these conditions combined by either all (AND) or any (OR), with localized labels. Each condition SHALL select an unambiguous claim path, operator, operand and explicit case handling. Operators SHALL include literal equals/not-equals, contains/not-contains, and advanced whole-value regex. Literal metacharacters SHALL NOT be interpreted as regex. Literal comparison SHALL default to ignoring case; administrators SHALL be able to select case-sensitive comparison. For nonempty string arrays, positive predicates SHALL match any element and negative predicates SHALL require all elements to satisfy the negation. Missing, empty, incompatible and oversized values SHALL fail every predicate. Invalid input SHALL be rejected before saving; bounded regex timeouts SHALL NOT establish rule-derived admission.

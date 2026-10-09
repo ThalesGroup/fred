@@ -362,6 +362,11 @@ export default function PlatformAccessPage() {
               configured={state.data.has_admission_sources}
               busy={locked}
               onClose={() => setFilterConfirmation(undefined)}
+              onImportUsers={() => {
+                setFilterConfirmation(undefined);
+                setTabIndex(1);
+                setWhitelistTabIndex(0);
+              }}
               onConfirm={(revision) =>
                 void run(async () => {
                   await filter({

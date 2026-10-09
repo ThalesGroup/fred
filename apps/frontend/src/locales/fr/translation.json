@@ -3417,6 +3417,12 @@
         "createdSuccess": "Lien créé"
       },
       "activation": {
+        "importWarning": "Les utilisateurs existants n'ont pas été importés",
+        "importWarningHint": "Les utilisateurs sans règle correspondante ni exception dans la liste blanche risquent de perdre leur accès. Voulez-vous continuer sans les importer ou aller dans la liste blanche pour les importer d'abord ?",
+        "continueWithoutImport": "Continuer sans importer",
+        "goToWhitelist": "Aller à la liste blanche",
+        "importStatusFailed": "Impossible de vérifier si les utilisateurs existants ont été importés. Réessayez avant d'activer le filtrage.",
+
         "enable": "Activer le filtrage",
         "disable": "Désactiver le filtrage",
         "enableTitle": "Activer le filtrage de la plateforme ?",
