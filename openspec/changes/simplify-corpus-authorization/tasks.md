@@ -124,7 +124,7 @@ preserve old behavior through adapters, compatibility switches or automatic repa
   generated-file churn in this block. Ruff and raw kernel typing passed.
   Canonical SQL ancestry/admission gates, corpus conversion and removal of remaining
   per-document checks are still pending; task 1.4 remains open.
-  The next foundation block adds one SQL resolution of the user's stored
+  Commit `c2097695d` adds one SQL resolution of the user's stored
   organization or an explicit organization/team/project, with owner-only personal
   checks before FGA. `authorize_space` requires current-space access and batches
   only the at-most-three common ancestors for corpus/agent reads; writes and

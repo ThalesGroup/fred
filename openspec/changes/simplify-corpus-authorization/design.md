@@ -211,9 +211,16 @@ Candidate deletions are not savings until static and dynamic consumers are check
 
 ## Governance decision and delivery
 
-The first integrated milestone is now empty-platform deployment followed by the
-existing `make build-demo-bundle` and import flow. The command builds the ZIP;
-import performs provisioning through control-plane services. One bundle names one
+The first integrated milestone is a complete, simplified backend foundation:
+canonical SQL ownership, shared space authorization, converted corpus and execution
+consumers, and deletion of superseded permission paths. Acceptance requires measured
+production additions/deletions, bounded authorization counts on real protected paths,
+and demonstrated isolation/revocation. Individual schema or primitive commits do
+not complete that milestone.
+
+After this milestone, validate empty-platform provisioning through the existing
+`make build-demo-bundle` and import flow. The command builds the ZIP; import
+performs provisioning through control-plane services. One bundle names one
 organization. Import/export remain platform-admin operations for this version;
 organization-scoped data is not permission for an organization admin to export
 closed descendants. Replace the old bundle contract without an old-format serving
@@ -235,7 +242,12 @@ Add only explicit organization declarations/assignments needed by the new model.
 Do not infer organization administration from platform or team administration.
 Keep the existing bootstrap-token flow: its authenticated caller becomes platform
 admin without requiring an organization. That operational grant remains independent
-of Priya's organization role and continues to authorize the initial bundle import.
+of Priya's organization role and continues to authorize the initial bundle import. An
+interrupted import stops with an explicit failure and the existing task's phase
+history; completed writes may remain across SQL, the identity provider and FGA.
+Recovery is an explicit operator cleanup/restore, not automatic repair, retry,
+compensation or a new reconciliation framework. Re-import of a successfully
+completed bundle remains supported under the normal local-administration rules.
 
 Use one topic branch and one draft implementation PR targeting `swift`.
 A planning commit precedes six implementation stages in [tasks](tasks.md):

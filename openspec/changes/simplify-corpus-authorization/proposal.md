@@ -39,7 +39,10 @@ is historical; this change incorporates the developer decisions of 2026-10-08.
 - Deliver a separate offline migration tool: configurable organizations and team
   assignments, no initial projects, preserved identities, coordinated backup and
   restore. No compatibility switches, dual reads/writes or rolling mixed versions.
-- Make the existing demo-bundle import the first integrated provisioning path:
+- First complete the simplified backend foundation, including corpus/execution
+  consumers and deletion of superseded authorization paths; measure code reduction,
+  call counts and isolation before returning to import/export or UI work.
+- Then use the existing demo-bundle import as the integrated provisioning path:
   start an empty platform, build the demo archive, then import one organization
   with its users, teams and local roles. Replace the existing bundle contract with
   one organization per bundle and symmetric organization-scoped export, initially

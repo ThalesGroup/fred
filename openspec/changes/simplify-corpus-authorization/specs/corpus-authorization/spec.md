@@ -338,6 +338,11 @@ mutation boundary during re-import. Unsupported old-format bundles SHALL be refu
 - **THEN** its supported structure and local memberships/roles are preserved
 - **AND** no foreign-organization or owner-only personal content is exported
 
+#### Scenario: Provisioning fails between stores
+- **WHEN** a SQL, identity-provider or OpenFGA step fails after earlier import steps have completed
+- **THEN** the import is failed explicitly and its existing task history identifies completed phases
+- **AND** the operator must inspect and clean up or restore partial state before retrying; the importer performs no automatic recovery or compensation
+
 #### Scenario: Organization administration is insufficient for export
 - **WHEN** an organization admin without platform administration requests an organization export
 - **THEN** the operation is denied
