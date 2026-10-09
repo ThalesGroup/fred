@@ -14,8 +14,8 @@
 
 - [x] 3.1 Run the full capability offline test suite and one root `make code-quality` near commit/push; record commands and outcomes here.
 - [x] 3.2 Apply the full branch audit against its actual target and obtain an independent read-only review, including performance review of fill-time matching; record base/head, coverage, findings, dispositions, and exclusions here or in the PR.
-- [ ] 3.3 Reconcile planning artifacts with the implementation, sync specs, and archive via the repository skills; verify OpenSpec validation passes and no active completed change remains.
-- [ ] 3.4 Commit the coherent changes, push, and open an English draft PR linked to #3020; verify the PR includes the intended diff, migration note, and verification evidence.
+- [x] 3.3 Reconcile planning artifacts with the implementation, sync specs, and archive via the repository skills; verify OpenSpec validation passes and no active completed change remains.
+- [x] 3.4 Commit the coherent changes, push, and open an English draft PR linked to #3020; verify the PR includes the intended diff, migration note, and verification evidence.
 
 ## Verification evidence
 
@@ -27,3 +27,5 @@
 - No introduced I/O, shared mutable state, metric changes, or event-loop blocking; analyze/save/fill retain existing bounded thread offloading. No live load campaign or browser feature validation was performed. Final publication metadata is verified separately at delivery.
 - Raw package `basedpyright`: 105 existing diagnostics both before and after the change; the package baseline remains unchanged. Root baseline-aware type checking reports zero new errors. Final parser-only check after signature annotations: 90 passed.
 - Final root `make code-quality`: passed all 17 configured modules, including frontend TypeScript, Prettier, and ESLint. Existing Python environments were reused with `UV_NO_SYNC=1`; `libs/frontend` dependencies were provisioned from the committed lockfile in this worktree.
+- Implementation commit: `9030949bc9d2c3e23fc775dbaf74738e1a5febe8`. Draft PR: https://github.com/ThalesGroup/fred/pull/3026, targeting `swift`; issue #3020 remains open until merge.
+- Delta/main spec equality verified before archival; all artifacts complete, all tasks complete. Archived on 2026-10-09 after tests, quality, reviews, and draft publication.
