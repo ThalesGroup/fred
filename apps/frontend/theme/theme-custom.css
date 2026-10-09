@@ -1,0 +1,6 @@
+/* Every CSS variable from Pebble, Cobalt and Cloud can be overridden here.
+   The editor generates the selectors for both light and dark modes. */
+html[data-ui-theme="pebble"][data-theme="light"] {
+  --primary: #2844a0;
+  --on-primary: #ffffff;
+}

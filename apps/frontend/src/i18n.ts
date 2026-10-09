@@ -38,3 +38,19 @@ i18n
   });
 
 export default i18n;
+
+/** Apply optional deployment labels before any React content is rendered. */
+export async function loadThemeTranslations(): Promise<void> {
+  await Promise.all(
+    ["en", "fr"].map(async (language) => {
+      const response = await fetch(`/theme-translations/${language}.json`, { cache: "no-cache" });
+      if (response.status === 404) return;
+      if (!response.ok) throw new Error(`Cannot load theme translations for ${language}: ${response.status}`);
+      const overrides: unknown = await response.json();
+      if (!overrides || typeof overrides !== "object" || Array.isArray(overrides)) {
+        throw new Error(`Invalid theme translations for ${language}`);
+      }
+      i18n.addResourceBundle(language, "translation", overrides, true, true);
+    }),
+  );
+}
