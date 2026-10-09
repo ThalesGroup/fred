@@ -3436,7 +3436,7 @@
         "previewFailed": "The population review is unavailable or outdated. Retry before confirming.",
         "checkedAt": "Last checked: {{date}}",
         "unknownHint": "These accounts could not be evaluated with the available verified data. Token information may be missing, expired or conflicting, or account status could not be checked. Their access will be evaluated on their next request; a missing field in a verified token is evaluated normally.",
-        "groups": "Population outcome",
+        "groups": "Dry run",
         "allowed": "Allowed",
         "blocked": "Blocked",
         "email": "Email"

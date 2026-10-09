@@ -3436,7 +3436,7 @@
         "previewFailed": "Le récapitulatif est indisponible ou obsolète. Réessayez avant de confirmer.",
         "checkedAt": "Dernier contrôle : {{date}}",
         "unknownHint": "Ces comptes n'ont pas pu être évalués avec les données vérifiées disponibles. Les informations de token peuvent manquer, avoir expiré ou être incohérentes, ou le statut du compte peut être indisponible. Leur accès sera évalué lors de leur prochaine requête ; une clé absente dans un token vérifié est évaluée normalement.",
-        "groups": "Résultat par utilisateur",
+        "groups": "Dry run",
         "allowed": "Autorisés",
         "blocked": "Bloqués",
         "email": "E-mail"
