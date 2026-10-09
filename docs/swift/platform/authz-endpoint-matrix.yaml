@@ -887,32 +887,47 @@ operations:
     method: GET
     path: /control-plane/v1/announcements/active
     review_status: approved
-    required_permission: authenticated # Delivery surface for the platform announcement banners. Authentication is the ONLY gate on purpose: an enabled announcement is content the deployment means every user to see, and the response carries nothing but admin-authored banner text. Deliberately NOT on the public pre-auth /frontend/config, where the retired deployer-configured info_banner used to ride — these rows are written at runtime from the admin console, so an unauthenticated visitor must not be able to read them. Returns enabled announcements only; disabled ones never leave the store.
+    required_permission: authenticated # Delivery surface for the platform announcement banners. Authentication is the ONLY gate on purpose: an enabled announcement is content the deployment means every user to see, and the response carries nothing but admin-authored banner text. Deliberately NOT on the public pre-auth /frontend/config, where the retired deployer-configured info_banner used to ride — these rows are written at runtime from the admin console, so an unauthenticated visitor must not be able to read them. Returns enabled banners only; disabled ones never leave the store, and patch notes are delivered by /announcements/patch-note instead.
   - service: control-plane
     method: GET
     path: /control-plane/v1/admin/platform/announcements
     review_status: approved
-    required_permission: can_manage_platform # Admin listing: every announcement, enabled or not. The catch-all platform gate, checked inline (organization_authz keeps no helper for it by design, so a delegated surface cannot reuse it). Read shares the write gate because the draft of an unpublished announcement is not user-facing content.
+    required_permission: can_manage_platform # Admin listing: every announcement, enabled or not. The catch-all platform gate, checked inline (organization_authz keeps no helper for it by design, so a delegated surface cannot reuse it). Read shares the write gate because the draft of an unpublished announcement is not user-facing content. Each patch note carries dismissal_count, an aggregate (no user ids) of the users who dismissed its current edition.
   - service: control-plane
     method: POST
     path: /control-plane/v1/admin/platform/announcements
     review_status: approved
-    required_permission: can_manage_platform # Creates an announcement. This gate is the only thing between an actor and putting arbitrary markdown at the top of every user's screen. Body validated by AnnouncementWriteRequest (severity Literal, per-locale length caps, at least one non-empty locale for title and description_short) at parsing, before authz runs. Created disabled by default.
+    required_permission: can_manage_platform # Creates an announcement. This gate is the only thing between an actor and putting arbitrary markdown at the top of every user's screen. Body validated by AnnouncementWriteRequest (severity Literal, per-locale length caps, at least one non-empty locale for title and description_short for a banner, for description_long for a patch note, whose title and body must cover the same locales) at parsing, before authz runs. Created disabled by default; creating an enabled patch note disables the previous one and records activation events.
   - service: control-plane
     method: PUT
     path: /control-plane/v1/admin/platform/announcements/{announcement_id}
     review_status: approved
-    required_permission: can_manage_platform # Replaces an announcement's content wholesale, never its delivery. Bumps content_version when a reader-visible field actually changed, which makes the banner reappear for users who had dismissed the previous wording.
+    required_permission: can_manage_platform # Replaces an announcement's content wholesale, never its delivery. Bumps content_version when a reader-visible field actually changed, which makes the banner reappear for users who had dismissed the previous wording. A patch note never bumps here, so an edit while on air never re-shows it; an edit while disabled is remembered for the next activation. Reads the row with SELECT ... FOR UPDATE. Changing kind is refused (422).
   - service: control-plane
     method: PUT
     path: /control-plane/v1/admin/platform/announcements/{announcement_id}/enabled
     review_status: approved
-    required_permission: can_manage_platform # Toggles delivery only, without resubmitting content. Bumps content_version on the off -> on transition: putting an announcement back on air is a relaunch and must reach the users who closed the previous run.
+    required_permission: can_manage_platform # Toggles delivery only, without resubmitting content. Bumps content_version on the off -> on transition: putting a banner or a patch note back on air is a relaunch and must reach the users who closed or dismissed the previous run; for a patch note it also deletes every user's dismissal in the same transaction. Reads the row with SELECT ... FOR UPDATE so concurrent toggles cannot record duplicate events. Enabling a patch note disables the active one in the same transaction (409 when a concurrent activation wins the partial unique index); every real state change appends an activation-history event.
   - service: control-plane
     method: DELETE
     path: /control-plane/v1/admin/platform/announcements/{announcement_id}
     review_status: approved
-    required_permission: can_manage_platform # Removes the announcement permanently. Dismissal state lives in each user's browser keyed by id, so a deleted id simply stops matching anything.
+    required_permission: can_manage_platform # Removes the announcement permanently. Banner dismissal state lives in each user's browser keyed by id, so a deleted id simply stops matching anything; patch-note dismissals are deleted with it. Deleting an enabled announcement records a deactivated event (row read with SELECT ... FOR UPDATE, so concurrent deletes record one); the history outlives the row.
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/announcements/patch-note
+    review_status: pending_review
+    required_permission: authenticated # The enabled patch note (null when none) and whether the caller dismissed it since it was last enabled, so the client can reopen it on request. Identity from the token only; reads the caller's own dismissal row and nobody else's.
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/announcements/{announcement_id}/dismissal
+    review_status: pending_review
+    required_permission: authenticated # Records the caller's own "don't show again" on a patch note (one row per user and note); idempotent, 404 for a banner or unknown id. The user id comes from the token, never the request, so no caller can write another user's dismissal.
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/platform/announcements/activation-history
+    review_status: pending_review
+    required_permission: can_manage_platform # The 100 newest activation/deactivation events with actor uids. Same catch-all gate as the other announcement admin routes.
 
   - service: knowledge-flow
     method: GET

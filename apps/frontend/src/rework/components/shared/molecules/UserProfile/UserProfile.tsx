@@ -23,11 +23,13 @@ import { useFrontendBootstrap } from "../../../../../hooks/useFrontendBootstrap.
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import MenuPopover from "@shared/molecules/MenuPopover/MenuPopover.tsx";
 import MenuPopoverItem from "@shared/molecules/MenuPopover/MenuPopoverItem.tsx";
+import { PatchNoteDialog } from "@shared/molecules/PatchNoteDialog/PatchNoteDialog.tsx";
+import { useActivePatchNote } from "../../../../features/announcements/useActivePatchNote.ts";
 
 /**
  * Bottom-of-rail user entry: an avatar button. Clicking it opens a popover above it grouping
- * user-scoped actions: Profile (the existing settings page), optional Contact
- * support, and Logout. The Help Center and the platform admin console moved out
+ * user-scoped actions: Profile (the existing settings page), What's new (the
+ * active patch note, even once dismissed), optional Contact support, and Logout. The Help Center and the platform admin console moved out
  * of this menu to the mainNavBar (#2298); team admin stays on the team banner
  * gear. This menu is global only.
  */
@@ -36,6 +38,8 @@ export default function UserProfile() {
   const { t } = useTranslation();
   const { contactSupportLink } = useFrontendProperties();
   const [open, setOpen] = useState(false);
+  const patchNote = useActivePatchNote();
+  const [readingPatchNote, setReadingPatchNote] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const userFullName = KeyCloakService.GetUserFullName();
@@ -79,6 +83,19 @@ export default function UserProfile() {
                   label={t("rework.profileMenu.profile")}
                   onClick={() => goTo("/settings")}
                 />,
+                ...(patchNote
+                  ? [
+                      <MenuPopoverItem
+                        key="whatsNew"
+                        icon={{ category: "outlined", type: "new_releases" }}
+                        label={t("rework.profileMenu.whatsNew")}
+                        onClick={() => {
+                          setOpen(false);
+                          setReadingPatchNote(true);
+                        }}
+                      />,
+                    ]
+                  : []),
               ],
               contactSupportLink
                 ? [
@@ -119,6 +136,16 @@ export default function UserProfile() {
           <UserAvatar name={userFullName} size="small" imageUrl={bootstrap?.current_user?.avatar_image_url} />
         </button>
       </Tooltip>
+
+      {patchNote && (
+        <PatchNoteDialog
+          open={readingPatchNote}
+          title={patchNote.title}
+          markdown={patchNote.markdown}
+          showDontShowAgain={false}
+          onClose={() => setReadingPatchNote(false)}
+        />
+      )}
     </div>
   );
 }

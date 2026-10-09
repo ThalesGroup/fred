@@ -1085,6 +1085,27 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/control-plane/v1/announcements/active` }),
     }),
+    getActivePatchNoteControlPlaneV1AnnouncementsPatchNoteGet: build.query<
+      GetActivePatchNoteControlPlaneV1AnnouncementsPatchNoteGetApiResponse,
+      GetActivePatchNoteControlPlaneV1AnnouncementsPatchNoteGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/announcements/patch-note` }),
+    }),
+    dismissPatchNoteControlPlaneV1AnnouncementsAnnouncementIdDismissalPut: build.mutation<
+      DismissPatchNoteControlPlaneV1AnnouncementsAnnouncementIdDismissalPutApiResponse,
+      DismissPatchNoteControlPlaneV1AnnouncementsAnnouncementIdDismissalPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/announcements/${queryArg.announcementId}/dismissal`,
+        method: "PUT",
+      }),
+    }),
+    listActivationHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGet: build.query<
+      ListActivationHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetApiResponse,
+      ListActivationHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/announcements/activation-history` }),
+    }),
     listAnnouncementsControlPlaneV1AdminPlatformAnnouncementsGet: build.query<
       ListAnnouncementsControlPlaneV1AdminPlatformAnnouncementsGetApiResponse,
       ListAnnouncementsControlPlaneV1AdminPlatformAnnouncementsGetApiArg
@@ -2301,8 +2322,18 @@ export type PutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutApiArg 
 export type GetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetApiResponse =
   /** status 200 Successful Response */ Announcement[];
 export type GetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetApiArg = void;
+export type GetActivePatchNoteControlPlaneV1AnnouncementsPatchNoteGetApiResponse =
+  /** status 200 Successful Response */ ActivePatchNote;
+export type GetActivePatchNoteControlPlaneV1AnnouncementsPatchNoteGetApiArg = void;
+export type DismissPatchNoteControlPlaneV1AnnouncementsAnnouncementIdDismissalPutApiResponse = unknown;
+export type DismissPatchNoteControlPlaneV1AnnouncementsAnnouncementIdDismissalPutApiArg = {
+  announcementId: string;
+};
+export type ListActivationHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetApiResponse =
+  /** status 200 Successful Response */ AnnouncementActivationEvent[];
+export type ListActivationHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetApiArg = void;
 export type ListAnnouncementsControlPlaneV1AdminPlatformAnnouncementsGetApiResponse =
-  /** status 200 Successful Response */ Announcement[];
+  /** status 200 Successful Response */ AdminAnnouncement[];
 export type ListAnnouncementsControlPlaneV1AdminPlatformAnnouncementsGetApiArg = void;
 export type CreateAnnouncementControlPlaneV1AdminPlatformAnnouncementsPostApiResponse =
   /** status 201 Successful Response */ Announcement;
@@ -4065,6 +4096,8 @@ export type SetPlatformUiSettingsRequest = {
 };
 export type Announcement = {
   id: string;
+  /** `banner` or `patch_note`. Fixed at creation. */
+  kind: "banner" | "patch_note";
   severity: "info" | "warning" | "error" | "success";
   /** Locale → title map. The frontend resolves it against the viewer's locale and falls back to 'en'. */
   title: {
@@ -4074,7 +4107,7 @@ export type Announcement = {
   description_short: {
     [key: string]: string;
   };
-  /** Locale → markdown map rendered in the more-info dialog. Empty for every locale means the banner offers no more-info action. */
+  /** Locale → markdown map. For a banner, the more-info dialog (empty for every locale means no more-info action). For a patch note, its body. */
   description_long: {
     [key: string]: string;
   };
@@ -4082,29 +4115,84 @@ export type Announcement = {
   enabled: boolean;
   /** Whether a user may close the banner. A non-dismissible announcement stays until an admin disables it. */
   dismissible: boolean;
-  /** Changes only when reader-visible content changes, never on an enabled/disabled toggle. The frontend keys each user's dismissal on it, so a bump makes the banner reappear for everyone who had closed the previous wording. */
+  /** The edition the browser-side close is keyed on, so a bump shows the announcement again to everyone who had closed it. Both kinds bump when re-enabled; a banner also on a content edit. */
   content_version: number;
   created_at: string;
   updated_at: string;
   created_by?: string | null;
   updated_by?: string | null;
 };
-export type AnnouncementWriteRequest = {
+export type ActivePatchNote = {
+  patch_note?: Announcement | null;
+  /** Whether the caller ticked "Don't show again" since it was last enabled: the client does not open it at load, only on request. */
+  dismissed?: boolean;
+};
+export type AnnouncementActivationEvent = {
+  id: string;
+  /** May name an announcement that has since been deleted. */
+  announcement_id: string;
+  kind: "banner" | "patch_note";
+  /** Locale → title as it was when the event happened. */
+  label: {
+    [key: string]: string;
+  };
+  /** The banner's severity when the event happened; null for a patch note. */
+  severity?: ("info" | "warning" | "error" | "success") | null;
+  action: "activated" | "deactivated";
+  /** Uid of the administrator who made the change. */
+  actor_uid?: string | null;
+  occurred_at: string;
+};
+export type AdminAnnouncement = {
+  id: string;
+  /** `banner` or `patch_note`. Fixed at creation. */
+  kind: "banner" | "patch_note";
   severity: "info" | "warning" | "error" | "success";
-  /** Locale → title map. At least one locale must be non-empty. */
+  /** Locale → title map. The frontend resolves it against the viewer's locale and falls back to 'en'. */
   title: {
     [key: string]: string;
   };
-  /** Locale → markdown map shown in the banner. At least one locale must be non-empty. */
+  /** Locale → markdown map rendered inside the banner itself. */
   description_short: {
     [key: string]: string;
   };
-  /** Locale → markdown map for the more-info dialog. Optional: leaving it empty is what removes the more-info action from the banner. */
+  /** Locale → markdown map. For a banner, the more-info dialog (empty for every locale means no more-info action). For a patch note, its body. */
+  description_long: {
+    [key: string]: string;
+  };
+  /** Whether the announcement is delivered to users right now. */
+  enabled: boolean;
+  /** Whether a user may close the banner. A non-dismissible announcement stays until an admin disables it. */
+  dismissible: boolean;
+  /** The edition the browser-side close is keyed on, so a bump shows the announcement again to everyone who had closed it. Both kinds bump when re-enabled; a banner also on a content edit. */
+  content_version: number;
+  created_at: string;
+  updated_at: string;
+  created_by?: string | null;
+  updated_by?: string | null;
+  /** Patch note only: how many users ticked "Don't show again" since it was last enabled. Null for a banner. */
+  dismissal_count?: number | null;
+};
+export type AnnouncementWriteRequest = {
+  /** `banner` or `patch_note`. An update cannot change it. */
+  kind?: "banner" | "patch_note";
+  /** Banner only; a patch note is stored as `info`. */
+  severity: "info" | "warning" | "error" | "success";
+  /** Locale → plain-text title map. Both kinds need at least one non-empty locale; a patch note needs a title in exactly the locales that have a body. */
+  title: {
+    [key: string]: string;
+  };
+  /** Locale → markdown map shown in the banner. A banner needs at least one non-empty locale; a patch note has none. */
+  description_short: {
+    [key: string]: string;
+  };
+  /** Locale → markdown map. For a banner, the optional more-info dialog. For a patch note, its body: at least one non-empty locale. */
   description_long?: {
     [key: string]: string;
   };
   /** Create disabled by default so an admin can draft in peace. */
   enabled?: boolean;
+  /** Banner only; a patch note is always dismissible. */
   dismissible?: boolean;
 };
 export type SetAnnouncementEnabledRequest = {
@@ -4638,6 +4726,11 @@ export const {
   usePutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutMutation,
   useGetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetQuery,
   useLazyGetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetQuery,
+  useGetActivePatchNoteControlPlaneV1AnnouncementsPatchNoteGetQuery,
+  useLazyGetActivePatchNoteControlPlaneV1AnnouncementsPatchNoteGetQuery,
+  useDismissPatchNoteControlPlaneV1AnnouncementsAnnouncementIdDismissalPutMutation,
+  useListActivationHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetQuery,
+  useLazyListActivationHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetQuery,
   useListAnnouncementsControlPlaneV1AdminPlatformAnnouncementsGetQuery,
   useLazyListAnnouncementsControlPlaneV1AdminPlatformAnnouncementsGetQuery,
   useCreateAnnouncementControlPlaneV1AdminPlatformAnnouncementsPostMutation,

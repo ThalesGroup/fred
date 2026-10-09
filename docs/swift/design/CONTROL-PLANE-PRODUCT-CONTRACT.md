@@ -4092,8 +4092,8 @@ banner show again.
 | PUT    | `/admin/platform/announcements/{id}/enabled`                     | `can_manage_platform` |
 | DELETE | `/admin/platform/announcements/{id}`                             | `can_manage_platform` |
 
-`/announcements/active` returns the enabled set and is gated by authentication
-only — an announcement is content every user is meant to see. Every admin
+`/announcements/active` returns the enabled banners (patch notes excluded since
+section 61) and is gated by authentication only — an announcement is content every user is meant to see. Every admin
 mutation emits an audit record (`platform.announcement.created` / `.updated` /
 `.toggled` / `.deleted`).
 
@@ -4243,6 +4243,61 @@ where a picture renders: the bootstrap `current_user` and team admin summaries
 display-name cache, so a change shows on the next call; presigns of one batch
 run concurrently, at most 8 at a time. Never exported or logged. Full behavior:
 OpenSpec `user-profile-picture`.
+
+## 61. Contract Notes - patch-note announcements and activation history (2026-10-09)
+
+Extends section 55. OpenSpec change `add-patch-note-announcements`.
+
+**Kind.** `platform_announcement.kind` is `banner` (default, every pre-existing
+row) or `patch_note`, fixed at creation (an update changing it is refused,
+`422`). `Announcement.kind` is always present; `AnnouncementWriteRequest.kind`
+defaults to `banner`. A patch note keeps one markdown body per locale in
+`description_long` (same 20,000-character cap); the server stores it with
+`severity="info"`, `dismissible=true` and an empty `description_short`. Its
+`title` is a plain-text locale map validated like a banner's (200 characters),
+and must cover exactly the locales that have a body.
+
+**One active patch note.** Enabling a patch note (toggle, or create with
+`enabled=true`) disables the active one in the same transaction. Banners are
+untouched. A partial unique index (`uq_platform_announcement_active_patch_note`,
+`enabled AND kind = 'patch_note'`) makes two enabled patch notes impossible; a
+concurrent activation that loses on it gets `409`.
+
+**Dismissal and re-show.** Server-side, one row per user and patch note
+(`platform_announcement_dismissal`); a row present means hidden for that user.
+Every off-to-on toggle deletes all of the note's dismissals in the same
+transaction as the enable, so a re-enabled note is shown to everyone again; a
+content edit keeps them. A patch note's `content_version` never moves on a
+content edit and is bumped on every off-to-on toggle, as for a banner: it keys
+the client's "closed this sign-in" flag. Dismissals are also removed with the
+patch note and with the user (`DELETE /users/{id}`). Banners keep their
+per-browser dismissal. The admin list (`AdminAnnouncement`) gives each patch
+note a `dismissal_count`: its rows (one grouped count). Toggle, content update and delete read
+the row `FOR UPDATE`.
+
+**Activation history.** `platform_announcement_activation_event`, append-only,
+no foreign key so it outlives the announcement. One event per real `enabled`
+change: toggle on/off, creation enabled, automatic disable of the previous
+patch note (actor = the admin enabling the new one) and deletion of an enabled
+announcement (`deactivated`). Each event carries `announcement_id`, `kind`,
+`label` (title per locale at event time), `severity` (the
+banner's severity at event time; `null` for a patch note, whose stored
+severity is a placeholder), `action` (`activated | deactivated`), `actor_uid`
+and `occurred_at`, written in the same
+transaction as the change. The `.toggled` and `.created` audit records gain
+`auto_disabled_ids`.
+
+| Method | Path                                                  | Permission            | Response                                   |
+| ------ | ----------------------------------------------------- | --------------------- | ------------------------------------------ |
+| GET    | `/announcements/patch-note`                           | authenticated         | `ActivePatchNote { patch_note: Announcement \| null, dismissed: bool }`: the enabled patch note and whether the caller dismissed it since it was last enabled |
+| PUT    | `/announcements/{id}/dismissal`                       | authenticated         | `204`, idempotent (one row per user and note); `404` when the id is not a patch note. Identity from the token only |
+| GET    | `/admin/platform/announcements/activation-history`    | `can_manage_platform` | `AnnouncementActivationEvent[]`, 100 newest first |
+
+`GET /announcements/patch-note` is read once per application load (no
+polling); a patch note enabled mid-session is seen at the next load. The client
+opens it at load unless `dismissed`, and the profile menu reopens it on request.
+`GET /admin/platform/announcements` now returns `AdminAnnouncement[]`
+(`Announcement` plus `dismissal_count`, null for a banner).
 
 ## Knowledge Flow ingestion cancellation — 2026-09-23
 

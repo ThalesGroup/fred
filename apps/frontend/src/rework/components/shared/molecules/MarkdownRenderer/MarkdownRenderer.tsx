@@ -48,6 +48,9 @@ interface MarkdownRendererProps {
    *  Block constructs — headings, lists, tables — have nowhere to go in that
    *  context, so do not author them there. */
   inline?: boolean;
+  /** Open every link in a new tab, for content shown over the app (a dialog) that
+   *  a click must not navigate away from. */
+  linksInNewTab?: boolean;
 }
 
 interface MdastNode {
@@ -195,6 +198,7 @@ export const MarkdownRenderer = forwardRef<HTMLDivElement, MarkdownRendererProps
     compact = false,
     headingAnchors = false,
     inline = false,
+    linksInNewTab = false,
   },
   ref,
 ) {
@@ -254,8 +258,15 @@ export const MarkdownRenderer = forwardRef<HTMLDivElement, MarkdownRendererProps
             p: ({ children }: { children?: React.ReactNode }) => <span>{children}</span>,
           }
         : {}),
+      ...(linksInNewTab
+        ? {
+            a: ({ node: _node, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { node?: unknown }) => (
+              <a {...props} target="_blank" rel="noopener noreferrer" />
+            ),
+          }
+        : {}),
     }),
-    [onSourceClick, headingAnchors, inline],
+    [onSourceClick, headingAnchors, inline, linksInNewTab],
   );
 
   function pendingFenceLanguage(fence: PendingStreamingFence): string {

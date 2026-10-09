@@ -21,7 +21,10 @@ from fred_core import KeycloakUser, get_current_user
 
 from control_plane_backend.announcements import service
 from control_plane_backend.announcements.schemas import (
+    ActivePatchNote,
+    AdminAnnouncement,
     Announcement,
+    AnnouncementActivationEvent,
     AnnouncementWriteRequest,
     SetAnnouncementEnabledRequest,
 )
@@ -40,13 +43,13 @@ ProductDependencies = Annotated[
 @router.get(
     "/announcements/active",
     response_model=list[Announcement],
-    summary="List the announcements currently delivered to users.",
+    summary="List the banners currently delivered to users.",
 )
 async def get_active_announcements(
     deps: ProductDependencies,
     user: KeycloakUser = Depends(get_current_user),
 ) -> list[Announcement]:
-    """Every authenticated user's view: the enabled announcements.
+    """Every authenticated user's view: the enabled banners (never patch notes).
 
     Authentication is the only gate — this is content the deployment means
     every user to see. It is deliberately NOT on the public pre-auth
@@ -60,14 +63,57 @@ async def get_active_announcements(
 
 
 @router.get(
+    "/announcements/patch-note",
+    response_model=ActivePatchNote,
+    summary="Get the active patch note and whether the caller dismissed it.",
+)
+async def get_active_patch_note(
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> ActivePatchNote:
+    """Read once per application load; `patch_note` is null when none is
+    enabled, and `dismissed` tells the client not to open it on its own."""
+
+    return await service.get_active_patch_note(user=user, deps=deps)
+
+
+@router.put(
+    "/announcements/{announcement_id}/dismissal",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Dismiss a patch note for the caller, on every device.",
+)
+async def dismiss_patch_note(
+    announcement_id: str,
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> Response:
+    await service.dismiss_patch_note(
+        user=user, announcement_id=announcement_id, deps=deps
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get(
+    "/admin/platform/announcements/activation-history",
+    response_model=list[AnnouncementActivationEvent],
+    summary="List the latest announcement activations and deactivations (admin).",
+)
+async def list_activation_history(
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> list[AnnouncementActivationEvent]:
+    return await service.list_activation_history(user=user, deps=deps)
+
+
+@router.get(
     "/admin/platform/announcements",
-    response_model=list[Announcement],
+    response_model=list[AdminAnnouncement],
     summary="List every announcement (admin).",
 )
 async def list_announcements(
     deps: ProductDependencies,
     user: KeycloakUser = Depends(get_current_user),
-) -> list[Announcement]:
+) -> list[AdminAnnouncement]:
     return await service.list_announcements(user=user, deps=deps)
 
 
@@ -112,9 +158,8 @@ async def set_announcement_enabled(
     deps: ProductDependencies,
     user: KeycloakUser = Depends(get_current_user),
 ) -> Announcement:
-    """Separate from the content update so a toggle never bumps
-    `content_version` — a dismissed banner must not come back because an admin
-    flicked the switch."""
+    """Re-enabling bumps `content_version` and, for a patch note, clears
+    every user's "Don't show again": going back on air shows it to everyone."""
 
     return await service.set_announcement_enabled(
         user=user,
