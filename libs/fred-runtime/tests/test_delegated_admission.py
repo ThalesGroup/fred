@@ -1561,6 +1561,9 @@ async def test_a_run_starts_as_many_children_at_once_as_its_turn_asks_for(
 async def test_a_failure_of_its_own_never_repeats_the_grant(monkeypatch, caplog):
     """An ordinary crash reaches the client as an event: whatever it says about
     the request it failed on, the person it named is not part of it."""
+    from fred_core.logs.processors import install_context_capture
+
+    install_context_capture()
 
     class _CrashingRuntime(_RecordingRuntime):
         async def activate(self) -> None:
@@ -1590,9 +1593,13 @@ async def test_a_failure_of_its_own_never_repeats_the_grant(monkeypatch, caplog)
     assert "activate" in caplog.text
     assert "person=alice" not in payloads[-1]["message"]
     assert "run-7" not in payloads[-1]["message"]
-    emitted = repr([record.__dict__ for record in caplog.records])
+    # Admitted opaque identity is diagnostic metadata; exception text and the
+    # client-facing failure still cannot repeat URLs, credentials or content.
+    emitted = caplog.text
     for canary in ("alice", "run-7", "agent-a", "kf.invalid/documents"):
         assert canary not in emitted
+    completed = next(r for r in caplog.records if r.msg == "Agent execution completed")
+    assert getattr(completed, "_fred_snapshot").values["user_id"] == "alice"
 
 
 # ---------------------------------------------------------------------------

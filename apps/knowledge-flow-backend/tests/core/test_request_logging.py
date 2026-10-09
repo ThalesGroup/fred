@@ -54,26 +54,19 @@ def _restored_logging() -> Iterator[None]:
     root = logging.getLogger()
     uvicorn_loggers = [logging.getLogger(name) for name in ("uvicorn", "uvicorn.error", "uvicorn.access")]
     loggers = [root, *uvicorn_loggers, logging.getLogger(AUDIT_LOGGER_NAME)]
-    saved = [(lg, list(lg.filters), list(lg.handlers), lg.level, lg.propagate) for lg in loggers]
+    saved = [(lg, list(lg.filters), list(lg.handlers), lg.level, lg.propagate, lg.disabled) for lg in loggers]
     # Filters left by an earlier `create_app` in this process would apply twice.
     for lg in uvicorn_loggers:
         lg.filters.clear()
-    marker = "_fred_handlers_knowledge-flow"
-    had_marker = hasattr(root, marker)
-    if had_marker:
-        delattr(root, marker)
     try:
         yield
     finally:
-        for lg, filters, handlers, level, propagate in saved:
+        for lg, filters, handlers, level, propagate, disabled in saved:
             lg.filters[:] = filters
             lg.handlers[:] = handlers
             lg.setLevel(level)
             lg.propagate = propagate
-        if had_marker:
-            setattr(root, marker, True)
-        elif hasattr(root, marker):
-            delattr(root, marker)
+            lg.disabled = disabled
 
 
 def _register_probe(router: APIRouter) -> None:
@@ -150,14 +143,15 @@ async def _served_records(app_context: ApplicationContext, monkeypatch: pytest.M
     ],
 )
 @pytest.mark.asyncio
-async def test_under_delegation_a_request_is_logged_once_by_the_neutral_access_log(app_context: ApplicationContext, monkeypatch, delegation: DelegationConfig) -> None:
+async def test_under_delegation_a_request_has_one_safe_completion(app_context: ApplicationContext, monkeypatch, delegation: DelegationConfig) -> None:
     response, records = await _served_records(app_context, monkeypatch, delegation)
 
     assert response.startswith(b"HTTP/1.1 200 ")
-    assert [record for record in records if record.name == "http"] == []
-    access = [record for record in records if record.name == "uvicorn.access"]
+    assert [record for record in records if record.name == "uvicorn.access"] == []
+    access = [record for record in records if record.name == "http"]
     assert len(access) == 1
-    assert access[0].getMessage() == "access event=request outcome=responded method=GET status=200"
+    assert access[0].http_status == 200
+    assert access[0].route == "/knowledge-flow/v1/probe/{name}"
     for record in records:
         leaked = [canary for canary in _CANARIES if canary in repr(record.__dict__)]
         assert leaked == [], f"{record.name}: {leaked}"
@@ -168,6 +162,8 @@ async def test_without_delegation_the_request_logger_writes_its_response_line(ap
     response, records = await _served_records(app_context, monkeypatch, DelegationConfig())
 
     assert response.startswith(b"HTTP/1.1 200 ")
-    lines = [record.getMessage() for record in records if record.name == "http"]
-    assert any(line.startswith(f"<<< GET /knowledge-flow/v1/probe/{_PATH_CANARY} status=200 ") for line in lines)
-    assert not [canary for canary in _GRANT_CANARIES for line in lines if canary in line]
+    completion = [record for record in records if record.name == "http"]
+    assert len(completion) == 1
+    assert completion[0].http_status == 200
+    assert completion[0].route == "/knowledge-flow/v1/probe/{name}"
+    assert all(canary not in repr(record.__dict__) for record in records for canary in _CANARIES)
