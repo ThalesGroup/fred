@@ -23,6 +23,10 @@ Reconcile production overlays with the chart values and restart the APIs. Adapt 
 
 Shared configuration startup events retain the selected file paths as structured `env_file` and `config_file` fields, rather than embedding them in the message. Environment-file contents are not logged.
 
+Dependency warnings/errors retain their logger, severity and safe scoped context,
+but use a fixed diagnostic message without upstream text, extras or tracebacks in
+every delegation mode. They remain console-only to avoid recursive store emission.
+
 ## Validation
 
 Emit an ordinary event and confirm that stdout has a complete single-line JSON object with normalized severity, event time, source and structured properties. Verify severity/timestamp promotion and field filtering in a GKE canary before declaring collector compatibility. Check readable local output without width-dependent wrapping.

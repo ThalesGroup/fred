@@ -277,16 +277,15 @@ class UvicornSensitiveQueryFilter(logging.Filter):
 
 class DependencyDiagnosticFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
-        """Keep dependency failures useful without exporting upstream text under delegation."""
-        if _delegation_in_use():
-            record.msg = "Dependency diagnostic"
-            record.args = ()
-            record.exc_info = None
-            record.exc_text = None
-            record.stack_info = None
-            for key in tuple(record.__dict__):
-                if key not in _STANDARD_LOG_RECORD_ATTRS and key != "_fred_snapshot":
-                    record.__dict__.pop(key, None)
+        """Retain dependency severity/source without exporting upstream text or content."""
+        record.msg = "Dependency diagnostic"
+        record.args = ()
+        record.exc_info = None
+        record.exc_text = None
+        record.stack_info = None
+        for key in tuple(record.__dict__):
+            if key not in _STANDARD_LOG_RECORD_ATTRS and key != "_fred_snapshot":
+                record.__dict__.pop(key, None)
         return True
 
 

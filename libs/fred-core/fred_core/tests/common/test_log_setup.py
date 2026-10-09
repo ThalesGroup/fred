@@ -619,17 +619,25 @@ def test_shared_output_preserves_legacy_arguments_and_structured_fields(
         assert record.args == original_args
 
 
+@pytest.mark.parametrize("delegation", [False, True])
 def test_dependency_child_diagnostics_remain_sanitized(
     capsys: pytest.CaptureFixture[str],
+    delegation: bool,
 ) -> None:
-    initialize_delegation(DelegationConfig(accept_delegated_calls=True))
+    initialize_delegation(DelegationConfig(accept_delegated_calls=delegation))
     log_setup(
         service_name="dependency-contract",
         store=_StubLogStore(),
         log_format="json",
         include_uvicorn=False,
     )
-    logging.getLogger("httpx.transport").warning("SECRET-CANARY signed_url=credential")
+    logging.getLogger("httpx.transport").warning(
+        "SECRET-CANARY signed_url=%s",
+        "SECRET-CANARY",
+        extra={"detail": "SECRET-CANARY"},
+        exc_info=(ValueError, ValueError("SECRET-CANARY"), None),
+        stack_info=True,
+    )
     output = capsys.readouterr().out
     assert "SECRET-CANARY" not in output
     assert json.loads(output)["severity"] == "WARNING"
