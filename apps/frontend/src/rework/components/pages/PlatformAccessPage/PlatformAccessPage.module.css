@@ -1,13 +1,4 @@
 /* SPDX-License-Identifier: Apache-2.0 */
-.page {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-m);
-  margin: auto;
-  padding: var(--spacing-xl);
-  width: min(100%, 50rem);
-  overflow: auto;
-}
 .actions {
   display: flex;
   flex-wrap: wrap;
@@ -19,11 +10,4 @@
   padding: var(--spacing-s);
   color: var(--primary);
   font: var(--font-label-large);
-}
-.legal {
-  border: 1px solid var(--outline-muted);
-  border-radius: var(--radius-ms);
-  padding: var(--spacing-m);
-  max-height: 45vh;
-  overflow: auto;
 }

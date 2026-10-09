@@ -461,7 +461,7 @@ The modal SHALL scroll only its JSON region, keeping the field search, display t
 
 ### Requirement: Admission feedback uses the shared Fred error presentation
 
-Admission denial, invalid Free enrollment links and admission verification failures SHALL use the existing Fred error visual language and shared presentation, with localized actionable messages. Support SHALL use contactSupportLink when configured, alongside appropriate retry and sign-out actions. These screens SHALL remain reachable without protected bootstrap or team/resource loading; ordinary error pages SHALL retain their existing action.
+Admission denial, invalid Free enrollment links and admission verification failures SHALL use the existing Fred error visual language and shared presentation, with localized actionable messages. Support SHALL use contactSupportLink when configured, alongside appropriate retry actions. Sign-out SHALL remain available for admission denial but SHALL NOT appear in the invitation or its error state. These screens SHALL remain reachable without protected bootstrap or team/resource loading; ordinary error pages SHALL retain their existing action.
 
 #### Scenario: Denied or invalid enrollment route
 

@@ -46,7 +46,10 @@ afterEach(() => {
 });
 it("requires legal acceptance before caller-only enrollment", async () => {
   act(() => root.render(<FreeEnrollmentPage />));
-  const join = [...host.querySelectorAll("button")].find((node) => node.textContent === "rework.platformAccess.join")!;
+  const join = [...host.querySelectorAll("button")].find((node) =>
+    node.textContent?.includes("rework.platformAccess.join"),
+  )!;
+  expect(host.textContent).not.toContain("rework.platformAccess.signOut");
   expect(join.disabled).toBe(true);
   await act(async () => host.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click());
   await act(async () => join.click());
@@ -58,6 +61,7 @@ it("invalid links expose no enrollment action", () => {
   act(() => root.render(<FreeEnrollmentPage />));
   expect(host.textContent).toContain("rework.platformAccess.invalidLink");
   expect(host.textContent).not.toContain("rework.platformAccess.joinTeam");
+  expect(host.textContent).not.toContain("rework.platformAccess.signOut");
 });
 
 it("records one authenticated arrival independently of legal acceptance and enrollment", async () => {

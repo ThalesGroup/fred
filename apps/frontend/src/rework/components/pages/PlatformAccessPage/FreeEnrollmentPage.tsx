@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import Button from "@shared/atoms/Button/Button";
+import Checkbox from "@shared/atoms/Checkbox/Checkbox";
+import TeamInitials from "@shared/atoms/TeamInitials/TeamInitials";
 import { MarkdownRenderer } from "@shared/molecules/MarkdownRenderer/MarkdownRenderer";
 import { useLegalMarkdown } from "@hooks/useLegalMarkdown";
 import { useFrontendProperties } from "../../../../hooks/useFrontendProperties";
-import { KeyCloakService } from "../../../../security/KeycloakService";
 import { platformPath } from "../../../../common/platformAccess";
 import {
   useFreeEnrollmentPreviewQuery,
@@ -14,13 +15,14 @@ import {
   useEnrollFreeTeamMutation,
   useRecordFreeOpeningMutation,
 } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
-import styles from "./PlatformAccessPage.module.css";
+import styles from "./FreeEnrollmentPage.module.css";
 import PlatformAccessError from "./PlatformAccessError";
 
 export default function FreeEnrollmentPage() {
   const { token = "" } = useParams();
   const { t } = useTranslation();
-  const { gcuVersion, contactSupportLink } = useFrontendProperties();
+  const { gcuVersion, contactSupportLink, siteDisplayName } = useFrontendProperties();
+  const acceptanceId = useId();
   const preview = useFreeEnrollmentPreviewQuery({ token });
   const [accept, acceptance] = useAcceptFreeCguMutation();
   const [enroll, enrollment] = useEnrollFreeTeamMutation();
@@ -58,6 +60,7 @@ export default function FreeEnrollmentPage() {
   if (preview.isError || failed)
     return (
       <PlatformAccessError
+        hideSignOut
         title={t("rework.platformAccess.joinTitle")}
         message={t(preview.isError ? "rework.platformAccess.invalidLink" : "rework.platformAccess.failed")}
         retry={() => {
@@ -68,42 +71,65 @@ export default function FreeEnrollmentPage() {
     );
   return (
     <main className={styles.page}>
-      <h1>{t("rework.platformAccess.joinTitle")}</h1>
-      {preview.isLoading && <p>{t("rework.platformAccess.loading")}</p>}
-      {preview.data && (
-        <>
-          <p>{t("rework.platformAccess.joinTeam", { team: preview.data.team_name })}</p>
-          {openingFailed && <p role="status">{t("rework.platformAccess.links.openingFailed")}</p>}
-          {preview.data.cgu_required && (
+      <section className={styles.card} aria-labelledby="invitation-title">
+        <header className={styles.header}>
+          {siteDisplayName && <p className={styles.brand}>{siteDisplayName}</p>}
+          <h1 id="invitation-title" className={styles.title}>
+            {t("rework.platformAccess.joinTitle")}
+          </h1>
+        </header>
+        <div className={styles.content}>
+          {preview.isLoading && <p role="status">{t("rework.platformAccess.loading")}</p>}
+          {preview.data && (
             <>
-              <div className={styles.legal}>
-                <MarkdownRenderer text={markdown} />
+              <div className={styles.team}>
+                <TeamInitials name={preview.data.team_name} size="medium" className={styles.avatar} />
+                <div className={styles.teamDetails}>
+                  <h2 className={styles.teamName}>{preview.data.team_name}</h2>
+                  <p className={styles.description}>
+                    {t("rework.platformAccess.joinTeam", { team: preview.data.team_name })}
+                  </p>
+                </div>
               </div>
-              <label>
-                <input type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} />{" "}
-                {t("rework.platformAccess.acceptCgu")}
-              </label>
+              {openingFailed && <p role="status">{t("rework.platformAccess.links.openingFailed")}</p>}
+              {preview.data.cgu_required && (
+                <>
+                  <div className={styles.legal}>
+                    <MarkdownRenderer text={markdown} />
+                  </div>
+                  <div className={styles.acceptance}>
+                    <Checkbox
+                      id={acceptanceId}
+                      checked={accepted}
+                      onChange={(event) => setAccepted(event.target.checked)}
+                    />
+                    <label htmlFor={acceptanceId}>{t("rework.platformAccess.acceptCgu")}</label>
+                  </div>
+                </>
+              )}
             </>
           )}
-          <Button
-            color="primary"
-            variant="filled"
-            size="medium"
-            disabled={busy || (preview.data.cgu_required && (!accepted || !gcuVersion || !markdown))}
-            onClick={() => void join()}
-          >
-            {t("rework.platformAccess.join")}
-          </Button>
-        </>
-      )}
-      {contactSupportLink && (
-        <a href={contactSupportLink} target="_blank" rel="noopener noreferrer">
-          {t("rework.platformAccess.support")}
-        </a>
-      )}
-      <Button color="primary" variant="filled" size="medium" onClick={() => KeyCloakService.CallLogout()}>
-        {t("rework.platformAccess.signOut")}
-      </Button>
+        </div>
+        <footer className={styles.footer}>
+          {contactSupportLink && (
+            <a className={styles.support} href={contactSupportLink} target="_blank" rel="noopener noreferrer">
+              {t("rework.platformAccess.support")}
+            </a>
+          )}
+          {preview.data && (
+            <Button
+              color="primary"
+              variant="filled"
+              size="medium"
+              icon={{ category: "outlined", type: "person_add" }}
+              disabled={busy || (preview.data.cgu_required && (!accepted || !gcuVersion || !markdown))}
+              onClick={() => void join()}
+            >
+              {t("rework.platformAccess.join")}
+            </Button>
+          )}
+        </footer>
+      </section>
     </main>
   );
 }

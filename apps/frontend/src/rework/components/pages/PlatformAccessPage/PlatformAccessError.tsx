@@ -10,10 +10,12 @@ export default function PlatformAccessError({
   title,
   message,
   retry,
+  hideSignOut = false,
 }: {
   title: string;
   message: string;
   retry: () => void;
+  hideSignOut?: boolean;
 }) {
   const { t } = useTranslation();
   const { contactSupportLink } = useFrontendProperties();
@@ -31,9 +33,11 @@ export default function PlatformAccessError({
           <Button color="primary" variant="outlined" size="medium" onClick={retry}>
             {t("rework.platformAccess.retry")}
           </Button>
-          <Button color="primary" variant="outlined" size="medium" onClick={() => KeyCloakService.CallLogout()}>
-            {t("rework.platformAccess.signOut")}
-          </Button>
+          {!hideSignOut && (
+            <Button color="primary" variant="outlined" size="medium" onClick={() => KeyCloakService.CallLogout()}>
+              {t("rework.platformAccess.signOut")}
+            </Button>
+          )}
         </div>
       }
     />
