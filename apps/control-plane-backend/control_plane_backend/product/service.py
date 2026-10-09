@@ -3259,7 +3259,6 @@ async def prepare_execution(
             f"Unknown agent instance {agent_instance_id!r} for team {team_id!r}."
         )
     bind_operation_context(
-        {"session_id": session_id} if session_id else {},
         user_id=user.uid,
         team_id=str(team_id),
         agent_instance_id=agent_instance_id,
@@ -3332,6 +3331,7 @@ async def prepare_execution(
                 f"Session {session_id!r} is not usable for this execution."
             )
         assert session_record is not None
+        bind_operation_context(session_id=session_record.session_id)
         if session_record.context_prompt_ids:
             # Resolve library prompts only within the caller's authorized scope:
             # the active team plus the caller's personal team (the same union the
@@ -4384,11 +4384,10 @@ async def create_session(
             source_runtime_id = instance.source_runtime_id
     bind_operation_context(
         {"agent_instance_id": request.agent_instance_id}
-        if request.agent_instance_id
+        if request.agent_instance_id and source_runtime_id is not None
         else {},
         user_id=user.uid,
         team_id=str(team_id),
-        session_id=request.session_id,
     )
     record = SessionMetadataRecord(
         session_id=request.session_id,
@@ -4402,6 +4401,7 @@ async def create_session(
         created = await deps.get_session_metadata_store().create(record)
     except SessionMetadataAlreadyExistsError as exc:
         raise SessionAlreadyExistsError(request.session_id) from exc
+    bind_operation_context(session_id=created.session_id)
     try:
         deps.get_kpi_writer().count(
             "session.created_total",

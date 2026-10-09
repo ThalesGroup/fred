@@ -32,7 +32,7 @@ from fred_core import enforce_account_status, get_config, initialize_user_securi
 from fred_core.common import read_env_bool, register_exception_handlers
 from fred_core.diagnostics import install_gc_diagnostics
 from fred_core.kpi import KPIMiddleware, emit_process_kpis, emit_sql_pool_kpis
-from fred_core.logs.http import REFERENCE_HEADERS, RequestLoggingMiddleware
+from fred_core.logs.http import REFERENCE_HEADERS, RequestLoggingFastAPI
 from fred_core.logs.null_log_store import NullLogStore
 from fred_core.scheduler import SchedulerBackend, TemporalClientProvider
 from fred_core.security.mcp_delegation import (
@@ -253,7 +253,7 @@ def create_app() -> FastAPI:
             await gc_diagnostics.stop()
             await application_context.shutdown()
 
-    app = FastAPI(
+    app = RequestLoggingFastAPI(
         docs_url=f"{configuration.app.base_url}/docs" if docs_enabled else None,
         redoc_url=f"{configuration.app.base_url}/redoc" if docs_enabled else None,
         openapi_url=f"{configuration.app.base_url}/openapi.json" if docs_enabled else None,
@@ -278,7 +278,7 @@ def create_app() -> FastAPI:
 
     allowed_origins = list({_norm_origin(o) for o in configuration.security.authorized_origins})
     logger.info("%s[CORS] allow_origins=%s", LOG_PREFIX, allowed_origins)
-    app.add_middleware(
+    app.add_request_middleware(
         CORSMiddleware,
         allow_origins=allowed_origins,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
@@ -293,8 +293,7 @@ def create_app() -> FastAPI:
 
     apply_security_profile(configuration.security)
 
-    app.add_middleware(KPIMiddleware, kpi=application_context.get_kpi_writer)
-    app.add_middleware(RequestLoggingMiddleware)
+    app.add_request_middleware(KPIMiddleware, kpi=application_context.get_kpi_writer)
     monitoring_router = APIRouter(prefix=configuration.app.base_url)
     router = APIRouter(
         prefix=configuration.app.base_url,

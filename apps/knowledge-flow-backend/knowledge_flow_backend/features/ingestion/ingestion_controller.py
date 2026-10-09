@@ -53,7 +53,7 @@ from fred_core.documents.document_structures import (
 )
 from fred_core.kpi import KPIActor, KPIWriter
 from fred_core.kpi.kpi_writer import to_kpi_actor
-from fred_core.logs.context import bind_operation_context
+from fred_core.logs.context import bind_operation_context, operation_log_scope
 from fred_core.scheduler import SchedulerBackend
 from fred_core.security.delegation import holds_caller_role
 from fred_core.security.structure import is_service_agent
@@ -1055,115 +1055,116 @@ class IngestionController:
         last_error: str | None = None
         total = len(preloaded_files)
         scheduled_candidates: list[tuple[str, str, str | None, str | None]] = []
+        bind_operation_context(clear=("document_uid", "task_id"))
 
         for event in self._plan_events(plan):
             yield event
 
         for filename, input_temp_file in preloaded_files:
-            bind_operation_context(clear=("document_uid", "task_id"))
-            file_started = time.perf_counter()
-            file_status = "error"
-            file_type = pathlib.Path(filename).suffix.lstrip(".") or None
-            current_step = STEP_UPLOAD_PREPARATION
-            pending_save: asyncio.Future[None] | None = None
-            try:
-                output_temp_dir = input_temp_file.parent.parent
+            with operation_log_scope(completion=False, clear=("document_uid", "task_id")):
+                file_started = time.perf_counter()
+                file_status = "error"
+                file_type = pathlib.Path(filename).suffix.lstrip(".") or None
+                current_step = STEP_UPLOAD_PREPARATION
+                pending_save: asyncio.Future[None] | None = None
+                try:
+                    output_temp_dir = input_temp_file.parent.parent
 
-                yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
-                overwrites = plan.overwrite_uid.get(filename)
-                metadata = await self.service.extract_metadata(
-                    user,
-                    file_path=input_temp_file,
-                    tags=tags,
-                    source_tag=source_tag,
-                    profile=profile,
-                )
-                if overwrites:
-                    metadata = await self.service.adopt_existing_document(user, metadata, overwrites)
-                bind_operation_context(document_uid=metadata.document_uid)
-                metadata_file_type = getattr(metadata, "file_type", None)
-                file_type = metadata_file_type or file_type
-                pending_save = asyncio.ensure_future(asyncio.to_thread(self.service.save_input, user, metadata=metadata, input_dir=output_temp_dir / "input"))
-                await asyncio.shield(pending_save)
-
-                if scheduler_task_service is None:
-                    yield (
-                        ProcessingProgress(
-                            step=current_step,
-                            status=Status.SUCCESS,
-                            filename=filename,
-                            document_uid=metadata.document_uid,
-                        ).model_dump_json()
-                        + "\n"
-                    )
-
-                    current_step = STEP_PROCESSING
                     yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
-                    metadata = await push_input_process(user=user, metadata=metadata, input_file=str(input_temp_file), profile=profile)
-                    file_to_process = FileToProcess(
-                        document_uid=metadata.document_uid,
-                        external_path=None,
-                        source_tag=source_tag,
+                    overwrites = plan.overwrite_uid.get(filename)
+                    metadata = await self.service.extract_metadata(
+                        user,
+                        file_path=input_temp_file,
                         tags=tags,
+                        source_tag=source_tag,
                         profile=profile,
-                        processed_by=user,
                     )
-                    metadata = await output_process(file=file_to_process, metadata=metadata, accept_memory_storage=True)
-                    yield (
-                        ProcessingProgress(
-                            step=current_step,
-                            status=Status.SUCCESS,
-                            filename=filename,
-                            document_uid=metadata.document_uid,
-                        ).model_dump_json()
-                        + "\n"
-                    )
-                    yield (
-                        ProcessingProgress(
-                            step=STEP_FINISHED,
-                            status=Status.FINISHED,
-                            filename=filename,
-                            document_uid=metadata.document_uid,
-                        ).model_dump_json()
-                        + "\n"
-                    )
-                    success += 1
-                    file_status = "ok"
-                else:
-                    await self.service.save_metadata(user, metadata=metadata)
+                    if overwrites:
+                        metadata = await self.service.adopt_existing_document(user, metadata, overwrites)
+                    bind_operation_context(document_uid=metadata.document_uid)
+                    metadata_file_type = getattr(metadata, "file_type", None)
+                    file_type = metadata_file_type or file_type
+                    pending_save = asyncio.ensure_future(asyncio.to_thread(self.service.save_input, user, metadata=metadata, input_dir=output_temp_dir / "input"))
+                    await asyncio.shield(pending_save)
 
-                    file_task_id: Optional[str] = None
+                    if scheduler_task_service is None:
+                        yield (
+                            ProcessingProgress(
+                                step=current_step,
+                                status=Status.SUCCESS,
+                                filename=filename,
+                                document_uid=metadata.document_uid,
+                            ).model_dump_json()
+                            + "\n"
+                        )
 
-                    yield (
-                        ProcessingProgress(
-                            step=current_step,
-                            status=Status.SUCCESS,
-                            filename=filename,
+                        current_step = STEP_PROCESSING
+                        yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
+                        metadata = await push_input_process(user=user, metadata=metadata, input_file=str(input_temp_file), profile=profile)
+                        file_to_process = FileToProcess(
                             document_uid=metadata.document_uid,
-                            task_id=file_task_id,
-                        ).model_dump_json()
-                        + "\n"
-                    )
+                            external_path=None,
+                            source_tag=source_tag,
+                            tags=tags,
+                            profile=profile,
+                            processed_by=user,
+                        )
+                        metadata = await output_process(file=file_to_process, metadata=metadata, accept_memory_storage=True)
+                        yield (
+                            ProcessingProgress(
+                                step=current_step,
+                                status=Status.SUCCESS,
+                                filename=filename,
+                                document_uid=metadata.document_uid,
+                            ).model_dump_json()
+                            + "\n"
+                        )
+                        yield (
+                            ProcessingProgress(
+                                step=STEP_FINISHED,
+                                status=Status.FINISHED,
+                                filename=filename,
+                                document_uid=metadata.document_uid,
+                            ).model_dump_json()
+                            + "\n"
+                        )
+                        success += 1
+                        file_status = "ok"
+                    else:
+                        await self.service.save_metadata(user, metadata=metadata)
 
-                    scheduled_candidates.append((filename, metadata.document_uid, file_type, file_task_id))
-                    file_status = "queued"
-            except Exception as e:
-                error_message = self._format_exception_message(e)
-                last_error = error_message
-                logger.exception("Ingestion error during '%s' for file '%s'", current_step, filename, exc_info=True)
-                yield self._progress_event(step=current_step, status=Status.FAILED, filename=filename, error=error_message)
-            finally:
-                cleanup_uploaded_temp_file_after(pending_save, input_temp_file)
-                duration_ms = (time.perf_counter() - file_started) * 1000.0
-                logger.info("Upload preparation completed", extra={"outcome": file_status, "duration_ms": duration_ms})
-                kpi.emit(
-                    name="ingestion.document_duration_ms",
-                    type="timer",
-                    value=duration_ms,
-                    unit="ms",
-                    dims={"file_type": file_type, "status": file_status, "source": "api"},
-                    actor=kpi_actor,
-                )
+                        file_task_id: Optional[str] = None
+
+                        yield (
+                            ProcessingProgress(
+                                step=current_step,
+                                status=Status.SUCCESS,
+                                filename=filename,
+                                document_uid=metadata.document_uid,
+                                task_id=file_task_id,
+                            ).model_dump_json()
+                            + "\n"
+                        )
+
+                        scheduled_candidates.append((filename, metadata.document_uid, file_type, file_task_id))
+                        file_status = "queued"
+                except Exception as e:
+                    error_message = self._format_exception_message(e)
+                    last_error = error_message
+                    logger.exception("Ingestion error during '%s' for file '%s'", current_step, filename, exc_info=True)
+                    yield self._progress_event(step=current_step, status=Status.FAILED, filename=filename, error=error_message)
+                finally:
+                    cleanup_uploaded_temp_file_after(pending_save, input_temp_file)
+                    duration_ms = (time.perf_counter() - file_started) * 1000.0
+                    logger.info("Upload preparation completed", extra={"outcome": file_status, "duration_ms": duration_ms})
+                    kpi.emit(
+                        name="ingestion.document_duration_ms",
+                        type="timer",
+                        value=duration_ms,
+                        unit="ms",
+                        dims={"file_type": file_type, "status": file_status, "source": "api"},
+                        actor=kpi_actor,
+                    )
 
         if scheduler_task_service is not None and scheduled_candidates:
             current_step = STEP_QUEUED_FOR_PROCESSING
@@ -1196,21 +1197,21 @@ class IngestionController:
                 task_ids = {file.document_uid: file.task_id for file in definition.files}
                 scheduled_candidates = [(name, uid, kind, task_ids[uid]) for name, uid, kind, _ in scheduled_candidates]
                 for filename, document_uid, _, task_id in scheduled_candidates:
-                    bind_operation_context(document_uid=document_uid, task_id=task_id)
-                    # Canonical progress event carrying task_id, like the preparation
-                    # and processing steps — so the UI can correlate every step of the
-                    # sequence to its task. workflow_id is bound server-side (above) and
-                    # is not consumed by the client, so it is no longer put on the wire.
-                    yield (
-                        ProcessingProgress(
-                            step=current_step,
-                            status=Status.SUCCESS,
-                            filename=filename,
-                            document_uid=document_uid,
-                            task_id=task_id,
-                        ).model_dump_json()
-                        + "\n"
-                    )
+                    with operation_log_scope(completion=False, document_uid=document_uid, task_id=task_id):
+                        # Canonical progress event carrying task_id, like the preparation
+                        # and processing steps — so the UI can correlate every step of the
+                        # sequence to its task. workflow_id is bound server-side (above) and
+                        # is not consumed by the client, so it is no longer put on the wire.
+                        yield (
+                            ProcessingProgress(
+                                step=current_step,
+                                status=Status.SUCCESS,
+                                filename=filename,
+                                document_uid=document_uid,
+                                task_id=task_id,
+                            ).model_dump_json()
+                            + "\n"
+                        )
                 # Emit queued processing status so the UI can track via SSE task events.
                 for filename, document_uid, _, task_id in scheduled_candidates:
                     yield (

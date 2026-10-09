@@ -82,7 +82,7 @@ from fred_core.logs.context import (
     current_context,
     operation_log_scope,
 )
-from fred_core.logs.http import REFERENCE_HEADERS, RequestLoggingMiddleware
+from fred_core.logs.http import REFERENCE_HEADERS, RequestLoggingFastAPI
 from fred_core.logs.log_setup import log_setup
 from fred_core.logs.log_store_factory import build_log_store
 from fred_core.security.backend_to_backend_auth import M2MBearerAuth
@@ -6531,7 +6531,7 @@ def create_agent_app(
                             "[fred-runtime] shutdown step failed: %s", label
                         )
 
-    app = FastAPI(
+    app = RequestLoggingFastAPI(
         title=config.app.name,
         version="0.1.0",
         docs_url=f"{base_url}/docs" if base_url else "/docs",
@@ -6545,7 +6545,7 @@ def create_agent_app(
 
     # CORS — only added when security is provided so local-dev pods stay simple.
     if authorized_origins:
-        app.add_middleware(
+        app.add_request_middleware(
             CORSMiddleware,
             allow_origins=authorized_origins,
             allow_methods=["GET", "POST"],
@@ -6556,12 +6556,10 @@ def create_agent_app(
 
     # KPI middleware — writer is lazily resolved from app.state because the
     # container (and its KPI writer) is only initialised during lifespan startup.
-    app.add_middleware(
+    app.add_request_middleware(
         KPIMiddleware,
         kpi=lambda: get_pod_container_from_app(app).get_kpi_writer(),
     )
-
-    app.add_middleware(RequestLoggingMiddleware)
 
     api_router = APIRouter(prefix=base_url)
     api_router.include_router(

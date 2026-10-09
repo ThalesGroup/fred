@@ -29,6 +29,12 @@ message text. No Grafana dashboard change is required to display the summary.
 
 Use fresh `X-Request-ID` and `X-Correlation-ID` response headers to find a request. Generic diagnostic logs can now include admitted opaque person and resolved business references; review deployment log access and retention accordingly. Metric labels and audit restrictions remain as documented in observability §6/§7.
 
+Request logging and configured CORS surround FastAPI's unhandled-error response
+boundary, so generic 500 responses retain the references and a completion with
+their actual status. Session references bind only after ownership validation or
+successful creation. Batch upload completions retain batch/workflow context;
+per-document references remain scoped to each file's diagnostics.
+
 ## Validation
 
 Check normal, failing and streaming requests, a chat resume, a tool invocation, and an upload. Completion must follow stream termination, cancellation must not invent status, and unrelated requests must keep separate context. The focused offline isolation check includes actual thread work and retained tasks. Collector/deployment verification remains a rollout step.

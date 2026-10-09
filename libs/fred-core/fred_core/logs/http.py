@@ -13,10 +13,14 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 from uuid import uuid4
 
+from fastapi import FastAPI
 from starlette.datastructures import MutableHeaders
+from starlette.middleware import Middleware
 from starlette.requests import ClientDisconnect
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
@@ -131,3 +135,35 @@ class RequestLoggingMiddleware:
                             f" | {outcome}" if outcome != "responded" else "",
                             extra=facts,
                         )
+
+
+class RequestLoggingFastAPI(FastAPI):
+    """Keep request ownership and CORS around FastAPI's unhandled-error boundary."""
+
+    _request_middlewares: tuple[Middleware, ...] = ()
+
+    def add_request_middleware(
+        self,
+        middleware_class: Callable[..., ASGIApp],
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
+        """Configure request-wide adapters before serving, including error responses.
+
+        Arguments are opaque framework middleware constructor parameters, matching
+        FastAPI.add_middleware. Keep KPI outside CORS so preflights remain measured.
+        """
+        if self.middleware_stack is not None:
+            raise RuntimeError(
+                "Cannot add middleware after the application has started"
+            )
+        self._request_middlewares = (
+            Middleware(middleware_class, *args, **kwargs),
+            *self._request_middlewares,
+        )
+
+    def build_middleware_stack(self) -> ASGIApp:
+        app = super().build_middleware_stack()
+        for middleware, args, kwargs in reversed(self._request_middlewares):
+            app = middleware(app, *args, **kwargs)
+        return RequestLoggingMiddleware(app)

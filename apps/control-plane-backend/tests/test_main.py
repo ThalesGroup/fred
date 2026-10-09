@@ -26,6 +26,8 @@ Ref: docs/backlog/BACKLOG.md §3d — managed agent CRUD, enrollment, update, tu
 
 from __future__ import annotations
 
+import logging
+from collections.abc import Iterator
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -95,6 +97,23 @@ from sqlalchemy.ext.asyncio import create_async_engine
 @pytest.fixture(autouse=True)
 def _use_test_configuration(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("CONFIG_FILE", "./config/configuration_test.yaml")
+
+
+@pytest.fixture
+def request_completions() -> Iterator[list[logging.LogRecord]]:
+    records: list[logging.LogRecord] = []
+
+    class CompletionHandler(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            records.append(record)
+
+    handler = CompletionHandler()
+    logger = logging.getLogger("http")
+    logger.addHandler(handler)
+    try:
+        yield records
+    finally:
+        logger.removeHandler(handler)
 
 
 _PERSONAL_TEAM_ID = personal_team_id("admin")
@@ -2157,6 +2176,7 @@ async def test_prepare_execution_resolves_context_prompts_within_caller_scope(
 @pytest.mark.asyncio
 async def test_prepare_execution_rejects_session_owned_by_another_user(
     monkeypatch: pytest.MonkeyPatch,
+    request_completions: list[logging.LogRecord],
 ) -> None:
     """A session created by a different user must never lend its context
     prompts to this caller's execution — even within the same team and for
@@ -2217,6 +2237,11 @@ async def test_prepare_execution_rejects_session_owned_by_another_user(
     # Never leak the prompt text or the owning identity in the error.
     assert "Secret." not in resp.text
     assert "someone-else" not in resp.text
+    assert len(request_completions) == 1
+    assert "session_id" not in request_completions[0]._fred_snapshot.values
+    assert (
+        request_completions[0]._fred_snapshot.values["agent_instance_id"] == "inst-42"
+    )
 
 
 @pytest.mark.asyncio
@@ -2939,6 +2964,7 @@ async def test_patch_team_session_updates_title_and_activity(
 @pytest.mark.asyncio
 async def test_post_team_session_returns_conflict_for_duplicate_session(
     monkeypatch: pytest.MonkeyPatch,
+    request_completions: list[logging.LogRecord],
 ) -> None:
     """
     Verify duplicate control-plane session creation returns HTTP 409.
@@ -2978,6 +3004,9 @@ async def test_post_team_session_returns_conflict_for_duplicate_session(
 
     assert resp.status_code == 409
     assert resp.json()["detail"] == "Session 'session-duplicate' already exists."
+    assert len(request_completions) == 1
+    assert "session_id" not in request_completions[0]._fred_snapshot.values
+    assert "agent_instance_id" not in request_completions[0]._fred_snapshot.values
 
 
 @pytest.mark.asyncio

@@ -13,12 +13,16 @@
 # limitations under the License.
 
 import asyncio
+import json
+import logging
 import pathlib
 import threading
 from types import SimpleNamespace
 
 import pytest
 from fred_core import KeycloakUser
+from fred_core.logs.context import request_log_scope
+from fred_core.logs.processors import install_context_capture
 from fred_core.scheduler import SchedulerBackend
 
 from knowledge_flow_backend.common.structures import IngestionProcessingProfile, Status
@@ -140,11 +144,13 @@ async def test_cancelled_upload_keeps_workdir_until_content_store_write_finishes
         kpi_actor=SimpleNamespace(type="human"),
     )
 
-    consumer = asyncio.create_task(anext_all(stream))
-    await asyncio.to_thread(started.wait, 5)
-    consumer.cancel()
-    await asyncio.wait([consumer])
-    assert consumer.cancelled()
+    with request_log_scope(request_id="upload-request", correlation_id="upload-operation") as owner:
+        consumer = asyncio.create_task(anext_all(stream))
+        await asyncio.to_thread(started.wait, 5)
+        consumer.cancel()
+        await asyncio.wait([consumer])
+        assert consumer.cancelled()
+        assert owner.values == {"request_id": "upload-request", "correlation_id": "upload-operation"}
     assert workdir.exists()
 
     release.set()
@@ -159,6 +165,74 @@ async def test_cancelled_upload_keeps_workdir_until_content_store_write_finishes
 async def anext_all(stream) -> None:
     async for _ in stream:
         pass
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scheduled", [False, True])
+async def test_upload_batch_and_http_completion_do_not_inherit_final_document(tmp_path, monkeypatch, caplog, scheduled):
+    from fred_core.logs.context import bind_operation_context
+    from fred_core.logs.http import RequestLoggingFastAPI
+    from httpx import ASGITransport, AsyncClient
+    from starlette.responses import StreamingResponse
+
+    class DistinctDocumentService(_FakeService):
+        async def extract_metadata(self, user, file_path, tags, source_tag, profile):
+            return SimpleNamespace(document_uid={"first.csv": "doc-a", "second.csv": "doc-b"}[file_path.name], file_type="csv")
+
+    async def process(**kwargs):
+        return kwargs["metadata"]
+
+    async def submit_documents(**kwargs):
+        files = [SimpleNamespace(document_uid=file.document_uid, task_id=f"task-{index}") for index, file in enumerate(kwargs["files"])]
+        return SimpleNamespace(files=files), SimpleNamespace(workflow_id="upload-workflow")
+
+    monkeypatch.setattr("knowledge_flow_backend.features.ingestion.ingestion_controller.push_input_process", process)
+    monkeypatch.setattr("knowledge_flow_backend.features.ingestion.ingestion_controller.output_process", process)
+    controller = IngestionController.__new__(IngestionController)
+    controller.service = DistinctDocumentService()
+    controller._scheduler_backend = lambda: SchedulerBackend.MEMORY
+    paths = []
+    for index, name in enumerate(("first.csv", "second.csv")):
+        path = tmp_path / str(index) / "input" / name
+        path.parent.mkdir(parents=True)
+        path.write_text("synthetic", encoding="utf-8")
+        paths.append((name, path))
+    app = RequestLoggingFastAPI()
+
+    @app.get("/upload")
+    async def upload():
+        bind_operation_context(document_uid="previous-document", task_id="previous-task")
+        return StreamingResponse(
+            controller._stream_upload_process(
+                preloaded_files=paths,
+                user=KeycloakUser(uid="user-1", username="synthetic", roles=[]),
+                tags=[],
+                source_tag="uploads",
+                profile=IngestionProcessingProfile.medium,
+                scheduler_task_service=SimpleNamespace(submit_documents=submit_documents) if scheduled else None,
+                background_tasks=None,
+                kpi=_FakeKpi(),
+                kpi_actor=SimpleNamespace(type="human"),
+            ),
+            media_type="application/x-ndjson",
+        )
+
+    install_context_capture()
+    with caplog.at_level(logging.INFO):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.get("/upload")
+    assert response.status_code == 200
+    assert json.loads(response.text.splitlines()[-1])["status"] == Status.SUCCESS.value
+    prepared = [record for record in caplog.records if record.getMessage() == "Upload preparation completed"]
+    assert {record._fred_snapshot.values["document_uid"] for record in prepared} == {"doc-a", "doc-b"}
+    batch = next(record for record in caplog.records if record.getMessage() == "Upload batch completed")
+    completed = [record for record in caplog.records if record.name == "http"]
+    assert len(completed) == 1
+    for record in [batch, completed[0]]:
+        assert record._fred_snapshot.values.get("document_uid") is None
+        assert record._fred_snapshot.values.get("task_id") is None
+        if scheduled:
+            assert record._fred_snapshot.values["workflow_id"] == "upload-workflow"
 
 
 @pytest.mark.asyncio

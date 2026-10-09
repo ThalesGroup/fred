@@ -717,6 +717,86 @@ def test_context_rejects_aggregate_metadata_without_stringifying_objects() -> No
             pass
 
 
+@pytest.mark.asyncio
+async def test_fastapi_unhandled_error_keeps_response_and_log_references(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from unittest.mock import Mock
+
+    from fred_core.common.fastapi_handlers import register_exception_handlers
+    from fred_core.kpi.base_kpi_writer import BaseKPIWriter
+    from fred_core.kpi.http_middleware import KPIMiddleware
+    from fred_core.logs.http import REFERENCE_HEADERS, RequestLoggingFastAPI
+    from httpx import ASGITransport, AsyncClient
+    from starlette.middleware.cors import CORSMiddleware
+
+    log_setup(
+        service_name="error-contract",
+        store=_StubLogStore(),
+        log_format="json",
+        include_uvicorn=False,
+    )
+    app = RequestLoggingFastAPI()
+    app.add_request_middleware(
+        CORSMiddleware,
+        allow_origins=["https://fred.example"],
+        allow_methods=["GET"],
+        allow_headers=["Authorization"],
+        expose_headers=REFERENCE_HEADERS,
+    )
+    kpi = Mock(spec=BaseKPIWriter)
+    app.add_request_middleware(KPIMiddleware, kpi=kpi)
+    register_exception_handlers(app)
+
+    @app.get("/failure")
+    async def failure() -> None:
+        raise RuntimeError("SECRET-CANARY")
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app, raise_app_exceptions=False),
+        base_url="http://test",
+    ) as client:
+        response = await client.get(
+            "/failure", headers={"Origin": "https://fred.example"}
+        )
+        preflight = await client.options(
+            "/failure",
+            headers={
+                "Origin": "https://fred.example",
+                "Access-Control-Request-Method": "GET",
+            },
+        )
+    assert response.status_code == 500
+    assert response.json() == {"detail": "Internal server error"}
+    assert response.headers["access-control-allow-origin"] == "https://fred.example"
+    exposed = response.headers["access-control-expose-headers"].lower()
+    assert "x-request-id" in exposed and "x-correlation-id" in exposed
+    output = capsys.readouterr().out
+    assert "SECRET-CANARY" not in output
+    events = [json.loads(line) for line in output.splitlines()]
+    completed = [
+        event
+        for event in events
+        if event["logger"] == "http" and event["http_method"] == "GET"
+    ]
+    assert len(completed) == 1
+    assert completed[0]["http_status"] == 500
+    assert completed[0]["outcome"] == "failed"
+    failure_event = next(
+        event for event in events if event["message"] == "Unhandled request failure"
+    )
+    for event in [completed[0], failure_event]:
+        assert event["request_id"] == response.headers["x-request-id"]
+        assert event["correlation_id"] == response.headers["x-correlation-id"]
+    assert preflight.status_code == 200
+    assert [call.kwargs["method"] for call in kpi.api_call.call_args_list] == [
+        "GET",
+        "OPTIONS",
+    ]
+    assert kpi.api_call.call_args_list[0].kwargs["exception_type"] == "RuntimeError"
+    assert kpi.api_call.call_args_list[1].kwargs["exception_type"] is None
+
+
 @pytest.mark.parametrize("log_format", ["json", "text"])
 def test_startup_diagnostics_wait_for_selected_output(
     capsys: pytest.CaptureFixture[str],

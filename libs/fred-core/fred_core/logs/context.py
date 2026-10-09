@@ -58,12 +58,10 @@ _completion_binding: ContextVar[bool] = ContextVar(
 @contextmanager
 def completion_log_scope(values: Mapping[str, object]) -> Generator[None, None, None]:
     """Emit the owned request snapshot after streaming run scopes have retired."""
-    token = _operation_lifetimes.set(())
-    try:
-        with log_context(values):
-            yield
-    finally:
-        _operation_lifetimes.reset(token)
+    # The sender task can still carry bindings explicitly cleared by a stream
+    # task. Replace its entire bag so those stale values cannot reappear.
+    with request_log_scope(**values):
+        yield
 
 
 @contextmanager
