@@ -892,6 +892,15 @@
                       "title": "Log Level",
                       "type": "string"
                     },
+                    "log_format": {
+                      "default": "text",
+                      "enum": [
+                        "json",
+                        "text"
+                      ],
+                      "title": "Log Format",
+                      "type": "string"
+                    },
                     "limit_concurrency": {
                       "anyOf": [
                         {
@@ -4110,6 +4119,15 @@
                     "log_level": {
                       "default": "info",
                       "title": "Log Level",
+                      "type": "string"
+                    },
+                    "log_format": {
+                      "default": "text",
+                      "enum": [
+                        "json",
+                        "text"
+                      ],
+                      "title": "Log Format",
                       "type": "string"
                     },
                     "reload": {
@@ -8990,6 +9008,15 @@
                       "title": "Log Level",
                       "type": "string"
                     },
+                    "log_format": {
+                      "default": "text",
+                      "enum": [
+                        "json",
+                        "text"
+                      ],
+                      "title": "Log Format",
+                      "type": "string"
+                    },
                     "reload": {
                       "default": false,
                       "title": "Reload",
@@ -13868,6 +13895,15 @@
                       "title": "Log Level",
                       "type": "string"
                     },
+                    "log_format": {
+                      "default": "text",
+                      "enum": [
+                        "json",
+                        "text"
+                      ],
+                      "title": "Log Format",
+                      "type": "string"
+                    },
                     "reload": {
                       "default": false,
                       "title": "Reload",
@@ -18534,6 +18570,15 @@
                     "log_level": {
                       "default": "info",
                       "title": "Log Level",
+                      "type": "string"
+                    },
+                    "log_format": {
+                      "default": "text",
+                      "enum": [
+                        "json",
+                        "text"
+                      ],
+                      "title": "Log Format",
                       "type": "string"
                     },
                     "reload": {
@@ -23204,6 +23249,15 @@
                       "title": "Log Level",
                       "type": "string"
                     },
+                    "log_format": {
+                      "default": "text",
+                      "enum": [
+                        "json",
+                        "text"
+                      ],
+                      "title": "Log Format",
+                      "type": "string"
+                    },
                     "reload": {
                       "default": false,
                       "title": "Reload",
@@ -27865,6 +27919,15 @@
                       "title": "Log Level",
                       "type": "string"
                     },
+                    "log_format": {
+                      "default": "text",
+                      "enum": [
+                        "json",
+                        "text"
+                      ],
+                      "title": "Log Format",
+                      "type": "string"
+                    },
                     "gcu_version": {
                       "anyOf": [
                         {
@@ -30151,6 +30214,15 @@
                     "log_level": {
                       "default": "info",
                       "title": "Log Level",
+                      "type": "string"
+                    },
+                    "log_format": {
+                      "default": "text",
+                      "enum": [
+                        "json",
+                        "text"
+                      ],
+                      "title": "Log Format",
                       "type": "string"
                     },
                     "gcu_version": {

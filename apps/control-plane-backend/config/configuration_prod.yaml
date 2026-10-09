@@ -14,6 +14,7 @@ app:
   address: 0.0.0.0
   port: 8222
   log_level: info
+  log_format: text
   default_team_max_resources_storage_size: 5368709120
   personal_max_resources_storage_size: 5368709120
 

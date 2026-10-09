@@ -17,6 +17,7 @@ app:
   address: "127.0.0.1"
   port: 8112
   log_level: "info"
+  log_format: text
   reload: false
   reload_dir: "."
   pdf_render_ttl_days: 30

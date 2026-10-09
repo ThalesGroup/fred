@@ -32,6 +32,7 @@ from fred_core import enforce_account_status, get_config, initialize_user_securi
 from fred_core.common import read_env_bool, register_exception_handlers
 from fred_core.diagnostics import install_gc_diagnostics
 from fred_core.kpi import KPIMiddleware, emit_process_kpis, emit_sql_pool_kpis
+from fred_core.logs.null_log_store import NullLogStore
 from fred_core.scheduler import SchedulerBackend, TemporalClientProvider
 from fred_core.security.mcp_delegation import (
     declare_delegation_parameters,
@@ -45,8 +46,6 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from knowledge_flow_backend.application_context import ApplicationContext, get_configuration
 from knowledge_flow_backend.common.config_loader import (
-    get_loaded_config_file_path,
-    get_loaded_env_file_path,
     load_configuration,
 )
 from knowledge_flow_backend.common.http_logging import RequestResponseLogger
@@ -139,9 +138,14 @@ def _without_response_docs(mcp: FastApiMCP) -> FastApiMCP:
 
 def create_app() -> FastAPI:
     configuration: Configuration = load_configuration()
-    env_file = get_loaded_env_file_path() or "<unset>"
-    config_file = get_loaded_config_file_path() or "<unset>"
-    logger.info("%s Environment file: %s | Configuration file: %s", LOG_PREFIX, env_file, config_file)
+    log_setup(
+        service_name="knowledge-flow",
+        log_level=configuration.app.log_level,
+        log_format=configuration.app.log_format,
+        service_role="api",
+        store=NullLogStore(),
+    )
+    logger.info("Application configuration ready")
     logger.info("%s Embedding model: [%s] %s", LOG_PREFIX, configuration.embedding_model.provider, configuration.embedding_model.name)
     logger.info("%s Chat model: [%s] %s", LOG_PREFIX, configuration.chat_model.provider, configuration.chat_model.name)
     if configuration.ocr_model:
@@ -161,6 +165,8 @@ def create_app() -> FastAPI:
     log_setup(
         service_name="knowledge-flow",
         log_level=configuration.app.log_level,
+        log_format=configuration.app.log_format,
+        service_role="api",
         store=application_context.get_log_store(),
     )
     logger.info("%s create_app() called with base_url=%s", LOG_PREFIX, base_url)

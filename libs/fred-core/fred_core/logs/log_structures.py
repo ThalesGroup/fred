@@ -20,6 +20,9 @@ from pydantic import BaseModel, Field
 
 from fred_core.common import OpenSearchIndexConfig
 
+AUDIT_LOGGER_NAME = "fred.security.audit"
+KPI_LOGGER_NAME = "KPI"
+
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
 # Closed, structurally-derived classification for the generic app-log store
