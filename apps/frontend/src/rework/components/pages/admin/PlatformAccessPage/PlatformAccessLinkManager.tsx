@@ -7,14 +7,19 @@ import TextInput from "@shared/atoms/TextInput/TextInput";
 import { useCopyConfirmation } from "@hooks/useCopyConfirmation";
 import { ActionBar } from "@shared/molecules/ActionBar/ActionBar";
 import { Dialog } from "@shared/molecules/Dialog/Dialog";
+import Select from "@shared/molecules/Select/Select";
 import DataTable from "@shared/molecules/DataTable/LocalizedDataTable";
 import { platformPath } from "../../../../../common/platformAccess";
-import type { PlatformAccessTeam } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type {
+  PlatformAccessTeam,
+  PlatformEnrollmentLinkInfo,
+} from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
   usePlatformEnrollmentLinksQuery,
   useGeneratePlatformLinkMutation,
   useRevealPlatformLinkMutation,
   useRevokePlatformLinkMutation,
+  useDeleteInactivePlatformLinksMutation,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import styles from "./PlatformAccessPage.module.css";
 
@@ -27,8 +32,9 @@ export default function PlatformAccessLinkManager({
 }) {
   const { t, i18n } = useTranslation();
   const [offset, setOffset] = useState(0);
+  const [status, setStatus] = useState<PlatformEnrollmentLinkInfo["status"] | "all">("all");
   const links = usePlatformEnrollmentLinksQuery(
-    { teamId: team.team_id, offset, limit: 25 },
+    { teamId: team.team_id, offset, limit: 25, status: status === "all" ? undefined : status },
     {
       refetchOnMountOrArgChange: true,
       pollingInterval: 30000,
@@ -37,6 +43,9 @@ export default function PlatformAccessLinkManager({
   const [generate, generating] = useGeneratePlatformLinkMutation();
   const [reveal, revealing] = useRevealPlatformLinkMutation();
   const [revoke, revoking] = useRevokePlatformLinkMutation();
+  const [deleteInactive, deleting] = useDeleteInactivePlatformLinksMutation();
+  const [confirmCleanup, setConfirmCleanup] = useState(false);
+  const [deletedCount, setDeletedCount] = useState<number>();
   const [view, setView] = useState<"list" | "create" | "output">("list");
   const [copying, setCopying] = useState(false);
   const [created, setCreated] = useState(false);
@@ -49,7 +58,9 @@ export default function PlatformAccessLinkManager({
   const [url, setUrl] = useState<string>();
   const [confirmRevoke, setConfirmRevoke] = useState<string>();
   const [failed, setFailed] = useState(false);
-  const busy = generating.isLoading || revealing.isLoading || revoking.isLoading || copying;
+  const busy = generating.isLoading || revealing.isLoading || revoking.isLoading || deleting.isLoading || copying;
+  const history = !links.isFetching && !links.isError ? links.currentData : undefined;
+  const inactiveCount = links.currentData?.inactive_count ?? 0;
   const date = (value: string | null) =>
     value ? new Date(value).toLocaleString(i18n.language) : t("rework.platformAccess.links.never");
   const run = async (action: () => Promise<void>) => {
@@ -118,7 +129,7 @@ export default function PlatformAccessLinkManager({
   return (
     <>
       <Dialog
-        open={!confirmRevoke && view === "list"}
+        open={!confirmRevoke && !confirmCleanup && view === "list"}
         title={t("rework.platformAccess.links.title", { team: team.name || team.team_id })}
         maxWidth={1100}
         hideCancel
@@ -149,7 +160,45 @@ export default function PlatformAccessLinkManager({
               {t("rework.platformAccess.createLink")}
             </Button>
           </div>
+          <div className={styles.linkControls}>
+            <div className={styles.linkFilter}>
+              <Select<PlatformEnrollmentLinkInfo["status"] | "all">
+                compact
+                size="medium"
+                label={t("rework.platformAccess.links.statusLabel")}
+                value={status}
+                disabled={busy}
+                options={(["all", "active", "revoked", "expired", "suspended"] as const).map((value) => ({
+                  key: value,
+                  value,
+                  label: t(`rework.platformAccess.links.status.${value}`),
+                }))}
+                onChange={(value) => {
+                  setOffset(0);
+                  setStatus(value);
+                  setFailed(false);
+                  setDeletedCount(undefined);
+                }}
+              />
+            </div>
+            <Button
+              color="error"
+              variant="outlined"
+              size="medium"
+              disabled={busy || links.isFetching || links.isError || !inactiveCount}
+              onClick={() => {
+                setFailed(false);
+                setConfirmCleanup(true);
+              }}
+            >
+              {t("rework.platformAccess.links.cleanup")}
+            </Button>
+          </div>
           {!team.free && <p role="status">{t("rework.platformAccess.links.suspendedHint")}</p>}
+          {deletedCount !== undefined && (
+            <p role="status">{t("rework.platformAccess.links.deleted", { count: deletedCount })}</p>
+          )}
+          {links.isFetching && <p role="status">{t("rework.platformAccess.links.loading")}</p>}
           {failed && <p role="alert">{t("rework.platformAccess.failed")}</p>}
           {links.isError && (
             <div role="alert">
@@ -159,84 +208,123 @@ export default function PlatformAccessLinkManager({
               </Button>
             </div>
           )}
-          <DataTable
-            data={links.data?.items ?? []}
-            rowKey={(link) => link.id}
-            serverPagination={{ offset, limit: 25, totalCount: links.data?.total ?? 0, onOffsetChange: setOffset }}
-            columns={[
-              {
-                label: t("rework.platformAccess.links.note"),
-                size: "2fr",
-                cellRenderer: (link) => (
-                  <span className={styles.exampleValue}>{link.note || t("rework.platformAccess.links.untitled")}</span>
-                ),
-              },
-              {
-                label: t("rework.platformAccess.links.created"),
-                size: "1.5fr",
-                cellRenderer: (link) => date(link.created_at),
-              },
-              {
-                label: t("rework.platformAccess.links.expiry"),
-                size: "1.5fr",
-                cellRenderer: (link) => date(link.expires_at),
-              },
-              {
-                label: t("rework.platformAccess.links.statusLabel"),
-                size: "1fr",
-                cellRenderer: (link) => t(`rework.platformAccess.links.status.${link.status}`),
-              },
-              {
-                label: t("rework.platformAccess.links.openings"),
-                size: "1fr",
-                cellRenderer: (link) => link.opening_count,
-              },
-              {
-                label: t("rework.platformAccess.links.actions"),
-                size: "2fr",
-                cellRenderer: (link) => (
-                  <div className={styles.row}>
-                    <ActionBar
-                      alwaysVisible
-                      actions={[
-                        {
-                          id: "copy",
-                          icon: copyConfirmed(link.id) ? "check" : "content_copy",
-                          label: t(
-                            copyConfirmed(link.id)
-                              ? "rework.platformAccess.links.copied"
-                              : "rework.platformAccess.links.copyUrl",
-                          ),
-                          disabled: busy || links.isFetching || !link.recoverable,
-                          onClick: () =>
-                            void run(async () => {
-                              try {
-                                const result = await reveal({ teamId: team.team_id, linkId: link.id }).unwrap();
-                                setCreated(false);
-                                await copy(linkUrl(result.token), link.id);
-                              } finally {
-                                revealing.reset();
-                              }
-                            }),
-                        },
-                      ]}
-                    />
-                    <Button
-                      color="error"
-                      variant="outlined"
-                      size="small"
-                      disabled={busy || links.isFetching || link.status === "revoked"}
-                      onClick={() => setConfirmRevoke(link.id)}
-                    >
-                      {t("rework.platformAccess.links.revoke")}
-                    </Button>
-                  </div>
-                ),
-              },
-            ]}
-          />
+          <div className={styles.linkTable}>
+            <DataTable
+              data={history?.items ?? []}
+              rowKey={(link) => link.id}
+              serverPagination={{
+                offset,
+                limit: 25,
+                totalCount: links.currentData?.total ?? links.data?.total ?? 0,
+                onOffsetChange: setOffset,
+              }}
+              columns={[
+                {
+                  label: t("rework.platformAccess.links.note"),
+                  size: "2fr",
+                  cellRenderer: (link) => (
+                    <span className={styles.exampleValue}>
+                      {link.note || t("rework.platformAccess.links.untitled")}
+                    </span>
+                  ),
+                },
+                {
+                  label: t("rework.platformAccess.links.created"),
+                  size: "1.5fr",
+                  cellRenderer: (link) => date(link.created_at),
+                },
+                {
+                  label: t("rework.platformAccess.links.expiry"),
+                  size: "1.5fr",
+                  cellRenderer: (link) => date(link.expires_at),
+                },
+                {
+                  label: t("rework.platformAccess.links.statusLabel"),
+                  size: "1fr",
+                  cellRenderer: (link) => t(`rework.platformAccess.links.status.${link.status}`),
+                },
+                {
+                  label: t("rework.platformAccess.links.openings"),
+                  size: "1fr",
+                  cellRenderer: (link) => link.opening_count,
+                },
+                {
+                  label: t("rework.platformAccess.links.actions"),
+                  size: "2fr",
+                  cellRenderer: (link) => (
+                    <div className={styles.row}>
+                      <ActionBar
+                        alwaysVisible
+                        actions={[
+                          {
+                            id: "copy",
+                            icon: copyConfirmed(link.id) ? "check" : "content_copy",
+                            label: t(
+                              copyConfirmed(link.id)
+                                ? "rework.platformAccess.links.copied"
+                                : "rework.platformAccess.links.copyUrl",
+                            ),
+                            disabled: busy || links.isFetching || !link.recoverable,
+                            onClick: () =>
+                              void run(async () => {
+                                try {
+                                  const result = await reveal({ teamId: team.team_id, linkId: link.id }).unwrap();
+                                  setCreated(false);
+                                  await copy(linkUrl(result.token), link.id);
+                                } finally {
+                                  revealing.reset();
+                                }
+                              }),
+                          },
+                        ]}
+                      />
+                      <Button
+                        color="error"
+                        variant="outlined"
+                        size="small"
+                        disabled={busy || links.isFetching || link.status === "revoked"}
+                        onClick={() => setConfirmRevoke(link.id)}
+                      >
+                        {t("rework.platformAccess.links.revoke")}
+                      </Button>
+                    </div>
+                  ),
+                },
+              ]}
+            />
+          </div>
         </div>
       </Dialog>
+      {confirmCleanup && (
+        <Dialog
+          open
+          title={t("rework.platformAccess.links.cleanupTitle")}
+          confirmColor="error"
+          confirmLabel={t("rework.platformAccess.links.cleanupConfirm")}
+          confirmDisabled={busy || links.isFetching || links.isError || !inactiveCount}
+          onCancel={() => {
+            if (!busy) {
+              setConfirmCleanup(false);
+              setFailed(false);
+            }
+          }}
+          onConfirm={() =>
+            void run(async () => {
+              const result = await deleteInactive({ teamId: team.team_id }).unwrap();
+              setDeletedCount(result.deleted_count);
+              setOffset(0);
+              setConfirmCleanup(false);
+            })
+          }
+        >
+          <div className={styles.dialogBody}>
+            <p>
+              {t("rework.platformAccess.links.cleanupHint", { team: team.name || team.team_id, count: inactiveCount })}
+            </p>
+            {failed && <p role="alert">{t("rework.platformAccess.failed")}</p>}
+          </div>
+        </Dialog>
+      )}
       {view === "create" && (
         <Dialog
           open

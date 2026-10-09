@@ -3489,12 +3489,19 @@
           "active": "Actif",
           "suspended": "Suspendu",
           "expired": "Expiré",
-          "revoked": "Révoqué"
+          "revoked": "Révoqué",
+          "all": "Tous les liens"
         },
         "copyUrl": "Copier l'URL",
         "copied": "URL copiée dans le presse-papier.",
         "copyFailed": "Le presse-papier est inaccessible. Sélectionnez l'URL ci-dessus pour la copier manuellement, ou réessayez.",
-        "createdSuccess": "Lien créé"
+        "createdSuccess": "Lien créé",
+        "cleanup": "Supprimer les liens expirés et révoqués",
+        "cleanupTitle": "Supprimer les liens obsolètes ?",
+        "cleanupConfirm": "Supprimer les liens",
+        "cleanupHint": "Supprimer définitivement {{count}} liens expirés ou révoqués pour {{team}}, ainsi que leurs notes et compteurs d'accès. Les membres et les liens utilisables seront conservés.",
+        "deleted": "{{count}} liens obsolètes supprimés.",
+        "loading": "Chargement des liens..."
       },
       "activation": {
         "emptyAllowed": "Aucun utilisateur n'est autorisé par cette évaluation.",
@@ -3506,7 +3513,6 @@
         "continueWithoutImport": "Continuer sans importer",
         "goToWhitelist": "Aller à la liste blanche",
         "importStatusFailed": "Impossible de vérifier si les utilisateurs existants ont été importés. Réessayez avant d'activer le filtrage.",
-
         "enable": "Activer le filtrage",
         "disable": "Désactiver le filtrage",
         "enableTitle": "Activer le filtrage de la plateforme ?",

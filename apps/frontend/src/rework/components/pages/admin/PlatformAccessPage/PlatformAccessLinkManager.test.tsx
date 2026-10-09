@@ -10,35 +10,47 @@ const hooks = vi.hoisted(() => ({
   revoke: vi.fn(),
   reset: vi.fn(),
   query: vi.fn(),
+  cleanup: vi.fn(),
+  fetching: false,
+  error: false,
+  total: 1,
+  inactive: 5,
+  uncachedPage: false,
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }) }));
 vi.mock("../../../../../common/config", () => ({ getConfig: () => ({ frontend_basename: "/" }) }));
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   usePlatformEnrollmentLinksQuery: (...args: unknown[]) => {
     hooks.query(...args);
+    const data = {
+      items: [
+        {
+          id: "invitation",
+          note: "Workshop",
+          created_at: "2026-10-01T12:00:00Z",
+          expires_at: null,
+          revoked_at: null,
+          status: "active",
+          opening_count: 7,
+          last_opened_at: "2026-10-02T12:34:56Z",
+          recoverable: true,
+        },
+      ],
+      total: hooks.total,
+      inactive_count: hooks.inactive,
+    };
+    const uncached = hooks.uncachedPage && (args[0] as { offset: number }).offset > 0;
     return {
-      data: {
-        items: [
-          {
-            id: "invitation",
-            note: "Workshop",
-            created_at: "2026-10-01T12:00:00Z",
-            expires_at: null,
-            revoked_at: null,
-            status: "active",
-            opening_count: 7,
-            last_opened_at: "2026-10-02T12:34:56Z",
-            recoverable: true,
-          },
-        ],
-        total: 1,
-      },
-      isFetching: false,
+      data,
+      currentData: uncached ? undefined : data,
+      isFetching: hooks.fetching || uncached,
+      isError: hooks.error,
     };
   },
   useGeneratePlatformLinkMutation: () => [hooks.generate, { isLoading: false, reset: hooks.reset }],
   useRevealPlatformLinkMutation: () => [hooks.reveal, { isLoading: false, reset: hooks.reset }],
   useRevokePlatformLinkMutation: () => [hooks.revoke, { isLoading: false }],
+  useDeleteInactivePlatformLinksMutation: () => [hooks.cleanup, { isLoading: false }],
 }));
 import PlatformAccessLinkManager from "./PlatformAccessLinkManager";
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -48,6 +60,12 @@ beforeEach(() => {
   hooks.generate.mockReturnValue({ unwrap: async () => ({ token: "fixture-generated-token" }) });
   hooks.reveal.mockReturnValue({ unwrap: async () => ({ token: "fixture-original-token" }) });
   hooks.revoke.mockReturnValue({ unwrap: async () => undefined });
+  hooks.cleanup.mockReturnValue({ unwrap: async () => ({ deleted_count: 5 }) });
+  hooks.fetching = false;
+  hooks.error = false;
+  hooks.total = 1;
+  hooks.inactive = 5;
+  hooks.uncachedPage = false;
   Object.defineProperty(navigator, "clipboard", {
     configurable: true,
     value: { writeText: vi.fn().mockResolvedValue(undefined) },
@@ -82,6 +100,92 @@ const change = (node: HTMLInputElement, value: string) =>
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(node, value);
     node.dispatchEvent(new Event("input", { bubbles: true }));
   });
+const selectStatus = (status: string) => {
+  act(() => document.querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]')!.click());
+  act(() => {
+    [...document.querySelectorAll<HTMLElement>('[role="option"]')]
+      .find((node) => node.textContent?.includes(`rework.platformAccess.links.status.${status}`))!
+      .click();
+  });
+};
+
+it("filters complete history from the first page", () => {
+  hooks.total = 50;
+  render();
+  act(() => document.querySelector<HTMLButtonElement>('button[aria-label="dataTable.pagination.next"]')!.click());
+  expect(hooks.query.mock.lastCall?.[0]).toMatchObject({ offset: 25, status: undefined });
+  selectStatus("expired");
+  expect(hooks.query.mock.lastCall?.[0]).toEqual({ teamId: "demo", offset: 0, limit: 25, status: "expired" });
+});
+
+it("keeps an uncached page selected while its first request is loading", () => {
+  hooks.total = 50;
+  hooks.uncachedPage = true;
+  render();
+  act(() => document.querySelector<HTMLButtonElement>('button[aria-label="dataTable.pagination.next"]')!.click());
+  expect(hooks.query.mock.lastCall?.[0]).toMatchObject({ offset: 25 });
+  expect(document.body.textContent).not.toContain("Workshop");
+  expect(button("links.cleanup").disabled).toBe(true);
+  hooks.uncachedPage = false;
+  render();
+  expect(hooks.query.mock.lastCall?.[0]).toMatchObject({ offset: 25 });
+  expect(document.body.textContent).toContain("Workshop");
+});
+
+it("hides stale rows during refresh without resetting the current page", () => {
+  hooks.total = 50;
+  render();
+  act(() => document.querySelector<HTMLButtonElement>('button[aria-label="dataTable.pagination.next"]')!.click());
+  hooks.fetching = true;
+  render();
+  expect(document.body.textContent).not.toContain("Workshop");
+  expect(button("links.cleanup").disabled).toBe(true);
+  expect(hooks.query.mock.lastCall?.[0]).toMatchObject({ offset: 25 });
+  hooks.fetching = false;
+  hooks.error = true;
+  render();
+  expect(document.body.textContent).not.toContain("Workshop");
+});
+
+it("requires cleanup confirmation and preserves the selected filter", async () => {
+  render(false);
+  selectStatus("revoked");
+  act(() => button("links.cleanup").click());
+  expect(hooks.cleanup).not.toHaveBeenCalled();
+  expect(document.body.textContent).toContain("rework.platformAccess.links.cleanupHint");
+  act(() =>
+    [...document.querySelectorAll<HTMLButtonElement>("button")]
+      .find((node) => node.textContent === "common.cancel")!
+      .click(),
+  );
+  expect(hooks.cleanup).not.toHaveBeenCalled();
+  act(() => button("links.cleanup").click());
+  await act(async () => button("links.cleanupConfirm").click());
+  expect(hooks.cleanup).toHaveBeenCalledWith({ teamId: "demo" });
+  expect(hooks.query.mock.lastCall?.[0]).toMatchObject({ status: "revoked", offset: 0 });
+  expect(document.body.textContent).toContain("rework.platformAccess.links.deleted");
+});
+
+it("keeps a failed cleanup in the confirmation without claiming success", async () => {
+  hooks.cleanup.mockReturnValue({
+    unwrap: async () => {
+      throw new Error("unavailable");
+    },
+  });
+  render();
+  act(() => button("links.cleanup").click());
+  await act(async () => button("links.cleanupConfirm").click());
+  expect(document.querySelector('[role="dialog"] [role="alert"]')?.textContent).toContain(
+    "rework.platformAccess.failed",
+  );
+  expect(document.body.textContent).not.toContain("rework.platformAccess.links.deleted");
+});
+
+it("disables cleanup without obsolete links", () => {
+  hooks.inactive = 0;
+  render();
+  expect(button("links.cleanup").disabled).toBe(true);
+});
 it("keeps history available while Free is suspended and prevents link creation", () => {
   render(false);
   expect(document.body.textContent).toContain("Workshop");

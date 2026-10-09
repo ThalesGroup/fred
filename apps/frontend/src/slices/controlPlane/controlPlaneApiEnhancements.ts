@@ -88,7 +88,10 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
       invalidatesTags: ["PlatformAccessLinks"],
     },
     listPlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksGet: {
-      providesTags: ["PlatformAccessLinks"],
+      providesTags: (_result, _error, arg) => [{ type: "PlatformAccessLinks", id: arg.teamId }],
+    },
+    deleteInactivePlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksInactiveDelete: {
+      invalidatesTags: (_result, _error, arg) => [{ type: "PlatformAccessLinks", id: arg.teamId }],
     },
     revokePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdDelete: {
       invalidatesTags: ["PlatformAccessLinks"],
@@ -933,5 +936,7 @@ export const useRevealPlatformLinkMutation =
   enhancedControlPlaneApi.useRevealPlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdRevealPostMutation;
 export const useRevokePlatformLinkMutation =
   enhancedControlPlaneApi.useRevokePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdDeleteMutation;
+export const useDeleteInactivePlatformLinksMutation =
+  enhancedControlPlaneApi.useDeleteInactivePlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksInactiveDeleteMutation;
 export const useRecordFreeOpeningMutation =
   enhancedControlPlaneApi.useRecordFreeEnrollmentOpeningControlPlaneV1PlatformAccessFreeTokenOpeningPostMutation;

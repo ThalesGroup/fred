@@ -3489,12 +3489,19 @@
           "active": "Active",
           "suspended": "Suspended",
           "expired": "Expired",
-          "revoked": "Revoked"
+          "revoked": "Revoked",
+          "all": "All links"
         },
         "copyUrl": "Copy URL",
         "copied": "URL copied to clipboard.",
         "copyFailed": "Clipboard access failed. Select the URL above and copy it manually, or retry.",
-        "createdSuccess": "Link created"
+        "createdSuccess": "Link created",
+        "cleanup": "Delete expired and revoked links",
+        "cleanupTitle": "Delete obsolete links?",
+        "cleanupConfirm": "Delete links",
+        "cleanupHint": "Permanently delete {{count}} expired or revoked links for {{team}}, including their notes and access counts. Team members and usable links will be kept.",
+        "deleted": "{{count}} obsolete links deleted.",
+        "loading": "Loading links..."
       },
       "activation": {
         "emptyAllowed": "No users are allowed by this review.",
@@ -3506,7 +3513,6 @@
         "continueWithoutImport": "Continue without importing",
         "goToWhitelist": "Go to whitelist",
         "importStatusFailed": "Unable to check whether existing users have been imported. Retry before enabling filtering.",
-
         "enable": "Enable filtering",
         "disable": "Disable filtering",
         "enableTitle": "Activate platform filtering?",

@@ -156,6 +156,22 @@
 .linkOutput {
   margin-top: var(--spacing-s);
 }
+.linkControls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--spacing-m);
+  margin-bottom: var(--spacing-m);
+}
+.linkFilter {
+  width: 12rem;
+  max-width: 100%;
+}
+.linkTable {
+  height: 26rem;
+  min-height: 0;
+  max-height: 45dvh;
+}
 @media (max-width: 600px) {
   .linkCreation {
     grid-template-columns: minmax(0, 1fr);
