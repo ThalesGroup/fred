@@ -75,6 +75,22 @@ export default function PlatformAccessLinkManager({
   };
   const linkUrl = (token: string) => new URL(platformPath(`join-free/${token}`), window.location.origin).toString();
   const copyConfirmed = (linkId?: string) => copied && copyStatus === "copied" && copiedLinkId === linkId;
+  const copyAction = (onClick: () => void, disabled: boolean, linkId?: string) => (
+    <ActionBar
+      alwaysVisible
+      actions={[
+        {
+          id: "copy",
+          icon: copyConfirmed(linkId) ? "check" : "content_copy",
+          label: t(
+            copyConfirmed(linkId) ? "rework.platformAccess.links.copied" : "rework.platformAccess.links.copyUrl",
+          ),
+          disabled,
+          onClick,
+        },
+      ]}
+    />
+  );
   const copyAnnouncement = (
     <span className={styles.screenReaderOnly} role="status">
       {copied && copyStatus === "copied" ? t("rework.platformAccess.links.copied") : ""}
@@ -260,31 +276,20 @@ export default function PlatformAccessLinkManager({
                   size: "2fr",
                   cellRenderer: (link) => (
                     <div className={styles.row}>
-                      <ActionBar
-                        alwaysVisible
-                        actions={[
-                          {
-                            id: "copy",
-                            icon: copyConfirmed(link.id) ? "check" : "content_copy",
-                            label: t(
-                              copyConfirmed(link.id)
-                                ? "rework.platformAccess.links.copied"
-                                : "rework.platformAccess.links.copyUrl",
-                            ),
-                            disabled: busy || links.isFetching || !link.recoverable,
-                            onClick: () =>
-                              void run(async () => {
-                                try {
-                                  const result = await reveal({ teamId: team.team_id, linkId: link.id }).unwrap();
-                                  setCreated(false);
-                                  await copy(linkUrl(result.token), link.id);
-                                } finally {
-                                  revealing.reset();
-                                }
-                              }),
-                          },
-                        ]}
-                      />
+                      {copyAction(
+                        () =>
+                          void run(async () => {
+                            try {
+                              const result = await reveal({ teamId: team.team_id, linkId: link.id }).unwrap();
+                              setCreated(false);
+                              await copy(linkUrl(result.token), link.id);
+                            } finally {
+                              revealing.reset();
+                            }
+                          }),
+                        busy || links.isFetching || !link.recoverable,
+                        link.id,
+                      )}
                       <Button
                         color="error"
                         variant="outlined"
@@ -383,20 +388,7 @@ export default function PlatformAccessLinkManager({
               readOnly
               onFocus={(event) => event.target.select()}
             />
-            <ActionBar
-              alwaysVisible
-              actions={[
-                {
-                  id: "copy",
-                  icon: copyConfirmed() ? "check" : "content_copy",
-                  label: t(
-                    copyConfirmed() ? "rework.platformAccess.links.copied" : "rework.platformAccess.links.copyUrl",
-                  ),
-                  disabled: busy,
-                  onClick: () => void copy(url),
-                },
-              ]}
-            />
+            {copyAction(() => void copy(url), busy)}
             {copyStatus === "failed" && <p role="alert">{t("rework.platformAccess.links.copyFailed")}</p>}
             {copyAnnouncement}
           </div>

@@ -153,9 +153,6 @@
 .linkToolbar > button {
   margin-inline-start: auto;
 }
-.linkOutput {
-  margin-top: var(--spacing-s);
-}
 .linkControls {
   display: flex;
   flex-wrap: wrap;

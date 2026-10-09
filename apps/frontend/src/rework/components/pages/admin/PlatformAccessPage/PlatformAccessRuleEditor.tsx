@@ -58,7 +58,7 @@ export default function PlatformAccessRuleEditor({
   const [conflict, setConflict] = useState(false);
   const [conditionErrors, setConditionErrors] = useState<Record<number, string>>({});
   const [picking, setPicking] = useState<number | "add">();
-  const [selection, setSelection] = useState<{ index: number; claim: string[] }>();
+  const [selection, setSelection] = useState<number>();
   const [result, setResult] = useState<PlatformAccessPolicyPreview>();
   const locked = disabled || busy;
   const [saved, setSaved] = useState(false);
@@ -359,24 +359,22 @@ export default function PlatformAccessRuleEditor({
       {picking !== undefined && (
         <PlatformAccessClaimPicker
           onClose={() => setPicking(undefined)}
-          onSelect={(update) => {
-            if (update.claim) {
-              const index = picking === "add" ? draft.conditions.length : picking;
-              if (picking === "add")
-                edit({ ...draft, conditions: [...draft.conditions, { ...emptyCondition(), claim: update.claim }] });
-              else updateCondition(picking, { claim: update.claim });
-              setSelection({ index, claim: update.claim });
-            }
+          onSelect={(claim) => {
+            const index = picking === "add" ? draft.conditions.length : picking;
+            if (picking === "add")
+              edit({ ...draft, conditions: [...draft.conditions, { ...emptyCondition(), claim }] });
+            else updateCondition(picking, { claim });
+            setSelection(index);
             setPicking(undefined);
           }}
         />
       )}
-      {selection && draft.conditions[selection.index] && (
+      {selection !== undefined && draft.conditions[selection] && (
         <PlatformAccessValuePrompt
-          claim={selection.claim}
-          operator={draft.conditions[selection.index].operator}
+          claim={draft.conditions[selection].claim}
+          operator={draft.conditions[selection].operator}
           onSelect={(value) => {
-            updateCondition(selection.index, { claim: selection.claim, ...(value === undefined ? {} : { value }) });
+            if (value !== undefined) updateCondition(selection, { value });
             setSelection(undefined);
           }}
         />
