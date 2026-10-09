@@ -25,4 +25,4 @@
 ## 5. Documentation and close-out
 
 - [x] 5.1 Update the three package READMEs and `docs/swift/ux/COMPONENT-UX.md` for the preparation/composition/publication workflow; verify they describe implemented behavior and link the durable spec without duplicating requirements.
-- [ ] 5.2 Reconcile these artifacts with the verified implementation and approved scope, sync the delta spec, and archive the completed change through the repository procedures; verify OpenSpec validation and that no implementation tasks remain, then push the completed implementation to the draft PR linked to the issue.
+- [x] 5.2 Reconcile these artifacts with the verified implementation and approved scope, sync the delta spec, and archive the completed change through the repository procedures; verify OpenSpec validation and that no implementation tasks remain, then push the completed implementation to the draft PR linked to the issue. The new durable spec passes strict validation and all 20 main specs pass standard validation; global strict validation retains one unchanged legacy Purpose-placeholder warning, documented in the PR.
