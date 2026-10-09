@@ -26,6 +26,9 @@ Shared configuration startup events retain the selected file paths as structured
 Dependency warnings/errors retain their logger, severity and safe scoped context,
 but use a fixed diagnostic message without upstream text, extras or tracebacks in
 every delegation mode. They remain console-only to avoid recursive store emission.
+Uvicorn warnings/errors and exception records likewise omit unrestricted server
+text and tracebacks in every mode; request-correlated application diagnostics
+provide the local support references.
 
 ## Validation
 

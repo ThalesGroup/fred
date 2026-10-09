@@ -209,6 +209,16 @@ def _delegation_in_use() -> bool:
     return get_delegation_config().in_use
 
 
+def _clear_unrestricted_diagnostic_details(record: logging.LogRecord) -> None:
+    record.__dict__.pop("message", None)
+    record.exc_info = None
+    record.exc_text = None
+    record.stack_info = None
+    for key in tuple(record.__dict__):
+        if key not in _STANDARD_LOG_RECORD_ATTRS and key != "_fred_snapshot":
+            record.__dict__.pop(key, None)
+
+
 class UvicornSensitiveQueryFilter(logging.Filter):
     """
     Redact sensitive query parameter values from uvicorn log records.
@@ -223,7 +233,10 @@ class UvicornSensitiveQueryFilter(logging.Filter):
 
     def filter(self, record: logging.LogRecord) -> bool:
         delegation_in_use = _delegation_in_use()
-        if delegation_in_use:
+        if delegation_in_use or (
+            record.name != "uvicorn.access"
+            and (record.levelno >= logging.WARNING or record.exc_info is not None)
+        ):
             if record.name == "uvicorn.access":
                 method = None
                 status = None
@@ -248,16 +261,17 @@ class UvicornSensitiveQueryFilter(logging.Filter):
                 )
                 record.args = (method, status)
             else:
-                outcome = "failed" if record.levelno >= logging.ERROR else "observed"
+                outcome = (
+                    "failed"
+                    if record.levelno >= logging.ERROR or record.exc_info
+                    else "observed"
+                )
                 record.msg = "server event=uvicorn outcome=%s reason=%s"
                 record.args = (
                     outcome,
                     "server_error" if outcome == "failed" else "lifecycle",
                 )
-            record.__dict__.pop("message", None)
-            record.exc_info = None
-            record.exc_text = None
-            record.stack_info = None
+            _clear_unrestricted_diagnostic_details(record)
             return True
         if isinstance(record.msg, str):
             record.msg = _sanitize_sensitive_query_params(record.msg)
@@ -280,12 +294,7 @@ class DependencyDiagnosticFilter(logging.Filter):
         """Retain dependency severity/source without exporting upstream text or content."""
         record.msg = "Dependency diagnostic"
         record.args = ()
-        record.exc_info = None
-        record.exc_text = None
-        record.stack_info = None
-        for key in tuple(record.__dict__):
-            if key not in _STANDARD_LOG_RECORD_ATTRS and key != "_fred_snapshot":
-                record.__dict__.pop(key, None)
+        _clear_unrestricted_diagnostic_details(record)
         return True
 
 

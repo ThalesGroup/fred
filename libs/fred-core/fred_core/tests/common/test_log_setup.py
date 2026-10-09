@@ -643,6 +643,36 @@ def test_dependency_child_diagnostics_remain_sanitized(
     assert json.loads(output)["severity"] == "WARNING"
 
 
+@pytest.mark.parametrize("delegation", [False, True])
+@pytest.mark.parametrize("log_format", ["json", "text"])
+def test_uvicorn_error_traceback_remains_sanitized(
+    capsys: pytest.CaptureFixture[str],
+    delegation: bool,
+    log_format: Literal["json", "text"],
+) -> None:
+    initialize_delegation(DelegationConfig(accept_delegated_calls=delegation))
+    with _wired_uvicorn_logging():
+        log_setup(
+            service_name="server-contract",
+            store=_StubLogStore(),
+            log_format=log_format,
+            use_rich=False,
+        )
+        try:
+            raise RuntimeError("SECRET-CANARY")
+        except RuntimeError:
+            logging.getLogger("uvicorn.error").exception(
+                "ASGI failure %s", "SECRET-CANARY", extra={"detail": "SECRET-CANARY"}
+            )
+        output = capsys.readouterr().out
+        assert "SECRET-CANARY" not in output
+        assert "server event=uvicorn outcome=failed reason=server_error" in output
+        if log_format == "json":
+            event = json.loads(output)
+            assert event["severity"] == "ERROR"
+            assert "exception" not in event
+
+
 def test_context_rejects_aggregate_metadata_without_stringifying_objects() -> None:
     from fred_core.logs.context import log_context
 
