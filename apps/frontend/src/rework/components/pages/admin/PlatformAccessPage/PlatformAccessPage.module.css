@@ -169,7 +169,8 @@
   min-height: 0;
   max-height: 45dvh;
 }
-.suspendedLink {
+/* Rows use display: contents; dim cell content without fading their backgrounds. */
+.suspendedLink > * > * {
   opacity: 0.6;
   filter: grayscale(1);
 }

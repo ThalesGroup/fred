@@ -230,7 +230,7 @@ export default function PlatformAccessLinkManager({
             <DataTable
               data={history?.items ?? []}
               rowKey={(link) => link.id}
-              rowClassName={(link) => (link.status === "suspended" ? styles.suspendedLink : undefined)}
+              rowClassName={(link) => (!team.free || link.status === "suspended" ? styles.suspendedLink : undefined)}
               serverPagination={{
                 offset,
                 limit: 25,
