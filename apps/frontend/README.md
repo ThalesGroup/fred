@@ -242,17 +242,27 @@ an archive with entries escaping its root is refused. A zip made from a folder
 To add selectable themes, put entries in `theme-catalog.json`:
 
 ```json
-{"themes":[{"id":"acme","label":"Acme","base":"pebble"},{"id":"partner","label":"Partner","base":"cloud"}]}
+{
+  "themes": [
+    { "id": "acme", "label": "Acme", "base": "pebble" },
+    { "id": "partner", "label": "Partner", "base": "cloud" }
+  ]
+}
 ```
 
 Each ID must be unique, lowercase and at most 32 characters; `base` is
 `pebble`, `cobalt` or `cloud`. The base supplies all tokens, fonts and shapes.
 Add only the differences in `theme-custom.css`, using selectors such as
-`[data-ui-theme="acme"][data-theme="light"]` and the matching `dark`
-selector. Do not prefix these selectors with `html`: the admin previews also
+`[data-ui-theme="acme"][data-ui-base-theme="pebble"][data-theme="light"]`
+and the matching `dark` selector. Include the base attribute so the ZIP rule
+wins over the shipped CSS, which loads later. Do not prefix these selectors
+with `html`: the admin previews also
 need to match them. ZIP themes appear in the profile picker and the admin theme settings,
 where an admin can choose a default or hide a theme. Images and fonts placed in
 the ZIP are shared assets; CSS can select different assets for each theme.
+The chat also exposes `[data-chat-main]`, `[data-chat-welcome-agent]` and
+`[data-chat-agent-icon]` for theme-specific backgrounds and avatars. Scope
+these rules under `html[data-ui-theme="<id>"]` so other themes stay unchanged.
 
 | Variable                                                        | Meaning                                                                                                                                                                                                                                  |
 | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
