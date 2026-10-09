@@ -4278,7 +4278,11 @@ Standalone wiki-style documentation page (own tab, no app chrome) at
 page items, `Separator` dividers) and the article column
 (`Breadcrumb` + copy-page-link `IconButton`, `MarkdownRenderer` with
 `headingAnchors`). fr/en switch as an xs `ButtonGroup` in the header, synced
-with the URL. Entry: profile menu item below "Profil" (icon `help`).
+with the URL. Entry: the Help Center icon in the global navigation rail.
+When `contactSupportLink` is configured, the shared header displays a localized
+"Contact support" link on every section and article page. It opens the configured
+destination in a new tab with `noopener noreferrer`; the action is absent when
+the URL is empty. Header actions wrap on narrower screens.
 
 ### `MarkdownRenderer` `headingAnchors` + `HeadingWithAnchor`
 
