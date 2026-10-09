@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { normalizeApiError } from "@core/errors/normalizeApiError";
 import Button from "@shared/atoms/Button/Button";
+import Icon from "@shared/atoms/Icon/Icon";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import Switch from "@shared/atoms/Switch/Switch";
 import TextInput from "@shared/atoms/TextInput/TextInput";
@@ -272,7 +273,10 @@ export default function PlatformAccessRuleEditor({
                   aria-haspopup="dialog"
                   onClick={() => setPicking(index)}
                 >
-                  {selectedField}
+                  <code className={styles.fieldName} title={selectedField}>
+                    {selectedField}
+                  </code>
+                  <Icon category="outlined" type="edit" />
                 </button>
               </div>
               <Select

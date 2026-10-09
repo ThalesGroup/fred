@@ -38,6 +38,7 @@ export default function PlatformAccessValuePrompt({
   const value =
     operator === "regex" && literal !== undefined ? literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") : literal;
   const limit = operator === "regex" ? 2048 : 1024;
+  const selectedField = claim.length === 1 ? claim[0] : claim.map((key) => JSON.stringify(key)).join(" > ");
   return (
     <Dialog
       open
@@ -51,23 +52,39 @@ export default function PlatformAccessValuePrompt({
         if (value !== undefined && value.length > 0 && value.length <= limit) onSelect(value);
       }}
     >
-      <div className={styles.dialogBody}>
-        <p className={styles.exampleValue}>{claim.map((key) => JSON.stringify(key)).join(" > ")}</p>
+      <div className={`${styles.dialogBody} ${styles.valuePrompt}`}>
         <p>{t("rework.platformAccess.picker.valueHint")}</p>
-        {own.isFetching && <p role="status">{t("rework.platformAccess.loading")}</p>}
-        {own.isError && <p role="alert">{t("rework.platformAccess.picker.failed")}</p>}
-        {!own.isFetching && !own.isError && !examples.length && <p>{t("rework.platformAccess.picker.noValue")}</p>}
-        {examples.length > 1 ? (
-          <Select
-            size="small"
-            label={t("rework.platformAccess.rule.value")}
-            value={chosen}
-            onChange={setChosen}
-            options={examples.map((example, index) => ({ key: String(index), value: index, label: example }))}
-          />
-        ) : (
-          examples.length === 1 && <p className={styles.exampleValue}>{examples[0]}</p>
-        )}
+        <dl className={styles.tokenExample}>
+          <div>
+            <dt>{t("rework.platformAccess.picker.selected")}</dt>
+            <dd>
+              <code className={styles.fieldName} title={selectedField}>
+                {selectedField}
+              </code>
+            </dd>
+          </div>
+          <div>
+            <dt>{t("rework.platformAccess.picker.tokenValue")}</dt>
+            <dd className={styles.tokenValue}>
+              {own.isFetching && <p role="status">{t("rework.platformAccess.loading")}</p>}
+              {own.isError && <p role="alert">{t("rework.platformAccess.picker.failed")}</p>}
+              {!own.isFetching && !own.isError && !examples.length && (
+                <p>{t("rework.platformAccess.picker.noValue")}</p>
+              )}
+              {examples.length > 1 ? (
+                <Select
+                  size="small"
+                  label={t("rework.platformAccess.rule.value")}
+                  value={chosen}
+                  onChange={setChosen}
+                  options={examples.map((example, index) => ({ key: String(index), value: index, label: example }))}
+                />
+              ) : (
+                examples.length === 1 && <span className={styles.exampleValue}>{examples[0]}</span>
+              )}
+            </dd>
+          </div>
+        </dl>
         {value !== undefined && value.length > limit && (
           <p role="alert">{t("rework.platformAccess.picker.valueTooLong")}</p>
         )}

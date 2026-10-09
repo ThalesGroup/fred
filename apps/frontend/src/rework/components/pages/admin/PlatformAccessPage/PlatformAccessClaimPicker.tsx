@@ -7,6 +7,7 @@ import { Dialog } from "@shared/molecules/Dialog/Dialog";
 import type { PlatformAccessCondition } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { usePlatformAccessOwnClaimsQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import styles from "./PlatformAccessClaimPicker.module.css";
+import pageStyles from "./PlatformAccessPage.module.css";
 
 import { isRootAttribute } from "./platformAccessClaims";
 
@@ -22,6 +23,7 @@ export default function PlatformAccessClaimPicker({
   const [advanced, setAdvanced] = useState(false);
   const [search, setSearch] = useState("");
   const [path, setPath] = useState<string[]>();
+  const selectedField = path?.length === 1 ? path[0] : path?.map((key) => JSON.stringify(key)).join(" > ");
   const facts = !own.isFetching && !own.isError ? own.data : undefined;
   const selectable = new Set((facts?.selectable_paths ?? []).map((part) => JSON.stringify(part)));
   const select = (next: string[]) => {
@@ -139,16 +141,12 @@ export default function PlatformAccessClaimPicker({
             </>
           )}
         </>
-        {path && (
-          <div className={styles.selection}>
-            <p>
-              {t("rework.platformAccess.picker.selected")}:{" "}
-              <strong title={path.map((key) => JSON.stringify(key)).join(" > ")}>
-                {path.map((key) => JSON.stringify(key)).join(" > ")}
-              </strong>
-            </p>
-          </div>
-        )}
+        <div className={styles.selection}>
+          <span>{t("rework.platformAccess.picker.selected")}</span>
+          <code className={pageStyles.fieldName} title={selectedField} aria-live="polite" data-empty={!path}>
+            {selectedField ?? t("rework.platformAccess.picker.noSelection")}
+          </code>
+        </div>
       </div>
     </Dialog>
   );

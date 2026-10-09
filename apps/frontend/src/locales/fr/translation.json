@@ -3361,6 +3361,8 @@
         "empty": "Aucun champ compatible trouvé. Essayez l'autre source.",
         "failed": "Impossible de lire les claims vérifiés de votre session.",
         "selected": "Champ sélectionné",
+        "noSelection": "Aucun champ sélectionné",
+        "tokenValue": "Valeur actuelle du token",
         "useField": "Utiliser ce champ",
         "ownAdvancedHint": "Claims vérifiés de votre token actuel, y compris les champs techniques et les propriétés imbriquées. Cliquez sur une clé contenant du texte ou une liste de textes.",
         "advancedFields": "Afficher les champs avancés",
@@ -3368,10 +3370,10 @@
         "simpleEmpty": "Aucun champ texte à la racine ne correspond. Modifiez la recherche ou affichez les champs avancés.",
         "valueTitle": "Utiliser la valeur actuelle ?",
         "useValue": "Utiliser cette valeur",
-        "keepValue": "Garder ma valeur",
-        "valueHint": "Utilisez la valeur de votre compte connecté ou gardez la valeur du filtre déjà saisie.",
+        "keepValue": "Saisir ma propre valeur",
+        "valueHint": "Utilisez cette valeur de votre compte ou saisissez vous-même la valeur du filtre.",
         "noValue": "Ce champ n'a pas de valeur texte utilisable dans votre compte actuel.",
-        "valueTooLong": "Cette valeur dépasse la limite du filtre. Gardez votre valeur et saisissez-en une plus courte."
+        "valueTooLong": "Cette valeur dépasse la limite du filtre. Saisissez vous-même une valeur plus courte."
       },
       "verificationFailed": "Vérification de l'accès indisponible",
       "links": {

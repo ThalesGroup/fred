@@ -177,7 +177,7 @@
 .accountField {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-xs);
+  gap: var(--spacing-2xs);
   min-width: 0;
 }
 .accountField > span {
@@ -185,22 +185,82 @@
   font: var(--font-body-medium);
 }
 .fieldChoice {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
   cursor: pointer;
   border: 0;
   border-radius: var(--radius-ms);
   background: transparent;
-  padding: var(--spacing-s) 0;
+  padding: 0;
+  width: fit-content;
+  max-width: 100%;
+  min-height: 2.5rem;
   color: var(--primary);
   font: var(--font-body-large);
   text-align: start;
-  overflow-wrap: anywhere;
 }
-.fieldChoice:hover {
-  text-decoration: underline;
+.fieldName {
+  display: inline-block;
+  border-radius: var(--radius-ms);
+  background: color-mix(in srgb, var(--primary) 8%, var(--surface-container));
+  padding: var(--spacing-xs) var(--spacing-s);
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  font-family: var(--font-family-mono, monospace);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fieldChoice > span {
+  flex-shrink: 0;
+}
+.fieldChoice:not(:disabled):hover .fieldName {
+  background: color-mix(in srgb, var(--primary) 16%, var(--surface-container));
+}
+.fieldChoice:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 .fieldChoice:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
+}
+.valuePrompt {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+}
+.valuePrompt > p {
+  margin: 0;
+}
+.tokenExample {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+  margin: 0;
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-ms);
+  background: var(--surface-container);
+  padding: var(--spacing-m);
+  min-width: 0;
+}
+.tokenExample dt {
+  margin-bottom: var(--spacing-xs);
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
+.tokenExample dd {
+  margin: 0;
+  min-width: 0;
+}
+.tokenValue {
+  color: var(--on-surface);
+  font: var(--font-body-large);
+  overflow-wrap: anywhere;
+}
+.tokenValue > span {
+  white-space: pre-wrap;
 }
 
 .floatingAction {

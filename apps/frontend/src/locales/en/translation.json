@@ -3361,6 +3361,8 @@
         "empty": "No supported claims found. Try the other source.",
         "failed": "Could not read your verified session claims.",
         "selected": "Selected field",
+        "noSelection": "No field selected",
+        "tokenValue": "Current token value",
         "useField": "Use this field",
         "ownAdvancedHint": "Verified claims from your current access token, including technical fields and nested properties. Click a text or text-list key to select it.",
         "advancedFields": "Show advanced fields",
@@ -3368,10 +3370,10 @@
         "simpleEmpty": "No matching root text fields. Change the search or show advanced fields.",
         "valueTitle": "Use the current value?",
         "useValue": "Use this value",
-        "keepValue": "Keep my value",
-        "valueHint": "Use the value from your signed-in account, or keep the filter value you already entered.",
+        "keepValue": "Enter my own value",
+        "valueHint": "Use this value from your account, or enter the filter value yourself.",
         "noValue": "This field has no usable text value in your current account.",
-        "valueTooLong": "This value exceeds the filter limit. Keep your value and enter a shorter one."
+        "valueTooLong": "This value exceeds the filter limit. Enter a shorter value yourself."
       },
       "verificationFailed": "Access verification unavailable",
       "links": {
