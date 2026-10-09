@@ -48,7 +48,7 @@ import logging
 from collections.abc import Awaitable, Callable, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Annotated, Any, Literal, cast
 
 from fred_sdk.contracts.capability import (
     AgentCapability,
@@ -62,7 +62,7 @@ from langchain.agents.middleware import AgentMiddleware, AgentState
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.messages import SystemMessage
 from langchain_core.tools import BaseTool, tool
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from fred_capability_writable_document.router import build_router
 from fred_capability_writable_document.store import (
@@ -117,8 +117,10 @@ def _open_documents_fragment(records: Sequence[WritableDocumentRecord]) -> str:
         "Collaborative documents already open in the editor for this "
         f"session:\n{catalog}\n\n"
         "When the user asks to modify, revise, correct, extend, shorten, "
-        "reformat, or otherwise change one of these documents, call "
-        "write_document with that exact document_id so the SAME document "
+        "reformat, or otherwise change one of these documents, first call "
+        "begin_document_generation with a short title and wait for its result. "
+        "Then compose the revised content and call write_document in the next "
+        "round with that exact document_id so the SAME document "
         "is updated in place. Only omit document_id when the user clearly "
         "wants a brand-new, separate document."
     )
@@ -131,12 +133,17 @@ def _open_documents_fragment(records: Sequence[WritableDocumentRecord]) -> str:
 # the collaborative editor.
 _WRITE_INSTRUCTIONS = (
     "WRITABLE DOCUMENT: when the user asks — in any wording or language — to "
-    "write, create, draft, or produce a document, report, email, memo, "
+    "write, create, draft, produce, or revise a document, report, email, memo, "
     "meeting notes, or any other textual deliverable, you MUST open it in the "
     "editor; never write the deliverable itself in the chat. If the finished "
     "Markdown already exists in the conversation workspace and the "
     "open_writable_document tool is available, call it with the file path. "
-    "Otherwise call the write_document tool with the full content. "
+    "Otherwise, after necessary research or clarification and BEFORE composing "
+    "new or revised content, call begin_document_generation with a short title "
+    "as a separate tool round. Wait for its result, then compose the full "
+    "Markdown and call write_document in a later round. NEVER batch preparation "
+    "and publication together. Repeat preparation for EVERY generation or "
+    "revision, even if it was already called in an earlier user turn. "
     "The tool opens the document in a side-by-side editor where the user can "
     "review, edit, and export it. In the chat, reply only with a short "
     "summary of what you put in the document."
@@ -224,6 +231,22 @@ class _WritableDocumentMiddleware(AgentMiddleware):
         session_id = identity.session_id
         user_id = identity.user_id
 
+        @tool("begin_document_generation")
+        async def begin_document_generation(
+            title: Annotated[str, Field(min_length=1, max_length=160)],
+        ) -> str:
+            """Announce document composition before drafting new or revised content.
+
+            Call this alone after research or clarification, with only a short title.
+            Wait for its result before composing the full write_document arguments.
+            This does not create or modify a document.
+            """
+            return (
+                f"Document composition started for '{title}'. Now compose the full "
+                "Markdown and call write_document in the next round, reusing the "
+                "existing document_id when revising a document."
+            )
+
         @tool("write_document", response_format="content_and_artifact")
         async def write_document(
             title: str,
@@ -235,6 +258,9 @@ class _WritableDocumentMiddleware(AgentMiddleware):
             Use this whenever you are producing a deliverable document (report, email, memo,
             meeting notes) so the document is separated from the conversation and the user can
             edit it and export it to various formats (Word and Markdown).
+
+            Before composing new or revised content, call begin_document_generation alone
+            and wait for its result. Publish the full content in a later tool round.
 
             IMPORTANT - revise in place, never duplicate: to modify, correct, extend, shorten,
             reformat, or otherwise change a document that ALREADY exists, you MUST pass its
@@ -254,7 +280,7 @@ class _WritableDocumentMiddleware(AgentMiddleware):
                 document_id=document_id,
             )
 
-        tools: Sequence[BaseTool] = [write_document]
+        tools: Sequence[BaseTool] = [write_document, begin_document_generation]
         self.tools = tools
         self._session_id = session_id
 

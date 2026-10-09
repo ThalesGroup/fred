@@ -1695,6 +1695,10 @@
       "summaryTools_one": "{{count}} outil",
       "summaryTools_other": "{{count}} outils",
       "thinking": "Réflexion en cours…",
+      "generateDocument": "Génération du contenu du document...",
+      "generatePresentation": "Génération du contenu de la présentation...",
+      "generateHtml": "Génération du contenu HTML...",
+      "generateContent": "Génération du contenu...",
       "tabular": {
         "catalogForDocument": "Lecture du sommaire du document « {{name}} ».",
         "catalogForWorkbook": "Lecture du sommaire du classeur.",
@@ -1736,6 +1740,12 @@
         "success": "Succès"
       },
       "toolLabels": {
+        "prepareDocument": "Préparation du contenu du document",
+        "preparePresentation": "Préparation du contenu de la présentation",
+        "prepareHtml": "Préparation du contenu HTML",
+        "writeDocument": "Écriture du document",
+        "renderPresentation": "Génération du PowerPoint",
+        "renderHtml": "Rendu de l'aperçu HTML",
         "readQuery": "Lecture de la requête",
         "documents": "Liste des documents tabulaires",
         "markdown": "Lecture du catalogue du classeur",

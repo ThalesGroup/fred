@@ -1,16 +1,16 @@
 ---
 schema: 1
-title: "Plan visible deliverable generation before publication"
+title: "Show deliverable generation before publication"
 impact: none
 configuration: none
-configuration_reason: "This draft adds OpenSpec planning documents only; application configuration and chart values are unchanged."
-no_action_reason: "No runtime behavior, API, stored data, or deployment artifact changes in this planning-only draft."
+configuration_reason: "Preparation tools follow existing capability activation and template configuration; no new chart or application setting is needed."
+no_action_reason: "Deploy the updated frontend and agent pod normally. No stored data migration or operator action is required."
 ---
 
 ## Applicability
 
-This planning-only draft describes a proposed preparation/composition/publication
-workflow. It does not yet ship the tools or frontend labels.
+This change adds preparation tools and live composition/publication labels for
+writable documents, configured PowerPoint templates, and static HTML artifacts.
 
 ## Prerequisites
 
@@ -26,16 +26,16 @@ Deploy Fred normally; no additional operator or user action is required.
 
 ## Validation
 
-Validate the planning artifacts with
-`openspec validate show-deliverable-generation-progress --strict`.
-The proposed generation indicators are not available until implementation.
+On an enabled ReAct agent, request a document or HTML artifact, or fill a
+configured PowerPoint template. Confirm preparation completes before the content
+generation label appears, followed by publication and the existing deliverable.
 
 ## Rollback
 
-Use the normal rollback procedure; this draft introduces no data migration.
+Use the normal rollback procedure; this change introduces no data migration.
 
 ## Limitations
 
-Reconcile this declaration with the actual implementation before making the PR
-ready for final review. Operator impact has only been assessed for this draft's
-planning documents.
+The instructed workflow adds one ordinary tool call and one model round per
+generation, including revisions. Existing call budgets still apply. Publication
+tools remain callable directly; old pods continue to work with the updated UI.

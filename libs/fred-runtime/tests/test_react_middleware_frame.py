@@ -68,7 +68,7 @@ from langchain_core.messages import (
     ToolMessage,
 )
 from langchain_core.outputs import ChatGeneration, ChatResult
-from langchain_core.tools import tool
+from langchain_core.tools import BaseTool, tool
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Checkpointer, Command
 from pydantic import Field
@@ -148,10 +148,12 @@ def _build_agent(
     approval_enabled: bool = True,
     always_require_tools: tuple[str, ...] = (),
     max_tool_calls_per_turn: int | None = None,
+    tools: list[BaseTool] | None = None,
 ) -> Any:
+    available_tools = tools if tools is not None else [send_email, get_weather]
     return build_tool_loop_compiled_react_agent(
         model=model,
-        tools=[send_email, get_weather],
+        tools=available_tools,
         system_prompt="SYS-frame.",
         binding=_binding(),
         approval_policy=ToolApprovalPolicy(
@@ -159,13 +161,81 @@ def _build_agent(
         ),
         checkpointer=cast(Checkpointer, InMemorySaver()),
         definition=_definition(),
-        available_tool_names={"send_email", "get_weather"},
+        available_tool_names={tool.name for tool in available_tools},
         max_tool_calls_per_turn=max_tool_calls_per_turn,
     )
 
 
 def _cfg(thread_id: str) -> dict[str, Any]:
     return {"configurable": {"thread_id": thread_id}}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "limit,expected", [(1, ["prepare"]), (2, ["prepare", "publish"])]
+)
+async def test_preparation_consumes_the_normal_tool_budget(
+    limit: int, expected: list[str]
+) -> None:
+    executed: list[str] = []
+
+    @tool
+    def begin_document_generation(title: str) -> str:
+        """Acknowledge document preparation."""
+        executed.append("prepare")
+        return "Compose in the next round."
+
+    @tool
+    def write_document(title: str, content_markdown: str) -> str:
+        """Publish the document."""
+        executed.append("publish")
+        return "saved"
+
+    model = ScriptedModel(
+        script=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    _tool_call(
+                        "begin_document_generation", {"title": "Report"}, "prepare"
+                    )
+                ],
+            ),
+            AIMessage(
+                content="",
+                tool_calls=[
+                    _tool_call(
+                        "write_document",
+                        {"title": "Report", "content_markdown": "Body"},
+                        "publish",
+                    )
+                ],
+            ),
+            AIMessage(content="done"),
+        ]
+    )
+    agent = _build_agent(
+        model,
+        approval_enabled=False,
+        tools=[begin_document_generation, write_document],
+        max_tool_calls_per_turn=limit,
+    )
+    result = await agent.ainvoke(
+        {"messages": [HumanMessage("Create a report")]}, _cfg(f"budget-{limit}")
+    )
+
+    assert executed == expected
+    assert len(model.calls) >= 2
+    assert any(
+        isinstance(message, ToolMessage) and message.tool_call_id == "prepare"
+        for message in model.calls[1]
+    )
+    publication_result = next(
+        message
+        for message in result["messages"]
+        if isinstance(message, ToolMessage) and message.tool_call_id == "publish"
+    )
+    assert publication_result.status == ("error" if limit == 1 else "success")
 
 
 @pytest.fixture(autouse=True)

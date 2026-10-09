@@ -363,6 +363,7 @@ export function useChatSse(
   >(new Map());
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [waitResponse, setWaitResponse] = useState(false);
+  const [activeExchangeId, setActiveExchangeId] = useState<string | null>(null);
   // Chat-turn controls (CAPAB-01 #1976, RFC §3.3/§3.7) — supersedes the retired
   // `effectiveChatOptions`. Populated by prepare-execution; the composer
   // resolves each descriptor's `widget` id against the chat-turn-control
@@ -411,6 +412,7 @@ export function useChatSse(
     // because this IS the current owner's cancellation, issued from outside.
     preflightOwnerRef.current = null;
     setWaitResponse(false);
+    setActiveExchangeId(null);
     thoughtBufsRef.current.clear();
     setAll([]);
     setChatControls([]);
@@ -435,6 +437,7 @@ export function useChatSse(
     preflightOwnerRef.current = null;
     if (turnSessionRef.current) stoppedSessionsRef.current.add(turnSessionRef.current);
     setWaitResponse(false);
+    setActiveExchangeId(null);
   }, []);
 
   // Parse one SSE block and dispatch to ChatMessage state + callbacks.
@@ -490,6 +493,7 @@ export function useChatSse(
         }
 
         case "final": {
+          setActiveExchangeId((current) => (current === exchangeId ? null : current));
           // `final` is the only reliable end-of-turn signal on this stream (see
           // agent_app.py's `execute_stream` docstring) — the contract's
           // `turn_persisted` event is defined but never actually emitted, so the
@@ -583,6 +587,7 @@ export function useChatSse(
         }
 
         case "awaiting_human": {
+          setActiveExchangeId((current) => (current === exchangeId ? null : current));
           if (
             event.token_usage ||
             event.sources?.length ||
@@ -760,6 +765,7 @@ export function useChatSse(
         }
 
         case "execution_error": {
+          setActiveExchangeId((current) => (current === exchangeId ? null : current));
           console.error(`[useChatSse] execution_error received — ${event.message ?? "unknown error"}`);
           // Close any thoughts that are still open so they don't blink forever.
           for (const [thoughtId, buf] of thoughtBufsRef.current.entries()) {
@@ -890,6 +896,7 @@ export function useChatSse(
       preflightOwnerRef.current = ac;
       // Immediately non-reentrant, not only once prepare-execution succeeds —
       // the send button disables right away, matching the synchronous lock.
+      setActiveExchangeId(null);
       setWaitResponse(true);
 
       // Releases the preflight lock on every early-return path below —
@@ -1069,6 +1076,7 @@ export function useChatSse(
         preflightOwnerRef.current = null;
       }
       turnSessionRef.current = effectiveSessionId;
+      setActiveExchangeId(exchangeId);
       // A continue sends no message: the composer keeps the user's draft.
       if (!continuing) onTurnStarted?.();
 
@@ -1337,6 +1345,7 @@ export function useChatSse(
       const agentQuestion = hitlPayload?.stage === "agent_question";
       const answersToMirror = batchAnswers ?? [{ event: pending, answer, freeText, skipped }];
 
+      setActiveExchangeId(exchangeId);
       setWaitResponse(true);
 
       // Only flipped once the runtime answers 2xx. A fetch rejection or a
@@ -1544,6 +1553,7 @@ export function useChatSse(
   return {
     messages,
     waitResponse,
+    activeExchangeId,
     chatControls,
     maxChatInputChars,
     prepareChatControls,

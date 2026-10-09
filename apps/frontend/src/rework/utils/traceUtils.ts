@@ -42,6 +42,22 @@ export type TraceEntry =
 
 export type TraceStatus = "pending" | "awaiting_confirmation" | "ok" | "error" | "streaming";
 
+type DeliverableKind = "document" | "presentation" | "html";
+const DELIVERABLE_TOOLS: Record<string, { kind: DeliverableKind; preparation: boolean; label: string }> = {
+  begin_document_generation: { kind: "document", preparation: true, label: "prepareDocument" },
+  begin_ppt_generation: { kind: "presentation", preparation: true, label: "preparePresentation" },
+  begin_html_artifact_generation: { kind: "html", preparation: true, label: "prepareHtml" },
+  write_document: { kind: "document", preparation: false, label: "writeDocument" },
+  fill_ppt_template: { kind: "presentation", preparation: false, label: "renderPresentation" },
+  render_html_artifact: { kind: "html", preparation: false, label: "renderHtml" },
+};
+
+const COMPOSITION_LABELS: Record<DeliverableKind, string> = {
+  document: "generateDocument",
+  presentation: "generatePresentation",
+  html: "generateHtml",
+};
+
 export function isTraceChannel(channel: Channel): boolean {
   return TRACE_CHANNELS.includes(channel);
 }
@@ -512,6 +528,8 @@ export function entryLabel(entry: TraceEntry, translate?: (key: string) => strin
       return "Observation";
     case "tool_call": {
       if (entry.kind !== "combo") return "Tool call";
+      const deliverable = DELIVERABLE_TOOLS[toolName(entry.call)];
+      if (deliverable && translate) return translate(`rework.chatTrace.toolLabels.${deliverable.label}`);
       if (toolSlug(toolName(entry.call)) === "read_query" && translate) {
         return translate("rework.chatTrace.toolLabels.readQuery");
       }
@@ -1301,4 +1319,42 @@ export function traceSummary(entries: TraceEntry[], pendingToolCallIds?: readonl
   const awaitingConfirmation = statuses.some((s) => s === "awaiting_confirmation");
 
   return { reasoningMs, toolCount, toolMs: totalLatencyMs(entries), running, awaitingConfirmation };
+}
+
+/** Live activity between short preparation and publication; tool rows keep their own status. */
+export function deliverableActivity(entries: TraceEntry[]): string | null {
+  if (entries.some((entry) => entry.kind === "solo" && entry.message.channel === "error")) return null;
+  const composing = new Map<string, Set<DeliverableKind>>();
+  const pending: ((typeof DELIVERABLE_TOOLS)[string] | undefined)[] = [];
+  for (const entry of entries) {
+    const message = entry.kind === "combo" ? entry.call : entry.message;
+    const executionId = message.metadata?.extras?.execution_id;
+    const scope = JSON.stringify([message.session_id, message.exchange_id, executionId ?? null]);
+    if (statusForEntry(entry) === "error") {
+      composing.delete(scope);
+      continue;
+    }
+    if (entry.kind !== "combo") continue;
+    const tool = DELIVERABLE_TOOLS[toolName(entry.call)];
+    if (!entry.result) pending.push(tool);
+    if (!tool) continue;
+    if (tool.preparation) {
+      if (entry.result && toolResultOk(entry.result)) {
+        const kinds = composing.get(scope) ?? new Set<DeliverableKind>();
+        kinds.add(tool.kind);
+        composing.set(scope, kinds);
+      }
+    } else {
+      composing.get(scope)?.delete(tool.kind);
+    }
+  }
+  if (pending.length > 0) {
+    const publication = pending[0];
+    return pending.length === 1 && publication && !publication.preparation
+      ? `rework.chatTrace.toolLabels.${publication.label}`
+      : null;
+  }
+  const kinds = [...composing.values()].flatMap((kinds) => [...kinds]);
+  if (kinds.length === 0) return null;
+  return `rework.chatTrace.${kinds.length === 1 ? COMPOSITION_LABELS[kinds[0]] : "generateContent"}`;
 }

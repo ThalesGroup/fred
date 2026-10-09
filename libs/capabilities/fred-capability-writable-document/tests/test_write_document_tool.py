@@ -34,6 +34,7 @@ from fred_sdk.contracts.capability import (
 )
 from fred_sdk.contracts.runtime import RuntimeServices
 from port_fakes import FakeWritableDocumentStore
+from pydantic import BaseModel
 
 
 @pytest.fixture()
@@ -46,7 +47,11 @@ def fake_store() -> FakeWritableDocumentStore:
         store_module.clear_store_provider()
 
 
-def _tool(session_id: str | None = "s-1", user_id: str = "u-1"):
+def _tool(
+    session_id: str | None = "s-1",
+    user_id: str = "u-1",
+    name: str = "write_document",
+):
     ctx = CapabilityContext(
         identity=CapabilityIdentity(user_id=user_id, session_id=session_id),
         config=EmptyModel(),
@@ -54,7 +59,51 @@ def _tool(session_id: str | None = "s-1", user_id: str = "u-1"):
         services=RuntimeServices(),
     )
     middleware = _WritableDocumentMiddleware(ctx)
-    return middleware.tools[0]
+    return next(tool for tool in middleware.tools if tool.name == name)
+
+
+@pytest.mark.asyncio
+async def test_preparation_does_not_create_document(
+    fake_store: FakeWritableDocumentStore,
+):
+    preparation = _tool(name="begin_document_generation")
+    assert isinstance(preparation.args_schema, type) and issubclass(
+        preparation.args_schema, BaseModel
+    )
+    schema = preparation.args_schema.model_json_schema()
+    assert set(schema["properties"]) == {"title"}
+    assert schema["properties"]["title"]["maxLength"] == 160
+
+    result = await preparation.ainvoke({"title": "Weekly report"})
+
+    assert isinstance(result, str)
+    assert "next round" in result
+    assert "write_document" in result
+    assert await fake_store.list_for_session("s-1") == []
+
+
+@pytest.mark.asyncio
+async def test_preparation_preserves_existing_document(
+    fake_store: FakeWritableDocumentStore,
+):
+    title = "Long report " + "x" * 160
+    original = await _tool().ainvoke(
+        {
+            "type": "tool_call",
+            "name": "write_document",
+            "id": "seed",
+            "args": {"title": title, "content_markdown": "v1"},
+        }
+    )
+    document_id = original.artifact.ui_parts[0].document_id
+
+    await _tool(name="begin_document_generation").ainvoke({"title": "Report"})
+
+    rows = await fake_store.list_for_session("s-1")
+    assert len(rows) == 1
+    assert rows[0].document_id == document_id
+    assert rows[0].title == title
+    assert rows[0].content_md == "v1"
 
 
 @pytest.mark.asyncio

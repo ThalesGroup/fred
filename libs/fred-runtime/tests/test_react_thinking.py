@@ -356,6 +356,7 @@ class _FakeServices:
 class _FakeCompiledAgent:
     def __init__(self, events: list[object]) -> None:
         self._events = events
+        self.consumed = 0
 
     async def astream(
         self,
@@ -365,6 +366,7 @@ class _FakeCompiledAgent:
         stream_mode: object = None,
     ) -> AsyncIterator[object]:
         for event in self._events:
+            self.consumed += 1
             yield event
 
 
@@ -679,6 +681,122 @@ async def test_stream_without_reasoning_emits_no_thought_events() -> None:
         e.delta for e in collected if isinstance(e, AssistantDeltaRuntimeEvent)
     )
     assert answer == "plain answer"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "preparation,publication,payload_key",
+    [
+        ("begin_document_generation", "write_document", "content_markdown"),
+        ("begin_ppt_generation", "fill_ppt_template", "summary"),
+        ("begin_html_artifact_generation", "render_html_artifact", "html"),
+    ],
+)
+async def test_preparation_is_visible_before_payload_composition(
+    preparation: str, publication: str, payload_key: str
+) -> None:
+    prep_call = AIMessage(
+        content="",
+        tool_calls=[
+            {"id": "prepare", "name": preparation, "args": {"title": "Report"}}
+        ],
+    )
+    prep_result = ToolMessage(content="ready", tool_call_id="prepare", name=preparation)
+    publication_args = {"title": "Report", payload_key: "x" * 20_000}
+    events: list[object] = [
+        ("updates", {"agent": {"messages": [prep_call]}}),
+        ("updates", {"tools": {"messages": [prep_result]}}),
+        (
+            "messages",
+            (
+                AIMessageChunk(
+                    content="",
+                    tool_call_chunks=[
+                        {
+                            "name": publication,
+                            "args": '{"title":"Report",',
+                            "id": "publish",
+                            "index": 0,
+                        }
+                    ],
+                ),
+                {"langgraph_node": "agent"},
+            ),
+        ),
+        (
+            "updates",
+            {
+                "agent": {
+                    "messages": [
+                        AIMessage(
+                            content="",
+                            tool_calls=[
+                                {
+                                    "id": "publish",
+                                    "name": publication,
+                                    "args": publication_args,
+                                }
+                            ],
+                        )
+                    ]
+                }
+            },
+        ),
+        (
+            "updates",
+            {
+                "tools": {
+                    "messages": [
+                        ToolMessage(
+                            content="published",
+                            tool_call_id="publish",
+                            name=publication,
+                        )
+                    ]
+                }
+            },
+        ),
+        ("updates", {"agent": {"messages": [AIMessage(content="done")]}}),
+    ]
+    compiled = _FakeCompiledAgent(events)
+    executor = _TransportBackedReActExecutor(
+        compiled_agent=compiled,  # type: ignore[arg-type]
+        binding=_FakeBinding(),  # type: ignore[arg-type]
+        services=_FakeServices(),  # type: ignore[arg-type]
+        runtime_class_name="ReActRuntime",
+    )
+    stream = executor.stream(
+        ReActInput(
+            messages=(
+                ReActMessage(role=ReActMessageRole.USER, content="Create a report"),
+            )
+        ),
+        ExecutionConfig(),
+    )
+    preparation_events: list[object] = []
+    async for event in stream:
+        preparation_events.append(event)
+        if isinstance(event, ToolResultRuntimeEvent):
+            break
+    first_call = next(
+        event for event in preparation_events if isinstance(event, ToolCallRuntimeEvent)
+    )
+    assert first_call.tool_name == preparation
+    first_result = preparation_events[-1]
+    assert isinstance(first_result, ToolResultRuntimeEvent)
+    assert first_result.call_id == "prepare"
+    assert compiled.consumed == 2
+
+    remainder = [event async for event in stream]
+    calls = [event for event in remainder if isinstance(event, ToolCallRuntimeEvent)]
+    assert len(calls) == 1
+    assert calls[0].tool_name == publication
+    assert calls[0].arguments == publication_args
+    assert not any(
+        isinstance(event, ThoughtStartEvent) and event.source == "model_native"
+        for event in preparation_events + remainder
+    )
+    assert isinstance(remainder[-1], FinalRuntimeEvent)
 
 
 def _stream_frame(

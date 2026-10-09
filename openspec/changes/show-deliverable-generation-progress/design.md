@@ -22,6 +22,11 @@ Each tool returns a short acknowledgement and directs the model to compose the c
 
 Update the instruction fragments and publication-tool descriptions to require a separate preparation round before composing a new payload, including revisions. Preserve PPT's grounding-before-fill instructions and the existing document path for finished workspace Markdown. Keep direct publication compatible: no server-side prerequisite or rejection of old callers.
 
+The existing-document catalog and HTML revision reminder repeat the same sequence
+for every revision. A preparation from an earlier user turn does not cover a later
+generation. Preparation titles stay short even when the existing deliverable's
+publication title is longer; exact identity comes from its existing ID.
+
 An internal LLM call inside preparation would introduce a second generation/prompting boundary and different tuning behavior. Streaming partial arguments would instead require a runtime event/partial-payload contract. Neither is needed for the requested two-tool workflow.
 
 ### Live composition label derived from existing traces

@@ -1695,6 +1695,10 @@
       "summaryTools_one": "{{count}} tool",
       "summaryTools_other": "{{count}} tools",
       "thinking": "Thinking…",
+      "generateDocument": "Generating document content...",
+      "generatePresentation": "Generating presentation content...",
+      "generateHtml": "Generating HTML content...",
+      "generateContent": "Generating content...",
       "tabular": {
         "catalogForDocument": "Reading the summary of document “{{name}}”.",
         "catalogForWorkbook": "Reading the workbook summary.",
@@ -1736,6 +1740,12 @@
         "success": "Success"
       },
       "toolLabels": {
+        "prepareDocument": "Preparing document content",
+        "preparePresentation": "Preparing presentation content",
+        "prepareHtml": "Preparing HTML content",
+        "writeDocument": "Writing the document",
+        "renderPresentation": "Generating the PowerPoint",
+        "renderHtml": "Rendering the HTML preview",
         "readQuery": "Reading query",
         "documents": "Listing tabular documents",
         "markdown": "Reading the workbook catalog",
