@@ -51,7 +51,7 @@ class _Store:
     def __init__(self, stored: StoredPlatformPrompt | None) -> None:
         self._stored = stored
 
-    async def get(self) -> StoredPlatformPrompt | None:
+    async def get(self, session=None) -> StoredPlatformPrompt | None:
         return self._stored
 
 

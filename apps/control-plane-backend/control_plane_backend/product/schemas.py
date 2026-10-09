@@ -243,26 +243,6 @@ class AgentTemplateSummary(BaseModel):
             "by hand."
         ),
     )
-    reasoning_enabled: bool = Field(
-        default=False,
-        description=(
-            "Does this template offer per-question reasoning (REASON-01 level "
-            "3)? Verbatim from the pod's `default_tuning`. The agent-creation "
-            "form pre-ticks its Reasoning card from it, as "
-            "`default_capability_ids` pre-ticks capabilities — a seed the "
-            "operator can untick, never a lock. False for pods predating "
-            "#2473."
-        ),
-    )
-    reasoning_default_on: bool = Field(
-        default=False,
-        description=(
-            "Does this template start new conversations with the composer's "
-            "reasoning toggle already ON (REASON-01 Amendment B)? Verbatim "
-            "from the pod's `default_tuning`; only meaningful alongside "
-            "`reasoning_enabled`. False for pods predating #2473."
-        ),
-    )
 
 
 class ManagedAgentInstanceSummary(BaseModel):
@@ -295,25 +275,11 @@ class ManagedAgentInstanceSummary(BaseModel):
             "such as the enable/disable toggle are unaffected."
         ),
     )
-    reasoning_enabled: bool = Field(
-        default=False,
+    recommended_chat_profile_id: str | None = Field(
+        default=None,
         description=(
-            "Whether this agent offers the per-question reasoning toggle in "
-            "its chat composer (REASON-01 level 3). A plain agent property "
-            "edited in the General section of the agent form, NOT a "
-            "capability — reasoning is a property of how the model is called, "
-            "not a tool the agent can use. False for every agent enrolled "
-            "before REASON-01 until independently edited."
-        ),
-    )
-    reasoning_default_on: bool = Field(
-        default=False,
-        description=(
-            "Whether a new conversation with this agent starts with the "
-            "composer's reasoning toggle already ON (REASON-01 Amendment B). "
-            "Only meaningful while `reasoning_enabled` is true — with no "
-            "toggle offered there is nothing to preselect. The user can still "
-            "switch it off per question."
+            "Chat profile this agent's new conversations start on. Null "
+            "follows the team default."
         ),
     )
     status: Literal["enabled", "disabled"]
@@ -484,11 +450,12 @@ class ExecutionPreparation(BaseModel):
             "contract)."
         ),
     )
-    agent_profile_overrides: dict[str, str] = Field(
-        default_factory=dict,
+    chat_profile_id: str | None = Field(
+        default=None,
         description=(
-            "Team's per-agent model-profile overrides (agent_id -> profile_id), "
-            "same resolution notes as chat_default_profile_id above."
+            "User-level chat profile for this call only, set solely from the "
+            "evaluator's `agent_model_override`. Forwarded as "
+            "`RuntimeContext.chat_profile_id`; the pod re-validates it."
         ),
     )
     reasoning_enabled_model_ids: list[str] = Field(
@@ -986,26 +953,12 @@ class CreateAgentInstanceRequest(BaseModel):
             "verbatim. Values for unselected capabilities are ignored."
         ),
     )
-    reasoning_enabled: bool = Field(
-        default=False,
+    recommended_chat_profile_id: str | None = Field(
+        default=None,
         description=(
-            "Offer the per-question reasoning toggle in this agent's chat "
-            "composer (REASON-01 level 3). A plain agent property alongside "
-            "role/description — NOT a capability, because reasoning is a "
-            "property of how the model is called rather than a tool the agent "
-            "can use. Defaults to False: enabling it only makes the composer "
-            "toggle appear, and the user still has to flip it per question."
-        ),
-    )
-    reasoning_default_on: bool = Field(
-        default=False,
-        description=(
-            "Start every new conversation with this agent's reasoning toggle "
-            "already ON (REASON-01 Amendment B). Read only when "
-            "`reasoning_enabled` is true; it seeds the composer's initial "
-            "value and nothing more — the user can switch it off for any "
-            "question. Defaults to False, the platform behaviour before this "
-            "field existed."
+            "Optional recommended chat profile. Must be a chat profile the "
+            "team can use and has not disabled, served by the template's pod "
+            "(else 422). Null follows the team default."
         ),
     )
 
@@ -1072,23 +1025,11 @@ class UpdateAgentInstanceRequest(BaseModel):
             "and the returned stored envelope is persisted verbatim."
         ),
     )
-    reasoning_enabled: bool | None = Field(
+    recommended_chat_profile_id: str | None = Field(
         default=None,
         description=(
-            "Offer the per-question reasoning toggle in this agent's chat "
-            "composer (REASON-01 level 3). Omit to leave the current setting "
-            "unchanged — same convention as `role`, so a partial update such "
-            "as the enable/disable toggle is not forced to resupply it."
-        ),
-    )
-    reasoning_default_on: bool | None = Field(
-        default=None,
-        description=(
-            "Start new conversations with the reasoning toggle already ON "
-            "(REASON-01 Amendment B). Omit to leave the current setting "
-            "unchanged. Written independently of `reasoning_enabled`: "
-            "withdrawing the offer leaves this value stored but inert, so "
-            "re-offering reasoning restores the author's original default."
+            "Recommended chat profile. Omit to leave it unchanged; pass null "
+            "to follow the team default. Validated like on create."
         ),
     )
 
@@ -1120,6 +1061,9 @@ class ManagedAgentRuntimeBinding(BaseModel):
     # above, so adding this list costs one extra cheap store read, not a new
     # round trip.
     reasoning_enabled_model_ids: list[str] = Field(default_factory=list)
+    # Model capability ids the team disabled, resolved on this same per-turn
+    # call: the pod ignores a user choice or recommendation naming one.
+    team_disabled_model_ids: list[str] = Field(default_factory=list)
     # Platform-operator `chat` model binding, resolved fresh on this same
     # per-turn call — same trust boundary and same reasoning as
     # reasoning_enabled_model_ids immediately above: a stale or

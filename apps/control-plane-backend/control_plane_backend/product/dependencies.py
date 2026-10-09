@@ -20,11 +20,13 @@ from typing import TYPE_CHECKING, Awaitable, Callable
 import httpx
 from fastapi import Request
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
+from fred_core.sql import make_session_factory
 from fred_core.tasks.service import TaskService
 from fred_core.teams.metadata_store import TeamMetadataStore
 
 if TYPE_CHECKING:
     from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
     from temporalio.client import Client as TemporalClient
 
 from control_plane_backend.agent_instances.store import AgentInstanceStore
@@ -110,6 +112,11 @@ class ProductServiceDependencies:
     get_task_service: Callable[[], TaskService]
     get_platform_bootstrap_store: Callable[[], PlatformBootstrapStore]
     get_runtime_http_client: Callable[[], httpx.AsyncClient]
+    # Lets one service call batch several short reads on one pooled
+    # connection; `None` (test fakes) falls back to one session per read.
+    get_sql_session_factory: Callable[[], "async_sessionmaker[AsyncSession]"] | None = (
+        None
+    )
 
 
 def build_product_service_dependencies(
@@ -159,6 +166,9 @@ def build_product_service_dependencies(
         get_task_service=container.get_task_service,
         get_platform_bootstrap_store=container.get_platform_bootstrap_store,
         get_runtime_http_client=container.get_runtime_http_client,
+        get_sql_session_factory=lambda: make_session_factory(
+            container.get_pg_async_engine()
+        ),
     )
 
 
