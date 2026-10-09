@@ -12,31 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// The per-question reasoning control (REASON-01 level 4), styled after the
-// designer's Composer.html mockup (2026-08-12): a plain TEXT BUTTON with a
-// chevron at the right edge of the composer's bottomRow (RichInputField's
-// `rightExtraSlot`, before the mic). The state reads as two MODES, not as an
-// on/off switch: "Rapide" and "Boost" (#2387). "Désactivé" next to a model name
-// read as though the MODEL were disabled — the state word sat beside the model
-// with nothing tying it to reasoning. Naming both modes removes that reading:
-// neither describes anything as off. The menu opens above, right-aligned, with
-// the effort/latency explainer as a muted header and the two modes as
-// check-circle rows.
-//
-// Deliberately NOT a level picker, and since #2387 not a level DISPLAY either.
-// The effort a reasoning turn runs with is the model's ops-authored
-// `settings.reasoning_effort`, applied live by the pod; surfacing it here
-// implied a per-question choice that never existed, and it was snapshotted
-// through two DB columns to reach the composer at all. A same-day effort
-// picker was withdrawn for a related reason (RUNTIME-EXECUTION-CONTRACT §8.48:
-// providers 400 on values they do not support). The wire stays the tri-state
-// boolean.
-//
-// `COMPOSER_CHIP_WIDGETS` is the single source of truth for which widget ids
-// are promoted out of the "tune" popover: `ComposerControlSlot` excludes them
-// from its "tools" render and `ManagedChatPage`'s `hasToolControls` guard
-// excludes them too, so the tune button never opens onto an empty popover
-// when an agent only exposes promoted controls.
+// The composer's model and reasoning control: a text button at the right edge
+// of the composer naming the current model and reasoning mode, whose menu lists
+// the selectable models and the two reasoning modes (never an effort level).
+// `COMPOSER_CHIP_WIDGETS` keeps its widget ids out of the "tune" popover.
 
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -45,6 +24,7 @@ import MenuPopover from "@shared/molecules/MenuPopover/MenuPopover.tsx";
 import MenuPopoverItem from "@shared/molecules/MenuPopover/MenuPopoverItem.tsx";
 import type { ChatControlDescriptor, EffectiveChatModel } from "../../../slices/controlPlane/controlPlaneOpenApi";
 import type { ChatTurnControlComposerState } from "./types";
+import { currentModelRow, offersReasoning } from "./modelChoice";
 import styles from "./ReasoningChip.module.css";
 
 export const COMPOSER_CHIP_WIDGETS = new Set(["reasoning_toggle"]);
@@ -103,19 +83,26 @@ interface ReasoningChipProps {
   composer: ChatTurnControlComposerState;
   /** Mirrors the add/tune menu buttons: no picking while a response streams. */
   disabled?: boolean;
-  /** The model the next turn will actually route to (#2387).
-   *
-   *  The chip used to take its model identity from the reasoning control's own
-   *  `params` — i.e. the single model whose REASONING an admin had enabled
-   *  platform-wide, which has nothing to do with routing. With a platform
-   *  binding or any override in force it therefore named a model that was not
-   *  answering. This prop is the resolved answer instead, and the two concerns
-   *  are now independent: the model always shows, the reasoning menu still only
-   *  appears when the `reasoning_toggle` control does. */
+  /** The agent's resolved model and the models a member may pick. */
   effectiveModel?: EffectiveChatModel;
+  /** The conversation's model choice; null runs the recommended model. */
+  chatProfileId?: string | null;
+  onChatProfileChange?: (profileId: string) => void;
 }
 
-export function ReasoningChip({ chatControls, composer, disabled = false, effectiveModel }: ReasoningChipProps) {
+/**
+ * One compact composer control: the current model, a menu listing the
+ * selectable models and, when the current model can reason, the reasoning row.
+ * Read-only text when nothing can be picked.
+ */
+export function ReasoningChip({
+  chatControls,
+  composer,
+  disabled = false,
+  effectiveModel,
+  chatProfileId = null,
+  onChatProfileChange,
+}: ReasoningChipProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -142,65 +129,32 @@ export function ReasoningChip({ chatControls, composer, disabled = false, effect
     };
   }, [open]);
 
-  // Only agents whose author enabled reasoning (and with a platform-enabled
-  // reasoning model) emit the platform reasoning_toggle control — no control,
-  // no reasoning MENU, same gate the tune-menu row used. It no longer gates the
-  // chip itself: the model label is independent of reasoning (#2387), so an
-  // agent that offers no reasoning still gets to say which model answers.
-  const platformControl = chatControls.find((entry) => entry.widget === "reasoning_toggle");
-  // The control says "the platform enabled reasoning on SOME model and this
-  // agent offers it" — it cannot say whether the model this turn routes to is
-  // one of them, because computing that needs the pod catalog and the
-  // prepare-execution path must stay free of catalog fetches.
-  //
-  // So the routed model has the last word. `RoutedChatModelFactory` STRIPS the
-  // reasoning settings for a model whose reasoning is off, so offering the
-  // toggle here would be offering something inert: the user flips it on and the
-  // turn silently does not reason. Concretely, with reasoning enabled on Mistral
-  // Small and a team override routing to Mistral Medium, the chip used to render
-  // "Mistral Medium · Désactivé" with a working-looking toggle behind it.
-  //
-  // `undefined` (no resolution yet, or an older backend) leaves the control as
-  // the platform served it — the pre-#2387 behaviour, not a silent hide.
-  const control = effectiveModel?.reasoning_enabled === false ? undefined : platformControl;
+  const locked = effectiveModel?.choice_locked === true;
+  const rows = locked ? [] : (effectiveModel?.selectable_models ?? []);
+  const current = currentModelRow(effectiveModel, chatProfileId);
+  // A model the routed turn would strip reasoning from gets no reasoning row.
+  const showReasoning = offersReasoning(chatControls, effectiveModel, chatProfileId);
 
   const on = composer.reasoning;
   const title = t("chatbot.composerSettings.reasoningRowLabel");
-  // Two modes, never a level. The effort a reasoning turn runs with is the
-  // pod's ops-authored `settings.reasoning_effort`, applied live — quoting it
-  // back at the user implied a per-question choice that never existed (#2387).
+  // Two modes, never a level: the effort is the pod's ops-authored setting.
   const onLabel = t("chatbot.composerSettings.reasoningOn");
   const offLabel = t("chatbot.composerSettings.reasoningOff");
-  // The "Élevé (Raisonnement)" wording is shown ONLY in the menu, where the
-  // parenthetical says which effort level maps to reasoning; the closed chip
-  // keeps just "Élevé" (onLabel) after the model name — the reasoning meaning
-  // is already carried by the menu the user picked it from.
+  // The "(Raisonnement)" wording lives in the menu only.
   const onMenuLabel = t("chatbot.composerSettings.reasoningOnMenu");
-  // Model identity first, Claude-style ("Mistral Small Élevé"): model in the
-  // regular button text, reasoning state one step fainter
-  // (--on-surface-muted) — the color contrast is the separator.
-  //
-  // Sourced from the RESOLVED model, never from the reasoning control: the
-  // capability id is the same `model__{provider}__{name}` shape `modelLabel`
-  // already knew how to split, so the id-splitting fallback still covers a
-  // model whose catalog names no `model_display_name`.
-  const displayLabel = modelLabel(effectiveModel?.display_name, effectiveModel?.name, effectiveModel?.capability_id);
+  const displayLabel = current
+    ? modelLabel(current.display_name, current.name, current.capability_id)
+    : modelLabel(effectiveModel?.display_name, effectiveModel?.name, effectiveModel?.capability_id);
   const stateLabel = on ? onLabel : offLabel;
-  // The turn will fail with ModelNotUsableError before the LLM call. Say so
-  // here rather than letting the user discover an opaque error — the same
-  // diagnosability rule REASON-01 §8 applies to the reasoning control itself.
-  const unavailable = effectiveModel?.enabled_for_team === false;
+  // The recommended model the team cannot use fails the turn: say so up front.
+  const unavailable = !current && effectiveModel?.enabled_for_team === false;
   const unavailableLabel = t("chatbot.composerSettings.modelNotEnabledForTeam");
+  const canPickModel = rows.length > 1 && !!onChatProfileChange;
 
-  // Nothing to show and nothing to pick: no reasoning control, and no model
-  // resolved (a pod that declares no chat default and has no team policy, or an
-  // unreachable pod). Rendering an empty chip would be worse than none.
-  if (!control && !displayLabel) return null;
+  if (!showReasoning && !displayLabel) return null;
 
-  // Model label with no reasoning menu behind it — a plain, non-interactive
-  // statement of which model answers. Deliberately not a disabled button: there
-  // is no action being withheld, so nothing should look clickable.
-  if (!control) {
+  // Nothing to pick: a plain statement of which model answers, not a disabled button.
+  if (!showReasoning && !canPickModel) {
     return (
       <div className={styles.wrap}>
         <span
@@ -221,11 +175,59 @@ export function ReasoningChip({ chatControls, composer, disabled = false, effect
     );
   }
 
-  const pick = (next: boolean) => {
-    composer.onReasoningChange(next);
+  const close = () => {
     setOpen(false);
     triggerRef.current?.focus();
   };
+  const pick = (next: boolean) => {
+    composer.onReasoningChange(next);
+    close();
+  };
+  const pickModel = (profileId: string) => {
+    onChatProfileChange?.(profileId);
+    close();
+  };
+  const ariaLabel = showReasoning
+    ? `${displayLabel ? `${displayLabel}, ` : ""}${title}: ${stateLabel}`
+    : (displayLabel ?? title);
+
+  // Model rows: the selectable models, or (older backend) the resolved model
+  // as one read-only row. A locked choice lists none.
+  const modelRows = rows.length
+    ? rows.map((row) => {
+        const selected = row.profile_id === current?.profile_id;
+        return (
+          <MenuPopoverItem
+            key={row.profile_id}
+            role="option"
+            label={modelLabel(row.display_name, row.name, row.capability_id) ?? row.profile_id}
+            selected={selected}
+            accentSelected
+            trailingIcon={selected ? "check_circle" : undefined}
+            onClick={canPickModel ? () => pickModel(row.profile_id) : undefined}
+          />
+        );
+      })
+    : !locked && displayLabel
+      ? [
+          <MenuPopoverItem
+            key="model"
+            role="option"
+            label={displayLabel}
+            selected
+            accentSelected
+            trailingIcon="check_circle"
+          />,
+        ]
+      : [];
+
+  // The menu is named after the sections it shows.
+  const menuLabel =
+    modelRows.length && showReasoning
+      ? t("chatbot.composerSettings.modelAndReasoningMenu")
+      : modelRows.length
+        ? t("chatbot.composerSettings.reasoningModelsSection")
+        : title;
 
   return (
     <div ref={containerRef} className={styles.wrap}>
@@ -237,16 +239,9 @@ export function ReasoningChip({ chatControls, composer, disabled = false, effect
         disabled={disabled}
         aria-haspopup="menu"
         aria-expanded={open}
-        // The visible words name the MODE ("Rapide"/"Boost"); the accessible
-        // name adds what they are a mode OF, which sighted users get from the
-        // menu's own header.
-        aria-label={
-          unavailable
-            ? `${title}: ${on ? onLabel : offLabel} — ${unavailableLabel}`
-            : `${title}: ${on ? onLabel : offLabel}`
-        }
+        aria-label={unavailable ? `${ariaLabel} — ${unavailableLabel}` : ariaLabel}
         title={unavailable ? unavailableLabel : undefined}
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => setOpen((value) => !value)}
       >
         {displayLabel ? (
           <>
@@ -258,7 +253,7 @@ export function ReasoningChip({ chatControls, composer, disabled = false, effect
                 <Icon category="outlined" type="error_outline" />
               </span>
             )}
-            <span className={styles.state}>{stateLabel}</span>
+            {showReasoning && <span className={styles.state}>{stateLabel}</span>}
           </>
         ) : (
           <span className={styles.value}>{on ? onLabel : title}</span>
@@ -271,60 +266,59 @@ export function ReasoningChip({ chatControls, composer, disabled = false, effect
       {open && (
         <div className={styles.menu}>
           <MenuPopover
-            aria-label={title}
+            dense
+            quietUnselected
+            aria-label={menuLabel}
             groups={[
-              // Section 1 — Models. Per-turn model selection does not exist yet
-              // (no runtime override field, routing is server-resolved), so the
-              // resolved model shows as a single read-only, already-checked row.
-              // The section is here so real multi-model selection can later drop
-              // sibling rows with an onClick beside this one. Omitted when no
-              // model label resolved (older backend / unreachable pod).
-              ...(displayLabel
+              ...(modelRows.length
                 ? [
                     [
                       <div key="models-title" className={styles.sectionTitle}>
                         {t("chatbot.composerSettings.reasoningModelsSection")}
                       </div>,
-                      <MenuPopoverItem
-                        key="model"
-                        role="option"
-                        label={displayLabel}
-                        selected
-                        accentSelected
-                        trailingIcon="check_circle"
-                      />,
+                      ...modelRows,
                     ],
                   ]
                 : []),
-              // Section 2 — Effort. "Normal" = reasoning off, "Élevé
-              // (Raisonnement)" = reasoning on (the parenthetical lives here, not
-              // in the closed chip). The effort/latency explainer trails the two.
-              [
-                <div key="effort-title" className={styles.sectionTitle}>
-                  {t("chatbot.composerSettings.reasoningEffortSection")}
-                </div>,
-                <MenuPopoverItem
-                  key="off"
-                  role="option"
-                  label={offLabel}
-                  selected={!on}
-                  accentSelected
-                  trailingIcon={!on ? "check_circle" : undefined}
-                  onClick={() => pick(false)}
-                />,
-                <MenuPopoverItem
-                  key="on"
-                  role="option"
-                  label={onMenuLabel}
-                  selected={on}
-                  accentSelected
-                  trailingIcon={on ? "check_circle" : undefined}
-                  onClick={() => pick(true)}
-                />,
-                <div key="effort-hint" className={styles.description}>
-                  {t("chatbot.composerSettings.reasoningHint")}
-                </div>,
-              ],
+              ...(showReasoning
+                ? [
+                    [
+                      <div key="effort-title" className={styles.sectionTitle}>
+                        {t("chatbot.composerSettings.reasoningEffortSection")}
+                      </div>,
+                      <MenuPopoverItem
+                        key="off"
+                        role="option"
+                        label={offLabel}
+                        selected={!on}
+                        accentSelected
+                        trailingIcon={!on ? "check_circle" : undefined}
+                        onClick={() => pick(false)}
+                      />,
+                      <MenuPopoverItem
+                        key="on"
+                        role="option"
+                        label={onMenuLabel}
+                        selected={on}
+                        accentSelected
+                        trailingIcon={on ? "check_circle" : undefined}
+                        onClick={() => pick(true)}
+                      />,
+                    ],
+                  ]
+                : modelRows.length
+                  ? [
+                      // The section stays, so the menu reads the same for every model.
+                      [
+                        <div key="effort-title" className={styles.sectionTitle}>
+                          {t("chatbot.composerSettings.reasoningEffortSection")}
+                        </div>,
+                        <div key="effort-none" className={styles.sectionEmpty}>
+                          {t("chatbot.composerSettings.reasoningEffortNone")}
+                        </div>,
+                      ],
+                    ]
+                  : []),
             ]}
           />
         </div>

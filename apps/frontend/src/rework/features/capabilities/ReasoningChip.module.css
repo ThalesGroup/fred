@@ -117,20 +117,20 @@
   font-size: 16px;
 }
 
-.description {
-  padding: var(--spacing-2xs) var(--spacing-s);
-  max-width: 260px;
-  color: var(--on-surface-retreat);
-  font: var(--font-body-small);
-}
-
 /* Section heading inside the menu ("Modèles", "Effort") — a quiet label that
    groups the rows below it, one step above the muted body so it reads as a
    heading without competing with the selectable rows. */
 .sectionTitle {
-  padding: var(--spacing-xs) var(--spacing-s) var(--spacing-3xs);
+  padding: var(--spacing-2xs) var(--spacing-xs) var(--spacing-3xs);
   color: var(--on-surface-muted);
   font: var(--font-label-small);
+}
+
+/* Muted line standing in for the effort rows when the model offers none. */
+.sectionEmpty {
+  padding: var(--spacing-3xs) var(--spacing-xs) var(--spacing-xs);
+  color: var(--on-surface-muted);
+  font: var(--font-body-small);
 }
 
 .menu {

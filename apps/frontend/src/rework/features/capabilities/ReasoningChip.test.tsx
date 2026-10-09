@@ -12,11 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// The right-edge reasoning control (REASON-01 level 4), per the designer's
-// Composer.html mockup: a plain text button + chevron reading "Raisonnement"
-// when off and the model's ops-authored effort level when on. The level comes
-// from the control's params.effort (derived from settings.reasoning_effort —
-// the single source of truth); the wire stays the tri-state boolean.
+// The composer's model and reasoning control, closed: a text button naming the
+// model and the reasoning mode, or plain text when nothing can be picked.
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
@@ -284,7 +281,7 @@ describe("ReasoningChip (REASON-01 level 4, mockup text button)", () => {
     // subject too, which sighted users read off the menu header.
     const html = render([reasoningControl({ default: false })], false, false, effectiveModel({ name: "gpt-4.1" }));
     expect(html).toContain(
-      'aria-label="chatbot.composerSettings.reasoningRowLabel: chatbot.composerSettings.reasoningOff"',
+      'aria-label="GPT 4.1, chatbot.composerSettings.reasoningRowLabel: chatbot.composerSettings.reasoningOff"',
     );
   });
 

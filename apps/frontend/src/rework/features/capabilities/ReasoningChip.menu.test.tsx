@@ -13,11 +13,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// The open reasoning menu is split into two sections (#2446-adjacent UI rework):
-// a read-only "Models" section (per-turn model selection has no backend yet, so
-// the resolved model is shown checked but not selectable) and an "Effort"
-// section (Normal / "Élevé (Raisonnement)"). The parenthetical reasoning wording
-// lives in the menu only — the closed chip keeps just "Élevé" (reasoningOn).
+// The open menu: a Models section listing the selectable models and, when the
+// current model can reason, the reasoning row (Normal / "Élevé (Raisonnement)").
 // These need a live DOM to open the menu, so they sit apart from the SSR tests
 // in ReasoningChip.test.tsx.
 
@@ -70,12 +67,23 @@ const model: EffectiveChatModel = {
 let container: HTMLDivElement;
 let root: Root;
 
-function mount(composer: ChatTurnControlComposerState) {
+function mount(
+  composer: ChatTurnControlComposerState,
+  effectiveModel: EffectiveChatModel = model,
+  extra: { chatProfileId?: string | null; onChatProfileChange?: (id: string) => void } = {},
+) {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
   act(() => {
-    root.render(<ReasoningChip chatControls={[reasoningControl()]} composer={composer} effectiveModel={model} />);
+    root.render(
+      <ReasoningChip
+        chatControls={[reasoningControl()]}
+        composer={composer}
+        effectiveModel={effectiveModel}
+        {...extra}
+      />,
+    );
   });
 }
 function openMenu() {
@@ -112,7 +120,7 @@ describe("ReasoningChip — split menu (Models + Effort)", () => {
     expect(html).toContain("chatbot.composerSettings.reasoningOnMenu");
   });
 
-  it("shows the resolved model as a read-only, checked row (no onClick to change it)", () => {
+  it("shows the resolved model as a checked row when the backend lists no selectable models", () => {
     mount(composerState());
     openMenu();
     const modelRow = menuButtons().find((b) => b.textContent?.includes("Mistral Small Latest"));
@@ -122,7 +130,7 @@ describe("ReasoningChip — split menu (Models + Effort)", () => {
     expect(container.innerHTML).toContain('data-icon="check_circle"');
   });
 
-  it("picking 'Élevé (Raisonnement)' turns reasoning on; 'Normal' turns it off", () => {
+  it("picking 'Élevé (Raisonnement)' turns reasoning on; 'Faible' turns it off", () => {
     const onReasoningChange = vi.fn();
     mount(composerState({ reasoning: false, onReasoningChange }));
     openMenu();
@@ -137,5 +145,88 @@ describe("ReasoningChip — split menu (Models + Effort)", () => {
     ) as HTMLElement;
     act(() => normal.click());
     expect(onReasoningChange).toHaveBeenCalledWith(false);
+  });
+});
+
+const SMALL = "model__mistral__mistral-small";
+const LARGE = "model__mistral__mistral-large";
+const twoModels: EffectiveChatModel = {
+  enabled_for_team: true,
+  reasoning_enabled: true,
+  capability_id: SMALL,
+  selectable_models: [
+    { profile_id: "chat.small", capability_id: SMALL, name: "mistral-small", reasoning_enabled: true },
+    { profile_id: "chat.large", capability_id: LARGE, name: "mistral-large", reasoning_enabled: false },
+  ],
+} as EffectiveChatModel;
+
+describe("ReasoningChip — model choice", () => {
+  it("lists the selectable models with the current one checked, and picks another", () => {
+    const onChatProfileChange = vi.fn();
+    mount(composerState(), twoModels, { chatProfileId: null, onChatProfileChange });
+    openMenu();
+
+    const small = menuButtons().find((b) => b.textContent?.includes("Mistral Small")) as HTMLElement;
+    const large = menuButtons().find((b) => b.textContent?.includes("Mistral Large")) as HTMLElement;
+    expect(small.querySelector('[data-icon="check_circle"]')).not.toBeNull();
+    expect(large.querySelector('[data-icon="check_circle"]')).toBeNull();
+
+    act(() => large.click());
+    expect(onChatProfileChange).toHaveBeenCalledWith("chat.large");
+  });
+
+  it("names the chosen model and keeps the Effort section, saying no level is available", () => {
+    mount(composerState(), twoModels, { chatProfileId: "chat.large", onChatProfileChange: vi.fn() });
+    expect(container.textContent).toContain("Mistral Large");
+    expect(container.innerHTML).not.toContain("chatbot.composerSettings.reasoningOff");
+    openMenu();
+    expect(container.innerHTML).toContain("chatbot.composerSettings.reasoningEffortSection");
+    expect(container.innerHTML).toContain("chatbot.composerSettings.reasoningEffortNone");
+    expect(container.innerHTML).not.toContain("chatbot.composerSettings.reasoningOff");
+  });
+
+  it("names the menu after the sections it shows", () => {
+    mount(composerState(), twoModels, { chatProfileId: null, onChatProfileChange: vi.fn() });
+    openMenu();
+    expect(container.querySelector('[aria-label="chatbot.composerSettings.modelAndReasoningMenu"]')).not.toBeNull();
+
+    act(() => root.unmount());
+    container.remove();
+    mount(composerState(), twoModels, { chatProfileId: "chat.large", onChatProfileChange: vi.fn() });
+    openMenu();
+    expect(container.querySelector('[aria-label="chatbot.composerSettings.reasoningModelsSection"]')).not.toBeNull();
+  });
+
+  it("offers no model rows when a higher level locks the choice", () => {
+    mount(composerState(), { ...model, choice_locked: true, selectable_models: [] } as EffectiveChatModel, {
+      onChatProfileChange: vi.fn(),
+    });
+    openMenu();
+    expect(container.innerHTML).not.toContain("chatbot.composerSettings.reasoningModelsSection");
+    expect(container.innerHTML).toContain("chatbot.composerSettings.reasoningEffortSection");
+  });
+
+  it("is read-only text for a single model without reasoning", () => {
+    const single = {
+      enabled_for_team: true,
+      capability_id: LARGE,
+      selectable_models: [twoModels.selectable_models![1]],
+    } as EffectiveChatModel;
+    mount(composerState(), single, { onChatProfileChange: vi.fn() });
+    expect(container.querySelector("button")).toBeNull();
+    expect(container.textContent).toContain("Mistral Large");
+  });
+
+  it("shows a single model with reasoning as the only, selected row beside the reasoning row", () => {
+    const single = {
+      ...twoModels,
+      selectable_models: [twoModels.selectable_models![0]],
+    } as EffectiveChatModel;
+    mount(composerState(), single, { onChatProfileChange: vi.fn() });
+    openMenu();
+    const rows = menuButtons().filter((b) => b.textContent?.includes("Mistral"));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].querySelector('[data-icon="check_circle"]')).not.toBeNull();
+    expect(container.innerHTML).toContain("chatbot.composerSettings.reasoningOnMenu");
   });
 });

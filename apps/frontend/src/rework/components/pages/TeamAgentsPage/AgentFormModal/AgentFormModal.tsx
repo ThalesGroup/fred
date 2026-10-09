@@ -35,15 +35,8 @@ export type AgentFormPayload = {
   role: string;
   description: string;
   usageStatement: string;
-  /** REASON-01 level 3: does this agent offer the composer's reasoning toggle? */
-  reasoningEnabled: boolean;
-  /**
-   * REASON-01 Amendment B: does a new conversation start with that toggle
-   * already on? Always submitted, including while `reasoningEnabled` is false —
-   * the value is then inert backend-side, which is what lets an author withdraw
-   * the offer and restore it later without losing their default.
-   */
-  reasoningDefaultOn: boolean;
+  /** Chat profile new conversations start on; null follows the team default. */
+  recommendedChatProfileId: string | null;
   tuningFieldValues: Record<string, unknown>;
   /** Explicit list of active capability ids ([] = none active). */
   selectedCapabilityIds: string[];
@@ -84,8 +77,7 @@ type FormState = {
   role: string;
   description: string;
   usageStatement: string;
-  reasoningEnabled: boolean;
-  reasoningDefaultOn: boolean;
+  recommendedChatProfileId: string | null;
   tuningValues: Record<string, unknown>;
   selectedCapabilityIds: string[];
   capabilityConfigValues: Record<string, Record<string, unknown>>;
@@ -134,34 +126,6 @@ export function defaultCapabilitySelection(template: AgentTemplateSummary | unde
 }
 
 /**
- * The reasoning settings a NEW instance of `template` starts with (#2473):
- * whether its Reasoning card is pre-ticked (REASON-01 level 3) and whether the
- * nested "start conversations in Boost" switch is pre-set (Amendment B).
- *
- * Deliberately NOT narrowed by platform state, mirroring the card it seeds.
- * The Reasoning card is rendered unconditionally in `AgentFormBody` and the
- * form never reads `reasoning_enabled_model_ids`; levels 1-2 are enforced live
- * on the send path, where an agent that offers reasoning on a deployment with
- * no reasoning-enabled model simply gets no composer control. Suppressing the
- * pre-tick here instead would make it vanish based on platform state invisible
- * from this form — the "I turned it on and nothing happened" confusion the
- * absent-not-inert rule exists to prevent.
- *
- * A seed, not a lock: the operator can untick either before saving, and both
- * are submitted explicitly on create, so this is what makes a template's
- * declared reasoning defaults actually reach a new instance.
- */
-export function defaultReasoningSelection(template: AgentTemplateSummary | undefined): {
-  reasoningEnabled: boolean;
-  reasoningDefaultOn: boolean;
-} {
-  return {
-    reasoningEnabled: template?.reasoning_enabled ?? false,
-    reasoningDefaultOn: template?.reasoning_default_on ?? false,
-  };
-}
-
-/**
  * Builds the submit payload using the selected template contract so stale
  * capability keys from previous UI versions cannot leak into create or edit
  * requests.
@@ -196,8 +160,7 @@ export function buildAgentFormSubmitPayload(
     role: form.role.trim(),
     description: form.description.trim(),
     usageStatement: form.usageStatement.trim(),
-    reasoningEnabled: form.reasoningEnabled,
-    reasoningDefaultOn: form.reasoningDefaultOn,
+    recommendedChatProfileId: form.recommendedChatProfileId,
     tuningFieldValues: form.tuningValues,
     selectedCapabilityIds: effectiveCapabilityIds,
     capabilityConfigValues: effectiveCapabilityConfig,
@@ -221,16 +184,6 @@ export function extractCapabilityConfigValues(
       return [id, id === CAP_DOCUMENT_ACCESS ? normalizeDocumentAccessConfig(config) : config];
     }),
   );
-}
-
-/** Turning reasoning on also turns it on by default for new conversations;
- *  the member can still untick that afterwards. */
-export function withReasoning(
-  prev: Pick<FormState, "reasoningEnabled" | "reasoningDefaultOn">,
-  enabled: boolean,
-): Pick<FormState, "reasoningEnabled" | "reasoningDefaultOn"> {
-  const turnedOn = enabled && !prev.reasoningEnabled;
-  return { reasoningEnabled: enabled, reasoningDefaultOn: turnedOn || prev.reasoningDefaultOn };
 }
 
 /** Save-blocking problems reported by config widgets. Only ACTIVE capabilities count. */
@@ -262,8 +215,7 @@ export default function AgentFormModal({
     role: "",
     description: "",
     usageStatement: "",
-    reasoningEnabled: false,
-    reasoningDefaultOn: false,
+    recommendedChatProfileId: null,
     tuningValues: {},
     selectedCapabilityIds: [],
     capabilityConfigValues: {},
@@ -286,8 +238,7 @@ export default function AgentFormModal({
         role: editInstance.role,
         description: editInstance.description ?? "",
         usageStatement: editInstance.usage_statement ?? "",
-        reasoningEnabled: editInstance.reasoning_enabled ?? false,
-        reasoningDefaultOn: editInstance.reasoning_default_on ?? false,
+        recommendedChatProfileId: editInstance.recommended_chat_profile_id ?? null,
         tuningValues: (editInstance.tuning_field_values as Record<string, unknown>) ?? {},
         selectedCapabilityIds: editInstance.selected_capability_ids ?? [],
         // capability_config stores the {schema_version, config} envelope per id;
@@ -304,8 +255,7 @@ export default function AgentFormModal({
         role: "",
         description: "",
         usageStatement: "",
-        reasoningEnabled: false,
-        reasoningDefaultOn: false,
+        recommendedChatProfileId: null,
         tuningValues: {},
         selectedCapabilityIds: [],
         capabilityConfigValues: {},
@@ -330,10 +280,7 @@ export default function AgentFormModal({
       role: "",
       description: tpl?.description_by_lang?.[lang] ?? tpl?.description ?? "",
       usageStatement: "",
-      // #2473: seeded from the template like `selectedCapabilityIds` below,
-      // instead of the hardcoded `false` pair that made a template's declared
-      // reasoning defaults unreachable.
-      ...defaultReasoningSelection(tpl),
+      recommendedChatProfileId: null,
       tuningValues: defaultTuningValues,
       selectedCapabilityIds: defaultCapabilitySelection(tpl),
       capabilityConfigValues: {},
@@ -481,8 +428,7 @@ export default function AgentFormModal({
           role={form.role}
           description={form.description}
           usageStatement={form.usageStatement}
-          reasoningEnabled={form.reasoningEnabled}
-          reasoningDefaultOn={form.reasoningDefaultOn}
+          recommendedChatProfileId={form.recommendedChatProfileId}
           tuningFieldValues={form.tuningValues}
           selectedCapabilityIds={form.selectedCapabilityIds}
           capabilityConfigValues={form.capabilityConfigValues}
@@ -498,8 +444,7 @@ export default function AgentFormModal({
           onRoleChange={(v) => setForm((prev) => ({ ...prev, role: v }))}
           onDescriptionChange={(v) => setForm((prev) => ({ ...prev, description: v }))}
           onUsageStatementChange={(v) => setForm((prev) => ({ ...prev, usageStatement: v }))}
-          onReasoningEnabledChange={(v) => setForm((prev) => ({ ...prev, ...withReasoning(prev, v) }))}
-          onReasoningDefaultOnChange={(v) => setForm((prev) => ({ ...prev, reasoningDefaultOn: v }))}
+          onRecommendedChatProfileIdChange={(v) => setForm((prev) => ({ ...prev, recommendedChatProfileId: v }))}
           onTuningChange={handleTuningChange}
           onCapabilitySelectionChange={(ids) => setForm((prev) => ({ ...prev, selectedCapabilityIds: ids }))}
           onCapabilitySelectionReplace={(next) =>
@@ -507,7 +452,6 @@ export default function AgentFormModal({
               ...prev,
               selectedCapabilityIds: next.selectedCapabilityIds,
               capabilityConfigValues: next.capabilityConfigValues,
-              ...withReasoning(prev, next.reasoningEnabled),
             }))
           }
           onCapabilityConfigChange={handleCapabilityConfigChange}

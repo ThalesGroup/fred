@@ -16,11 +16,6 @@
  * The two document packs each turn on one `document_access` source.
  */
 
-/** Reasoning is a form field (`reasoningEnabled`), not a `CapabilityManifest`
- *  capability — the reasoning pack toggles that field instead of a capability
- *  id. Every other pack maps to real backend capability ids. */
-export type ToolPackKind = "capabilities" | "reasoning";
-
 /** One line in a pack's expandable "included capabilities" list. */
 export interface ToolPackIncludedCapability {
   /** Backend capability id, checked against the team's `available_capabilities`
@@ -34,7 +29,6 @@ export interface ToolPackIncludedCapability {
 export interface ToolPack {
   /** Stable UI-only pack id (not a backend id). */
   id: string;
-  kind: ToolPackKind;
   /** Material Symbols icon name (rendered 48px, on-surface). */
   icon: string;
   titleKey: string;
@@ -99,27 +93,11 @@ const TEAM_DOCUMENTS_INCLUDES = [...SHARED_DOCUMENT_INCLUDES, SIMILARITY_INCLUDE
 
 export const TOOL_PACK_SECTIONS: ToolPackSection[] = [
   {
-    id: "intelligence_orchestration",
-    titleKey: "rework.teams.formAgent.capabilities.sections.intelligenceOrchestration",
-    packs: [
-      {
-        id: "reasoning",
-        kind: "reasoning",
-        icon: "neurology",
-        titleKey: "rework.teams.formAgent.capabilities.packs.reasoning.title",
-        descriptionKey: "rework.teams.formAgent.capabilities.packs.reasoning.description",
-        includes: [],
-        enablesCapabilityIds: [],
-      },
-    ],
-  },
-  {
     id: "data_knowledge",
     titleKey: "rework.teams.formAgent.capabilities.sections.dataKnowledge",
     packs: [
       {
         id: DOC_ACCESS_ATTACHMENTS,
-        kind: "capabilities",
         icon: "attach_file",
         titleKey: "rework.teams.formAgent.capabilities.packs.attachments.title",
         descriptionKey: "rework.teams.formAgent.capabilities.packs.attachments.description",
@@ -129,7 +107,6 @@ export const TOOL_PACK_SECTIONS: ToolPackSection[] = [
       },
       {
         id: DOC_ACCESS_TEAM_DOCUMENTS,
-        kind: "capabilities",
         icon: "database",
         titleKey: "rework.teams.formAgent.capabilities.packs.teamDocuments.title",
         descriptionKey: "rework.teams.formAgent.capabilities.packs.teamDocuments.description",
@@ -141,7 +118,6 @@ export const TOOL_PACK_SECTIONS: ToolPackSection[] = [
         // Same icon as the wiki's own entry in the team navigation panel, so the
         // pack and the thing it grants access to read as one feature.
         id: PACK_TEAM_WIKI,
-        kind: "capabilities",
         icon: "book_2",
         titleKey: "rework.teams.formAgent.capabilities.packs.teamWiki.title",
         descriptionKey: "rework.teams.formAgent.capabilities.packs.teamWiki.description",
@@ -156,7 +132,6 @@ export const TOOL_PACK_SECTIONS: ToolPackSection[] = [
     packs: [
       {
         id: "word_document",
-        kind: "capabilities",
         icon: "description",
         titleKey: "rework.teams.formAgent.capabilities.packs.wordDocument.title",
         descriptionKey: "rework.teams.formAgent.capabilities.packs.wordDocument.description",
@@ -165,7 +140,6 @@ export const TOOL_PACK_SECTIONS: ToolPackSection[] = [
       },
       {
         id: "powerpoint_document",
-        kind: "capabilities",
         icon: "slideshow",
         titleKey: "rework.teams.formAgent.capabilities.packs.powerpointDocument.title",
         descriptionKey: "rework.teams.formAgent.capabilities.packs.powerpointDocument.description",
@@ -174,7 +148,6 @@ export const TOOL_PACK_SECTIONS: ToolPackSection[] = [
       },
       {
         id: "web_page",
-        kind: "capabilities",
         icon: "code",
         titleKey: "rework.teams.formAgent.capabilities.packs.webPage.title",
         descriptionKey: "rework.teams.formAgent.capabilities.packs.webPage.description",

@@ -43,7 +43,7 @@ import {
 } from "./toolPacks.ts";
 import { PptFillerPackOptions } from "../../../../features/capabilities/ppt_filler/PptFillerPackOptions.tsx";
 import { DocumentAccessPackOptions } from "./DocumentAccessPackOptions/DocumentAccessPackOptions.tsx";
-import { SwitchRow } from "../AgentCreateEditModal/SwitchRow/SwitchRow.tsx";
+import { RecommendedModelField } from "./RecommendedModelField/RecommendedModelField.tsx";
 import { helpPagePath } from "@rework/features/helpCenter/content";
 import { isHelpLang } from "@rework/features/helpCenter/manifest";
 import styles from "./AgentFormBody.module.css";
@@ -101,10 +101,8 @@ type AgentFormBodyProps = {
   role: string;
   description: string;
   usageStatement: string;
-  /** REASON-01 level 3 — offers the composer's reasoning toggle to users. */
-  reasoningEnabled: boolean;
-  /** REASON-01 Amendment B — that toggle starts ON in every new conversation. */
-  reasoningDefaultOn: boolean;
+  /** Chat profile new conversations start on; null follows the team default. */
+  recommendedChatProfileId: string | null;
   tuningFieldValues: Record<string, unknown>;
   /** Explicit list of active capability ids ([] = none active). */
   selectedCapabilityIds: string[];
@@ -123,12 +121,11 @@ type AgentFormBodyProps = {
   onRoleChange: (v: string) => void;
   onDescriptionChange: (v: string) => void;
   onUsageStatementChange: (v: string) => void;
-  onReasoningEnabledChange: (v: boolean) => void;
-  onReasoningDefaultOnChange: (v: boolean) => void;
+  onRecommendedChatProfileIdChange: (v: string | null) => void;
   onTuningChange: (key: string, value: unknown) => void;
   onCapabilitySelectionChange: (ids: string[]) => void;
-  /** Atomic replacement of the whole capability selection (ids + config +
-   *  reasoning) — used by the Simple "packs" view, which flips several at once. */
+  /** Atomic replacement of the whole capability selection (ids + config) —
+   *  used by the Simple "packs" view, which flips several at once. */
   onCapabilitySelectionReplace: (next: CapabilitySelectionState) => void;
   onCapabilityConfigChange: (capabilityId: string, key: string, value: unknown) => void;
   onCapabilityAssetFileChange: (capabilityId: string, slotKey: string, file: File | null) => void;
@@ -143,8 +140,7 @@ export function AgentFormBody({
   role,
   description,
   usageStatement,
-  reasoningEnabled,
-  reasoningDefaultOn,
+  recommendedChatProfileId,
   tuningFieldValues,
   selectedCapabilityIds,
   capabilityConfigValues,
@@ -160,8 +156,7 @@ export function AgentFormBody({
   onRoleChange,
   onDescriptionChange,
   onUsageStatementChange,
-  onReasoningEnabledChange,
-  onReasoningDefaultOnChange,
+  onRecommendedChatProfileIdChange,
   onTuningChange,
   onCapabilitySelectionChange,
   onCapabilitySelectionReplace,
@@ -236,7 +231,7 @@ export function AgentFormBody({
 
   const visibleSections = SECTION_ORDER.filter((s) => {
     if (s === "prompts") return promptFields.length > 0;
-    return true; // general, tools (always has the reasoning card), and commitments always have content
+    return true; // general, tools and commitments always have content
   });
 
   const effectiveSection = visibleSections.includes(activeSection) ? activeSection : (visibleSections[0] ?? "general");
@@ -419,6 +414,12 @@ export function AgentFormBody({
                   maxLength={500}
                   disabled={isSubmitting}
                 />
+                <RecommendedModelField
+                  teamId={teamId}
+                  value={recommendedChatProfileId}
+                  onChange={onRecommendedChatProfileIdChange}
+                  disabled={isSubmitting}
+                />
                 {renderFieldList(generalFields)}
               </>
             )}
@@ -452,35 +453,13 @@ export function AgentFormBody({
                   <SimpleCapabilitiesView
                     availableIds={availableCapabilityIds}
                     supportsCapabilities={selectedTemplate?.supports_capabilities ?? true}
-                    selection={{ selectedCapabilityIds, capabilityConfigValues, reasoningEnabled }}
+                    selection={{ selectedCapabilityIds, capabilityConfigValues }}
                     disabled={isSubmitting}
                     onSelectionChange={onCapabilitySelectionReplace}
                     renderPackOptions={renderPackOptions}
                   />
                 ) : (
                   <ul className={styles.toolsList}>
-                    {/* REASON-01 level 3 (Amendment C) — always offered, regardless
-                    of the template's own capabilities, so it isn't gated behind
-                    `capabilities.length > 0` like the ones below it. Same
-                    CapabilityCard as every real capability; not one itself. */}
-                    <CapabilityCard
-                      name={t("rework.teams.formAgent.fields.reasoning.label")}
-                      description={t("rework.teams.formAgent.fields.reasoning.hint")}
-                      checked={reasoningEnabled}
-                      disabled={isSubmitting}
-                      onToggle={() => onReasoningEnabledChange(!reasoningEnabled)}
-                      subForm={
-                        reasoningEnabled && (
-                          <SwitchRow
-                            size="small"
-                            label={t("rework.teams.formAgent.fields.reasoningDefaultOn.label")}
-                            description={t("rework.teams.formAgent.fields.reasoningDefaultOn.hint")}
-                            checked={reasoningDefaultOn}
-                            onChange={onReasoningDefaultOnChange}
-                          />
-                        )
-                      }
-                    />
                     {capabilities.map((capability) => {
                       const checked = selectedCapabilityIds.includes(capability.id);
                       const configFields = capability.config_fields ?? [];

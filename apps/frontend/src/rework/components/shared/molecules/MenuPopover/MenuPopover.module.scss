@@ -199,3 +199,30 @@
 .danger .itemIcon {
   color: var(--error);
 }
+
+/* ── Dense variant ──────────────────────────────────────────────────────── */
+
+/* Opt-in (`dense`): tighter surface, row sides and dividers for short pickers. */
+.dense {
+  padding: var(--spacing-3xs);
+
+  .item {
+    padding: var(--spacing-xs);
+  }
+
+  .separator {
+    margin: var(--spacing-3xs) calc(-1 * var(--spacing-3xs));
+  }
+}
+
+/* Opt-in (`quietUnselected`): wins over the accent colour on the label only;
+   the selected row keeps its accent state layer and check. */
+.quietUnselected .item .itemLabel {
+  color: var(--on-surface-retreat);
+}
+
+.quietUnselected .item:hover:not(:disabled) .itemLabel,
+.quietUnselected .item[data-selected="true"] .itemLabel,
+.quietUnselected .item[data-accent-selected="true"][data-selected="true"] .itemLabel {
+  color: var(--on-surface);
+}

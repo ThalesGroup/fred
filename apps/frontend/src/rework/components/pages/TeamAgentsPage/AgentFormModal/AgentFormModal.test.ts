@@ -18,10 +18,8 @@ import type {
   ManagedAgentInstanceSummary,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
-  withReasoning,
   buildAgentFormSubmitPayload,
   defaultCapabilitySelection,
-  defaultReasoningSelection,
   extractCapabilityConfigValues,
 } from "./AgentFormModal";
 
@@ -46,51 +44,6 @@ const EMPTY_CAPABILITY_STATE = {
   capabilityAssetFiles: {} as Record<string, Record<string, File | undefined>>,
   capabilityBlockingErrors: {} as Record<string, string | null>,
 };
-
-describe("defaultReasoningSelection", () => {
-  it("seeds both fields from the template's declared defaults", () => {
-    // #2473: platform_ops declares both, so a new instance opens with the
-    // Reasoning card ticked and its nested "start in Boost" switch on.
-    const template = {
-      ...makeCapabilityTemplate([]),
-      reasoning_enabled: true,
-      reasoning_default_on: true,
-    } as AgentTemplateSummary;
-
-    expect(defaultReasoningSelection(template)).toEqual({
-      reasoningEnabled: true,
-      reasoningDefaultOn: true,
-    });
-  });
-
-  it("seeds the offer without the default-on switch", () => {
-    // The two are independent: a template may offer reasoning while still
-    // leaving new conversations starting in Rapide.
-    const template = {
-      ...makeCapabilityTemplate([]),
-      reasoning_enabled: true,
-      reasoning_default_on: false,
-    } as AgentTemplateSummary;
-
-    expect(defaultReasoningSelection(template)).toEqual({
-      reasoningEnabled: true,
-      reasoningDefaultOn: false,
-    });
-  });
-
-  it("defaults to off for a template that declares neither, and for none", () => {
-    // The pre-#2473 behaviour, and what an older pod's payload yields — the
-    // form must not invent a reasoning offer no template asked for.
-    expect(defaultReasoningSelection(makeCapabilityTemplate([]))).toEqual({
-      reasoningEnabled: false,
-      reasoningDefaultOn: false,
-    });
-    expect(defaultReasoningSelection(undefined)).toEqual({
-      reasoningEnabled: false,
-      reasoningDefaultOn: false,
-    });
-  });
-});
 
 describe("defaultCapabilitySelection", () => {
   it("pre-ticks the template's declared defaults", () => {
@@ -129,8 +82,7 @@ describe("buildAgentFormSubmitPayload", () => {
         role: "  Guardian  ",
         description: "  Guardrails  ",
         usageStatement: "  Screens inbound requests for policy violations.  ",
-        reasoningEnabled: false,
-        reasoningDefaultOn: false,
+        recommendedChatProfileId: null,
         tuningValues: {},
         ...EMPTY_CAPABILITY_STATE,
       },
@@ -142,7 +94,7 @@ describe("buildAgentFormSubmitPayload", () => {
       role: "Guardian",
       description: "Guardrails",
       usageStatement: "Screens inbound requests for policy violations.",
-      reasoningEnabled: false,
+      recommendedChatProfileId: null,
     });
   });
 
@@ -154,8 +106,7 @@ describe("buildAgentFormSubmitPayload", () => {
         role: "",
         description: "",
         usageStatement: "",
-        reasoningEnabled: false,
-        reasoningDefaultOn: false,
+        recommendedChatProfileId: null,
         tuningValues: {},
         ...EMPTY_CAPABILITY_STATE,
         selectedCapabilityIds: ["ghost-cap"],
@@ -177,8 +128,7 @@ describe("buildAgentFormSubmitPayload", () => {
         role: "",
         description: "",
         usageStatement: "",
-        reasoningEnabled: false,
-        reasoningDefaultOn: false,
+        recommendedChatProfileId: null,
         tuningValues: {},
         ...EMPTY_CAPABILITY_STATE,
         // "gone" is not advertised; "unselected" is advertised but not ticked.
@@ -223,8 +173,7 @@ describe("buildAgentFormSubmitPayload", () => {
           role: "",
           description: "",
           usageStatement: "",
-          reasoningEnabled: false,
-          reasoningDefaultOn: false,
+          recommendedChatProfileId: null,
           tuningValues: {},
           ...EMPTY_CAPABILITY_STATE,
           selectedCapabilityIds: ids,
@@ -246,8 +195,7 @@ describe("buildAgentFormSubmitPayload", () => {
         role: "",
         description: "",
         usageStatement: "",
-        reasoningEnabled: false,
-        reasoningDefaultOn: false,
+        recommendedChatProfileId: null,
         tuningValues: {},
         ...EMPTY_CAPABILITY_STATE,
         selectedCapabilityIds: ["knowledge-flow-mcp-text"],
@@ -265,27 +213,23 @@ describe("buildAgentFormSubmitPayload", () => {
     });
   });
 
-  it("carries the reasoning preselection even while the offer is off (REASON-01 Amendment B)", () => {
-    // The two reasoning fields are independent on purpose. If the payload
-    // builder dropped the preselection whenever the offer was off, an author
-    // who toggled the offer off and back on would silently lose their default —
-    // the backend keeps the value inert precisely so it survives that round trip.
-    const payload = buildAgentFormSubmitPayload(
-      {
-        templateId: "runtime:agent",
-        displayName: "Agent",
-        role: "",
-        description: "",
-        usageStatement: "",
-        reasoningEnabled: false,
-        reasoningDefaultOn: true,
-        tuningValues: {},
-        ...EMPTY_CAPABILITY_STATE,
-      },
-      makeCapabilityTemplate([]),
-    );
+  it("carries the recommended model, null meaning follow the team", () => {
+    const base = {
+      templateId: "runtime:agent",
+      displayName: "Agent",
+      role: "",
+      description: "",
+      usageStatement: "",
+      tuningValues: {},
+      ...EMPTY_CAPABILITY_STATE,
+    };
 
-    expect(payload).toMatchObject({ reasoningEnabled: false, reasoningDefaultOn: true });
+    expect(
+      buildAgentFormSubmitPayload({ ...base, recommendedChatProfileId: "chat.gpt5" }, makeCapabilityTemplate([])),
+    ).toMatchObject({ recommendedChatProfileId: "chat.gpt5" });
+    expect(
+      buildAgentFormSubmitPayload({ ...base, recommendedChatProfileId: null }, makeCapabilityTemplate([])),
+    ).toMatchObject({ recommendedChatProfileId: null });
   });
 });
 
@@ -318,23 +262,6 @@ describe("extractCapabilityConfigValues", () => {
     expect(extractCapabilityConfigValues(stored)).toEqual({
       document_access: { attachments: true, team_documents: false, bind_libraries: false },
       other: { search_attachments_only: true },
-    });
-  });
-});
-
-describe("withReasoning", () => {
-  it("turns reasoning on by default when reasoning is turned on", () => {
-    expect(withReasoning({ reasoningEnabled: false, reasoningDefaultOn: false }, true)).toEqual({
-      reasoningEnabled: true,
-      reasoningDefaultOn: true,
-    });
-  });
-
-  it("keeps the member's default choice otherwise", () => {
-    expect(withReasoning({ reasoningEnabled: true, reasoningDefaultOn: false }, true).reasoningDefaultOn).toBe(false);
-    expect(withReasoning({ reasoningEnabled: true, reasoningDefaultOn: true }, false)).toEqual({
-      reasoningEnabled: false,
-      reasoningDefaultOn: true,
     });
   });
 });
