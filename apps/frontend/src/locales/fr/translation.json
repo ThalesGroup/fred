@@ -503,12 +503,14 @@
       "reasoningRowLabel": "Raisonnement",
       "reasoningModelsSection": "Modèles",
       "reasoningEffortSection": "Effort",
+      "reasoningEffortNone": "Aucun niveau d'effort disponible",
+      "modelAndReasoningMenu": "Modèle et raisonnement",
       "reasoningOff": "Faible",
       "reasoningOn": "Élevé",
       "reasoningOnMenu": "Élevé (Raisonnement)",
-      "reasoningHint": "Active le raisonnement pour les questions approfondies (augmente le temps de réponse et la consommation de tokens).",
       "selectLibraryFirst": "Sélectionnez d'abord une bibliothèque.",
-      "modelNotEnabledForTeam": "Ce modèle n'est pas activé pour cette équipe — le message échouera. Demandez à un administrateur de la plateforme de l'activer."
+      "modelNotEnabledForTeam": "Ce modèle n'est pas activé pour cette équipe — le message échouera. Demandez à un administrateur de la plateforme de l'activer.",
+      "modelChoiceLost": "{{model}} n'est plus disponible : la conversation revient au modèle conseillé."
     },
     "characterCounter": "{{used}} / {{limit}} caractères",
     "conversationAriaLabel": "Conversation",
@@ -2629,31 +2631,38 @@
         "activity": "Activité",
         "usage": "Consommation",
         "responsibilities": "Responsabilités",
-        "routing": "Routage des modèles",
+        "routing": "Modèles",
         "retention": "Rétention"
       },
       "routing": {
-        "title": "Routage des modèles",
-        "defaultProfile": {
-          "title": "Modèle de chat par défaut",
-          "explanation": "Le profil de modèle utilisé pour les agents de chat gérés de cette équipe quand aucune substitution d'agent ci-dessous ne s'applique. Laisser vide pour utiliser le défaut du déploiement.",
-          "label": "Identifiant du profil par défaut",
-          "useDeploymentDefault": "Utiliser le défaut du déploiement"
+        "title": "Modèles",
+        "subtitle": "Les modèles que la plateforme autorise pour cette équipe : ceux que les membres peuvent utiliser, celui par défaut, et si le raisonnement démarre activé.",
+        "readOnly": "Seuls les administrateurs de l'équipe peuvent modifier ses modèles.",
+        "emptyState": "La plateforme n'autorise encore aucun modèle pour cette équipe. Demandez à un administrateur de la plateforme d'en autoriser un.",
+        "enabledTooltip": "Activé pour l'équipe",
+        "enabledLabel": "Activer {{model}} pour l'équipe",
+        "defaultCannotBeDisabled": "Le modèle par défaut ne peut pas être désactivé",
+        "reasoningDefault": "Raisonnement activé par défaut",
+        "reasoningDefaultLabel": "Raisonnement activé par défaut pour {{model}}",
+        "isDefault": "Par défaut",
+        "setDefault": "Définir par défaut",
+        "defaultUnavailable": "Le modèle par défaut de l'équipe n'est plus disponible pour cette équipe. Définissez un autre modèle par défaut.",
+        "saveError": "Impossible d'enregistrer les modèles de l'équipe.",
+        "disableDialog": {
+          "title": "Désactiver {{model}} ?",
+          "confirm": "Désactiver",
+          "loading": "Recherche des agents qui utilisent ce modèle comme modèle conseillé…",
+          "loadError": "Impossible de vérifier quels agents utilisent ce modèle comme modèle conseillé.",
+          "noAgents": "Aucun agent de l'équipe n'utilise ce modèle comme modèle conseillé.",
+          "agents": "Ces agents utilisent ce modèle comme modèle conseillé. Ils passeront au modèle par défaut de l'équipe, {{model}} :",
+          "agentsUnnamed": "Ces agents utilisent ce modèle comme modèle conseillé. Ils passeront au modèle par défaut de l'équipe :",
+          "conversations": "Les conversations en cours sur ce modèle passeront au modèle conseillé de leur agent. Pour les agents qui suivent le modèle par défaut de l'équipe, ce sera {{model}}.",
+          "conversationsUnnamed": "Les conversations en cours sur ce modèle passeront au modèle conseillé de leur agent."
         },
-        "agentOverrides": {
-          "title": "Substitutions par agent",
-          "explanation": "Remplacer le modèle par défaut pour un agent spécifique.",
-          "agent": "Agent",
-          "agentPlaceholder": "Sélectionner un agent",
-          "targetProfileId": "Identifiant du profil",
-          "targetProfilePlaceholder": "Sélectionner un modèle",
-          "addRule": "Ajouter une substitution",
-          "incompleteRow": "Choisissez un agent et un profil pour chaque ligne de substitution (ou supprimez la ligne) avant d'enregistrer."
-        },
-        "profileUnavailable": "Plus activé pour cette équipe",
-        "emptyState": "Cette équipe n'a encore aucun modèle activé. Demandez à un administrateur de la plateforme d'activer au moins une capability de modèle avant de configurer des règles de routage.",
-        "save": "Enregistrer",
-        "saveError": "Impossible d'enregistrer la politique de routage."
+        "loadError": "Impossible de charger les modèles de l'équipe.",
+        "loadErrorHint": "Les modifications sont désactivées jusqu'à leur chargement. Réessayez dans un instant.",
+        "conflict": "Les modèles de l'équipe ont changé entre-temps",
+        "conflictHint": "Ils ont été rechargés. Vérifiez-les, puis refaites votre modification."
       },
       "parameters": {
         "title": "Paramètres",
@@ -2759,8 +2768,7 @@
           },
           "sections": {
             "dataKnowledge": "Données et connaissances",
-            "documentProduction": "Production de documents",
-            "intelligenceOrchestration": "Intelligence et orchestration"
+            "documentProduction": "Production de documents"
           },
           "notSupported": "Cet agent ne prend pas en charge la sélection de capacités.",
           "packs": {
@@ -2787,10 +2795,6 @@
             "webPage": {
               "title": "Générer une page web (HTML/CSS)",
               "description": "Capacité de produire du HTML/CSS statique rendu dans un aperçu à côté du chat."
-            },
-            "reasoning": {
-              "title": "Raisonnement",
-              "description": "Accès au mode \"raisonnement\" dans les options du chat."
             }
           }
         },
@@ -2814,13 +2818,14 @@
             "intro": "Afin de garantir la conformité de votre agent aux normes et règlementations en vigueur, veuillez décrire en détail la raison-d'être de cet agent, ses utilisations envisagées et les risques associés.",
             "placeholder": "Finalité, utilisateurs cibles, acteurs impactés, données exploitées, productions/livrables, impacts en cas d'erreur de l'agent..."
           },
-          "reasoning": {
-            "label": "Accéder au raisonnement approfondi",
-            "hint": "Accès au mode \"raisonnement approfondi\" dans les options du chat."
-          },
-          "reasoningDefaultOn": {
-            "label": "Raisonnement approfondi activé par défaut",
-            "hint": "Chaque nouvelle conversation avec cet agent démarre avec le bouton de raisonnement approfondi déjà activé. Les utilisateurs peuvent toujours le désactiver question par question. Le raisonnement approfondi est plus lent et, sur les agents qui appellent des outils, peut amener le modèle à répéter des appels."
+          "recommendedModel": {
+            "label": "Modèle conseillé",
+            "hint": "Les nouvelles conversations avec cet agent démarrent sur ce modèle. Les membres peuvent toujours choisir un autre modèle dans le chat.",
+            "teamDefault": "Modèle par défaut de l'équipe",
+            "teamDefaultCurrent": "Actuellement {{model}}. Suit les changements faits par l'admin d'équipe.",
+            "teamDefaultFollows": "Suit les changements faits par l'admin d'équipe.",
+            "unavailableOption": "Plus disponible",
+            "unavailable": "{{model}} n'est plus disponible pour cette équipe. Choisissez un autre modèle ou le modèle par défaut de l'équipe."
           }
         },
         "noTemplates": "Aucun modèle d'agent disponible — demandez à un administrateur d'activer une capability d'agent, ou vérifiez le runtime d'agents.",

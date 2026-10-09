@@ -139,11 +139,13 @@ d'une page, que je puisse exporter en PDF. »
 
 ### Raisonnement
 
-**Ce qu'elle fait** — ouvre dans les options de la conversation un mode où
-l'agent prend le temps de décomposer le problème avant de répondre.
+**Ce qu'il fait** — un mode où l'agent prend le temps de décomposer le
+problème avant de répondre. Ce n'est pas une capacité à activer sur l'agent :
+il suit le modèle de langage choisi, et se règle dans la conversation (voir
+[Les conversations](/help/fr/features/chat#choisir-le-modele-et-le-raisonnement)).
 
-**Ses limites** — ce mode dépend du modèle utilisé et n'est pas proposé avec
-tous. Les réponses sont plus lentes et plus coûteuses. Il apporte peu sur une
+**Ses limites** — il n'est proposé qu'avec les modèles pour lesquels
+l'administrateur l'a activé. Les réponses sont plus lentes et plus coûteuses. Il apporte peu sur une
 recherche simple, davantage sur une analyse en plusieurs étapes.
 
 **Un exemple** — comparer deux offres sur une dizaine de critères et justifier

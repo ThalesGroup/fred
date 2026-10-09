@@ -503,12 +503,14 @@
       "reasoningRowLabel": "Reasoning",
       "reasoningModelsSection": "Models",
       "reasoningEffortSection": "Effort",
+      "reasoningEffortNone": "No effort level available",
+      "modelAndReasoningMenu": "Model and reasoning",
       "reasoningOff": "Low",
       "reasoningOn": "High",
       "reasoningOnMenu": "High (Reasoning)",
-      "reasoningHint": "Turns on reasoning for in-depth questions (increases response time and token usage).",
       "selectLibraryFirst": "Select a library first.",
-      "modelNotEnabledForTeam": "This model is not enabled for this team — the message will fail. Ask a platform administrator to enable it."
+      "modelNotEnabledForTeam": "This model is not enabled for this team — the message will fail. Ask a platform administrator to enable it.",
+      "modelChoiceLost": "{{model}} is no longer available: the conversation goes back to the recommended model."
     },
     "characterCounter": "{{used}} / {{limit}} characters",
     "conversationAriaLabel": "Conversation",
@@ -2629,31 +2631,38 @@
         "activity": "Activity",
         "usage": "Usage",
         "responsibilities": "Responsibilities",
-        "routing": "Model routing",
+        "routing": "Models",
         "retention": "Retention"
       },
       "routing": {
-        "title": "Model routing",
-        "defaultProfile": {
-          "title": "Default chat model",
-          "explanation": "The model profile used for this team's managed chat agents when no agent override matches below. Leave empty to use the deployment default.",
-          "label": "Default profile id",
-          "useDeploymentDefault": "Use deployment default"
+        "title": "Models",
+        "subtitle": "The models the platform allows this team: which ones members can use, the default one, and whether reasoning starts on.",
+        "readOnly": "Only team administrators can change the team's models.",
+        "emptyState": "The platform allows no model for this team yet. Ask a platform administrator to allow one.",
+        "enabledTooltip": "Enabled for the team",
+        "enabledLabel": "Enable {{model}} for the team",
+        "defaultCannotBeDisabled": "The default model cannot be disabled",
+        "reasoningDefault": "Reasoning on by default",
+        "reasoningDefaultLabel": "Reasoning on by default for {{model}}",
+        "isDefault": "Default",
+        "setDefault": "Set as default",
+        "defaultUnavailable": "The team's default model is no longer available to this team. Set another model as default.",
+        "saveError": "Could not save the team's models.",
+        "disableDialog": {
+          "title": "Disable {{model}}?",
+          "confirm": "Disable",
+          "loading": "Looking for the agents that use this model as their recommended model…",
+          "loadError": "Could not check which agents use this model as their recommended model.",
+          "noAgents": "No agent in this team uses this model as its recommended model.",
+          "agents": "These agents use this model as their recommended model. They will switch to the team's default model, {{model}}:",
+          "agentsUnnamed": "These agents use this model as their recommended model. They will switch to the team's default model:",
+          "conversations": "Ongoing conversations on this model will switch to their agent's recommended model. For agents that follow the team's default model, that is {{model}}.",
+          "conversationsUnnamed": "Ongoing conversations on this model will switch to their agent's recommended model."
         },
-        "agentOverrides": {
-          "title": "Agent overrides",
-          "explanation": "Override the default model for one specific agent.",
-          "agent": "Agent",
-          "agentPlaceholder": "Select an agent",
-          "targetProfileId": "Profile id",
-          "targetProfilePlaceholder": "Select a model",
-          "addRule": "Add override",
-          "incompleteRow": "Pick both an agent and a profile for every override row (or remove the row) before saving."
-        },
-        "profileUnavailable": "No longer enabled for this team",
-        "emptyState": "This team has no enabled models yet. Ask a platform admin to enable at least one model capability before configuring routing rules.",
-        "save": "Save",
-        "saveError": "Could not save the routing policy."
+        "loadError": "The team's models could not be loaded.",
+        "loadErrorHint": "Changes are disabled until they load. Try again in a moment.",
+        "conflict": "The team's models changed meanwhile",
+        "conflictHint": "They were reloaded. Check them, then make your change again."
       },
       "parameters": {
         "title": "Settings",
@@ -2759,8 +2768,7 @@
           },
           "sections": {
             "dataKnowledge": "Data and knowledge",
-            "documentProduction": "Document production",
-            "intelligenceOrchestration": "Intelligence and orchestration"
+            "documentProduction": "Document production"
           },
           "notSupported": "This agent does not support capability selection.",
           "packs": {
@@ -2787,10 +2795,6 @@
             "webPage": {
               "title": "Generate a web page (HTML/CSS)",
               "description": "Ability to produce static HTML/CSS rendered in a preview beside the chat."
-            },
-            "reasoning": {
-              "title": "Reasoning",
-              "description": "Access to \"reasoning\" mode in the chat options."
             }
           }
         },
@@ -2814,13 +2818,14 @@
             "intro": "To ensure your agent complies with applicable standards and regulations, please describe in detail this agent's purpose, its intended uses, and the associated risks.",
             "placeholder": "Purpose, target users, impacted parties, data handled, outputs/deliverables, impact if the agent errs..."
           },
-          "reasoning": {
-            "label": "Access deep reasoning",
-            "hint": "Access to \"deep reasoning\" mode in the chat options."
-          },
-          "reasoningDefaultOn": {
-            "label": "Deep reasoning on by default",
-            "hint": "Every new conversation with this agent starts with the composer's deep reasoning toggle already on. Users can still switch it off per question. Deep reasoning is slower and, on agents that call tools, can make the model repeat calls."
+          "recommendedModel": {
+            "label": "Recommended model",
+            "hint": "New conversations with this agent start on this model. Members can still pick another model in the chat.",
+            "teamDefault": "Team default model",
+            "teamDefaultCurrent": "Currently {{model}}. Follows changes made by the team admin.",
+            "teamDefaultFollows": "Follows changes made by the team admin.",
+            "unavailableOption": "No longer available",
+            "unavailable": "{{model}} is no longer available to this team. Pick another model or the team default model."
           }
         },
         "noTemplates": "No agent templates available — ask a platform admin to enable an agent capability, or check the agent runtime.",

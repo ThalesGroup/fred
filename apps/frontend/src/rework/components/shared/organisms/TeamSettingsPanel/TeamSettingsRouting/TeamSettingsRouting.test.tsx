@@ -13,19 +13,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Locks in the read/write split (team_editor writes, team_admin reads), that
-// the default-profile + per-agent override fields round-trip through the
-// query result, that both profile pickers are scoped to the team's
-// `can_use`-enabled models, that an incomplete override row is dropped
-// rather than saved half-filled, and that a rejected PATCH surfaces the
-// server's 400 detail inline.
+// The team's Models section: one row per model, the default's badge and its
+// locked enable switch, the reasoning switch only where reasoning can run, the
+// read-only view, and the disable confirmation that writes nothing on cancel.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
-  AgentTemplateSummary,
   AvailableModelProfileList,
+  DisableImpact,
   TeamRoutingPolicy,
   TeamWithPermissions,
 } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
@@ -39,22 +36,32 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const h = vi.hoisted(() => ({
   policy: undefined as TeamRoutingPolicy | undefined,
   availableModels: undefined as AvailableModelProfileList | undefined,
-  agentTemplates: undefined as AgentTemplateSummary[] | undefined,
-  updateRoutingPolicy: vi.fn(() => ({ unwrap: () => Promise.resolve() })),
+  impact: { agents: [] } as DisableImpact,
+  fetching: false,
+  readError: false,
+  refetch: vi.fn(),
+  showWarn: vi.fn(),
+  updateRoutingPolicy: vi.fn((_: unknown) => ({ unwrap: () => Promise.resolve() as Promise<unknown> })),
+  fetchDisableImpact: vi.fn((_: unknown, __?: boolean) => ({ unwrap: () => Promise.resolve(h.impact) })),
 }));
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
-  useTeamRoutingPolicyQuery: () => ({ data: h.policy, isLoading: false }),
-  useAvailableModelProfilesQuery: () => ({ data: h.availableModels, isLoading: false }),
-  useUpdateTeamRoutingPolicyMutation: () => [h.updateRoutingPolicy, { isLoading: false }],
-}));
+vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({ showWarn: h.showWarn }) }));
 
-vi.mock("../../../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
-  useGetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetQuery: () => ({ data: h.agentTemplates }),
+vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  useTeamRoutingPolicyQuery: () => ({
+    data: h.policy,
+    isLoading: false,
+    isFetching: h.fetching,
+    isError: h.readError,
+    refetch: h.refetch,
+  }),
+  useAvailableModelProfilesQuery: () => ({ data: h.availableModels, isLoading: false, isFetching: false }),
+  useUpdateTeamRoutingPolicyMutation: () => [h.updateRoutingPolicy, { isLoading: false }],
+  useLazyDisableImpactQuery: () => [h.fetchDisableImpact],
 }));
 
 import TeamSettingsRouting from "./TeamSettingsRouting.tsx";
@@ -62,12 +69,12 @@ import TeamSettingsRouting from "./TeamSettingsRouting.tsx";
 let container: HTMLDivElement;
 let root: Root;
 
-function render(ui: React.ReactElement) {
+function render(canWrite: boolean) {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
   act(() => {
-    root.render(ui);
+    root.render(<TeamSettingsRouting team={TEAM} canWrite={canWrite} />);
   });
 }
 
@@ -77,316 +84,284 @@ afterEach(() => {
   });
   container.remove();
   h.updateRoutingPolicy.mockClear();
+  h.fetchDisableImpact.mockClear();
+  h.refetch.mockClear();
+  h.showWarn.mockClear();
+  h.fetching = false;
+  h.readError = false;
   h.policy = undefined;
   h.availableModels = undefined;
-  h.agentTemplates = undefined;
+  h.impact = { agents: [] };
 });
 
 const TEAM = { id: "team-1", name: "Team One", is_member: true, admins: [], permissions: [] } as TeamWithPermissions;
+const MISTRAL = "model__mistral__mistral-small";
+const GPT = "model__openai__gpt-5";
 
-const ONE_MODEL: AvailableModelProfileList = {
-  profiles: [{ profile_id: "chat.openai.gpt5", capability_id: "model__openai__gpt-5", name: "GPT-5" }],
-};
-
-const TWO_MODELS: AvailableModelProfileList = {
+const MODELS: AvailableModelProfileList = {
   profiles: [
-    { profile_id: "default.chat.mistral", capability_id: "model__mistral__default", name: "Mistral" },
-    { profile_id: "chat.openai.gpt5", capability_id: "model__openai__gpt-5", name: "GPT-5" },
+    { profile_id: "chat.gpt5", capability_id: GPT, name: "gpt-5", display_name: "GPT-5", reasoning_available: true },
+    {
+      profile_id: "chat.gpt5.alt",
+      capability_id: GPT,
+      name: "gpt-5",
+      display_name: "GPT-5",
+      reasoning_available: true,
+    },
+    { profile_id: "chat.mistral", capability_id: MISTRAL, name: "mistral-small", reasoning_available: false },
   ],
+  effective_default_profile_id: "chat.mistral",
 };
 
-const RICO_TEMPLATE = {
-  template_id: "t1",
-  source_runtime_id: "fred-agents",
-  source_agent_id: "rico",
-  display_name: "Rico",
-  description: "",
-} as AgentTemplateSummary;
-
-// Select's trigger is a <button aria-haspopup="listbox">; plain action
-// buttons ("Add override", "Save") carry no such attribute.
-function selectTriggers(): HTMLButtonElement[] {
-  return Array.from(container.querySelectorAll('button[aria-haspopup="listbox"]'));
+function policy(patch: Partial<TeamRoutingPolicy> = {}): TeamRoutingPolicy {
+  return { team_id: "team-1", version: 1, chat_default_profile_id: null, ...patch };
 }
 
-function pressKey(el: Element, key: string) {
-  act(() => {
-    el.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+function tiles(): HTMLLIElement[] {
+  return Array.from(container.querySelectorAll("li"));
+}
+
+function tile(name: string): HTMLLIElement {
+  const found = tiles().find((li) => li.textContent?.includes(name));
+  if (!found) throw new Error(`no tile for ${name}`);
+  return found;
+}
+
+function enableSwitch(name: string): HTMLInputElement {
+  return tile(name).querySelector('input[aria-label="rework.teamSettings.routing.enabledLabel"]') as HTMLInputElement;
+}
+
+function reasoningSwitch(name: string): HTMLInputElement | null {
+  return tile(name).querySelector('input[aria-label="rework.teamSettings.routing.reasoningDefaultLabel"]');
+}
+
+function defaultButton(name: string): HTMLButtonElement {
+  return tile(name).querySelector("button") as HTMLButtonElement;
+}
+
+function dialogButton(label: string): HTMLButtonElement | undefined {
+  return Array.from(document.body.querySelectorAll('[role="alertdialog"] button')).find(
+    (button) => button.textContent === label,
+  ) as HTMLButtonElement | undefined;
+}
+
+async function flush() {
+  await act(async () => {
+    await Promise.resolve();
   });
 }
 
 describe("TeamSettingsRouting", () => {
-  it("renders the stored default profile id and agent overrides", () => {
-    h.policy = {
-      team_id: "team-1",
-      version: 1,
-      chat_default_profile_id: "default.chat.mistral",
-      agent_profile_overrides: { rico: "chat.openai.gpt5" },
-    };
-    h.availableModels = TWO_MODELS;
-    h.agentTemplates = [RICO_TEMPLATE];
-    render(<TeamSettingsRouting team={TEAM} canWrite={true} />);
+  it("lists one row per model, the effective default badged and the others offering Set as default", () => {
+    h.policy = policy();
+    h.availableModels = MODELS;
+    render(true);
 
-    const triggers = selectTriggers();
-    // [0] default profile · [1] the row's agent · [2] the row's target profile
-    expect(triggers[0].textContent).toContain("Mistral (default.chat.mistral)");
-    expect(triggers[1].textContent).toContain("Rico");
-    expect(triggers[2].textContent).toContain("GPT-5 (chat.openai.gpt5)");
-    // No free-text inputs left in the row — agent and profile are both pickers.
-    expect(container.querySelectorAll("input")).toHaveLength(0);
+    expect(tiles()).toHaveLength(2);
+    expect(defaultButton("Mistral Small").textContent).toContain("rework.teamSettings.routing.isDefault");
+    expect(defaultButton("Mistral Small").disabled).toBe(true);
+    expect(defaultButton("GPT-5").textContent).toBe("rework.teamSettings.routing.setDefault");
+    expect(defaultButton("GPT-5").disabled).toBe(false);
   });
 
-  it("disables every field and hides the save/add controls for a read-only caller (team_admin)", () => {
-    h.policy = {
-      team_id: "team-1",
-      version: 1,
-      chat_default_profile_id: "chat.openai.gpt5",
-      agent_profile_overrides: {},
-    };
-    h.availableModels = ONE_MODEL;
-    render(<TeamSettingsRouting team={TEAM} canWrite={false} />);
+  it("disables the default model's enable switch", () => {
+    h.policy = policy({ chat_default_profile_id: "chat.gpt5" });
+    h.availableModels = MODELS;
+    render(true);
 
-    selectTriggers().forEach((trigger) => expect(trigger.disabled).toBe(true));
-    expect(Array.from(container.querySelectorAll("button")).some((b) => b.textContent?.includes("addRule"))).toBe(
-      false,
-    );
-    expect(
-      Array.from(container.querySelectorAll("button")).some(
-        (b) => b.textContent === "rework.teamSettings.routing.save",
-      ),
-    ).toBe(false);
+    expect(enableSwitch("GPT-5").disabled).toBe(true);
+    expect(enableSwitch("Mistral Small").disabled).toBe(false);
   });
 
-  it("shows an explanatory message instead of a picker when the team has no enabled models", () => {
-    h.policy = { team_id: "team-1", version: 0, chat_default_profile_id: null, agent_profile_overrides: {} };
-    h.availableModels = { profiles: [] };
-    render(<TeamSettingsRouting team={TEAM} canWrite={true} />);
+  it("shows the reasoning switch only for a model whose reasoning the platform enabled", () => {
+    h.policy = policy({ reasoning_default_off_model_ids: [GPT] });
+    h.availableModels = MODELS;
+    render(true);
 
-    expect(selectTriggers()).toHaveLength(0);
-    expect(container.textContent).toContain("rework.teamSettings.routing.emptyState");
+    expect(reasoningSwitch("GPT-5")?.checked).toBe(false);
+    expect(reasoningSwitch("Mistral Small")).toBeNull();
   });
 
-  it("a stale profile id no longer enabled for the team still renders as a flagged option instead of vanishing", () => {
-    h.policy = {
-      team_id: "team-1",
-      version: 1,
-      chat_default_profile_id: "chat.openai.gpt4o-legacy",
-      agent_profile_overrides: {},
-    };
-    h.availableModels = ONE_MODEL;
-    render(<TeamSettingsRouting team={TEAM} canWrite={true} />);
+  it("lists a team-disabled model unchecked", () => {
+    h.policy = policy({ disabled_model_ids: [GPT] });
+    h.availableModels = MODELS;
+    render(true);
 
-    expect(selectTriggers()[0].textContent).toContain("chat.openai.gpt4o-legacy");
+    expect(enableSwitch("GPT-5").checked).toBe(false);
+    expect(enableSwitch("Mistral Small").checked).toBe(true);
   });
 
-  it("adding an override appends one empty row with no agent or profile picked", () => {
-    h.policy = { team_id: "team-1", version: 0, chat_default_profile_id: null, agent_profile_overrides: {} };
-    h.availableModels = ONE_MODEL;
-    render(<TeamSettingsRouting team={TEAM} canWrite={true} />);
+  it("is read-only for a team editor or analyst", () => {
+    h.policy = policy();
+    h.availableModels = MODELS;
+    render(false);
 
-    const addButton = Array.from(container.querySelectorAll("button")).find((b) => b.textContent?.includes("addRule"))!;
-    act(() => {
-      addButton.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-    });
-
-    // default-profile select + the new row's agent + target-profile selects.
-    expect(selectTriggers()).toHaveLength(3);
+    expect(container.textContent).toContain("rework.teamSettings.routing.readOnly");
+    container.querySelectorAll("input").forEach((input) => expect(input.disabled).toBe(true));
+    container.querySelectorAll("button").forEach((button) => expect(button.disabled).toBe(true));
   });
 
-  it("save PATCHes the picked default profile id and current overrides", async () => {
-    h.policy = { team_id: "team-1", version: 0, chat_default_profile_id: null, agent_profile_overrides: {} };
-    h.availableModels = ONE_MODEL;
-    render(<TeamSettingsRouting team={TEAM} canWrite={true} />);
+  it("is editable for a team admin, and Set as default saves the whole policy", () => {
+    h.policy = policy({ disabled_model_ids: [], reasoning_default_off_model_ids: [GPT] });
+    h.availableModels = MODELS;
+    render(true);
 
-    const defaultTrigger = selectTriggers()[0];
-    pressKey(defaultTrigger, "ArrowDown"); // open, active = "use deployment default" (current value)
-    pressKey(defaultTrigger, "ArrowDown"); // move to the one available model
-    pressKey(defaultTrigger, "Enter");
-
-    const saveButton = Array.from(container.querySelectorAll("button")).find(
-      (b) => b.textContent === "rework.teamSettings.routing.save",
-    )!;
-    await act(async () => {
-      saveButton.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-      await Promise.resolve();
-    });
-
+    act(() => defaultButton("GPT-5").click());
     expect(h.updateRoutingPolicy).toHaveBeenCalledWith({
       teamId: "team-1",
-      updateTeamRoutingPolicyRequest: { chat_default_profile_id: "chat.openai.gpt5", agent_profile_overrides: {} },
+      updateTeamRoutingPolicyRequest: {
+        chat_default_profile_id: "chat.gpt5",
+        disabled_model_ids: [],
+        reasoning_default_off_model_ids: [GPT],
+        expected_version: 1,
+      },
     });
   });
 
-  it("shows the server's 400 detail inline when the save is rejected", async () => {
-    h.policy = { team_id: "team-1", version: 0, chat_default_profile_id: null, agent_profile_overrides: {} };
-    h.availableModels = ONE_MODEL;
-    h.updateRoutingPolicy.mockReturnValue({
-      unwrap: () =>
-        Promise.reject({ status: 400, data: { detail: "Team 'team-1' may not use profile id(s) ['ghost']." } }),
-    } as never);
-    render(<TeamSettingsRouting team={TEAM} canWrite={true} />);
+  it("keeps the stored default when only the reasoning default changes", () => {
+    h.policy = policy();
+    h.availableModels = MODELS;
+    render(true);
 
-    const saveButton = Array.from(container.querySelectorAll("button")).find(
-      (b) => b.textContent === "rework.teamSettings.routing.save",
-    )!;
-    await act(async () => {
-      saveButton.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-      await Promise.resolve();
-      await Promise.resolve();
+    act(() => reasoningSwitch("GPT-5")!.click());
+    expect(h.updateRoutingPolicy).toHaveBeenCalledWith({
+      teamId: "team-1",
+      updateTeamRoutingPolicyRequest: {
+        chat_default_profile_id: null,
+        disabled_model_ids: [],
+        reasoning_default_off_model_ids: [GPT],
+        expected_version: 1,
+      },
     });
-
-    expect(container.textContent).toContain("may not use profile id(s) ['ghost']");
   });
 
-  it("round-trips an agent-scoped override and saves it keyed by agent_id", async () => {
-    h.policy = {
-      team_id: "team-1",
-      version: 1,
-      chat_default_profile_id: null,
-      agent_profile_overrides: { rico: "chat.openai.gpt5" },
-    };
-    h.availableModels = ONE_MODEL;
-    h.agentTemplates = [RICO_TEMPLATE];
-    h.updateRoutingPolicy.mockReturnValue({ unwrap: () => Promise.resolve() } as never);
-    render(<TeamSettingsRouting team={TEAM} canWrite={true} />);
+  it("lists the recommending agents and the conversation fallback, then saves on confirm", async () => {
+    h.policy = policy();
+    h.availableModels = MODELS;
+    h.impact = { agents: [{ agent_instance_id: "x", display_name: "Agent X" }] };
+    render(true);
 
-    // the row's agent select resolves the id to the agent's display name
-    expect(selectTriggers()[1].textContent).toContain("Rico");
+    act(() => enableSwitch("GPT-5").click());
+    await flush();
 
-    const saveButton = Array.from(container.querySelectorAll("button")).find(
-      (b) => b.textContent === "rework.teamSettings.routing.save",
-    )!;
-    await act(async () => {
-      saveButton.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-      await Promise.resolve();
-    });
-
-    const calls = h.updateRoutingPolicy.mock.calls as unknown as Array<
-      [{ updateTeamRoutingPolicyRequest: { agent_profile_overrides: Record<string, string> } }]
-    >;
-    const overrides = calls[calls.length - 1][0].updateTeamRoutingPolicyRequest.agent_profile_overrides;
-    expect(overrides).toEqual({ rico: "chat.openai.gpt5" });
-  });
-
-  it("renders a 422 array-shaped detail as a readable message, not [object Object]", async () => {
-    h.policy = { team_id: "team-1", version: 0, chat_default_profile_id: null, agent_profile_overrides: {} };
-    h.availableModels = ONE_MODEL;
-    h.updateRoutingPolicy.mockReturnValue({
-      unwrap: () =>
-        Promise.reject({
-          status: 422,
-          data: {
-            detail: [
-              {
-                loc: ["body", "agent_profile_overrides"],
-                msg: "String should have at least 1 character",
-                type: "string_too_short",
-              },
-            ],
-          },
-        }),
-    } as never);
-    render(<TeamSettingsRouting team={TEAM} canWrite={true} />);
-
-    const saveButton = Array.from(container.querySelectorAll("button")).find(
-      (b) => b.textContent === "rework.teamSettings.routing.save",
-    )!;
-    await act(async () => {
-      saveButton.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(container.textContent).toContain("String should have at least 1 character");
-    expect(container.textContent).not.toContain("[object Object]");
-  });
-
-  it("blocks save and shows an error for a row with an agent picked but no profile", async () => {
-    h.policy = { team_id: "team-1", version: 0, chat_default_profile_id: null, agent_profile_overrides: {} };
-    h.availableModels = ONE_MODEL;
-    h.agentTemplates = [RICO_TEMPLATE];
-    h.updateRoutingPolicy.mockReturnValue({ unwrap: () => Promise.resolve() } as never);
-    render(<TeamSettingsRouting team={TEAM} canWrite={true} />);
-
-    const addButton = Array.from(container.querySelectorAll("button")).find((b) => b.textContent?.includes("addRule"))!;
-    act(() => {
-      addButton.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-    });
-
-    // triggers: [0] default profile · [1] new row's agent · [2] new row's profile (left unset)
-    const [, agentTrigger] = selectTriggers();
-    pressKey(agentTrigger, "ArrowDown");
-    pressKey(agentTrigger, "Enter");
-
-    const saveButton = Array.from(container.querySelectorAll("button")).find(
-      (b) => b.textContent === "rework.teamSettings.routing.save",
-    )!;
-    await act(async () => {
-      saveButton.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-      await Promise.resolve();
-    });
-
+    expect(h.fetchDisableImpact).toHaveBeenCalledWith({ teamId: "team-1", capabilityId: GPT }, false);
+    const dialog = document.body.querySelector('[role="alertdialog"]');
+    expect(dialog?.textContent).toContain("Agent X");
+    expect(dialog?.textContent).toContain("rework.teamSettings.routing.disableDialog.conversations");
     expect(h.updateRoutingPolicy).not.toHaveBeenCalled();
-    expect(container.textContent).toContain("rework.teamSettings.routing.agentOverrides.incompleteRow");
-  });
 
-  it("does not block save on a fully untouched blank row (just silently excluded)", async () => {
-    h.policy = { team_id: "team-1", version: 0, chat_default_profile_id: null, agent_profile_overrides: {} };
-    h.availableModels = ONE_MODEL;
-    h.updateRoutingPolicy.mockReturnValue({ unwrap: () => Promise.resolve() } as never);
-    render(<TeamSettingsRouting team={TEAM} canWrite={true} />);
-
-    const addButton = Array.from(container.querySelectorAll("button")).find((b) => b.textContent?.includes("addRule"))!;
-    act(() => {
-      addButton.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-    });
-
-    const saveButton = Array.from(container.querySelectorAll("button")).find(
-      (b) => b.textContent === "rework.teamSettings.routing.save",
-    )!;
-    await act(async () => {
-      saveButton.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-      await Promise.resolve();
-    });
-
+    act(() => dialogButton("rework.teamSettings.routing.disableDialog.confirm")!.click());
+    await flush();
     expect(h.updateRoutingPolicy).toHaveBeenCalledWith({
       teamId: "team-1",
-      updateTeamRoutingPolicyRequest: { chat_default_profile_id: null, agent_profile_overrides: {} },
+      updateTeamRoutingPolicyRequest: {
+        chat_default_profile_id: null,
+        disabled_model_ids: [GPT],
+        reasoning_default_off_model_ids: [],
+        expected_version: 1,
+      },
     });
   });
 
-  it("saves a complete row's override once both an agent and a profile are picked", async () => {
-    h.policy = { team_id: "team-1", version: 0, chat_default_profile_id: null, agent_profile_overrides: {} };
-    h.availableModels = ONE_MODEL;
-    h.agentTemplates = [RICO_TEMPLATE];
-    h.updateRoutingPolicy.mockReturnValue({ unwrap: () => Promise.resolve() } as never);
-    render(<TeamSettingsRouting team={TEAM} canWrite={true} />);
+  it("writes nothing when the disable dialog is cancelled", async () => {
+    h.policy = policy();
+    h.availableModels = MODELS;
+    render(true);
 
-    const addButton = Array.from(container.querySelectorAll("button")).find((b) => b.textContent?.includes("addRule"))!;
-    act(() => {
-      addButton.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-    });
+    act(() => enableSwitch("GPT-5").click());
+    await flush();
+    act(() => dialogButton("common.cancel")!.click());
+    await flush();
 
-    // triggers: [0] default profile · [1] new row's agent · [2] new row's profile
-    const [, agentTrigger, profileTrigger] = selectTriggers();
-    pressKey(agentTrigger, "ArrowDown");
-    pressKey(agentTrigger, "ArrowDown");
-    pressKey(agentTrigger, "Enter");
-    pressKey(profileTrigger, "ArrowDown");
-    pressKey(profileTrigger, "Enter");
+    expect(document.body.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(h.updateRoutingPolicy).not.toHaveBeenCalled();
+  });
 
-    const saveButton = Array.from(container.querySelectorAll("button")).find(
-      (b) => b.textContent === "rework.teamSettings.routing.save",
-    )!;
-    await act(async () => {
-      saveButton.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-      await Promise.resolve();
-    });
+  it("re-enables a disabled model without a dialog", () => {
+    h.policy = policy({ disabled_model_ids: [GPT] });
+    h.availableModels = MODELS;
+    render(true);
 
-    const calls = h.updateRoutingPolicy.mock.calls as unknown as Array<
-      [{ updateTeamRoutingPolicyRequest: { agent_profile_overrides: Record<string, string> } }]
-    >;
-    const overrides = calls[calls.length - 1][0].updateTeamRoutingPolicyRequest.agent_profile_overrides;
-    expect(overrides).toEqual({ rico: "chat.openai.gpt5" });
+    act(() => enableSwitch("GPT-5").click());
+    expect(h.fetchDisableImpact).not.toHaveBeenCalled();
+    expect(h.updateRoutingPolicy).toHaveBeenCalledWith(
+      expect.objectContaining({ updateTeamRoutingPolicyRequest: expect.objectContaining({ disabled_model_ids: [] }) }),
+    );
+  });
+
+  it("flags a stored default the team can no longer use", () => {
+    h.policy = policy({ chat_default_profile_id: "chat.revoked" });
+    h.availableModels = MODELS;
+    render(true);
+
+    expect(container.textContent).toContain("rework.teamSettings.routing.defaultUnavailable");
+  });
+
+  it("locks every write while the policy is being refetched", () => {
+    h.policy = policy();
+    h.availableModels = MODELS;
+    h.fetching = true;
+    render(true);
+
+    container.querySelectorAll("input").forEach((input) => expect(input.disabled).toBe(true));
+    container.querySelectorAll("button").forEach((button) => expect(button.disabled).toBe(true));
+  });
+
+  it("reloads and warns, without an error line, when another admin saved meanwhile", async () => {
+    h.policy = policy();
+    h.availableModels = MODELS;
+    h.updateRoutingPolicy.mockImplementationOnce(() => ({
+      unwrap: () => Promise.reject({ status: 409, data: { detail: "changed" } }),
+    }));
+    render(true);
+
+    act(() => defaultButton("GPT-5").click());
+    await flush();
+
+    expect(h.refetch).toHaveBeenCalled();
+    expect(h.showWarn).toHaveBeenCalledWith(
+      expect.objectContaining({ summary: "rework.teamSettings.routing.conflict" }),
+    );
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it("shows a load error, not the empty state, when the policy cannot be read", () => {
+    h.policy = undefined;
+    h.availableModels = { profiles: [] };
+    h.readError = true;
+    render(true);
+
+    expect(container.textContent).toContain("rework.teamSettings.routing.loadError");
+    expect(container.textContent).not.toContain("rework.teamSettings.routing.emptyState");
+    expect(container.querySelectorAll("input, button")).toHaveLength(0);
+  });
+
+  it("explains the default's locked switch in visible text tied to it, with no nested labels", () => {
+    h.policy = policy();
+    h.availableModels = MODELS;
+    render(true);
+
+    const helper = tile("Mistral Small").querySelector("[id]") as HTMLElement;
+    expect(helper.textContent).toBe("rework.teamSettings.routing.defaultCannotBeDisabled");
+    expect(enableSwitch("Mistral Small").getAttribute("aria-describedby")).toBe(helper.id);
+    expect(container.querySelector("label label")).toBeNull();
+  });
+
+  it("badges the default once when it is a second profile of a model", () => {
+    h.policy = policy({ chat_default_profile_id: "chat.gpt5.alt" });
+    h.availableModels = MODELS;
+    render(true);
+
+    expect(tiles()).toHaveLength(2);
+    expect(defaultButton("GPT-5").textContent).toContain("rework.teamSettings.routing.isDefault");
+    expect(container.textContent).not.toContain("rework.teamSettings.routing.defaultUnavailable");
+  });
+
+  it("shows the empty state when the platform allows no model", () => {
+    h.policy = policy();
+    h.availableModels = { profiles: [] };
+    render(true);
+
+    expect(container.textContent).toContain("rework.teamSettings.routing.emptyState");
   });
 });

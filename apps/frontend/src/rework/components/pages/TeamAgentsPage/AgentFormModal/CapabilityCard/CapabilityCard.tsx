@@ -35,10 +35,8 @@ interface CapabilityCardProps {
 /**
  * Generic toggle card for the agent form's Capabilities tab: a switch plus a
  * name/description, and an optional sub-form area. Used for every entry in
- * that tab — a template-provided capability (its `config_fields` rendered via
- * {@link CapabilityConfigForm} as `subForm`) and the built-in reasoning offer
- * (REASON-01, Amendment C — a `SwitchRow` as `subForm`) alike, so the tab has
- * exactly one card component regardless of what's actually being toggled.
+ * that tab: a template-provided capability, its `config_fields` rendered via
+ * {@link CapabilityConfigForm} as `subForm`.
  */
 export function CapabilityCard({ name, description, checked, disabled, onToggle, subForm }: CapabilityCardProps) {
   return (

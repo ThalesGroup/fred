@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-.team-settings-routing-container {
+.page {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-m);
@@ -23,41 +23,92 @@
   max-width: 1000px;
 }
 
-.form-section {
+.hint {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.models {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tile {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-m);
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-ms);
+  background-color: var(--surface-container);
+  padding: var(--spacing-s) var(--spacing-m);
+  color: var(--on-surface);
+}
+
+/* Only the label gives way when the tile is narrow. */
+.tile > :not(.label) {
+  flex-shrink: 0;
+}
+
+.toggle {
+  display: inline-flex;
+}
+
+.label {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.name {
+  overflow: hidden;
+  font: var(--font-body-large);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tile[data-disabled] .name {
+  color: var(--on-surface-retreat);
+}
+
+.reasoning {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+/* Same type as the ConfirmationDialog message it sits under. */
+.dialogBody {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-s);
-  border-radius: var(--radius-s);
-  background-color: var(--surface-container);
-  padding: var(--spacing-s) var(--spacing-m);
-}
-
-.section-title {
-  color: var(--on-surface-retreat);
-  font: var(--font-label-medium);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.section-explanation {
+  width: 100%;
   color: var(--on-surface-retreat);
   font: var(--font-body-medium);
+
+  p {
+    margin: 0;
+  }
+
+  .error {
+    font: inherit;
+  }
 }
 
-.rule-row {
-  display: grid;
-  grid-template-columns: minmax(140px, 1fr) minmax(180px, 1.2fr) auto;
-  align-items: end;
-  gap: var(--spacing-s);
+.agents {
+  margin: 0;
+  padding-inline-start: var(--spacing-l);
 }
 
-.actions-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.error-message {
+.error {
+  margin: 0;
   color: var(--error);
-  font: var(--font-body-medium);
+  font: var(--font-body-small);
 }
