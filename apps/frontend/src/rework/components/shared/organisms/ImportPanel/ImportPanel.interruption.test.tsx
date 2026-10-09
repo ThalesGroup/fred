@@ -433,7 +433,10 @@ describe("ImportPanel — taking a file back before it is sent", () => {
     // past the concurrency limit are still waiting their turn — those are the
     // ones the user can still take back.
     const release: (() => void)[] = [];
-    streamMock.mockImplementation(() => new Promise<never[]>((resolve) => release.push(() => resolve([]))));
+    streamMock.mockImplementation((files, _mode, _meta, _discover, _failed, _resolved, _conflicted, beforeSend) => {
+      beforeSend?.(files);
+      return new Promise<never[]>((resolve) => release.push(() => resolve([])));
+    });
     const running = runImport(
       ["a.pdf", "b.pdf", "c.pdf", "d.pdf", "queued.pdf"].map((name) => ({
         requestMetadata: { tags: ["tag-1"] },

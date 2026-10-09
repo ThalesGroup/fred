@@ -13,12 +13,29 @@
 // limitations under the License.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { configureStore } from "@reduxjs/toolkit";
 
 vi.mock("../security/KeycloakService", () => ({
-  KeyCloakService: { GetToken: () => "test-token" },
+  KeyCloakService: { GetToken: vi.fn(), ensureFreshToken: vi.fn() },
+}));
+vi.mock("../rework/features/imports/unfinishedImports", () => ({
+  noteImportStarted: vi.fn(),
+  noteImportSettled: vi.fn(),
+  noteImportFailed: vi.fn(),
 }));
 
+import { KeyCloakService } from "../security/KeycloakService";
 import { streamUploadOrProcessDocument, type ScheduledTask } from "./streamDocumentUpload";
+import { cancelImport, canCancelImport, clearHeldImports, runImport } from "../rework/features/imports/importRun";
+import { taskSlice } from "../rework/features/tasks/taskSlice";
+
+beforeEach(() => {
+  clearHeldImports();
+  vi.restoreAllMocks();
+  vi.mocked(KeyCloakService.GetToken).mockReset().mockReturnValue("test-token");
+  vi.mocked(KeyCloakService.ensureFreshToken).mockReset().mockResolvedValue(true);
+});
+afterEach(() => vi.unstubAllGlobals());
 
 /** Build a Response whose body streams the given lines as NDJSON. */
 function ndjsonResponse(lines: string[]): Response {
@@ -37,9 +54,6 @@ function stubFetch(lines: string[]): void {
 }
 
 describe("streamUploadOrProcessDocument", () => {
-  beforeEach(() => vi.restoreAllMocks());
-  afterEach(() => vi.unstubAllGlobals());
-
   it("reports a task once despite its id repeating across progress lines", async () => {
     // The real backend emits the same task_id on preparation, queued and processing
     // lines (and one finished line with no id). The correlation must stay stable and
@@ -324,9 +338,6 @@ describe("streamUploadOrProcessDocument", () => {
 });
 
 describe("multipart filename pinning", () => {
-  beforeEach(() => vi.restoreAllMocks());
-  afterEach(() => vi.unstubAllGlobals());
-
   it("uploads a folder-originated file under its leaf name, never its relative path", async () => {
     // Browsers put the RELATIVE path (webkitRelativePath) in the multipart
     // filename for files picked out of a folder — the backend then 404s writing
@@ -358,5 +369,257 @@ describe("the server's own explanation", () => {
     await expect(streamUploadOrProcessDocument([new File(["x"], "a.pdf")], "process")).rejects.toThrow(
       /Storage quota exceeded/,
     );
+  });
+});
+
+describe("upload authentication recovery", () => {
+  it.each(["upload", "process"] as const)("waits for renewal before reading the %s request's token", async (mode) => {
+    const fetch = vi.fn().mockResolvedValue(ndjsonResponse([]));
+    vi.stubGlobal("fetch", fetch);
+    let finishRefresh!: (fresh: boolean) => void;
+    vi.mocked(KeyCloakService.ensureFreshToken).mockReturnValueOnce(
+      new Promise<boolean>((resolve) => {
+        finishRefresh = resolve;
+      }),
+    );
+
+    const upload = streamUploadOrProcessDocument([new File(["x"], "a.pdf")], mode);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(KeyCloakService.GetToken).not.toHaveBeenCalled();
+    vi.mocked(KeyCloakService.GetToken).mockReturnValue("renewed-token");
+    finishRefresh(true);
+    await upload;
+
+    expect(KeyCloakService.ensureFreshToken).toHaveBeenCalledExactlyOnceWith(30);
+    expect(fetch).toHaveBeenCalledExactlyOnceWith(
+      mode === "upload" ? "/knowledge-flow/v1/upload-documents" : "/knowledge-flow/v1/upload-process-documents",
+      expect.objectContaining({ headers: { Authorization: "Bearer renewed-token" } }),
+    );
+  });
+
+  it.each(["upload", "process"] as const)(
+    "renews a rejected %s request once without changing its payload",
+    async (mode) => {
+      const fetch = vi
+        .fn()
+        .mockResolvedValueOnce(new Response(JSON.stringify({ detail: "Token expired" }), { status: 401 }))
+        .mockResolvedValueOnce(
+          ndjsonResponse([
+            JSON.stringify({ filename: "a.pdf", task_id: "task-a", document_uid: "doc-a" }),
+            JSON.stringify({ filename: "a.pdf", task_id: "task-a", document_uid: "doc-a" }),
+            JSON.stringify({ filename: "b.pdf", step: "finished", status: "finished" }),
+          ]),
+        );
+      vi.stubGlobal("fetch", fetch);
+      vi.mocked(KeyCloakService.ensureFreshToken).mockImplementation(async (validity) => {
+        vi.mocked(KeyCloakService.GetToken).mockReturnValue(validity === 0 ? "retry-token" : "first-token");
+        return true;
+      });
+      const discovered = vi.fn();
+      const resolved = vi.fn();
+      const failed = vi.fn();
+      const beforeSend = vi.fn((files: File[]) => files);
+      const metadata = { tags: ["folder"], profile: "fast", conflict_decisions: { "a.pdf": "overwrite" } };
+
+      const tasks = await streamUploadOrProcessDocument(
+        [new File(["first"], "sub/a.pdf"), new File(["second"], "b.pdf")],
+        mode,
+        metadata,
+        discovered,
+        failed,
+        resolved,
+        undefined,
+        beforeSend,
+      );
+
+      expect(fetch).toHaveBeenCalledTimes(2);
+      expect(vi.mocked(KeyCloakService.ensureFreshToken).mock.calls).toEqual([[30], [0]]);
+      const [first, retry] = fetch.mock.calls.map(([url, init]) => ({ url, ...init }));
+      expect(first.url).toBe(retry.url);
+      expect(first.headers.Authorization).toBe("Bearer first-token");
+      expect(retry.headers.Authorization).toBe("Bearer retry-token");
+      expect(first.method).toBe("POST");
+      expect(retry.method).toBe("POST");
+      expect(retry.body).toBe(first.body);
+      const parts = (retry.body as FormData).getAll("files") as File[];
+      expect(parts.map((part) => part.name)).toEqual(["a.pdf", "b.pdf"]);
+      expect(await Promise.all(parts.map((part) => part.text()))).toEqual(["first", "second"]);
+      expect(retry.body.get("metadata_json")).toBe(JSON.stringify(metadata));
+      expect(tasks).toEqual([{ taskId: "task-a", documentUid: "doc-a", filename: "a.pdf" }]);
+      expect(discovered).toHaveBeenCalledExactlyOnceWith(tasks[0]);
+      expect(resolved).toHaveBeenCalledExactlyOnceWith("b.pdf");
+      expect(failed).not.toHaveBeenCalled();
+      expect(beforeSend).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("stops after the retry is still unauthorized and preserves its explanation", async () => {
+    const fetch = vi
+      .fn()
+      .mockImplementation(async () => new Response(JSON.stringify({ detail: "Invalid audience" }), { status: 401 }));
+    vi.stubGlobal("fetch", fetch);
+
+    await expect(streamUploadOrProcessDocument([new File(["x"], "a.pdf")], "process")).rejects.toThrow(
+      "Upload failed: 401 . Invalid audience",
+    );
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(KeyCloakService.ensureFreshToken).mock.calls).toEqual([[30], [0]]);
+  });
+
+  it("does not resend when forced renewal fails", async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ detail: "Session expired" }), { status: 401 }));
+    vi.stubGlobal("fetch", fetch);
+    vi.mocked(KeyCloakService.ensureFreshToken).mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+
+    await expect(streamUploadOrProcessDocument([new File(["x"], "a.pdf")], "process")).rejects.toThrow(
+      "Session expired",
+    );
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(KeyCloakService.ensureFreshToken).mock.calls).toEqual([[30], [0]]);
+  });
+
+  it.each([400, 403, 429, 503])("does not renew or replay an HTTP %i refusal", async (status) => {
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ detail: "Upload refused" }), { status }));
+    vi.stubGlobal("fetch", fetch);
+
+    await expect(streamUploadOrProcessDocument([new File(["x"], "a.pdf")], "process")).rejects.toThrow(
+      "Upload refused",
+    );
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(KeyCloakService.ensureFreshToken).toHaveBeenCalledExactlyOnceWith(30);
+  });
+
+  it("does not replay a request when the network fails", async () => {
+    const fetch = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    vi.stubGlobal("fetch", fetch);
+
+    await expect(streamUploadOrProcessDocument([new File(["x"], "a.pdf")], "process")).rejects.toThrow(
+      "Failed to fetch",
+    );
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(KeyCloakService.ensureFreshToken).toHaveBeenCalledExactlyOnceWith(30);
+  });
+
+  it("does not replay an accepted import whose stream later breaks", async () => {
+    const discovered = vi.fn();
+    let reads = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (reads++ === 0) {
+          controller.enqueue(new TextEncoder().encode(JSON.stringify({ filename: "a.pdf", task_id: "task-a" }) + "\n"));
+        } else {
+          controller.error(new Error("Stream interrupted"));
+        }
+      },
+    });
+    const fetch = vi.fn().mockResolvedValue(new Response(body));
+    vi.stubGlobal("fetch", fetch);
+
+    await expect(streamUploadOrProcessDocument([new File(["x"], "a.pdf")], "process", {}, discovered)).rejects.toThrow(
+      "Stream interrupted",
+    );
+
+    expect(discovered).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(KeyCloakService.ensureFreshToken).toHaveBeenCalledExactlyOnceWith(30);
+  });
+
+  it("does not replay an accepted stream reporting a per-file 401 processing error", async () => {
+    stubFetch([JSON.stringify({ filename: "a.pdf", status: "failed", error: "Processor received HTTP 401" })]);
+
+    await expect(streamUploadOrProcessDocument([new File(["x"], "a.pdf")], "process")).rejects.toThrow(
+      "Processor received HTTP 401",
+    );
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(KeyCloakService.ensureFreshToken).toHaveBeenCalledExactlyOnceWith(30);
+  });
+
+  it.each(["upload", "process"] as const)(
+    "keeps a %s batch cancellable while its token is being renewed",
+    async (mode) => {
+      const store = configureStore({ reducer: { tasks: taskSlice.reducer } });
+      const onError = vi.fn();
+      const fetch = vi
+        .fn()
+        .mockResolvedValue(
+          ndjsonResponse([JSON.stringify({ filename: "b.pdf", step: "finished", status: "finished" })]),
+        );
+      vi.stubGlobal("fetch", fetch);
+      let finishRefresh!: (fresh: boolean) => void;
+      vi.mocked(KeyCloakService.ensureFreshToken).mockReturnValueOnce(
+        new Promise<boolean>((resolve) => {
+          finishRefresh = resolve;
+        }),
+      );
+
+      const running = runImport(
+        [
+          {
+            requestMetadata: { tags: ["folder"] },
+            files: [new File(["a"], "a.pdf"), new File(["b"], "b.pdf")],
+          },
+        ],
+        { dispatch: store.dispatch, uploadMode: mode, teamId: "team", onError },
+      );
+      const entries = Object.values(store.getState().tasks.byId);
+      const cancelledId = entries.find((entry) => entry.target?.label === "a.pdf")!.taskId;
+      const remainingId = entries.find((entry) => entry.target?.label === "b.pdf")!.taskId;
+
+      expect(fetch).not.toHaveBeenCalled();
+      expect(canCancelImport(cancelledId)).toBe(true);
+      expect(cancelImport(cancelledId, store.dispatch)).toBe(true);
+      expect(canCancelImport(remainingId)).toBe(true);
+      fetch.mockImplementationOnce(async () => {
+        expect(canCancelImport(remainingId)).toBe(false);
+        return ndjsonResponse([JSON.stringify({ filename: "b.pdf", step: "finished", status: "finished" })]);
+      });
+      finishRefresh(true);
+      await running;
+
+      expect(fetch).toHaveBeenCalledTimes(1);
+      const body = fetch.mock.calls[0][1].body as FormData;
+      expect((body.getAll("files") as File[]).map((file) => file.name)).toEqual(["b.pdf"]);
+      expect(store.getState().tasks.byId[cancelledId]).toBeUndefined();
+      expect(store.getState().tasks.byId[remainingId].state).toBe("succeeded");
+      expect(onError).not.toHaveBeenCalled();
+    },
+  );
+
+  it("sends nothing when every file is cancelled during token renewal", async () => {
+    const store = configureStore({ reducer: { tasks: taskSlice.reducer } });
+    const onError = vi.fn();
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    let finishRefresh!: (fresh: boolean) => void;
+    vi.mocked(KeyCloakService.ensureFreshToken).mockReturnValueOnce(
+      new Promise<boolean>((resolve) => {
+        finishRefresh = resolve;
+      }),
+    );
+
+    const running = runImport(
+      [
+        {
+          requestMetadata: {},
+          files: [new File(["a"], "a.pdf")],
+        },
+      ],
+      { dispatch: store.dispatch, uploadMode: "process", teamId: "team", onError },
+    );
+    const entryId = Object.values(store.getState().tasks.byId)[0].taskId;
+    expect(cancelImport(entryId, store.dispatch)).toBe(true);
+    finishRefresh(true);
+    await running;
+
+    expect(fetch).not.toHaveBeenCalled();
+    expect(store.getState().tasks.byId).toEqual({});
+    expect(onError).not.toHaveBeenCalled();
   });
 });
