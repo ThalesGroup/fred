@@ -30,6 +30,7 @@ from fred_pod.security.oidc_endpoints import resolve_endpoints
 from jwt import PyJWKClient
 
 from fred_core.common import ThreadSafeLRUCache, get_config, read_env_bool
+from fred_core.logs.context import bind_operation_context
 from fred_core.security.delegation import (
     AssertedUser,
     bears_service_account_markers,
@@ -778,6 +779,7 @@ async def get_current_user_without_gcu(
             client_id=LOCAL_DEV_CLIENT_ID,
         )
         request.state.principal_context = PrincipalContext(caller=user, subject=user)
+        bind_operation_context(user_id=user.uid)
         return user
 
     if not token:
@@ -792,6 +794,8 @@ async def get_current_user_without_gcu(
     caller = decode_jwt(token)
     subject = await resolve_request_principal(request, caller)
     await require_active_subject(subject)
+    if not is_service_agent(subject):
+        bind_operation_context(user_id=subject.uid)
     return subject
 
 

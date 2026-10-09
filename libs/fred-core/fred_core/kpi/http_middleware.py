@@ -19,6 +19,7 @@ from typing import Callable, Optional, Union
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
+from starlette.types import Scope
 
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.kpi_writer_structures import KPIActor
@@ -30,6 +31,12 @@ logger = logging.getLogger(__name__)
 _SKIP_SUFFIXES = ("/healthz", "/ready")
 
 KPIWriterSource = Union[BaseKPIWriter, Callable[[], BaseKPIWriter]]
+_UNHANDLED_EXCEPTION_TYPE = "fred.unhandled_exception_type"
+
+
+def record_unhandled_request_exception(scope: Scope, exc: Exception) -> None:
+    """Keep bounded taxonomy when FastAPI renders a 500 before re-raising."""
+    scope[_UNHANDLED_EXCEPTION_TYPE] = type(exc).__name__
 
 
 class KPIMiddleware(BaseHTTPMiddleware):
@@ -69,6 +76,10 @@ class KPIMiddleware(BaseHTTPMiddleware):
         finally:
             latency_ms = (time.perf_counter() - t0) * 1000
             http_status = response.status_code if response is not None else 500
+            if exc_type is None:
+                rendered_exception = request.scope.get(_UNHANDLED_EXCEPTION_TYPE)
+                if isinstance(rendered_exception, str):
+                    exc_type = rendered_exception
             # Use templated route path to avoid high-cardinality dims (e.g. /users/{id}).
             # Falls back to raw path only for unmatched routes (404s).
             route = getattr(request.scope.get("route"), "path", request.url.path)

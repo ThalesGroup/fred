@@ -413,6 +413,8 @@ def log_setup(
             if name == "uvicorn.access":
                 # Reads the raw request path, which the sensitive filter below can drop.
                 lg.addFilter(UvicornAccessProbeFilter(("/healthz", "/ready")))
+                # The ASGI completion event owns HTTP access, including streams.
+                lg.disabled = True
             lg.addFilter(UvicornSensitiveQueryFilter())
             lg.setLevel(log_level.upper())
             lg.propagate = True  # forward to our root handlers

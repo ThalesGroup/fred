@@ -38,6 +38,7 @@ from fred_core.common.fastapi_handlers import (
 )
 from fred_core.diagnostics import install_gc_diagnostics
 from fred_core.kpi import KPIMiddleware
+from fred_core.logs.http import REFERENCE_HEADERS, RequestLoggingFastAPI
 from fred_core.scheduler import SchedulerBackend
 from pydantic import BaseModel
 
@@ -296,7 +297,7 @@ def create_app() -> FastAPI:
             await container.shutdown()
             logger.info("[MAIN] Lifespan exit: orderly shutdown.")
 
-    app = FastAPI(
+    app = RequestLoggingFastAPI(
         docs_url=f"{configuration.app.base_url}/docs" if docs_enabled else None,
         redoc_url=f"{configuration.app.base_url}/redoc" if docs_enabled else None,
         openapi_url=f"{configuration.app.base_url}/openapi.json"
@@ -317,13 +318,14 @@ def create_app() -> FastAPI:
 
     app.dependency_overrides[get_config] = get_application_configuration
 
-    app.add_middleware(
+    app.add_request_middleware(
         CORSMiddleware,
         allow_origins=allowed_origins,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Content-Type", "Authorization"],
+        expose_headers=REFERENCE_HEADERS,
     )
-    app.add_middleware(KPIMiddleware, kpi=container.get_kpi_writer)
+    app.add_request_middleware(KPIMiddleware, kpi=container.get_kpi_writer)
 
     router = APIRouter(prefix=configuration.app.base_url)
 

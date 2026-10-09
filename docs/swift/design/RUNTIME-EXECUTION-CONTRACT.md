@@ -6573,3 +6573,13 @@ owns the restricted SQL activity sink, the engine and the search providers
 package holds only the tools, and the runtime imports no capability package.
 The deployment is default-off. See the [activity contract](../platform/OBSERVABILITY-AND-AUDIT.md#restricted-web-research-activity)
 and [migration guide](../ops/migrations/2980-native-web-research.md).
+
+### Structured request and journey diagnostics (2026-10-01)
+
+Runtime logging binds ingress request/correlation references into PortableContext
+and RuntimeContext, with fresh references for standalone execution. Resolved session,
+exchange, team, instance/template and admitted run references scope generic execution
+and tool diagnostics; tool/run outcomes remain distinct from successful SSE transport.
+HITL resumes keep the existing exchange identity. Scope teardown retires retained-task
+metadata. See [observability §6/§7](../platform/OBSERVABILITY-AND-AUDIT.md) for field,
+sensitive-data and audit boundaries.

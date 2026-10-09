@@ -41,6 +41,7 @@ from fred_core.common import TeamId, personal_team_id
 from fred_core.common.team_id import is_personal_team_id
 from fred_core.kpi.kpi_writer import to_kpi_actor
 from fred_core.kpi.kpi_writer_structures import KPIActor
+from fred_core.logs.context import bind_operation_context
 from fred_core.security.backend_to_backend_auth import (
     M2MBearerAuth,
     RefreshableTokenProvider,
@@ -3257,6 +3258,11 @@ async def prepare_execution(
         raise ExecutionPreparationError(
             f"Unknown agent instance {agent_instance_id!r} for team {team_id!r}."
         )
+    bind_operation_context(
+        user_id=user.uid,
+        team_id=str(team_id),
+        agent_instance_id=agent_instance_id,
+    )
     if not instance.enabled:
         raise ExecutionPreparationError(
             f"Agent instance {agent_instance_id!r} is disabled.",
@@ -3325,6 +3331,7 @@ async def prepare_execution(
                 f"Session {session_id!r} is not usable for this execution."
             )
         assert session_record is not None
+        bind_operation_context(session_id=session_record.session_id)
         if session_record.context_prompt_ids:
             # Resolve library prompts only within the caller's authorized scope:
             # the active team plus the caller's personal team (the same union the
@@ -4375,6 +4382,13 @@ async def create_session(
         )
         if instance is not None:
             source_runtime_id = instance.source_runtime_id
+    bind_operation_context(
+        {"agent_instance_id": request.agent_instance_id}
+        if request.agent_instance_id and source_runtime_id is not None
+        else {},
+        user_id=user.uid,
+        team_id=str(team_id),
+    )
     record = SessionMetadataRecord(
         session_id=request.session_id,
         team_id=team_id,
@@ -4387,6 +4401,7 @@ async def create_session(
         created = await deps.get_session_metadata_store().create(record)
     except SessionMetadataAlreadyExistsError as exc:
         raise SessionAlreadyExistsError(request.session_id) from exc
+    bind_operation_context(session_id=created.session_id)
     try:
         deps.get_kpi_writer().count(
             "session.created_total",
@@ -4399,6 +4414,7 @@ async def create_session(
         )
     except Exception:
         logger.exception("[control-plane][kpi] Failed to emit session.created_total")
+    logger.info("Conversation created", extra={"outcome": "succeeded"})
     return _record_to_item(created)
 
 
@@ -4687,6 +4703,13 @@ async def create_session_attachment(
         session_id=session_id,
         user_id=user_id,
     )
+    bind_operation_context(
+        user_id=user_id,
+        team_id=str(team_id),
+        session_id=session_id,
+        attachment_id=request.attachment_id,
+        document_uid=request.document_uid,
+    )
     store = deps.get_session_attachment_store()
     await store.save(
         SessionAttachmentRecord(
@@ -4709,6 +4732,7 @@ async def create_session_attachment(
             f"Failed to persist attachment {request.attachment_id!r} for session {session_id!r}.",
             http_status=500,
         )
+    logger.info("Conversation attachment persisted", extra={"outcome": "succeeded"})
     return _to_session_attachment_summary(created)
 
 
