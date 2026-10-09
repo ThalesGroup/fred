@@ -14,10 +14,6 @@
  * limitations under the License.
  */
 
-.dialog {
-  --dialog-title-padding-bottom: 0;
-}
-
 /* The review takes the whole dialog height so the prompt and the side column can fill it. */
 .reviewDialog {
   height: calc(100dvh - var(--spacing-xl));
@@ -85,11 +81,6 @@
 }
 
 /* Name/role/description, prompt, capabilities: the prompt gets 2.4 shares of 4.4. */
-/* A selected prompt shows it on the editor border. */
-.promptSelected {
-  --prompt-editor-border: var(--primary);
-}
-
 .promptColumn {
   flex: 2.4 1 0;
 }

@@ -19,6 +19,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PromptEditor } from "./PromptEditor";
+import styles from "./PromptEditor.module.css";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -214,6 +215,13 @@ describe("PromptEditor", () => {
     render({ value: "text", readOnly: true, disabled: true });
     expect(content.getAttribute("contenteditable")).toBe("false");
     expect(content.getAttribute("aria-readonly")).toBe("false");
+  });
+
+  it("marks the field as chosen only when highlighted", () => {
+    render({ value: "text", readOnly: true });
+    expect(container.firstElementChild?.classList.contains(styles.highlighted)).toBe(false);
+    render({ value: "text", readOnly: true, highlighted: true });
+    expect(container.firstElementChild?.classList.contains(styles.highlighted)).toBe(true);
   });
 
   const copyButton = () => container.querySelector<HTMLButtonElement>('button[aria-label="rework.promptEditor.copy"]');

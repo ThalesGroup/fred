@@ -49,7 +49,7 @@ test("accepts the actual packed UI archive", async () => {
     ),
   );
   assert.equal(evidence.package, `${manifest.name}@${manifest.version}`);
-  assert.equal(evidence.glyphCount, 136);
+  assert.equal(evidence.glyphCount, 137);
   assert.deepEqual(evidence.externalModules, [
     "react",
     "react-dom",

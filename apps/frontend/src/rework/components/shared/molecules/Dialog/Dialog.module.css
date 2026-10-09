@@ -44,7 +44,12 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-2xs);
-  padding: var(--spacing-s) var(--spacing-m) var(--dialog-title-padding-bottom, var(--spacing-s));
+  padding: var(--spacing-s) var(--spacing-m);
+}
+
+/* compactTitle: the body starts right under the title. */
+.titleContainer.compactTitle {
+  padding-bottom: 0;
 }
 
 .title {

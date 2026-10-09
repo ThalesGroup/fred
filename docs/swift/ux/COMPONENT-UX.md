@@ -292,7 +292,7 @@ The single entry point is an **Assistant** button (`Button variant="tonal"`, new
 tonal, same `container` / `on-container` tokens as `IconButton`'s tonal; `auto_awesome`, small) in
 the `SettingsModal` header actions, before Cancel, in create and edit modes. It is hidden on the
 template step: the assistant cannot pick a template from a description yet. It opens a
-`Dialog` in two steps: a plain-words description (`TextArea`, 4000 characters, spinner while
+`Dialog` (new `compactTitle` prop: no padding under the title, no ad-hoc custom property) in two steps: a plain-words description (`TextArea`, 4000 characters, spinner while
 drafting, friendly inline errors that keep the description), then a review where every proposal is
 a selectable tile (not a checkbox, which cost width and indented the values), all selected by
 default. A tile is a `button role="checkbox"` whose content starts at the left edge, with a status
@@ -304,7 +304,8 @@ transparent, `--on-surface-retreat` text; inset state-layer hover, 2px `--primar
 dialog height in three full-height columns (stacked under 40rem): the proposed identity (name, role
 and description, label over value); the drafted prompt in a read-only `PromptEditor` filling that
 height (new `fillHeight` prop, 2.4 of 4.4 width shares; editor label visually hidden via
-`hideLabel`), the editor itself staying free for text selection; then the recommended capabilities.
+`hideLabel`; new `highlighted` prop gives it a `--primary` border while the prompt is ticked), the
+editor itself staying free for text selection; then the recommended capabilities.
 Each column is a `--surface-container-low` panel (`--radius-s`, clipped) with a fixed section header
 over a scrolling body (`--spacing-xs` padding). The header is a full-width `button role="checkbox"`
 on `--surface-container` (`--spacing-xs` `--spacing-s` padding, `--font-title-small`, top corners

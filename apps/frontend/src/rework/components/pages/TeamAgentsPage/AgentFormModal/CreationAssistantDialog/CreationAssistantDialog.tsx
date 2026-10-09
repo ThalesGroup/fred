@@ -225,7 +225,8 @@ export function CreationAssistantDialog({
             <LoadingRow label={t(`${KEY}.loading`)} />
           ) : undefined
         }
-        className={reviewing ? `${styles.dialog} ${styles.reviewDialog}` : styles.dialog}
+        compactTitle
+        className={reviewing ? styles.reviewDialog : undefined}
       >
         {reviewing ? (
           <div className={`${styles.content} ${styles.reviewContent}`}>
@@ -251,7 +252,7 @@ export function CreationAssistantDialog({
                   title={t(`${KEY}.promptHeading`)}
                   state={ticked.has("systemPrompt") ? "true" : "false"}
                   onToggle={() => toggleItem("systemPrompt")}
-                  className={`${styles.promptColumn} ${ticked.has("systemPrompt") ? styles.promptSelected : ""}`}
+                  className={styles.promptColumn}
                 >
                   <PromptEditor
                     label={t(`${KEY}.promptHeading`)}
@@ -260,6 +261,7 @@ export function CreationAssistantDialog({
                     onChange={() => {}}
                     readOnly
                     fillHeight
+                    highlighted={ticked.has("systemPrompt")}
                   />
                 </SectionPanel>
               )}

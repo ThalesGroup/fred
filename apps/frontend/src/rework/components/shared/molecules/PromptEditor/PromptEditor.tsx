@@ -45,6 +45,8 @@ export interface PromptEditorProps {
   hideLabel?: boolean;
   /** Grow to the parent's height instead of `rows` (the parent must be a sized flex column). */
   fillHeight?: boolean;
+  /** Show the field as chosen, with a primary border (e.g. selected in a review). */
+  highlighted?: boolean;
   required?: boolean;
   error?: string;
   /** Visible height in lines before the editor scrolls. */
@@ -105,6 +107,7 @@ export function PromptEditor({
   readOnly = false,
   hideLabel = false,
   fillHeight = false,
+  highlighted = false,
   required = false,
   error,
   rows = PROMPT_EDITOR_ROWS,
@@ -220,7 +223,7 @@ export function PromptEditor({
 
   return (
     <div
-      className={`${styles.editor} ${disabled ? styles.disabled : ""} ${readOnly ? styles.readOnly : ""} ${fillHeight ? styles.fill : ""} ${!disabled && error ? styles.error : ""}`}
+      className={`${styles.editor} ${disabled ? styles.disabled : ""} ${readOnly ? styles.readOnly : ""} ${fillHeight ? styles.fill : ""} ${highlighted ? styles.highlighted : ""} ${!disabled && error ? styles.error : ""}`}
     >
       <span className={hideLabel ? styles.visuallyHidden : styles.label} id={labelId}>
         {required ? `${label} *` : label}

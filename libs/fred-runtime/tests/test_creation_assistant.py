@@ -27,7 +27,7 @@ import json
 import warnings
 from datetime import date
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 import httpx
 import pytest
@@ -75,6 +75,7 @@ class _StructuredModel(FakeListChatModel):
     methods: list[str] = []
     schemas: list[Any] = []
     cancelled: list[str] = []
+    started: Any = None  # asyncio.Event set once the call is running
 
     def with_structured_output(  # type: ignore[override]
         self, schema: Any, *, include_raw: bool = False, **kwargs: Any
@@ -84,6 +85,8 @@ class _StructuredModel(FakeListChatModel):
 
         async def _run(messages: list[BaseMessage]) -> dict[str, Any]:
             self.seen.append(messages)
+            if self.started is not None:
+                self.started.set()
             if self.delay_s:
                 try:
                     await asyncio.sleep(self.delay_s)
@@ -600,24 +603,43 @@ def test_both_calls_without_a_prompt_is_502(kpi, hedge) -> None:
     assert "winner=none" in _completion_line(hedge)
 
 
+class _SteppedClockLoop(asyncio.SelectorEventLoop):
+    """Loop whose clock the test moves forward, so a deadline expires on cue."""
+
+    offset = 0.0
+
+    def time(self) -> float:
+        return super().time() + self.offset
+
+
 def test_deadline_cancels_both_calls_and_is_504(kpi, hedge) -> None:
-    reasoning, plain = _model(delay_s=5.0), _model(delay_s=5.0)
+    # Calls that never answer; the deadline is crossed only once both run.
+    reasoning, plain = _model(delay_s=3600.0), _model(delay_s=3600.0)
+    plain.started = asyncio.Event()
 
     async def _run() -> Any:
-        deadline = asyncio.get_running_loop().time() + 0.2
+        loop = cast(_SteppedClockLoop, asyncio.get_running_loop())
+
+        async def _expire_once_plain_started() -> None:
+            await plain.started.wait()
+            loop.offset += 60.0
+
+        expirer = asyncio.create_task(_expire_once_plain_started())
         try:
             return await creation_assistant.draft_agent(
                 _request(),
                 reasoning,
                 "gpt-test",
                 fallback_model=plain,
-                deadline=deadline,
+                deadline=loop.time() + 30.0,
             )
         finally:
+            await expirer
             assert asyncio.all_tasks() == {asyncio.current_task()}  # none leaked
 
     with pytest.raises(HTTPException) as exc:
-        asyncio.run(_run())
+        with asyncio.Runner(loop_factory=_SteppedClockLoop) as runner:
+            runner.run(_run())
 
     assert exc.value.status_code == 504
     assert (reasoning.cancelled, plain.cancelled) == (["json_schema"], ["json_schema"])

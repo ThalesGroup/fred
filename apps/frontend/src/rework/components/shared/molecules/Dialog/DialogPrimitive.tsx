@@ -61,8 +61,10 @@ export interface DialogProps {
   titlePrefix?: ReactNode;
   /** Optional caller-owned portal container inside the themed .fred-ui root. */
   portalContainer?: HTMLElement | null;
-  /** Extra class on the dialog surface, e.g. to set `--dialog-title-padding-bottom`. */
+  /** Extra class on the dialog surface, e.g. to size it. */
   className?: string;
+  /** Drop the space under the title, for a body that brings its own top spacing. */
+  compactTitle?: boolean;
   /** Optional content on the left of the action bar, facing the buttons (e.g. a short hint). */
   footerStart?: ReactNode;
 }
@@ -83,6 +85,7 @@ export function DialogPrimitive({
   titlePrefix,
   portalContainer,
   className,
+  compactTitle = false,
   footerStart,
 }: DialogProps) {
   const titleId = useId();
@@ -211,7 +214,7 @@ export function DialogPrimitive({
               style={maxWidth ? { width: `min(${maxWidth}px, 90vw)` } : undefined}
               onClick={(event) => event.stopPropagation()}
             >
-              <div className={styles.titleContainer}>
+              <div className={compactTitle ? `${styles.titleContainer} ${styles.compactTitle}` : styles.titleContainer}>
                 {titlePrefix}
                 <p id={titleId} className={styles.title}>
                   {title}

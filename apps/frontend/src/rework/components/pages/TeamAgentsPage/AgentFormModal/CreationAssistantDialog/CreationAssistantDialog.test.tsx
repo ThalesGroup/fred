@@ -19,6 +19,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FullPageModal } from "@shared/molecules/FullPageModal/FullPageModal";
 import type { CapabilityCatalogEntry } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { CreationAssistantDialog } from "./CreationAssistantDialog";
+import promptEditorStyles from "@shared/molecules/PromptEditor/PromptEditor.module.css";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -234,8 +235,16 @@ describe("CreationAssistantDialog", () => {
       Array(3).fill("false"),
     );
 
+    // The prompt editor border follows its section's tick.
+    const promptHighlighted = () =>
+      document
+        .querySelector(".cm-editor")!
+        .closest(`.${promptEditorStyles.editor}`)!
+        .classList.contains(promptEditorStyles.highlighted);
+    expect(promptHighlighted()).toBe(true);
     await act(async () => tileFor(`${KEY}.promptHeading`).click());
     expect(stateOf(`${KEY}.promptHeading`)).toBe("false");
+    expect(promptHighlighted()).toBe(false);
     await act(async () => tileFor(`${KEY}.promptHeading`).click());
     expect(stateOf(`${KEY}.promptHeading`)).toBe("true");
 

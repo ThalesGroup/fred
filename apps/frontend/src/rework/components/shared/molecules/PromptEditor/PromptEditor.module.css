@@ -57,7 +57,7 @@
 
 .host {
   --input-outline: transparent;
-  --input-border: var(--prompt-editor-border, var(--outline-variant));
+  --input-border: var(--outline-variant);
   display: flex;
   outline: 2px solid var(--input-outline);
   border: 1px solid var(--input-border);
@@ -77,6 +77,11 @@
 
 .editor:not(.error):not(.disabled):not(.readOnly) .host:hover {
   border-color: var(--outline);
+}
+
+/* highlighted: the caller marks this prompt as chosen (e.g. selected in a review). */
+.editor.highlighted:not(.error):not(.disabled) .host {
+  border-color: var(--primary);
 }
 
 .editor:not(.error) .host:has(:global(.cm-editor.cm-focused)) {
