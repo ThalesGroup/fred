@@ -167,24 +167,33 @@ export default function PlatformAccessPage() {
                 hidden={whitelistTabIndex !== 0}
                 tabIndex={0}
               >
-                <section className={styles.section}>
-                  <h2>{t("rework.platformAccess.t0Import")}</h2>
-                  <p>{t("rework.platformAccess.t0Hint")}</p>
-                  {t0.data && (
-                    <p>
-                      {t("rework.platformAccess.t0Preview", { count: t0.data.candidates, matching: t0.data.matching })}
-                    </p>
-                  )}
-                  <Button
-                    color="primary"
-                    variant="filled"
-                    size="medium"
-                    disabled={locked || !t0.data || !!t0.data.completed_at}
-                    onClick={() => void run(() => importT0().unwrap())}
-                  >
-                    {t(t0.data?.completed_at ? "rework.platformAccess.t0Done" : "rework.platformAccess.t0Import")}
-                  </Button>
-                </section>
+                {t0.data?.completed_at ? (
+                  <p className={styles.importCompleted} role="status">
+                    {t("rework.platformAccess.t0Done")}
+                  </p>
+                ) : (
+                  <section className={styles.section}>
+                    <h2>{t("rework.platformAccess.t0Import")}</h2>
+                    <p>{t("rework.platformAccess.t0Hint")}</p>
+                    {t0.data && (
+                      <p>
+                        {t("rework.platformAccess.t0Preview", {
+                          count: t0.data.candidates,
+                          matching: t0.data.matching,
+                        })}
+                      </p>
+                    )}
+                    <Button
+                      color="primary"
+                      variant="filled"
+                      size="medium"
+                      disabled={locked || !t0.data || t0.isFetching || t0.isError}
+                      onClick={() => void run(() => importT0().unwrap())}
+                    >
+                      {t("rework.platformAccess.t0Import")}
+                    </Button>
+                  </section>
+                )}
                 <section className={styles.section}>
                   <TextInput
                     label={t("rework.platformAccess.search")}

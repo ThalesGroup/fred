@@ -223,13 +223,15 @@ it("shows Free team provenance and offers an independent individual grant", asyn
   await act(async () => button.click());
   expect(state.grant).toHaveBeenCalledWith({ userId: "user" });
 });
-it("makes the completed initial import immutable", () => {
+it("reduces the completed import to a discreet status without an import action", () => {
   state.completed = true;
   render();
-  const button = [...host.querySelectorAll("button")].find((node) =>
-    node.textContent?.includes("rework.platformAccess.t0Done"),
-  )!;
-  expect(button.disabled).toBe(true);
+  expect(host.querySelector('[role="status"]')?.textContent).toContain("rework.platformAccess.t0Done");
+  expect(host.textContent).not.toContain("rework.platformAccess.t0Hint");
+  expect(
+    [...host.querySelectorAll("button")].some((node) => node.textContent === "rework.platformAccess.t0Import"),
+  ).toBe(false);
+  expect(state.importT0).not.toHaveBeenCalled();
 });
 
 it("grants selected users and clears selection only on success", async () => {

@@ -295,3 +295,9 @@
     border-top: 1px solid var(--outline-muted);
   }
 }
+
+.importCompleted {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
