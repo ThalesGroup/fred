@@ -105,6 +105,11 @@ the reason is never lost. Note, out of scope: native backends' console output
 is text without `service` — only their store handler writes it — a divergence
 for a separate change.
 
+Temporal Core logs are forwarded through the worker's Python logger using
+`LogForwardingConfig`, preserving its default filter and source timestamps.
+A runtime is created even with engine metrics disabled; only the metrics
+exporter is conditional, so logging never falls back to native text output.
+
 **D11. Reconciliation is three-valued in the result itself.** A boolean
 `reconciliation_complete` could not say "nothing to do": an incremental source
 whose revision did not move had to answer `False`, so a perfectly synchronized

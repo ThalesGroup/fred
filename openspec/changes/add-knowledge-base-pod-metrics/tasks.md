@@ -20,6 +20,13 @@
 ## 3. Structured logs
 
 - [x] 3.1 Replace the `basicConfig` call in the Knowledge Base entrypoint with a JSON-lines formatter carrying `ts`, `level`, `logger`, `msg`, `service`, `knowledge_base`, and a `text` format selected by `observability.logs.format`; verify with a test capturing stdout in both formats
+- [x] 3.2 Forward native engine logs through the same logger with metrics enabled or disabled; verify real Core log output in JSON and text, identity, timestamp, severity filtering and absence of duplicate native output
+
+  Verified with the native Rust log hook (four format/exporter combinations),
+  `make test TEST_DIRS=libs/fred-sdk` (625 passed, 3 skipped),
+  `make code-quality CODE_QUALITY_DIRS=libs/fred-sdk`, and strict OpenSpec validation.
+  Independent review against `5d1271b8b` found no actionable issue; no remote
+  Temporal server was needed for this logging correction.
 
 ## 4. Samples and docs
 

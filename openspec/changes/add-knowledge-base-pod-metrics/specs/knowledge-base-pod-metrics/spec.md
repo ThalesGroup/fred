@@ -91,6 +91,15 @@ and `text`; `text` is for local work and SHALL still carry the runtime id on
 every line. Log records SHALL follow the same exclusions as other Fred logs:
 no secret, no token, no document content.
 
+The workflow engine's native logs SHALL use this same output and formatter,
+including when its Prometheus exporter is disabled. Forwarding SHALL preserve
+the engine's default severity filter and each record's original timestamp.
+
+#### Scenario: Native engine log with metrics enabled or disabled
+- **WHEN** the engine emits a log accepted by its severity filter
+- **THEN** the pod writes it once to stdout in the configured JSON or text format with its runtime id
+- **AND** JSON includes the definition id and original timestamp, with no separate unformatted native copy
+
 #### Scenario: Configuration loading is logged as the pod
 - **WHEN** the pod logs while loading its configuration, then starts
 - **THEN** those lines are JSON objects carrying the runtime id, like every later line

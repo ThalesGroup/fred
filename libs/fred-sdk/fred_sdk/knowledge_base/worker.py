@@ -29,7 +29,13 @@ import logging
 
 from temporalio import activity
 from temporalio.client import Client
-from temporalio.runtime import PrometheusConfig, Runtime, TelemetryConfig
+from temporalio.runtime import (
+    LogForwardingConfig,
+    LoggingConfig,
+    PrometheusConfig,
+    Runtime,
+    TelemetryConfig,
+)
 from temporalio.worker import Worker
 from temporalio.worker.workflow_sandbox import (
     SandboxedWorkflowRunner,
@@ -70,26 +76,30 @@ def build_workflow_runner() -> SandboxedWorkflowRunner:
 
 def build_runtime(
     knowledge_base: KnowledgeBase, configuration: PodConfiguration
-) -> Runtime | None:
-    """The engine runtime, exporting its own metrics when configured to.
+) -> Runtime:
+    """Forward engine logs as the pod, with optional engine metrics.
 
-    None keeps the engine's default runtime, which exports nothing. Every
-    series is tagged with the pod and the definition, as the SDK's own are, so
-    the two endpoints join on the same labels.
+    Logging stays configured even without an exporter. Engine series carry
+    the same pod and definition labels as the SDK's own endpoint.
     """
     exporter = configuration.observability.temporal.prometheus
-    if not exporter.enabled:
-        return None
-    logger.info(
-        "Workflow engine metrics served at %s:%s", exporter.address, exporter.port
-    )
-    return Runtime(
+    runtime = Runtime(
         telemetry=TelemetryConfig(
-            metrics=PrometheusConfig(
-                bind_address=f"{exporter.address}:{exporter.port}",
-                counters_total_suffix=True,
-                unit_suffix=True,
-                durations_as_seconds=True,
+            logging=LoggingConfig(
+                filter=LoggingConfig.default.filter,
+                forwarding=LogForwardingConfig(
+                    logger=logger, prepend_target_on_message=False
+                ),
+            ),
+            metrics=(
+                PrometheusConfig(
+                    bind_address=f"{exporter.address}:{exporter.port}",
+                    counters_total_suffix=True,
+                    unit_suffix=True,
+                    durations_as_seconds=True,
+                )
+                if exporter.enabled
+                else None
             ),
             global_tags={
                 "service": configuration.runtime_id,
@@ -97,6 +107,11 @@ def build_runtime(
             },
         )
     )
+    if exporter.enabled:
+        logger.info(
+            "Workflow engine metrics served at %s:%s", exporter.address, exporter.port
+        )
+    return runtime
 
 
 def _build_activity(

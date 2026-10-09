@@ -495,8 +495,11 @@ def test_both_exporters_default_to_loopback_on_distinct_ports():
     assert observability.kpi.prometheus.port != observability.temporal.prometheus.port
 
 
-def test_the_engine_runtime_exports_only_when_enabled():
-    from fred_sdk.knowledge_base.worker import build_runtime
+def test_the_engine_runtime_exports_only_when_enabled(monkeypatch):
+    from fred_sdk.knowledge_base import worker
+
+    built: dict[str, Any] = {}
+    monkeypatch.setattr(worker, "Runtime", lambda **kwargs: built.update(kwargs))
 
     definition = KnowledgeBase(
         id="acme.kb.runtime", version="1.0.0", name="R", description="Runtime"
@@ -505,7 +508,10 @@ def test_the_engine_runtime_exports_only_when_enabled():
         _pod_payload(observability={"temporal": {"prometheus": {"enabled": False}}})
     )
 
-    assert build_runtime(definition, disabled) is None
+    worker.build_runtime(definition, disabled)
+
+    assert built["telemetry"].metrics is None
+    assert built["telemetry"].logging.forwarding is not None
 
 
 def test_the_engine_series_carry_the_pod_and_the_definition(monkeypatch):
