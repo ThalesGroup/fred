@@ -204,6 +204,15 @@ introduced. Project storage is charged once to its parent team's existing quota;
 no project quota UI. Corpus ownership changes must preserve personal/platform
 resource policies and avoid charging inherited reads to the consuming space.
 
+Use the dedicated `corpus_folder` table approved by the developer: one space,
+one optional same-space parent, a local name and existing descriptive/source-sync
+metadata. Its IDs preserve the old document-tag IDs during offline translation.
+A composite parent FK preserves space ownership; sibling/root name uniqueness is
+SQL-enforced. The shared model/store belongs in `fred-core.documents`; Knowledge
+Flow owns its DDL and corpus services. This replaces the document branch of `tag`,
+not the tag implementation used by other resource kinds. No document-tag adapter,
+dual write or transitional authorization branch is retained.
+
 `tag` also serves non-corpus resources. Some CSV/Excel attachments occupy metadata
 rows with no corpus folder. Model that existing distinction explicitly; do not
 force attachments into the corpus or delete all tag/resource authorization.

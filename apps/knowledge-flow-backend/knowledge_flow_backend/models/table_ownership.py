@@ -22,8 +22,8 @@ different questions on a shared database:
   autogenerate and ``alembic check`` never touch tables migrated by
   control-plane or fred-runtime.
 - ``REQUIRED_TABLES`` — what a knowledge-flow process cannot serve without:
-  the owned set plus foreign tables it reads at runtime (``users`` and
-  ``teammetadata``, both migrated by control-plane's tree but queried by
+  the owned set plus foreign tables it reads at runtime (``users``, ``space`` and
+  ``teammetadata``, migrated by control-plane's tree but queried by
   ingestion/metadata code). Both entrypoints (``main.py`` and
   ``main_worker.py``) pass it to ``require_tables`` so a deployment that
   skipped its migration jobs fails at boot instead of self-creating tables
@@ -31,7 +31,7 @@ different questions on a shared database:
   ``CoreBase`` created ``document_labels`` in production ahead of its
   migration, wedging the migration job on ``DuplicateTableError``).
 
-``tag``/``metadata``/``document_labels`` live on the shared ``CoreBase``
+``tag``/``metadata``/``document_labels``/``corpus_folder`` live on the shared ``CoreBase``
 (control-plane's import/export reads them directly) but their DDL belongs to
 this tree alone. ``sched_workflow_tasks`` (Alembic-only, no ORM model) is
 deliberately absent from both sets: it is not in any metadata, so owning it
@@ -44,6 +44,8 @@ from __future__ import annotations
 # Base.metadata, so every module registering an owned table must be imported
 # HERE — never rely on package-init side effects that a later cleanup could
 # make lazy.
+import fred_core.documents.corpus_folder_models  # noqa: F401 — registers corpus_folder with CoreBase
+import fred_core.teams.space_models  # noqa: F401 — foreign FK target, migrated by control-plane
 import fred_core.documents.document_models  # noqa: F401 — registers metadata + tag with CoreBase
 import fred_core.documents.label_models  # noqa: F401 — registers document_labels with CoreBase
 
@@ -53,16 +55,16 @@ from knowledge_flow_backend.models.base import Base
 
 # CoreBase tables whose migrations this tree owns — explicit names, never
 # derived from CoreBase.metadata (that would claim every backend's tables).
-SHARED_CORE_TABLES: frozenset[str] = frozenset({"tag", "metadata", "document_labels"})
+SHARED_CORE_TABLES: frozenset[str] = frozenset({"tag", "metadata", "document_labels", "corpus_folder"})
 
 OWNED_TABLES: frozenset[str] = frozenset(Base.metadata.tables) | SHARED_CORE_TABLES
 
 # Foreign tables knowledge-flow queries at runtime without owning their DDL:
-# `users` (user store lookups in ingestion) and `teammetadata`
+# `space` (canonical ownership), `users` and `teammetadata`
 # (TeamMetadataStore in ingestion/metadata services). Their migrations belong
 # to control-plane's tree — listing them here only makes the startup guard
 # honest about what this component needs to serve traffic.
-REQUIRED_TABLES: frozenset[str] = OWNED_TABLES | frozenset({"users", "teammetadata"})
+REQUIRED_TABLES: frozenset[str] = OWNED_TABLES | frozenset({"users", "teammetadata", "space"})
 
 # Consumed by alembic/env.py, main.py and main_worker.py — declared so
 # CodeQL's module-local unused-global query sees the export.

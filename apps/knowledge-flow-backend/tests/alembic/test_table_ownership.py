@@ -44,6 +44,7 @@ from knowledge_flow_backend.models.table_ownership import (
 _FOREIGN_TABLES = frozenset(
     {
         "users",
+        "space",
         "session",
         "session_metadata",
         "teammetadata",
@@ -57,7 +58,7 @@ _FOREIGN_TABLES = frozenset(
 
 def test_owned_set_covers_kfb_tables_and_nothing_foreign() -> None:
     assert {"resource", "kf_task_run", "kf_task_event_log"} <= OWNED_TABLES
-    assert SHARED_CORE_TABLES == {"tag", "metadata", "document_labels"}
+    assert SHARED_CORE_TABLES == {"tag", "metadata", "document_labels", "corpus_folder"}
     assert OWNED_TABLES.isdisjoint(_FOREIGN_TABLES)
     # Alembic-only, no ORM model: owning it would make autogenerate propose
     # its DROP (absent from every metadata).
@@ -70,9 +71,9 @@ def test_required_set_adds_the_foreign_tables_kfb_reads() -> None:
     by ingestion/metadata code — missing them at boot must fail fast, not
     surface as UndefinedTableError mid-request."""
     assert OWNED_TABLES <= REQUIRED_TABLES
-    assert {"users", "teammetadata"} <= REQUIRED_TABLES
+    assert {"users", "teammetadata", "space"} <= REQUIRED_TABLES
     # Needed-but-foreign is not owned: the Alembic filter must stay strict.
-    assert REQUIRED_TABLES - OWNED_TABLES == {"users", "teammetadata"}
+    assert REQUIRED_TABLES - OWNED_TABLES == {"users", "teammetadata", "space"}
 
 
 def test_autogenerate_on_migrated_database_proposes_nothing() -> None:

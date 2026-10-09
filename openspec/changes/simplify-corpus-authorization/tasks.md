@@ -157,6 +157,23 @@ preserve old behavior through adapters, compatibility switches or automatic repa
 ## 3. Corpus conversion and deletion
 
 - [ ] 3.1 Replace corpus membership arrays with canonical folder ownership and scalar constrained names; verify one-folder/one-space membership, same-folder conflict handling and valid folder hierarchy while preserving non-corpus tags and folderless session attachment metadata.
+  Developer confirmed a dedicated `corpus_folder` table, replacing documentary
+  tags while preserving other resource tags. First storage block provides a
+  same-space parent FK, sibling/root name uniqueness, root-only source-sync
+  metadata and paginated child reads without document IDs. Parent/space are
+  immutable through the store; renaming changes only descriptive fields.
+  Knowledge Flow owns DDL; its startup requirements include CP-owned `space`.
+  Checks: 30 SQLite/PostgreSQL cases and 3 table-ownership cases passed, including
+  migrated-model parity. Fresh isolated PostgreSQL upgrades/checks for both CP
+  and KF passed with one head each; KF head `ef54a72b19d0`. Raw typing and Ruff
+  passed. Independent read-only review against `b375d4442` plus this block found
+  no actionable defect, independently passed 15 SQLite and 3 ownership cases,
+  and checked caller-session update/rollback. PostgreSQL was not rerun by reviewer.
+  Production store +85/-0; ownership registration +8/-6; model +85/-0;
+  migration +42/-0; tests +191/-3. No consumer deletion is claimed yet.
+  Document ownership, actual corpus consumers and legacy-tag retirement remain
+  pending; technical-identity rights need developer clarification before consumer
+  cutover. This schema/store block does not complete task 3.1 or the backend milestone.
 - [ ] 3.2 Convert upload/overwrite, source synchronization and import/export writers; verify stable UID/folder on overwrite, rejection of reparenting, synchronized-source restrictions and new-format ownership/role round trips.
 - [ ] 3.3 Convert deletion, retries and quota accounting through existing lifecycle services; verify no stale/orphan hit is served, concurrent/retried mutations preserve constraints, and project storage is charged once to its parent team.
 - [ ] 3.4 Gate metadata, direct content, vector and tabular retrieval by canonical contextual spaces before retrieval/ranking; verify ancestor-common reach, explicit folder subtree/document restrictions, empty intersection and stale-index rejection.
