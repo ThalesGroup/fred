@@ -38,7 +38,7 @@ from pptx.oxml.ns import qn
 from pydantic import BaseModel, ConfigDict, Field, model_serializer
 
 from fred_capability_ppt_filler.traversal import (
-    KEY_PATTERN,
+    iter_key_matches,
     list_keys_on_slide,
 )
 
@@ -66,10 +66,18 @@ _METADATA_LINE_PATTERN = re.compile(r"^\s*-\s*(\w+)\s*:\s*(.*)$")
 # ``text`` / ``image`` (checked inline so the type narrows to the schema Literal).
 _RECOGNIZED_METADATA_KEYS = frozenset({"type", "folder"})
 
-# A notes line is a header ONLY if it is one or more comma-separated ``{{key}}`` tokens
-# ending in a colon, e.g. ``{{name}}:`` or ``{{a}}, {{b}}:``. Anything else (including a
-# line that merely mentions ``{{...}}`` inline) is description text.
-_HEADER_PATTERN = re.compile(r"^\s*\{\{[^}]+\}\}(\s*,\s*\{\{[^}]+\}\})*\s*:\s*$")
+
+def _parse_header_keys(line: str) -> Optional[List[str]]:
+    """Read a header using exactly the marker grammar used on slides."""
+    keys: List[str] = []
+    pos = 0
+    for match in iter_key_matches(line):
+        if line[pos : match.start()].strip() != ("," if keys else ""):
+            return None
+        keys.append(match.group("key").strip())
+        pos = match.end()
+    return keys if keys and line[pos:].strip() == ":" else None
+
 
 # A "keep separator" line is a line of only dashes (>= 3). Everything in a slide's notes
 # AFTER the first such line is content the author wants kept verbatim in the FILLED deck
@@ -300,19 +308,17 @@ def _parse_notes_descriptions(notes_text: str) -> Dict[str, _ParsedKeyMeta]:
     n = len(lines)
     while i < n:
         line = lines[i]
-        if not _HEADER_PATTERN.match(line):
+        header_keys = _parse_header_keys(line)
+        if header_keys is None:
             # Stray description text with no preceding header: ignore it (only
             # described keys matter).
             i += 1
             continue
 
-        # The keys named on this header line (one or more).
-        header_keys = [m.strip() for m in KEY_PATTERN.findall(line)]
-
         # Collect the block: every line until the next header or EOF.
         block: List[str] = []
         i += 1
-        while i < n and not _HEADER_PATTERN.match(lines[i]):
+        while i < n and _parse_header_keys(lines[i]) is None:
             block.append(lines[i])
             i += 1
 

@@ -1,4 +1,4 @@
-# PowerPoint template — how it works
+# PowerPoint template - how it works
 
 This capability lets an agent fill in a fill-in-the-blanks PowerPoint, based on instructions and files made available to it. It is useful when you have a fixed PowerPoint format to reproduce regularly while changing only the content.
 
@@ -10,26 +10,29 @@ For your agent to fill in your PowerPoint, you need to identify each area it wil
 
 ### 1. Mark the areas to fill in
 
-In a text box, write a **key** between double curly braces where a value should appear:
+In a text box, write a **key** between single or double curly braces where a value should appear:
 
 ```
+{name}
 {{name}}
 ```
+
+`{name}` and `{{name}}` identify the same key. You can mix both forms on slides and in note headers, including image keys. The braces must be balanced: `{name}}`, `{{name}`, `{{{name}}}`, nested braces, and empty keys are not markers and stay unchanged. Key names are case-sensitive; spaces immediately inside the braces are ignored.
 
 You can reuse the same key several times on a slide to repeat the same value. The same key on another slide is independent.
 
 ### 2. Describe each key in the notes
 
-In the slide's **notes** (View → Notes), write for each key a header line `{{key}}:` followed by a description. It tells the agent what to put in that spot:
+In the slide's **notes** (View -> Notes), write for each key a header line `{key}:` or `{{key}}:` followed by a description. It tells the agent what to put in that spot:
 
 ```
 {{name}}:
 Name of the employee, to be found in the CV.
 ```
 
-A line is a header only if it consists of one or more `{{key}}` keys ending with a colon. A key quoted in the middle of a sentence stays ordinary text — so you can write naturally.
+A line is a header only if it consists of one or more `{key}` or `{{key}}` keys, separated by commas and ending with a colon. A key quoted in the middle of a sentence stays ordinary text - so you can write naturally.
 
-![A slide with keys between double curly braces in its text boxes, and the slide notes describing each key.](/ppt-filler/template.png)
+![A slide with keys between single or double curly braces in its text boxes, and the slide notes describing each key.](/ppt-filler/template.png)
 
 ## Advanced usage
 
@@ -51,10 +54,10 @@ Three to five points maximum, phrased for a business audience.
 
 ### Assigning one description to several keys
 
-List several keys separated by commas on the header line to give them the same description. This is useful when a slide repeats the same structure several times — for example a CV with three sections describing the last three experiences, each with a title and a description:
+List several keys separated by commas on the header line to give them the same description. This is useful when a slide repeats the same structure several times - for example a CV with three sections describing the last three experiences, each with a title and a description:
 
 ```
-{{titleExperience1}}, {{titleExperience2}}, {{titleExperience3}}:
+{titleExperience1}, {{titleExperience2}}, {titleExperience3}:
 The job title and company, from most recent to oldest.
 
 {{descriptionExperience1}}, {{descriptionExperience2}}, {{descriptionExperience3}}:
@@ -79,7 +82,7 @@ A key can also be filled with an **image** instead of text. The agent picks a pi
 
 ### 1. Mark the image spot
 
-Draw a shape — a rectangle or a text box — where the image should appear, and write a `{{key}}` as its text. The shape's position and size become the image's placement box.
+Draw a shape - a rectangle or a text box - where the image should appear, and write `{key}` or `{{key}}` as its text. The shape's position and size become the image's placement box.
 
 ```
 {{countryFlag}}
@@ -97,11 +100,11 @@ Pick the flag matching the country discussed.
 ```
 
 - `type: image` tells the agent to place a picture. The default is `text`, so ordinary keys need nothing.
-- `folder:` points at a folder of your uploaded resources — your personal space or your team's. Quotes are optional, and keywords and values are case-insensitive.
+- `folder:` points at a folder of your uploaded resources - your personal space or your team's. Quotes are optional. Metadata keywords and the `type` value are case-insensitive; keep the folder path as it appears in your resources.
 
 ### Offering several image slots
 
-A multi-key header shares one folder and one piece of guidance — handy for offering several slots configured once:
+A multi-key header shares one folder and one piece of guidance - handy for offering several slots configured once:
 
 ```
 {{logo1}}, {{logo2}}, {{logo3}}:
@@ -110,26 +113,26 @@ A multi-key header shares one folder and one piece of guidance — handy for off
 Add the logos of the partners mentioned, most prominent first.
 ```
 
-You can offer N image slots and tell the agent (in the description) to use only the ones that fit. **Unused image slots are removed** — the deck shows no empty box. (Omitted text keys still become empty text, as before.)
+You can offer N image slots and tell the agent (in the description) to use only the ones that fit. **Unused image slots are removed** - the deck shows no empty box. (Omitted text keys still become empty text, as before.)
 
 ### Good to know
 
-- The image is scaled to **fit inside** the shape's box, with its aspect ratio preserved and centered — no distortion and no cropping.
+- The image is scaled to **fit inside** the shape's box, with its aspect ratio preserved and centered - no distortion and no cropping.
 - A repeated image key (the same key in several shapes on one slide) gets the same image in every shape, just like repeated text keys.
 - Real presenter notes after the `---` separator are left untouched.
-- The folder must be a real folder in your space. It is checked when you pick the template and again when you save.
+- The folder must be a real folder in your space. Its existence is checked when you save the uploaded template.
 
 ## Errors
 
 When you upload a PowerPoint template, it is analyzed immediately. As long as an error remains, the agent cannot be saved. These cases can occur:
 
-- **A key without a description** — a `{{key}}` appears in a text box but is not described in the slide's notes -> Add the missing description in the notes.
-- **A description for a missing key** — the notes describe a `{{key}}` that does not appear in any text box on the slide -> Fix the typo, remove the outdated description, or add the missing key to the slide.
-- **An unknown metadata keyword** — a metadata line uses a keyword other than `type` or `folder` -> Fix the typo; only `type` and `folder` are recognized.
-- **An unknown type** — a `type:` value is neither `text` nor `image` -> Use one of those two values.
-- **Duplicated metadata** — the same metadata keyword appears twice in one key's block -> Remove the duplicate line.
-- **An image without a folder** — a key is `type: image` but has no folder -> Add a `- folder: "..."` line pointing at your resources.
-- **An empty folder** — a `folder:` line is blank -> Fill in the folder path.
-- **A folder on a non-image key** — a `folder:` is set on a key that is not an image -> Either add `- type: image`, or remove the folder line.
-- **A folder that does not exist** — the named folder is not found in your space (personal or team) -> Fix the name, or create the folder and upload to it.
-- **An image key in an invalid location** — an image key sits somewhere that cannot hold a picture, such as a table cell -> Move it into a text box or a rectangle.
+- **A key without a description** - a `{{key}}` appears in a text box but is not described in the slide's notes -> Add the missing description in the notes.
+- **A description for a missing key** - the notes describe a `{{key}}` that does not appear in any text box on the slide -> Fix the typo, remove the outdated description, or add the missing key to the slide.
+- **An unknown metadata keyword** - a metadata line uses a keyword other than `type` or `folder` -> Fix the typo; only `type` and `folder` are recognized.
+- **An unknown type** - a `type:` value is neither `text` nor `image` -> Use one of those two values.
+- **Duplicated metadata** - the same metadata keyword appears twice in one key's block -> Remove the duplicate line.
+- **An image without a folder** - a key is `type: image` but has no folder -> Add a `- folder: "..."` line pointing at your resources.
+- **An empty folder** - a `folder:` line is blank -> Fill in the folder path.
+- **A folder on a non-image key** - a `folder:` is set on a key that is not an image -> Either add `- type: image`, or remove the folder line.
+- **A folder that does not exist** - the named folder is not found in your space (personal or team) -> Fix the name, or create the folder and upload to it.
+- **An image key in an invalid location** - an image key sits somewhere that cannot hold a picture, such as a table cell -> Move it into a text box or a rectangle.

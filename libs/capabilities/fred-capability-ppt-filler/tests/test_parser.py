@@ -35,6 +35,7 @@ from fred_capability_ppt_filler.parser import (
     parse,
 )
 from fred_capability_ppt_filler.traversal import (
+    _iter_text_paragraphs,
     list_keys_on_slide,
     replace_keys_on_slide,
 )
@@ -444,8 +445,9 @@ def test_keys_in_grouped_shapes_are_discovered():
     assert result.errors == []
 
 
-def test_fill_replaces_keys_in_table_cells():
-    deck = _build_table_deck("{{x}}:\nThe x", ["before {{x}} after"])
+@pytest.mark.parametrize("marker", ["{x}", "{{x}}"])
+def test_fill_replaces_keys_in_table_cells(marker):
+    deck = _build_table_deck("{{x}}:\nThe x", [f"before {marker} after"])
     presentation = Presentation(io.BytesIO(deck))
     slide = presentation.slides[0]
 
@@ -458,8 +460,9 @@ def test_fill_replaces_keys_in_table_cells():
     assert "FILLED" in table.cell(0, 0).text
 
 
-def test_fill_replaces_keys_in_grouped_shapes():
-    deck = _build_group_deck("{{g}}:\nThe g", ["start {{g}} end"])
+@pytest.mark.parametrize("marker", ["{g}", "{{g}}"])
+def test_fill_replaces_keys_in_grouped_shapes(marker):
+    deck = _build_group_deck("{{g}}:\nThe g", [f"start {marker} end"])
     presentation = Presentation(io.BytesIO(deck))
     slide = presentation.slides[0]
 
@@ -528,6 +531,18 @@ def test_parse_accepts_path(tmp_path):
     "line,is_header",
     [
         ("{{name}}:", True),
+        ("{name}:", True),
+        ("{a}, {{b}}:", True),
+        ("{{a}}, {b}:", True),
+        ("{{name}:", False),
+        ("{name}}:", False),
+        ("{{{name}}}:", False),
+        ("{outer {inner}}:", False),
+        ("{ }:", False),
+        ("{name},:", False),
+        ("{a} {b}:", False),
+        ("{a},,{b}:", False),
+        ("{name}: extra text", False),
         ("  {{name}}  :  ", True),
         ("{{a}}, {{b}}:", True),
         ("{{a}},{{b}} , {{c}}:", True),
@@ -538,9 +553,125 @@ def test_parse_accepts_path(tmp_path):
     ],
 )
 def test_header_detection(line, is_header):
-    from fred_capability_ppt_filler.parser import _HEADER_PATTERN
+    from fred_capability_ppt_filler.parser import _parse_header_keys
 
-    assert bool(_HEADER_PATTERN.match(line)) is is_header
+    assert (_parse_header_keys(line) is not None) is is_header
+
+
+@pytest.mark.parametrize("body", ["{name}", "{{name}}", "{ name } / {{name}}"])
+@pytest.mark.parametrize("header", ["{name}:", "{{name}}:"])
+def test_marker_forms_share_one_schema_and_fill_value(body: str, header: str) -> None:
+    deck = _build_deck([(body, f"{header}\nThe name")])
+    result = parse(deck)
+    assert result.errors == []
+    assert result.model_dump(by_alias=True)["schema"] == [
+        {"slide": 1, "keys": [{"key": "name", "description": "The name"}]}
+    ]
+    presentation = Presentation(io.BytesIO(deck))
+    replace_keys_on_slide(presentation.slides[0], lambda key: "Ada")
+    expected = "Ada / Ada" if "/" in body else "Ada"
+    assert (
+        "".join(
+            run.text
+            for paragraph in _iter_text_paragraphs(presentation.slides[0])
+            for run in paragraph.runs
+        )
+        == expected
+    )
+    buffer = io.BytesIO()
+    presentation.save(buffer)
+    assert parse(buffer.getvalue()).slides == []
+
+
+def test_mixed_note_header_shares_image_metadata_and_preserves_inline_mentions() -> (
+    None
+):
+    description = "Choose {first} and {{last}} from the folder."
+    deck = _build_deck(
+        [
+            (
+                "{first} {{last}}",
+                "{{first}}, {last}:\n- type: image\n- folder: Brand/Logos\n"
+                f"{description}\n---\n{{ghost}}:\n{{{{other}}}}:",
+            )
+        ]
+    )
+    result = parse(deck)
+    assert result.errors == []
+    assert [field.key for field in result.slides[0].keys] == ["first", "last"]
+    for field in result.slides[0].keys:
+        assert field.description == description
+        assert field.type == "image"
+        assert field.folder == "Brand/Logos"
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "{name",
+        "name}",
+        "{{name}",
+        "{name}}",
+        "{{{name}}}",
+        "{outer {inner}}",
+        "{{outer {inner}}}",
+        "{}",
+        "{{}}",
+        "{ }",
+        "{{ }}",
+    ],
+)
+def test_malformed_markers_are_not_discovered_or_replaced(body: str) -> None:
+    deck = _build_deck([(body, "")])
+    assert parse(deck).slides == []
+    slide = Presentation(io.BytesIO(deck)).slides[0]
+    replace_keys_on_slide(slide, lambda key: pytest.fail("Malformed marker was filled"))
+    assert (
+        "".join(
+            run.text
+            for paragraph in _iter_text_paragraphs(slide)
+            for run in paragraph.runs
+        )
+        == body
+    )
+
+
+@pytest.mark.parametrize("marker", ["{name}", "{{name}}"])
+def test_every_run_boundary_is_fillable(marker: str) -> None:
+    for boundary in range(1, len(marker)):
+        deck = _build_split_run_deck(
+            [f"Before {marker[:boundary]}", f"{marker[boundary:]} after"],
+            "{name}:\nThe name",
+        )
+        assert parse(deck).errors == []
+        slide = Presentation(io.BytesIO(deck)).slides[0]
+        replace_keys_on_slide(slide, lambda key: "Ada")
+        assert (
+            "".join(
+                run.text
+                for paragraph in _iter_text_paragraphs(slide)
+                for run in paragraph.runs
+            )
+            == "Before Ada after"
+        )
+
+
+def test_adjacent_markers_and_invalid_sequences_use_one_recognition_pass() -> None:
+    body = "{first}{{last}} {bad}} {outer {inner}} {valid}"
+    deck = _build_deck([(body, "{first}, {last}, {{valid}}:\nA value")])
+    assert parse(deck).errors == []
+    slide = Presentation(io.BytesIO(deck)).slides[0]
+    calls: List[str] = []
+
+    def value_for(key: str) -> str:
+        calls.append(key)
+        return "{literal}"
+
+    replace_keys_on_slide(slide, value_for)
+    assert calls == ["first", "last", "valid"]
+    assert "".join(
+        run.text for paragraph in _iter_text_paragraphs(slide) for run in paragraph.runs
+    ) == ("{literal}{literal} {bad}} {outer {inner}} {literal}")
 
 
 # --- Keep-separator: notes after a "---" line are kept verbatim, never parsed ----------
