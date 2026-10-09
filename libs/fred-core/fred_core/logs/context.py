@@ -16,7 +16,7 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Iterator, Mapping
+from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -56,7 +56,7 @@ _completion_binding: ContextVar[bool] = ContextVar(
 
 
 @contextmanager
-def completion_log_scope(values: Mapping[str, object]) -> Iterator[None]:
+def completion_log_scope(values: Mapping[str, object]) -> Generator[None, None, None]:
     """Emit the owned request snapshot after streaming run scopes have retired."""
     token = _operation_lifetimes.set(())
     try:
@@ -69,7 +69,7 @@ def completion_log_scope(values: Mapping[str, object]) -> Iterator[None]:
 @contextmanager
 def operation_log_scope(
     *, clear: tuple[str, ...] = (), completion: bool | None = None, **values: object
-) -> Iterator[None]:
+) -> Generator[None, None, None]:
     """Retire inherited run metadata in tasks retained beyond the run's lifetime."""
     lifetime = RequestLogScope({})
     token = _operation_lifetimes.set((*_operation_lifetimes.get(), lifetime))
@@ -132,7 +132,7 @@ def bind_operation_context(
 
 
 @contextmanager
-def request_log_scope(**values: object) -> Iterator[RequestLogScope]:
+def request_log_scope(**values: object) -> Generator[RequestLogScope, None, None]:
     """Start an isolated scope and retire it even when a retained task outlives it."""
     previous = get_contextvars()
     clear_contextvars()
@@ -303,7 +303,7 @@ def log_context(
     *,
     clear: tuple[str, ...] = (),
     **fields: object,
-) -> Iterator[None]:
+) -> Generator[None, None, None]:
     """Bind nested metadata and restore it on all exits, including cancellation."""
     validated = safe_context({**(values or {}), **fields})
     tokens = bind_contextvars(**{**dict.fromkeys(clear), **validated})
