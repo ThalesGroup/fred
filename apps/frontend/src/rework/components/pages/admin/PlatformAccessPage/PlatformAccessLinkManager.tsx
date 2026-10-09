@@ -23,6 +23,8 @@ import {
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import styles from "./PlatformAccessPage.module.css";
 
+type LinkStatusFilter = Exclude<PlatformEnrollmentLinkInfo["status"], "suspended"> | "all";
+
 export default function PlatformAccessLinkManager({
   team,
   onClose,
@@ -32,7 +34,7 @@ export default function PlatformAccessLinkManager({
 }) {
   const { t, i18n } = useTranslation();
   const [offset, setOffset] = useState(0);
-  const [status, setStatus] = useState<PlatformEnrollmentLinkInfo["status"] | "all">("all");
+  const [status, setStatus] = useState<LinkStatusFilter>("all");
   const links = usePlatformEnrollmentLinksQuery(
     { teamId: team.team_id, offset, limit: 25, status: status === "all" ? undefined : status },
     {
@@ -74,7 +76,7 @@ export default function PlatformAccessLinkManager({
   const linkUrl = (token: string) => new URL(platformPath(`join-free/${token}`), window.location.origin).toString();
   const copyConfirmed = (linkId?: string) => copied && copyStatus === "copied" && copiedLinkId === linkId;
   const copyAnnouncement = (
-    <span className={styles.copyAnnouncement} role="status">
+    <span className={styles.screenReaderOnly} role="status">
       {copied && copyStatus === "copied" ? t("rework.platformAccess.links.copied") : ""}
     </span>
   );
@@ -162,13 +164,13 @@ export default function PlatformAccessLinkManager({
           </div>
           <div className={styles.linkControls}>
             <div className={styles.linkFilter}>
-              <Select<PlatformEnrollmentLinkInfo["status"] | "all">
+              <Select<LinkStatusFilter>
                 compact
                 size="medium"
                 label={t("rework.platformAccess.links.statusLabel")}
                 value={status}
                 disabled={busy}
-                options={(["all", "active", "revoked", "expired", "suspended"] as const).map((value) => ({
+                options={(["all", "active", "revoked", "expired"] as const).map((value) => ({
                   key: value,
                   value,
                   label: t(`rework.platformAccess.links.status.${value}`),
@@ -194,7 +196,6 @@ export default function PlatformAccessLinkManager({
               {t("rework.platformAccess.links.cleanup")}
             </Button>
           </div>
-          {!team.free && <p role="status">{t("rework.platformAccess.links.suspendedHint")}</p>}
           {deletedCount !== undefined && (
             <p role="status">{t("rework.platformAccess.links.deleted", { count: deletedCount })}</p>
           )}
@@ -212,6 +213,7 @@ export default function PlatformAccessLinkManager({
             <DataTable
               data={history?.items ?? []}
               rowKey={(link) => link.id}
+              rowClassName={(link) => (link.status === "suspended" ? styles.suspendedLink : undefined)}
               serverPagination={{
                 offset,
                 limit: 25,
@@ -241,7 +243,11 @@ export default function PlatformAccessLinkManager({
                 {
                   label: t("rework.platformAccess.links.statusLabel"),
                   size: "1fr",
-                  cellRenderer: (link) => t(`rework.platformAccess.links.status.${link.status}`),
+                  cellRenderer: (link) => (
+                    <span className={link.status === "suspended" ? styles.screenReaderOnly : undefined}>
+                      {t(`rework.platformAccess.links.status.${link.status}`)}
+                    </span>
+                  ),
                 },
                 {
                   label: t("rework.platformAccess.links.openings"),
@@ -298,7 +304,7 @@ export default function PlatformAccessLinkManager({
       {confirmCleanup && (
         <Dialog
           open
-          title={t("rework.platformAccess.links.cleanupTitle")}
+          title={t("rework.platformAccess.links.cleanupTitle", { team: team.name || team.team_id })}
           confirmColor="error"
           confirmLabel={t("rework.platformAccess.links.cleanupConfirm")}
           confirmDisabled={busy || links.isFetching || links.isError || !inactiveCount}

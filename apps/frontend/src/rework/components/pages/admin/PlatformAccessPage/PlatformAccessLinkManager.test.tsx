@@ -16,6 +16,7 @@ const hooks = vi.hoisted(() => ({
   total: 1,
   inactive: 5,
   uncachedPage: false,
+  linkStatus: "active",
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }) }));
 vi.mock("../../../../../common/config", () => ({ getConfig: () => ({ frontend_basename: "/" }) }));
@@ -30,7 +31,7 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
           created_at: "2026-10-01T12:00:00Z",
           expires_at: null,
           revoked_at: null,
-          status: "active",
+          status: hooks.linkStatus,
           opening_count: 7,
           last_opened_at: "2026-10-02T12:34:56Z",
           recoverable: true,
@@ -53,6 +54,7 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
   useDeleteInactivePlatformLinksMutation: () => [hooks.cleanup, { isLoading: false }],
 }));
 import PlatformAccessLinkManager from "./PlatformAccessLinkManager";
+import styles from "./PlatformAccessPage.module.css";
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 let host: HTMLDivElement, root: Root;
 beforeEach(() => {
@@ -66,6 +68,7 @@ beforeEach(() => {
   hooks.total = 1;
   hooks.inactive = 5;
   hooks.uncachedPage = false;
+  hooks.linkStatus = "active";
   Object.defineProperty(navigator, "clipboard", {
     configurable: true,
     value: { writeText: vi.fn().mockResolvedValue(undefined) },
@@ -187,13 +190,23 @@ it("disables cleanup without obsolete links", () => {
   expect(button("links.cleanup").disabled).toBe(true);
 });
 it("keeps history available while Free is suspended and prevents link creation", () => {
+  hooks.linkStatus = "suspended";
   render(false);
   expect(document.body.textContent).toContain("Workshop");
   expect(document.body.textContent).toContain("7");
   expect(document.body.textContent).not.toContain(new Date("2026-10-02T12:34:56Z").toLocaleString("en"));
-  expect(document.body.textContent).toContain("rework.platformAccess.links.suspendedHint");
+  expect(document.body.textContent).not.toContain("rework.platformAccess.links.suspendedHint");
+  expect(document.querySelector(`.${styles.suspendedLink} .${styles.screenReaderOnly}`)?.textContent).toBe(
+    "rework.platformAccess.links.status.suspended",
+  );
   expect(button("createLink").disabled).toBe(true);
   expect(button("links.revoke").disabled).toBe(false);
+  expect(button("links.copyUrl").disabled).toBe(false);
+  expect(document.querySelector(`.${styles.suspendedLink}`)?.textContent).toContain("Workshop");
+  act(() => document.querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]')!.click());
+  expect([...document.querySelectorAll('[role="option"]')].map((option) => option.textContent)).toEqual(
+    ["all", "active", "revoked", "expired"].map((status) => `rework.platformAccess.links.status.${status}`),
+  );
 });
 it("creates a noted link without an implicit expiry and clears reusable mutation data", async () => {
   render();

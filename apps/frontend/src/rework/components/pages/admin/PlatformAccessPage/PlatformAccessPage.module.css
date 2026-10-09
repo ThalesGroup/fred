@@ -172,6 +172,10 @@
   min-height: 0;
   max-height: 45dvh;
 }
+.suspendedLink {
+  opacity: 0.6;
+  filter: grayscale(1);
+}
 @media (max-width: 600px) {
   .linkCreation {
     grid-template-columns: minmax(0, 1fr);
@@ -381,7 +385,7 @@
   min-width: 0;
 }
 
-.copyAnnouncement {
+.screenReaderOnly {
   position: absolute;
   clip-path: inset(50%);
   margin: -1px;

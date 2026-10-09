@@ -89,6 +89,7 @@ export interface DataTableProps<T> {
    *  item as soon as `data` re-sorts (e.g. after an edit changes sort
    *  order). Required when `selectable` is set. */
   rowKey?: (element: T) => string | number;
+  rowClassName?: (element: T) => string | undefined;
   /** Adds a leading checkbox column. Selection is scoped to the checkbox
    *  itself (not the whole row) — rows here typically carry their own
    *  clickable actions (preview, menu), so a whole-row click target would
@@ -167,6 +168,7 @@ export default function DataTable<T>({
   pageSize,
   serverPagination,
   rowKey,
+  rowClassName,
   selectable = false,
   selectedKeys,
   onSelectionChange,
@@ -338,7 +340,7 @@ export default function DataTable<T>({
           const isSelected = selectable && (selectedKeys?.has(key) ?? false);
           return (
             <div
-              className={styles["datatable-row"]}
+              className={`${styles["datatable-row"]} ${rowClassName?.(line) ?? ""}`}
               key={key}
               data-selected={isSelected || undefined}
               data-activatable={!!onRowClick || undefined}
