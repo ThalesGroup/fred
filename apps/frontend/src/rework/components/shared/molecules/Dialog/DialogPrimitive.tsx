@@ -44,6 +44,8 @@ function isVisibleFocusable(node: HTMLElement, dialog: HTMLElement): boolean {
 
 export interface DialogProps {
   open: boolean;
+  /** Keep a background dialog visible without competing with the foreground dialog. */
+  inactive?: boolean;
   title: string;
   children: ReactNode;
   confirmLabel: string;
@@ -65,6 +67,7 @@ export interface DialogProps {
 
 export function DialogPrimitive({
   open,
+  inactive = false,
   title,
   children,
   confirmLabel,
@@ -114,7 +117,7 @@ export function DialogPrimitive({
   }, [open, portalContainer]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || inactive) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       const dialog = dialogRef.current;
       if (!dialog) return;
@@ -163,7 +166,7 @@ export function DialogPrimitive({
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open]);
+  }, [open, inactive]);
 
   // A body that is all text has nothing focusable inside it, so once it
   // scrolls a keyboard-only user cannot reach it. Making it a tab stop fixes
@@ -189,6 +192,8 @@ export function DialogPrimitive({
         <Portal id="modal-portal" root={portalRoot}>
           <div
             className={styles.overlay}
+            inert={inactive}
+            aria-hidden={inactive || undefined}
             onClick={(event) => {
               if (event.target === event.currentTarget) onCancel();
             }}

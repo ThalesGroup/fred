@@ -63,6 +63,54 @@ afterEach(() => {
 });
 
 describe("Dialog focus and consumer-root portal", () => {
+  it("keeps an inactive background dialog visible while only the foreground handles keys", () => {
+    const closeHistory = vi.fn();
+    function Harness() {
+      const [confirm, setConfirm] = useState(false);
+      return (
+        <>
+          <Dialog
+            open
+            inactive={confirm}
+            title="Team links"
+            hideCancel
+            confirmLabel="Close"
+            onConfirm={closeHistory}
+            onCancel={closeHistory}
+          >
+            <button onClick={() => setConfirm(true)}>Review cleanup</button>
+          </Dialog>
+          <Dialog
+            open={confirm}
+            title="Confirm cleanup"
+            confirmLabel="Delete links"
+            cancelLabel="Cancel"
+            onConfirm={() => {}}
+            onCancel={() => setConfirm(false)}
+          >
+            Remove obsolete links?
+          </Dialog>
+        </>
+      );
+    }
+    render(<Harness />);
+    const trigger = buttonNamed("Review cleanup");
+    act(() => trigger.click());
+    expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(2);
+    expect(document.querySelector('[inert][aria-hidden="true"]')?.textContent).toContain("Team links");
+    const confirm = buttonNamed("Delete links");
+    act(() => {
+      confirm.focus();
+      confirm.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true }));
+    });
+    expect(document.activeElement).toBe(buttonNamed("Cancel"));
+    act(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })));
+    expect(closeHistory).not.toHaveBeenCalled();
+    expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+    expect(document.querySelector("[inert]")).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+
   it("programmatic opening uses its originating root even when focus is outside", () => {
     const outside = document.createElement("button");
     document.body.appendChild(outside);

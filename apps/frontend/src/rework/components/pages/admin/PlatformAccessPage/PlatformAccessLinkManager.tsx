@@ -131,7 +131,8 @@ export default function PlatformAccessLinkManager({
   return (
     <>
       <Dialog
-        open={!confirmRevoke && !confirmCleanup && view === "list"}
+        open={!confirmRevoke && view === "list"}
+        inactive={confirmCleanup}
         title={t("rework.platformAccess.links.title", { team: team.name || team.team_id })}
         maxWidth={1100}
         hideCancel

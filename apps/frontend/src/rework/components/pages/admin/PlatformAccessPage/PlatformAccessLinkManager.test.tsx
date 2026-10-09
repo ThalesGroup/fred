@@ -156,6 +156,7 @@ it("requires cleanup confirmation and preserves the selected filter", async () =
   act(() => button("links.cleanup").click());
   expect(hooks.cleanup).not.toHaveBeenCalled();
   expect(document.body.textContent).toContain("rework.platformAccess.links.cleanupHint");
+  expect(document.querySelector('[inert] [role="dialog"]')?.textContent).toContain("Workshop");
   act(() =>
     [...document.querySelectorAll<HTMLButtonElement>("button")]
       .find((node) => node.textContent === "common.cancel")!
