@@ -15,7 +15,7 @@
 from __future__ import annotations
 
 import pytest
-from fred_pod.common import OpenSearchStoreConfig
+from fred_pod.common import OpenSearchStoreConfig, PodAppIdentity
 from pydantic import ValidationError
 
 
@@ -44,3 +44,32 @@ def test_opensearch_config_explicit_password_wins(monkeypatch) -> None:
     )
 
     assert cfg.password == "inline"  # nosec B105  # pragma: allowlist secret
+
+
+@pytest.mark.parametrize("runtime_id", ["fred-agents", "webdav-kb", "kb2", "a"])
+def test_a_runtime_id_is_a_lowercase_slug(runtime_id: str) -> None:
+    assert PodAppIdentity(runtime_id=runtime_id).runtime_id == runtime_id
+
+
+@pytest.mark.parametrize(
+    "runtime_id",
+    [
+        "",
+        "My KB",
+        "Webdav",
+        "fred.samples.webdav",
+        "kb_webdav",
+        "-kb",
+        "kb-",
+        "kb--x",
+        "2kb",
+    ],
+)
+def test_anything_else_is_refused(runtime_id: str) -> None:
+    with pytest.raises(ValidationError):
+        PodAppIdentity(runtime_id=runtime_id)
+
+
+def test_a_runtime_id_has_no_default() -> None:
+    with pytest.raises(ValidationError, match="runtime_id"):
+        PodAppIdentity.model_validate({})

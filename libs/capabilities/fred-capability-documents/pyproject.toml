@@ -1,14 +1,14 @@
 [project]
 name = "fred-capability-documents"
-version = "0.1.2"
+version = "4.4.3"
 description = "Fred agent capabilities over the Knowledge Flow document ports: summarize, similarity, label search, extract, verbatim read."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Thales", email = "noreply@thalesgroup.com" }]
 dependencies = [
-  "fred-core>=4.0.0",
-  "fred-sdk[agents]>=4.2.0",
+  "fred-core>=4.4.3",
+  "fred-sdk[agents]>=4.4.3",
   "pydantic>=2.7.0,<3.0.0",
   "langchain-core>=0.3.0",
 ]
@@ -75,5 +75,5 @@ dev = [
   "ruff>=0.15.22,<0.16",
   # Test-only: the tests exercise entry-point discovery through fred-runtime's
   # CapabilityRegistry and build their CapabilityContext with its helper.
-  "fred-runtime>=4.0.0",
+  "fred-runtime>=4.4.3",
 ]

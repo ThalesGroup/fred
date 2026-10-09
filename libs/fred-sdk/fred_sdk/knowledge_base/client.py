@@ -32,6 +32,7 @@ from __future__ import annotations
 import httpx
 from fred_pod.security.backend_to_backend_auth import M2MBearerAuth
 
+from fred_sdk.knowledge_base import telemetry
 from fred_sdk.knowledge_base.configuration import PodConfiguration
 from fred_sdk.knowledge_base.declaration import KnowledgeBaseDeclaration
 from fred_sdk.knowledge_base.models import (
@@ -54,7 +55,10 @@ class ControlPlaneClient:
 
     async def publish(self, declaration: KnowledgeBaseDeclaration) -> None:
         """Upsert this definition's declaration. Idempotent, so a redeploy replays."""
+        # Not measured: `publish` runs as a one-shot deployment hook that no
+        # scraper ever reaches. Its exit status and logs are its outcome.
         await self._request(
+            None,
             "PUT",
             f"/knowledge-bases/definitions/{declaration.id}",
             json={"prefix": self._prefix, **declaration.to_payload()},
@@ -72,6 +76,7 @@ class ControlPlaneClient:
         identifier alone says nothing about which folder is being filled.
         """
         payload = await self._request(
+            "run_context",
             "GET",
             f"/knowledge-bases/definitions/{definition_id}"
             f"/instances/{instance_id}/runs/{run_id}/context",
@@ -80,14 +85,21 @@ class ControlPlaneClient:
 
     async def _request(
         self,
+        operation: str | None,
         method: str,
         path: str,
         json: object | None = None,
         params: dict[str, str] | None = None,
     ) -> dict:
-        response = await self._client.request(
-            method, f"{self._base_url}{path}", json=json, params=params
-        )
+        url = f"{self._base_url}{path}"
+        if operation is None:
+            response = await self._client.request(method, url, json=json, params=params)
+        else:
+            with telemetry.observing_request("control_plane", operation) as answered:
+                response = await self._client.request(
+                    method, url, json=json, params=params
+                )
+                answered(response.status_code)
         response.raise_for_status()
         if not response.content:
             return {}

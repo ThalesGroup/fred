@@ -29,11 +29,35 @@ import logging
 from collections.abc import Sequence
 
 from fred_sdk.knowledge_base.client import ControlPlaneClient
-from fred_sdk.knowledge_base.configuration import PodConfiguration
+from fred_sdk.knowledge_base.configuration import (
+    PodConfiguration,
+    bind_active_configuration,
+)
 from fred_sdk.knowledge_base.declaration import KnowledgeBaseDeclaration
 from fred_sdk.knowledge_base.knowledge_base import KnowledgeBase
+from fred_sdk.knowledge_base.logs import (
+    configure_logging,
+    hold_until_configured,
+    release_unconfigured,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def _load(knowledge_base: KnowledgeBase) -> PodConfiguration:
+    """Read the configuration once: log as the pod it names, and hand it to runs."""
+    try:
+        configuration = PodConfiguration.load()
+    except BaseException:
+        release_unconfigured()
+        raise
+    bind_active_configuration(configuration)
+    configure_logging(
+        service=configuration.runtime_id,
+        knowledge_base=knowledge_base.id,
+        log_format=configuration.observability.logs.format,
+    )
+    return configuration
 
 
 def publish_knowledge_base(knowledge_base: KnowledgeBase) -> None:
@@ -43,7 +67,7 @@ def publish_knowledge_base(knowledge_base: KnowledgeBase) -> None:
     stores stays what is deployed.
     """
     declaration = KnowledgeBaseDeclaration.of(knowledge_base)
-    configuration = PodConfiguration.load()
+    configuration = _load(knowledge_base)
 
     async def _publish() -> None:
         client = ControlPlaneClient(configuration)
@@ -67,7 +91,7 @@ def run_knowledge_base(knowledge_base: KnowledgeBase) -> None:
     authenticates as and what it connects to all come from the pod's
     configuration.
     """
-    configuration = PodConfiguration.load()
+    configuration = _load(knowledge_base)
     # Imported here so `publish` needs no workflow engine at all: serving runs
     # is the only thing that does, and it ships as the `knowledge-base` extra.
     try:
@@ -97,7 +121,8 @@ def knowledge_base_main(
     commands.add_parser("run", help="serve runs until stopped")
 
     arguments = parser.parse_args(argv)
-    logging.basicConfig(level=logging.INFO, format="%(levelname)-7s %(message)s")
+    # Nothing is written until the configuration names the pod: see logs.py.
+    hold_until_configured()
 
     if arguments.command == "publish":
         publish_knowledge_base(knowledge_base)

@@ -1,11 +1,11 @@
 [project]
 name = "fred-capability-web-research"
-version = "0.1.0"
+version = "4.4.3"
 description = "Fred native web search and page reading tools"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 license = { text = "Apache-2.0" }
-dependencies = ["fred-sdk[agents]>=4.4.0", "langchain-core>=1.6.5", "pydantic>=2.7,<3"]
+dependencies = ["fred-sdk[agents]>=4.4.3", "langchain-core>=1.6.5", "pydantic>=2.7,<3"]
 
 [project.entry-points."fred.capabilities"]
 web_research = "fred_capability_web_research.capability:WebResearchCapability"
@@ -16,7 +16,7 @@ dev = [
   "basedpyright==1.31.0",
   "detect-secrets>=1.5.0",
   # fred-runtime hosts the capability registry and the runtime adapter the tests drive.
-  "fred-runtime[app]>=4.4.0",
+  "fred-runtime[app]>=4.4.3",
   "pytest>=8.4.2",
   "pytest-asyncio>=1.2.0",
   "pytest-cov>=6.2.1",
