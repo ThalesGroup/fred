@@ -24,7 +24,9 @@ if name == "kubectl":
         p = Path(args[args.index("--patch-file") + 1])
         assert p.stat().st_mode & 0o077 == 0
         import base64
-        assert json.loads(p.read_text())["data"]["OPENAI_API_KEY"] == base64.b64encode(os.environ["OPENAI_API_KEY"].encode()).decode()
+        (name, value), = json.loads(p.read_text())["data"].items()
+        assert value == base64.b64encode(os.environ[name].encode()).decode()
+        with open(os.environ["CALLS"] + ".patched", "a") as f: f.write(name + "\\n")
     if "configmap" in args and "get" in args:
         p = Path(os.environ["CALLS"] + ".count")
         count = int(p.read_text()) if p.exists() else 0
@@ -35,7 +37,9 @@ if name == "kubectl":
 
 
 class HookTests(unittest.TestCase):
-    def exercise(self, changed: bool, fresh: bool = False) -> tuple[str, list]:
+    def exercise(
+        self, changed: bool, fresh: bool = False, brave_key: str = ""
+    ) -> tuple[str, list]:
         with tempfile.TemporaryDirectory(prefix="fred configure ") as directory:
             root = Path(directory)
             (root / "deploy/k3d").mkdir(parents=True)
@@ -62,6 +66,7 @@ class HookTests(unittest.TestCase):
                 CURRENT_KEY="" if changed else base64.b64encode(key.encode()).decode(),
                 DASHBOARD_CHANGED="1" if changed else "",
                 FRESH="1" if fresh else "",
+                WEB_RESEARCH_PROVIDER_KEY=brave_key,
             )
             output = ""
             for hook in ("prepare", "finish"):
@@ -76,7 +81,10 @@ class HookTests(unittest.TestCase):
             calls = [
                 json.loads(line) for line in (root / "calls").read_text().splitlines()
             ]
-            self.assertNotIn(key, output + json.dumps(calls))
+            for secret in filter(None, (key, brave_key)):
+                self.assertNotIn(secret, output + json.dumps(calls))
+            patched = root / "calls.patched"
+            self.patched = patched.read_text().split() if patched.exists() else []
             self.assertNotIn(
                 base64.b64encode(key.encode()).decode(), output + json.dumps(calls)
             )
@@ -108,6 +116,11 @@ class HookTests(unittest.TestCase):
         self.assertFalse(
             any("restart" in c and "deployment/grafana" not in c for c in calls)
         )
+
+    def test_brave_key_from_environment_reaches_fred_secrets(self) -> None:
+        output, _ = self.exercise(False, brave_key="test-only-brave-key")
+        self.assertEqual(self.patched, ["WEB_RESEARCH_PROVIDER_KEY"])
+        self.assertIn("Brave Search key written to fred-secrets", output)
 
     def test_unchanged_key_and_dashboards_do_not_restart(self) -> None:
         _, calls = self.exercise(False)

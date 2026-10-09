@@ -64,6 +64,16 @@ it without the key fails Fred Agents startup. Providers never fall back to one
 another; an outage returns `provider_failed`. The key reaches only the provider
 endpoint, never logs, activity or model arguments.
 
+Set the secrets under `applications.fred-agents.dotenv`, which the chart
+renders into the `fred-agents-env` Kubernetes Secret like the other Fred Agents
+credentials (proxy entry only when `proxy_auth_env` is set):
+
+```yaml
+dotenv:
+  WEB_RESEARCH_PROVIDER_KEY: "<Brave Search API key>"
+  WEB_RESEARCH_PROXY_AUTH: "<username:password>"
+```
+
 Without `proxy_url`, research uses direct public access. With it, every provider,
 page and redirect uses the configured HTTP(S) forward proxy; failures never fall
 back to direct access. `HTTP_PROXY`, `HTTPS_PROXY` and `NO_PROXY` environment
