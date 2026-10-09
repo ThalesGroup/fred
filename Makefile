@@ -46,7 +46,7 @@ clean: ## Clean all submodules
 ##@ Tests
 
 .PHONY: test
-test: k3d-tests libs-version-tests ## Run non-integration test suites in all submodules and print coverage summary
+test: k3d-tests libs-version-tests publish-libs-tests ## Run non-integration test suites in all submodules and print coverage summary
 	@set -e; \
 	for dir in $(TEST_DIRS); do \
 		echo "************ Running tests in $$dir ************"; \
@@ -205,6 +205,10 @@ libs-version: ## Set one version on every PyPI package, their floors on each oth
 libs-version-tests: ## Test the libs-version rewrite offline
 	python3 -m unittest discover -s scripts/tests -p 'test_libs_version.py'
 
+.PHONY: publish-libs-tests
+publish-libs-tests: ## Test bulk publishing offline with fake packages
+	python3 -m unittest discover -s scripts/tests -p 'test_publish_libs.py'
+
 .PHONY: publish-libs-dry-run
 publish-libs-dry-run: ## Build every PyPI package in dependency order, stop at the first failure, upload nothing
 	@set -e; \
@@ -235,7 +239,7 @@ publish-libs: ## Build every PyPI package, then publish, in order, each version 
 	@test -n "$$PYPI_TOKEN" || { echo "PYPI_TOKEN is not set: nothing was built or uploaded."; exit 1; }
 	$(MAKE) publish-libs-dry-run
 	@set -e; \
-	pending=$$($(MAKE) -s _pypi-pending); \
+	pending=$$($(MAKE) --no-print-directory -s _pypi-pending); \
 	for dir in $$pending; do \
 		echo "************ Publishing $$dir ************"; \
 		env -u VIRTUAL_ENV $(MAKE) -C $$dir publish; \
