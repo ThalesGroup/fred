@@ -167,6 +167,27 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/pod/v1/agents/sessions/${queryArg.sessionId}/messages` }),
     }),
+    getRuntimeInstanceSkills: build.query<GetRuntimeInstanceSkillsApiResponse, GetRuntimeInstanceSkillsApiArg>({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/skills`,
+        params: {
+          agent_instance_id: queryArg.agentInstanceId,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    getRuntimeInstanceSkillDetail: build.query<
+      GetRuntimeInstanceSkillDetailApiResponse,
+      GetRuntimeInstanceSkillDetailApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/skills/${queryArg.skillName}`,
+        params: {
+          agent_instance_id: queryArg.agentInstanceId,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
     listAgentTemplatesPodV1AgentsTemplatesGet: build.query<
       ListAgentTemplatesPodV1AgentsTemplatesGetApiResponse,
       ListAgentTemplatesPodV1AgentsTemplatesGetApiArg
@@ -338,6 +359,17 @@ export type GetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetApiResponse
 export type GetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetApiArg = {
   sessionId: string;
 };
+export type GetRuntimeInstanceSkillsApiResponse = /** status 200 Successful Response */ SkillCatalog;
+export type GetRuntimeInstanceSkillsApiArg = {
+  agentInstanceId: string;
+  teamId: string;
+};
+export type GetRuntimeInstanceSkillDetailApiResponse = /** status 200 Successful Response */ SkillDetail;
+export type GetRuntimeInstanceSkillDetailApiArg = {
+  skillName: string;
+  agentInstanceId: string;
+  teamId: string;
+};
 export type ListAgentTemplatesPodV1AgentsTemplatesGetApiResponse =
   /** status 200 Successful Response */ AgentTemplateSummary[];
 export type ListAgentTemplatesPodV1AgentsTemplatesGetApiArg = {
@@ -488,8 +520,13 @@ export type ConversationTurn = {
 export type TurnCommand = {
   appended_text?: string;
   command: string;
+  draft_command_offset?: number | null;
+  draft_text?: string | null;
   prompt_id?: string | null;
   prompt_name?: string | null;
+};
+export type SkillInvocation = {
+  name: string;
 };
 export type RuntimeContext = {
   access_token?: string | null;
@@ -533,6 +570,8 @@ export type RuntimeContext = {
   selected_document_libraries_ids?: string[] | null;
   selected_document_uids?: string[] | null;
   session_id?: string | null;
+  skill?: SkillInvocation | null;
+  skills?: SkillInvocation[] | null;
   team_id?: string | null;
   template_agent_id?: string | null;
   trace_id?: string | null;
@@ -779,10 +818,20 @@ export type NodeErrorRuntimeEvent = {
   routed_to: string;
   sequence?: number;
 };
+export type SkillLoadAttribution = {
+  agent_id: string;
+  child?: boolean;
+  child_id?: string | null;
+  load_id: string;
+  name: string;
+  origin: "user" | "agent";
+  revision: string;
+};
 export type StatusRuntimeEvent = {
   detail?: string | null;
   kind?: "status";
   sequence?: number;
+  skill_load?: SkillLoadAttribution | null;
   status: string;
 };
 export type ThoughtDeltaEvent = {
@@ -906,6 +955,8 @@ export type Channel =
 export type CommandDescriptor = {
   appended_text?: string;
   command: string;
+  draft_command_offset?: number | null;
+  draft_text?: string | null;
   prompt_id?: string | null;
   prompt_name?: string | null;
   [key: string]: any;
@@ -1020,6 +1071,21 @@ export type ChatMessage = {
   role: Role;
   session_id: string;
   timestamp: string;
+};
+export type SkillSummary = {
+  argument_hint?: string | null;
+  description: string;
+  name: string;
+};
+export type SkillCatalog = {
+  revision?: string;
+  skills?: SkillSummary[];
+  supported?: boolean;
+};
+export type SkillDetail = {
+  content: string;
+  revision: string;
+  skill: SkillSummary;
 };
 export type AssetSlot = {
   accepted_types: string[];
@@ -1257,6 +1323,10 @@ export const {
   useDeleteSessionFilesystemPodV1AgentsSessionsSessionIdFilesystemDeleteMutation,
   useGetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetQuery,
   useLazyGetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetQuery,
+  useGetRuntimeInstanceSkillsQuery,
+  useLazyGetRuntimeInstanceSkillsQuery,
+  useGetRuntimeInstanceSkillDetailQuery,
+  useLazyGetRuntimeInstanceSkillDetailQuery,
   useListAgentTemplatesPodV1AgentsTemplatesGetQuery,
   useLazyListAgentTemplatesPodV1AgentsTemplatesGetQuery,
   useListWebResearchActivityPodV1AgentsWebResearchActivityGetQuery,

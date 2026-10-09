@@ -54,6 +54,7 @@ def build_react_platform_middleware_frame(
     max_tool_calls_per_turn: int | None = None,
     tool_call_text_recovery_enabled: bool = True,
     capability_middleware: Sequence[AgentMiddleware] = (),
+    skills_middleware: Sequence[AgentMiddleware] = (),
     capability_hitl: Mapping[str, CapabilityHitlBinding] | None = None,
 ) -> list[AgentMiddleware]:
     """
@@ -84,6 +85,7 @@ def build_react_platform_middleware_frame(
             kpi=kpi,
         ),
         DynamicPromptMiddleware(available_tool_names=available_tool_names),
+        *skills_middleware,
         # --- CAPABILITY BLOCK INSERTION SLOT (#1973, RFC §5.3) ---
         *capability_middleware,
         # Just outside tracing on purpose: every retried attempt is then a real

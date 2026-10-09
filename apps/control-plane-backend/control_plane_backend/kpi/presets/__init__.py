@@ -48,6 +48,10 @@ from control_plane_backend.kpi.presets.sessions_by_scope import (
 from control_plane_backend.kpi.presets.sessions_over_time import (
     SESSIONS_OVER_TIME_PRESET,
 )
+from control_plane_backend.kpi.presets.skill_usage import (
+    SKILL_USAGE_PRESET,
+    USER_SKILL_USAGE_PRESET,
+)
 from control_plane_backend.kpi.presets.storage_by_team import STORAGE_BY_TEAM_PRESET
 from control_plane_backend.kpi.presets.token_usage_by_agent import (
     TOKEN_USAGE_BY_AGENT_PRESET,
@@ -93,6 +97,8 @@ from control_plane_backend.kpi.presets.web_research_summary import (
 )
 
 PRESETS: list[PresetDef] = [
+    SKILL_USAGE_PRESET,
+    USER_SKILL_USAGE_PRESET,
     ACTIVE_USERS_OVER_TIME_PRESET,
     UNIQUE_USERS_TOTAL_PRESET,
     SESSIONS_OVER_TIME_PRESET,

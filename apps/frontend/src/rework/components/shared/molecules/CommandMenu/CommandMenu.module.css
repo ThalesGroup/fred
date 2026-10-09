@@ -30,6 +30,7 @@
   padding: var(--spacing-2xs);
   max-height: 40vh;
   overflow-y: auto;
+  color: var(--on-surface);
 }
 
 .group:not(:first-child) {
@@ -72,21 +73,25 @@
   font-size: 0.875rem;
 }
 
+.promptIcon {
+  background: var(--info-container);
+  color: var(--on-info-container);
+}
+
 .rowText {
   display: flex;
   flex: 1;
-  align-items: baseline;
-  gap: var(--spacing-s);
+  flex-direction: column;
+  gap: var(--spacing-2xs);
   min-width: 0;
 }
 
-/* The command never truncates — it is what the user is about to type. The
- * description beside it gives up the width instead. */
 .rowLabel {
-  flex-shrink: 0;
+  flex-shrink: 1;
   color: var(--on-surface);
   font: var(--font-body-medium);
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 /* Shown in place of the list when there is nothing to offer. */
@@ -97,12 +102,28 @@
   font: var(--font-body-medium);
 }
 
-.rowSublabel {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
+.rowHeading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--spacing-2xs) var(--spacing-s);
+}
+
+.argumentHint {
   color: var(--on-surface-retreat);
   font: var(--font-body-small);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+}
+
+.rowDescription {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+  font-style: italic;
+  overflow-wrap: anywhere;
+}
+
+.sourceLabel {
+  flex-shrink: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
 }

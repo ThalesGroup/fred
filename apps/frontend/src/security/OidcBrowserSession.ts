@@ -33,9 +33,18 @@ export class OidcBrowserSession {
   private invalidated = false;
   private readonly redirectUri: string;
 
-  constructor(issuer: string, clientId: string, apiScope: string | undefined, redirectUri: string) {
+  constructor(
+    issuer: string,
+    clientId: string,
+    apiScope: string | undefined,
+    redirectUri: string,
+    provider: "keycloak" | "oidc" = "oidc",
+  ) {
     this.redirectUri = redirectUri;
-    const scope = ["openid", "profile", "offline_access", apiScope].filter(Boolean).join(" ");
+    // Keycloak issues ordinary refresh tokens without the offline-access grant.
+    const scope = ["openid", "profile", provider === "oidc" ? "offline_access" : undefined, apiScope]
+      .filter(Boolean)
+      .join(" ");
     this.manager = new UserManager({
       authority: issuer.replace(/\/+$/, ""),
       client_id: clientId,

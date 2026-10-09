@@ -21,6 +21,7 @@ import { ConversationOutlineRail } from "@shared/molecules/ConversationOutlineRa
 import { sameTurnIds, toOutlinePreview, toTurnIds } from "@shared/molecules/ConversationOutlineRail/outlineItems";
 import { RichInputField } from "@shared/molecules/RichInputField/RichInputField";
 import { SessionTitleEditor } from "@shared/molecules/SessionTitleEditor/SessionTitleEditor";
+import SkillDetailPanel from "@shared/molecules/SkillDetailPanel/SkillDetailPanel";
 import CommandPromptPanel from "@shared/molecules/CommandPromptPanel/CommandPromptPanel";
 import { CommandMenu } from "@shared/molecules/CommandMenu/CommandMenu";
 import { FullReasoningPanel } from "@shared/molecules/FullReasoningPanel/FullReasoningPanel";
@@ -31,7 +32,13 @@ import { DocumentScopePanel } from "@shared/molecules/DocumentScopePanel/Documen
 import { AgentTodoPanel } from "@shared/molecules/AgentTodoPanel/AgentTodoPanel";
 import { TraceDetailDrawer } from "@shared/molecules/ThoughtTrace/TraceDetailDrawer/TraceDetailDrawer";
 import { TraceDrawerProvider } from "@shared/molecules/ThoughtTrace/traceDrawerContext";
-import { findTraceEntry, traceEntryKey, type TraceEntry } from "../../../utils/traceUtils";
+import {
+  findTraceEntry,
+  skillFileReadOf,
+  skillLoadOf,
+  traceEntryKey,
+  type TraceEntry,
+} from "../../../utils/traceUtils";
 import { isAgentTodoSnapshotSettled, latestAgentTodoSnapshot, presentAgentTodos } from "../../../utils/agentTodo";
 import { ComposerActionsMenu } from "@shared/molecules/ComposerActionsMenu/ComposerActionsMenu";
 import { UploadWarningAckDialog } from "@shared/molecules/UploadWarningAckDialog/UploadWarningAckDialog";
@@ -58,6 +65,8 @@ import {
   useGetTeamQuery,
 } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import {
+  useGetAgentInstanceSkillDetailQuery,
+  useGetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetQuery,
   useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery,
   type ContextPromptSummary,
   type ManagedAgentInstanceSummary,
@@ -121,6 +130,8 @@ function ManagedChatWelcome({ agent }: { agent?: ManagedAgentInstanceSummary }) 
 }
 
 type ActivePushDrawer =
+  | { kind: "skill"; name: string }
+  | { kind: "skill-file"; entryKey: string }
   | { kind: "attachments" }
   | { kind: "capability"; key: string }
   | { kind: "document-scope" }
@@ -147,6 +158,25 @@ export default function ManagedChatPage() {
   // `InlineDrawer layout="push"` — sharing one slot keeps at most one open at
   // a time so their widths never cumulate.
   const [activePushDrawer, setActivePushDrawer] = useState<ActivePushDrawer>(null);
+  const openSkill = useCallback(
+    (name: string) =>
+      setActivePushDrawer((drawer) =>
+        drawer?.kind === "skill" && drawer.name === name ? null : { kind: "skill", name },
+      ),
+    [],
+  );
+  const previewSkillName = activePushDrawer?.kind === "skill" ? activePushDrawer.name : null;
+  const skillPreview = useGetAgentInstanceSkillDetailQuery(
+    { teamId, agentInstanceId, skillName: previewSkillName ?? "" },
+    { skip: !previewSkillName, refetchOnMountOrArgChange: true },
+  );
+  const previewScope = useRef({ teamId, agentInstanceId });
+  useEffect(() => {
+    if (previewScope.current.teamId !== teamId || previewScope.current.agentInstanceId !== agentInstanceId) {
+      setActivePushDrawer((drawer) => (drawer?.kind === "skill" || drawer?.kind === "skill-file" ? null : drawer));
+      previewScope.current = { teamId, agentInstanceId };
+    }
+  }, [teamId, agentInstanceId]);
   const attachmentsDrawerOpen = activePushDrawer?.kind === "attachments";
 
   const activeCapabilityKey = activePushDrawer?.kind === "capability" ? activePushDrawer.key : null;
@@ -157,8 +187,24 @@ export default function ManagedChatPage() {
   // as deltas arrive. Trace rows open it through TraceDrawerProvider.
   const [selectedTraceKey, setSelectedTraceKey] = useState<string | null>(null);
   const traceDrawerApi = useMemo(
-    () => ({ openTrace: (entry: TraceEntry) => setSelectedTraceKey(traceEntryKey(entry)) }),
-    [],
+    () => ({
+      openTrace: (entry: TraceEntry) => {
+        const skill = entry.kind === "solo" ? skillLoadOf(entry.message) : null;
+        if (skillFileReadOf(entry)) {
+          setSelectedTraceKey(null);
+          const entryKey = traceEntryKey(entry);
+          setActivePushDrawer((drawer) =>
+            drawer?.kind === "skill-file" && drawer.entryKey === entryKey ? null : { kind: "skill-file", entryKey },
+          );
+        } else if (skill) {
+          setSelectedTraceKey(null);
+          openSkill(skill.name);
+        } else {
+          setSelectedTraceKey(traceEntryKey(entry));
+        }
+      },
+    }),
+    [openSkill],
   );
 
   const { activeTeam } = useFrontendBootstrap();
@@ -169,6 +215,12 @@ export default function ManagedChatPage() {
   const isAdmin = isPersonalTeam || canAdministerAdmins;
 
   const chat = useManagedChat({ teamId, agentInstanceId });
+  const { currentData: agentTemplates } = useGetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetQuery({
+    teamId,
+  });
+  const agentCategory = agentTemplates?.find(
+    (template) => template.template_id === chat.agentInstance?.template_id,
+  )?.category;
 
   // Opening a push drawer is a statement about ONE conversation, so switching
   // conversations closes it: the panels (capability, attachments, document
@@ -263,6 +315,9 @@ export default function ManagedChatPage() {
   const [transcribeAudio] = useTranscribeAudioKnowledgeFlowV1AudioTranscriptionsPostMutation();
   // Re-resolved every render from the live messages so the open drawer streams.
   const selectedTraceEntry = selectedTraceKey ? findTraceEntry(chat.messages, selectedTraceKey) : null;
+  const fileTraceEntry =
+    activePushDrawer?.kind === "skill-file" ? findTraceEntry(chat.messages, activePushDrawer.entryKey) : null;
+  const previewFile = fileTraceEntry ? skillFileReadOf(fileTraceEntry) : null;
   const isInitialState =
     chat.threadMessages.length === 0 && !chat.waitResponse && !conversationUnresolved && chat.pendingHitl == null;
 
@@ -537,11 +592,20 @@ export default function ManagedChatPage() {
     (chat.sessionId !== null && chat.resumingAgentQuestionSessionId === chat.sessionId);
   const composerControlsDisabled = chat.waitResponse || chat.isLoadingHistory || awaitingAgentQuestion;
 
-  // `/` at the start of an empty composer. Owns the menu and resolves the
+  // Slash commands and inline skills. Owns the menu and resolves the
   // first token on submit, so `Tab` then `Enter` and `Enter` from the open
   // menu reach the same send.
   const commands = useComposerCommands({
     teamId,
+    agentInstanceId,
+    includePersonalCommands: agentCategory === "react",
+    personalTeamId: activeTeam?.id,
+    onRunSkill: (run) => void chat.runSkill(run),
+    onSkillError: (reason) =>
+      showError({
+        summary: t("chatbot.skills.errorTitle"),
+        detail: t(reason === "usage" ? "chatbot.skills.usage" : "chatbot.skills.unavailable"),
+      }),
     input: chat.input,
     setInput: chat.setInput,
     onRunCommand: (run) => void chat.runCommand(run),
@@ -555,11 +619,14 @@ export default function ManagedChatPage() {
 
   const composer = (
     <RichInputField
-      value={chat.input}
-      onChange={chat.setInput}
+      value={commands.composerValue}
+      onChange={commands.onComposerChange}
       onSend={commands.submit}
       onInterrupt={chat.waitResponse ? chat.handleAbort : undefined}
-      placeholder={t("chatbot.composerPlaceholder")}
+      placeholder={
+        commands.selectedSkillArgumentHint ??
+        t(commands.selectedSkills.length ? "chatbot.skills.requestPlaceholder" : "chatbot.composerPlaceholder")
+      }
       accessibleDescription={t("chatbot.composerPlaceholder")}
       commandTrigger={commands.trigger}
       aboveFieldSlot={commands.menu ? <CommandMenu {...commands.menu} /> : undefined}
@@ -573,6 +640,14 @@ export default function ManagedChatPage() {
       onVoiceInputError={reportVoiceInputError}
       focusEndRequestId={focusEndRequestId}
       showSendButton
+      inlineSkills={{
+        promptToken: commands.selectedPrompt,
+        tokens: commands.selectedSkills.map((token) => ({
+          ...token,
+          description: commands.skillDescriptions.get(token.name),
+          onOpen: openSkill,
+        })),
+      }}
       aboveTextSlot={
         chat.attachments.length > 0 ? (
           <AttachmentChips attachments={chat.attachments} onRemove={chat.removeAttachment} />
@@ -782,6 +857,8 @@ export default function ManagedChatPage() {
                         hitlFreeText={chat.hitlFreeText}
                         onHitlFreeTextChange={chat.setHitlFreeText}
                         onOpenCommandPrompt={openCommandPrompt}
+                        onOpenSkill={openSkill}
+                        skillDescriptions={commands.skillDescriptions}
                       />
                     )}
                   </div>
@@ -822,6 +899,21 @@ export default function ManagedChatPage() {
             capabilityIds={chat.capabilityIds}
             activeKey={activeCapabilityKey}
             onActiveKeyChange={handleCapabilityPanelChange}
+          />
+
+          <SkillDetailPanel
+            open={!!previewSkillName || activePushDrawer?.kind === "skill-file"}
+            file={activePushDrawer?.kind === "skill-file" ? previewFile : undefined}
+            name={previewSkillName ?? ""}
+            onClose={() =>
+              setActivePushDrawer((drawer) =>
+                drawer?.kind === "skill" || drawer?.kind === "skill-file" ? null : drawer,
+              )
+            }
+            detail={skillPreview.currentData}
+            loading={skillPreview.isFetching}
+            error={!!skillPreview.error}
+            onRetry={() => void skillPreview.refetch()}
           />
 
           <CommandPromptPanel

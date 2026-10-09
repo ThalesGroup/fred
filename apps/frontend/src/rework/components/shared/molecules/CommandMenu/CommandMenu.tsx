@@ -14,16 +14,19 @@
 
 import { memo, useEffect, useId, useRef, type MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
+import Icon from "@shared/atoms/Icon/Icon";
 import styles from "./CommandMenu.module.css";
 
-/** One invocable entry. Today always a library prompt carrying a command. */
-export interface CommandMenuEntry {
+/** A library prompt command or a platform skill suggestion. */
+export type CommandMenuEntry = {
+  source?: "platform" | "personal" | "team";
   promptId: string;
   command: string;
   name: string;
   description?: string | null;
+  argumentHint?: string | null;
   emoji?: string | null;
-}
+} & ({ kind: "skill" } | { kind: "prompt"; promptTeamId: string });
 
 interface CommandMenuProps {
   /** Id the composer points at with `aria-controls`. */
@@ -90,26 +93,46 @@ export const CommandMenu = memo(function CommandMenu({
     <div id={id} ref={listRef} className={styles.menu} role="listbox" aria-label={t("chatbot.commandMenu.ariaLabel")}>
       <div className={styles.group} role="group" aria-labelledby={headingId}>
         <div id={headingId} className={styles.groupTitle}>
-          {t("chatbot.commandMenu.promptsSection")}
+          {t(
+            entries.every((entry) => entry.kind === "skill")
+              ? "chatbot.skills.menuTitle"
+              : entries.some((entry) => entry.kind === "skill")
+                ? "chatbot.commandMenu.ariaLabel"
+                : "chatbot.commandMenu.promptsSection",
+          )}
         </div>
         {entries.map((entry, index) => (
           <div
-            key={entry.promptId}
+            key={`${entry.kind === "prompt" ? entry.promptTeamId : "platform"}:${entry.promptId}`}
             id={optionId(index)}
             className={styles.row}
             role="option"
             aria-selected={index === activeIndex}
             data-active={index === activeIndex}
+            title={entry.kind === "skill" ? t("chatbot.skills.platformProvided") : undefined}
+            aria-description={entry.kind === "skill" ? t("chatbot.skills.platformProvided") : undefined}
             onMouseMove={() => onFocusEntry(index)}
             onMouseDown={activate(index)}
           >
-            <span className={styles.rowIcon} aria-hidden>
-              {entry.emoji?.trim() || "/"}
+            <span className={`${styles.rowIcon} ${entry.kind === "prompt" ? styles.promptIcon : ""}`} aria-hidden>
+              {entry.kind === "skill" ? (
+                <Icon category="outlined" type="customPlatformSkill" />
+              ) : (
+                <Icon category="outlined" type="edit_note" />
+              )}
             </span>
             <span className={styles.rowText}>
-              <span className={styles.rowLabel}>/{entry.command}</span>
-              <span className={styles.rowSublabel}>{entry.description?.trim() || entry.name}</span>
+              <span className={styles.rowHeading}>
+                <span className={styles.rowLabel}>{entry.kind === "skill" ? entry.name : `/${entry.command}`}</span>
+                {entry.kind === "skill" && entry.argumentHint && (
+                  <span className={styles.argumentHint}>{` ${entry.argumentHint}`}</span>
+                )}
+              </span>
+              <em className={styles.rowDescription}>{entry.description?.trim() || entry.name}</em>
             </span>
+            {entry.source && (
+              <span className={styles.sourceLabel}>{t(`chatbot.commandMenu.sources.${entry.source}`)}</span>
+            )}
           </div>
         ))}
       </div>

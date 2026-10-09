@@ -103,7 +103,7 @@ describe("RichInputField command trigger", () => {
 
     expect(trigger.onQueryChange).not.toHaveBeenCalled();
     type("/");
-    expect(trigger.onQueryChange).toHaveBeenCalledWith("");
+    expect(trigger.onQueryChange).toHaveBeenCalledWith("", { start: 0, end: 1 });
   });
 
   it("reports nothing for a slash inside text", () => {
@@ -114,14 +114,26 @@ describe("RichInputField command trigger", () => {
     expect(trigger.onQueryChange).not.toHaveBeenCalled();
   });
 
+  it("reports an inline prefix only for the host's available command names", () => {
+    const trigger = binding({ inlineCommandNames: ["compte-rendu"] });
+    render(<Host trigger={trigger} onSend={vi.fn()} />);
+    type("Notes /comp");
+    expect(trigger.onQueryChange).toHaveBeenLastCalledWith("comp", { start: 6, end: 11 });
+    type("Notes /tmp/file");
+    expect(trigger.onQueryChange).toHaveBeenLastCalledWith(null);
+    vi.mocked(trigger.onQueryChange).mockClear();
+    type("Notes /summary");
+    expect(trigger.onQueryChange).not.toHaveBeenCalled();
+  });
+
   it("updates the query as the user types after the slash", () => {
     const trigger = binding();
     render(<Host trigger={trigger} onSend={vi.fn()} />);
 
     type("/");
     type("/su");
-    expect(trigger.onQueryChange).toHaveBeenNthCalledWith(1, "");
-    expect(trigger.onQueryChange).toHaveBeenNthCalledWith(2, "su");
+    expect(trigger.onQueryChange).toHaveBeenNthCalledWith(1, "", { start: 0, end: 1 });
+    expect(trigger.onQueryChange).toHaveBeenNthCalledWith(2, "su", { start: 0, end: 3 });
   });
 
   it("closes when the slash is deleted away", () => {

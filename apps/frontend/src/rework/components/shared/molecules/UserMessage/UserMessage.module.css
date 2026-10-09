@@ -19,3 +19,12 @@
   font: var(--font-body-large);
   white-space: pre-wrap;
 }
+
+.skillTurn {
+  font: var(--font-body-large);
+  white-space: pre-wrap;
+}
+
+.skillTurn > p {
+  display: inline;
+}

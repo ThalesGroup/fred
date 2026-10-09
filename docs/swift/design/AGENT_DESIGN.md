@@ -90,7 +90,7 @@ This is the right runtime shape because it stays close to LangChain/LangGraph.
 It currently provides:
 
 - tool-aware system prompt construction
-- shared Mermaid rendering prompt policy injection
+- shared platform skill discovery and loading when configured
 - MCP/local tool resolution through `MCPRuntime`
 - optional tool-level HITL approval gating
 - fallback path when `langchain.agents.create_agent` is unavailable
@@ -548,20 +548,17 @@ Examples in `fred-agents`: `fred.github.sentinel` (locked to OpenSearch MCP),
 catalog label shown when browsing templates; the `display_name` the operator
 enters at enrollment becomes the instance's identity within the team.
 
-**Shared prompt bundles.** Cross-pod prompt fragments (e.g. the Mermaid-safe
-Markdown output contract every shipped default agent follows) live as
-packaged Markdown under `fred_sdk.resources.prompts`, registered in
-`GLOBAL_BASE_PROMPT_RESOURCES`/`GLOBAL_BASE_PROMPT_MARKDOWN` — `fred-sdk` is
-the single source of truth for the *content*. `fred-runtime` **injects** the
-bundle at execution time (`compose_system_prompt()` in
-`react_prompting`, composed by `compose_system_prompt` after the two
-platform-wide blocks) rather than baking it into any agent's
-`system_prompt_template` or `FieldSpec` default — so it never appears in the
-agent editor and still applies when an operator overrides the whole prompt.
-Tool-specific non-negotiable behavior belongs in runtime-enforced contracts
-(MCP `agent_instructions`), the same execution-time model. Graph agents
-(mindmap, `GraphRuntime`) compose per-node prompts and do not pass through
-this suffix path — they never receive the bundle.
+**Platform procedures.** English `SKILL.md` workflows live in
+`fred_runtime/skills/`, including Mermaid diagram rules in `mermaid/SKILL.md`.
+Configured agents receive catalog metadata. ReAct uses confined shared skill
+tools and preloads explicit selections. Deep parents and children use native
+filesystem reads through `create_deep_agent(skills=["/skills/"])`; explicit
+selection does not preload instructions or guarantee a model read.
+Editable `system_prompt_template` and `FieldSpec` defaults remain raw agent text.
+The SDK's Markdown loaders return packaged resources verbatim; they do not append
+platform rules. Graph agents compose per-node prompts and remain outside this
+skill workflow. See `PROMPTS.md` for prompt-layer placement and the runtime
+execution contract for loading and continuity.
 
 ## Summary
 

@@ -13,10 +13,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { act, type ReactNode } from "react";
+import { SkillBadge } from "@shared/molecules/SkillBadge/SkillBadge";
+import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ChatMessage } from "../../../../slices/runtime/runtimeOpenApi";
+import type { ThreadMessage } from "../../../types/thread";
+import { ThoughtTrace } from "@shared/molecules/ThoughtTrace/ThoughtTrace";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -54,6 +58,8 @@ vi.mock("@shared/molecules/RichInputField/RichInputField", () => ({
     characterCount?: number;
     characterLimit?: number;
     focusEndRequestId?: number;
+    inlineSkills?: { tokens: { name: string; description?: string; onOpen: (name: string) => void }[] };
+    placeholder?: string;
   }) => (
     <div
       data-testid="composer"
@@ -62,11 +68,15 @@ vi.mock("@shared/molecules/RichInputField/RichInputField", () => ({
       data-character-count={props.characterCount}
       data-character-limit={props.characterLimit}
       data-focus-request={props.focusEndRequestId}
-    />
+      data-placeholder={props.placeholder}
+    >
+      {props.inlineSkills?.tokens.map((token) => <SkillBadge key={token.name} {...token} />)}
+    </div>
   ),
 }));
 vi.mock("./ConversationThread/ConversationThread", () => ({
   ConversationThread: (props: {
+    messages: ThreadMessage[];
     maxChatInputChars?: number;
     hitlFreeText: string;
     onHitlFreeTextChange: unknown;
@@ -78,12 +88,12 @@ vi.mock("./ConversationThread/ConversationThread", () => ({
       data-hitl-draft={props.hitlFreeText}
       data-has-hitl-change-handler={typeof props.onHitlFreeTextChange === "function"}
       data-loading={props.isLoading}
-    />
+    >
+      {props.messages.map((message) => (
+        <ThoughtTrace key={message.id} messages={message.traceMessages ?? []} />
+      ))}
+    </div>
   ),
-}));
-
-vi.mock("@shared/molecules/ThoughtTrace/traceDrawerContext", () => ({
-  TraceDrawerProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 vi.mock("../../../../hooks/useFrontendProperties", () => ({
   useFrontendProperties: () => ({ agentIconName: "person" }),
@@ -100,7 +110,33 @@ vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useAddPromptFavoriteMutation: () => [vi.fn()],
   useRemovePromptFavoriteMutation: () => [vi.fn()],
 }));
+const templateQuery = vi.hoisted(() => ({
+  currentData: [] as { template_id: string; category: string }[] | undefined,
+}));
+const commandQueries = vi.hoisted(() => vi.fn());
+const skillPreviewQuery = vi.hoisted(() => vi.fn());
+const previewResult = vi.hoisted(() => ({
+  currentData: undefined as unknown,
+  isFetching: false,
+  error: undefined as unknown,
+  refetch: vi.fn(),
+}));
 vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
+  useGetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetQuery: () => templateQuery,
+  useGetAgentInstanceSkillsQuery: () => ({
+    currentData: {
+      supported: true,
+      skills: [
+        { name: "compare-options", description: "Compare", argument_hint: "[options]" },
+        { name: "review", description: "Review" },
+      ],
+    },
+  }),
+  useGetAgentInstanceSkillDetailQuery: (args: unknown, options: unknown) => {
+    skillPreviewQuery(args, options);
+    return previewResult;
+  },
+
   useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery: () => [
     () => ({ unwrap: async () => ({ text: "" }) }),
   ],
@@ -113,7 +149,10 @@ vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
   useGetTeamPromptCategoriesControlPlaneV1TeamsTeamIdPromptCategoriesGetQuery: () => ({ data: [] }),
   // The composer's command list — no prompt carries a command here, so the
   // trigger stays closed and the composer behaves as it did before.
-  useGetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetQuery: () => ({ data: [] }),
+  useGetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetQuery: (args: unknown, options: unknown) => {
+    commandQueries(args, options);
+    return { currentData: [] };
+  },
 }));
 vi.mock("@hooks/useTeamCapabilities.ts", () => ({
   useTeamCapabilities: () => ({ canAdministerAdmins: false }),
@@ -813,4 +852,225 @@ describe("ManagedChatPage — entering a conversation puts the cursor in the com
 
     expect(focusRequest()).toBe(after);
   });
+});
+
+describe("ManagedChatPage skill preview", () => {
+  it.each([
+    { origin: "user", child: false },
+    { origin: "agent", child: false },
+    { origin: "agent", child: true },
+  ])("previews a $origin load from its trace row and toggles it closed (child: $child)", ({ origin, child }) => {
+    const load: ChatMessage = {
+      session_id: "session-1",
+      exchange_id: "exchange-1",
+      rank: 1,
+      timestamp: "2026-10-07T10:00:00Z",
+      role: "system",
+      channel: "system_note",
+      parts: [{ type: "text", text: "Loaded instructions" }],
+      metadata: { extras: { skill_load: { name: "compte-rendu", origin, load_id: "load", child } } },
+    };
+    chatValue = baseChatValue([load]);
+    chatValue.threadMessages = [{ ...renderedTurn, traceMessages: [load] }];
+    chatValue.input = "Keep my draft";
+    const setInput = vi.fn();
+    const handleSend = vi.fn();
+    chatValue.setInput = setInput;
+    chatValue.handleSend = handleSend;
+    previewResult.currentData = {
+      skill: { name: "compte-rendu", description: "Prepare meeting minutes", argument_hint: "[notes]" },
+      revision: "snapshot",
+      content: "## Minutes\nRead **notes**.",
+    };
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    try {
+      act(() => root.render(<ManagedChatPage />));
+      const skill = container.querySelector<HTMLButtonElement>('[aria-label="1. chatbot.skills.loaded: compte-rendu"]');
+      expect(skill?.type).toBe("button");
+      act(() => skill!.click());
+      expect(skillPreviewQuery).toHaveBeenLastCalledWith(
+        { teamId: "team-1", agentInstanceId: "agent-1", skillName: "compte-rendu" },
+        { skip: false, refetchOnMountOrArgChange: true },
+      );
+      expect(container.querySelector('aside[data-open="true"]')?.textContent).toContain("Prepare meeting minutes");
+      expect(container.querySelector("strong")?.textContent).toBe("notes");
+      act(() => skill!.click());
+      expect(container.textContent).not.toContain("Prepare meeting minutes");
+      expect(setInput).not.toHaveBeenCalled();
+      expect(handleSend).not.toHaveBeenCalled();
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+      previewResult.currentData = undefined;
+    }
+  });
+
+  it("opens the exclusive right-hand panel without sending or changing the selected request", () => {
+    chatValue = baseChatValue([]);
+    chatValue.input = "/compare-options Keep this request";
+    const setInput = vi.fn();
+    const handleSend = vi.fn();
+    chatValue.setInput = setInput;
+    chatValue.handleSend = handleSend;
+    previewResult.currentData = {
+      skill: { name: "compare-options", description: "Compare alternatives", argument_hint: "[options]" },
+      revision: "snapshot",
+      content: "---\nname: compare-options\n---\n## Procedure\nRead **evidence**.",
+    };
+    previewResult.error = undefined;
+    previewResult.isFetching = false;
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    try {
+      act(() => root.render(<ManagedChatPage />));
+      expect(skillPreviewQuery).toHaveBeenLastCalledWith(
+        { teamId: "team-1", agentInstanceId: "agent-1", skillName: "" },
+        { skip: true, refetchOnMountOrArgChange: true },
+      );
+      const skill = container.querySelector<HTMLButtonElement>('[aria-label="chatbot.skills.open"]');
+      expect(skill).not.toBeNull();
+      expect(skill?.title).toBe("chatbot.skills.platformProvided\nCompare");
+      expect(container.querySelector('[data-testid="composer"]')?.getAttribute("data-placeholder")).toBe("[options]");
+      act(() => skill!.click());
+      expect(skillPreviewQuery).toHaveBeenLastCalledWith(
+        { teamId: "team-1", agentInstanceId: "agent-1", skillName: "compare-options" },
+        { skip: false, refetchOnMountOrArgChange: true },
+      );
+      expect(container.textContent).not.toContain("chatbot.skills.currentVersion");
+      expect(container.querySelector('aside[data-open="true"]')?.getAttribute("data-title-size")).toBe("large");
+      expect(container.textContent).toContain("Compare alternatives");
+      expect(container.querySelector("strong")?.textContent).toBe("evidence");
+      expect(container.textContent).not.toContain("name: compare-options");
+      expect(setInput).not.toHaveBeenCalled();
+      expect(handleSend).not.toHaveBeenCalled();
+      act(() => skill!.click());
+      expect(container.textContent).not.toContain("Compare alternatives");
+      expect(skillPreviewQuery).toHaveBeenLastCalledWith(
+        { teamId: "team-1", agentInstanceId: "agent-1", skillName: "" },
+        { skip: true, refetchOnMountOrArgChange: true },
+      );
+      act(() => skill!.click());
+      expect(container.textContent).toContain("Compare alternatives");
+      act(() => rail.footerLaunchers.find((launcher) => launcher.key === "full-reasoning")!.onOpen());
+      expect(container.textContent).not.toContain("Compare alternatives");
+      chatValue.input = "/review ";
+      act(() => root.render(<ManagedChatPage />));
+      expect(container.querySelector('[data-testid="composer"]')?.getAttribute("data-placeholder")).toBe(
+        "chatbot.skills.requestPlaceholder",
+      );
+      chatValue.input = "";
+      act(() => root.render(<ManagedChatPage />));
+      expect(container.querySelector('[data-testid="composer"]')?.getAttribute("data-placeholder")).toBe(
+        "chatbot.composerPlaceholder",
+      );
+      expect(setInput).not.toHaveBeenCalled();
+      expect(handleSend).not.toHaveBeenCalled();
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+      previewResult.currentData = undefined;
+    }
+  });
+});
+
+describe("ManagedChatPage skill reference preview", () => {
+  it.each(["read_skill_file", "read_file"])(
+    "opens stored file text from %s by keyboard, replaces the skill and toggles closed without changing the draft",
+    (toolName) => {
+      const common = { session_id: "session-1", exchange_id: "exchange-1", timestamp: "2026-10-07T10:00:00Z" };
+      const call: ChatMessage = {
+        ...common,
+        rank: 1,
+        role: "assistant",
+        channel: "tool_call",
+        parts: [
+          {
+            type: "tool_call",
+            call_id: "ref",
+            name: toolName,
+            args:
+              toolName === "read_file"
+                ? { file_path: "/skills/compare-options/references/model.md", offset: 1, limit: 1 }
+                : { name: "compare-options", path: "references/model.md" },
+          },
+        ],
+      };
+      const result: ChatMessage = {
+        ...common,
+        rank: 2,
+        role: "tool",
+        channel: "tool_result",
+        parts: [{ type: "tool_result", call_id: "ref", ok: true, content: "## Stored reference\n**Historical** text" }],
+      };
+      chatValue = baseChatValue([call, result]);
+      chatValue.threadMessages = [{ ...renderedTurn, traceMessages: [call, result] }];
+      chatValue.input = "/compare-options Keep draft";
+      const setInput = vi.fn();
+      chatValue.setInput = setInput;
+      const handleSend = vi.fn();
+      chatValue.handleSend = handleSend;
+      previewResult.currentData = {
+        skill: { name: "compare-options", description: "Current skill description" },
+        revision: "now",
+        content: "Current instructions",
+      };
+      const container = document.createElement("div");
+      document.body.appendChild(container);
+      const root = createRoot(container);
+      try {
+        act(() => root.render(<ManagedChatPage />));
+        act(() => container.querySelector<HTMLButtonElement>('[aria-label="chatbot.skills.open"]')!.click());
+        expect(container.textContent).toContain("Current skill description");
+        const row = container.querySelector<HTMLElement>(
+          '[aria-label="1. rework.chatTrace.toolLabels.readSkillFile: references/model.md"]',
+        );
+        expect(row).not.toBeNull();
+        act(() => row!.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true })));
+        expect(container.textContent).not.toContain("Current skill description");
+        expect(container.querySelector('aside[data-open="true"]')?.textContent).toContain("Historical");
+        expect(skillPreviewQuery).toHaveBeenLastCalledWith(
+          expect.objectContaining({ skillName: "" }),
+          expect.objectContaining({ skip: true }),
+        );
+        act(() => row!.click());
+        expect(container.querySelector('aside[data-open="true"]')).toBeNull();
+        expect(setInput).not.toHaveBeenCalled();
+        expect(handleSend).not.toHaveBeenCalled();
+      } finally {
+        act(() => root.unmount());
+        container.remove();
+        previewResult.currentData = undefined;
+      }
+    },
+  );
+});
+
+describe("ManagedChatPage ReAct slash prompt sources", () => {
+  it.each(["react", "deep", "graph", "proxy", "unresolved", "other-template"])(
+    "enables personal commands only for the current resolved ReAct template: %s",
+    (category) => {
+      bootstrap.activeTeamId = "personal-1";
+      chatValue = { ...baseChatValue([]), agentInstance: { template_id: "runtime:agent-1" } };
+      templateQuery.currentData =
+        category === "unresolved"
+          ? undefined
+          : [
+              {
+                template_id: category === "other-template" ? "runtime:other" : "runtime:agent-1",
+                category: category === "other-template" ? "react" : category,
+              },
+            ];
+      commandQueries.mockClear();
+      renderToStaticMarkup(<ManagedChatPage />);
+      expect(commandQueries.mock.calls.slice(-2)).toEqual([
+        [{ teamId: "team-1" }, { skip: false }],
+        [{ teamId: "personal-1" }, { skip: category !== "react" }],
+      ]);
+      templateQuery.currentData = [];
+      bootstrap.activeTeamId = "team-1";
+    },
+  );
 });

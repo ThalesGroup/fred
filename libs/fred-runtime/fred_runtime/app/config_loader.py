@@ -68,6 +68,14 @@ def _parse_agent_pod_config(config_file: str) -> AgentPodConfig:
 
     payload = parse_yaml_mapping_file(config_file)
     configuration = AgentPodConfig.model_validate(payload)
+    if configuration.skills is not None and configuration.skills.directory != "package":
+        from pathlib import Path
+
+        directory = Path(configuration.skills.directory)
+        if not directory.is_absolute():
+            configuration.skills.directory = str(
+                Path(config_file).resolve().parent / directory
+            )
     return apply_external_catalog_overrides(configuration)
 
 

@@ -168,6 +168,24 @@ describe("ThoughtTrace", () => {
     expect(html).toContain("310ms");
   });
 
+  it.each([
+    { origin: "user", child: false },
+    { origin: "user", child: true },
+    { origin: "agent", child: false },
+    { origin: "agent", child: true },
+  ])("numbers the $origin skill load before the tool steps (child: $child)", ({ origin, child }) => {
+    const load = msg({
+      role: "system",
+      channel: "system_note",
+      metadata: { extras: { skill_load: { name: "compte-rendu", origin, load_id: "load", child } } },
+    });
+    const html = render([load, load, ...TRACE], false);
+    expect([...html.matchAll(/>([123])</g)].map((match) => match[1])).toEqual(["1", "2", "3"]);
+    expect(html.indexOf(">1<")).toBeLessThan(html.indexOf(">chatbot.skills.loaded<"));
+    expect(html.indexOf(">chatbot.skills.loaded<")).toBeLessThan(html.indexOf(">2<"));
+    expect(html).toContain(`chatbot.skills.origin${origin === "user" ? "User" : child ? "Child" : "Agent"}`);
+  });
+
   it("collapses to the summary line alone once the turn is done", () => {
     const html = render(TRACE, true);
     expect(html).not.toContain("rework.chatTrace.phase.planning");

@@ -43,6 +43,7 @@ from fred_core import (
 from fred_core.common import TeamId
 from fred_core.kpi import runtime_stage_timer
 from fred_core.security.structure import PrincipalContext
+from fred_sdk.contracts.skills import SkillCatalog, SkillDetail
 from pydantic import ValidationError
 
 from control_plane_backend.agent_instances.store import AgentInstanceRecord
@@ -1436,7 +1437,9 @@ async def post_marketplace_prompt_import(
             )
             return MarketplaceImportResult(team_id=str(target_team_id), prompt=summary)
         except PromptRequestError as exc:
-            return MarketplaceImportResult(team_id=str(target_team_id), error=str(exc))
+            return MarketplaceImportResult(
+                team_id=str(target_team_id), error=str(exc), error_code=exc.code
+            )
 
     # Dedupe (preserving order) so two imports into the same team can't race on
     # the `_imported-N` suffix; distinct targets have no ordering dependency, so
@@ -1995,6 +1998,70 @@ async def post_prepare_runtime_agent_execution(
         )
     except ExecutionPreparationError as exc:
         raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
+
+
+@router.get(
+    "/teams/{team_id}/agent-instances/{agent_instance_id}/skills",
+    response_model=SkillCatalog,
+    operation_id="get_agent_instance_skills",
+)
+async def get_agent_instance_skills(
+    team_id: Annotated[TeamId, Path()],
+    agent_instance_id: Annotated[str, Path(min_length=1)],
+    deps: ProductDependencies,
+    http_request: Request,
+    user: KeycloakUser = Depends(get_current_user),
+) -> SkillCatalog:
+    """Discover skills on the selected instance after team-use authorization."""
+    from control_plane_backend.product.skills import get_instance_skills
+
+    team_id = await require_team_access(
+        user,
+        team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_USE_TEAM_AGENTS],
+    )
+    try:
+        return await get_instance_skills(
+            team_id, agent_instance_id, deps, http_request.headers.get("Authorization")
+        )
+    except ExecutionPreparationError as exc:
+        raise HTTPException(status_code=exc.http_status, detail=str(exc)) from None
+
+
+@router.get(
+    "/teams/{team_id}/agent-instances/{agent_instance_id}/skills/{skill_name}",
+    response_model=SkillDetail,
+    operation_id="get_agent_instance_skill_detail",
+)
+async def get_agent_instance_skill_detail(
+    team_id: Annotated[TeamId, Path()],
+    agent_instance_id: Annotated[str, Path(min_length=1)],
+    skill_name: Annotated[
+        str, Path(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$", max_length=64)
+    ],
+    deps: ProductDependencies,
+    http_request: Request,
+    user: KeycloakUser = Depends(get_current_user),
+) -> SkillDetail:
+    from control_plane_backend.product.skills import get_instance_skill_detail
+
+    team_id = await require_team_access(
+        user,
+        team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_USE_TEAM_AGENTS],
+    )
+    try:
+        return await get_instance_skill_detail(
+            team_id,
+            agent_instance_id,
+            skill_name,
+            deps,
+            http_request.headers.get("Authorization"),
+        )
+    except ExecutionPreparationError as exc:
+        raise HTTPException(status_code=exc.http_status, detail=str(exc)) from None
 
 
 @router.post(

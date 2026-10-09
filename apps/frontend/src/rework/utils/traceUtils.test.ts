@@ -15,6 +15,8 @@
 import { describe, it, expect } from "vitest";
 import type { ChatMessage } from "../../slices/runtime/runtimeOpenApi";
 import {
+  skillLoadOf,
+  skillFileReadOf,
   asFailedSqlQueryResult,
   asRagSearchResult,
   asSqlQueryResult,
@@ -1412,3 +1414,113 @@ describe("native web research trace rows", () => {
     expect(toolDiscriminator(fetch)).toBeNull();
   });
 });
+describe("skill load history", () => {
+  it.each(["user", "agent"] as const)("retains compact %s attribution and hides successful body traces", (origin) => {
+    const step = msg({
+      role: "system",
+      channel: "system_note",
+      metadata: { extras: { skill_load: { name: "compte-rendu", origin, load_id: "load", child: false } } },
+    });
+    const rows = groupTraceEntries([
+      toolCallMsg("load", "load_skill", { name: "compte-rendu" }),
+      step,
+      toolResultMsg("load", "PRIVATE BODY"),
+      step,
+    ]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].kind).toBe("solo");
+    expect(skillLoadOf(step)).toMatchObject({ name: "compte-rendu", origin, child: false });
+    expect(entryLabel(rows[0], (key) => key)).toBe("chatbot.skills.loaded");
+    expect(traceRows(rows).map((row) => row.index)).toEqual([1]);
+  });
+  it("retains child identity and leaves failed loads inspectable", () => {
+    const step = msg({
+      role: "system",
+      channel: "system_note",
+      metadata: {
+        extras: {
+          skill_load: { name: "compte-rendu", origin: "agent", load_id: "child:load", child: true, child_id: "child" },
+        },
+      },
+    });
+    expect(skillLoadOf(step)?.child).toBe(true);
+    const rows = groupTraceEntries([
+      step,
+      toolCallMsg("failed", "load_skill"),
+      toolResultMsg("failed", "Unavailable", false),
+    ]);
+    expect(rows).toHaveLength(2);
+    expect(rows[1].kind).toBe("combo");
+    expect(traceRows(rows).map((row) => row.index)).toEqual([1, 2]);
+  });
+});
+
+describe("skill file read preview", () => {
+  it("opens only a successful canonical read and preserves the exact returned text", () => {
+    const call = toolCallMsg("ref", "read_skill_file", { name: "compte-rendu", path: "references/model.md" });
+    const result = toolResultMsg("ref", "## Archived model\n**Exact** text");
+    const [entry] = groupTraceEntries([call, result]);
+    expect(skillFileReadOf(entry)).toEqual({
+      name: "compte-rendu",
+      path: "references/model.md",
+      content: "## Archived model\n**Exact** text",
+    });
+    expect(entryLabel(entry, (key) => key)).toBe("rework.chatTrace.toolLabels.readSkillFile");
+    expect(primaryTextForEntry(entry)).toBe("references/model.md");
+    expect(skillFileReadOf(groupTraceEntries([call])[0])).toBeNull();
+    expect(skillFileReadOf(groupTraceEntries([call, toolResultMsg("ref", "failed", false)])[0])).toBeNull();
+    expect(
+      skillFileReadOf(
+        groupTraceEntries([
+          toolCallMsg("ref", "custom_read_skill_file", { name: "compte-rendu", path: "model.md" }),
+          result,
+        ])[0],
+      ),
+    ).toBeNull();
+  });
+});
+
+describe("native Deep skill reference preview", () => {
+  it("uses the returned paginated excerpt and localized file label", () => {
+    const call = toolCallMsg("native-ref", "read_file", {
+      file_path: "/skills/compte-rendu/references/model.md",
+      offset: 1,
+      limit: 1,
+    });
+    const content = "File: /skills/compte-rendu/references/model.md\n2: **Exact window**";
+    const [entry] = groupTraceEntries([call, toolResultMsg("native-ref", content)]);
+    expect(skillFileReadOf(entry)).toEqual({
+      name: "compte-rendu",
+      path: "references/model.md",
+      content,
+      excerpt: true,
+    });
+    expect(entryLabel(entry, (key) => key)).toBe("rework.chatTrace.toolLabels.readSkillFile");
+    expect(primaryTextForEntry(entry)).toBe("references/model.md");
+    expect(skillFileReadOf(groupTraceEntries([call])[0])).toBeNull();
+    expect(skillFileReadOf(groupTraceEntries([call, toolResultMsg("native-ref", "failed", false)])[0])).toBeNull();
+  });
+  it.each([
+    "/ordinary.md",
+    "/skills/compte-rendu/SKILL.md",
+    "/skills/compte-rendu/../secret.md",
+    "/skills/compte-rendu/a\\secret.md",
+    "/skills/compte-rendu/a\u0000.md",
+  ])("rejects non-reference paths: %s", (file_path) => {
+    const [entry] = groupTraceEntries([toolCallMsg("ref", "read_file", { file_path }), toolResultMsg("ref", "text")]);
+    expect(skillFileReadOf(entry)).toBeNull();
+  });
+});
+
+it.each(["/skills/compte-rendu/references//model.md", "skills/compte-rendu/./references/model.md"])(
+  "previews native paths normalized by the backend: %s",
+  (file_path) => {
+    const [entry] = groupTraceEntries([toolCallMsg("ref", "read_file", { file_path }), toolResultMsg("ref", "exact")]);
+    expect(skillFileReadOf(entry)).toEqual({
+      name: "compte-rendu",
+      path: "references/model.md",
+      content: "exact",
+      excerpt: true,
+    });
+  },
+);

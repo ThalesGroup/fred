@@ -98,6 +98,7 @@ def build_tool_loop_compiled_react_agent(
     max_tool_calls_per_turn: int | None = None,
     tool_call_text_recovery_enabled: bool = True,
     capability_middleware: Sequence[AgentMiddleware] = (),
+    skills_middleware: Sequence[AgentMiddleware] = (),
     capability_hitl: Mapping[str, CapabilityHitlBinding] | None = None,
 ) -> object:
     """
@@ -135,6 +136,7 @@ def build_tool_loop_compiled_react_agent(
         max_tool_calls_per_turn=max_tool_calls_per_turn,
         tool_call_text_recovery_enabled=tool_call_text_recovery_enabled,
         capability_middleware=capability_middleware,
+        skills_middleware=skills_middleware,
         capability_hitl=capability_hitl,
     )
     # Names, per middleware, exactly what tools reach `create_agent` — the

@@ -16,7 +16,12 @@
 // Carries raw API types (ChatMessage, VectorSearchHit) because the rendering
 // layer (AssistantTurn, HitlPrompt) consumes them directly.
 
-import type { ChatMessage, CommandDescriptor, VectorSearchHit } from "../../slices/runtime/runtimeOpenApi";
+import type {
+  ChatMessage,
+  CommandDescriptor,
+  SkillInvocation,
+  VectorSearchHit,
+} from "../../slices/runtime/runtimeOpenApi";
 import type { TokenUsage } from "./conversation";
 import type { RawUiPart } from "./parts";
 import type { HitlAnswerSummary } from "../utils/hitlAnswerSummary";
@@ -58,4 +63,7 @@ export interface ThreadMessage {
    *  renders the command instead of `text` — which stays the full assembled
    *  text, since that is what replays to the model. */
   command?: CommandDescriptor | null;
+  /** Explicit user selection, from a live hint or the exchange's persisted load. */
+  skillName?: SkillInvocation["name"] | null;
+  skillNames?: SkillInvocation["name"][];
 }

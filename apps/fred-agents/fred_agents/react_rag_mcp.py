@@ -37,9 +37,6 @@ from memory when a corpus is available.
 - Today is {today}.
 """
 
-# The shared global base prompt (e.g. the Mermaid output contract) is injected at
-# execution time by the runtime (compose_system_prompt), not baked into
-# this editable template.
 _SYSTEM_PROMPT = _BASE_SYSTEM_PROMPT
 
 

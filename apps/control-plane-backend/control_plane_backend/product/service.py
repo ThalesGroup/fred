@@ -2406,6 +2406,7 @@ class EnrollmentError(Exception):
 # conflict share the status and the endpoint, and the form marks a different
 # input for each.
 PROMPT_COMMAND_CONFLICT = "prompt_command_conflict"
+PROMPT_COMMAND_RESERVED = "prompt_command_reserved"
 
 
 class PromptRequestError(Exception):
@@ -3650,6 +3651,16 @@ def _prompt_record_to_detail(record: PromptRecord) -> PromptDetail:
     )
 
 
+def _reject_reserved_prompt_command(command: str | None) -> None:
+    """Reserve the platform skill dispatcher while preserving legacy rows."""
+    if command == "skill":
+        raise PromptRequestError(
+            "The /skill command is reserved for platform skills; rename this prompt command.",
+            http_status=409,
+            code=PROMPT_COMMAND_RESERVED,
+        )
+
+
 async def create_prompt(
     *,
     user: KeycloakUser,
@@ -3672,6 +3683,7 @@ async def create_prompt(
     - `summary = await create_prompt(user=user, team_id=team_id, request=body, deps=deps)`
     """
 
+    _reject_reserved_prompt_command(request.command)
     record = PromptRecord(
         prompt_id=str(uuid4()),
         team_id=team_id,
@@ -3770,6 +3782,7 @@ async def list_prompt_commands(
             emoji=record.emoji,
         )
         for record in records
+        if record.command != "skill"
     ]
 
 
@@ -3840,6 +3853,12 @@ async def update_prompt(
     - `summary = await update_prompt(team_id, prompt_id, request, deps)`
     """
 
+    if request.command == "skill":
+        existing = await deps.get_prompt_store().get_for_team(prompt_id, team_id)
+        if existing is None:
+            return None
+        if existing.command != "skill":
+            _reject_reserved_prompt_command(request.command)
     try:
         updated = await deps.get_prompt_store().update(
             prompt_id,
@@ -3957,6 +3976,7 @@ async def promote_prompt(
         raise PromptRequestError(
             f"Prompt {prompt_id!r} not found for team {team_id!r}.", http_status=404
         )
+    _reject_reserved_prompt_command(source.command)
     target_team_id = TeamId(request.target_team_id)
     record = PromptRecord(
         prompt_id=str(uuid4()),
@@ -4150,6 +4170,7 @@ async def _next_imported_command(
     still fits the 64-character column.
     """
 
+    _reject_reserved_prompt_command(base_command)
     if base_command is None:
         return None
     taken = await store.list_commands_by_team(target_team_id)
@@ -4186,11 +4207,11 @@ async def import_published_prompt_into_team(
             f"Published prompt {prompt_id!r} not found in the marketplace.",
             http_status=404,
         )
-    name = await _next_imported_name(store, target_team_id, source.name)
     # Copied, unlike `category_id` just below: a category is an id pointing at
     # a row the destination team does not have, while a command is a plain
     # string meaning the same thing everywhere.
     command = await _next_imported_command(store, target_team_id, source.command)
+    name = await _next_imported_name(store, target_team_id, source.name)
     record = PromptRecord(
         prompt_id=str(uuid4()),
         team_id=target_team_id,

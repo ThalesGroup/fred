@@ -49,6 +49,7 @@ from fred_runtime.support.thinking import (
     strip_reasoning_from_history,
     thread_reasoning_within_open_turn,
 )
+from fred_sdk.contracts.context import RuntimeContext
 from fred_sdk.contracts.react_contract import (
     ReActInput,
     ReActMessage,
@@ -339,16 +340,13 @@ class _FakePortable:
     baggage: dict[str, object] = {}
 
 
-class _FakeRuntimeContext:
-    pass
-
-
 class _FakeBinding:
     portable_context = _FakePortable()
-    runtime_context = _FakeRuntimeContext()
+    runtime_context = RuntimeContext()
 
 
 class _FakeServices:
+    skills = None
     tracer = None
     metrics = None
 

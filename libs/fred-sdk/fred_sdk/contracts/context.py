@@ -46,6 +46,8 @@ from fred_core.model.models import ModelProvider
 from fred_core.store import VectorSearchHit
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 
+from .skills import SkillInvocation
+
 # NOTE: This module is the canonical home for portable context + UI parts.
 # Keep Link/Geo parts and RuntimeContext here to avoid circular imports.
 
@@ -412,6 +414,8 @@ class TurnCommand(BaseModel):
     appended_text: str = ""
     prompt_id: Optional[str] = None
     prompt_name: Optional[str] = None
+    draft_text: Optional[str] = None
+    draft_command_offset: Optional[int] = Field(default=None, ge=0)
 
 
 class RuntimeContext(BaseModel):
@@ -454,6 +458,20 @@ class RuntimeContext(BaseModel):
     agent_instance_id: Optional[str] = None
     template_agent_id: Optional[str] = None
     execution_action: Optional[Literal["execute", "resume"]] = None
+    skill: SkillInvocation | None = None
+    skills: list[SkillInvocation] | None = None
+
+    @model_validator(mode="after")
+    def validate_skill_selections(self) -> RuntimeContext:
+        if self.skill is not None and self.skills is not None:
+            raise ValueError("Use skills or legacy skill, not both")
+        if self.skills is not None:
+            self.skills = list({item.name: item for item in self.skills}.values())
+        return self
+
+    @property
+    def selected_skills(self) -> tuple[SkillInvocation, ...]:
+        return tuple(self.skills or ()) if self.skill is None else (self.skill,)
 
     # Group B — Auth delegation (mutable; refreshed in place by token refresh logic)
     access_token: Optional[str] = None

@@ -32,13 +32,13 @@ the canonical registry in `fred_sdk.contracts.prompt_utils.PROMPT_SAFE_TOKENS`.
 
 Supported user-authored tokens are:
 
-| Token | Meaning |
-| --- | --- |
-| `{today}` | ISO-8601 date at execution time |
+| Token                 | Meaning                          |
+| --------------------- | -------------------------------- |
+| `{today}`             | ISO-8601 date at execution time  |
 | `{response_language}` | Human-readable response language |
-| `{session_id}` | Active session identifier |
-| `{user_id}` | Authenticated user identifier |
-| `{agent_id}` | Agent definition identifier |
+| `{session_id}`        | Active session identifier        |
+| `{user_id}`           | Authenticated user identifier    |
+| `{agent_id}`          | Agent definition identifier      |
 
 Any `{…}` the renderer does not recognize is left exactly as written. That covers
 unknown simple tokens such as `{name}`, and equally non-simple patterns such as
@@ -125,13 +125,21 @@ already used for uncategorized prompts (`hashColorIndex`, frontend).
 
 ### 3.2 Prompt commands (PROMPT-CMD-01)
 
+`skill` is reserved for the legacy platform composer dispatcher `/skill <name> [request]` (new invocation uses `/<name>` within the request).
+Create, reassignment and promotion refuse it with HTTP 409 and
+`prompt_command_reserved`. Marketplace import returns HTTP 200 with that code
+in each refused target's `error_code` alongside `error`. Existing homonymous rows remain readable in the
+library and editable, including while keeping their old command, but are excluded
+from the slash catalog. Renaming restores their ordinary prompt shortcut. This
+reservation applies even when the selected runtime has no skills.
+
 A prompt may carry an optional `command`: a lowercase unaccented slug
 (`^[a-z0-9_-]+$`, at most 64 characters) that runs it from the chat composer by
 typing `/` plus that slug. Authoring it takes `team_editor`, like any other
 write to a prompt; any member of the team can then run it.
 
 **One namespace per team.** Uniqueness is guaranteed by the database, not by
-the application: a *partial* unique index on `(team_id, command)` restricted to
+the application: a _partial_ unique index on `(team_id, command)` restricted to
 `command IS NOT NULL`, so any number of prompts may carry none while a present
 one stays unique within its team. The namespace is the team rather than the
 prompt library specifically, which leaves room for a future team-scoped
@@ -142,7 +150,8 @@ the form can point at the right field: the store asks the database which
 constraint fired rather than parsing the driver's message (the name wins when
 both collide), and a command conflict carries an object detail
 `{"code": "prompt_command_conflict", "message": ...}`. A plain string detail
-remains the shape for every other prompt error.
+remains the shape for other prompt errors except the reserved-command error,
+which carries `{"code": "prompt_command_reserved", "message": ...}`.
 
 Copying a prompt carries the command with it. Importing a published prompt into
 a team that already holds that command appends the first free `-N` suffix from
@@ -162,6 +171,32 @@ The composer resolves a typed command against
 rows, and a command past the cap would resolve to nothing while the typed token
 went to the agent as ordinary text. Carrying no prompt text is what lets this
 listing be uncapped.
+
+For managed ReAct agents, the slash menu combines the chat team's commands
+with the caller's personal commands and the selected runtime's platform skills.
+The existing template category identifies ReAct; other execution families retain
+the current menu. Each query remains scoped to one authorized team, and a
+personal chat reads its library once. Entries show their source. Selecting a
+prompt preserves its owning team and id through completion and detail lookup;
+a typed prompt command prefers the chat team's match, then the personal one.
+An explicitly selected prompt homonym remains a prompt, while existing delimited
+skill recognition stays unchanged. Prompts without commands remain in the
+library panel. Changes of team/instance/source invalidate previous choices and
+late detail responses. An invalidated completed prompt requires command editing
+or reselection; it cannot become another source's homonym. Typed personal fallback
+waits for a resolved team catalog, while an explicitly selected personal row is
+independent of that discovery. No new endpoint, schema or runtime prompt loader
+is added.
+
+Managed chat supports one available prompt command alongside multiple explicit
+platform skills anywhere in the draft, in either selection order. Completion
+preserves text before and after each token. ReAct adds the personal prompt
+library to a team chat; other families keep their current library sources.
+Submission replaces only the prompt token with its authorized text, preserving
+both surrounding fragments and sending the skills as name-only selections.
+Repeated skill names load once per turn; all completed selections must remain
+available or the whole submission fails. History stores the canonical draft and chosen prompt offset for
+copy/edit and previews without resolving the prompt again.
 
 Running a command sends the **prompt's text**, not the command, and the turn
 records a descriptor of what was run (`RuntimeContext.command`, and the stored
@@ -196,11 +231,11 @@ prompt row. Name conflicts in the target team return HTTP 409.
 A session may attach zero, one, or many prompts as ordered chat context. This is
 persisted in the `session_context_prompts` association table:
 
-| Column | Meaning |
-| --- | --- |
-| `session_id` | Session metadata id |
-| `prompt_id` | Library prompt id |
-| `position` | Prompt order in the conversation context |
+| Column       | Meaning                                  |
+| ------------ | ---------------------------------------- |
+| `session_id` | Session metadata id                      |
+| `prompt_id`  | Library prompt id                        |
+| `position`   | Prompt order in the conversation context |
 
 `UpdateSessionRequest.context_prompt_ids` is a full ordered replacement set:
 
@@ -328,17 +363,50 @@ for the improvement proposal.
 
 ## 8. System Prompt Assembly (PROMPT-10)
 
+When enabled, ReAct receives platform skill names/descriptions, advisory argument
+hints and loading guidance inside the existing `<tools>` block. Its snapshot
+adapter and confined loading tools remain unchanged.
+
+Deep parents and native children receive the skill index from DeepAgents through
+`create_deep_agent(skills=["/skills/"])` and the explicit child's `skills` field.
+The native middleware appends its own skill section; Fred does not render a
+second catalog or build skills middleware. Full instructions and relative
+references load progressively with native `read_file` from the physical
+`/skills/` FilesystemBackend mount. Upstream owns metadata caching/formatting;
+existing Fred platform rules and disabled execution still apply.
+Associated resources are discovered from Markdown links/instructions in SKILL.md;
+for example, compte-rendu links references/modele-compte-rendu.md. Resolve a
+relative link from the directory containing that SKILL.md and use native
+read_file on its absolute mounted path. No extra references catalog is injected.
+
+The web composer and previews retain their validated startup service. Explicit
+preload applies only to ReAct. Deep preserves the canonical user invocation text
+without snapshot body validation or an injected instruction message; upstream
+discovery and model-driven read_file calls load its skills. Returned native instruction/reference text escapes reserved Fred
+tags at the existing tool boundary. Native file edits are visible on subsequent
+reads; web/ReAct snapshot refresh still requires restart. Resource and checkpoint
+semantics are defined in the runtime execution contract.
+
+Loaded messages identify skills as procedures rather than callable functions.
+Loading grants no tools or permissions, and advisory hints describe useful user
+input rather than JSON parameters. Only declared tools may be called. Model
+compliance remains probabilistic.
+
+Mermaid diagram rules live in the packaged `mermaid` skill. The composer advertises
+its metadata when that skill is configured; the full rules reach the model only
+through a user or model load. No global SDK prompt bundle is injected.
+
 `compose_system_prompt` (`fred_runtime/react/react_prompting.py`, shared by
 the ReAct and Deep runtimes) sends the model four XML-wrapped blocks. Their
 order in the prompt is also their precedence, and the clause that says so is
 part of the first block:
 
-| Order | Tag                     | Content                                                                                     | Edited by                    | Validated at save |
-| ----- | ----------------------- | ------------------------------------------------------------------------------------------- | ---------------------------- | ----------------- |
-| 1     | `platform_instructions` | Shipped platform instructions, ending with the precedence clause                            | Nobody (pod image)           | No, code-owned    |
-| 2     | `platform_prompt`       | Admin-editable platform prompt (Postgres row, else the pod default)                         | Platform admin               | Yes, 422          |
-| 3     | `tools`                 | Tool list grouped by MCP server with each server's `agent_instructions`, Deep's filesystem note, the Mermaid output contract | Pod operator (YAML), fred-sdk | No, code-owned; a remote server's tool descriptions are escaped as data |
-| 4     | `agent_instructions`    | The agent's rendered template, with every string tuning value substituted in                | Owning team                  | Yes, 422 on every string field |
+| Order | Tag                     | Content                                                                                                                           | Edited by                         | Validated at save                                                       |
+| ----- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- | ----------------------------------------------------------------------- |
+| 1     | `platform_instructions` | Shipped platform instructions, ending with the precedence clause                                                                  | Nobody (pod image)                | No, code-owned                                                          |
+| 2     | `platform_prompt`       | Admin-editable platform prompt (Postgres row, else the pod default)                                                               | Platform admin                    | Yes, 422                                                                |
+| 3     | `tools`                 | Tool list grouped by MCP server with each server's `agent_instructions`, Deep's filesystem note, and the configured skill catalog | Pod operator (YAML), fred-runtime | No, code-owned; a remote server's tool descriptions are escaped as data |
+| 4     | `agent_instructions`    | The agent's rendered template, with every string tuning value substituted in                                                      | Owning team                       | Yes, 422 on every string field                                          |
 
 Precedence, as written in `config/platform_prompt.json`, is the block order
 itself, spelled out as one chain by bare tag name: `platform_instructions >

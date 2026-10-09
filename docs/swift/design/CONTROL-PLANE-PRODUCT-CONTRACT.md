@@ -382,6 +382,55 @@ Do not model platform-owned selectors as generic tuning fields. In particular:
 - `require_tools: list[str]` — tool names the agent requires
 - `config_fields: list[ManagedAgentFieldSpec]` — configurable parameters owned by the MCP tool and persisted via `mcp_config_values`
 
+#### Skill catalog for a managed instance
+
+`GET /control-plane/v1/teams/{team_id}/agent-instances/{agent_instance_id}/skills`
+requires `CAN_USE_TEAM_AGENTS`, verifies the instance belongs to that team and
+is enabled, and proxies only its enabled `source_runtime_id`. It forwards the
+verified bearer identity to that runtime's authenticated metadata route; it never
+merges other pod catalogs. `SkillCatalog` contains only support, revision and
+name/description and optional advisory `argument_hint` metadata (defined by the
+runtime contract). A 404 from an older runtime means unsupported during
+rolling upgrades; an unavailable source and invalid upstream metadata fail safely.
+The composer fetches the actual selected instance and ignores stale data from
+previous selections. Runtime selection and load attribution are defined in the
+runtime execution contract.
+
+`GET /control-plane/v1/teams/{team_id}/agent-instances/{agent_instance_id}/skills/{skill_name}`
+provides a separate `SkillDetail` preview with the same `CAN_USE_TEAM_AGENTS`, team,
+instance availability and configured-source checks. It forwards verified identity,
+validates the typed response and selected skill name, and never falls back to another
+runtime. Runtime 404 remains an unavailable preview; malformed responses return 502.
+Only opening the inline skill label requests content. Preview leaves the composer
+and execution state intact and reads the current runtime snapshot. Technical
+version details are not exposed in the user preview.
+
+Successful `read_skill_file` trace activation previews the exact stored tool
+result in the same resizable right-hand panel (2026-10-07), replacing its current
+skill/file view. It performs no new read and leaves the draft intact; activating
+the same reference again closes it. Pending/failed reads retain ordinary trace
+details. Markdown is sanitized; other accepted text references are escaped.
+Successful native Deep `read_file` references under `/skills/<name>/` use the
+same panel. They are labeled as excerpts and render the exact returned window,
+including native pagination/line information, as escaped text.
+
+`GET /control-plane/v1/kpi/presets/skill_usage` reports successful procedure loads
+by skill and user/model origin on the existing date range. It shares KPI scope:
+`can_read_members` for an explicit team, `can_observe_platform` for the platform.
+The typed response contains `rows` (`skill_name`, `user_count`, `model_count`,
+`total`), `since`, `until` and `truncated`. It returns at most 100 skills ranked
+by total descending/name ascending. Platform, team and personal dashboards reuse a dedicated subsection, sortable table and
+five-minute query cache. Each space shows only its matching skill subsection;
+team display retains existing elevated-role gating and does not query personal
+skill usage.
+`GET /control-plane/v1/kpi/presets/user_skill_usage` (2026-10-07) returns the same
+shape for the authenticated user's own conversations across teams. Like existing
+personal presets it requires authentication, filters `dims.user_id` server-side,
+and rejects team parameters; user/model columns describe invocation origin,
+not which user's conversations are included. Members can view personal usage
+without elevated team permissions.
+Collection starts with instrumentation deployment, with no historical backfill.
+
 ### 3.3 Runtime binding stays internal
 
 `RuntimeBinding` is not a primary frontend product contract.
@@ -407,12 +456,11 @@ Execution semantics:
   - ReAct/Deep runtime also mirrors non-blank `prompts.system` onto
     `ReActAgentDefinition.system_prompt_template`
   - blank value means "keep the author-defined default prompt"
-  - Fred's shared global base prompt (the Mermaid output contract) is **not**
-    part of this editable value or the author-defined default. It is appended by
-    the runtime at execution time, after the effective/overridden prompt
-    (RUNTIME-09; see RUNTIME-EXECUTION-CONTRACT §8.12), so it applies uniformly
-    even when an operator overrides `prompts.system` and never appears in the
-    agent editor.
+  - Platform skill bodies, including Mermaid diagram rules, are **not** part
+    of this editable value or the author-defined default. Configured runtime
+    catalogs advertise metadata; explicit user or model loading supplies the
+    instructions through the ordinary conversation context. Overriding
+    `prompts.system` does not alter the runtime catalog or skill-loading tools.
 - Graph agents read prompt and setting values through `context.tuning_values`
 - tool-owned chat affordances are computed on the pod by
   `capability.chat_controls(config)` and shipped as
@@ -650,6 +698,7 @@ managed agent instances:
 Rules:
 
 - prompt ownership is team-scoped
+- `skill` is reserved for platform skills; command assignment/copy rules and legacy handling are defined in `PROMPTS.md` §3.2
 - the reserved system team `personal` is the personal prompt library; do not
   introduce a parallel user-scoped prompt API
 - prompt `text` uses the same template-validation contract as agent
@@ -1178,8 +1227,7 @@ Live impact before the fix: 6 frontend routes and 3 in-page controls were
 unreachable/disabled for all users.
 
 `PermissionSummary` now carries exactly `is_platform_admin` and
-`is_platform_observer` — unchanged, already OpenFGA-derived since review item
-4. (Superseded 2026-09-09 by §51: both booleans became `platform_roles`.)
+`is_platform_observer` — unchanged, already OpenFGA-derived since review item 4. (Superseded 2026-09-09 by §51: both booleans became `platform_roles`.)
 Team-scoped gating was never this field's job; it goes through
 `TeamWithPermissions.permissions` (`list[TeamPermission]`), already returned
 by every team-fetching endpoint and unaffected by this change.
@@ -4049,7 +4097,6 @@ version: existing admins become pending at the next startup and see the charter
 when they open their team. Unsetting the version promotes every pending admin
 at the next startup.
 
-
 ## 55. Contract Notes - platform announcements (2026-09-25, issue #2805)
 
 **What it is.** A platform admin authors announcements at runtime; every
@@ -4059,13 +4106,13 @@ configuration and is **removed** — see "Removal" below.
 
 **Model.** One `platform_announcement` row per announcement.
 
-| Field                                                | Meaning                                                                                        |
-| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `severity`                                           | `info \| warning \| error \| success`, the same `Literal` as `platform.frontend.upload_warning`. Fixes the banner's colour and icon; neither is separately authorable. |
-| `title`, `description_short`, `description_long`     | Locale → text maps (`fr`, `en`), resolved against the viewer's locale with an `en` fallback. The two descriptions are markdown. `description_long` empty for every locale is what removes the more-info action from the banner. |
-| `enabled`                                            | Whether it is delivered. Created disabled.                                                     |
-| `dismissible`                                        | Whether a user may close the banner.                                                           |
-| `content_version`                                    | Bumped when a reader-visible field changes — severity, any text, or `dismissible` — and when a disabled announcement is enabled again. **Never** when one is disabled. |
+| Field                                            | Meaning                                                                                                                                                                                                                         |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `severity`                                       | `info \| warning \| error \| success`, the same `Literal` as `platform.frontend.upload_warning`. Fixes the banner's colour and icon; neither is separately authorable.                                                          |
+| `title`, `description_short`, `description_long` | Locale → text maps (`fr`, `en`), resolved against the viewer's locale with an `en` fallback. The two descriptions are markdown. `description_long` empty for every locale is what removes the more-info action from the banner. |
+| `enabled`                                        | Whether it is delivered. Created disabled.                                                                                                                                                                                      |
+| `dismissible`                                    | Whether a user may close the banner.                                                                                                                                                                                            |
+| `content_version`                                | Bumped when a reader-visible field changes — severity, any text, or `dismissible` — and when a disabled announcement is enabled again. **Never** when one is disabled.                                                          |
 
 **`content_version` is the dismissal key.** The frontend records a dismissal in
 `localStorage` as `<id>@<content_version>`, so bumping the version is the only
@@ -4083,14 +4130,14 @@ banner show again.
 
 **Endpoints.**
 
-| Method | Path                                                             | Permission           |
-| ------ | ---------------------------------------------------------------- | -------------------- |
-| GET    | `/announcements/active`                                          | authenticated        |
-| GET    | `/admin/platform/announcements`                                  | `can_manage_platform` |
-| POST   | `/admin/platform/announcements`                                  | `can_manage_platform` |
-| PUT    | `/admin/platform/announcements/{id}`                             | `can_manage_platform` |
-| PUT    | `/admin/platform/announcements/{id}/enabled`                     | `can_manage_platform` |
-| DELETE | `/admin/platform/announcements/{id}`                             | `can_manage_platform` |
+| Method | Path                                         | Permission            |
+| ------ | -------------------------------------------- | --------------------- |
+| GET    | `/announcements/active`                      | authenticated         |
+| GET    | `/admin/platform/announcements`              | `can_manage_platform` |
+| POST   | `/admin/platform/announcements`              | `can_manage_platform` |
+| PUT    | `/admin/platform/announcements/{id}`         | `can_manage_platform` |
+| PUT    | `/admin/platform/announcements/{id}/enabled` | `can_manage_platform` |
+| DELETE | `/admin/platform/announcements/{id}`         | `can_manage_platform` |
 
 `/announcements/active` returns the enabled set and is gated by authentication
 only — an announcement is content every user is meant to see. Every admin
@@ -4138,7 +4185,9 @@ uncapped.
 **Error shape — one new code.** A prompt write that collides on the command
 returns 409 with an **object** detail, `{"code": "prompt_command_conflict",
 "message": ...}`, so a form can mark the command field rather than the name.
-Every other prompt error keeps the plain-string detail. The two conflicts are
+Reserved `skill` assignment also returns an object detail with
+`prompt_command_reserved`; legacy and batch-import rules are in `PROMPTS.md`
+§3.2. Other prompt errors keep plain-string detail. Name and command conflicts are
 told apart by asking the database which constraint fired, not by parsing the
 driver's message; a name collision wins when both apply.
 
@@ -4332,7 +4381,6 @@ be read. Direct identity-provider changes do not update platform account status.
 With the Keycloak directory and account status disabled, deletion writes no suspension. Exact refusal and retry
 scenarios are maintained in the
 [subject and account status specification](../../../openspec/changes/add-delegated-agent-execution/specs/delegation-subject-and-account-status/spec.md).
-
 
 ## Knowledge Flow ingestion admission and relaunch — 2026-09-26
 

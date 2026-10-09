@@ -1,4 +1,14 @@
-# How do I use Mermaid diagram design?
+---
+name: mermaid
+description: Create or repair Mermaid flowcharts for workflows, architectures and relationships using parse-safe diagram syntax.
+argument-hint: "[diagram goal or source] [constraints]"
+---
+
+# Parse-safe Mermaid diagrams
+
+Identify the diagram goal and its source from the request or conversation. For a
+repair, preserve the intended relationships while correcting the syntax. Ask for
+missing information essential to the diagram rather than inventing it.
 
 When you include Mermaid diagrams, follow these rules strictly so the diagram always parses:
 

@@ -61,6 +61,7 @@ from .context import (
     UiPart,
 )
 from .models import AgentDefinition
+from .skills import SkillLoadAttribution, SkillsPort
 from .web_research import WebResearchPort
 
 ChatModelHandle: TypeAlias = object
@@ -220,6 +221,7 @@ class StatusRuntimeEvent(RuntimeEventBase):
     kind: Literal[RuntimeEventKind.STATUS] = RuntimeEventKind.STATUS
     status: str = Field(..., min_length=1)
     detail: str | None = None
+    skill_load: SkillLoadAttribution | None = None
 
 
 class ThoughtStartEvent(RuntimeEventBase):
@@ -1618,6 +1620,7 @@ class RuntimeServices:
     # Appended last to preserve positional compatibility.
     conversation_filesystem: ConversationFilesystemPort | None = None
     web_research: WebResearchPort | None = None
+    skills: SkillsPort | None = None
 
 
 InputModelT = TypeVar("InputModelT", bound=BaseModel)

@@ -161,7 +161,7 @@ async function copyCanonical(relativePath) {
   }
   if (relativePath === generatedTypePath) {
     const applicationIconTypes =
-      'export type IconCategory = "outlined" | "rounded" | "sharp";\n\nconst customIcons = ["customAgent"] as const;\n\n';
+      'export type IconCategory = "outlined" | "rounded" | "sharp";\n\nconst customIcons = ["customAgent", "customPlatformSkill"] as const;\n\n';
     const materialType =
       "export type MaterialIconType = (typeof materialIcons)[number];";
     assert(

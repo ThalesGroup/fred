@@ -1,0 +1,47 @@
+## Why
+
+Fred agents cannot currently discover or load platform-owned `SKILL.md` workflows, and users cannot invoke them from managed web chat. Provide one shared implementation for ReAct, DeepAgent and Deep children, reusing the installed DeepAgents skills middleware.
+
+Tracking: [#2711](https://github.com/ThalesGroup/fred/issues/2711). The developer-confirmed scope extends that issue's original ReAct-only, model-facing slice to DeepAgent and explicit web invocation. Its prompt-layering and confined-read requirements remain applicable.
+
+## What Changes
+
+- Store platform-distributed skills and their references under `libs/fred-runtime/fred_runtime/skills/` and include them as `fred-runtime` package data. Discover them from the configured read-only directory in agent pods. Publish a validated startup snapshot for ReAct and the web catalog. Deep agents read the same physical directory through upstream FilesystemBackend; their native discovery is configured with create_deep_agent(skills=["/skills/"]). Design for a few dozen skills.
+- Put validated metadata and advisory argument hints inside ReAct's existing `<tools>` block. Deep parents and native children receive the upstream native index from `skills=` over the same source folder, without a second Fred-rendered catalog or per-agent selection.
+- Provide shared tools to load a skill and read its UTF-8 reference files. Deep parents and native children let `create_deep_agent` assemble native skills middleware via `skills=`; ReAct retains the Fred snapshot adapter. Keep Fred-specific prompt placement and confined snapshot reads for ReAct; do not install a general filesystem or shell on ReAct agents.
+- Mount the configured skill directory at `/skills/` through upstream `FilesystemBackend(root_dir=directory, virtual_mode=True)` in the Deep parent and native-child composite backend. Remove Deep snapshot files, synthetic discovery records and Fred-rendered native catalog guidance. Deny agent/capability writes through the existing filesystem permissions; deployed resources remain read-only on disk. Advertise canonical paths so Deep can use native `read_file` for instructions and references, preserving manual invocation, load attribution, reference previews and KPI. Expose only native filesystem skill access to Deep parent/native children; do not register Fred `load_skill`/`read_skill_file` tools there. ReAct retains its existing confined tools, and explicit web preload remains internal to ReAct; Deep selections remain ordinary user text for native model-driven loading.
+- Add autocompleted `/skill <name> [request]` invocation to the web composer. Show a selected skill as a discreet icon/full-name token inline with the editable request, removed by Backspace at the start of the request without a separate removal button or losing that request; retain the badge in sent/reopened history through name-only selection metadata, independently of skill loading. Resolve and preload selected skills before inference for ReAct; Deep uses native model-driven loading without a Fred preload. A named invocation without trailing text remains valid, including when the skill needs input; the agent uses the conversation or asks for missing information.
+- Make the inline skill name clickable in the composer and sent/reopened user messages. Open the existing right-hand chat panel with the full name, description, optional argument hint and formatted `SKILL.md` instructions. Retrieve the current runtime snapshot through a dedicated authenticated detail route; keep catalog responses metadata-only and preview independent from invocation.
+- Localize the reference-reading tool label and let successful `read_skill_file` steps open the exact text returned by that call in the same exclusive right-hand panel. Switching between a skill and a reference replaces the panel content without another read or agent turn.
+- Record successful skill loads through the existing KPI writer, distinguishing explicit user requests from model choices (including Deep children). A native Deep instruction read matching the current typed selection uses user origin, while other skill reads use agent origin; this does not add preload or count selections as loads. Show a sortable skill-by-origin count table on the team, platform and personal dashboards using their existing date-range filters and authorization.
+- For ReAct managed chat only, combine platform skills with commanded prompts from the chat team and the caller's personal library in the slash menu. Preserve separate skill and prompt execution paths, source-aware prompt selection and existing command-turn history. Prompts without a command stay in the library panel; other execution families retain their existing prompt libraries.
+- **BREAKING:** reserve the `skill` composer command for platform skill dispatch. Refuse new prompt commands named `skill`; existing homonyms remain available in the prompt library and must be renamed to restore command invocation. Other prompt commands remain unchanged. This compatibility choice was explicitly confirmed by the developer.
+- Support multiple explicit platform skills in one web turn, preserving every inline invocation when another is selected. Managed chat may combine an available prompt command at any whitespace-delimited position with these skills, in either selection order: resolve that exact prompt and carry all skill names on the same turn. ReAct retains its additional personal library; Deep retains native loading. Keep one prompt command per turn; composing several prompt commands is outside this refinement.
+- Allow automatic selection, multiple skills per request and normal tool-loop iteration. Retain loaded instructions in conversation history under the existing history-budget rules; apply them according to the current request, without a persistent active-skill mode.
+- Show a compact skill-load step with the name and user/agent origin. Skip invalid skills with diagnostics, reject unavailable explicit invocations clearly, and explain unavailable tool-dependent steps while completing the feasible work.
+- Ship English instructions and resources for `compte-rendu` (preserving its existing identifier) and a small essential catalog: `grounded-research`, `summarize-document`, `compare-options` and `verify-answer`. Prioritize response quality and reliability; measured gains are outside this change.
+- Migrate the SDK's always-injected Mermaid rules into an English `mermaid` platform skill with an advisory argument hint. Remove the obsolete SDK resource and global-bundle injection; retain frontend diagram rendering and sanitization. Without skills configured, Mermaid guidance is no longer injected automatically. This behavior change was explicitly confirmed by the developer.
+
+## Capabilities
+
+### New Capabilities
+
+- `platform-agent-skills`: deployment-owned skill discovery, confined reads, shared agent loading, web invocation, contextual continuity and load visibility.
+
+### Modified Capabilities
+
+None of the current durable specs is modified. The new capability owns the reserved platform dispatcher; update the existing prompt contract and help to explain its effect on prompt commands. The active prompt-command changes remain the source for their existing requirements.
+
+## Impact
+
+- `libs/fred-runtime`: packaged `fred_runtime/skills/` instructions/references, package-data distribution, pod configuration/bootstrap, a shared skill catalog/backend and loading tools, ReAct/Deep middleware assembly, authenticated catalog access, execution/history attribution and offline tests.
+- `libs/fred-sdk`: additive typed catalog, invocation and load-attribution contracts where required by the existing runtime interfaces; retire the Mermaid global-bundle resource and registration while keeping generic Markdown loaders.
+- `libs/fred-core`: additive keyword dimensions for skill name/origin in the existing KPI index mapping and startup mapping repair; retain the existing asynchronous writer and Prometheus label-confinement policy.
+- `apps/control-plane-backend`: resolve catalog metadata through the configured runtime source for the selected managed agent, using the existing routing and team authorization boundary; enforce the reserved prompt command in create/update/import paths; add the typed, team-scopable `skill_usage` preset and a self-scoped `user_skill_usage` preset sharing its aggregation. No skill files or skill CRUD storage here.
+- `apps/frontend`: generated API clients, composer command hook/menu, managed execution payload and compact activity rendering; shared reference preview and skill-usage table in `TeamUsagePage` and platform `AnalyticsPage`; English/French help and labels.
+- `apps/fred-agents`, deployment chart values/schemas and images: consume the skills distributed by `fred-runtime` and configure optional read-only activation; do not own or duplicate the skill files. No new third-party dependency or database migration is planned.
+- Existing runtime/product contracts, prompt assembly guidance, web usage guidance and an English operator migration note describing optional activation and renaming any legacy `skill` prompt command.
+
+## Non-Goals
+
+User/team-authored skills, uploads or skill editing, script execution, automatic permission/tool provisioning, persistent skill modes, dedicated CLI commands, Graph-agent integration, catalog search infrastructure and isolated skill sub-agents.

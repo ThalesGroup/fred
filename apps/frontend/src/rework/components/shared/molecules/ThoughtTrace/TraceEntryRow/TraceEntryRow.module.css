@@ -32,6 +32,15 @@
   user-select: none;
 }
 
+.skillRow {
+  border: 0;
+  background: transparent;
+  width: 100%;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
 /* An answered question stays attached to the tool step that raised it. */
 .hasAnswer {
   --trace-marker-y: 16px;

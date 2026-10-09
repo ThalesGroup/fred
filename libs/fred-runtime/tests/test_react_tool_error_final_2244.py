@@ -40,6 +40,7 @@ from fred_runtime.react.react_runtime import (
 )
 from fred_sdk.contracts.context import (
     LinkPart,
+    RuntimeContext,
     ToolContentBlock,
     ToolContentKind,
     ToolInvocationResult,
@@ -61,16 +62,13 @@ class _FakePortable:
     baggage: dict[str, object] = {}
 
 
-class _FakeRuntimeContext:
-    pass
-
-
 class _FakeBinding:
     portable_context = _FakePortable()
-    runtime_context = _FakeRuntimeContext()
+    runtime_context = RuntimeContext()
 
 
 class _FakeServices:
+    skills = None
     tracer = None
     metrics = None
 

@@ -31,6 +31,10 @@ The defaults preserve the Keycloak behavior. In OIDC mode, Fred rejects a
 Keycloak directory, `delegation.service_accounts_only: true`, and active
 delegation without `delegation.caller_roles_claim` at startup.
 
+The Keycloak browser requests `openid profile` plus the configured API scope;
+ordinary refresh does not require an offline-access grant. Other OIDC providers
+also request `offline_access` for refresh-token support.
+
 The local directory stores only people who have signed in. It does not create
 or delete accounts at the identity provider: creation returns
 `managed_by_identity_provider`, while deletion suspends the person in Fred, including when delegation is disabled. Enforced OpenFGA services validate account-status support at startup. A local delete returns 403 `account_suspension_disabled` if enforcement is disabled; an unavailable account-status check returns 503 `account_status_unavailable`.

@@ -36,13 +36,22 @@ from control_plane_backend.models.base import Base as CPBase
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 from control_plane_backend.product.schemas import (
     COMMAND_MAX_LENGTH,
+    CreatePromptRequest,
     MarketplacePromptDetail,
     MarketplacePromptSummary,
+    PromptPromoteRequest,
+    UpdatePromptRequest,
 )
 from control_plane_backend.product.service import (
+    PromptRequestError,
     _next_imported_command,
     _next_imported_name,
+    create_prompt,
+    get_prompt,
     import_published_prompt_into_team,
+    list_prompt_commands,
+    promote_prompt,
+    update_prompt,
 )
 from control_plane_backend.prompts.store import PromptRecord, PromptStore
 from fred_core import KeycloakUser
@@ -278,3 +287,53 @@ async def test_next_imported_command_sees_commands_past_a_listing_page(
         await store.create(_record("team-a", f"Filler {i}", command=f"cmd-{i}"))
 
     assert await _next_imported_command(store, TeamId("team-a"), "cmd-0") == "cmd-0-2"
+
+
+@pytest.mark.asyncio
+async def test_skill_command_is_reserved_but_legacy_prompt_stays_editable(
+    store: PromptStore,
+) -> None:
+    """A reserved dispatcher cannot be newly assigned or copied into a team."""
+    deps = _deps(store)
+    with pytest.raises(PromptRequestError, match="reserved"):
+        await create_prompt(
+            user=_user(),
+            team_id=TeamId("team-a"),
+            request=CreatePromptRequest(name="New", text="Text", command="skill"),
+            deps=deps,
+        )
+    legacy = _record("team-a", "Legacy", command="skill")
+    await store.create(legacy)
+    other = _record("team-a", "Other", command="summary")
+    await store.create(other)
+    assert [
+        entry.command for entry in await list_prompt_commands(TeamId("team-a"), deps)
+    ] == ["summary"]
+    assert await get_prompt(TeamId("team-a"), legacy.prompt_id, deps) is not None
+    update = UpdatePromptRequest(name="Legacy edited", text="Edited", command="skill")
+    assert (
+        await update_prompt(TeamId("team-a"), legacy.prompt_id, update, deps)
+        is not None
+    )
+    with pytest.raises(PromptRequestError, match="reserved"):
+        await update_prompt(TeamId("team-a"), other.prompt_id, update, deps)
+    with pytest.raises(PromptRequestError, match="reserved"):
+        await promote_prompt(
+            _user(),
+            TeamId("team-a"),
+            legacy.prompt_id,
+            PromptPromoteRequest(target_team_id="team-b"),
+            deps,
+        )
+    await store.set_published(legacy.prompt_id, TeamId("team-a"), True)
+    with pytest.raises(PromptRequestError, match="reserved"):
+        await import_published_prompt_into_team(
+            _user(), legacy.prompt_id, TeamId("team-b"), deps
+        )
+    renamed = await update_prompt(
+        TeamId("team-a"),
+        legacy.prompt_id,
+        UpdatePromptRequest(name="Legacy edited", text="Edited", command="minutes"),
+        deps,
+    )
+    assert renamed is not None and renamed.command == "minutes"

@@ -769,6 +769,7 @@ class MarketplaceImportResult(BaseModel):
     team_id: str
     prompt: PromptSummary | None = None
     error: str | None = None
+    error_code: str | None = None
 
 
 class MarketplaceImportResponse(BaseModel):

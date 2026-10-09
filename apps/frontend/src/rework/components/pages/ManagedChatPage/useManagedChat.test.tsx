@@ -1985,6 +1985,91 @@ describe("useManagedChat — session write reliability", () => {
     );
   });
 
+  it.each([
+    { exchangeId: "exch-1", invocation: { name: "compte-rendu" }, expected: "compte-rendu" },
+    { exchangeId: "older-exchange", invocation: { name: "compte-rendu" }, expected: undefined },
+    { exchangeId: "exch-1", invocation: { name: 42 }, expected: undefined },
+  ])("restores only the resumed exchange's typed skill ($exchangeId)", async ({ exchangeId, invocation, expected }) => {
+    chatSseMessages = [
+      {
+        session_id: "session-1",
+        exchange_id: exchangeId,
+        timestamp: "2026-10-09T00:00:00Z",
+        rank: 0,
+        role: "user",
+        channel: "final",
+        parts: [{ type: "text", text: "/compte-rendu notes" }],
+        metadata: { extras: { skill_invocation: invocation } },
+      },
+    ];
+    mount();
+    bindSession("session-1");
+    act(() => capturedOnAwaitingHuman?.(awaitingHumanEvent));
+    rerender();
+    await act(async () => latest.handleHitlAnswer("proceed"));
+    expect(sendHitlResumeMock).toHaveBeenCalledWith(
+      awaitingHumanEvent,
+      "proceed",
+      undefined,
+      expected
+        ? expect.objectContaining({ skills: [{ name: expected }] })
+        : expect.not.objectContaining({ skills: expect.anything() }),
+      undefined,
+      false,
+    );
+    act(() => latest.setInput("follow up"));
+    await act(async () => {
+      await latest.handleSend();
+    });
+    expect(sendMock).toHaveBeenCalledOnce();
+    expect(sendMock.mock.calls[0]?.[2]).not.toHaveProperty("skill");
+  });
+
+  it("sends a prompt with all skills and restores them only for its interrupted exchange", async () => {
+    const skills = [{ name: "compte-rendu" }, { name: "mermaid" }];
+    const command = {
+      command: "summary",
+      prompt_id: "p-summary",
+      draft_text: "Before /summary /compte-rendu /mermaid after",
+      draft_command_offset: 7,
+    };
+    mount();
+    bindSession("session-1");
+    await act(async () =>
+      latest.runCommand({ text: "Before\n\nPrompt instructions\n\n/compte-rendu /mermaid after", command, skills }),
+    );
+    expect(sendMock.mock.calls[sendMock.mock.calls.length - 1]?.[2]).toEqual(
+      expect.objectContaining({ command, skills }),
+    );
+    chatSseMessages = [
+      {
+        session_id: "session-1",
+        exchange_id: "exch-1",
+        timestamp: "2026-10-09T00:00:00Z",
+        rank: 0,
+        role: "user",
+        channel: "final",
+        parts: [{ type: "text", text: "assembled prompt" }],
+        metadata: { command, extras: { skill_invocations: skills } },
+      },
+    ];
+    rerender();
+    act(() => capturedOnAwaitingHuman?.(awaitingHumanEvent));
+    rerender();
+    await act(async () => latest.handleHitlAnswer("proceed"));
+    expect(sendHitlResumeMock).toHaveBeenCalledWith(
+      awaitingHumanEvent,
+      "proceed",
+      undefined,
+      expect.objectContaining({ skills }),
+      undefined,
+      false,
+    );
+    act(() => latest.setInput("follow up"));
+    await act(async () => latest.handleSend());
+    expect(sendMock.mock.calls[sendMock.mock.calls.length - 1]?.[2]).not.toHaveProperty("skills");
+  });
+
   it("blocks new turns while an agent question is pending and during its resume", async () => {
     let resolveResume: (reached: boolean) => void = () => {};
     sendHitlResumeMock.mockImplementationOnce(() => new Promise<boolean>((resolve) => (resolveResume = resolve)));

@@ -149,6 +149,7 @@ from fred_sdk.contracts.runtime import (
     RuntimeServices,
     parse_human_input_answer,
 )
+from fred_sdk.contracts.skills import SkillCatalog, SkillDetail, SkillInvocation
 from fred_sdk.contracts.ui_part_union import current_ui_part_union
 from fred_sdk.support.authored_toolsets import (
     AuthoredToolRuntimePorts,
@@ -947,7 +948,12 @@ def _build_runtime_services(
         conversation_filesystem = _build_conversation_filesystem(binding)
     conversation_port = None
     if conversation_filesystem is not None:
-        backend, permissions = build_conversation_filesystem(conversation_filesystem)
+        backend, permissions = build_conversation_filesystem(
+            conversation_filesystem,
+            skills=runtime_config.skills
+            if isinstance(definition, DeepAgentDefinition)
+            else None,
+        )
         conversation_port = DeepConversationFilesystemPort(backend, permissions)
     settings = _build_agent_settings(definition, team_id=team_id)
     base_tool_invoker = FredKnowledgeSearchToolInvoker(
@@ -1103,6 +1109,7 @@ def _build_runtime_services(
             credentials=credential_provider,
         ),
         conversation_filesystem=conversation_port,
+        skills=runtime_config.skills,
     )
 
 
@@ -2408,6 +2415,21 @@ async def _authorize_and_resolve(
                 credentials=credentials or static_person_provider(access_token),
             )
         _validate_resolved_team(request, target.team_id, container)
+        selections = (
+            request.runtime_context.selected_skills if request.runtime_context else ()
+        )
+        if selections and request.resume_payload is None:
+            skills = get_runtime_context().config.skills
+            if isinstance(target.definition, GraphAgentDefinition) or skills is None:
+                raise HTTPException(
+                    status_code=422, detail="Platform skills unavailable for this agent"
+                )
+            if not isinstance(target.definition, DeepAgentDefinition):
+                try:
+                    for selection in selections:
+                        skills.read(selection.name)
+                except ValueError as exc:
+                    raise HTTPException(status_code=422, detail=str(exc)) from None
     except BaseException as exc:
         # Nothing past admission got as far as starting the run, so the record
         # it wrote has no owner left to release it.
@@ -2861,6 +2883,8 @@ async def _write_turn_history(
     user_id: str,
     request_message: str | None,
     turn_command: CommandDescriptor | None = None,
+    skill_invocation: SkillInvocation | dict[str, Any] | None = None,
+    skill_invocations: list[SkillInvocation | dict[str, Any]] | None = None,
     payloads: list[dict[str, Any]],
     history_store: HistoryStorePort,
     team_id: str | None = None,
@@ -2979,11 +3003,29 @@ async def _write_turn_history(
                 )
                 rank += 1
     elif request_message:
-        messages.append(
-            make_user_text(
-                session_id, exchange_id, rank, request_message, command=turn_command
-            )
+        user_message = make_user_text(
+            session_id, exchange_id, rank, request_message, command=turn_command
         )
+        if skill_invocations:
+            extras = {
+                "skill_invocations": [
+                    SkillInvocation.model_validate(item).model_dump(mode="json")
+                    for item in skill_invocations
+                ]
+            }
+            user_message.metadata = user_message.metadata.model_copy(
+                update={"extras": extras}
+            )
+        elif skill_invocation is not None:
+            extras = {
+                "skill_invocation": SkillInvocation.model_validate(
+                    skill_invocation
+                ).model_dump(mode="json")
+            }
+            user_message.metadata = user_message.metadata.model_copy(
+                update={"extras": extras}
+            )
+        messages.append(user_message)
         rank += 1
 
     # Reasoning blocks still accumulating, keyed by thought_id. A block reserves
@@ -3044,10 +3086,33 @@ async def _write_turn_history(
     final_finish_reason: str | None = None
     final_context_tokens: int | None = None
 
+    skill_load_ids: set[str] = set()
     for payload in payloads:
         kind = payload.get("kind")
 
-        if kind == "tool_call":
+        if kind == "status" and isinstance(payload.get("skill_load"), dict):
+            from fred_sdk.contracts.skills import SkillLoadAttribution
+
+            attribution = SkillLoadAttribution.model_validate(payload["skill_load"])
+            if attribution.load_id in skill_load_ids:
+                continue
+            skill_load_ids.add(attribution.load_id)
+            messages.append(
+                ChatMessage(
+                    session_id=session_id,
+                    exchange_id=exchange_id,
+                    rank=rank,
+                    timestamp=datetime.now(timezone.utc),
+                    role=Role.system,
+                    channel=Channel.system_note,
+                    parts=[TextPart(text=attribution.name)],
+                    metadata=ChatMetadata.model_validate(
+                        {"extras": {"skill_load": attribution.model_dump(mode="json")}}
+                    ),
+                )
+            )
+            rank += 1
+        elif kind == "tool_call":
             messages.append(
                 make_tool_call(
                     session_id,
@@ -3670,6 +3735,8 @@ async def _stream(
                     user_id=user_id,
                     request_message=request.message,
                     turn_command=_turn_command(ctx),
+                    skill_invocation=ctx.get("skill"),
+                    skill_invocations=ctx.get("skills"),
                     payloads=collected,
                     history_store=history_store,
                     team_id=resolved_team_id,
@@ -4388,6 +4455,8 @@ async def _iterate_runtime_event_payloads_inner(
         agent_instance_id=request.agent_instance_id,
         template_agent_id=definition.agent_id,
         execution_action=execution_action,
+        skill=ctx.get("skill"),
+        skills=ctx.get("skills"),
         # Chat options forwarded from the frontend RuntimeContext.
         # These were present in ctx but were silently dropped, causing
         # ContextAwareTool and all KF search helpers to always use defaults.
@@ -5032,6 +5101,55 @@ def _build_agent_router(
             for definition in registry.values()
             if include_non_public or getattr(definition, "public", True)
         ]
+
+    @router.get(
+        "/skills",
+        response_model=SkillCatalog,
+        operation_id="get_runtime_instance_skills",
+    )
+    async def get_skills(
+        http_request: Request,
+        agent_instance_id: str,
+        team_id: str,
+        container: PodApplicationContext = Depends(get_pod_container),
+        caller: KeycloakUser | None = Depends(_authenticated_user),
+    ) -> SkillCatalog:
+        """List metadata after the same team-use and target checks as execution."""
+        from fred_runtime.skills.api import get_instance_skills
+
+        return await get_instance_skills(
+            agent_instance_id,
+            team_id,
+            caller,
+            http_request.headers.get("Authorization"),
+            container,
+            registry,
+        )
+
+    @router.get(
+        "/skills/{skill_name}",
+        response_model=SkillDetail,
+        operation_id="get_runtime_instance_skill_detail",
+    )
+    async def get_skill_detail(
+        http_request: Request,
+        skill_name: str,
+        agent_instance_id: str,
+        team_id: str,
+        container: PodApplicationContext = Depends(get_pod_container),
+        caller: KeycloakUser | None = Depends(_authenticated_user),
+    ) -> SkillDetail:
+        from fred_runtime.skills.api import get_instance_skill_detail
+
+        return await get_instance_skill_detail(
+            skill_name,
+            agent_instance_id,
+            team_id,
+            caller,
+            http_request.headers.get("Authorization"),
+            container,
+            registry,
+        )
 
     @router.get("/mcp-catalog")
     async def get_mcp_catalog() -> _McpCatalogResponse:
@@ -5984,6 +6102,8 @@ def _build_agent_router(
                     user_id=user_id_str,
                     request_message=request.input,
                     turn_command=_turn_command(internal_req.context or {}),
+                    skill_invocation=(internal_req.context or {}).get("skill"),
+                    skill_invocations=(internal_req.context or {}).get("skills"),
                     payloads=payloads,
                     history_store=history_store,
                     team_id=target.team_id,
@@ -6088,6 +6208,8 @@ def _build_agent_router(
                     user_id=user_id_str,
                     request_message=request.input,
                     turn_command=_turn_command(internal_req.context or {}),
+                    skill_invocation=(internal_req.context or {}).get("skill"),
+                    skill_invocations=(internal_req.context or {}).get("skills"),
                     payloads=payloads,
                     history_store=history_store,
                     team_id=target.team_id,
@@ -6384,6 +6506,15 @@ def create_agent_app(
                 raise RuntimeError(
                     "Invalid runtime storage state: checkpointer and history store must be configured together."
                 )
+            from fred_runtime.skills.catalog import PlatformSkills
+
+            skills = (
+                await asyncio.to_thread(
+                    PlatformSkills.from_directory, config.skills.directory
+                )
+                if config.skills is not None
+                else None
+            )
             set_runtime_context(
                 FredRuntimeContext(
                     RuntimeConfig(
@@ -6394,6 +6525,7 @@ def create_agent_app(
                         checkpointer=checkpointer,
                         history_store=history_store,
                         filesystem=container.get_filesystem(),
+                        skills=skills,
                         conversation_filesystem_quotas=(
                             config.storage.conversation_filesystem
                         ),
