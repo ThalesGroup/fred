@@ -214,6 +214,7 @@ acme-theme-1.0.zip
 ├── images/icons/customAgent.svg     # agent icon silhouette (rendered as a CSS mask)
 ├── images/default-team-avatar.png   # same name as a stock file: shadows it
 ├── theme-custom.css                 # theme token overrides and other CSS
+├── theme-catalog.json               # optional additional selectable themes
 ├── theme-properties.json            # branding labels and image names
 ├── theme-translations/en.json        # English UI label overrides
 ├── theme-translations/fr.json        # French UI label overrides
@@ -224,7 +225,7 @@ acme-theme-1.0.zip
 ```
 
 Only `/images/**`, `/contrib/**`, root `*.md`, `theme-custom.css`,
-`theme-properties.json` and `theme-translations/{en,fr}.json` can be overridden;
+`theme-catalog.json`, `theme-properties.json` and `theme-translations/{en,fr}.json` can be overridden;
 `index.html`, `config.json` and the bundle never are. Translation JSON can
 override UI message keys; omitted keys keep the shipped text. Use CSS selectors such as
 `html[data-ui-theme="pebble"][data-theme="light"]` to override any token in
@@ -237,6 +238,21 @@ these branding keys: `siteDisplayName`, `siteTitle`, `siteSubtitle`,
 frontend base path. See `theme/` for a working example. Symlinks are dropped and
 an archive with entries escaping its root is refused. A zip made from a folder
 (`zip -r acme-theme.zip acme-theme/`) is accepted: the wrapper folder is skipped.
+
+To add selectable themes, put entries in `theme-catalog.json`:
+
+```json
+{"themes":[{"id":"acme","label":"Acme","base":"pebble"},{"id":"partner","label":"Partner","base":"cloud"}]}
+```
+
+Each ID must be unique, lowercase and at most 32 characters; `base` is
+`pebble`, `cobalt` or `cloud`. The base supplies all tokens, fonts and shapes.
+Add only the differences in `theme-custom.css`, using selectors such as
+`[data-ui-theme="acme"][data-theme="light"]` and the matching `dark`
+selector. Do not prefix these selectors with `html`: the admin previews also
+need to match them. ZIP themes appear in the profile picker and the admin theme settings,
+where an admin can choose a default or hide a theme. Images and fonts placed in
+the ZIP are shared assets; CSS can select different assets for each theme.
 
 | Variable                                                        | Meaning                                                                                                                                                                                                                                  |
 | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -326,7 +342,8 @@ directory is a complete working example - round logo and its dark variant, an
 agent icon silhouette, a team avatar, and the four legal files - so the target
 produces a verifiable archive out of the box; copy it and point `THEME_SRC` at
 your own. Its `theme-properties.json` selects `acme-team-avatar.svg` and
-`icons/customAgent.svg`; its `theme-custom.css` overrides a Pebble color.
+`icons/customAgent.svg`; its catalog adds an Acme theme based on Pebble, and
+`theme-custom.css` customizes Acme in both light and dark modes.
 
 The target also flags the two layout mistakes that are hard to spot from a
 running pod: entries outside the supported surfaces, and an English legal
