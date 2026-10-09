@@ -613,7 +613,7 @@ async def test_spawned_child_forwards_pdf_timings_on_success_and_failure(tmp_pat
     lines = [json.loads(line) for line in capfd.readouterr().out.splitlines()]
     child = next(event for event in lines if event["logger"] == "test.extraction.child")
     assert {key: child[key] for key in context} == context
-    assert child["service"] == "knowledge-flow-worker" and child["service_role"] == "worker"
+    assert child["service"] == "knowledge-flow" and child["service_role"] == "worker"
     assert child["severity"] == "INFO" and "timestamp" in child
     events = [call.kwargs for call in writer.emit.call_args_list]
     assert [event["name"] for event in events] == (["knowledge_flow.pdf.image_description_latency_ms", "knowledge_flow.pdf.image_loop_latency_ms"] if telemetry else [])

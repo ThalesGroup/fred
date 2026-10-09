@@ -84,7 +84,7 @@ async def main() -> None:
     # Keep worker logging local-only: Temporal workflow sandbox must not trigger
     # external log sinks (OpenSearch/HTTP imports) from workflow threads.
     log_setup(
-        service_name="knowledge-flow-worker",
+        service_name="knowledge-flow",
         service_role="worker",
         log_level=configuration.app.log_level,
         log_format=configuration.app.log_format,

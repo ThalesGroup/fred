@@ -118,7 +118,7 @@ async def test_main_worker_enables_observability_from_configuration(app_context,
 
     events = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
     assert events
-    assert all(event.get("service") == "knowledge-flow-worker" for event in events)
+    assert all(event.get("service") == "knowledge-flow" for event in events)
     assert all(event.get("service_role") == "worker" for event in events)
     assert all("timestamp" in event and "severity" in event for event in events)
 

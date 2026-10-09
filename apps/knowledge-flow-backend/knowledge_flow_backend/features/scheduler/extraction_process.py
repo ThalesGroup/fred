@@ -236,7 +236,7 @@ class _ChildGroup:
 
 
 def _child_with_logging(request: ExtractionRequest, result_pipe: Connection, parent_pid: int, *, target: Callable[..., None]) -> None:
-    log_setup(service_name="knowledge-flow-worker", service_role="worker", log_format=request.log_format, log_level=request.log_level, store=NullLogStore(), use_rich=False, include_uvicorn=False)
+    log_setup(service_name="knowledge-flow", service_role="worker", log_format=request.log_format, log_level=request.log_level, store=NullLogStore(), use_rich=False, include_uvicorn=False)
     with request_log_scope():
         bind_received_log_context(request.logging_context)
         target(request, result_pipe, parent_pid)
