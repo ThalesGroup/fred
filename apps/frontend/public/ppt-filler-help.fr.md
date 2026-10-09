@@ -2,7 +2,9 @@
 
 Cette capacité permet à un agent de remplir un PowerPoint à trous, à partir d'instructions et de fichiers mis à sa disposition. Elle sert lorsque vous avez un format fixe de PowerPoint à reproduire régulièrement en ne changeant que le contenu.
 
-![Deux power point: un d'entrée avec des balises de template, un autre remplis par un agent (résultat)](/ppt-filler/introduction.png)
+La capture ci-dessous montre la diapositive "Enjeux & Besoins" avant et après remplissage. En haut, les zones "Votre contexte", "Missions attendues" et "Référence de votre cahier des charges" contiennent des clés. En bas, l'agent les a remplacées par le contexte du projet, les missions et le nom du fichier source. La mise en page est conservée et les instructions des notes ont été retirées.
+
+![La diapositive "Enjeux & Besoins" avant et après remplissage des trois zones de texte.](/ppt-filler/introduction.png)
 
 ## Comment créer un template de PowerPoint
 
@@ -13,26 +15,37 @@ Pour que votre agent puisse remplir votre PowerPoint, vous devez identifier chaq
 Dans une zone de texte, écrivez une **clé** entre accolades simples ou doubles à l'endroit où une valeur doit apparaître :
 
 ```
-{nom}
-{{nom}}
+{contexte}
+{missions}
+{refCahierCharges}
 ```
 
-`{nom}` et `{{nom}}` désignent la même clé. Vous pouvez mélanger les deux formes dans les diapositives et les en-têtes des notes, y compris pour les images. Utilisez `{clé}` ou `{{clé}}` avec un nom de clé descriptif. Les noms de clés sont sensibles à la casse ; les espaces juste à l'intérieur des accolades sont ignorés. Les templates existants en doubles accolades sont reconnus exactement comme auparavant.
+Ce sont les trois clés visibles dans la capture. Les doubles accolades fonctionnent aussi : `{contexte}` et `{{contexte}}` désignent la même clé. Vous pouvez utiliser des accolades simples dans la diapositive et doubles dans les notes, comme sur les captures, ou mélanger les deux formes, y compris pour les images. Les noms de clés sont sensibles à la casse ; les espaces juste à l'intérieur des accolades sont ignorés. Les templates existants en doubles accolades sont reconnus exactement comme auparavant.
 
 Vous pouvez réutiliser la même clé plusieurs fois sur une diapositive pour répéter la même valeur. La même clé sur une autre diapositive est, elle, indépendante.
 
 ### 2. Décrivez chaque clé dans les notes
 
-Dans les **notes** de la diapositive (Affichage -> Notes), écrivez pour chaque clé une ligne d'en-tête `{clé}:` ou `{{clé}}:` suivie d'une description. Elle indique à l'agent quoi mettre à cet endroit :
+Dans le volet **Notes**, sous la diapositive, écrivez pour chaque clé un en-tête suivi d'une description. Les captures utilisent des en-têtes en doubles accolades. Pour les trois zones ci-dessus, écrivez :
 
 ```
-{{nom}}:
-Nom du collaborateur, à trouver dans le CV.
+{{contexte}}:
+Contexte du projet. Une à deux phrases.
+
+{{missions}}:
+Ensemble des missions et objectifs. Une à deux phrases.
+
+{{refCahierCharges}}:
+Nom du fichier duquel les données sont extraites.
 ```
+
+Chaque description indique à l'agent quoi mettre dans la zone correspondante. Un en-tête en accolades simples, comme `{missions}:`, fonctionne également. Le nom de la clé doit être identique dans la diapositive et dans les notes.
+
+La capture contient une coquille : `{{context}}:` dans les notes correspond à `{contexte}` dans la diapositive. Utilisez `{{contexte}}:` comme dans l'exemple ci-dessus.
 
 Une ligne n'est un en-tête que si elle se compose d'une ou plusieurs clés `{clé}` ou `{{clé}}`, séparées par des virgules et terminées par deux-points. Une clé citée au milieu d'une phrase reste du texte ordinaire - vous pouvez donc écrire naturellement.
 
-![Une diapositive avec des clés entre accolades simples ou doubles dans ses zones de texte, et les notes de la diapositive décrivant chaque clé.](/ppt-filler/template.png)
+![La diapositive "Enjeux & Besoins" avec trois clés en accolades simples et le volet Notes avec leurs descriptions en doubles accolades.](/ppt-filler/template.png)
 
 ## Utilisation avancée
 

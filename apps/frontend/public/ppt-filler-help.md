@@ -2,7 +2,9 @@
 
 This capability lets an agent fill in a fill-in-the-blanks PowerPoint, based on instructions and files made available to it. It is useful when you have a fixed PowerPoint format to reproduce regularly while changing only the content.
 
-![Two PowerPoints: an input one with template tags, and another filled in by an agent (the result).](/ppt-filler/introduction.png)
+The screenshot below shows the "Enjeux & Besoins" slide before and after filling. At the top, the "Votre contexte", "Missions attendues", and "Référence de votre cahier des charges" areas contain keys. At the bottom, the agent has replaced them with the project context, the assignments, and the source filename. The layout is preserved and the instructions in the notes have been removed.
+
+![The "Enjeux & Besoins" slide before and after its three text areas are filled.](/ppt-filler/introduction.png)
 
 ## How to create a PowerPoint template
 
@@ -13,26 +15,37 @@ For your agent to fill in your PowerPoint, you need to identify each area it wil
 In a text box, write a **key** between single or double curly braces where a value should appear:
 
 ```
-{name}
-{{name}}
+{contexte}
+{missions}
+{refCahierCharges}
 ```
 
-`{name}` and `{{name}}` identify the same key. You can mix both forms on slides and in note headers, including image keys. Use `{key}` or `{{key}}` with a descriptive key name. Key names are case-sensitive; spaces immediately inside the braces are ignored. Existing double-brace templates are recognized exactly as before.
+These are the three keys shown in the screenshot. Double braces also work: `{contexte}` and `{{contexte}}` identify the same key. You can use single braces on the slide and double braces in the notes, as the screenshots do, or mix both forms, including image keys. Key names are case-sensitive; spaces immediately inside the braces are ignored. Existing double-brace templates are recognized exactly as before.
 
 You can reuse the same key several times on a slide to repeat the same value. The same key on another slide is independent.
 
 ### 2. Describe each key in the notes
 
-In the slide's **notes** (View -> Notes), write for each key a header line `{key}:` or `{{key}}:` followed by a description. It tells the agent what to put in that spot:
+In the **Notes** pane below the slide, write a header followed by a description for each key. The screenshots use double-brace headers. For the three areas above, write:
 
 ```
-{{name}}:
-Name of the employee, to be found in the CV.
+{{contexte}}:
+The project context. One or two sentences.
+
+{{missions}}:
+The assignments and objectives. One or two sentences.
+
+{{refCahierCharges}}:
+The name of the file from which the data is extracted.
 ```
+
+Each description tells the agent what to put in the corresponding area. A single-brace header such as `{missions}:` also works. The key name must be identical on the slide and in the notes.
+
+The screenshot contains a typo: `{{context}}:` in the notes corresponds to `{contexte}` on the slide. Use `{{contexte}}:` as in the example above.
 
 A line is a header only if it consists of one or more `{key}` or `{{key}}` keys, separated by commas and ending with a colon. A key quoted in the middle of a sentence stays ordinary text - so you can write naturally.
 
-![A slide with keys between single or double curly braces in its text boxes, and the slide notes describing each key.](/ppt-filler/template.png)
+![The "Enjeux & Besoins" slide with three single-brace keys and the Notes pane with their double-brace descriptions.](/ppt-filler/template.png)
 
 ## Advanced usage
 
