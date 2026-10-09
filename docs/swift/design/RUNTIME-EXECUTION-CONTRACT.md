@@ -1886,6 +1886,11 @@ config) and 4 (composer control) are phase 2 and not implemented here.
 Levels 3-4 of REASON-01 (per-agent and per-question reasoning), plus its three
 tool-loop-safety preconditions. Builds on §8.29 (levels 1-2); read that first.
 
+**2026-10-09 — superseded in part by §8.105.** Level 3 (the agent offer,
+`AgentTuning.reasoning_enabled`) is removed: the platform activation alone is
+the ceiling. The tri-state below is redefined: only `True` reasons, `None`
+no longer defers to the ceiling.
+
 **Reasoning is not a capability** (RFC §15, Amendment A). It was built as one, as
 §7 specified, and withdrawn before release: an agent does not *use* reasoning the
 way it uses a tool, so the Tools tab was the wrong place to enable it. What ships:
@@ -2004,6 +2009,11 @@ model — see §C.9 and the note below.
 ---
 
 ### 8.32 ✅ `RuntimeContext` gains team routing policy fields (TEAM-05, #2118, 2026-07-27)
+
+**2026-10-09 — `agent_profile_overrides` and `resolve_team_override` removed
+(§8.105).** The user's choice (`chat_profile_id`) and the instance
+recommendation now sit between the pod override and the team default;
+`chat_default_profile_id` below is unchanged.
 
 **2026-08-16 — chat-only drift enforcement (#2365).** A team-selected profile
 whose declared capability is not `chat` now raises
@@ -6577,3 +6587,76 @@ owns the restricted SQL activity sink, the engine and the search providers
 package holds only the tools, and the runtime imports no capability package.
 The deployment is default-off. See the [activity contract](../platform/OBSERVABILITY-AND-AUDIT.md#restricted-web-research-activity)
 and [migration guide](../ops/migrations/2980-native-web-research.md).
+
+### 8.105 Per-conversation model choice, instance recommendation and model-led reasoning (2026-10-09, #3029)
+
+Supersedes the team per-agent level of §8.32 and the agent gate and tri-state
+of §8.30. OpenSpec change `chat-model-and-reasoning-picker`; product side in
+`CONTROL-PLANE-PRODUCT-CONTRACT.md` §37 / §41 (2026-10-09 entries).
+
+**Chat model precedence**, highest first. `resolve_effective_chat_profile`
+(fred-sdk) stays the one shared implementation, used by the pod and by the
+control-plane effective-chat-model read:
+
+1. platform binding (`BoundRuntimeContext.platform_chat_model_binding`, §8.55),
+   short-circuited by the caller;
+2. pod per-agent override (`models_catalog.yaml` `agent_profile_overrides`);
+3. user's per-conversation choice — new `RuntimeContext.chat_profile_id`;
+4. instance recommendation — new `AgentTuning.recommended_chat_profile_id`;
+5. team default (`RuntimeContext.chat_default_profile_id`);
+6. pod default.
+
+`RuntimeContext.agent_profile_overrides`, `resolve_team_override` and
+`ChatProfileOrigin.TEAM_AGENT_OVERRIDE` are removed. `ChatProfileOrigin` and
+`ModelSelectionSource` gain `user_choice` and `instance_recommendation`; both
+are logged at info on `[V2][MODEL_ROUTING]`. No KPI label changes.
+`chat_profile_id` is bound on managed-instance turns only: a direct template
+run (`agent_id`, no `agent_instance_id`) drops it.
+
+**Trust boundary.**
+
+- `chat_profile_id` is client-forwarded. `RoutedChatModelFactory.select`
+  accepts it, and the recommendation, only when the profile is a known chat
+  profile, its model is in `usable_model_ids` (`can_use`; `None` = ReBAC off)
+  and not in `team_disabled_model_ids`. Otherwise it logs
+  `[V2][MODEL_ROUTING] <level> ignored: … reason=…` at debug (it runs on every
+  model call and names client input) and falls through. A stale or spoofed
+  choice never fails the turn. The resolver stays pure: the caller
+  passes `None` for an invalid level.
+- `BoundRuntimeContext.team_disabled_model_ids` and
+  `BoundRuntimeContext.recommended_chat_profile_id` are TRUSTED: filled from
+  the per-turn `ManagedAgentRuntimeBinding` (the disabled set) and the
+  server-resolved instance tuning (the recommendation). No `ctx.get` exists
+  for either, so a request body cannot set them. Empty / `None` outside
+  managed turns; an older control plane that omits the disabled set stays
+  compatible.
+- The team default keeps failing closed: unknown or non-chat →
+  `TeamRoutingProfileDriftError`; model team-disabled → `ModelNotUsableError`
+  (never a silent substitution). The team-disabled set narrows the user,
+  instance and team levels only; the pod default stays gated by `can_use`.
+- The choice applies to the top-level agent only. Registry children get a
+  `PortableContext` without it and keep their own resolution; native Deep
+  sub-agents reuse the parent's client.
+
+**Reasoning.**
+
+- Ceiling: on a managed instance turn, `reasoning_enabled_model_ids` is the
+  platform list from the runtime binding, with no agent gate
+  (`AgentTuning.reasoning_enabled` / `reasoning_default_on` are removed; the
+  `AgentDefinition` fields are deprecated no-ops). A turn without a managed
+  instance binds `[]`.
+- Tri-state redefined: only `reasoning is True` reasons, within the ceiling.
+  `False` and `None` both strip, so callers that send nothing
+  (OpenAI-compatible router, evaluation) never reason by accident. The field
+  stays `bool | None` for wire compatibility. `build_for_chat` strips unless
+  `reasoning is True`; the composer always sends an explicit value while its
+  row is shown.
+- The effort picker stays withdrawn (§8.48).
+
+**Deprecated for pod authors (design Q1, decided 2026-10-09).**
+`AgentDefinition.reasoning_enabled` / `reasoning_default_on` stay for one SDK
+minor as deprecated, inert fields: a definition setting them (class attribute
+or constructor) still loads, logs one deprecation warning per definition
+class, and changes nothing. They will be removed in a later minor. `AgentTuning`
+no longer has them and ignores them in stored payloads.
+Migration note: `docs/swift/ops/migrations/chat-model-and-reasoning-picker.md`.

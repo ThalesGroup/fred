@@ -60,7 +60,6 @@ Not included in V1:
 - billing budgets
 - request rate limits
 - provider-level retry or timeout tuning
-- per-user model-routing policies
 
 ---
 
