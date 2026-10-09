@@ -46,7 +46,7 @@ clean: ## Clean all submodules
 ##@ Tests
 
 .PHONY: test
-test: k3d-tests ## Run non-integration test suites in all submodules and print coverage summary
+test: k3d-tests libs-version-tests publish-libs-tests ## Run non-integration test suites in all submodules and print coverage summary
 	@set -e; \
 	for dir in $(TEST_DIRS); do \
 		echo "************ Running tests in $$dir ************"; \
@@ -180,20 +180,80 @@ install-wtf: ## Install the wtf worktree CLI locally (uv tool install, or fallba
 
 VERSION ?=
 
+# The Python packages published to PyPI, in dependency order: the libs, then
+# the capabilities. All of them carry one version, set by `libs-version`.
+PYPI_PACKAGES := \
+	libs/fred-pod \
+	libs/fred-core \
+	libs/fred-sdk \
+	libs/fred-runtime \
+	libs/capabilities/fred-capability-document-access \
+	libs/capabilities/fred-capability-documents \
+	libs/capabilities/fred-capability-html-artifact \
+	libs/capabilities/fred-capability-mcp \
+	libs/capabilities/fred-capability-platform-ops \
+	libs/capabilities/fred-capability-ppt-filler \
+	libs/capabilities/fred-capability-team-wiki \
+	libs/capabilities/fred-capability-writable-document
+
+.PHONY: libs-version
+libs-version: ## Set one version on every PyPI package, their floors on each other, and relock (usage: make libs-version VERSION=x.y.z)
+	@test -n "$(VERSION)" || { echo "Usage: make libs-version VERSION=x.y.z"; exit 1; }
+	python3 scripts/libs_version.py --version "$(VERSION)" $(PYPI_PACKAGES)
+
+.PHONY: libs-version-tests
+libs-version-tests: ## Test the libs-version rewrite offline
+	python3 -m unittest discover -s scripts/tests -p 'test_libs_version.py'
+
+.PHONY: publish-libs-tests
+publish-libs-tests: ## Test bulk publishing offline with fake packages
+	python3 -m unittest discover -s scripts/tests -p 'test_publish_libs.py'
+
+.PHONY: publish-libs-dry-run
+publish-libs-dry-run: ## Build every PyPI package in dependency order, stop at the first failure, upload nothing
+	@set -e; \
+	for dir in $(PYPI_PACKAGES); do \
+		echo "************ Building $$dir ************"; \
+		env -u VIRTUAL_ENV $(MAKE) -C $$dir publish-dry-run; \
+	done
+
+# The packages whose version is not on PyPI yet, one directory per line; a
+# package already there is reported on stderr. PyPI answers 200 for a release
+# it has and 404 for one it has not: any other answer stops the release rather
+# than guess.
+.PHONY: _pypi-pending
+_pypi-pending:
+	@set -e; \
+	for dir in $(PYPI_PACKAGES); do \
+		set -- $$(python3 -c "import tomllib; p = tomllib.load(open('$$dir/pyproject.toml', 'rb'))['project']; print(p['name'], p['version'])"); \
+		code=$$(curl -s -o /dev/null -w '%{http_code}' "https://pypi.org/pypi/$$1/$$2/json"); \
+		case "$$code" in \
+			200) echo "$$1 $$2 is already on PyPI: skipped." >&2 ;; \
+			404) echo "$$dir" ;; \
+			*) echo "PyPI answered $$code for $$1 $$2: stopping." >&2; exit 1 ;; \
+		esac; \
+	done
+
+.PHONY: publish-libs
+publish-libs: ## Build every PyPI package, then publish, in order, each version PyPI does not have yet (requires PYPI_TOKEN)
+	@test -n "$$PYPI_TOKEN" || { echo "PYPI_TOKEN is not set: nothing was built or uploaded."; exit 1; }
+	$(MAKE) publish-libs-dry-run
+	@set -e; \
+	pending=$$($(MAKE) --no-print-directory -s _pypi-pending); \
+	for dir in $$pending; do \
+		echo "************ Publishing $$dir ************"; \
+		env -u VIRTUAL_ENV $(MAKE) -C $$dir publish; \
+	done; \
+	echo "Every PyPI package is published."
+
 .PHONY: set-version
-set-version: ## Update project version everywhere (usage: make set-version VERSION=x.y.z)
+set-version: ## Update the chart and application versions; the PyPI packages have libs-version (usage: make set-version VERSION=x.y.z)
 	@if [ -z "$(VERSION)" ]; then echo "ERROR: VERSION is required. Usage: make set-version VERSION=x.y.z"; exit 1; fi
 	$(eval PY_VERSION := $(shell echo "$(VERSION)" | sed 's/-/+/'))
 	@echo "Setting version to $(VERSION) (Python: $(PY_VERSION))..."
 	@echo "--- Helm chart ---"
 	sed -i 's/^version: .*/version: $(VERSION)/' deploy/charts/fred/Chart.yaml
 	sed -i 's/^appVersion: .*/appVersion: $(VERSION)/' deploy/charts/fred/Chart.yaml
-	@echo "--- libs/fred-pod ---"
-	sed -i 's/^version = .*/version = "$(PY_VERSION)"/' libs/fred-pod/pyproject.toml
-	cd libs/fred-pod && uv lock
-	@echo "--- libs/fred-core ---"
-	sed -i 's/^version = .*/version = "$(PY_VERSION)"/' libs/fred-core/pyproject.toml
-	cd libs/fred-core && uv lock
 	@echo "--- fred-agents ---"
 	sed -i 's/^version = .*/version = "$(PY_VERSION)"/' apps/fred-agents/pyproject.toml
 	cd apps/fred-agents && uv lock

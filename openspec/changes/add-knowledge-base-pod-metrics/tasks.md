@@ -1,0 +1,47 @@
+## 1. Shared pod identity
+
+- [x] 1.1 Add the `app.runtime_id` model and its slug pattern to `fred-pod`, and make `fred-runtime`'s `PodAppConfig` reuse them; verify `fred-pod` and `fred-runtime` test suites pass unchanged
+- [x] 1.2 Require `app` in the Knowledge Base `PodConfiguration`; verify a test that a configuration without `app.runtime_id`, or with `My KB`, fails to load naming the key
+
+## 2. Metrics against the spec
+
+- [x] 2.1 Add the `service` label to every `fred_kb_*` series and to the engine runtime's global tags, and `sdk` to `fred_kb_info` (D8); verify with the updated telemetry tests
+- [x] 2.2 Add a contract test in `libs/fred-sdk/tests/test_knowledge_base_metrics_contract.py` that drives one run, one call per operation and one ingestion wait, then asserts every series name, type, label set and closed value set listed in the spec; verify with `uv run pytest tests/test_knowledge_base_metrics_contract.py`
+- [x] 2.3 Review `telemetry.py`, `worker.py`, `documents.py` and `client.py` against each spec requirement (counted once per attempt, duration span, `interrupted` vs `error`, transport errors, no excluded label) and record any gap as a fix; verify by a short audit note in the PR description
+- [x] 2.4 Check that author-registered series on the default registry are served on `/metrics`; verify with a test registering a custom counter
+- [x] 2.5 Correct the `PodObservability` docstring to "nothing is reachable from outside unless bound outward" (D5); verify by review
+- [x] 2.6 Preserve issue totals independently of the 50-detail limit, including JSON round-trips and later list edits; verify warnings, errors, late codes, repeated observations and the process-wide code limit with offline regression tests
+
+  Verified with `make test TEST_DIRS=libs/fred-sdk` (621 passed, 3 skipped),
+  `make code-quality CODE_QUALITY_DIRS=libs/fred-sdk`, and strict OpenSpec validation.
+  Independent review of the correction against `73839e3` found no remaining
+  actionable issue after verifying mutable reports and repeated JSON round-trips.
+
+## 3. Structured logs
+
+- [x] 3.1 Replace the `basicConfig` call in the Knowledge Base entrypoint with a JSON-lines formatter carrying `ts`, `level`, `logger`, `msg`, `service`, `knowledge_base`, and a `text` format selected by `observability.logs.format`; verify with a test capturing stdout in both formats
+- [x] 3.2 Forward native engine logs through the same logger with metrics enabled or disabled; verify real Core log output in JSON and text, identity, timestamp, severity filtering and absence of duplicate native output
+
+  Verified with the native Rust log hook (four format/exporter combinations),
+  `make test TEST_DIRS=libs/fred-sdk` (625 passed, 3 skipped),
+  `make code-quality CODE_QUALITY_DIRS=libs/fred-sdk`, and strict OpenSpec validation.
+  Independent review against `5d1271b8b` found no actionable issue; no remote
+  Temporal server was needed for this logging correction.
+
+## 4. Samples and docs
+
+- [x] 4.1 Set `app.runtime_id` in `webdav-knowledge-base` (`config/configuration.yaml`, chart `values.yaml`) and in `fred-samples/knowledge-bases`; verify each pod starts locally
+- [x] 4.2 Fix `KNOWLEDGE-BASE.md` §1 (two read-only ports) and add the missing *Operational metrics* section linking to the spec, with the PromQL for error rate, document throughput and ingestion latency and the matching log filter, without restating the series table; verify the anchor resolves
+- [x] 4.3 Add a short *Metrics and logs* paragraph to the `fred-sdk` README Knowledge Base section: `app.runtime_id`, zero metrics code, how to add domain series, never team/instance labels; verify by review
+- [x] 4.4 Update `docs/swift/ops/migrations/knowledge-base-pod-metrics.md`: breaking `app.runtime_id`, JSON logs, final series and labels; verify its Validation commands against a local pod
+
+## 5. End-to-end check
+
+- [ ] 5.1 Rebuild `webdav-knowledge-base` against this SDK, run one synchronization locally with metrics bound, and confirm `curl :9000/metrics` and `curl :9001/metrics` show the spec's series with `service` and `knowledge_base`, and that a log line's `service` matches; record the excerpt in the PR
+- [x] 5.2 Run `openspec validate add-knowledge-base-pod-metrics --strict` and the `fred-pod`, `fred-sdk` and `fred-runtime` test suites; all pass
+
+## 6. Three-valued reconciliation (D11)
+
+- [x] 6.1 Replace `reconciliation_complete` with `reconciliation: KnowledgeBaseReconciliation` (`complete`, `partial`, `up_to_date`) and refuse `up_to_date` with writes, errors or a non-succeeded outcome; verify model tests
+- [x] 6.2 Report the value as the `reconciliation` label and reach `up_to_date` in the contract test; verify the telemetry and contract suites
+- [x] 6.3 Migrate the README, KNOWLEDGE-BASE.md, the migration note, the three samples, `webdav-knowledge-base` and the blog post; verify every sample suite, the blog type check and smoke test, and the site build

@@ -45,6 +45,12 @@ CONTRIBUTED_NAME_PATTERN = rf"^{_SEGMENT}(?:\.{_SEGMENT})+$"
 
 MAX_NAME_CHARS = 255
 
+#: A deployed pod's operational identity: one lowercase slug, `fred-agents` or
+#: `webdav-kb`. Not a contributed name — it is chosen by whoever deploys, not
+#: by whoever authors, and it lands in Prometheus labels and log fields, which
+#: is why no dot, capital or space is allowed.
+RUNTIME_ID_PATTERN = r"^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+
 _NAME_RE = re.compile(CONTRIBUTED_NAME_PATTERN)
 
 

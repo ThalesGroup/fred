@@ -638,7 +638,7 @@ dev = [
 
 [[package]]
 name = "fred-capability-document-access"
-version = "0.1.2"
+version = "4.4.3"
 source = { editable = "../../libs/capabilities/fred-capability-document-access" }
 dependencies = [
     { name = "fred-core" },
@@ -679,7 +679,7 @@ dev = [
 
 [[package]]
 name = "fred-capability-documents"
-version = "0.1.2"
+version = "4.4.3"
 source = { editable = "../../libs/capabilities/fred-capability-documents" }
 dependencies = [
     { name = "fred-core" },
@@ -720,7 +720,7 @@ dev = [
 
 [[package]]
 name = "fred-capability-html-artifact"
-version = "0.1.3"
+version = "4.4.3"
 source = { editable = "../../libs/capabilities/fred-capability-html-artifact" }
 dependencies = [
     { name = "fred-core" },
@@ -764,18 +764,19 @@ dev = [
 
 [[package]]
 name = "fred-capability-mcp"
-version = "0.1.1"
+version = "4.4.3"
 source = { editable = "../../libs/capabilities/fred-capability-mcp" }
 dependencies = [
     { name = "fred-sdk", extra = ["agents"] },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "fred-sdk", extras = ["agents"], specifier = ">=4.3.0" }]
+requires-dist = [{ name = "fred-sdk", extras = ["agents"], editable = "../../libs/fred-sdk" }]
+provides-extras = ["dev"]
 
 [[package]]
 name = "fred-capability-platform-ops"
-version = "0.1.3"
+version = "4.4.3"
 source = { editable = "../../libs/capabilities/fred-capability-platform-ops" }
 dependencies = [
     { name = "fred-core" },
@@ -818,7 +819,7 @@ dev = [
 
 [[package]]
 name = "fred-capability-ppt-filler"
-version = "0.1.4"
+version = "4.4.3"
 source = { editable = "../../libs/capabilities/fred-capability-ppt-filler" }
 dependencies = [
     { name = "fastapi" },
@@ -868,7 +869,7 @@ dev = [
 
 [[package]]
 name = "fred-capability-team-wiki"
-version = "0.1.3"
+version = "4.4.3"
 source = { editable = "../../libs/capabilities/fred-capability-team-wiki" }
 dependencies = [
     { name = "fred-core" },
@@ -911,7 +912,7 @@ dev = [
 
 [[package]]
 name = "fred-capability-writable-document"
-version = "0.1.5"
+version = "4.4.3"
 source = { editable = "../../libs/capabilities/fred-capability-writable-document" }
 dependencies = [
     { name = "fastapi" },
@@ -960,7 +961,7 @@ dev = [
 
 [[package]]
 name = "fred-core"
-version = "4.4.2"
+version = "4.4.3"
 source = { editable = "../../libs/fred-core" }
 dependencies = [
     { name = "aiosqlite" },
@@ -1060,7 +1061,7 @@ dev = [
 
 [[package]]
 name = "fred-pod"
-version = "4.4.2"
+version = "4.4.3"
 source = { editable = "../../libs/fred-pod" }
 dependencies = [
     { name = "httpx" },
@@ -1100,7 +1101,7 @@ dev = [
 
 [[package]]
 name = "fred-runtime"
-version = "4.4.2"
+version = "4.4.3"
 source = { editable = "../../libs/fred-runtime" }
 dependencies = [
     { name = "alembic" },
@@ -1170,7 +1171,7 @@ dev = [
 
 [[package]]
 name = "fred-sdk"
-version = "4.4.2"
+version = "4.4.3"
 source = { editable = "../../libs/fred-sdk" }
 dependencies = [
     { name = "fred-pod" },
@@ -1199,6 +1200,7 @@ requires-dist = [
     { name = "langchain", marker = "extra == 'agents'", specifier = ">=1.4.2" },
     { name = "langchain-core", marker = "extra == 'agents'", specifier = ">=1.6.5" },
     { name = "langgraph", marker = "extra == 'agents'", specifier = ">=1.2.12" },
+    { name = "prometheus-client", marker = "extra == 'knowledge-base'", specifier = ">=0.20.0" },
     { name = "pydantic", specifier = ">=2.7.0,<3.0.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.4.2" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=6.2.1" },

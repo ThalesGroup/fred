@@ -281,6 +281,11 @@ agent can do" belong outside the capability system.
 | Full vertical (`validate_config`, middleware, `router`, `tables`, team settings) | a **capability package** built on `fred-sdk` | the package only |
 | First-party | same package model, installed in the `fred-agents` pod via a `pyproject.toml` dependency (worked example: `libs/capabilities/fred-capability-ppt-filler`, #1903) | the package only |
 
+First-party capabilities (`libs/capabilities/*`) are published to PyPI with the
+libs, at the same version as `fred-runtime`, one package each. A third-party pod
+declares the ones it needs as dependencies, exactly as `fred-agents` does:
+installing a package registers its capabilities, so a pod carries only those.
+
 **Do not** build a "capability pod" and **do not** put capability runtime code in
 control-plane — it stays the proxy/registry/team-policy authority (RFC §7).
 
