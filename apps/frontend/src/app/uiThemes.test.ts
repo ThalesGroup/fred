@@ -21,6 +21,10 @@ import {
   computeDarkMode,
   offeredUiThemes,
   PLATFORM_UI_THEMES_CACHE_KEY,
+  CUSTOM_UI_THEMES_CACHE_KEY,
+  availableUiThemes,
+  setCustomUiThemes,
+  uiThemeBase,
   type PlatformUiThemes,
   resolveUiTheme,
   THEME_MODE_STORAGE_KEY,
@@ -63,6 +67,7 @@ describe("UI theme catalog", () => {
     expect(BOOT_SCRIPT).toContain(`"${localStorageKey(UI_THEME_STORAGE_KEY)}"`);
     expect(BOOT_SCRIPT).toContain(`"${localStorageKey(THEME_MODE_STORAGE_KEY)}"`);
     expect(BOOT_SCRIPT).toContain(`"${PLATFORM_UI_THEMES_CACHE_KEY}"`);
+    expect(BOOT_SCRIPT).toContain(`"${CUSTOM_UI_THEMES_CACHE_KEY}"`);
   });
 
   it("matches the theme files", () => {
@@ -110,16 +115,25 @@ describe("theme resolution before the first paint", () => {
     const attributes = boot(storage, prefersDark);
     const parsed = typeof platform === "object" && platform !== null ? (platform as PlatformUiThemes) : null;
     expect(attributes["data-ui-theme"]).toBe(resolveUiTheme(theme, parsed));
+    expect(attributes["data-ui-base-theme"]).toBe(uiThemeBase(attributes["data-ui-theme"]));
     const dark = computeDarkMode((mode ?? "system") as ThemeMode, prefersDark);
     expect(attributes["data-theme"]).toBe(dark ? "dark" : "light");
   });
 
   it("falls back to the default theme and the OS mode when storage is unavailable", () => {
-    expect(boot("unavailable", true)).toEqual({ "data-ui-theme": "pebble", "data-theme": "dark" });
+    expect(boot("unavailable", true)).toEqual({
+      "data-ui-theme": "pebble",
+      "data-ui-base-theme": "pebble",
+      "data-theme": "dark",
+    });
   });
 
   it("uses light when the browser has no matchMedia, as React does", () => {
-    expect(boot({}, "unsupported")).toEqual({ "data-ui-theme": "pebble", "data-theme": "light" });
+    expect(boot({}, "unsupported")).toEqual({
+      "data-ui-theme": "pebble",
+      "data-ui-base-theme": "pebble",
+      "data-theme": "light",
+    });
   });
 
   it("resolves an unknown stored theme to pebble", () => {
@@ -128,6 +142,30 @@ describe("theme resolution before the first paint", () => {
       "pebble",
     );
   });
+});
+
+it("offers multiple ZIP themes and applies each inherited base before paint", () => {
+  const custom = [
+    { id: "acme", label: "Acme", base: "pebble" as const },
+    { id: "delta", label: "Delta", base: "cloud" as const },
+  ];
+  setCustomUiThemes(custom);
+  try {
+    expect(availableUiThemes()).toEqual([...UI_THEMES, "acme", "delta"]);
+    expect(resolveUiTheme(null, { default_theme: "delta" })).toBe("delta");
+    expect(resolveUiTheme("acme", { hidden_themes: ["acme"] })).toBe("pebble");
+    expect(
+      boot(
+        {
+          [CUSTOM_UI_THEMES_CACHE_KEY]: JSON.stringify(custom),
+          [localStorageKey(UI_THEME_STORAGE_KEY)]: JSON.stringify("delta"),
+        },
+        false,
+      ),
+    ).toMatchObject({ "data-ui-theme": "delta", "data-ui-base-theme": "cloud" });
+  } finally {
+    setCustomUiThemes([]);
+  }
 });
 
 describe("resolveUiTheme with platform settings", () => {

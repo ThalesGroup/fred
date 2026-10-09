@@ -101,8 +101,8 @@ function ManagedChatWelcome({ agent }: { agent?: ManagedAgentInstanceSummary }) 
   return (
     <div className={styles.welcomeBlock}>
       {agent && (
-        <div className={styles.welcomeAgent}>
-          <span className={styles.welcomeAgentIcon}>
+        <div className={styles.welcomeAgent} data-chat-welcome-agent>
+          <span className={styles.welcomeAgentIcon} data-chat-agent-icon>
             <Icon category="outlined" type={resolveAgentIcon(agent, agentIconName)} />
           </span>
           <span className={styles.welcomeAgentIdentity}>
@@ -736,7 +736,7 @@ export default function ManagedChatPage() {
             {/* Conversation column — holds only the main column now; the push drawers
             moved up to the page body so they reflow the header too. */}
             <div className={styles.contentRow}>
-              <div className={styles.mainColumn}>
+              <div className={styles.mainColumn} data-chat-main>
                 {allowChatAttachments && dragActive && (
                   <div className={styles.dropOverlay} aria-hidden>
                     <div className={styles.dropOverlayContent}>

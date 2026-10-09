@@ -38,8 +38,9 @@ set -eu
 #     "ui_upstream":"http://acme-forecast-ui:80",
 #     "service_upstream":"http://acme-forecast-api:8000",
 #     "service_required":true}]'
-# FRONTEND_THEME_URL installs a branding archive over images/, contrib/ and the
-# root markdown at startup; FRONTEND_THEME_S3_* and FRONTEND_THEME_REQUIRED
+# FRONTEND_THEME_URL installs a branding archive over images/, contrib/,
+# theme-custom.css, theme-properties.json, theme-translations/ and root markdown at startup.
+# FRONTEND_THEME_S3_* and FRONTEND_THEME_REQUIRED
 # tune it. Layout and variables: apps/frontend/README.md, "Theme overlay".
 : "${FRONTEND_AGENTIC_UPSTREAM:=http://fred-agents}"
 : "${FRONTEND_KNOWLEDGE_FLOW_UPSTREAM:=http://knowledge-flow-backend:8000}"
@@ -200,7 +201,7 @@ install_theme() {
     set -- "${root}"/*
     if [ $# -eq 1 ] && [ -d "$1" ]; then
         case "$(basename "$1")" in
-            images | contrib) ;;
+            images | contrib | theme-translations) ;;
             *) root=$1 ;;
         esac
     fi
@@ -216,7 +217,46 @@ install_theme() {
         name=$(basename "${entry}")
         if [ -d "${entry}" ] && { [ "${name}" = images ] || [ "${name}" = contrib ]; }; then
             cp -R "${entry}" "${staging}/" || { theme_failure "cannot read ${name} from the archive"; return 0; }
-        elif [ -f "${entry}" ] && [ "${name%.md}" != "${name}" ]; then
+        elif [ -d "${entry}" ] && [ "${name}" = theme-translations ]; then
+            mkdir "${staging}/theme-translations" || { theme_failure "cannot stage translations"; return 0; }
+            for language in en fr; do
+                source_file="${entry}/${language}.json"
+                [ -f "${source_file}" ] || continue
+                if ! jq -es '
+                    def safe: type == "string" or (type == "object" and all(to_entries[];
+                        (.key | test("^[A-Za-z0-9_-]+$")) and
+                        (.key != "__proto__" and .key != "constructor" and .key != "prototype") and
+                        (.value | safe)));
+                    length == 1 and (.[0] | type == "object" and safe)
+                ' "${source_file}" >/dev/null 2>&1; then
+                    theme_failure "invalid ${name}/${language}.json"
+                    return 0
+                fi
+                cp "${source_file}" "${staging}/theme-translations/" || { theme_failure "cannot read translation"; return 0; }
+            done
+        elif [ -f "${entry}" ] && { [ "${name%.md}" != "${name}" ] || [ "${name}" = theme-custom.css ] || [ "${name}" = theme-properties.json ] || [ "${name}" = theme-catalog.json ]; }; then
+            if [ "${name}" = theme-catalog.json ] && ! jq -es '
+                length == 1 and (.[0] | type == "object" and (keys == ["themes"]) and
+                (.themes | type == "array" and length <= 16 and
+                    all(.[]; type == "object" and (keys == ["base", "id", "label"]) and
+                        (.id | type == "string" and test("^[a-z][a-z0-9-]{0,31}$") and
+                            . != "pebble" and . != "cobalt" and . != "cloud") and
+                        (.label | type == "string" and length > 0 and length <= 80) and
+                        (.base | IN("pebble", "cobalt", "cloud")))) and
+                ((.themes | map(.id) | unique | length) == (.themes | length)))
+            ' "${entry}" >/dev/null 2>&1; then
+                theme_failure "invalid theme-catalog.json"
+                return 0
+            fi
+            if [ "${name}" = theme-properties.json ] && ! jq -es '
+                length == 1 and (.[0] |
+                    type == "object" and
+                    (keys - ["agentIconName", "agentsNicknamePlural", "agentsNicknameSingular", "contactSupportLink", "defaultPersonalAvatarFile", "defaultTeamAvatarFile", "faviconName", "faviconNameDark", "logoName", "logoNameDark", "releaseBrand", "siteDisplayName", "siteSubtitle", "siteTitle"] | length == 0) and
+                    all(.[]; type == "string" and length <= 200))
+            ' "${entry}" >/dev/null 2>&1; then
+                theme_failure "invalid theme-properties.json"
+                return 0
+            fi
             cp "${entry}" "${staging}/" || { theme_failure "cannot read ${name} from the archive"; return 0; }
         else
             echo "Theme entry ignored, not a served surface: ${name}" >&2
@@ -224,7 +264,7 @@ install_theme() {
     done
     installed=$(find "${staging}" -type f | wc -l)
     if [ "${installed}" -eq 0 ]; then
-        theme_failure "archive holds no images/, contrib/ or root markdown"
+        theme_failure "archive holds no supported theme files"
         return 0
     fi
     if ! find "${FRONTEND_THEME_DIR}" -mindepth 1 -delete ||
@@ -464,6 +504,38 @@ cat <<'EOF'
 
     location @stock {
         try_files $uri =404;
+    }
+
+    location = /theme-properties.json {
+        add_header Cache-Control "no-cache";
+EOF
+printf '        root %s;\n' "${FRONTEND_THEME_DIR}"
+cat <<'EOF'
+        try_files $uri @stock;
+    }
+
+    location = /theme-catalog.json {
+        add_header Cache-Control "no-cache";
+EOF
+printf '        root %s;\n' "${FRONTEND_THEME_DIR}"
+cat <<'EOF'
+        try_files $uri @stock;
+    }
+
+    location = /theme-custom.css {
+        add_header Cache-Control "no-cache";
+EOF
+printf '        root %s;\n' "${FRONTEND_THEME_DIR}"
+cat <<'EOF'
+        try_files $uri @stock;
+    }
+
+    location ~ "^/theme-translations/(en|fr)\.json$" {
+        add_header Cache-Control "no-cache";
+EOF
+printf '        root %s;\n' "${FRONTEND_THEME_DIR}"
+cat <<'EOF'
+        try_files $uri @stock;
     }
 
     # Applies the stored UI theme before the first paint; must never be stale,

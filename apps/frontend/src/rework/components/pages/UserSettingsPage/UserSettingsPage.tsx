@@ -24,7 +24,7 @@ import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useContext } from "react";
 import { ApplicationContext } from "../../../../app/ApplicationContextProvider.tsx";
-import { UI_THEME_LABEL_KEYS, type UiTheme } from "../../../../app/uiThemes.ts";
+import { uiThemeLabel, type UiTheme } from "../../../../app/uiThemes.ts";
 import { KeyCloakService } from "../../../../security/KeycloakService.ts";
 import { useFrontendProperties } from "../../../../hooks/useFrontendProperties.ts";
 import { Link, useNavigate } from "react-router-dom";
@@ -143,7 +143,7 @@ export default function UserSettingsPage() {
                   options={offeredUiThemes.map((theme) => ({
                     key: theme,
                     value: theme,
-                    label: t(UI_THEME_LABEL_KEYS[theme]),
+                    label: uiThemeLabel(theme, t),
                   }))}
                   value={uiTheme}
                   onChange={setUiTheme}
