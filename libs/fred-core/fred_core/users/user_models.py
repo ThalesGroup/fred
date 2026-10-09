@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from uuid import UUID
 from datetime import datetime
 
 from sqlalchemy import (
@@ -47,7 +48,7 @@ class UserRow(Base):
         {"extend_existing": True},
     )
 
-    id: Mapped[Uuid] = mapped_column(Uuid, primary_key=True)
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
     # NULL identifies a newcomer awaiting admission, not an implicit organization.
     organization_id: Mapped[str | None] = mapped_column(String, index=True)
     organization_kind: Mapped[str] = mapped_column(

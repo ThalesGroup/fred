@@ -61,6 +61,22 @@ class PostgresUserStore(BaseUserStore):
     def __init__(self, engine: AsyncEngine):
         self._sessions = make_session_factory(engine)
 
+    async def filter_organization_users(
+        self,
+        user_ids: list[UUID],
+        organization_id: str,
+        session: AsyncSession | None = None,
+    ) -> set[UUID]:
+        async with use_session(self._sessions, session) as s:
+            return set(
+                await s.scalars(
+                    select(UserRow.id).where(
+                        UserRow.id.in_(user_ids),
+                        UserRow.organization_id == organization_id,
+                    )
+                )
+            )
+
     async def assign_organization(
         self,
         user_id: UUID,

@@ -124,6 +124,25 @@ preserve old behavior through adapters, compatibility switches or automatic repa
   generated-file churn in this block. Ruff and raw kernel typing passed.
   Canonical SQL ancestry/admission gates, corpus conversion and removal of remaining
   per-document checks are still pending; task 1.4 remains open.
+  The next foundation block adds one SQL resolution of the user's stored
+  organization or an explicit organization/team/project, with owner-only personal
+  checks before FGA. `authorize_space` requires current-space access and batches
+  only the at-most-three common ancestors for corpus/agent reads; writes and
+  analysis remain local. Team creation and initial-admin search use this gate,
+  and one bounded SQL identity intersection rejects foreign/unadmitted nominees.
+  No implicit creator membership or SQL compensation after an uncertain FGA write.
+  Checks: 48 SQLite/PostgreSQL cases and 121 affected control-plane cases passed;
+  raw typing of the new core and affected CP service/dependencies/context reported
+  zero diagnostics. `make update-control-plane-api` regenerated the API contract;
+  the generated TypeScript client is unchanged (description-only API edits).
+  Independent read-only review against `32b4a52d5` found malformed nominee IDs
+  yielding 500 and the candidate picker retaining a platform gate. Both were
+  corrected and reviewed again with no further finding. Import/export, remaining
+  membership consumers and full-branch readiness are outside this focused review.
+  This block adds/removes production Python +297/-122 (net +175), model/context
+  declarations +28/-1 and tests +492/-124. It adds the required shared foundation;
+  it is not a reduction claim or completion of the backend milestone. Remaining
+  team/personal guards and all corpus consumers still need convergence/deletion.
 - [ ] 1.5 Deliver the first integrated path through the existing demo-bundle: deploy an empty target platform, build/import one organization with explicit users/teams/local roles through control-plane services, and export/re-import the same organization. Preserve the existing demo accounts, credentials, teams, memberships, local/platform roles and build workflow; confirm only new organization declarations/assignments. Keep import/export platform-admin-only, preserve organization boundaries and personal privacy, reject unsupported old bundles, and retain existing closed-space administration rules. Coordinate corpus-format completion with task 3.2; this task is not complete with only a parser or demo fixture.
 
 ## 2. Administration and membership

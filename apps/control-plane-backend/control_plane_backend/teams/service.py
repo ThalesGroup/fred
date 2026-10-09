@@ -21,7 +21,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from threading import Lock
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi import UploadFile
 from fred_core import (
@@ -44,6 +44,8 @@ from fred_core import (
     holds_caller_role,
     is_service_agent,
 )
+from fred_core.security.rebac.rebac_engine import SpacePermission
+from fred_core.security.rebac.space_authorization import authorize_space
 from fred_core.common import TeamId, ThreadSafeLRUCache, is_personal_team_id
 from fred_core.logs.audit_log import emit_audit_log
 from fred_core.scheduler import SchedulerBackend
@@ -756,112 +758,85 @@ async def create_team(
     request: CreateTeamRequest,
     deps: TeamServiceDependencies,
 ) -> TeamWithPermissions:
-    """Bootstrap a brand-new team with its first `team_admin`(s) (RFC §28).
-
-    Why this function exists:
-    - there was previously no team-creation flow at all: a "team" is a
-      Keycloak root group, discovered lazily, and every membership endpoint
-      requires the group (and a `team_admin`) to already exist — a freshly
-      created Keycloak group was unreachable by any of them
-    - the creator must not gain a standing team relation from creating a team
-      (RFC §24.2/§24.7); this action writes explicit `team_admin` tuples only
-      for the subjects named in the request
-
-    How to use it:
-    - call from the `can_create_team`-gated `POST /teams` route, which a
-      `team_manager` reaches as well as a `platform_admin`
-    - one-shot by construction: `team_metadata.name`'s DB-level unique
-      constraint (migration a8b9c0d1e2f3) makes a second call for the same
-      name fail with `TeamAlreadyExistsError` (409) rather than silently
-      reassigning an existing team's admins
-
-    Example:
-    - `team = await create_team(user, CreateTeamRequest(name="swiftpost", initial_team_admin_ids=["alice-sub"]), deps)`
-    """
-    rebac = deps.rebac
-    await rebac.check_user_permission_or_raise(
-        user, PlatformPermission.CAN_CREATE_TEAM, PLATFORM_ID
+    """Create a team in the caller's organization with explicitly nominated admins."""
+    access = await authorize_space(
+        user,
+        None,
+        SpacePermission.CREATE_TEAM,
+        spaces=deps.get_space_store(),
+        rebac=deps.rebac,
     )
+    return await provision_team(user, request, access.context.organization_id, deps)
 
+
+async def provision_team(
+    user: KeycloakUser,
+    request: CreateTeamRequest,
+    organization_id: str,
+    deps: TeamServiceDependencies,
+    *,
+    initial_roles: dict[str, set[UserTeamRelation]] | None = None,
+    team_id: TeamId | None = None,
+) -> TeamWithPermissions:
+    """One-shot creation shared by authorized administration and bundle import."""
+    rebac = deps.rebac
     store = deps.get_team_metadata_store()
-    # AUTHZ-05 post-implementation review finding: this pre-check is a
-    # fast-path only (fails fast on the common case without a wasted insert
-    # attempt) — it does NOT by itself close the race between two concurrent
-    # `POST /teams` calls for the same name, since both could pass it before
-    # either writes. The actual guarantee is `team_metadata.name`'s DB-level
-    # unique constraint below.
-    if await store.get_by_name(request.name) is not None:
+    if await store.get_by_name(request.name, organization_id) is not None:
         raise TeamAlreadyExistsError(request.name)
-
-    admin_relations = [
-        await resolve_granted_team_relation(
-            admin_user_id, UserTeamRelation.TEAM_ADMIN, deps
-        )
-        for admin_user_id in request.initial_team_admin_ids
-    ]
-    team_id = TeamId(uuid4().hex)
+    roles = {uid: set(values) for uid, values in (initial_roles or {}).items()}
+    for uid in request.initial_team_admin_ids:
+        roles.setdefault(uid, set()).add(UserTeamRelation.TEAM_ADMIN)
     try:
-        metadata = await store.create(team_id, request.name)
+        nominees = {UUID(uid) for uid in roles}
+    except ValueError as exc:
+        raise TeamAdminConstraintError(
+            "Initial team members need valid user IDs"
+        ) from exc
+    if (
+        await get_user_store().filter_organization_users(
+            list(nominees), organization_id
+        )
+        != nominees
+    ):
+        raise TeamAdminConstraintError(
+            "Initial team members must belong to its organization"
+        )
+    grants = await asyncio.gather(
+        *(
+            resolve_granted_team_relation(uid, role, deps)
+            for uid, values in roles.items()
+            for role in sorted(values)
+        )
+    )
+    subjects = [uid for uid, values in roles.items() for _role in sorted(values)]
+    team_id = team_id or TeamId(uuid4().hex)
+    try:
+        metadata = await store.create(team_id, request.name, organization_id)
     except IntegrityError as exc:
         raise TeamAlreadyExistsError(request.name) from exc
-
-    try:
-        bootstrap_token = await rebac.add_relations(
-            [
+    # SQL and FGA are separate commits. Failure requires operator intervention;
+    # deleting SQL here would not roll back an uncertain FGA write.
+    token = await rebac.add_relations(
+        [
+            Relation(
+                subject=RebacReference(Resource.ORGANIZATION, organization_id),
+                relation=RelationType.ORGANIZATION,
+                resource=RebacReference(Resource.TEAM, team_id),
+            ),
+            *[
                 Relation(
-                    subject=RebacReference(Resource.USER, admin_user_id),
-                    relation=admin_relation.to_relation(),
+                    subject=RebacReference(Resource.USER, uid),
+                    relation=role.to_relation(),
                     resource=RebacReference(Resource.TEAM, team_id),
                 )
-                for admin_user_id, admin_relation in zip(
-                    request.initial_team_admin_ids, admin_relations, strict=True
-                )
+                for uid, role in zip(subjects, grants, strict=True)
             ],
-            actor_uid=user.uid,
-        )
-    except Exception:
-        logger.warning(
-            "Rolling back team %s (%s): failed to grant initial team_admin(s)",
-            team_id,
-            request.name,
-        )
-        await store.delete(team_id)
-        raise
-
-    logger.info(
-        "Bootstrapped team %s (%s) with initial team_admin(s): %s",
-        team_id,
-        request.name,
-        ", ".join(request.initial_team_admin_ids),
+        ],
+        actor_uid=user.uid,
     )
-
     await _seed_starter_kit(team_id, deps)
-
-    # Build the response directly rather than through the permission-gated
-    # `get_team_by_id` path: the calling platform_admin is not necessarily a
-    # team_member of the team they just created (by design, RFC §24.2/§24.7),
-    # so a CAN_READ-gated lookup would deny their own creation response.
-    # TEAM-09: grant marketplace discoverability immediately — don't wait for
-    # the lazy backfill in `_list_teams` to reach this brand-new team.
-    # #2433: a new team is PRIVATE by default, so the grant is conditional —
-    # a brand-new team has never held the `public` relation, so the private
-    # branch has nothing to revoke (the idempotent revoke in `_list_teams`
-    # remains the backstop if the default ever changes again).
-    public_token = None
-    if metadata.visibility == TeamVisibility.PUBLIC:
-        public_token = await rebac.ensure_team_public_relations([team_id])
-    # Both writes above target this same brand-new team; use the latest one
-    # that actually happened (OpenFGA has no per-write snapshot token today —
-    # `_persist_relation` always returns the same `HIGHER_CONSISTENCY`
-    # sentinel — so any non-`None` value already means "read this team
-    # strongly"). Without this, the just-written `initial_team_admin_ids`
-    # tuples could race the projection Read below on eventual consistency and
-    # the creator's own response would come back with an empty admins list.
-    consistency_token = next(
-        (token for token in (public_token, bootstrap_token) if token is not None),
-        None,
-    )
-    return await _build_team_with_permissions(user, metadata, deps, consistency_token)
+    # The creator receives no implicit membership, so build the response directly.
+    return await _build_team_with_permissions(user, metadata, deps, token)
 
 
 async def get_team_by_id(
@@ -1035,14 +1010,10 @@ async def update_team(
         patch_data = request.model_dump(exclude_unset=True)
         store = deps.get_team_metadata_store()
         renamed_from: str | None = None
-        # Renaming to the current name is a no-op, not a conflict. Any other
-        # name must be free: `teammetadata.name` is globally unique, so this
-        # pre-check turns the common collision into a 409 instead of a 500.
+        # The SQL uniqueness constraint rejects collisions within the organization.
         if patch_data.get("name") == metadata.name:
             patch_data.pop("name")
         elif "name" in patch_data:
-            if await store.get_by_name(patch_data["name"]):
-                raise TeamAlreadyExistsError(patch_data["name"])
             renamed_from = metadata.name
         # The public API exposes the team image as `avatar_image_url`, but the
         # storage layer (fred_core `TeamMetadataPatch`) still speaks `banner_*`
@@ -1336,28 +1307,21 @@ async def search_candidate_team_admins(
     query: str,
     deps: TeamServiceDependencies,
 ) -> list[UserSummary]:
-    """
-    Search Keycloak users eligible to be a brand-new team's first `team_admin`.
-
-    Why this function exists:
-    - `create_team` requires at least one `initial_team_admin_ids` entry, and
-      the only org-wide directory (`GET /users`) is gated on
-      `can_administer_users` — `platform_admin`-only. A `team_manager` could
-      reach `/admin/teams` and hold `can_create_team`, yet had no way to name
-      an admin, so the form was unusable for the very role that owns the page.
-
-    How to use it:
-    - call from `GET /teams/candidate-admins`
-    - gated on the same `can_create_team` as the action it feeds, and bounded
-      like the team-scoped search rather than widening the directory listing
-
-    Example:
-    - `matches = await search_candidate_team_admins(user, "cohen", deps)`
-    """
-    await deps.rebac.check_user_permission_or_raise(
-        user, PlatformPermission.CAN_CREATE_TEAM, PLATFORM_ID
+    """Find same-organization nominees using the team-creation gate."""
+    access = await authorize_space(
+        user,
+        None,
+        SpacePermission.CREATE_TEAM,
+        spaces=deps.get_space_store(),
+        rebac=deps.rebac,
     )
-    return await _search_users_bounded(query, deps)
+    matches = await _search_users_bounded(query, deps)
+    if not matches:
+        return []
+    admitted = await get_user_store().filter_organization_users(
+        [UUID(candidate.id) for candidate in matches], access.context.organization_id
+    )
+    return [candidate for candidate in matches if UUID(candidate.id) in admitted]
 
 
 async def search_candidate_team_members(

@@ -28,6 +28,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from typing import Any, cast
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -53,12 +54,14 @@ from fred_core import (
     AuthorizationError,
     KeycloakUser,
     PlatformPermission,
+    SpacePermission,
     RebacReference,
     Relation,
     RelationType,
     Resource,
     TeamPermission,
 )
+from fred_core.teams.space_models import SpaceContext, SpaceKind
 from fred_core.common import TeamId
 from fred_core.teams.metadata_store import TeamMetadata
 from httpx import ASGITransport, AsyncClient
@@ -93,6 +96,22 @@ class _FakeRebac:
         # role's exact reach can be asserted.
         if self._granted is not None and permission not in self._granted:
             raise AuthorizationError(user.uid, permission.value, Resource.PLATFORM)
+
+    async def has_permissions(self, subject, checks, **kwargs):
+        self.permission_checks.extend(permission for permission, _ in checks)
+        return [
+            self._granted is None
+            or any(
+                type(granted) is type(permission) and granted == permission
+                for granted in self._granted
+            )
+            for permission, _ in checks
+        ]
+
+    async def check_permission_or_raise(self, subject, permission, resource, **kwargs):
+        self.permission_checks.append(permission)
+        if self._granted is not None and permission not in self._granted:
+            raise AuthorizationError(subject.id, permission.value, resource.type)
 
     async def check_user_team_permissions_or_raise(
         self, *, user, team_id, permissions
@@ -145,10 +164,12 @@ class _FakeMetadataStore:
     async def list_all(self, session=None) -> list[TeamMetadata]:
         return list(self.teams.values())
 
-    async def get_by_name(self, name, session=None):
+    async def get_by_name(self, name, organization_id=None, session=None):
         return next((t for t in self.teams.values() if t.name == name), None)
 
-    async def create(self, team_id, name, session=None) -> TeamMetadata:
+    async def create(
+        self, team_id, name, organization_id, session=None
+    ) -> TeamMetadata:
         if self._create_raises is not None:
             raise self._create_raises
         self.created.append((str(team_id), name))
@@ -164,6 +185,11 @@ class _FakeMetadataStore:
         existing = self.teams.get(str(team_id))
         if existing is None:
             return None
+        name = patch.to_store_values().get("name")
+        if name is not None and any(
+            t.id != existing.id and t.name == name for t in self.teams.values()
+        ):
+            raise IntegrityError("UPDATE", {}, Exception("duplicate scoped name"))
         record = existing.model_dump()
         record.update(patch.to_store_values())
         updated = TeamMetadata(**record)
@@ -185,7 +211,12 @@ class _FakeMetadataStore:
 
 
 def _user() -> KeycloakUser:
-    return KeycloakUser(uid="platform-admin-1", username="admin", roles=[], email=None)
+    return KeycloakUser(
+        uid="00000000-0000-0000-0000-000000000010",
+        username="admin",
+        roles=[],
+        email=None,
+    )
 
 
 async def _no_users_by_ids(*_a, **_k) -> dict:
@@ -242,6 +273,11 @@ def _deps(
         rebac=cast(Any, rebac),
         scheduler_backend=cast(Any, object()),
         get_team_metadata_store=cast(Any, lambda: store),
+        get_space_store=lambda: SimpleNamespace(
+            resolve_for_user=AsyncMock(
+                return_value=SpaceContext("org", SpaceKind.ORGANIZATION, "org", None)
+            )
+        ),
         get_default_team_store=cast(Any, object),
         get_team_admin_charter_store=cast(Any, object),
         get_prompt_store=cast(Any, lambda: prompt_store or cast(Any, object())),
@@ -259,11 +295,25 @@ def _deps(
     )
 
 
+@pytest.fixture
+def admitted_users(monkeypatch):
+    store = SimpleNamespace(
+        find_user_by_id=AsyncMock(return_value=SimpleNamespace(organization_id="org")),
+        filter_organization_users=AsyncMock(side_effect=lambda ids, _org: set(ids)),
+    )
+    monkeypatch.setattr(
+        "control_plane_backend.teams.service.get_user_store", lambda: store
+    )
+    return store
+
+
 # --------------------------- create_team (name uniqueness race) -------------
 
 
 @pytest.mark.asyncio
-async def test_create_team_translates_db_integrity_error_to_already_exists() -> None:
+async def test_create_team_translates_db_integrity_error_to_already_exists(
+    admitted_users,
+) -> None:
     """AUTHZ-05 post-implementation review finding: the app-level `get_by_name`
     pre-check is a fast-path only — it cannot by itself close the race between
     two concurrent `POST /teams` calls for the same name, since both could
@@ -280,7 +330,10 @@ async def test_create_team_translates_db_integrity_error_to_already_exists() -> 
     with pytest.raises(TeamAlreadyExistsError):
         await create_team(
             _user(),
-            CreateTeamRequest(name="swiftpost", initial_team_admin_ids=["alice"]),
+            CreateTeamRequest(
+                name="swiftpost",
+                initial_team_admin_ids=["00000000-0000-0000-0000-000000000011"],
+            ),
             _deps(rebac, store),
         )
 
@@ -289,21 +342,26 @@ async def test_create_team_translates_db_integrity_error_to_already_exists() -> 
 
 
 @pytest.mark.asyncio
-async def test_create_team_rolls_back_metadata_when_admin_grant_fails() -> None:
-    """Failed initial grants must not leave a registered team without an admin."""
+async def test_create_team_stops_without_compensation_when_admin_grant_fails(
+    admitted_users,
+) -> None:
+    """Uncertain FGA writes require explicit operator recovery."""
     rebac = _FakeRebac(add_relations_raises=RuntimeError("openfga unavailable"))
     store = _FakeMetadataStore()
 
     with pytest.raises(RuntimeError, match="openfga unavailable"):
         await create_team(
             _user(),
-            CreateTeamRequest(name="swiftpost", initial_team_admin_ids=["alice"]),
+            CreateTeamRequest(
+                name="swiftpost",
+                initial_team_admin_ids=["00000000-0000-0000-0000-000000000011"],
+            ),
             _deps(rebac, store),
         )
 
-    assert await store.get_by_name("swiftpost") is None
+    assert await store.get_by_name("swiftpost") is not None
     assert len(store.created) == 1
-    assert store.deleted_ids == [store.created[0][0]]
+    assert store.deleted_ids == []
     assert rebac.added_relations == []
 
 
@@ -534,7 +592,9 @@ def test_create_and_rename_agree_on_trimming() -> None:
     deep: a team created as `"Ops "` and a rename to `"Ops"` would each pass
     the pre-check and the unique index, leaving two teams a reader cannot tell
     apart."""
-    created = CreateTeamRequest(name="  Ops  ", initial_team_admin_ids=["alice"])
+    created = CreateTeamRequest(
+        name="  Ops  ", initial_team_admin_ids=["00000000-0000-0000-0000-000000000011"]
+    )
     renamed = UpdateTeamRequest(name="  Ops  ")
 
     assert created.name == "Ops"
@@ -836,37 +896,81 @@ def _team_manager_rebac(**kwargs: Any) -> _FakeRebac:
 
 
 @pytest.mark.asyncio
-async def test_team_manager_creates_a_team_with_no_further_gate(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """`POST /teams` must be reachable on `can_create_team` alone: no second
-    org check, no `can_manage_platform` fallback, no Keycloak-role assumption.
-    The creator receives no relation on the new team unless they name
-    themselves in `initial_team_admin_ids` (RFC §24.2/§24.7) — here they do
-    not, so the only user tuple written names the requested admin."""
-    rebac = _team_manager_rebac()
+async def test_organization_admin_creates_without_implicit_membership(
+    monkeypatch, admitted_users
+):
+    rebac = _FakeRebac(granted={SpacePermission.CREATE_TEAM})
     store = _FakeMetadataStore()
     _stub_team_projection(monkeypatch)
-
     team = await create_team(
-        _team_manager(),
-        CreateTeamRequest(name="Northbridge", initial_team_admin_ids=["alice"]),
-        _deps(
-            rebac,
-            store,
-            prompt_store=_FakePromptStoreForSeed(),
-            prompt_category_store=_FakePromptCategoryStoreForSeed(),
+        _user(),
+        CreateTeamRequest(
+            name="Northbridge",
+            initial_team_admin_ids=["00000000-0000-0000-0000-000000000011"],
         ),
+        _deps(rebac, store),
     )
-
     assert team.name == "Northbridge"
-    assert rebac.permission_checks == [PlatformPermission.CAN_CREATE_TEAM]
-    admin_subjects = {
-        relation.subject.id
-        for relation in rebac.added_relations
-        if relation.relation == RelationType.TEAM_ADMIN
-    }
-    assert admin_subjects == {"alice"}
+    assert rebac.permission_checks == [SpacePermission.CREATE_TEAM]
+    assert {
+        r.subject.id
+        for r in rebac.added_relations
+        if r.relation == RelationType.TEAM_ADMIN
+    } == {"00000000-0000-0000-0000-000000000011"}
+
+
+@pytest.mark.asyncio
+async def test_platform_team_manager_cannot_substitute_for_organization_admin(
+    admitted_users,
+):
+    rebac = _team_manager_rebac()
+    store = _FakeMetadataStore()
+    with pytest.raises(AuthorizationError):
+        await create_team(
+            _user(),
+            CreateTeamRequest(
+                name="Northbridge",
+                initial_team_admin_ids=["00000000-0000-0000-0000-000000000011"],
+            ),
+            _deps(rebac, store),
+        )
+    assert not store.created
+
+
+@pytest.mark.asyncio
+async def test_create_team_rejects_foreign_initial_member(admitted_users):
+    admitted_users.filter_organization_users.side_effect = lambda _ids, _org: set()
+    store = _FakeMetadataStore()
+    from control_plane_backend.teams.schemas import TeamAdminConstraintError
+
+    with pytest.raises(TeamAdminConstraintError, match="organization"):
+        await create_team(
+            _user(),
+            CreateTeamRequest(
+                name="Northbridge",
+                initial_team_admin_ids=["00000000-0000-0000-0000-000000000011"],
+            ),
+            _deps(_FakeRebac(), store),
+        )
+    assert not store.created
+
+
+@pytest.mark.asyncio
+async def test_create_team_rejects_malformed_initial_member_before_writes(
+    admitted_users,
+):
+    from control_plane_backend.teams.schemas import TeamAdminConstraintError
+
+    store, rebac = _FakeMetadataStore(), _FakeRebac()
+    with pytest.raises(TeamAdminConstraintError, match="valid user IDs"):
+        await create_team(
+            _user(),
+            CreateTeamRequest(name="Team", initial_team_admin_ids=["invalid"]),
+            _deps(rebac, store),
+        )
+    assert not store.created
+    assert rebac.added_relations == []
+    admitted_users.filter_organization_users.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -957,23 +1061,31 @@ async def test_team_manager_cannot_reach_a_can_manage_platform_surface(
 
 
 @pytest.mark.asyncio
-async def test_search_candidate_team_admins_is_gated_on_can_create_team() -> None:
-    """`create_team` requires at least one admin id, and the org-wide
-    directory (`GET /users`) is `can_administer_users`-gated — platform_admin
-    only. Without this search a team_manager could open `/admin/teams` and
-    hold `can_create_team` yet never fill the form."""
-    rebac = _team_manager_rebac()
-    store = _FakeMetadataStore()
+async def test_search_candidate_team_admins_is_scoped_to_organization(admitted_users):
+    from uuid import UUID
 
-    async def _search(query: str) -> list[UserSummary]:
-        return [UserSummary(id="alice", username=query)]
+    rebac = _FakeRebac(granted={SpacePermission.CREATE_TEAM})
+    identifiers = [
+        "00000000-0000-0000-0000-000000000011",
+        "00000000-0000-0000-0000-000000000012",
+    ]
+    admitted_users.filter_organization_users.side_effect = lambda _ids, _org: {
+        UUID(identifiers[0])
+    }
+
+    async def search(query):
+        return [
+            UserSummary(id=identifier, username=query) for identifier in identifiers
+        ]
 
     matches = await search_candidate_team_admins(
-        _team_manager(), "coh", _deps(rebac, store, search_users=_search)
+        _user(), "coh", _deps(rebac, _FakeMetadataStore(), search_users=search)
     )
-
-    assert [user.id for user in matches] == ["alice"]
-    assert rebac.permission_checks == [PlatformPermission.CAN_CREATE_TEAM]
+    assert [user.id for user in matches] == identifiers[:1]
+    assert rebac.permission_checks == [SpacePermission.CREATE_TEAM]
+    admitted_users.filter_organization_users.assert_awaited_once_with(
+        [UUID(identifier) for identifier in identifiers], "org"
+    )
 
 
 @pytest.mark.asyncio
@@ -991,7 +1103,7 @@ async def test_search_candidate_team_admins_never_degrades_into_a_directory_dump
 ):
     """The route's `min_length=2` validates the raw string, so a whitespace-only
     query would otherwise reach Keycloak un-narrowed."""
-    rebac = _team_manager_rebac()
+    rebac = _FakeRebac(granted={SpacePermission.CREATE_TEAM})
     store = _FakeMetadataStore()
     calls: list[str] = []
 
@@ -1001,7 +1113,7 @@ async def test_search_candidate_team_admins_never_degrades_into_a_directory_dump
 
     assert (
         await search_candidate_team_admins(
-            _team_manager(), "  ", _deps(rebac, store, search_users=_search)
+            _user(), "  ", _deps(rebac, store, search_users=_search)
         )
         == []
     )

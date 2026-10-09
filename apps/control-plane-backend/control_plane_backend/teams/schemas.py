@@ -233,10 +233,10 @@ class TeamMember(BaseModel):
 
 
 class CreateTeamRequest(BaseModel):
-    """Platform-admin-gated team bootstrap request (RFC §28).
+    """Organization-admin-gated team creation request.
 
     ``initial_team_admin_ids`` must name at least one Keycloak user `sub` —
-    an adminless team cannot be created. The requesting platform admin
+    an adminless team cannot be created. The requesting organization admin
     receives no relation on the created team unless they name themselves.
     """
 

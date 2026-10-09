@@ -37,6 +37,8 @@ silently.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from typing import Any, Iterable, cast
 from unittest.mock import AsyncMock, MagicMock
 
@@ -57,7 +59,7 @@ from control_plane_backend.users.schemas import UserSummary
 from fred_core import (
     AuthorizationError,
     KeycloakUser,
-    PlatformPermission,
+    SpacePermission,
     RebacEngine,
     RebacReference,
     Relation,
@@ -66,11 +68,22 @@ from fred_core import (
     TeamPermission,
     TeamVisibility,
 )
+from fred_core.teams.space_models import SpaceContext, SpaceKind
 from fred_core.common import TeamId
 from fred_core.security.rebac.noop_engine import NoopRebacEngine
 from fred_core.teams.metadata_store import TeamMetadata
 
 _ALL_PERMISSIONS = frozenset(TeamPermission)
+
+
+@pytest.fixture
+def admitted_users(monkeypatch):
+    monkeypatch.setattr(
+        "control_plane_backend.teams.service.get_user_store",
+        lambda: SimpleNamespace(
+            filter_organization_users=AsyncMock(side_effect=lambda ids, _org: set(ids))
+        ),
+    )
 
 
 def _user(uid: str = "alice") -> KeycloakUser:
@@ -89,25 +102,24 @@ class _FakeMetadataStore:
     def __init__(
         self,
         teams: dict[str, TeamMetadata],
-        *,
-        create_visibility: TeamVisibility = TeamVisibility.PRIVATE,
     ) -> None:
         self._teams = dict(teams)
-        # #2433: mirrors the real store's ORM default (PRIVATE); a test that
-        # needs `create_team`'s public branch overrides it.
-        self._create_visibility = create_visibility
 
     async def get_by_team_id(
         self, team_id: TeamId, session=None
     ) -> TeamMetadata | None:
         return self._teams.get(str(team_id))
 
-    async def get_by_name(self, name: str, session=None) -> TeamMetadata | None:
+    async def get_by_name(
+        self, name: str, organization_id, session=None
+    ) -> TeamMetadata | None:
         return next((t for t in self._teams.values() if t.name == name), None)
 
-    async def create(self, team_id: TeamId, name: str, session=None) -> TeamMetadata:
+    async def create(
+        self, team_id: TeamId, name: str, organization_id, session=None
+    ) -> TeamMetadata:
         metadata = TeamMetadata(
-            id=team_id, name=name, visibility=self._create_visibility
+            id=team_id, name=name, visibility=TeamVisibility.PRIVATE
         )
         self._teams[str(team_id)] = metadata
         return metadata
@@ -145,6 +157,11 @@ def _deps(
         rebac=cast(Any, rebac),
         scheduler_backend=cast(Any, object()),
         get_team_metadata_store=lambda: cast(Any, store),
+        get_space_store=lambda: SimpleNamespace(
+            resolve_for_user=AsyncMock(
+                return_value=SpaceContext("org", SpaceKind.ORGANIZATION, "org", None)
+            )
+        ),
         get_default_team_store=cast(Any, object),
         get_team_admin_charter_store=cast(Any, object),
         get_prompt_store=cast(Any, object),
@@ -417,6 +434,7 @@ async def test_list_teams_bulk_path_budget(team_count: int) -> None:
 
 @pytest.mark.asyncio
 async def test_create_get_update_share_the_same_assembler(
+    admitted_users,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """13: `create_team`/`get_team_by_id`/`update_team` all call
@@ -438,13 +456,14 @@ async def test_create_get_update_share_the_same_assembler(
     # create_team: platform_admin is not a member of the team they create —
     # must succeed without ever being checked for CAN_READ. Only the
     # org-level CAN_CREATE_TEAM is granted; no TeamPermission at all.
-    engine = CountingRebacEngine(
-        granted_permissions={PlatformPermission.CAN_CREATE_TEAM}
-    )
+    engine = CountingRebacEngine(granted_permissions={SpacePermission.CREATE_TEAM})
     store = _FakeMetadataStore({})
     created = await create_team(
-        _user("platform-admin"),
-        CreateTeamRequest(name="new-team", initial_team_admin_ids=["alice"]),
+        _user("00000000-0000-0000-0000-000000000010"),
+        CreateTeamRequest(
+            name="new-team",
+            initial_team_admin_ids=["00000000-0000-0000-0000-000000000011"],
+        ),
         _deps(engine, store),
     )
     assert calls == [created.id]
@@ -553,7 +572,7 @@ async def test_get_user_roles_in_team_reads_only_the_target_user() -> None:
 
 
 @pytest.mark.asyncio
-async def test_create_team_response_includes_admins_immediately() -> None:
+async def test_create_team_response_includes_admins_immediately(admitted_users) -> None:
     """7: `create_team`'s response must reflect the just-written
     `initial_team_admin_ids` in `admins`, `member_count`, and the direct
     relations it renders from — proving the write is actually visible to the
@@ -562,81 +581,74 @@ async def test_create_team_response_includes_admins_immediately() -> None:
     structural edge — written exactly once, with no prior existence-check
     read — and its token (there being nothing else to prefer it over) is what
     propagates to the projection's Read and BatchCheck."""
-    engine = CountingRebacEngine(
-        granted_permissions={PlatformPermission.CAN_CREATE_TEAM}
-    )
+    engine = CountingRebacEngine(granted_permissions={SpacePermission.CREATE_TEAM})
     store = _FakeMetadataStore({})
-    summaries = {"alice": UserSummary(id="alice", username="alice")}
+    summaries = {
+        "00000000-0000-0000-0000-000000000011": UserSummary(
+            id="00000000-0000-0000-0000-000000000011",
+            username="00000000-0000-0000-0000-000000000011",
+        )
+    }
 
     created = await create_team(
-        _user("platform-admin"),
-        CreateTeamRequest(name="new-team", initial_team_admin_ids=["alice"]),
+        _user("00000000-0000-0000-0000-000000000010"),
+        CreateTeamRequest(
+            name="new-team",
+            initial_team_admin_ids=["00000000-0000-0000-0000-000000000011"],
+        ),
         _deps(engine, store, admin_summaries=summaries),
     )
 
-    assert [a.id for a in created.admins] == ["alice"]
+    assert [a.id for a in created.admins] == ["00000000-0000-0000-0000-000000000011"]
     assert created.member_count == 1
     assert set(created.my_relations) == set()  # the creator isn't a member
-    assert _admin_relation(str(created.id), "alice") in engine.direct_relations
+    assert (
+        _admin_relation(str(created.id), "00000000-0000-0000-0000-000000000011")
+        in engine.direct_relations
+    )
     # #2433: private default — no TEAM-09 grant, so zero `list_relations`
     # calls (see test_create_team_is_private_by_default... for the rule).
     assert engine.list_relations_calls == []
     org_relations = [
-        r for r in engine.direct_relations if r.relation == RelationType.PLATFORM
+        r for r in engine.direct_relations if r.relation == RelationType.ORGANIZATION
     ]
     assert org_relations == [
         Relation(
-            subject=RebacReference(Resource.PLATFORM, "fred"),
-            relation=RelationType.PLATFORM,
+            subject=RebacReference(Resource.ORGANIZATION, "org"),
+            relation=RelationType.ORGANIZATION,
             resource=_team_ref(str(created.id)),
         )
     ]
     assert engine.list_direct_relations_tokens == ["consistency-token"]
-    assert engine.has_permissions_tokens == ["consistency-token"]
+    assert engine.has_permissions_tokens == [
+        RebacEngine.HIGHER_CONSISTENCY,
+        "consistency-token",
+    ]
 
 
 @pytest.mark.asyncio
-async def test_create_team_is_private_by_default_and_never_granted_public() -> None:
+async def test_create_team_is_private_by_default_and_never_granted_public(
+    admitted_users,
+) -> None:
     """#2433: a brand-new team must start invisible to non-members — PRIVATE
     visibility in the response, and no ReBAC `public` relation written (not
     even transiently: a grant-then-lazy-revoke would leave the team readable
     by anyone until the next `_list_teams` pass)."""
-    engine = CountingRebacEngine(
-        granted_permissions={PlatformPermission.CAN_CREATE_TEAM}
-    )
+    engine = CountingRebacEngine(granted_permissions={SpacePermission.CREATE_TEAM})
     store = _FakeMetadataStore({})
 
     created = await create_team(
-        _user("platform-admin"),
-        CreateTeamRequest(name="new-team", initial_team_admin_ids=["alice"]),
+        _user("00000000-0000-0000-0000-000000000010"),
+        CreateTeamRequest(
+            name="new-team",
+            initial_team_admin_ids=["00000000-0000-0000-0000-000000000011"],
+        ),
         _deps(engine, store),
     )
 
     assert created.visibility == TeamVisibility.PRIVATE
     assert engine.public_team_ids == set()
     assert engine.list_relations_calls == []  # no public existence-check read
-
-
-@pytest.mark.asyncio
-async def test_create_team_grants_public_when_metadata_is_public() -> None:
-    """#2433: the immediate TEAM-09 grant survives for a team whose created
-    metadata is PUBLIC — the grant is conditional on visibility, not removed
-    (no production path creates a public team today, but the branch is the
-    contract: grant iff discoverable)."""
-    engine = CountingRebacEngine(
-        granted_permissions={PlatformPermission.CAN_CREATE_TEAM}
-    )
-    store = _FakeMetadataStore({}, create_visibility=TeamVisibility.PUBLIC)
-
-    created = await create_team(
-        _user("platform-admin"),
-        CreateTeamRequest(name="new-team", initial_team_admin_ids=["alice"]),
-        _deps(engine, store),
-    )
-
-    assert created.visibility == TeamVisibility.PUBLIC
-    assert engine.public_team_ids == {str(created.id)}
-    assert engine.list_relations_calls == [(Resource.TEAM, RelationType.PUBLIC)]
 
 
 @pytest.mark.asyncio

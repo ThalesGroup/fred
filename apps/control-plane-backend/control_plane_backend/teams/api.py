@@ -194,7 +194,7 @@ async def list_teams(
     status_code=201,
     response_model=TeamWithPermissions,
     response_model_exclude_none=True,
-    summary="Bootstrap a new team with its initial team_admin(s) (platform admin only)",
+    summary="Create a team with nominated initial admins (organization admin only)",
 )
 async def create_team(
     request: CreateTeamRequest,
@@ -243,7 +243,7 @@ async def search_candidate_team_admins(
     user: KeycloakUser = Depends(get_current_user),
 ) -> list[UserSummary]:
     """Feeds `POST /teams`' `initial_team_admin_ids` and is gated on the same
-    `can_create_team`. Registered before `/teams/{team_id}` so the literal
+    `can_create_team` on the caller's organization. Registered before `/teams/{team_id}` so the literal
     path segment is not swallowed by the team-id path parameter."""
     return await search_candidate_team_admins_from_service(user, query, deps)
 

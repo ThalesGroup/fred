@@ -177,3 +177,241 @@ async def test_assignment_participates_in_the_callers_transaction(database, iden
             await store.assign_organization(user_id, "org-a", session=session)
             raise RuntimeError("rollback")
     assert (await store.find_user_by_id(user_id)).organization_id is None
+
+
+@pytest_asyncio.fixture
+async def spaces(database, identity):
+    from fred_core.teams.space_store import SpaceStore
+
+    users, owner = identity
+    await users.assign_organization(owner, "org-a")
+    other = uuid4()
+    await users.upsert_identity(other, "bob", None, None, None)
+    await users.assign_organization(other, "org-a")
+    store = SpaceStore(database)
+    personal = await store.create_personal_team(owner, "org-a")
+    other_personal = await store.create_personal_team(other, "org-a")
+    async with database.begin() as connection:
+        await connection.execute(
+            insert(SpaceRow).values(
+                id="project-a",
+                kind="project",
+                name="Project",
+                parent_id="team-a",
+                parent_kind="team",
+                parent_team_kind="collaborative",
+            )
+        )
+        await connection.execute(
+            insert(SpaceRow).values(
+                id="team-b",
+                kind="team",
+                name="Team",
+                parent_id="org-b",
+                parent_kind="organization",
+                team_kind="collaborative",
+            )
+        )
+    return store, owner, personal, other_personal
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("identifier", "expected"),
+    [
+        (None, (("organization", "org-a"),)),
+        ("org-a", (("organization", "org-a"),)),
+        ("team-a", (("team", "team-a"), ("organization", "org-a"))),
+        (
+            "project-a",
+            (("project", "project-a"), ("team", "team-a"), ("organization", "org-a")),
+        ),
+    ],
+)
+async def test_space_context_is_one_bounded_query(
+    database, spaces, identifier, expected
+):
+    store, owner, _, _ = spaces
+    statements = []
+
+    @event.listens_for(database.sync_engine, "before_cursor_execute")
+    def record(_conn, _cursor, statement, _parameters, _context, _many):
+        statements.append(statement)
+
+    context = await store.resolve_for_user(owner, identifier)
+    assert context is not None
+    assert context.ancestry == expected
+    assert context.organization_id == "org-a"
+    assert context.team_id == (None if identifier in (None, "org-a") else "team-a")
+    assert len(statements) == 1
+    assert statements[0].startswith("SELECT")
+    assert "RECURSIVE" not in statements[0]
+
+
+@pytest.mark.asyncio
+async def test_space_resolution_refuses_foreign_unknown_and_unadmitted_users(
+    database, spaces
+):
+    store, owner, _, other_personal = spaces
+    pending = uuid4()
+    users = PostgresUserStore(database)
+    await users.upsert_identity(pending, "pending", None, None, None)
+    for user, target in (
+        (owner, "org-b"),
+        (owner, "team-b"),
+        (owner, "missing"),
+        (owner, other_personal),
+        (pending, "org-a"),
+        (uuid4(), "team-a"),
+    ):
+        assert await store.resolve_for_user(user, target) is None
+
+
+@pytest.mark.asyncio
+async def test_personal_resolution_has_only_its_owner_and_organization(spaces):
+    store, owner, personal, _ = spaces
+    context = await store.resolve_for_user(owner, personal)
+    assert context is not None
+    assert context.ancestry == (("team", personal), ("organization", "org-a"))
+    assert context.team_id == personal
+    assert await store.create_personal_team(owner, "org-a") == personal
+    with pytest.raises(ValueError, match="owner's organization"):
+        await store.create_personal_team(owner, "org-b")
+
+
+@pytest.mark.asyncio
+async def test_organization_creation_does_not_reinterpret_existing_spaces(spaces):
+    store, _, _, _ = spaces
+    assert await store.create_organization("org-c", "Third") is True
+    assert await store.create_organization("org-c", "Third") is False
+    for identifier, name in (("org-c", "Changed"), ("team-a", "Team")):
+        with pytest.raises(ValueError, match="conflicts"):
+            await store.create_organization(identifier, name)
+
+
+class _SpaceDecisions:
+    def __init__(self, allowed_ids):
+        self.allowed_ids = set(allowed_ids)
+        self.calls = []
+
+    async def has_permissions(self, subject, checks, **kwargs):
+        self.calls.append((subject, checks, kwargs))
+        return [reference.id in self.allowed_ids for _, reference in checks]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "operation",
+    ["READ_CORPUS", "USE_AGENTS", "EDIT_CORPUS", "ANALYZE", "ADMINISTER_MEMBERS"],
+)
+async def test_space_access_batches_only_the_operation_scope(spaces, operation):
+    from fred_core.security.rebac.rebac_engine import RebacEngine, SpacePermission
+    from fred_core.security.rebac.space_authorization import authorize_space
+    from fred_core.security.structure import KeycloakUser
+
+    store, owner, _, _ = spaces
+    permission = SpacePermission[operation]
+    rebac = _SpaceDecisions({"project-a", "team-a", "org-a"})
+    access = await authorize_space(
+        KeycloakUser(uid=str(owner), username="alice", roles=[]),
+        "project-a",
+        permission,
+        spaces=store,
+        rebac=rebac,
+    )
+    expected = (
+        ("project-a", "team-a", "org-a")
+        if operation in ("READ_CORPUS", "USE_AGENTS")
+        else ("project-a",)
+    )
+    assert access.space_ids == expected
+    assert access.context.team_id == "team-a"
+    assert len(rebac.calls) == 1
+    assert [reference.id for _, reference in rebac.calls[0][1]] == list(expected)
+    assert rebac.calls[0][2]["consistency_token"] == RebacEngine.HIGHER_CONSISTENCY
+
+
+@pytest.mark.asyncio
+async def test_space_access_excludes_denied_ancestors_and_rechecks_next_request(spaces):
+    from fred_core.security.models import AuthorizationError
+    from fred_core.security.rebac.rebac_engine import SpacePermission
+    from fred_core.security.rebac.space_authorization import authorize_space
+    from fred_core.security.structure import KeycloakUser
+
+    store, owner, _, _ = spaces
+    user = KeycloakUser(uid=str(owner), username="alice", roles=[])
+    rebac = _SpaceDecisions({"project-a", "org-a"})
+    access = await authorize_space(
+        user, "project-a", SpacePermission.READ_CORPUS, spaces=store, rebac=rebac
+    )
+    assert access.space_ids == ("project-a", "org-a")
+    rebac.allowed_ids.remove("project-a")
+    with pytest.raises(AuthorizationError):
+        await authorize_space(
+            user, "project-a", SpacePermission.READ_CORPUS, spaces=store, rebac=rebac
+        )
+    assert len(rebac.calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_foreign_space_never_reaches_the_permission_engine(spaces):
+    from fred_core.security.models import AuthorizationError
+    from fred_core.security.rebac.rebac_engine import SpacePermission
+    from fred_core.security.rebac.space_authorization import authorize_space
+    from fred_core.security.structure import KeycloakUser
+
+    store, owner, _, _ = spaces
+    rebac = _SpaceDecisions({"org-b"})
+    for uid, target in ((str(owner), "org-b"), ("malformed", "org-a")):
+        with pytest.raises(AuthorizationError):
+            await authorize_space(
+                KeycloakUser(uid=uid, username="alice", roles=[]),
+                target,
+                SpacePermission.READ_CORPUS,
+                spaces=store,
+                rebac=rebac,
+            )
+    assert rebac.calls == []
+
+
+@pytest.mark.asyncio
+async def test_organization_candidate_filter_is_one_query(database, identity):
+    store, admitted = identity
+    await store.assign_organization(admitted, "org-a")
+    pending, foreign, missing = uuid4(), uuid4(), uuid4()
+    await store.upsert_identity(pending, "pending", None, None, None)
+    await store.upsert_identity(foreign, "foreign", None, None, None)
+    await store.assign_organization(foreign, "org-b")
+    statements = []
+
+    @event.listens_for(database.sync_engine, "before_cursor_execute")
+    def record(_conn, _cursor, statement, _parameters, _context, _many):
+        statements.append(statement)
+
+    assert await store.filter_organization_users(
+        [admitted, admitted, pending, foreign, missing], "org-a"
+    ) == {admitted}
+    assert len(statements) == 1
+    assert statements[0].startswith("SELECT")
+
+
+@pytest.mark.asyncio
+async def test_unadmitted_user_never_reaches_fga(database, identity):
+    from fred_core.security.models import AuthorizationError
+    from fred_core.security.rebac.rebac_engine import SpacePermission
+    from fred_core.security.rebac.space_authorization import authorize_space
+    from fred_core.security.structure import KeycloakUser
+    from fred_core.teams.space_store import SpaceStore
+
+    _, pending = identity
+    rebac = _SpaceDecisions({"org-a"})
+    for target in (None, "org-a", "team-a"):
+        with pytest.raises(AuthorizationError):
+            await authorize_space(
+                KeycloakUser(uid=str(pending), username="pending", roles=[]),
+                target,
+                SpacePermission.READ_CORPUS,
+                spaces=SpaceStore(database),
+                rebac=rebac,
+            )
+    assert rebac.calls == []

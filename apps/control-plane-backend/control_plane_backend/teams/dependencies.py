@@ -26,6 +26,7 @@ from fred_core import (
 from fred_core.scheduler import SchedulerBackend
 from fred_core.store import ContentStore
 from fred_core.teams.metadata_store import TeamMetadataStore
+from fred_core.teams.space_store import SpaceStore
 
 from control_plane_backend.app.container import ControlPlaneContainer
 from control_plane_backend.app.dependencies import get_application_container
@@ -95,6 +96,7 @@ class TeamServiceDependencies:
     rebac: RebacEngine
     scheduler_backend: SchedulerBackend
     get_team_metadata_store: Callable[[], TeamMetadataStore]
+    get_space_store: Callable[[], SpaceStore]
     get_default_team_store: Callable[[], PlatformDefaultTeamStore]
     get_team_admin_charter_store: Callable[[], TeamAdminCharterStore]
     get_prompt_store: Callable[[], PromptStore]
@@ -215,6 +217,7 @@ def build_team_service_dependencies(
         rebac=container.get_rebac_engine(),
         scheduler_backend=container.get_scheduler_backend(),
         get_team_metadata_store=container.get_team_metadata_store,
+        get_space_store=container.get_space_store,
         get_default_team_store=container.get_platform_default_team_store,
         get_team_admin_charter_store=container.get_team_admin_charter_store,
         get_prompt_store=container.get_prompt_store,

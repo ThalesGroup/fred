@@ -45,6 +45,7 @@ from fred_core.store import (
 )
 from fred_core.tasks.service import TaskService
 from fred_core.teams.metadata_store import TeamMetadataStore
+from fred_core.teams.space_store import SpaceStore
 from fred_pod.security.oidc_endpoints import resolve_endpoints
 from prometheus_client import start_http_server
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -106,6 +107,7 @@ class ApplicationContext:
         self._session_store: BaseSessionStore | None = None
         self._purge_queue_store: PurgeQueueStore | None = None
         self._team_metadata_store: TeamMetadataStore | None = None
+        self._space_store: SpaceStore | None = None
         self._platform_bootstrap_store: PlatformBootstrapStore | None = None
         self._content_store: ContentStore | None = None
         self._rebac_engine: RebacEngine | None = None
@@ -266,6 +268,11 @@ class ApplicationContext:
                 engine=self.get_pg_async_engine(),
             )
         return self._purge_queue_store
+
+    def get_space_store(self) -> SpaceStore:
+        if self._space_store is None:
+            self._space_store = SpaceStore(self.get_pg_async_engine())
+        return self._space_store
 
     def get_team_metadata_store(self) -> TeamMetadataStore:
         if self._team_metadata_store is None:

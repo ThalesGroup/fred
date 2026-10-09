@@ -3,6 +3,7 @@
 
 """Canonical, bounded organization/team/project ancestry."""
 
+from dataclasses import dataclass
 from enum import StrEnum
 from uuid import UUID
 
@@ -30,6 +31,31 @@ class SpaceKind(StrEnum):
 class TeamKind(StrEnum):
     COLLABORATIVE = "collaborative"
     PERSONAL = "personal"
+
+
+@dataclass(frozen=True)
+class SpaceContext:
+    id: str
+    kind: SpaceKind
+    organization_id: str
+    team_id: str | None
+
+    @property
+    def ancestry(self) -> tuple[tuple[SpaceKind, str], ...]:
+        """Current space first, then its parents; never siblings or descendants."""
+        if self.kind == SpaceKind.ORGANIZATION:
+            return ((self.kind, self.id),)
+        if self.kind == SpaceKind.TEAM:
+            return (
+                (self.kind, self.id),
+                (SpaceKind.ORGANIZATION, self.organization_id),
+            )
+        assert self.team_id is not None
+        return (
+            (self.kind, self.id),
+            (SpaceKind.TEAM, self.team_id),
+            (SpaceKind.ORGANIZATION, self.organization_id),
+        )
 
 
 class SpaceRow(Base):

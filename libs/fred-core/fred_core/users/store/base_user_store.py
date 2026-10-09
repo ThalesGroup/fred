@@ -38,6 +38,15 @@ class OrganizationAssignmentError(ValueError):
 
 class BaseUserStore(ABC):
     @abstractmethod
+    async def filter_organization_users(
+        self,
+        user_ids: list[UUID],
+        organization_id: str,
+        session: AsyncSession | None = None,
+    ) -> set[UUID]:
+        """Return the supplied identities belonging to this organization."""
+
+    @abstractmethod
     async def assign_organization(
         self,
         user_id: UUID,

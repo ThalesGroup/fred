@@ -79,6 +79,7 @@ def _fake_deps() -> TeamServiceDependencies:
         rebac=cast(Any, object()),
         scheduler_backend=cast(Any, object()),
         get_team_metadata_store=cast(Any, object),
+        get_space_store=lambda: None,
         get_default_team_store=cast(Any, object),
         get_team_admin_charter_store=cast(Any, object),
         get_prompt_store=cast(Any, object),

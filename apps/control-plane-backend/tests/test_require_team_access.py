@@ -71,6 +71,7 @@ def _deps(
         rebac=cast(Any, rebac),
         scheduler_backend=cast(Any, object()),
         get_team_metadata_store=lambda: cast(Any, metadata_store),
+        get_space_store=lambda: None,
         get_default_team_store=cast(Any, object),
         get_team_admin_charter_store=cast(Any, object),
         get_prompt_store=cast(Any, object),
@@ -88,7 +89,7 @@ def _deps(
 
 @pytest.mark.asyncio
 async def test_collaborative_team_authorized_returns_canonical_team_id() -> None:
-    """1: existing, authorized collaborative team — 0 Read + 1 Check, no more."""
+    """1: existing, authorized collaborative team — 0 Read + 1 BatchCheck, no more."""
     engine = CountingRebacEngine(
         org_linked_team_ids={"fredlab"},
         granted_permissions={TeamPermission.CAN_READ},
@@ -103,7 +104,8 @@ async def test_collaborative_team_authorized_returns_canonical_team_id() -> None
 
     assert resolved == TeamId("fredlab")
     assert engine.list_relations_calls == []
-    assert engine.has_permission_calls == [("u", TeamPermission.CAN_READ, "fredlab")]
+    assert engine.has_permission_calls == []
+    assert engine.has_permissions_calls == [(TeamPermission.CAN_READ,)]
     assert engine.add_relations_calls == []  # edge already existed: zero writes
     assert engine.lookup_resources_calls == 0
     assert engine.lookup_subjects_calls == 0
@@ -140,9 +142,8 @@ async def test_permission_denied_raises_authorization_error() -> None:
             required_permissions=[TeamPermission.CAN_UPDATE_AGENTS],
         )
 
-    assert engine.has_permission_calls == [
-        ("u", TeamPermission.CAN_UPDATE_AGENTS, "fredlab")
-    ]
+    assert engine.has_permission_calls == []
+    assert engine.has_permissions_calls == [(TeamPermission.CAN_UPDATE_AGENTS,)]
 
 
 @pytest.mark.asyncio
@@ -180,9 +181,8 @@ async def test_other_users_personal_space_denied_same_as_before() -> None:
 
 
 @pytest.mark.asyncio
-async def test_multiple_required_permissions_checked_independently() -> None:
-    """6 + 8: several required permissions run one Check each — call count
-    tracks the requested list, never the full 14-entry `TeamPermission` set."""
+async def test_multiple_required_permissions_use_one_batch() -> None:
+    """Several requested permissions share one batch without full projection."""
     engine = CountingRebacEngine(
         org_linked_team_ids={"fredlab"},
         granted_permissions={
@@ -208,12 +208,10 @@ async def test_multiple_required_permissions_checked_independently() -> None:
     # Zero Read regardless of permission count — the org edge is never
     # consulted here (#2065).
     assert engine.list_relations_calls == []
-    # Exactly one Check per requested permission — not `len(list(TeamPermission))`.
-    assert len(engine.has_permission_calls) == 2
-    assert {perm for _uid, perm, _rid in engine.has_permission_calls} == {
-        TeamPermission.CAN_READ,
-        TeamPermission.CAN_UPDATE_RESOURCES,
-    }
+    assert engine.has_permission_calls == []
+    assert engine.has_permissions_calls == [
+        (TeamPermission.CAN_READ, TeamPermission.CAN_UPDATE_RESOURCES)
+    ]
 
 
 @pytest.mark.asyncio
@@ -222,7 +220,7 @@ async def test_product_route_no_longer_triggers_full_projection(
 ) -> None:
     """7: a representative product route (`GET /teams/{id}/agent-instances`)
     keeps its functional response while the OpenFGA call budget collapses to
-    0 Read + 1 Check — no membership enrichment, no 14-permission batch, no
+    0 Read + 1 BatchCheck — no membership enrichment, no 14-permission batch, no
     role resolution `lookup_subjects` fan-out."""
     from types import SimpleNamespace
 
@@ -249,8 +247,7 @@ async def test_product_route_no_longer_triggers_full_projection(
     assert result == expected_instances
     list_instances.assert_awaited_once_with(TeamId("fredlab"), deps)
     assert engine.list_relations_calls == []
-    assert engine.has_permission_calls == [
-        ("u", TeamPermission.CAN_USE_TEAM_AGENTS, "fredlab")
-    ]
+    assert engine.has_permission_calls == []
+    assert engine.has_permissions_calls == [(TeamPermission.CAN_USE_TEAM_AGENTS,)]
     assert engine.lookup_subjects_calls == 0
     assert engine.lookup_resources_calls == 0
