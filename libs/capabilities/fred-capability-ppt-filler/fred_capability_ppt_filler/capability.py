@@ -70,7 +70,8 @@ from fred_sdk.contracts.models import FieldSpec, UIHints
 from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.messages import SystemMessage
-from pydantic import BaseModel
+from langchain_core.tools import tool
+from pydantic import BaseModel, Field
 
 from fred_capability_ppt_filler.concurrency import (
     acquire_heavy_job_slot,
@@ -265,6 +266,11 @@ _FILL_INSTRUCTIONS = (
     "values — especially when a field description points at documents. If "
     "those document tools are not in your toolset, tell the user this agent "
     "is missing the Document access capability instead of inventing values. "
+    "After gathering sources and any necessary clarification, BEFORE composing "
+    "new or revised slide values, call begin_ppt_generation with a short title "
+    "as a separate tool round. Wait for its result, then compose the slide "
+    "values and call fill_ppt_template in a later round. NEVER batch preparation "
+    "and publication together. "
     "Each of the tool's fields describes what to put there; only ask the "
     "user for values you genuinely cannot derive from the documents or the "
     "conversation. Keep every value SLIDE-READABLE: a few short bullet "
@@ -285,6 +291,24 @@ class _PptFillerMiddleware(AgentMiddleware):
         super().__init__()
         self.tools = build_fill_tools(ctx)
         self._fragment = _FILL_INSTRUCTIONS if self.tools else ""
+
+        @tool("begin_ppt_generation")
+        async def begin_ppt_generation(
+            title: Annotated[str, Field(min_length=1, max_length=160)],
+        ) -> str:
+            """Announce presentation composition before drafting new or revised slides.
+
+            Call this alone after research or clarification, with only a short title.
+            Wait for its result before composing the fill_ppt_template arguments.
+            This does not fetch the template, write a deck, or create a preview.
+            """
+            return (
+                f"Presentation composition started for '{title}'. Now compose the "
+                "slide values and call fill_ppt_template in the next round."
+            )
+
+        if self.tools:
+            self.tools = [*self.tools, begin_ppt_generation]
 
     async def awrap_model_call(
         self,

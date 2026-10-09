@@ -16,9 +16,9 @@
 
 Why this module exists (HTML-ARTIFACT-CAPABILITY-RFC.md, #2478):
 - an agent has no way to produce a *rendered* web page/component; asked for one it
-  can only paste HTML/CSS as a code block. This capability gives it one tool,
-  `render_html_artifact`, whose output is shown rendered in a viewer beside the
-  chat (read-only tabs: Preview / HTML / CSS + download).
+  can only paste HTML/CSS as a code block. Preparation announces composition,
+  then `render_html_artifact` publishes a viewer beside the chat
+  (read-only tabs: Preview / HTML / CSS + download).
 
 Shape (mirrors `writable_document`, minus the store/router — v1 is read-only):
 - the contributed `html_artifact` chat part carries the markup INLINE, so no owned
@@ -38,7 +38,7 @@ import hashlib
 import logging
 import uuid
 from collections.abc import Awaitable, Callable, Sequence
-from typing import Literal, cast
+from typing import Annotated, Literal, cast
 
 from fred_sdk.contracts.capability import (
     AgentCapability,
@@ -52,7 +52,7 @@ from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.messages import SystemMessage
 from langchain_core.tools import BaseTool, tool
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
@@ -95,15 +95,22 @@ class HtmlArtifactPart(BaseModel):
 # the chat instead of calling the tool.
 _HTML_INSTRUCTIONS = (
     "HTML ARTIFACT: when the user asks — in any wording or language — to build, "
-    "create, design, or show a web page, HTML page, component, section, layout, "
+    "create, revise, design, or show a web page, HTML page, component, section, layout, "
     "mockup, or styled HTML, you MUST call the 'render_html_artifact' tool with "
-    "the HTML and (optionally) the CSS; never paste the HTML/CSS as a code block "
+    "the HTML and (optionally) the CSS. After necessary research or clarification "
+    "and BEFORE composing new or revised markup, call begin_html_artifact_generation "
+    "with a short title as a separate tool round. Wait for its result, then compose "
+    "the HTML/CSS and call render_html_artifact in a later round. NEVER batch "
+    "preparation and publication together; never paste the HTML/CSS as a code block "
     "in the chat. A rendered preview opens in a viewer beside the chat where the "
     "user can see the result, read the source, and download it. Produce STATIC "
     "HTML and CSS only: no <script>, no JavaScript, no event handlers, and no "
     "external resources (no remote stylesheets, fonts, or images) — inline any "
     "image as a data: URI. Keep the CSS in the css argument, not in a <style> "
-    "tag. To revise an artifact you already produced, pass its existing "
+    "tag. For EVERY revision, repeat begin_html_artifact_generation alone and "
+    "wait for its result, even if preparation was called in an earlier user turn. "
+    "Then compose the revised markup and call render_html_artifact in the next "
+    "round, passing its existing "
     "artifact_id so the SAME preview updates in place. In the chat, reply only "
     "with a short summary of what you built."
 )
@@ -132,6 +139,22 @@ class _HtmlArtifactMiddleware(AgentMiddleware):
         super().__init__()
         session_id = ctx.identity.session_id
 
+        @tool("begin_html_artifact_generation")
+        async def begin_html_artifact_generation(
+            title: Annotated[str, Field(min_length=1, max_length=160)],
+        ) -> str:
+            """Announce HTML composition before drafting new or revised markup.
+
+            Call this alone after research or clarification, with only a short title.
+            Wait for its result before composing the render_html_artifact arguments.
+            This does not publish an artifact or open a preview.
+            """
+            return (
+                f"HTML composition started for '{title}'. Now compose the static "
+                "HTML/CSS and call render_html_artifact in the next round, reusing "
+                "the existing artifact_id when revising an artifact."
+            )
+
         @tool("render_html_artifact", response_format="content_and_artifact")
         async def render_html_artifact(
             title: str,
@@ -144,6 +167,9 @@ class _HtmlArtifactMiddleware(AgentMiddleware):
             Use this whenever the user asks for a web page, component, section,
             layout, mockup, or any styled HTML, so the RESULT is shown rendered
             (not as a code block) and the user can read the source and download it.
+
+            Before composing new or revised markup, call begin_html_artifact_generation
+            alone and wait for its result. Publish the markup in a later tool round.
 
             Produce static HTML/CSS only: no <script>, no JavaScript, no inline
             event handlers, and no external resources (inline images as data: URIs).
@@ -190,7 +216,10 @@ class _HtmlArtifactMiddleware(AgentMiddleware):
             )
             return f"Artifact '{title}' rendered (id={aid}).", artifact
 
-        self.tools: Sequence[BaseTool] = [render_html_artifact]
+        self.tools: Sequence[BaseTool] = [
+            render_html_artifact,
+            begin_html_artifact_generation,
+        ]
 
     async def awrap_model_call(
         self,

@@ -1663,12 +1663,55 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       sendPromise = latest.send("hello", "session-1");
       await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
     });
+    expect(latest.activeExchangeId).toBe(latest.messages.find((message) => message.role === "user")?.exchange_id);
     act(() => latest.abort());
+    expect(latest.activeExchangeId).toBeNull();
     read.reject(new DOMException("The operation was aborted.", "AbortError"));
     await act(async () => sendPromise);
 
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     expect(onErrorMock).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+
+  it("keeps preflight detached from the previous exchange and clears activity on final", async () => {
+    flushPendingWrites = async () => true;
+    const prep = deferred<unknown>();
+    prepareExecutionImpl = () => prep.promise;
+    let controller!: ReadableStreamDefaultController<Uint8Array>;
+    const body = new ReadableStream<Uint8Array>({
+      start: (value) => {
+        controller = value;
+      },
+    });
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(body));
+    mount();
+    let sendPromise!: Promise<boolean>;
+
+    await act(async () => {
+      sendPromise = latest.send("Create a report", "session-1");
+      await vi.waitFor(() => expect(prepareExecutionCalls).toHaveLength(1));
+    });
+    expect(latest.waitResponse).toBe(true);
+    expect(latest.activeExchangeId).toBeNull();
+    await act(async () => {
+      prep.resolve({
+        execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
+        chat_controls: [],
+        capability_base_urls: {},
+      });
+      await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+    });
+    expect(latest.activeExchangeId).toBe(latest.messages.find((message) => message.role === "user")?.exchange_id);
+    await act(async () => {
+      controller.enqueue(
+        new TextEncoder().encode(`data: ${JSON.stringify({ kind: "final", sequence: 1, content: "done" })}\n\n`),
+      );
+      controller.close();
+      await sendPromise;
+    });
+    expect(latest.activeExchangeId).toBeNull();
+    expect(latest.waitResponse).toBe(false);
     fetchSpy.mockRestore();
   });
 

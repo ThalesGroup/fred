@@ -38,6 +38,7 @@ import {
   totalLatencyMs,
   traceRows,
   traceSummary,
+  deliverableActivity,
 } from "./traceUtils";
 
 // ── Factory ───────────────────────────────────────────────────────────────────
@@ -329,6 +330,80 @@ describe("entryLabel localization", () => {
     ["Lecture de la requête", "Lecture de la requête"],
   ])("uses the active language label %s", (translation, expected) => {
     expect(entryLabel(entry, () => translation)).toBe(expected);
+  });
+});
+
+describe("deliverable composition activity", () => {
+  const prepared = (name = "begin_document_generation", id = "prepare") => [
+    toolCallMsg(id, name, { title: "Report" }),
+    toolResultMsg(id, "Composition started"),
+  ];
+  const activity = (messages: ChatMessage[]) => deliverableActivity(groupTraceEntries(messages));
+
+  it.each([
+    ["begin_document_generation", "generateDocument", "write_document", "writeDocument"],
+    ["begin_ppt_generation", "generatePresentation", "fill_ppt_template", "renderPresentation"],
+    ["begin_html_artifact_generation", "generateHtml", "render_html_artifact", "renderHtml"],
+  ])("keeps %s visible until publication, without reasoning", (preparation, composition, publication, label) => {
+    const messages = prepared(preparation);
+    const entries = groupTraceEntries(messages);
+    expect(statusForEntry(entries[0])).toBe("ok");
+    expect(deliverableActivity(entries)).toBe(`rework.chatTrace.${composition}`);
+    expect(activity([...messages, toolCallMsg("publish", publication)])).toBe(`rework.chatTrace.toolLabels.${label}`);
+    expect(
+      activity([...messages, toolCallMsg("publish", publication), toolResultMsg("publish", "Published")]),
+    ).toBeNull();
+  });
+
+  it("does not announce composition before preparation succeeds", () => {
+    const call = toolCallMsg("prepare", "begin_document_generation");
+    expect(activity([call])).toBeNull();
+    expect(activity([call, toolResultMsg("prepare", "Failed", false)])).toBeNull();
+  });
+
+  it("pauses composition for unrelated pending tools and resumes after success", () => {
+    const messages = [...prepared(), toolCallMsg("search", "search_web")];
+    expect(activity(messages)).toBeNull();
+    expect(activity([...messages, toolResultMsg("search", "Found")])).toBe("rework.chatTrace.generateDocument");
+    expect(activity([...messages, toolResultMsg("search", "Failed", false)])).toBeNull();
+  });
+
+  it("clears composition and publication activity on a terminal error", () => {
+    const error = msg({ channel: "error", parts: [{ type: "text", text: "Disconnected" }] });
+    expect(activity([...prepared(), error])).toBeNull();
+    expect(activity([...prepared(), toolCallMsg("publish", "write_document"), error])).toBeNull();
+  });
+
+  it("replaces repeated preparation without multiplying the activity", () => {
+    expect(activity([...prepared(), ...prepared("begin_document_generation", "again")])).toBe(
+      "rework.chatTrace.generateDocument",
+    );
+  });
+
+  it("uses generic composition while several deliverable kinds are pending", () => {
+    expect(activity([...prepared(), ...prepared("begin_ppt_generation", "ppt")])).toBe(
+      "rework.chatTrace.generateContent",
+    );
+  });
+
+  it("keeps publication from consuming another exchange or execution's preparation", () => {
+    for (const metadata of [{ exchange_id: "other" }, { metadata: { extras: { execution_id: "sibling" } } }]) {
+      const published = [toolCallMsg("publish", "write_document"), toolResultMsg("publish", "Published")].map((m) => ({
+        ...m,
+        ...metadata,
+      }));
+      expect(activity([...prepared(), ...published])).toBe("rework.chatTrace.generateDocument");
+    }
+  });
+
+  it("retains the direct publication label without a preparation call", () => {
+    expect(activity([toolCallMsg("publish", "write_document")])).toBe("rework.chatTrace.toolLabels.writeDocument");
+  });
+
+  it("localizes the preparation row separately from its actual completed status", () => {
+    const [entry] = groupTraceEntries(prepared());
+    expect(entryLabel(entry, (key) => key)).toBe("rework.chatTrace.toolLabels.prepareDocument");
+    expect(statusForEntry(entry)).toBe("ok");
   });
 });
 

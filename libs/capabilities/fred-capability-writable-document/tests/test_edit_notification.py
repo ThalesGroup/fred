@@ -158,6 +158,10 @@ async def test_awrap_model_call_overlays_open_documents_catalog(
     assert "WRITABLE DOCUMENT" in merged
     assert "Collaborative documents already open in the editor" in merged
     assert "- 'Report' (document_id=doc-1)" in merged
+    catalog = merged.split("Collaborative documents already open in the editor", 1)[1]
+    assert "first call begin_document_generation" in catalog
+    assert "wait for its result" in catalog
+    assert "next round with that exact document_id" in catalog
 
 
 @pytest.mark.asyncio
@@ -178,4 +182,7 @@ async def test_awrap_model_call_overlays_write_instructions_without_documents(
     merged = str(request.overridden.content)
     assert merged.startswith("BASE PROMPT")
     assert "write_document" in merged
+    assert "begin_document_generation" in merged
+    assert "Wait for its result" in merged
+    assert "NEVER batch preparation" in merged
     assert "Collaborative documents already open in the editor" not in merged

@@ -40,6 +40,30 @@ const GEO = { type: "geo", geojson: { type: "FeatureCollection", features: [] } 
 const DEMO_CARD = { type: "demo_card", title: "Demo echo", body: "HELLO" };
 const UNKNOWN = { type: "part_kind_from_the_future", payload: { x: 1 } };
 
+describe("live exchange identity", () => {
+  const messages = [
+    msg({
+      channel: "tool_call",
+      parts: [{ type: "tool_call", call_id: "prepare", name: "begin_document_generation", args: { title: "Report" } }],
+    }),
+    msg({
+      channel: "tool_result",
+      role: "tool",
+      parts: [{ type: "tool_result", call_id: "prepare", ok: true, content: "Started" }],
+    }),
+  ];
+
+  it("does not reactivate a previous trace during preflight or after cancellation", () => {
+    expect(toThreadMessages(messages, true, null)[0].isStreaming).toBe(false);
+    expect(toThreadMessages(messages, true, "new-exchange")[0].isStreaming).toBe(false);
+    expect(toThreadMessages(messages, false, "e1")[0].isStreaming).toBe(false);
+  });
+
+  it("keeps the identified exchange live between preparation and publication", () => {
+    expect(toThreadMessages(messages, true, "e1")[0].isStreaming).toBe(true);
+  });
+});
+
 describe("toThreadMessages — raw ui_part retention (#1977)", () => {
   it("keeps link, geo, capability, and unknown parts on the assistant row", () => {
     const messages = [

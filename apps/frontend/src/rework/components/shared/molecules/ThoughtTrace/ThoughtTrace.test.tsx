@@ -20,10 +20,21 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import type { ChatMessage } from "../../../../../slices/runtime/runtimeOpenApi";
 import { ThoughtTrace } from "./ThoughtTrace";
+import en from "../../../../../locales/en/translation.json";
+import fr from "../../../../../locales/fr/translation.json";
+
+const locale = vi.hoisted(() => ({ language: "en" }));
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string) => (key === "rework.chatTrace.toolLabels.readQuery" ? "Reading query" : key),
+    t: (key: string) => {
+      if (key === "rework.chatTrace.toolLabels.readQuery") return "Reading query";
+      if (/rework.chatTrace.(generate|toolLabels.(prepare|write|render))/.test(key)) {
+        const resource = locale.language === "fr" ? fr : en;
+        return key.split(".").reduce<unknown>((value, part) => (value as Record<string, unknown>)[part], resource);
+      }
+      return key;
+    },
   }),
 }));
 
@@ -88,6 +99,54 @@ function render(messages: ChatMessage[], done: boolean, pendingToolCallIds?: rea
 }
 
 describe("ThoughtTrace", () => {
+  const preparation = [
+    msg({
+      channel: "tool_call",
+      parts: [{ type: "tool_call", call_id: "prepare", name: "begin_document_generation", args: { title: "Report" } }],
+    }),
+    msg({
+      channel: "tool_result",
+      role: "tool",
+      parts: [{ type: "tool_result", call_id: "prepare", ok: true, content: "Started" }],
+    }),
+  ];
+
+  it.each([
+    ["en", "Generating document content...", "Preparing document content", "Writing the document"],
+    ["fr", "Génération du contenu du document...", "Préparation du contenu du document", "Écriture du document"],
+  ])("shows localized composition and publication in %s", (language, composing, prepared, publishing) => {
+    locale.language = language;
+    try {
+      const html = render(preparation, false);
+      expect(html).toContain(composing);
+      expect(html).toContain(prepared);
+      expect(html).toContain('aria-label="ok"');
+      expect(html).not.toContain('aria-label="pending"');
+      const publication = msg({
+        channel: "tool_call",
+        parts: [{ type: "tool_call", call_id: "publish", name: "write_document", args: {} }],
+      });
+      const writing = render([...preparation, publication], false);
+      expect(writing).toContain(publishing);
+      expect(writing).not.toContain(composing);
+      expect(render(preparation, true)).not.toContain(composing);
+    } finally {
+      locale.language = "en";
+    }
+  });
+
+  it("stops composition on errors and gives human approval priority", () => {
+    const error = msg({ channel: "error", parts: [{ type: "text", text: "Stream stopped" }] });
+    expect(render([...preparation, error], false)).not.toContain("Generating document content...");
+    const pending = msg({
+      channel: "tool_call",
+      parts: [{ type: "tool_call", call_id: "approve", name: "write_document", args: {} }],
+    });
+    const html = render([...preparation, pending], false, ["approve"]);
+    expect(html).toContain("rework.chatTrace.awaitingConfirmation");
+    expect(html).not.toContain("Generating document content...");
+  });
+
   it("renders nothing when the turn has no trace", () => {
     expect(render([], true)).toBe("");
   });

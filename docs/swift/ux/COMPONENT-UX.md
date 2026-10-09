@@ -491,6 +491,15 @@ _(none)_
 
 ### `ThoughtTrace`
 
+Deliverable generation uses a completed preparation row and a live composition
+label while the model builds document, PowerPoint, or HTML tool arguments, even
+without reasoning text. Publication replaces that label with writing/rendering.
+Other pending tools and human pauses take precedence; errors, cancellation,
+completed turns, reloaded history, and new-turn preflight clear the activity.
+Composition is derived from trace events scoped to the exchange and execution,
+without a timer or an unfinished preparation row. Labels are localized in English
+and French. See the [deliverable generation spec](../../../openspec/specs/deliverable-generation/spec.md).
+
 **Location:** `src/rework/components/shared/molecules/ThoughtTrace/ThoughtTrace.tsx`
 **Spec:** [`CHAT-COMPONENT-SPECS.md §1`](../design/CHAT-COMPONENT-SPECS.md)
 **Status:** `Functional`

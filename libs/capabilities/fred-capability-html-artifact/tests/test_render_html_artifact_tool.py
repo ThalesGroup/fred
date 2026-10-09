@@ -34,16 +34,72 @@ from fred_sdk.contracts.capability import (
     EmptyModel,
 )
 from fred_sdk.contracts.runtime import RuntimeServices
+from langchain.agents.middleware.types import ModelRequest, ModelResponse
+from langchain_core.language_models.fake_chat_models import FakeListChatModel
+from langchain_core.messages import AIMessage, SystemMessage
+from pydantic import BaseModel
 
 
-def _tool(session_id: str | None = "s-1", user_id: str = "u-1"):
+def _tool(
+    session_id: str | None = "s-1",
+    user_id: str = "u-1",
+    name: str = "render_html_artifact",
+):
     ctx = CapabilityContext(
         identity=CapabilityIdentity(user_id=user_id, session_id=session_id),
         config=EmptyModel(),
         turn_options=EmptyModel(),
         services=RuntimeServices(),
     )
-    return _HtmlArtifactMiddleware(ctx).tools[0]
+    return next(
+        tool for tool in _HtmlArtifactMiddleware(ctx).tools if tool.name == name
+    )
+
+
+@pytest.mark.asyncio
+async def test_preparation_returns_only_acknowledgement():
+    preparation = _tool(name="begin_html_artifact_generation")
+    assert isinstance(preparation.args_schema, type) and issubclass(
+        preparation.args_schema, BaseModel
+    )
+    schema = preparation.args_schema.model_json_schema()
+    assert set(schema["properties"]) == {"title"}
+    assert schema["properties"]["title"]["maxLength"] == 160
+
+    result = await preparation.ainvoke({"title": "Landing"})
+
+    assert isinstance(result, str)
+    assert "next round" in result
+    assert "render_html_artifact" in result
+    assert "artifact_id" in result
+
+
+@pytest.mark.asyncio
+async def test_model_overlay_requires_separate_preparation_round():
+    ctx = CapabilityContext(
+        identity=CapabilityIdentity(user_id="u-1", session_id="s-1"),
+        config=EmptyModel(),
+        turn_options=EmptyModel(),
+        services=RuntimeServices(),
+    )
+    request = ModelRequest(
+        model=FakeListChatModel(responses=["unused"]),
+        messages=[],
+        system_message=SystemMessage(content="BASE"),
+    )
+    response = ModelResponse(result=[AIMessage(content="stub")])
+
+    async def handler(overlaid: ModelRequest) -> ModelResponse:
+        assert overlaid.system_message is not None
+        content = str(overlaid.system_message.content)
+        assert content.startswith("BASE")
+        assert "begin_html_artifact_generation" in content
+        assert "Wait for its result" in content
+        assert "NEVER batch" in content
+        return response
+
+    result = await _HtmlArtifactMiddleware(ctx).awrap_model_call(request, handler)
+    assert result is response
 
 
 @pytest.mark.asyncio

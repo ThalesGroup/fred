@@ -37,16 +37,25 @@ from pathlib import Path
 
 import pytest
 from fred_capability_document_access import DocumentAccessCapability
+from fred_capability_html_artifact.capability import HtmlArtifactCapability
 from fred_capability_mcp import load_catalog
 from fred_capability_ppt_filler.capability import PptFillerCapability
+from fred_capability_writable_document.capability import WritableDocumentCapability
 from fred_runtime.app._catalogs import apply_external_catalog_overrides
 from fred_runtime.app.config import AgentPodConfig
 from fred_runtime.app.service_endpoints import ConfiguredServiceEndpoints
+from fred_runtime.capabilities.assembly import (
+    build_capability_agent_block,
+    build_capability_context,
+    collect_available_tool_names,
+)
 from fred_runtime.capabilities.registry import (
     CapabilityRegistry,
     boot_capability_registry,
 )
+from fred_sdk.contracts.capability import CapabilityIdentity
 from fred_sdk.contracts.capability.mcp import McpCapability
+from fred_sdk.contracts.runtime import RuntimeServices
 
 _PPT_PREVIEW_PART_KIND = "ppt_preview"
 
@@ -70,6 +79,45 @@ def test_two_capabilities_register_and_validate() -> None:
 
     assert registry.ids() == ("document_access", "ppt_filler")
     assert "ppt_filler" in registry
+
+
+def test_deliverable_capabilities_keep_six_distinct_tools_when_combined() -> None:
+    registry = CapabilityRegistry()
+    contexts = {}
+    for capability in (
+        WritableDocumentCapability(),
+        HtmlArtifactCapability(),
+        PptFillerCapability(),
+    ):
+        registry.register(capability)
+        config = (
+            {
+                "schema_slides": [
+                    {"slide": 1, "keys": [{"key": "summary", "description": "Summary"}]}
+                ]
+            }
+            if capability.manifest.id == "ppt_filler"
+            else {}
+        )
+        contexts[capability.manifest.id] = build_capability_context(
+            capability,
+            identity=CapabilityIdentity(user_id="user-1", session_id="session-1"),
+            services=RuntimeServices(),
+            config=config,
+        )
+    registry.validate({})
+    block = build_capability_agent_block(registry, contexts)
+    names = collect_available_tool_names((), block)
+
+    assert len(names) == 6
+    assert set(names) == {
+        "begin_document_generation",
+        "write_document",
+        "begin_ppt_generation",
+        "fill_ppt_template",
+        "begin_html_artifact_generation",
+        "render_html_artifact",
+    }
 
 
 def test_ppt_filler_contributes_router() -> None:

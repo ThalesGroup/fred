@@ -8,7 +8,10 @@ Design: `docs/swift/rfc/HTML-ARTIFACT-CAPABILITY-RFC.md` (issue #2478).
 
 ## What it ships
 
-- **Tool** `render_html_artifact(title, html, css, artifact_id?)` — HTML and CSS
+- **Preparation tool** `begin_html_artifact_generation(title)` acknowledges a short
+  title before composition without publishing a preview. The model waits for its
+  result before composing new or revised markup in a later model round.
+- **Publication tool** `render_html_artifact(title, html, css, artifact_id?)` - HTML and CSS
   kept separate (for the viewer's tabs). Combined size is capped at 256 KB.
 - **Chat part** `HtmlArtifactPart` (`type="html_artifact"`) carrying the markup
   **inline** — no owned table, no router, no migration (v1 is read-only; chat
@@ -20,6 +23,10 @@ Design: `docs/swift/rfc/HTML-ARTIFACT-CAPABILITY-RFC.md` (issue #2478).
 
 `execution_models=("react",)`: the prompt overlay is a `wrap_model_call` hook, so
 the tool is carried by the capability's middleware (mirrors `writable_document`).
+
+The live trace shows content generation between the two tools, then preview
+rendering. Direct publication remains supported; revisions reuse `artifact_id`.
+See the [deliverable generation spec](../../../openspec/specs/deliverable-generation/spec.md).
 
 ## Registration
 

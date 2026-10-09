@@ -61,6 +61,7 @@ from fred_sdk.contracts.runtime import RuntimeServices
 from port_fakes import FakeAssets, FakeDocs, FakeFolders, FakeWorkspace
 from pptx import Presentation
 from pptx.util import Inches
+from pydantic import BaseModel
 
 _PPTX_CONTENT_TYPE = (
     "application/vnd.openxmlformats-officedocument.presentationml.presentation"
@@ -1058,6 +1059,47 @@ async def test_middleware_overlays_fill_instructions_when_template_configured():
     # surface the missing capability instead of inventing values.
     assert "search_documents_using_vectorization" in merged
     assert "missing the Document access capability" in merged
+    assert "begin_ppt_generation" in merged
+    assert "Wait for its result" in merged
+    assert "NEVER batch preparation" in merged
+
+
+@pytest.mark.asyncio
+async def test_preparation_does_not_access_template_or_workspace():
+    from fred_capability_ppt_filler.capability import PptFillerCapability
+
+    deck = build_deck([("{{name}}", "{{name}}:\nThe name")])
+    workspace = FakeWorkspace()
+    ctx = _ctx(schema_slides(deck), workspace=workspace)
+    (middleware,) = PptFillerCapability().middleware(ctx)
+    tools = {tool.name: tool for tool in middleware.tools}
+    assert set(tools) == {"fill_ppt_template", "begin_ppt_generation"}
+    preparation = tools["begin_ppt_generation"]
+    assert isinstance(preparation.args_schema, type) and issubclass(
+        preparation.args_schema, BaseModel
+    )
+    assert set(preparation.args_schema.model_json_schema()["properties"]) == {"title"}
+
+    # No template bytes are supplied: any preparation fetch would fail.
+    result = await preparation.ainvoke({"title": "Quarterly report"})
+
+    assert "next round" in result
+    assert "fill_ppt_template" in result
+    assert workspace.writes == []
+
+
+def test_preparation_preserves_image_tool_availability():
+    from fred_capability_ppt_filler.capability import PptFillerCapability
+
+    deck = build_image_deck([(IMAGE_NOTES, ["{{logo}}"])])
+    (middleware,) = PptFillerCapability().middleware(
+        _ctx(image_schema(deck, slide=1, key="logo", tag_id="tag-logos"))
+    )
+    assert {tool.name for tool in middleware.tools} == {
+        "fill_ppt_template",
+        "list_images_in_folder",
+        "begin_ppt_generation",
+    }
 
 
 @pytest.mark.asyncio
@@ -1065,6 +1107,7 @@ async def test_middleware_stays_silent_without_a_configured_template():
     from fred_capability_ppt_filler.capability import PptFillerCapability
 
     (mw,) = PptFillerCapability().middleware(_ctx([]))
+    assert mw.tools == []
     request = _FakeModelRequest("BASE PROMPT")
 
     await mw.awrap_model_call(request, _passthrough)

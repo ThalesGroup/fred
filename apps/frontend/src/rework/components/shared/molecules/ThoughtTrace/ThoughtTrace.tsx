@@ -21,6 +21,7 @@ import type { TraceRow, TraceSummary } from "../../../../utils/traceUtils";
 import {
   formatLatencyMs,
   groupTraceEntries,
+  deliverableActivity,
   traceEntryKey,
   traceRows,
   traceSummary,
@@ -47,10 +48,11 @@ interface ThoughtTraceProps {
  * which announced "Thought for 856ms" — the sum of *tool* latencies — directly
  * above a reasoning row reading 16.4s (#2172).
  */
-function useSummaryLabel(summary: TraceSummary): string {
+function useSummaryLabel(summary: TraceSummary, activity: string | null): string {
   const { t } = useTranslation();
 
   if (summary.awaitingConfirmation) return t("rework.chatTrace.awaitingConfirmation");
+  if (activity) return t(activity);
   if (summary.running) return t("rework.chatTrace.thinking");
 
   const parts: string[] = [];
@@ -79,7 +81,8 @@ export function ThoughtTrace({
   // for reasons of its own on top of that.
   const entries = useMemo(() => groupTraceEntries(messages), [messages]);
   const summary = useMemo(() => traceSummary(entries, pendingToolCallIds), [entries, pendingToolCallIds]);
-  const label = useSummaryLabel(summary);
+  const activity = useMemo(() => (done ? null : deliverableActivity(entries)), [entries, done]);
+  const label = useSummaryLabel(summary, activity);
   const { expanded, toggle } = useTraceExpansion(done);
   // Only when open. `toThreadMessages` rebuilds every exchange's traceMessages
   // array on each streamed frame, so this memo is invalidated for the WHOLE
@@ -101,7 +104,9 @@ export function ThoughtTrace({
         <span className={styles.chevron} aria-hidden="true">
           <Icon category="outlined" type={expanded ? "expand_less" : "expand_more"} />
         </span>
-        <span className={`${styles.summary} ${summary.running ? styles.summaryStreaming : ""}`}>{label}</span>
+        <span className={`${styles.summary} ${summary.running || activity ? styles.summaryStreaming : ""}`}>
+          {label}
+        </span>
       </button>
 
       {/* One sequence, in the order the turn actually unfolded: reasoning and
