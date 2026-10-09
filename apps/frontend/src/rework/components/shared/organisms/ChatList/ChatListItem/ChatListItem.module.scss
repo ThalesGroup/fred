@@ -57,6 +57,10 @@
   flex: 1;
   flex-direction: column;
   min-width: 0;
+
+  &[data-read-only="true"] {
+    opacity: 0.7;
+  }
 }
 
 .title {
@@ -85,12 +89,22 @@
  * them to the far right. It still shrinks (flex-shrink 1, min-width 0) so a
  * long name ellipsizes on the one line rather than wrapping the date onto a
  * second — the date then lands at the row's right edge, always visible. */
-.agentName {
+.agentLabel {
+  display: inline-flex;
   flex: 0 1 auto;
   min-width: 0;
-  overflow: hidden;
   color: var(--primary);
+}
+
+.agentName {
+  min-width: 0;
+  overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.deletedSuffix {
+  flex: 0 0 auto;
+  white-space: pre;
 }
 
 /* Separator and date keep their intrinsic width — the name absorbs the squeeze. */
@@ -128,9 +142,8 @@
   color: var(--error);
 }
 
-.agentName[data-agent-deleted="true"] {
+.agentLabel[data-agent-deleted="true"] {
   color: var(--on-surface-muted);
-  text-decoration: line-through;
 }
 
 .accessibleStatus {

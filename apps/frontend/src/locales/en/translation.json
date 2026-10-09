@@ -602,6 +602,7 @@
     "deletedAgentReadOnly": "This {{agentsNicknameSingular}} has been deleted. This conversation is read-only.",
     "readOnlyComposerPlaceholder": "Read-only conversation",
     "deletedAgentTooltip": "{{agentsNicknameSingular}} deleted - read-only conversation",
+    "deletedAgentSuffix": "(deleted)",
     "historyUnavailable": "Conversation history is unavailable. Please try again later."
   },
   "comingSoon": {

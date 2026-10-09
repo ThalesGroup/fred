@@ -25,13 +25,14 @@ Deleting a managed agent SHALL preserve its existing conversation metadata and r
 
 ### Requirement: Deleted-agent conversations are read-only for execution
 
-A conversation whose managed agent has been deleted SHALL preserve its recorded agent display name, strike through only that name in the chat header and sidebar, provide an accessible deleted/read-only description with a tooltip on hover and keyboard focus. Its composer SHALL remain visible and disabled with a localized read-only placeholder, without a separate deletion banner. It SHALL prevent messages, commands, retries, human-input responses/skips, execution continuation/restart, attachment additions/removals and execution-context changes. Its historical human-input prompts and interrupted-execution records SHALL remain readable without executable actions. Starting a fresh conversation with that deleted instance SHALL be unavailable. Existing title management, reading/downloading attachments and conversation deletion SHALL retain their current permissions.
+A conversation whose managed agent has been deleted SHALL preserve its recorded agent display name, append a localized deletion suffix to that name in the chat header and sidebar (including grouped headers), and provide an accessible deleted/read-only description with a tooltip on hover and keyboard focus. The suffix SHALL be "(deleted)" in English and "(supprimé)" in French, remain visible when a long name is truncated, and replace strikethrough. The sidebar title, metadata and grouped agent label SHALL use 70% opacity without dimming the selection background or actions. Its composer SHALL remain visible and disabled with a localized read-only placeholder, without a separate deletion banner. It SHALL prevent messages, commands, retries, human-input responses/skips, execution continuation/restart, attachment additions/removals and execution-context changes. Its historical human-input prompts and interrupted-execution records SHALL remain readable without executable actions. Starting a fresh conversation with that deleted instance SHALL be unavailable. Existing title management, reading/downloading attachments and conversation deletion SHALL retain their current permissions.
 
 #### Scenario: Preserve a renamed agent after deletion and reload
 
 - **GIVEN** an agent renamed after its conversation was created
 - **WHEN** the agent is deleted and the user reloads the conversation list and conversation
-- **THEN** the latest name remains visible with strikethrough in the sidebar and conversation header
+- **THEN** the latest name remains visible with the localized deletion suffix and no strikethrough in the sidebar and conversation header
+- **AND** the sidebar text uses 70% opacity even when the conversation is neither selected nor hovered
 - **AND** the conversation title remains readable and the composer is visibly disabled
 - **AND** hovering or focusing the entry explains that the agent was deleted and the conversation is read-only
 

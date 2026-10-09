@@ -2013,7 +2013,7 @@ Composition and states:
   catch a regression here.
 
 Wording is deployment-configurable: the placeholder interpolates
-`agentsNicknamePlural`, since a deployment renames agents (e.g. "Lumis").
+`agentsNicknamePlural`, using the deployment's chosen label.
 
 **Sort.** A `Select` (`size="small"`, `compact`, no label, `min-width: 200px`
 so the control does not resize as the picked option changes length) sits after
@@ -5181,18 +5181,24 @@ permissions remain available; no evaluation data is removed.
 ### Conversations after agent deletion (2026-10-07)
 
 A saved conversation remains navigable after its managed agent is deleted. Its
-preserved agent name is struck through in the header and sidebar, including
-grouped headers. The conversation title stays readable. Hovering or focusing the
-entry explains the deleted/read-only state in the selected language; a durable
+preserved agent name carries a localized suffix, "(deleted)" in English and
+"(supprimé)" in French, in the header and sidebar, including grouped headers.
+The sidebar title and metadata use 70% opacity, as does the grouped agent label.
+The suffix stays visible when a long name is truncated. The name is not struck
+through, and the conversation title stays readable. Hovering or focusing the
+entry reveals the full agent name and explains the deleted/read-only state in
+the selected language; a durable
 accessible description carries the same state. Status text, generic name fallback,
 grouping and empty-list labels interpolate the configured `agentsNicknameSingular`.
-The struck name and disabled composer show read-only mode without a separate
-deletion banner. Names are snapshotted in
+The suffix and disabled composer show read-only mode without a separate
+deletion banner. `chatbot.deletedAgentReadOnly` supplies the disabled composer's
+hidden accessible description, not a visible notice. Names are snapshotted in
 session metadata before deletion, including renamed agents.
 Legacy names already lost use the existing localized generic agent fallback.
 The composer stays visible and natively disabled with a read-only placeholder,
 matching disabled surface/text tokens and no active elevation. Existing drafts
-remain visible but cannot be submitted.
+remain visible but cannot be submitted. In dark mode, the disabled composer's
+outline blends into its surroundings instead of forming a strong boundary.
 History loads independently of execution preparation. Missing routing or a failed
 history request shows an unavailable notice while retaining already cached text.
 

@@ -53,18 +53,19 @@ export function ChatListItem({
       data-selected={isSelected}
       aria-describedby={agentDeleted ? statusId : undefined}
     >
-      <div className={styles.chatDescription}>
+      <div className={styles.chatDescription} data-read-only={agentDeleted}>
         <div className={styles.title}>{label}</div>
         {/* Only the agent name shrinks so the date stays readable. */}
         {(agentName || dateLabel) && (
           <div className={styles.meta}>
             {agentName && (
               <span
-                className={styles.agentName}
+                className={styles.agentLabel}
                 data-agent-deleted={agentDeleted}
                 title={agentDeleted ? undefined : agentName}
               >
-                {agentName}
+                <span className={styles.agentName}>{agentName}</span>
+                {agentDeleted && <span className={styles.deletedSuffix}> {t("chatbot.deletedAgentSuffix")}</span>}
               </span>
             )}
             {agentName && dateLabel && <span className={styles.metaSeparator}>·</span>}
@@ -82,5 +83,9 @@ export function ChatListItem({
       </span>
     </Link>
   );
-  return agentDeleted ? <Tooltip text={deletedStatus}>{item}</Tooltip> : item;
+  return agentDeleted ? (
+    <Tooltip text={agentName ? `${agentName} - ${deletedStatus}` : deletedStatus}>{item}</Tooltip>
+  ) : (
+    item
+  );
 }

@@ -32,7 +32,7 @@ let agents: { agent_instance_id: string; display_name: string }[] | undefined;
 let success = true;
 let error = false;
 vi.mock("../../../../../hooks/useFrontendProperties", () => ({
-  useFrontendProperties: () => ({ agentsNicknameSingular: "Lumi" }),
+  useFrontendProperties: () => ({ agentsNicknameSingular: "" }),
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("react-router-dom", () => ({ useNavigate: () => vi.fn() }));
@@ -70,7 +70,6 @@ describe("ChatList deleted agents", () => {
     expect(html).toContain("Preserved conversation");
     expect(html).toContain("Preserved assistant");
     expect(html).toContain('data-agent-deleted="true"');
-    expect(html).not.toContain("(deleted)");
     expect(html).toContain("/team/team-1/managed-chat/agent-1?session=saved");
   });
   it.each([
@@ -117,7 +116,10 @@ it("groups by agent identity while preserving distinct live and deleted names", 
     );
     const headers = container.querySelectorAll('[class*="groupHeader"]');
     expect(headers).toHaveLength(2);
-    expect([...headers].map((header) => header.textContent)).toEqual(["Same name", "Same name"]);
+    expect([...headers].map((header) => header.textContent)).toEqual([
+      "Same name chatbot.deletedAgentSuffix",
+      "Same name",
+    ]);
     expect(container.querySelectorAll('[class*="groupHeader"][data-agent-deleted="true"]')).toHaveLength(1);
     expect(container.textContent).toContain("Deleted conversation");
     expect(container.textContent).toContain("Live conversation");

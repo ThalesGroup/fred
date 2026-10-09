@@ -175,7 +175,10 @@ export default function ChatList({ teamId }: ChatListProps) {
                   data-agent-deleted={agentDeleted(agentId)}
                   title={agentName(groupSessions[0])}
                 >
-                  {agentName(groupSessions[0])}
+                  <span className={styles.groupName}>{agentName(groupSessions[0])}</span>
+                  {agentDeleted(agentId) && (
+                    <span className={styles.deletedSuffix}> {t("chatbot.deletedAgentSuffix")}</span>
+                  )}
                 </div>
                 {groupSessions.map((session) => renderItem(session, false))}
               </div>

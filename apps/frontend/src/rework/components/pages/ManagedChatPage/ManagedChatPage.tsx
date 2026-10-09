@@ -732,14 +732,17 @@ export default function ManagedChatPage() {
                       </div>
                     )}
                     {chat.isReadOnly ? (
-                      <Tooltip text={t("chatbot.deletedAgentTooltip", { agentsNicknameSingular })}>
+                      <Tooltip
+                        text={`${chat.agentDisplayName} - ${t("chatbot.deletedAgentTooltip", { agentsNicknameSingular })}`}
+                      >
                         <span
                           className={styles.topBarAgentName}
                           data-agent-deleted="true"
                           tabIndex={0}
                           aria-label={`${chat.agentDisplayName} - ${t("chatbot.deletedAgentTooltip", { agentsNicknameSingular })}`}
                         >
-                          {chat.agentDisplayName}
+                          <span className={styles.deletedAgentName}>{chat.agentDisplayName}</span>
+                          <span className={styles.deletedAgentSuffix}> {t("chatbot.deletedAgentSuffix")}</span>
                         </span>
                       </Tooltip>
                     ) : (

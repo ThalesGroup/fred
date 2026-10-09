@@ -440,6 +440,17 @@
 }
 
 .topBarAgentName[data-agent-deleted="true"] {
+  display: inline-flex;
   color: var(--on-surface-muted);
-  text-decoration: line-through;
+}
+
+.deletedAgentName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.deletedAgentSuffix {
+  flex: 0 0 auto;
+  white-space: pre;
 }

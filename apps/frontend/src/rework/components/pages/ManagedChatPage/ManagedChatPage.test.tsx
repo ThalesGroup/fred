@@ -92,7 +92,7 @@ vi.mock("@shared/molecules/ThoughtTrace/traceDrawerContext", () => ({
   TraceDrawerProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 vi.mock("../../../../hooks/useFrontendProperties", () => ({
-  useFrontendProperties: () => ({ agentIconName: "person", agentsNicknameSingular: "Lumi" }),
+  useFrontendProperties: () => ({ agentIconName: "person", agentsNicknameSingular: "" }),
 }));
 vi.mock("../../../../hooks/useFrontendBootstrap", () => ({
   useFrontendBootstrap: () => ({ activeTeam: { id: bootstrap.activeTeamId } }),
@@ -377,7 +377,7 @@ describe("ManagedChatPage agent todo panel", () => {
 });
 
 describe("ManagedChatPage deleted agent", () => {
-  it("strikes the preserved name, freezes the thread and disables the composer without a redundant banner", () => {
+  it("labels the preserved name, freezes the thread and disables the composer without a redundant banner", () => {
     chatValue = {
       ...baseChatValue([]),
       executionDisabled: true,
@@ -387,7 +387,7 @@ describe("ManagedChatPage deleted agent", () => {
     };
     const html = renderToStaticMarkup(<ManagedChatPage />);
     expect(html).toContain("Preserved assistant");
-    expect(html).not.toContain("(deleted)");
+    expect(html).toContain("chatbot.deletedAgentSuffix");
     expect(html).toContain('data-agent-deleted="true"');
     expect(html).toContain('data-placeholder="chatbot.readOnlyComposerPlaceholder"');
     expect(html).toContain('data-description="chatbot.deletedAgentReadOnly"');

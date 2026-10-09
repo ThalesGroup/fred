@@ -47,7 +47,7 @@ describe("ChatListItem deleted agent presentation", () => {
     act(() => root.unmount());
     container.remove();
   });
-  function show(deleted: boolean, name: string | undefined = "Preserved assistant") {
+  function show(deleted: boolean, name: string | null = "Preserved assistant") {
     act(() =>
       root.render(
         <MemoryRouter>
@@ -55,7 +55,7 @@ describe("ChatListItem deleted agent presentation", () => {
             sessionId="saved"
             href="/conversation?session=saved"
             label="Conversation title"
-            agentName={name}
+            agentName={name ?? undefined}
             agentDeleted={deleted}
             dateLabel="07/10/26 - 15:00"
             onDelete={vi.fn()}
@@ -64,19 +64,19 @@ describe("ChatListItem deleted agent presentation", () => {
       ),
     );
   }
-  it("marks only the preserved agent name and announces the status without changing navigation", () => {
+  it("labels the preserved agent name and announces the status without changing navigation", () => {
     show(true);
     const link = container.querySelector("a")!;
     const name = container.querySelector('[data-agent-deleted="true"]')!;
-    expect(name.textContent).toBe("Preserved assistant");
+    expect(name.textContent).toBe("Preserved assistant (deleted)");
     expect(link.getAttribute("href")).toBe("/conversation?session=saved");
     expect(link.textContent).toContain("Conversation title");
-    expect(link.textContent).not.toContain("(deleted)");
+    expect(link.textContent).toContain("(deleted)");
     const statusId = link.getAttribute("aria-describedby")!.split(" ")[0];
     expect(document.getElementById(statusId)?.textContent).toBe("Agent deleted - read-only conversation");
   });
   it("shows the deletion explanation on keyboard focus and hover, including grouped entries", () => {
-    show(true, undefined);
+    show(true, null);
     const link = container.querySelector("a")!;
     act(() => {
       document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
@@ -88,17 +88,18 @@ describe("ChatListItem deleted agent presentation", () => {
     expect(document.querySelector('[role="tooltip"]')?.textContent).toBe("Agent deleted - read-only conversation");
   });
   it.each([
-    ["en", "Lumi deleted - read-only conversation"],
-    ["fr", "Lumi supprimé - conversation en lecture seule"],
-  ])("uses the deployment nickname in the %s deletion description and tooltip", async (language, status) => {
-    branding.agentsNicknameSingular = "Lumi";
+    ["en", "(deleted)", " deleted - read-only conversation"],
+    ["fr", "(supprimé)", " supprimé - conversation en lecture seule"],
+  ])("localizes the %s suffix and keeps an empty configured nickname", async (language, suffix, status) => {
+    branding.agentsNicknameSingular = "";
     await labels.changeLanguage(language);
     show(true);
     const link = container.querySelector("a")!;
     const statusId = link.getAttribute("aria-describedby")!.split(" ")[0];
     expect(document.getElementById(statusId)?.textContent).toBe(status);
     act(() => link.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
-    expect(document.querySelector('[role="tooltip"]')?.textContent).toBe(status);
+    expect(document.querySelector('[role="tooltip"]')?.textContent).toBe(`Preserved assistant - ${status}`);
+    expect(container.querySelector("[data-agent-deleted]")?.textContent).toBe(`Preserved assistant ${suffix}`);
     expect(container.textContent).not.toContain("{{");
   });
   it("keeps live agent names and entries free of deletion status", () => {
@@ -106,5 +107,6 @@ describe("ChatListItem deleted agent presentation", () => {
     expect(container.querySelector('[data-agent-deleted="true"]')).toBeNull();
     expect(container.querySelector("a")?.getAttribute("aria-describedby")).toBeNull();
     expect(container.textContent).not.toContain("read-only");
+    expect(container.textContent).not.toContain("(deleted)");
   });
 });
