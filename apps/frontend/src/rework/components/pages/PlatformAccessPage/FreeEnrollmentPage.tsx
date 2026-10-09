@@ -1,12 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import Button from "@shared/atoms/Button/Button";
-import Checkbox from "@shared/atoms/Checkbox/Checkbox";
 import TeamInitials from "@shared/atoms/TeamInitials/TeamInitials";
-import { MarkdownRenderer } from "@shared/molecules/MarkdownRenderer/MarkdownRenderer";
-import { useLegalMarkdown } from "@hooks/useLegalMarkdown";
+import { GcuPageContent } from "../GcuPage/GcuPage";
 import { useFrontendProperties } from "../../../../hooks/useFrontendProperties";
 import { platformPath } from "../../../../common/platformAccess";
 import {
@@ -22,7 +20,6 @@ export default function FreeEnrollmentPage() {
   const { token = "" } = useParams();
   const { t } = useTranslation();
   const { gcuVersion, contactSupportLink, siteDisplayName } = useFrontendProperties();
-  const acceptanceId = useId();
   const preview = useFreeEnrollmentPreviewQuery({ token });
   const [accept, acceptance] = useAcceptFreeCguMutation();
   const [enroll, enrollment] = useEnrollFreeTeamMutation();
@@ -41,15 +38,20 @@ export default function FreeEnrollmentPage() {
       active = false;
     };
   }, [token, preview.isSuccess, record]);
-  const markdown = useLegalMarkdown("gcu");
-  const [accepted, setAccepted] = useState(false);
   const [failed, setFailed] = useState(false);
   const busy = acceptance.isLoading || enrollment.isLoading || preview.isFetching;
+  const acceptTerms = async () => {
+    if (!gcuVersion) return;
+    try {
+      await accept({ token, acceptFreeEnrollmentCgu: { version: gcuVersion } }).unwrap();
+      await preview.refetch().unwrap();
+    } catch {
+      setFailed(true);
+    }
+  };
   const join = async () => {
     setFailed(false);
     try {
-      if (preview.data?.cgu_required && gcuVersion)
-        await accept({ token, acceptFreeEnrollmentCgu: { version: gcuVersion } }).unwrap();
       const status = await enroll({ token }).unwrap();
       if (status.admitted) window.location.replace(platformPath("/"));
       else setFailed(true);
@@ -69,6 +71,7 @@ export default function FreeEnrollmentPage() {
         }}
       />
     );
+  if (preview.data?.cgu_required) return <GcuPageContent isLoading={busy} onAccept={acceptTerms} />;
   return (
     <main className={styles.page}>
       <section className={styles.card} aria-labelledby="invitation-title">
@@ -92,21 +95,6 @@ export default function FreeEnrollmentPage() {
                 </div>
               </div>
               {openingFailed && <p role="status">{t("rework.platformAccess.links.openingFailed")}</p>}
-              {preview.data.cgu_required && (
-                <>
-                  <div className={styles.legal}>
-                    <MarkdownRenderer text={markdown} />
-                  </div>
-                  <div className={styles.acceptance}>
-                    <Checkbox
-                      id={acceptanceId}
-                      checked={accepted}
-                      onChange={(event) => setAccepted(event.target.checked)}
-                    />
-                    <label htmlFor={acceptanceId}>{t("rework.platformAccess.acceptCgu")}</label>
-                  </div>
-                </>
-              )}
             </>
           )}
         </div>
@@ -122,7 +110,7 @@ export default function FreeEnrollmentPage() {
               variant="filled"
               size="medium"
               icon={{ category: "outlined", type: "person_add" }}
-              disabled={busy || (preview.data.cgu_required && (!accepted || !gcuVersion || !markdown))}
+              disabled={busy}
               onClick={() => void join()}
             >
               {t("rework.platformAccess.join")}

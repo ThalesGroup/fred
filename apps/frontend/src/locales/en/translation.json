@@ -3367,7 +3367,6 @@
       "join": "Join this team",
       "invalidLink": "This link cannot be used. It may be expired, revoked or suspended, or the service is unavailable.",
       "loading": "Loading...",
-      "acceptCgu": "I have read and accept the terms of use.",
       "source": {
         "attribute": "Identity attribute",
         "manual": "Manual exception",

@@ -3367,7 +3367,6 @@
       "join": "Rejoindre cette équipe",
       "invalidLink": "Ce lien ne peut pas être utilisé. Il est peut-être expiré, révoqué ou suspendu, ou le service est indisponible.",
       "loading": "Chargement...",
-      "acceptCgu": "J'ai lu et j'accepte les conditions générales d'utilisation.",
       "source": {
         "attribute": "Attribut d'identité",
         "manual": "Exception manuelle",

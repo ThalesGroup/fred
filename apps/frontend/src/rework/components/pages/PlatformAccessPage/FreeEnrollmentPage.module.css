@@ -71,23 +71,6 @@
   color: var(--on-surface-retreat);
 }
 
-.legal {
-  border: 1px solid var(--outline-muted);
-  border-radius: var(--radius-s);
-  background: var(--surface-container-lowest);
-  padding: var(--spacing-m);
-  max-height: 20rem;
-  overflow: auto;
-  color: var(--on-surface);
-  overflow-wrap: anywhere;
-}
-
-.acceptance {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--spacing-s);
-}
-
 .footer {
   display: flex;
   flex-wrap: wrap;

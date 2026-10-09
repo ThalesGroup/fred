@@ -5,6 +5,9 @@ import { createRoot, Root } from "react-dom/client";
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
 const state = vi.hoisted(() => ({
   invalid: false,
+  required: true,
+  markdown: "Terms of use",
+  refetch: vi.fn(),
   record: vi.fn((_args: unknown) => ({ unwrap: async () => undefined })),
   accept: vi.fn(() => ({ unwrap: async () => undefined })),
   enroll: vi.fn(() => ({ unwrap: async () => ({ admitted: false }) })),
@@ -14,28 +17,56 @@ vi.mock("react-router-dom", () => ({ useNavigate: () => vi.fn(), useParams: () =
 vi.mock("@shared/molecules/MarkdownRenderer/MarkdownRenderer", () => ({
   MarkdownRenderer: ({ text }: { text: string }) => <p>{text}</p>,
 }));
-vi.mock("@hooks/useLegalMarkdown", () => ({ useLegalMarkdown: () => "Terms of use" }));
+vi.mock("@hooks/useLegalMarkdown", () => ({ useLegalMarkdown: () => state.markdown }));
 vi.mock("../../../../hooks/useFrontendProperties", () => ({
   useFrontendProperties: () => ({ gcuVersion: "v1", contactSupportLink: "https://support.example.org" }),
 }));
 vi.mock("../../../../security/KeycloakService", () => ({ KeyCloakService: { CallLogout: vi.fn() } }));
 vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useFreeEnrollmentPreviewQuery: () => ({
-    data: state.invalid ? undefined : { team_name: "Demo", cgu_required: true },
+    data: state.invalid ? undefined : { team_name: "Demo", cgu_required: state.required },
     isError: state.invalid,
     isSuccess: !state.invalid,
-    refetch: vi.fn(),
+    refetch: state.refetch,
   }),
   useAcceptFreeCguMutation: () => [state.accept, {}],
   useEnrollFreeTeamMutation: () => [state.enroll, {}],
   useRecordFreeOpeningMutation: () => [state.record, {}],
 }));
+vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
+  useGetUserDetailsControlPlaneV1UserGetQuery: () => {
+    throw new Error("Protected user query before enrollment");
+  },
+  useValidateGcuControlPlaneV1GcuPostMutation: () => {
+    throw new Error("Ordinary legal endpoint before admission");
+  },
+}));
 import FreeEnrollmentPage from "./FreeEnrollmentPage";
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 let host: HTMLDivElement, root: Root;
+let reachBottom: () => void;
 beforeEach(() => {
   state.invalid = false;
+  state.required = true;
+  state.markdown = "Terms of use";
   vi.clearAllMocks();
+  state.accept.mockReturnValue({ unwrap: async () => undefined });
+  state.refetch.mockReturnValue({
+    unwrap: async () => {
+      state.required = false;
+    },
+  });
+  vi.stubGlobal(
+    "IntersectionObserver",
+    class {
+      constructor(private callback: (entries: unknown[]) => void) {}
+      observe(target: Element) {
+        reachBottom = () => this.callback([{ isIntersecting: true, target }]);
+      }
+      unobserve() {}
+      disconnect() {}
+    },
+  );
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -43,18 +74,56 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount());
   host.remove();
+  vi.unstubAllGlobals();
 });
-it("requires legal acceptance before caller-only enrollment", async () => {
+const button = (key: string) => [...host.querySelectorAll("button")].find((node) => node.textContent?.endsWith(key));
+it("uses the common terms page before offering explicit team enrollment", async () => {
   act(() => root.render(<FreeEnrollmentPage />));
-  const join = [...host.querySelectorAll("button")].find((node) =>
-    node.textContent?.includes("rework.platformAccess.join"),
-  )!;
-  expect(host.textContent).not.toContain("rework.platformAccess.signOut");
-  expect(join.disabled).toBe(true);
-  await act(async () => host.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click());
-  await act(async () => join.click());
+  expect(host.textContent).toContain("rework.gcu.title");
+  expect(host.textContent).not.toContain("rework.platformAccess.joinTeam");
+  expect(host.querySelector('input[type="checkbox"]')).toBeNull();
+  expect(button("rework.gcu.validate")!.disabled).toBe(true);
+  act(() => reachBottom());
+  expect(button("rework.gcu.validate")!.disabled).toBe(false);
+  await act(async () => button("rework.gcu.validate")!.click());
   expect(state.accept).toHaveBeenCalledWith({ token: "opaque-token", acceptFreeEnrollmentCgu: { version: "v1" } });
+  expect(state.refetch).toHaveBeenCalledTimes(1);
+  expect(state.enroll).not.toHaveBeenCalled();
+  act(() => root.render(<FreeEnrollmentPage />));
+  expect(host.textContent).not.toContain("rework.gcu.title");
+  expect(host.textContent).toContain("rework.platformAccess.joinTeam");
+  expect(host.textContent).not.toContain("rework.platformAccess.signOut");
+  await act(async () => button("rework.platformAccess.join")!.click());
   expect(state.enroll).toHaveBeenCalledWith({ token: "opaque-token" });
+  expect(state.accept).toHaveBeenCalledTimes(1);
+});
+it("skips the legal page when current terms are already accepted", async () => {
+  state.required = false;
+  act(() => root.render(<FreeEnrollmentPage />));
+  expect(host.textContent).not.toContain("rework.gcu.title");
+  await act(async () => button("rework.platformAccess.join")!.click());
+  expect(state.accept).not.toHaveBeenCalled();
+  expect(state.enroll).toHaveBeenCalledTimes(1);
+});
+it("does not enroll when invitation legal acceptance fails", async () => {
+  state.accept.mockReturnValue({
+    unwrap: async () => {
+      throw new Error("Expired invitation");
+    },
+  });
+  act(() => root.render(<FreeEnrollmentPage />));
+  act(() => reachBottom());
+  await act(async () => button("rework.gcu.validate")!.click());
+  expect(host.querySelector('[role="alert"]')?.textContent).toContain("rework.platformAccess.failed");
+  expect(button("rework.platformAccess.join")).toBeUndefined();
+  expect(state.refetch).not.toHaveBeenCalled();
+  expect(state.enroll).not.toHaveBeenCalled();
+});
+it("cannot accept terms before their document loads", () => {
+  state.markdown = "";
+  act(() => root.render(<FreeEnrollmentPage />));
+  act(() => reachBottom());
+  expect(button("rework.gcu.validate")!.disabled).toBe(true);
 });
 it("invalid links expose no enrollment action", () => {
   state.invalid = true;
