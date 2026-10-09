@@ -1,7 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 import asyncio
-import hashlib
-import json
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -10,7 +8,7 @@ from uuid import UUID
 from fastapi import HTTPException
 from fred_pod.security.platform_access import PlatformAccessPolicy
 from fred_pod.security.structure import KeycloakUser
-from sqlalchemy import func, or_, select, text
+from sqlalchemy import ColumnElement, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from fred_core.security.platform_access.models import (
@@ -99,6 +97,20 @@ class PlatformAccessStore:
                 )
             return list((await s.scalars(query.order_by(TeamMetadataRow.id))).all())
 
+    @staticmethod
+    def user_search(query: str) -> ColumnElement[bool]:
+        return or_(
+            *(
+                column.ilike(f"%{query}%")
+                for column in (
+                    UserRow.username,
+                    UserRow.email,
+                    UserRow.first_name,
+                    UserRow.last_name,
+                )
+            )
+        )
+
     async def users(
         self,
         offset: int,
@@ -109,15 +121,7 @@ class PlatformAccessStore:
         async with self.read(session) as s:
             statement = select(UserRow)
             if query:
-                pattern = f"%{query}%"
-                statement = statement.where(
-                    or_(
-                        UserRow.username.ilike(pattern),
-                        UserRow.email.ilike(pattern),
-                        UserRow.first_name.ilike(pattern),
-                        UserRow.last_name.ilike(pattern),
-                    )
-                )
+                statement = statement.where(self.user_search(query))
             return list(
                 (
                     await s.scalars(
@@ -176,7 +180,6 @@ class PlatformAccessStore:
                 else set()
             )
             projection = self.projection(user, selected)
-            path = hashlib.sha256(json.dumps(sorted(selected)).encode()).hexdigest()
             row = await self.user(uid, session)
             if row is None:
                 row = UserRow(
@@ -196,7 +199,6 @@ class PlatformAccessStore:
                     row.last_seen_at = datetime.now(timezone.utc)
                     row.admission_conflicted = False
                     row.admission_attribute = projection
-                    row.admission_claim_path = path
                     row.admission_issued_at = issued
                     row.admission_expires_at = user.admission_expires_at
                 elif issued == row.admission_issued_at:
@@ -207,7 +209,6 @@ class PlatformAccessStore:
                     ):
                         row.admission_conflicted = True
                     row.admission_attribute = projection
-                    row.admission_claim_path = path
             await session.flush()
             return row
 
@@ -215,14 +216,7 @@ class PlatformAccessStore:
         async with self.read() as session:
             statement = select(func.count()).select_from(UserRow)
             if query:
-                statement = statement.where(
-                    or_(
-                        UserRow.username.ilike(f"%{query}%"),
-                        UserRow.email.ilike(f"%{query}%"),
-                        UserRow.first_name.ilike(f"%{query}%"),
-                        UserRow.last_name.ilike(f"%{query}%"),
-                    )
-                )
+                statement = statement.where(self.user_search(query))
             return int((await session.scalar(statement)) or 0)
 
     async def team(self, team_id: str, session: AsyncSession) -> TeamMetadataRow | None:

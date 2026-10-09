@@ -153,7 +153,6 @@ async def list_platform_access_users(
     limit: int = Query(25, ge=1, le=100),
     query: str = Query("", max_length=200),
 ) -> PlatformAccessUsersPage:
-    await access.state()
     return await service.users_page(access, offset, limit, query)
 
 

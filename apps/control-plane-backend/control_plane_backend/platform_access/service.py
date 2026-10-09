@@ -372,27 +372,26 @@ async def t0(
             )
         if state.revision != revision:
             raise HTTPException(409, "platform_access_t0_snapshot_changed")
-        if state.filtering_enabled and state.t0_completed_at is None:
+        if state.filtering_enabled:
             raise HTTPException(409, "t0_requires_inactive_filtering")
-        if state.t0_completed_at is None:
-            existing = set(
-                (await session.scalars(select(PlatformAccessUserRow.user_id))).all()
-            )
-            present = set((await session.scalars(select(UserRow.id))).all())
-            now = datetime.now(timezone.utc)
-            session.add_all(
-                [
-                    PlatformAccessUserRow(
-                        user_id=row.id,
-                        source="t0",
-                        granted_by=actor.uid,
-                        granted_at=now,
-                    )
-                    for row, matched in zip(rows, matches, strict=True)
-                    if not matched and row.id in present and row.id not in existing
-                ]
-            )
-            state.t0_completed_at = now
+        existing = set(
+            (await session.scalars(select(PlatformAccessUserRow.user_id))).all()
+        )
+        present = set((await session.scalars(select(UserRow.id))).all())
+        now = datetime.now(timezone.utc)
+        session.add_all(
+            [
+                PlatformAccessUserRow(
+                    user_id=row.id,
+                    source="t0",
+                    granted_by=actor.uid,
+                    granted_at=now,
+                )
+                for row, matched in zip(rows, matches, strict=True)
+                if not matched and row.id in present and row.id not in existing
+            ]
+        )
+        state.t0_completed_at = now
         return PlatformT0Preview(
             candidates=candidates, matching=matching, completed_at=state.t0_completed_at
         )
@@ -640,7 +639,6 @@ async def self_status(
 async def preview_link(
     access: PlatformAccess, user: KeycloakUser, token: str, version: str | None
 ) -> FreeEnrollmentPreview:
-    await access.state()
     await access.observe(user)
     async with access.store.read() as session:
         _, team = await require_link(access, token, session)

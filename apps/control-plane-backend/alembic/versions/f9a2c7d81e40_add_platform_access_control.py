@@ -17,7 +17,6 @@ depends_on = None
 def upgrade() -> None:
     for column in (
         sa.Column("admission_attribute", sa.JSON(), nullable=True),
-        sa.Column("admission_claim_path", sa.String(64), nullable=True),
         sa.Column("admission_issued_at", sa.Float(), nullable=True),
         sa.Column("admission_expires_at", sa.Float(), nullable=True),
         sa.Column(
@@ -105,7 +104,6 @@ def downgrade() -> None:
         "admission_conflicted",
         "admission_expires_at",
         "admission_issued_at",
-        "admission_claim_path",
         "admission_attribute",
     ):
         op.drop_column("users", name)

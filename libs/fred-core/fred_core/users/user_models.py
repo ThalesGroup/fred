@@ -49,7 +49,6 @@ class UserRow(Base):
     admission_attribute: Mapped[dict[str, str | list[str] | None] | None] = (
         mapped_column(JSON, nullable=True)
     )
-    admission_claim_path: Mapped[str | None] = mapped_column(String(64), nullable=True)
     admission_issued_at: Mapped[float | None] = mapped_column(Float, nullable=True)
     admission_expires_at: Mapped[float | None] = mapped_column(Float, nullable=True)
     admission_conflicted: Mapped[bool] = mapped_column(

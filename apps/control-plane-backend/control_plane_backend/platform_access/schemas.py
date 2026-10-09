@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
+from fred_core.security.platform_access.rules import Reason
 from fred_pod.security.platform_access import PlatformAccessPolicy
 from pydantic import (
     AwareDatetime,
@@ -156,16 +157,7 @@ class PlatformAccessOwnClaims(BaseModel):
 class PlatformAccessPolicyPreview(BaseModel):
     matched: bool
     admitted: bool
-    conditions: list[
-        Literal[
-            "matched",
-            "not_matching",
-            "missing",
-            "incompatible",
-            "timeout",
-            "unavailable",
-        ]
-    ]
+    conditions: list[Reason]
 
 
 class GrantPlatformAccessUsers(BaseModel):
