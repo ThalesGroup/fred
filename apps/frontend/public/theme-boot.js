@@ -27,6 +27,19 @@
     }
   }
 
+  var custom = read("localHook:ApplicationContextProvider.customUiThemes");
+  var bases = {};
+  if (custom instanceof Array) {
+    for (var c = 0; c < custom.length; c++) {
+      var entry = custom[c];
+      if (entry && typeof entry.id === "string" && /^[a-z][a-z0-9-]{0,31}$/.test(entry.id) &&
+          THEMES.indexOf(entry.id) < 0 && THEMES.indexOf(entry.base) >= 0) {
+        THEMES.push(entry.id);
+        bases[entry.id] = entry.base;
+      }
+    }
+  }
+
   // Same rules as resolveUiTheme: user's choice if offered, else the platform
   // default if offered, else the first offered theme (platform settings cached
   // from the last /frontend/config; index.tsx re-applies the fresh ones).
@@ -50,5 +63,6 @@
   }
 
   document.documentElement.setAttribute("data-ui-theme", theme);
+  document.documentElement.setAttribute("data-ui-base-theme", bases[theme] || theme);
   document.documentElement.setAttribute("data-theme", mode);
 })();

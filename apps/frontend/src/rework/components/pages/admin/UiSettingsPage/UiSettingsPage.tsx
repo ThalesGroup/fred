@@ -21,7 +21,7 @@ import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { userDisplayName } from "@core/utils/userDisplayName.ts";
 import { normalizeApiError } from "@core/errors/normalizeApiError.ts";
-import { offeredUiThemes, UI_THEME_LABEL_KEYS, UI_THEMES } from "../../../../../app/uiThemes.ts";
+import { availableUiThemes, offeredUiThemes, uiThemeBase, uiThemeLabel } from "../../../../../app/uiThemes.ts";
 import {
   usePlatformUiSettingsQuery,
   useSetPlatformUiSettingsMutation,
@@ -61,7 +61,7 @@ export default function UiSettingsPage() {
   const auditUids = data?.updated_by ? [data.updated_by] : [];
   const { data: auditUsers = [] } = useUsersByIdsQuery({ ids: auditUids }, { skip: auditUids.length === 0 });
 
-  const [defaultTheme, setDefaultTheme] = useState<string>(UI_THEMES[0]);
+  const [defaultTheme, setDefaultTheme] = useState<string>(availableUiThemes()[0]);
   const [hidden, setHidden] = useState<string[]>([]);
   const [serverError, setServerError] = useState<string | undefined>();
   useEffect(() => {
@@ -71,10 +71,8 @@ export default function UiSettingsPage() {
   }, [data]);
 
   // Ids stored by another frontend version: kept as they are on save.
-  const unknownIds = [...new Set([...hidden, defaultTheme])].filter(
-    (id) => !(UI_THEMES as readonly string[]).includes(id),
-  );
-  const offered = UI_THEMES.filter((theme) => !hidden.includes(theme));
+  const unknownIds = [...new Set([...hidden, defaultTheme])].filter((id) => !availableUiThemes().includes(id));
+  const offered = availableUiThemes().filter((theme) => !hidden.includes(theme));
   // Also while refetching after a save: a revert must never use settings older than the server's.
   const locked = isLoading || isFetching || isSaving || isError;
 
@@ -111,8 +109,8 @@ export default function UiSettingsPage() {
       <p className={styles.hint}>{t("rework.uiSettings.hint")}</p>
 
       <ul className={styles.themes}>
-        {UI_THEMES.map((theme) => {
-          const label = t(UI_THEME_LABEL_KEYS[theme]);
+        {availableUiThemes().map((theme) => {
+          const label = uiThemeLabel(theme, t);
           const isOffered = !hidden.includes(theme);
           const isDefault = theme === defaultTheme;
           return (
@@ -138,7 +136,13 @@ export default function UiSettingsPage() {
               {/* One preview, light half then dark half; the theme's own tokens resolve inside each half. */}
               <span className={styles.preview}>
                 {MODES.map((mode) => (
-                  <span key={mode} className={styles.swatches} data-ui-theme={theme} data-theme={mode}>
+                  <span
+                    key={mode}
+                    className={styles.swatches}
+                    data-ui-theme={theme}
+                    data-ui-base-theme={uiThemeBase(theme)}
+                    data-theme={mode}
+                  >
                     {SWATCHES.map((role) => (
                       <span key={role} className={styles.swatch} style={{ backgroundColor: `var(--${role})` }} />
                     ))}
@@ -146,7 +150,7 @@ export default function UiSettingsPage() {
                 ))}
               </span>
               {/* Only the theme's font and shapes apply here; colors stay those of the page. */}
-              <span className={styles.name} data-ui-theme={theme} title={label}>
+              <span className={styles.name} data-ui-theme={theme} data-ui-base-theme={uiThemeBase(theme)} title={label}>
                 {label}
               </span>
               <Button

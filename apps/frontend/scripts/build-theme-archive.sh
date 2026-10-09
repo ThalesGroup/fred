@@ -35,6 +35,7 @@ A theme directory mirrors apps/frontend/public/, and only these are served:
   <name>.md              gcu, gcu.fr, gdpr, gdpr.fr, team-admin-charter,
                          team-admin-charter.fr, release
   theme-custom.css        CSS variables and additional theme rules
+  theme-catalog.json       additional selectable themes
   theme-properties.json   branding labels and image file names
   theme-translations/    en.json and fr.json UI label overrides
 
@@ -51,7 +52,7 @@ fi
 # ignored; say so here instead, while the author can still fix the layout.
 ignored=$(find "${source_directory}" -mindepth 1 -maxdepth 1 \
     ! -name images ! -name contrib ! -name theme-translations ! -name '*.md' ! -name theme-custom.css \
-    ! -name theme-properties.json -printf '%f\n' 2>/dev/null || true)
+    ! -name theme-properties.json ! -name theme-catalog.json -printf '%f\n' 2>/dev/null || true)
 if [ -n "${ignored}" ]; then
     echo "Ignored, outside the supported theme surfaces:" >&2
     printf '  %s\n' ${ignored} >&2

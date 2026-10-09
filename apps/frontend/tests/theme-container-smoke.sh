@@ -61,8 +61,9 @@ with zipfile.ZipFile(f"{out}/theme.zip", "w") as z:
     z.writestr("images/icons/customAgent.svg", "<svg>acme-agent</svg>")
     z.writestr("gcu.md", "# theme terms")
     z.writestr("contrib/acme/release.md", "# acme release")
-    z.writestr("theme-custom.css", 'html[data-ui-theme="pebble"][data-theme="light"] { --primary: #123456; }')
+    z.writestr("theme-custom.css", '[data-ui-theme="acme"][data-theme="light"] { --primary: #123456; }')
     z.writestr("theme-properties.json", '{"siteDisplayName":"Acme","logoName":"acme-logo"}')
+    z.writestr("theme-catalog.json", '{"themes":[{"id":"acme","label":"Acme","base":"pebble"}]}')
     z.writestr("theme-translations/en.json", '{"rework":{"uiSettings":{"title":"Acme interface"}}}')
     # Never served from a theme, whatever the archive says.
     z.writestr("index.html", "<!doctype html>theme-shell")
@@ -92,6 +93,8 @@ with zipfile.ZipFile(f"{out}/no-surfaces.zip", "w") as z:
     z.writestr("README.txt", "nothing nginx would serve")
 with zipfile.ZipFile(f"{out}/invalid-properties.zip", "w") as z:
     z.writestr("theme-properties.json", '{"user_auth":{"enabled":false}}')
+with zipfile.ZipFile(f"{out}/invalid-catalog.zip", "w") as z:
+    z.writestr("theme-catalog.json", '{"themes":[{"id":"acme","label":"Acme","base":"unknown"}]}')
 with zipfile.ZipFile(f"{out}/invalid-translations.zip", "w") as z:
     z.writestr("theme-translations/en.json", '{"rework":{"uiSettings":{"title":false}}}')
 # unzip cannot write into a directory it stored unreadable, and the cleanup that
@@ -264,6 +267,7 @@ expect_status /images/missing.svg 404
 expect_status /contrib/none/release.md 404
 expect_status /missing.md 404
 expect_body /theme-properties.json '{}'
+expect_body /theme-catalog.json '"themes"'
 expect_body /theme-translations/en.json '{}'
 refute_body /theme-custom.css '#123456'
 expect_status /teams 200
@@ -285,6 +289,7 @@ expect_body /gcu.md 'theme terms'
 expect_body /contrib/acme/release.md 'acme release'
 expect_body /theme-custom.css '#123456'
 expect_body /theme-properties.json '"siteDisplayName":"Acme"'
+expect_body /theme-catalog.json '"id":"acme"'
 expect_body /theme-translations/en.json 'Acme interface'
 refute_body / theme-shell
 refute_body /config.json '"theme"'
@@ -324,6 +329,7 @@ for broken in \
     "escaping.zip|archive contains entries with '..' or absolute paths" \
     "no-surfaces.zip|archive holds no supported theme files" \
     "invalid-properties.zip|invalid theme-properties.json" \
+    "invalid-catalog.zip|invalid theme-catalog.json" \
     "invalid-translations.zip|invalid theme-translations/en.json" \
     "not-a-zip.zip|cannot unpack the archive" \
     "unwritable-dir.zip|cannot unpack the archive" \
