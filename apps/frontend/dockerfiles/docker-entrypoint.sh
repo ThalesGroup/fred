@@ -306,12 +306,39 @@ emit_application_map fred_application_ui_authority ui_upstream authority
 emit_application_map fred_application_ui_server_name ui_upstream server_name
 fi
 
+# Only bounded route families enter access logs: no raw paths, queries or headers.
+cat <<'EOF'
+map $status $fred_log_severity {
+    default INFO;
+    ~^4 WARNING;
+    ~^5 ERROR;
+}
+map $request_uri $fred_log_route {
+    default frontend;
+    ~^/fred/agents/v2(?:/|[?]|$) agent;
+    ~^/knowledge-flow(?:/|[?]|$) knowledge-flow;
+    ~^/control-plane(?:/|[?]|$) control-plane;
+    ~^/evaluation(?:/|[?]|$) evaluation;
+    ~^/apps(?:/|[?]|$) application-ui;
+    ~^/app-services(?:/|[?]|$) application-service;
+}
+log_format fred_json escape=json
+    '{"timestamp":"$time_iso8601","severity":"$fred_log_severity",'
+    '"message":"HTTP request completed","logger":"nginx.access",'
+    '"service":"frontend","service_role":"proxy","category":"access",'
+    '"request_id":"$request_id","http_method":"$request_method",'
+    '"http_route":"$fred_log_route","http_status":$status,'
+    '"duration_s":$request_time,"response_bytes":$body_bytes_sent}';
+EOF
+
 cat <<EOF
 server {
     listen 8080;
     server_name localhost;
     root /usr/share/nginx/html;
     index index.html index.htm;
+    access_log /dev/stdout fred_json;
+    error_log /dev/stderr warn;
     client_max_body_size ${FRONTEND_CLIENT_MAX_BODY_SIZE};
     resolver ${FRONTEND_DNS_RESOLVER} valid=10s;
 
