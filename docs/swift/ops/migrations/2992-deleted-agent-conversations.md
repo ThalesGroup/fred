@@ -9,7 +9,7 @@ configuration_reason: "The fix uses existing runtime snapshots and browser ingre
 ## Applicability
 
 Saved conversations keep their history and become read-only after agent deletion,
-with a preserved, struck-through agent name and visibly disabled chat composer.
+with a preserved agent name, a localized deletion suffix and visibly disabled chat composer.
 
 ## Prerequisites
 
@@ -36,7 +36,7 @@ additive name field and `SessionDetails.agent_deleted` / `messages_url`.
 ## Validation
 
 Open a conversation, rename its agent, delete the agent, then reload the list and
-conversation. Verify the latest name remains visible and struck through in both,
+conversation. Verify the latest name remains visible with the localized deletion suffix in both,
 history is readable, and the disabled composer explains read-only mode. Hover or
 focus the sidebar entry to read the deletion explanation. Confirm another live
 agent conversation still accepts messages.
