@@ -328,3 +328,10 @@
   cursor: pointer;
   font: var(--font-body-large);
 }
+
+.accessSources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+  min-width: 0;
+}

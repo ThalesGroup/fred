@@ -4,6 +4,7 @@ import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup";
 import { useTranslation } from "react-i18next";
 import { normalizeApiError } from "@core/errors/normalizeApiError";
 import Button from "@shared/atoms/Button/Button";
+import Chip from "@shared/atoms/Chip/Chip";
 import Checkbox from "@shared/atoms/Checkbox/Checkbox";
 import Switch from "@shared/atoms/Switch/Switch";
 import TextInput from "@shared/atoms/TextInput/TextInput";
@@ -263,13 +264,7 @@ export default function PlatformAccessPage() {
                       {
                         label: t("rework.teamSettings.members.table.identifiant"),
                         size: "2fr",
-                        cellRenderer: (user) => (
-                          <span>
-                            {user.username || user.user_id}
-                            <br />
-                            {user.email}
-                          </span>
-                        ),
+                        cellRenderer: (user) => user.username || user.email || "-",
                       },
                       {
                         label: t("rework.teamSettings.members.table.firstName"),
@@ -284,13 +279,18 @@ export default function PlatformAccessPage() {
                       {
                         label: t("rework.platformAccess.sources"),
                         size: "3fr",
-                        cellRenderer: (user) =>
-                          user.sources.map((source, index) => (
-                            <div key={index}>
-                              {t(`rework.platformAccess.source.${source.kind}`)}
-                              {source.team_id ? `: ${source.team_name || source.team_id} (${source.team_id})` : ""}
-                            </div>
-                          )),
+                        cellRenderer: (user) => (
+                          <div className={styles.accessSources}>
+                            {user.sources.length
+                              ? user.sources.map((source, index) => (
+                                  <Chip
+                                    key={index}
+                                    label={`${t(`rework.platformAccess.source.${source.kind}`)}${source.team_name ? `: ${source.team_name}` : ""}`}
+                                  />
+                                ))
+                              : "-"}
+                          </div>
+                        ),
                       },
                       {
                         label: t("rework.platformAccess.exception"),

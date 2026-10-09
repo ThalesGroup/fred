@@ -236,6 +236,8 @@ it("preserves rule drafts and user selections across tabs without mutations", as
 it("shows Free team provenance and offers an independent individual grant", async () => {
   render();
   expect(host.textContent).toContain("rework.platformAccess.source.free: Demo");
+  expect(host.textContent).not.toContain("(demo)");
+  expect(host.textContent).not.toContain("alice@example.org");
   const button = [...host.querySelectorAll("button")].find(
     (node) => node.textContent === "rework.platformAccess.allow",
   )!;
