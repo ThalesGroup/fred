@@ -34,6 +34,9 @@ A theme directory mirrors apps/frontend/public/, and only these are served:
   contrib/<brand>/<file> per-brand markdown
   <name>.md              gcu, gcu.fr, gdpr, gdpr.fr, team-admin-charter,
                          team-admin-charter.fr, release
+  theme-custom.css        CSS variables and additional theme rules
+  theme-properties.json   branding labels and image file names
+  theme-translations/    en.json and fr.json UI label overrides
 
 apps/frontend/theme/ is a working example to copy and edit.
 EOF
@@ -44,12 +47,13 @@ if ! command -v zip >/dev/null 2>&1; then
     exit 2
 fi
 
-# The container installs these three surfaces and logs everything else as
+# The container installs these surfaces and logs everything else as
 # ignored; say so here instead, while the author can still fix the layout.
 ignored=$(find "${source_directory}" -mindepth 1 -maxdepth 1 \
-    ! -name images ! -name contrib ! -name '*.md' -printf '%f\n' 2>/dev/null || true)
+    ! -name images ! -name contrib ! -name theme-translations ! -name '*.md' ! -name theme-custom.css \
+    ! -name theme-properties.json -printf '%f\n' 2>/dev/null || true)
 if [ -n "${ignored}" ]; then
-    echo "Ignored, outside images/, contrib/ and root *.md:" >&2
+    echo "Ignored, outside the supported theme surfaces:" >&2
     printf '  %s\n' ${ignored} >&2
 fi
 
