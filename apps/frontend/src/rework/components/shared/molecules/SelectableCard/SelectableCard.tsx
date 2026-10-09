@@ -12,29 +12,55 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { MaterialIcon } from "../../atoms/Icon/Icon.tsx";
+import type { MaterialIconType } from "../../utils/Type.ts";
 import styles from "./SelectableCard.module.css";
 
 export interface SelectableCardProps {
-  selected: boolean;
+  /** Omit when picking a card acts at once rather than marking a choice: no pressed state is announced. */
+  selected?: boolean;
   title: string;
   description: string;
   onSelect: () => void;
   disabled?: boolean;
+  /** Decorative Material Symbols icon shown before the text (package-safe: no custom icons). */
+  icon?: MaterialIconType;
 }
 
 /** A "pick one of N" card (radio-like). Design-tokens only. */
-export default function SelectableCard({ selected, title, description, onSelect, disabled }: SelectableCardProps) {
+export default function SelectableCard({
+  selected,
+  title,
+  description,
+  onSelect,
+  disabled,
+  icon,
+}: SelectableCardProps) {
+  const text = (
+    <>
+      <span className={styles.title}>{title}</span>
+      <span className={styles.description}>{description}</span>
+    </>
+  );
   return (
     <button
       type="button"
       className={styles.card}
-      data-selected={selected}
+      data-selected={selected ?? false}
       aria-pressed={selected}
       disabled={disabled}
       onClick={onSelect}
     >
-      <span className={styles.title}>{title}</span>
-      <span className={styles.description}>{description}</span>
+      {icon ? (
+        <span className={styles.withIcon}>
+          <span className={styles.icon} aria-hidden="true">
+            <MaterialIcon type={icon} />
+          </span>
+          <span className={styles.text}>{text}</span>
+        </span>
+      ) : (
+        text
+      )}
     </button>
   );
 }

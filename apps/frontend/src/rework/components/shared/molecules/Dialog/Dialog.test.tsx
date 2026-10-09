@@ -108,6 +108,70 @@ describe("Dialog focus and consumer-root portal", () => {
     expect(document.activeElement).toBe(portal().querySelector("input"));
   });
 
+  it("renders actionsAddon in the action bar, before the buttons", () => {
+    render(
+      <Dialog
+        open
+        title="Notice"
+        confirmLabel="Done"
+        onConfirm={() => {}}
+        onCancel={() => {}}
+        actionsAddon={<input type="checkbox" aria-label="Addon" />}
+      >
+        Message
+      </Dialog>,
+    );
+    const buttons = [...portal().querySelectorAll("button")];
+    const actions = buttons[0].parentElement!;
+
+    expect([...actions.querySelectorAll("input, button")]).toEqual([
+      portal().querySelector('[aria-label="Addon"]'),
+      ...buttons,
+    ]);
+  });
+
+  it("focuses the dialog itself when initialFocus is dialog", () => {
+    render(
+      <Dialog open title="Notes" confirmLabel="Done" onConfirm={() => {}} onCancel={() => {}} initialFocus="dialog">
+        <a href="https://example.com">Link</a>
+      </Dialog>,
+    );
+
+    expect(document.activeElement).toBe(portal().querySelector('[role="dialog"]'));
+  });
+
+  it("hideConfirm leaves Cancel as the only action and Enter inert", () => {
+    const onConfirm = vi.fn();
+    render(
+      <Dialog open title="Pick" confirmLabel="Done" onConfirm={onConfirm} onCancel={() => {}} hideConfirm>
+        <input aria-label="Field" />
+      </Dialog>,
+    );
+    const buttons = [...portal().querySelectorAll("button")];
+    expect(buttons.map((button) => button.textContent)).toEqual(["common.cancel"]);
+
+    const field = portal().querySelector("input")!;
+    act(() => {
+      field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    });
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
+  it("adds dividers only when asked", () => {
+    const dialog = (dividers?: boolean) => (
+      <Dialog open title="Notice" confirmLabel="Done" onConfirm={() => {}} onCancel={() => {}} dividers={dividers}>
+        Message
+      </Dialog>
+    );
+    render(dialog());
+    const classes = () => portal().querySelector('[role="dialog"]')!.className.split(" ");
+    expect(classes()).toHaveLength(1);
+
+    act(() => root.render(dialog(true)));
+    expect(classes()).toHaveLength(2);
+    expect(classes()[1]).toMatch(/dividers/);
+  });
+
   it("focuses the first control, contains Tab, and restores the trigger after Escape", () => {
     const onCancel = vi.fn();
     function Harness() {

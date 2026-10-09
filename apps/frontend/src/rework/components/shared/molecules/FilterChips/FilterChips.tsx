@@ -33,6 +33,8 @@ export interface FilterChipsProps<T extends string = string> {
   /** Called with the hidden count to produce the "show more" label. */
   showMoreLabel?: (hiddenCount: number) => string;
   showLessLabel?: string;
+  /** Names the chip group for assistive technologies. */
+  "aria-label"?: string;
 }
 
 export default function FilterChips<T extends string = string>({
@@ -43,6 +45,7 @@ export default function FilterChips<T extends string = string>({
   maxVisible,
   showMoreLabel,
   showLessLabel = "−",
+  "aria-label": ariaLabel,
 }: FilterChipsProps<T>) {
   const [expanded, setExpanded] = useState(false);
 
@@ -53,7 +56,7 @@ export default function FilterChips<T extends string = string>({
   const hiddenCount = hasMore ? options.length - maxVisible! : 0;
 
   return (
-    <div className={styles.chips} role="group">
+    <div className={styles.chips} role="group" aria-label={ariaLabel}>
       {allLabel !== undefined && (
         <button
           type="button"
