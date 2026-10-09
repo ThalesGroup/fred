@@ -495,15 +495,13 @@ export type RuntimeContext = {
   access_token?: string | null;
   access_token_expires_at?: number | null;
   agent_instance_id?: string | null;
-  /** Team-authored per-agent model-profile overrides (`agent_id -> profile_id`), same resolution/precedence notes as chat_default_profile_id above. `None`, not `{}`, when unset — matches every other Group C field so `model_dump(exclude_none=True)` (`to_legacy_context`) omits it for the common case of no team policy. For the `chat` capability, a platform-operator binding (`BoundRuntimeContext.platform_chat_model_binding`, resolved trusted per turn — never on this client-forwarded context) wins over this field unconditionally when set — that is the feature's intended precedence, not a bug: the platform operator is the authority on what is actually reachable/licensed in a given deployment; a pod-local ops-authored override can never beat that. */
-  agent_profile_overrides?: {
-    [key: string]: string;
-  } | null;
   /** Whether this interactive conversation offers the agent's ask_user tool. True mounts it, False disables it for new turns, and None means no interactive control was offered. */
   ask_user?: boolean | null;
   attachments_markdown?: string | null;
   /** Team-chosen default chat model profile id, resolved by control-plane from the team's TeamRoutingPolicy at prepare-execution and forwarded unchanged for the rest of the session — same channel as context_prompt_text, not re-fetched per turn. Applied by RoutedChatModelFactory only when no static models_catalog.yaml agent_profile_overrides entry matches — the static YAML override remains an ops-level override this can never beat. */
   chat_default_profile_id?: string | null;
+  /** The user's per-conversation chat model choice: a chat profile id picked in the composer and sent on every turn. Client-forwarded, so the pod accepts it only if the profile is a known chat profile whose model is in `usable_model_ids` and not in `team_disabled_model_ids`; otherwise it is ignored and logged. Ranks below the platform binding and the pod's per-agent override, above the instance recommendation and the team default. */
+  chat_profile_id?: string | null;
   command?: TurnCommand | null;
   context_prompt_text?: string | null;
   correlation_id?: string | null;
@@ -515,16 +513,13 @@ export type RuntimeContext = {
   language?: string | null;
   /** The user's per-question reasoning choice (REASON-01 level 4, `MODEL-REASONING-ENABLEMENT-RFC.md` §7), set by the composer toggle. Travels per turn on this context exactly like `search_policy`/`search_rag_scope` — reasoning is a property of the model call, not a tool, so it is a platform chat option and NOT a capability's `turn_options` slice.
     
-    TRI-STATE, and the distinction matters:
-    - `None` — the agent does not offer the choice (its author left reasoning off), so no per-question decision was made and levels 1-2 alone decide. This is the default and the pre-REASON-01 behaviour.
-    - `False` — the agent offers it and the user left it off: the turn must NOT reason, even on a model whose reasoning is enabled platform-wide.
-    - `True` — the user asked for it. Permission to reason, never a guarantee: level 2 remains a ceiling this cannot raise (§5.3). */
+    Only `True` reasons, and only on a model within `reasoning_enabled_model_ids` (a ceiling this cannot raise). `False` and `None` both mean no reasoning: callers that send nothing (OpenAI-compatible, evaluation) never reason by accident. Kept `bool | None` for wire compatibility. */
   reasoning?: boolean | null;
   /** kind="model" capability ids whose reasoning a platform admin has switched ON (`MODEL-REASONING-ENABLEMENT-RFC.md` §5, REASON-01), resolved by control-plane at prepare-execution and forwarded unchanged for the rest of the session — same channel and same 'not re-fetched per turn' contract as chat_default_profile_id above. GLOBAL, not per team: this is an activation ('does this model run with reasoning'), not a permission — per-team model authorization is the separate, untouched `usable_model_ids` (§5.1/§5.4).
     
     OFF BY DEFAULT, and this is a real semantic difference from `usable_model_ids`: there, `None` means 'unrestricted'; here `None` and `[]` mean the same thing as any absent id — reasoning does NOT run. A model reasons only by being named in this list (§5.6). RoutedChatModelFactory enforces it by STRIPPING the reasoning settings at client construction (§5.6.2).
     
-    As BOUND, this is the EFFECTIVE ceiling, not the raw platform list: `agent_app` intersects it with level 3 (the agent's own `AgentTuning.reasoning_enabled`, resolved server-side) before building the RuntimeContext, so an agent whose author left reasoning off carries an empty list whatever the request said (§14.5). What the FRONTEND sends is the platform list alone — the two differ on purpose, and the pod-side one is the one that counts. */
+    As BOUND on a managed instance turn, this is the platform list resolved server-side on the runtime binding; a turn without a managed instance binds an empty list. No agent-level setting narrows it. */
   reasoning_enabled_model_ids?: string[] | null;
   refresh_token?: string | null;
   search_policy?: ("strict" | "hybrid" | "semantic") | null;
@@ -1167,12 +1162,8 @@ export type AgentTuning = {
   /** The agent's mandatory description for the UI. */
   description: string;
   fields?: FieldSpec[];
-  /** Does a NEW conversation start with the composer's reasoning toggle already ON (REASON-01 Amendment B)? Seeds `params.default` on the emitted `reasoning_toggle` control — where the switch starts, never where it stays. Inert unless `reasoning_enabled`; kept rather than reset so withdrawing and restoring the offer does not lose the author's choice. */
-  reasoning_default_on?: boolean;
-  /** Does this agent OFFER per-question reasoning (REASON-01 level 3, `MODEL-REASONING-ENABLEMENT-RFC.md` §6)? A first-class agent property, deliberately NOT a capability: reasoning is a property of how the model is called, not a tool the agent can use, so it belongs next to role/description rather than in the tool picker.
-    
-    True only means the chat composer OFFERS the toggle — it never turns reasoning on by itself. The user still has to flip it per question (level 4, default off), and a platform admin still has to have enabled the model's reasoning (level 2, a ceiling). */
-  reasoning_enabled?: boolean;
+  /** The chat profile this instance's conversations start on, set by the agent's editor. `None` follows the team default, including later changes to it. Ranks above the team default and below the user's per-conversation choice; the pod ignores it when its model is not usable by the team or is team-disabled. */
+  recommended_chat_profile_id?: string | null;
   /** The agent's mandatory role for discovery. */
   role: string;
   /** Capability activation policy (RFC AGENT-CAPABILITY §3.8). None means inherit the template default selection; [] means activate no capabilities; a non-empty list means activate exactly that set. Validated at save time against the capabilities the instance's bound pod advertises. */

@@ -1082,6 +1082,17 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    getRoutingPolicyDisableImpactControlPlaneV1TeamsTeamIdRoutingPolicyDisableImpactGet: build.query<
+      GetRoutingPolicyDisableImpactControlPlaneV1TeamsTeamIdRoutingPolicyDisableImpactGetApiResponse,
+      GetRoutingPolicyDisableImpactControlPlaneV1TeamsTeamIdRoutingPolicyDisableImpactGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/routing-policy/disable-impact`,
+        params: {
+          capability_id: queryArg.capabilityId,
+        },
+      }),
+    }),
     getPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGet: build.query<
       GetPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGetApiResponse,
       GetPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGetApiArg
@@ -2487,6 +2498,12 @@ export type GetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffective
   teamId: string;
   agentInstanceId: string;
 };
+export type GetRoutingPolicyDisableImpactControlPlaneV1TeamsTeamIdRoutingPolicyDisableImpactGetApiResponse =
+  /** status 200 Successful Response */ DisableImpact;
+export type GetRoutingPolicyDisableImpactControlPlaneV1TeamsTeamIdRoutingPolicyDisableImpactGetApiArg = {
+  teamId: string;
+  capabilityId: string;
+};
 export type GetPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGetApiResponse =
   /** status 200 Successful Response */ PlatformModelBinding;
 export type GetPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGetApiArg = void;
@@ -3615,10 +3632,6 @@ export type AgentTemplateSummary = {
     
     Affects NEW instances only. An instance enrolled before this field existed persisted a genuine `selected_capability_ids: []` (the form always submitted an explicit selection), which is indistinguishable from a deliberate 'no capabilities' — so `materialize_default_capability_selections` skips it by design (it backfills `None` rows only). Such instances do not gain their template's defaults retroactively and must be re-ticked by hand. */
   default_capability_ids?: string[];
-  /** Does this template offer per-question reasoning (REASON-01 level 3)? Verbatim from the pod's `default_tuning`. The agent-creation form pre-ticks its Reasoning card from it, as `default_capability_ids` pre-ticks capabilities — a seed the operator can untick, never a lock. False for pods predating #2473. */
-  reasoning_enabled?: boolean;
-  /** Does this template start new conversations with the composer's reasoning toggle already ON (REASON-01 Amendment B)? Verbatim from the pod's `default_tuning`; only meaningful alongside `reasoning_enabled`. False for pods predating #2473. */
-  reasoning_default_on?: boolean;
 };
 export type SuspensionReason = "capability_unavailable" | "capability_access_revoked" | "capability_config_invalid";
 export type ManagedAgentInstanceSummary = {
@@ -3631,10 +3644,8 @@ export type ManagedAgentInstanceSummary = {
   role: string;
   /** User-authored intended-use statement (purpose, target/impacted users, data handled, outputs, error impact) captured in the agent form's Engagement tab, used to screen for platform/organization risk (#2105). Empty for agents enrolled before #2105 until independently edited — required at creation and enforced by the agent edit form on save, but omittable on `UpdateAgentInstanceRequest` (like `role`) so partial updates such as the enable/disable toggle are unaffected. */
   usage_statement?: string;
-  /** Whether this agent offers the per-question reasoning toggle in its chat composer (REASON-01 level 3). A plain agent property edited in the General section of the agent form, NOT a capability — reasoning is a property of how the model is called, not a tool the agent can use. False for every agent enrolled before REASON-01 until independently edited. */
-  reasoning_enabled?: boolean;
-  /** Whether a new conversation with this agent starts with the composer's reasoning toggle already ON (REASON-01 Amendment B). Only meaningful while `reasoning_enabled` is true — with no toggle offered there is nothing to preselect. The user can still switch it off per question. */
-  reasoning_default_on?: boolean;
+  /** Chat profile this agent's new conversations start on. Null follows the team default. */
+  recommended_chat_profile_id?: string | null;
   status: "enabled" | "disabled";
   /** Platform-forced suspension reason (#1975, RFC §3.9), or null when the instance is not suspended. Distinct from `status` (the editor's enable/disable toggle): a suspended instance is hidden from chat-only members and shows editors a warning with a locked enable toggle. One of capability_unavailable / capability_access_revoked / capability_config_invalid. */
   suspension_reason?: SuspensionReason | null;
@@ -3697,10 +3708,8 @@ export type CreateAgentInstanceRequest = {
       [key: string]: any;
     };
   } | null;
-  /** Offer the per-question reasoning toggle in this agent's chat composer (REASON-01 level 3). A plain agent property alongside role/description — NOT a capability, because reasoning is a property of how the model is called rather than a tool the agent can use. Defaults to False: enabling it only makes the composer toggle appear, and the user still has to flip it per question. */
-  reasoning_enabled?: boolean;
-  /** Start every new conversation with this agent's reasoning toggle already ON (REASON-01 Amendment B). Read only when `reasoning_enabled` is true; it seeds the composer's initial value and nothing more — the user can switch it off for any question. Defaults to False, the platform behaviour before this field existed. */
-  reasoning_default_on?: boolean;
+  /** Optional recommended chat profile. Must be a chat profile the team can use and has not disabled, served by the template's pod (else 422). Null follows the team default. */
+  recommended_chat_profile_id?: string | null;
 };
 export type UpdateAgentInstanceRequest = {
   display_name?: string | null;
@@ -3731,10 +3740,8 @@ export type UpdateAgentInstanceRequest = {
       [key: string]: any;
     };
   } | null;
-  /** Offer the per-question reasoning toggle in this agent's chat composer (REASON-01 level 3). Omit to leave the current setting unchanged — same convention as `role`, so a partial update such as the enable/disable toggle is not forced to resupply it. */
-  reasoning_enabled?: boolean | null;
-  /** Start new conversations with the reasoning toggle already ON (REASON-01 Amendment B). Omit to leave the current setting unchanged. Written independently of `reasoning_enabled`: withdrawing the offer leaves this value stored but inert, so re-offering reasoning restores the author's original default. */
-  reasoning_default_on?: boolean | null;
+  /** Recommended chat profile. Omit to leave it unchanged; pass null to follow the team default. Validated like on create. */
+  recommended_chat_profile_id?: string | null;
 };
 export type BodyPostTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesWithAssetsPost = {
   /** CreateAgentInstanceRequest as a JSON object string */
@@ -3950,16 +3957,8 @@ export type ManagedAgentTuning = {
   usage_statement?: string;
   tags?: string[];
   fields?: ManagedAgentFieldSpec[];
-  /** Does this agent OFFER per-question reasoning (REASON-01 level 3, `MODEL-REASONING-ENABLEMENT-RFC.md` §6)? A first-class agent property, deliberately NOT a capability: reasoning is a property of how the model is called, not a tool the agent can use, so it belongs next to role/description rather than in the tool picker.
-    
-    True only means the chat composer OFFERS the toggle — it never turns reasoning on by itself. The user still has to flip it per question (level 4, default off), and a platform admin still has to have enabled the model's reasoning (level 2, a ceiling). */
-  reasoning_enabled?: boolean;
-  /** When this agent offers reasoning, does a NEW conversation start with the composer toggle already ON (REASON-01 Amendment B)? Seeds `params.default` on the emitted `reasoning_toggle` control; the user can still flip it off per question — this decides where the switch starts, never where it stays.
-    
-    Meaningless unless `reasoning_enabled` is True: with the offer off no control is emitted at all, so no default can apply. The value is kept rather than reset in that case, so an author who turns the offer back on recovers their choice.
-    
-    Defaults to False, matching the hardcoded default this field replaces: `AGENT-THINKING-API-RFC.md` Amendment C measured reasoning re-issuing duplicate tool calls on this stack, so starting ON is an opt-in an author makes deliberately. */
-  reasoning_default_on?: boolean;
+  /** Chat profile this instance's conversations start on, above the team default. None follows the team default, including later changes. Validated on write against the team's usable and enabled models on the instance's pod; the pod re-checks it every turn. Legacy `reasoning_enabled` / `reasoning_default_on` keys in stored rows are ignored. */
+  recommended_chat_profile_id?: string | null;
   /** Capability activation policy (#1974, RFC AGENT-CAPABILITY §3.8). None means inherit the template default selection; [] means activate no capabilities; a non-empty list means activate exactly that set. Validated at save time against the capabilities the instance's bound pod advertises (unknown ids -> HTTP 422). */
   selected_capability_ids?: string[] | null;
   /** Per-capability stored config keyed by capability id. Each slice is the pod-validated {'schema_version', 'config'} envelope returned by the pod's validate-config round-trip, persisted VERBATIM — opaque to control-plane; the pod is the schema authority (RFC §3.8). Asset binaries never appear here — only KF storage keys. */
@@ -4022,6 +4021,7 @@ export type ManagedAgentRuntimeBinding = {
     };
   };
   reasoning_enabled_model_ids?: string[];
+  team_disabled_model_ids?: string[];
   platform_chat_model_binding?: ModelBinding | null;
   platform_prompt?: string | null;
 };
@@ -4132,10 +4132,8 @@ export type ExecutionPreparation = {
   };
   /** Team's default chat model profile id, resolved from its stored TeamRoutingPolicy at session prep (TEAM-ROUTING-POLICY-RFC.md §8.2, TEAM-05, #2118). Null when the team has no routing policy — the runtime then uses its own deployment default. The frontend folds this onto RuntimeContext exactly like context_prompt_text (same three-hop channel, same 'resolved once per session, not re-fetched per turn' contract). */
   chat_default_profile_id?: string | null;
-  /** Team's per-agent model-profile overrides (agent_id -> profile_id), same resolution notes as chat_default_profile_id above. */
-  agent_profile_overrides?: {
-    [key: string]: string;
-  };
+  /** User-level chat profile for this call only, set solely from the evaluator's `agent_model_override`. Forwarded as `RuntimeContext.chat_profile_id`; the pod re-validates it. */
+  chat_profile_id?: string | null;
   /** kind="model" capability ids whose reasoning a platform admin has switched on (REASON-01, `MODEL-REASONING-ENABLEMENT-RFC.md` §5.5). Resolved once here at session prep and folded onto RuntimeContext by the frontend, exactly like chat_default_profile_id — the same three-hop channel, deliberately not a per-turn lookup. GLOBAL, not per team: an activation ('does this model run with reasoning'), not a permission — per-team model access is untouched (§5.1). **Empty means no model reasons** (§5.6, off by default); the runtime strips the reasoning settings for every model absent from this list at client construction (§5.6.2). */
   reasoning_enabled_model_ids?: string[];
 };
@@ -4331,24 +4329,43 @@ export type TeamRoutingPolicy = {
   team_id: string;
   version: number;
   chat_default_profile_id?: string | null;
-  agent_profile_overrides?: {
-    [key: string]: string;
-  };
+  /** Model capability ids the team disabled for its members. */
+  disabled_model_ids?: string[];
+  /** Model capability ids whose composer reasoning row starts OFF. Every other reasoning-enabled model starts ON. */
+  reasoning_default_off_model_ids?: string[];
 };
 export type UpdateTeamRoutingPolicyRequest = {
   chat_default_profile_id?: string | null;
-  agent_profile_overrides?: {
-    [key: string]: string;
-  };
+  disabled_model_ids?: string[];
+  reasoning_default_off_model_ids?: string[];
+  /** The `version` the client last read (0 before any write). When set and the stored version differs, the write is refused with 409 so a concurrent edit is not overwritten. */
+  expected_version?: number | null;
 };
 export type AvailableModelProfile = {
   profile_id: string;
   capability_id: string;
   /** i18n key, same as CapabilityCatalogEntry.name */
   name: string;
+  /** Ops-authored model display name, when the pod catalog has one. */
+  display_name?: string | null;
+  /** Whether a platform admin enabled reasoning for this model: only then can the team set a reasoning default for it. */
+  reasoning_available?: boolean;
 };
 export type AvailableModelProfileList = {
   profiles?: AvailableModelProfile[];
+  /** The profile shown as the team's Default: the stored team default, else the pod default of the team's pods when they agree. Its model cannot be disabled. */
+  effective_default_profile_id?: string | null;
+};
+export type SelectableChatModel = {
+  /** Choice key sent as `chat_profile_id`. */
+  profile_id: string;
+  capability_id: string;
+  name: string;
+  display_name?: string | null;
+  /** Reasoning enabled platform-wide for this model. */
+  reasoning_enabled?: boolean;
+  /** The team's starting reasoning state for this model. */
+  reasoning_default_on?: boolean;
 };
 export type EffectiveChatModel = {
   /** The concrete model name. `capability_id` below identifies the `(provider, name)` pair uniquely for a caller that needs to join against team enablement or the models admin view. */
@@ -4363,6 +4380,17 @@ export type EffectiveChatModel = {
     
     Needed because the reasoning control is emitted from the PLATFORM list — 'some model has reasoning on' — while routing may land on a different model entirely. With reasoning enabled on Mistral Small and a team override routing to Mistral Medium, the composer used to render 'Mistral Medium · Élevé' and offer the toggle while the pod ran no reasoning at all. */
   reasoning_enabled?: boolean;
+  /** Models a member may pick for this agent: chat models served by the instance's pod, `can_use` for the team and not team-disabled. Empty when the choice is locked or the pod is unreachable. */
+  selectable_models?: SelectableChatModel[];
+  /** True when a platform binding or a pod per-agent override fixes the model, so no choice is offered. */
+  choice_locked?: boolean;
+};
+export type DisableImpactAgent = {
+  agent_instance_id: string;
+  display_name: string;
+};
+export type DisableImpact = {
+  agents?: DisableImpactAgent[];
 };
 export type PlatformModelBinding = {
   model_capability?: "chat";
@@ -5083,6 +5111,8 @@ export const {
   useLazyGetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetQuery,
   useGetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetQuery,
   useLazyGetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetQuery,
+  useGetRoutingPolicyDisableImpactControlPlaneV1TeamsTeamIdRoutingPolicyDisableImpactGetQuery,
+  useLazyGetRoutingPolicyDisableImpactControlPlaneV1TeamsTeamIdRoutingPolicyDisableImpactGetQuery,
   useGetPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGetQuery,
   useLazyGetPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGetQuery,
   usePutPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsPutMutation,
