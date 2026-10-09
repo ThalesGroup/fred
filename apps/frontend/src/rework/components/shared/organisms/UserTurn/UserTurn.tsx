@@ -14,10 +14,11 @@
 
 import { memo, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
+import { skillInvocationsText } from "@rework/utils/skillInvocation";
 import { writeRichClipboard } from "@rework/utils/clipboardUtils";
 import { useCopyConfirmation } from "@hooks/useCopyConfirmation";
 import { UserMessage } from "@shared/molecules/UserMessage/UserMessage";
-import type { CommandDescriptor } from "../../../../../slices/runtime/runtimeOpenApi";
+import type { CommandDescriptor, SkillInvocation } from "../../../../../slices/runtime/runtimeOpenApi";
 import { ActionBar } from "@shared/molecules/ActionBar/ActionBar";
 import type { Action } from "@shared/molecules/ActionBar/ActionBar";
 import styles from "./UserTurn.module.css";
@@ -32,6 +33,11 @@ interface UserTurnProps {
   /** Present when the turn was launched by a prompt command: the bubble then
    *  shows the command, and `onOpenCommand` reveals the text that was sent. */
   command?: CommandDescriptor | null;
+  skillName?: SkillInvocation["name"] | null;
+  skillNames?: SkillInvocation["name"][];
+  skillDescriptions?: ReadonlyMap<string, string>;
+  skillDescription?: string | null;
+  onOpenSkill?: (name: string) => void;
   /** Takes the turn's own values rather than a closure, so the caller can
    *  hand down one stable callback for every row — an arrow built per message
    *  would defeat this component's memo on every streamed frame. */
@@ -39,9 +45,21 @@ interface UserTurnProps {
 }
 
 // Memoized alongside AssistantTurn — see #2221.
-export const UserTurn = memo(function UserTurn({ text, turnId, onEdit, command, onOpenCommand }: UserTurnProps) {
+export const UserTurn = memo(function UserTurn({
+  text,
+  turnId,
+  onEdit,
+  command,
+  skillName,
+  skillNames,
+  skillDescriptions,
+  skillDescription,
+  onOpenSkill,
+  onOpenCommand,
+}: UserTurnProps) {
   const { t } = useTranslation();
   const { copied, confirmCopied } = useCopyConfirmation();
+  const invocationText = skillInvocationsText(text, skillNames ?? (skillName ? [skillName] : []), command);
 
   const openCommand = useCallback(() => {
     if (command && onOpenCommand) onOpenCommand({ text, command });
@@ -53,14 +71,16 @@ export const UserTurn = memo(function UserTurn({ text, turnId, onEdit, command, 
     // user message ever is. It also absorbs both clipboard failure modes (a
     // denied permission rejects; a non-secure origin has no navigator.clipboard
     // at all, so the property access throws synchronously).
-    writeRichClipboard("", text).then((success) => {
+    writeRichClipboard("", invocationText).then((success) => {
       if (success) confirmCopied();
     });
-  }, [text, confirmCopied]);
+  }, [invocationText, confirmCopied]);
 
   const actions: Action[] = useMemo(
     () => [
-      ...(onEdit ? [{ id: "edit", icon: "edit", label: t("chatbot.editMessage"), onClick: () => onEdit(text) }] : []),
+      ...(onEdit
+        ? [{ id: "edit", icon: "edit", label: t("chatbot.editMessage"), onClick: () => onEdit(invocationText) }]
+        : []),
       {
         id: "copy",
         icon: copied ? "check" : "content_copy",
@@ -68,14 +88,23 @@ export const UserTurn = memo(function UserTurn({ text, turnId, onEdit, command, 
         onClick: copyAction,
       },
     ],
-    [onEdit, text, copied, copyAction, t],
+    [onEdit, invocationText, copied, copyAction, t],
   );
 
   return (
     <div className={styles.turn} data-turn-id={turnId}>
       {/* Beside the bubble (user turns are right-aligned), revealed on hover. */}
       <ActionBar actions={actions} className={styles.actions} />
-      <UserMessage text={text} command={command} onOpenCommand={command && onOpenCommand ? openCommand : undefined} />
+      <UserMessage
+        text={text}
+        command={command}
+        skillNames={skillNames}
+        skillDescriptions={skillDescriptions}
+        skillName={skillName}
+        skillDescription={skillDescription}
+        onOpenSkill={onOpenSkill}
+        onOpenCommand={command && onOpenCommand ? openCommand : undefined}
+      />
     </div>
   );
 });

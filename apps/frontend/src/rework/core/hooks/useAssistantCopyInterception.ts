@@ -14,6 +14,7 @@
 
 import { useEffect, type RefObject } from "react";
 import { toEmailHtml, toPlainText } from "@rework/utils/clipboardUtils";
+import { selectedSkillText } from "@rework/utils/skillInvocation";
 
 const COPYABLE_SELECTOR = "[data-copyable-content]";
 
@@ -40,10 +41,16 @@ export function useAssistantCopyInterception(containerRef: RefObject<HTMLElement
 
     function onCopy(e: ClipboardEvent) {
       const sel = window.getSelection();
-      if (!sel || sel.isCollapsed || sel.rangeCount === 0 || !e.clipboardData) return;
+      if (e.defaultPrevented || !sel || sel.isCollapsed || sel.rangeCount === 0 || !e.clipboardData) return;
 
       try {
         const range = sel.getRangeAt(0);
+        const skillText = selectedSkillText(range, container);
+        if (skillText !== null) {
+          e.clipboardData.setData("text/plain", skillText);
+          e.preventDefault();
+          return;
+        }
         const start = closestCopyable(range.startContainer);
         const end = closestCopyable(range.endContainer);
         // Selection must land wholly inside a single copyable region — one

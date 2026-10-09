@@ -1307,11 +1307,10 @@ or native `<details>`, respectively). Implemented by
 - Citations use `[N]`, rendered as clickable badges by `rehypeCitations`
   (`SourceBadge`).
 
-The Mermaid parse-safe output contract and other cross-agent prompt
-fragments are injected at runtime (`compose_system_prompt`,
-`RUNTIME-09`) as a non-editable suffix — see
-`RUNTIME-EXECUTION-CONTRACT.md §8.12`. Graph agents (mindmap, `GraphRuntime`)
-do not go through this suffix path.
+Mermaid parse-safe rules are supplied by the configured platform `mermaid`
+skill through user or model loading, rather than an automatic prompt suffix.
+See `RUNTIME-EXECUTION-CONTRACT.md §8.105`. Graph agents (mindmap,
+`GraphRuntime`) remain outside this skill-loading path.
 
 ### 14.5 Files
 
@@ -1325,8 +1324,8 @@ do not go through this suffix path.
 | `shared/atoms/SourceBadge/SourceBadge.tsx` | Citation badge |
 | `styles/spacings.css`, `typography.css`, `radius.css` | Prose/tokens |
 | `apps/fred-agents/fred_agents/general_assistant.py` | Reference agent system prompt |
-| `libs/fred-sdk/fred_sdk/resources/prompts.py` | Global base prompt source (`GLOBAL_BASE_PROMPT_MARKDOWN`) |
-| `libs/fred-sdk/fred_sdk/resources/prompts/mermaid_output_contract.md` | Mermaid parse-safe contract |
+| `libs/fred-sdk/fred_sdk/resources/prompts.py` | Verbatim packaged Markdown loaders for agent authors |
+| `libs/fred-runtime/fred_runtime/skills/mermaid/SKILL.md` | Progressively loaded Mermaid diagram instructions |
 | `libs/fred-runtime/fred_runtime/react/react_prompting.py` | `compose_system_prompt()` |
 
 ---

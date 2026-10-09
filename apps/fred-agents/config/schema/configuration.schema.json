@@ -703,6 +703,22 @@
       "type": "object",
       "additionalProperties": false
     },
+    "PodSkillsConfig": {
+      "description": "Opt-in startup snapshot: package or a directory relative to configuration.yaml.",
+      "properties": {
+        "directory": {
+          "minLength": 1,
+          "title": "Directory",
+          "type": "string"
+        }
+      },
+      "required": [
+        "directory"
+      ],
+      "title": "PodSkillsConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
     "PodStorageConfig": {
       "description": "Persistence backend settings for an agent pod.\n\nAll conversation state (sessions, multi-turn history, checkpoints) is\nmanaged exclusively by the LangGraph SQL checkpointer, which uses the\n`postgres` connection. There are no separate session or history tables.\n\nFields:\n- `postgres`: SQL engine used by the LangGraph checkpointer (SQLite in\n  local dev via sqlite_path, PostgreSQL in production via host/port/database)\n- `opensearch`: optional, for log forwarding in production\n- `log_store`: optional, for structured log persistence\n- `object_store`: one bucket/root for all runtime-owned files",
       "properties": {
@@ -1530,6 +1546,17 @@
     },
     "web_research": {
       "$ref": "#/$defs/WebResearchDeploymentConfig"
+    },
+    "skills": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PodSkillsConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     }
   },
   "required": [

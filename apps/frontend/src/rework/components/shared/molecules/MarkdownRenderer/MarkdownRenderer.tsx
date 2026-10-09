@@ -30,6 +30,8 @@ import { getStreamingMarkdownState, type PendingStreamingFence } from "./streami
 
 interface MarkdownRendererProps {
   text: string;
+  /** Present local file references as labels instead of application routes. */
+  localLinksAsText?: boolean;
   onSourceClick?: (index: number) => void;
   streaming?: boolean;
   /** Drop the prose reading-width cap so wide content (CSV tables) can fill the
@@ -189,6 +191,7 @@ const REHYPE_PLUGINS: Parameters<typeof ReactMarkdown>[0]["rehypePlugins"] = [
 export const MarkdownRenderer = forwardRef<HTMLDivElement, MarkdownRendererProps>(function MarkdownRenderer(
   {
     text,
+    localLinksAsText = false,
     onSourceClick,
     streaming = false,
     fullWidth = false,
@@ -208,6 +211,18 @@ export const MarkdownRenderer = forwardRef<HTMLDivElement, MarkdownRendererProps
   // components (MermaidBlock, CodeBlock) and cause their effects to re-fire.
   const components = useMemo(
     () => ({
+      ...(localLinksAsText
+        ? {
+            a: ({ href, children, title }: { href?: string; children?: React.ReactNode; title?: string }) =>
+              href && /^(?:https?:\/\/|mailto:)/i.test(href) ? (
+                <a href={href} title={title} target="_blank" rel="noopener noreferrer">
+                  {children}
+                </a>
+              ) : (
+                <span title={href}>{children}</span>
+              ),
+          }
+        : {}),
       // pre: every fenced/indented block lands here, with or without a language.
       // react-markdown v9 dropped the `inline` prop, so the parent element is
       // the only reliable block-vs-inline signal — a `language-*` class is not.
@@ -255,7 +270,7 @@ export const MarkdownRenderer = forwardRef<HTMLDivElement, MarkdownRendererProps
           }
         : {}),
     }),
-    [onSourceClick, headingAnchors, inline],
+    [onSourceClick, headingAnchors, inline, localLinksAsText],
   );
 
   function pendingFenceLanguage(fence: PendingStreamingFence): string {

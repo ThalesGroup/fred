@@ -40,6 +40,119 @@ const GEO = { type: "geo", geojson: { type: "FeatureCollection", features: [] } 
 const DEMO_CARD = { type: "demo_card", title: "Demo echo", body: "HELLO" };
 const UNKNOWN = { type: "part_kind_from_the_future", payload: { x: 1 } };
 
+describe("explicit skill selection on user turns", () => {
+  const user = () => msg({ role: "user", parts: [{ type: "text", text: "Notes\nAction" }] });
+  const load = (origin: "user" | "agent", exchange_id = "e1", child = false) =>
+    msg({
+      role: "system",
+      channel: "system_note",
+      exchange_id,
+      metadata: { extras: { skill_load: { name: "compte-rendu", origin, load_id: "load", child } } },
+    });
+
+  it("labels a reopened user turn using its user-origin load without a catalog", () => {
+    const [turn] = toThreadMessages([user(), load("user")], false);
+    expect(turn.skillName).toBe("compte-rendu");
+    expect(turn.text).toBe("Notes\nAction");
+  });
+
+  it("labels the optimistic user turn before a load event arrives", () => {
+    const [turn] = toThreadMessages(
+      [
+        {
+          ...user(),
+          metadata: {
+            extras: {
+              optimistic_user: true,
+              skill_invocation: { name: "review" },
+            },
+          },
+        },
+      ],
+      true,
+    );
+    expect(turn.skillName).toBe("review");
+  });
+
+  it("uses the actual persisted user selection over an optimistic hint", () => {
+    const [turn] = toThreadMessages(
+      [
+        {
+          ...user(),
+          metadata: {
+            extras: {
+              optimistic_user: true,
+              skill_invocation: { name: "review" },
+            },
+          },
+        },
+        load("user"),
+      ],
+      false,
+    );
+    expect(turn.skillName).toBe("compte-rendu");
+  });
+
+  it("does not label ordinary mentions, automatic loads, child loads or a different exchange", () => {
+    for (const events of [[], [load("agent")], [load("user", "e1", true)], [load("user", "other")]]) {
+      const [turn] = toThreadMessages(
+        [{ ...user(), parts: [{ type: "text", text: "/skill compte-rendu" }] }, ...events],
+        false,
+      );
+      expect(turn.skillName).toBeNull();
+    }
+  });
+
+  it("labels persisted native Deep selections without fabricating a load", () => {
+    const selected = {
+      ...user(),
+      metadata: { extras: { skill_invocation: { name: "compte-rendu" } } },
+    };
+    for (const events of [[], [load("agent")], [load("agent", "e1", true)]]) {
+      const [turn] = toThreadMessages([selected, ...events], false);
+      expect(turn.skillName).toBe("compte-rendu");
+    }
+  });
+
+  it.each([false, true])(
+    "projects all persisted/optimistic selections with command metadata (optimistic: %s)",
+    (optimistic) => {
+      const command = {
+        command: "summary",
+        draft_text: "Before /summary /review /mermaid after",
+        draft_command_offset: 7,
+      };
+      const [turn] = toThreadMessages(
+        [
+          {
+            ...user(),
+            metadata: {
+              command,
+              extras: {
+                optimistic_user: optimistic,
+                skill_invocations: [{ name: "review" }, { name: "mermaid" }, { name: "review" }],
+              },
+            },
+          },
+        ],
+        optimistic,
+      );
+      expect(turn.skillNames).toEqual(["review", "mermaid"]);
+      expect(turn.command).toEqual(command);
+    },
+  );
+  it("ignores malformed invocation hints", () => {
+    for (const extras of [
+      { optimistic_user: true, skill_invocation: { name: 42 } },
+      { optimistic_user: true, skill_invocation: "review" },
+      { skill_invocation: { name: 42 } },
+    ]) {
+      const [turn] = toThreadMessages([{ ...user(), metadata: { extras } }], false);
+      expect(turn.skillName).toBeNull();
+    }
+  });
+});
+
 describe("toThreadMessages — raw ui_part retention (#1977)", () => {
   it("keeps link, geo, capability, and unknown parts on the assistant row", () => {
     const messages = [

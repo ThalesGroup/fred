@@ -681,6 +681,18 @@ const injectedRtkApi = api.injectEndpoints({
           },
         }),
       }),
+    getAgentInstanceSkills: build.query<GetAgentInstanceSkillsApiResponse, GetAgentInstanceSkillsApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances/${queryArg.agentInstanceId}/skills`,
+      }),
+    }),
+    getAgentInstanceSkillDetail: build.query<GetAgentInstanceSkillDetailApiResponse, GetAgentInstanceSkillDetailApiArg>(
+      {
+        query: (queryArg) => ({
+          url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances/${queryArg.agentInstanceId}/skills/${queryArg.skillName}`,
+        }),
+      },
+    ),
     prepareAgentExecution: build.mutation<PrepareAgentExecutionApiResponse, PrepareAgentExecutionApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances/${queryArg.agentInstanceId}/prepare-execution`,
@@ -1168,6 +1180,32 @@ const injectedRtkApi = api.injectEndpoints({
       AcknowledgeTaskControlPlaneV1TasksTaskIdAckPostApiArg
     >({
       query: (queryArg) => ({ url: `/control-plane/v1/tasks/${queryArg.taskId}/ack`, method: "POST" }),
+    }),
+    handlerControlPlaneV1KpiPresetsSkillUsageGet: build.query<
+      HandlerControlPlaneV1KpiPresetsSkillUsageGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsSkillUsageGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/skill_usage`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsUserSkillUsageGet: build.query<
+      HandlerControlPlaneV1KpiPresetsUserSkillUsageGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsUserSkillUsageGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/user_skill_usage`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
     }),
     handlerControlPlaneV1KpiPresetsActiveUsersOverTimeGet: build.query<
       HandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetApiResponse,
@@ -2048,6 +2086,17 @@ export type PostPrepareRuntimeAgentExecutionControlPlaneV1TeamsTeamIdRuntimesRun
     run?: string | null;
     agent?: string | null;
   };
+export type GetAgentInstanceSkillsApiResponse = /** status 200 Successful Response */ SkillCatalog;
+export type GetAgentInstanceSkillsApiArg = {
+  teamId: string;
+  agentInstanceId: string;
+};
+export type GetAgentInstanceSkillDetailApiResponse = /** status 200 Successful Response */ SkillDetail;
+export type GetAgentInstanceSkillDetailApiArg = {
+  teamId: string;
+  agentInstanceId: string;
+  skillName: string;
+};
 export type PrepareAgentExecutionApiResponse = /** status 200 Successful Response */ ExecutionPreparation;
 export type PrepareAgentExecutionApiArg = {
   teamId: string;
@@ -2364,6 +2413,26 @@ export type AcknowledgeTaskControlPlaneV1TasksTaskIdAckPostApiResponse =
   /** status 200 Successful Response */ AcknowledgeTaskResponse;
 export type AcknowledgeTaskControlPlaneV1TasksTaskIdAckPostApiArg = {
   taskId: string;
+};
+export type HandlerControlPlaneV1KpiPresetsSkillUsageGetApiResponse =
+  /** status 200 Successful Response */ SkillUsageResponse;
+export type HandlerControlPlaneV1KpiPresetsSkillUsageGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsUserSkillUsageGetApiResponse =
+  /** status 200 Successful Response */ SkillUsageResponse;
+export type HandlerControlPlaneV1KpiPresetsUserSkillUsageGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
 };
 export type HandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetApiResponse =
   /** status 200 Successful Response */ TimeSeriesResponse;
@@ -3475,6 +3544,7 @@ export type MarketplaceImportResult = {
   team_id: string;
   prompt?: PromptSummary | null;
   error?: string | null;
+  error_code?: string | null;
 };
 export type MarketplaceImportResponse = {
   results: MarketplaceImportResult[];
@@ -3648,6 +3718,21 @@ export type RuntimeAgentExecutionPreparation = {
   team_id: string;
   /** Ingress-relative URL for POST /agents/evaluate. */
   evaluate_url: string;
+};
+export type SkillSummary = {
+  name: string;
+  description: string;
+  argument_hint?: string | null;
+};
+export type SkillCatalog = {
+  supported?: boolean;
+  revision?: string;
+  skills?: SkillSummary[];
+};
+export type SkillDetail = {
+  skill: SkillSummary;
+  revision: string;
+  content: string;
 };
 export type ChatControlDescriptor = {
   capability_id: string;
@@ -4223,6 +4308,18 @@ export type AcknowledgeTaskResponse = {
   acknowledged_at: string;
   acknowledged_by: string | null;
 };
+export type SkillUsageRow = {
+  skill_name: string;
+  user_count: number;
+  model_count: number;
+  total: number;
+};
+export type SkillUsageResponse = {
+  rows: SkillUsageRow[];
+  since: string;
+  until: string;
+  truncated?: boolean;
+};
 export type TimeSeriesPoint = {
   date: string;
   value: number;
@@ -4571,6 +4668,10 @@ export const {
   usePostTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsPostMutation,
   useDeleteTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsAttachmentIdDeleteMutation,
   usePostPrepareRuntimeAgentExecutionControlPlaneV1TeamsTeamIdRuntimesRuntimeIdAgentsAgentIdPrepareExecutionPostMutation,
+  useGetAgentInstanceSkillsQuery,
+  useLazyGetAgentInstanceSkillsQuery,
+  useGetAgentInstanceSkillDetailQuery,
+  useLazyGetAgentInstanceSkillDetailQuery,
   usePrepareAgentExecutionMutation,
   useBootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostMutation,
   useGetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetQuery,
@@ -4651,6 +4752,10 @@ export const {
   useLazyStreamTaskEventsControlPlaneV1TasksTaskIdEventsGetQuery,
   useCancelTaskControlPlaneV1TasksTaskIdCancelPostMutation,
   useAcknowledgeTaskControlPlaneV1TasksTaskIdAckPostMutation,
+  useHandlerControlPlaneV1KpiPresetsSkillUsageGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsSkillUsageGetQuery,
+  useHandlerControlPlaneV1KpiPresetsUserSkillUsageGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsUserSkillUsageGetQuery,
   useHandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetQuery,
   useHandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetQuery,

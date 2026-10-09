@@ -27,13 +27,13 @@ list of those issues, organized per component. It feeds the UX review session ag
 Token names confirmed from `src/styles/themes/pebble.css` (every theme declares the same names).
 Use **only** these names — no hardcoded hex fallbacks for color tokens.
 
-| Purpose                         | Correct token                                                                                                 | Common wrong names                                                                   |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| Elevated surface (hover states) | `--surface-container-high`                                                                                    | ~~`--surface-container-hight`~~ (extra `t`)                                          |
+| Purpose                         | Correct token                                                                                                         | Common wrong names                                                                   |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Elevated surface (hover states) | `--surface-container-high`                                                                                            | ~~`--surface-container-hight`~~ (extra `t`)                                          |
 | Surfaces                        | `--surface-main`, `--surface-container-*`, `--surface-floating` (by role: FRONTEND_CODING_GUIDELINES §Surface tokens) |                                                                                      |
-| Text                            | `--on-surface`, `--on-surface-retreat`, `--on-surface-muted`                                                  | ~~`--on-surface-variant`~~ (doesn't exist)                                           |
-| Status colours                  | `--success`, `--error`, `--warning`, `--primary`                                                              | ~~`--success-main`~~, ~~`--error-main`~~, ~~`--warning-main`~~, ~~`--primary-main`~~ |
-| Borders                         | `--outline`, `--outline-variant`, `--outline-muted`                                                           | ~~`--outline-variant`~~ was previously undefined — added to token files 2026-06-02   |
+| Text                            | `--on-surface`, `--on-surface-retreat`, `--on-surface-muted`                                                          | ~~`--on-surface-variant`~~ (doesn't exist)                                           |
+| Status colours                  | `--success`, `--error`, `--warning`, `--primary`                                                                      | ~~`--success-main`~~, ~~`--error-main`~~, ~~`--warning-main`~~, ~~`--primary-main`~~ |
+| Borders                         | `--outline`, `--outline-variant`, `--outline-muted`                                                                   | ~~`--outline-variant`~~ was previously undefined — added to token files 2026-06-02   |
 
 Spacing and font tokens (`--spacing-*`, `--font-*`, `--radius-*`) are safe to use with numeric fallbacks since they are theme-neutral.
 
@@ -4989,10 +4989,11 @@ so an earlier failure does not outlive a successful retry.
 
 The trigger is an opt-in prop, not a behaviour of the field: without it a
 leading `/` is ordinary text and the component is the plain textarea it has
-always been. It fires **only on a `/` at the first position of an empty value**,
-and stays open while the value is that `/` plus one unbroken token — so
-`cat /tmp`, "et/ou", and the trailing space a completion adds never leave a menu
-on screen.
+always been. Available prompt commands and skills support whitespace-boundary
+completion near the caret in every managed chat, preserving surrounding request
+text and either invocation order. Ordinary paths
+and slashes in prose remain text unless they match an available command or catalog skill. A trailing
+space imports a complete skill name and closes its suggestions.
 
 The composer is modelled as a combobox pointing at a listbox it never gives
 focus to: the caret stays in the textarea, which is what frees `Tab` to mean
@@ -5008,9 +5009,31 @@ announced nor durable past the first keystroke.
 
 ### `CommandMenu`
 
-Sectioned from day one with a single section, titled for the prompt library:
-introducing a second kind of invocable object is then a new entry rather than a
-visual change. Only the active team's prompts that carry a command are offered.
+The menu offers prompt commands from the active team and skills from the
+selected agent's runtime catalog. For a resolved ReAct template, it additionally
+offers the caller's personal prompt commands, with visible and accessible labels
+for platform skills, personal prompts and team prompts. Personal chats offer one
+prompt source. Entries preserve their owning team and id; choosing either
+homonymous prompt runs that exact prompt after completion. A typed prompt
+command without an explicit row prefers the chat team's match, then the personal
+one, once the team's command catalog has resolved. An invalidated completed
+prompt requires command editing or reselection rather than dispatching a homonym.
+Explicit personal selections are usable while team discovery is pending.
+In the managed-chat composer, a completed recognized prompt command uses the same
+inline icon-and-name treatment as platform skills, with a distinct blue prompt
+icon and no visible slash. Its hover hint gives the full
+prompt title, personal/team source and description. The document retains
+`/command` for editing, copying and undo; the visual follows the exact prompt
+selected for submission, including homonyms. Incomplete, removed or invalidated
+prompt selections receive no prompt visual.
+Deep and other execution families retain their current sources. Its heading follows the kinds of entries
+currently displayed. `/` lists the available skills directly alongside prompt
+commands without a standalone `/skill` dispatcher; `/comp` filters skill names such as
+`compare-options` and `compte-rendu`. Choosing a skill completes the existing
+canonical invocation and preserves the request, without sending a turn.
+Direct skill-name prefixes also work at the caret within existing text; only
+names from the current runtime catalog enable these inline suggestions.
+Homonymous prompt and skill entries remain separate, with prompt commands first.
 
 Dressed in the shared menu grammar (`MenuPopover`): `--shadow-m`, `1px solid
 --outline-muted`, `--radius-s`, `--surface-container-high` fill,
@@ -5019,11 +5042,16 @@ It is anchored above the composer field rather than floating free. Keyboard
 focus and hover share that one highlight, so a pointer never leaves two rows
 looking active.
 
-A row is one line: the command, then its description beside it on the same
-baseline, so the list shows more of the library before it has to scroll. The
-command never truncates — it is what the user is about to type — and the
-description gives up the width instead. The emoji container is sized to that
-single line rather than to the two it used to hold.
+Prompt and skill rows share the same two-line layout: command or skill name
+above, full description in italics below. Prompts use a distinct prompt icon
+in a blue information tile; skills keep the platform pictogram. Skill names
+(without `/skill`) and their optional argument hints share the first line.
+Text wraps at narrow widths; the hint displays its value
+without the frontmatter field label. The list scrolls within its existing limit.
+Platform skills use a dedicated hexagon/book pictogram and localized platform-origin
+hover hint. Composer and sent-message badges reuse that pictogram; their native
+tooltip includes the current runtime catalog description when available. Missing
+catalog entries retain the name, origin and preview action without a new fetch.
 
 The focused entry's prompt detail is prefetched as the focus moves: the listing
 carries only a preview, so running a command needs the detail endpoint, and the
@@ -5044,6 +5072,60 @@ read as a broken hint. Such a panel is a `role="status"` line rather than an
 empty listbox (the swap `Menu` already makes) and claims no key but `Esc`: the
 typed token still submits as ordinary text and `Tab` still moves focus.
 
+### Inline skill invocation
+
+A completed `/<name>` stays at its invocation position within the editable text. The full name (without a visible slash) and platform icon form a discreet clickable label without a filled pill, border, removal cross or separate row. Chat uses a CodeMirror plain-text document with an inline replacement decoration; ordinary textarea consumers are unchanged. Wrapped lines and explicit newlines start at the normal text inset, and the label scrolls with its line. Editing any invocation character removes recognition while preserving surrounding text. A skill can be sent alone. Its advisory argument hint appears after a bare selected invocation without becoming document content.
+
+Skill suggestions use the command range at the caret, including before, after or within existing text. Completion replaces only that range and preserves its position. An exact catalog name followed by whitespace also imports on typing or paste. Neither action sends. Available prompt commands also complete inline without erasing surrounding text, before or after selected skills in every managed execution family. ReAct alone adds the caller's separate personal library to a team chat. A complete delimited skill name takes precedence, while choosing the prompt entry explicitly preserves prompt dispatch.
+
+Sent attributed user messages render the same inline token at its stored position. Full copy, native selection-copy and edit use `/name`. Older request-only and `/skill name` turns normalize to this canonical form for display/copy/edit without a backend schema change. Multiple skills can coexist with one available prompt in either selection order. Draft and history retain the blue prompt icon/name and purple skill badges. Each occurrence remains independently editable; repeated names load once. A catalog refresh invalidating a completed selection fails submission rather than dropping it. Canonical prompt draft text and its selected occurrence preserve mixed history, copying and editing.
+Agent-selected skills appear in the reasoning trace rather than labeling the user
+message. The inline icon/name is a keyboard-accessible button that opens the
+existing exclusive right-hand chat panel; activating the same skill again closes
+it, while activating another skill replaces the preview. The header reads
+`Skill: <name>` with the large title token and normal text color, without an icon.
+When supplied, `Arguments:` and the argument hint appear first, followed by
+`Description:` and its text, a divider and sanitized Markdown instructions without a redundant
+content heading. YAML metadata is presented separately. Technical runtime-version
+labels are omitted. Loading, unavailable and retry states never display another
+skill’s cached content. Opening and closing preserve
+the draft and invoke no agent tool.
+Skill-local reference links are readable labels rather than application routes.
+A successful reference tool row is localized as “Reading skill file” and names
+the relative path. Pointer/Enter/Space activation replaces the skill panel body
+with the exact stored reference text; another activation closes it. One shared
+panel preserves its width across skill/reference switching, and session/scope
+changes clear the view. Pending/failed reads use ordinary tool details.
+
+Team, platform and personal analytics share a dedicated skill-usage subsection
+with a table showing Skill, User, Model
+and Total columns, sortable within the returned top 100. It follows the existing
+date selector and cache/access rules, and distinguishes loading/error/empty
+states and truncated results. Counts cover successful procedure loads, starting
+at instrumentation deployment; references and context reuse are excluded.
+Personal usage includes only the authenticated user’s conversations across teams,
+including model-selected loads in those conversations. Each space shows only
+its matching skill subsection: personal usage in personal space, team usage in
+team space and platform usage in platform analytics. Team space does not query
+personal skill counts; team aggregates retain elevated-role gating.
+
+Deep skill selections retain their inline badge and preview after reopening through
+name-only user-message `metadata.extras.skill_invocations` (legacy singular metadata remains readable). This metadata records
+the user's selection, not a skill load. DeepAgents loads instructions through
+native model-driven filesystem reads. An actual instruction read matching the
+any current selected name displays user origin, including child reads; other skill
+reads display model origin. Legacy ReAct attribution remains supported for
+existing history.
+
+The interaction contract is in the platform-agent-skills OpenSpec change.
+
+In the expanded reasoning trace, successful skill loads share the tools’ compact
+step-number marker and chronological numbering. A load followed by two tools is
+numbered 1, 2, 3; reasoning and ordinary notes remain unnumbered. Attribution and
+the header’s tool-execution count retain their existing meaning. Each skill-load
+row is a native button that opens the same skill preview, including agent and
+child loads, and toggles it closed on a second activation.
+
 ### Running a command, and the turn it leaves
 
 Resolution happens on submit, whatever the menu is doing, so `Tab` then `Enter`
@@ -5051,12 +5133,19 @@ and `Enter` from the open menu reach the same send. A token no prompt holds is
 sent as typed — the user may genuinely have meant to write it.
 
 What goes on the wire is the **prompt's text**, never the command: the text does
-not pass through the composer and the user never sees it there. Text typed after
-the command is appended as free-text continuation, nothing parsed or named.
+not pass through the composer and the user never sees it there. In ReAct, text
+before and after the token stays on its respective side of the expanded prompt,
+including other selected skills. A single prompt and several skills share the
+turn; all skill names travel together in its runtime context.
 
 The turn itself renders as its command rather than as the assembled text
 (`UserMessage` + `CommandTurn`), which keeps a transcript of long prompts
-readable. The command and the text typed after it are laid out as one inline
+readable. Sent prompt tokens retain the composer's blue `--info` colour and
+decorative `edit_note` icon, with the same compact inline presentation as skill
+badges. Legacy appended text keeps the bubble's text colour. Hover underlines
+the prompt; keyboard focus is visible. Selection-copy omits decorative glyph
+names and preserves the command and skill slashes.
+The command and the text typed after it are laid out as one inline
 sentence, not as a flex row: they are one string and have to reflow as one when
 the bubble narrows (opening a side panel), where flex items would each wrap on
 their own and read as two unrelated texts. A control on that turn opens the text that was actually sent, read

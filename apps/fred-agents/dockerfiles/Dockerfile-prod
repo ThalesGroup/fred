@@ -83,6 +83,12 @@ COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-document-a
 COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-mcp /workspace/libs/capabilities/fred-capability-mcp
 COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-web-research /workspace/libs/capabilities/fred-capability-web-research
 
+# Packaged procedures and their source path stay read-only for the runtime UID.
+RUN chown -R root:root /workspace/libs/fred-runtime && \
+    chmod -R a-w /workspace/libs/fred-runtime && \
+    chown root:root /workspace /workspace/libs && \
+    chmod a-w /workspace /workspace/libs
+
 # alembic.ini is a real file only at the repo root; the per-project ones are dev-only
 # symlinks kept out of the build context (see .dockerignore), because Kaniko would copy
 # them verbatim — which is exactly the dangling link this image used to ship (#2289).

@@ -801,6 +801,26 @@ export function useChatSse(
         }
 
         case "status":
+          if (event.skill_load) {
+            const alreadyLoaded = messagesRef.current.some(
+              (message) =>
+                message.exchange_id === exchangeId &&
+                (message.metadata?.extras as Record<string, unknown> | undefined)?.skill_load &&
+                ((message.metadata?.extras as Record<string, unknown>).skill_load as { load_id?: string }).load_id ===
+                  event.skill_load?.load_id,
+            );
+            if (!alreadyLoaded)
+              emit({
+                session_id: sessionId,
+                exchange_id: exchangeId,
+                rank: rankRef.current++,
+                timestamp: ts,
+                role: "system",
+                channel: "system_note",
+                parts: [{ type: "text", text: event.skill_load.name }],
+                metadata: { extras: { skill_load: event.skill_load } },
+              });
+          }
           console.debug("[useChatSse] status:", event.status, event.detail);
           break;
       }
@@ -1085,7 +1105,14 @@ export function useChatSse(
         // optimistic row, so the turn renders as its command from the first
         // frame rather than flashing the assembled prompt text.
         metadata: {
-          extras: { optimistic_user: true },
+          extras: {
+            optimistic_user: true,
+            ...(runtimeContext?.skills
+              ? { skill_invocations: runtimeContext.skills }
+              : runtimeContext?.skill
+                ? { skill_invocation: runtimeContext.skill }
+                : {}),
+          },
           ...(runtimeContext?.command ? { command: runtimeContext.command } : {}),
         },
       };

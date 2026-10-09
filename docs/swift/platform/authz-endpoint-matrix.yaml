@@ -148,6 +148,11 @@ operations:
     required_permission: pending_review
   - service: control-plane
     method: GET
+    path: /control-plane/v1/kpi/presets/skill_usage
+    review_status: approved
+    required_permission: organization.can_observe_platform (platform scope) or team.can_read_members (team scope)
+  - service: control-plane
+    method: GET
     path: /control-plane/v1/kpi/presets/storage_by_team
     review_status: pending_review
     required_permission: pending_review
@@ -201,6 +206,11 @@ operations:
     path: /control-plane/v1/kpi/presets/user_sessions_total
     review_status: pending_review
     required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/kpi/presets/user_skill_usage
+    review_status: approved
+    required_permission: authenticated user; query restricted to requesting user's dims.user_id
   - service: control-plane
     method: GET
     path: /control-plane/v1/kpi/presets/user_token_usage_by_agent
@@ -510,6 +520,16 @@ operations:
     path: /control-plane/v1/teams/{team_id}/agent-instances/{agent_instance_id}/runtime
     review_status: pending_review
     required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/teams/{team_id}/agent-instances/{agent_instance_id}/skills
+    review_status: approved
+    required_permission: team.can_use_team_agents
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/teams/{team_id}/agent-instances/{agent_instance_id}/skills/{skill_name}
+    review_status: approved
+    required_permission: team.can_use_team_agents
   - service: control-plane
     method: GET
     path: /control-plane/v1/teams/{team_id}/agent-templates

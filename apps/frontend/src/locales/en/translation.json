@@ -398,6 +398,11 @@
       "panelTitle": "Command prompt"
     },
     "commandMenu": {
+      "sources": {
+        "platform": "Platform skill",
+        "personal": "Personal prompt",
+        "team": "Team prompt"
+      },
       "ariaLabel": "Available commands",
       "promptsSection": "Prompt library",
       "noneInTeam": "No command in this team yet. An editor can give one to a prompt from the Prompts page.",
@@ -603,6 +608,27 @@
       "empty": "No prompts in this space.",
       "emptyFilters": "No prompts match these filters.",
       "categoryLabel": "Category"
+    },
+    "skills": {
+      "badge": "Skill: {{name}}",
+      "platformProvided": "Skill provided by the platform",
+      "requestPlaceholder": "Your request (optional)",
+      "menuTitle": "Skills",
+      "usage": "Use /<skill-name> [request]. Select a skill; the request is optional.",
+      "errorTitle": "Skill could not be used",
+      "unavailable": "This skill’s content is unavailable.",
+      "loaded": "Skill loaded",
+      "originUser": "Requested by you",
+      "originAgent": "Selected by the agent",
+      "originChild": "Selected by a sub-agent",
+      "open": "View skill {{name}}",
+      "panelTitle": "Skill: {{name}}",
+      "fileTitle": "File: {{path}}",
+      "fileExcerptTitle": "Excerpt: {{path}}",
+      "loading": "Loading skill…",
+      "retry": "Try again",
+      "description": "Description:",
+      "arguments": "Arguments:"
     }
   },
   "comingSoon": {
@@ -1334,6 +1360,16 @@
       "missingTeamId": "Missing team id in route."
     },
     "analytics": {
+      "skillUsage": {
+        "title": "Skill usage",
+        "skill": "Skill",
+        "user_count": "User",
+        "model_count": "Model",
+        "total": "Total",
+        "description": "Successful skill loads in the selected period, requested by users or chosen by the model. Collection starts when this feature is enabled.",
+        "empty": "No skill loads recorded in this period.",
+        "truncated": "Showing the 100 most loaded skills. Sorting applies to these results."
+      },
       "activeUsers": {
         "title": "Active users",
         "uniqueTotal": "Active users (over full period)",
@@ -1600,7 +1636,8 @@
       "summary": "≈ {{co2e}} g CO₂e · {{kwh}} kWh (estimated)"
     },
     "teamUsage": {
-      "title": "My token usage",
+      "personalSkillsSectionTitle": "My skill usage",
+      "title": "My usage",
       "personalSectionTitle": "My usage",
       "tokensOverTime": {
         "title": "Token usage over time",
@@ -1617,6 +1654,7 @@
         "valueLabel": "Tokens"
       },
       "team": {
+        "skillsSectionTitle": "Team skill usage",
         "pageTitle": "Team usage",
         "sectionTitle": "Team usage",
         "membersLabel": "Members",
@@ -1736,6 +1774,7 @@
         "success": "Success"
       },
       "toolLabels": {
+        "readSkillFile": "Reading skill file",
         "readQuery": "Reading query",
         "documents": "Listing tabular documents",
         "markdown": "Reading the workbook catalog",
@@ -2882,7 +2921,8 @@
           "commandHelp": "Launch shortcuts in the chat",
           "description": "Description",
           "name": "Name",
-          "text": "Prompt text"
+          "text": "Prompt text",
+          "commandReserved": "/skill is reserved for platform skills. Choose another command."
         },
         "loading": "Loading prompts...",
         "modalCreate": "New prompt",

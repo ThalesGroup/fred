@@ -29,12 +29,14 @@ declare global {
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const importCalls: unknown[] = [];
+const showError = vi.fn();
+let importResults: { team_id: string; error?: string; error_code?: string }[] = [];
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
 }));
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
-  useToast: () => ({ showError: () => {}, showSuccess: () => {} }),
+  useToast: () => ({ showError, showSuccess: () => {} }),
 }));
 vi.mock("../../../../../../hooks/useFrontendBootstrap", () => ({
   useFrontendBootstrap: () => ({
@@ -49,7 +51,7 @@ vi.mock("../../../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
   usePostMarketplacePromptImportControlPlaneV1MarketplacePromptsPromptIdImportPostMutation: () => [
     (arg: unknown) => {
       importCalls.push(arg);
-      return { unwrap: async () => ({ results: [] }) };
+      return { unwrap: async () => ({ results: importResults }) };
     },
     { isLoading: false },
   ],
@@ -92,6 +94,25 @@ describe("ImportPromptDialog origin team", () => {
     });
     container.remove();
     importCalls.length = 0;
+    importResults = [];
+    showError.mockClear();
+  });
+
+  it("localizes a reserved skill command import error", async () => {
+    importResults = [{ team_id: "other-team", error: "ENGLISH SERVER DETAIL", error_code: "prompt_command_reserved" }];
+    render();
+    act(() => {
+      checkboxFor("Other team")!.click();
+    });
+    const confirm = Array.from(document.querySelectorAll('[role="dialog"] button')).find(
+      (b) => b.textContent?.trim() === "rework.marketplace.prompts.import.confirm",
+    );
+    await act(async () => {
+      (confirm as HTMLButtonElement)?.click();
+    });
+    expect(showError).toHaveBeenCalledWith(
+      expect.objectContaining({ detail: "rework.teams.prompts.form.commandReserved" }),
+    );
   });
 
   it("renders the author's team checked and not selectable", () => {

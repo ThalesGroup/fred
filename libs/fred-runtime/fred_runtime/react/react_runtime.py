@@ -65,6 +65,7 @@ from fred_sdk.contracts.runtime import (
     HumanInputRequest,
     RuntimeEvent,
     RuntimeServices,
+    StatusRuntimeEvent,
     ThoughtDeltaEvent,
     ThoughtEndEvent,
     ThoughtStartEvent,
@@ -72,6 +73,7 @@ from fred_sdk.contracts.runtime import (
     ToolResultRuntimeEvent,
     TracerPort,
 )
+from fred_sdk.contracts.skills import SkillsPort
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import (
     AIMessage,
@@ -93,6 +95,7 @@ from fred_runtime.runtime_support.run_scope import (
     terminal_stop_event,
 )
 from fred_runtime.runtime_support.trace_payloads import to_langfuse_usage
+from fred_runtime.skills.catalog import build_skills_middleware
 
 from .middleware.tool_call_recovery import (
     MAX_TOOL_CALL_RECOVERY_CHARS,
@@ -346,6 +349,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
         runtime_class_name: str,
         available_tool_names: Collection[str] = (),
         model_name: str | None = None,
+        preload_selected_skill: bool = True,
     ) -> None:
         self._compiled_agent = compiled_agent
         self._binding = binding
@@ -361,10 +365,22 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
             for length in range(1, len(name) + 1)
         )
         self._model_name = model_name
+        self._preload_selected_skill = preload_selected_skill
         # Names the actual runtime class (both ReActRuntime and DeepAgentRuntime
         # construct this same executor) so per-turn logs never say "ReActRuntime"
         # for a Deep turn.
         self._runtime_class_name = runtime_class_name
+
+    async def _input_with_skill(
+        self, input_model: ReActInput, config: ExecutionConfig
+    ) -> tuple[object, tuple[StatusRuntimeEvent, ...]]:
+        if not self._preload_selected_skill:
+            return _graph_input(input_model, config), ()
+        from fred_runtime.skills.preload import preload_skills
+
+        return await preload_skills(
+            _graph_input(input_model, config), self._binding, self._services, config
+        )
 
     async def invoke(
         self, input_model: ReActInput, config: ExecutionConfig
@@ -394,8 +410,9 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                 span.set_io(input=_trace_input_payload(input_model))
             span_token = active_agent_span.set(span)
         try:
+            graph_input, _ = await self._input_with_skill(input_model, config)
             result = await self._compiled_agent.ainvoke(
-                _graph_input(input_model, config),
+                graph_input,
                 config=_to_runnable_config(config),
             )
             transcript = tuple(
@@ -682,17 +699,38 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
         try:
             # Built here rather than above: translating the input can raise, and
             # by then the scope is open and owes the caller a close.
-            agent_stream = self._compiled_agent.astream(
-                _graph_input(input_model, config),
-                config=_to_runnable_config(config),
-                stream_mode=["messages", "updates"],
-            )
+            graph_input, preload = await self._input_with_skill(input_model, config)
+            for event in preload:
+                yield event.model_copy(update={"sequence": sequence})
+                sequence += 1
+            if self._services.skills is None:
+                agent_stream = self._compiled_agent.astream(
+                    graph_input,
+                    config=_to_runnable_config(config),
+                    stream_mode=["messages", "updates"],
+                )
+            else:
+                agent_stream = self._compiled_agent.astream(
+                    graph_input,
+                    config=_to_runnable_config(config),
+                    stream_mode=["messages", "updates", "custom"],
+                    subgraphs=True,
+                )
             while True:
                 try:
                     raw_event = await run_scope.next_event(agent_stream)
                 except StopAsyncIteration:
                     break
                 mode, update = _split_stream_event_mode(raw_event)
+
+                if (
+                    mode == "custom"
+                    and isinstance(update, StatusRuntimeEvent)
+                    and update.skill_load is not None
+                ):
+                    yield update.model_copy(update={"sequence": sequence})
+                    sequence += 1
+                    continue
 
                 if mode == "messages":
                     # Token usage is deliberately not read here: "updates" mode
@@ -1272,6 +1310,9 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
         logger.debug("[V2][EXECUTOR] system_prompt_len=%d", len(system_prompt))
         system_prompt = _compose_system_prompt(
             system_prompt,
+            skills_prompt=self.services.skills.prompt
+            if self.services.skills is not None
+            else "",
             binding=binding,
             agent_id=self.definition.agent_id,
             tool_suffix=_build_runtime_tool_prompt_suffix(
@@ -1304,6 +1345,7 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
 
         compiled_agent = _create_compiled_react_agent(
             model=self._model,
+            skills=self.services.skills,
             tools=[bound_tool.tool for bound_tool in bound_tools],
             system_prompt=system_prompt,
             binding=binding,
@@ -1366,6 +1408,7 @@ def _create_compiled_react_agent(
     available_tool_names: Collection[str],
     max_tool_calls_per_turn: int | None = None,
     capability_block: CapabilityAgentBlock | None = None,
+    skills: SkillsPort | None = None,
 ) -> _CompiledReActAgent:
     """
     Create the compiled ReAct agent implementation used at runtime.
@@ -1413,6 +1456,7 @@ def _create_compiled_react_agent(
             tracer=tracer,
             kpi=kpi,
             max_tool_calls_per_turn=max_tool_calls_per_turn,
+            skills_middleware=build_skills_middleware(skills),
             capability_middleware=(
                 capability_block.middleware if capability_block is not None else ()
             ),

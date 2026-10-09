@@ -27,7 +27,7 @@ import type { RuntimeAwaitingHumanEvent } from "@hooks/useChatSse";
 import type { RawUiPart } from "@rework/types/parts";
 import type { ThreadMessage } from "@rework/types/thread";
 import type { TokenUsage } from "@rework/types/conversation";
-import { isTraceChannel, textOf, toolCallId, uiPartsOf } from "../../../utils/traceUtils";
+import { isTraceChannel, skillLoadOf, textOf, toolCallId, uiPartsOf } from "../../../utils/traceUtils";
 import { hitlAnswerSummary } from "../../../utils/hitlAnswerSummary";
 
 function isPauseMetadata(m: ChatMessage): boolean {
@@ -272,6 +272,25 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
 
     const userMsg = msgs.find((m) => m.role === "user" && (m.channel as string) !== "hitl_response");
     if (userMsg) {
+      const loaded = msgs.map(skillLoadOf).find((load) => load?.origin === "user" && !load.child);
+      const invocation: unknown = userMsg.metadata?.extras?.skill_invocation;
+      const name =
+        loaded?.name ??
+        (invocation && typeof invocation === "object" && "name" in invocation && typeof invocation.name === "string"
+          ? invocation.name
+          : null);
+      const selections: unknown = userMsg.metadata?.extras?.skill_invocations;
+      const skillNames = Array.isArray(selections)
+        ? [
+            ...new Set(
+              selections.flatMap((item: unknown) =>
+                item && typeof item === "object" && "name" in item && typeof item.name === "string" ? [item.name] : [],
+              ),
+            ),
+          ]
+        : name
+          ? [name]
+          : [];
       result.push({
         id: `${eid}:user`,
         role: "user",
@@ -281,6 +300,8 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
         sources: [],
         uiParts: [],
         command: userMsg.metadata?.command ?? null,
+        skillName: skillNames[0] ?? null,
+        skillNames,
       });
     }
 

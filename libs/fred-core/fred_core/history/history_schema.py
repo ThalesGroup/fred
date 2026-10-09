@@ -386,6 +386,8 @@ class CommandDescriptor(BaseModel):
     appended_text: str = ""
     prompt_id: Optional[str] = None
     prompt_name: Optional[str] = None
+    draft_text: Optional[str] = None
+    draft_command_offset: Optional[int] = Field(default=None, ge=0)
 
 
 class ChatMetadata(BaseModel):

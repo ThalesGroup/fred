@@ -716,6 +716,8 @@ export const {
     useAvailableModelProfilesQuery,
   // The model a chat turn will actually route to — the composer label (#2387).
   useGetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetQuery: useEffectiveChatModelQuery,
+  useHandlerControlPlaneV1KpiPresetsSkillUsageGetQuery: useSkillUsageQuery,
+  useHandlerControlPlaneV1KpiPresetsUserSkillUsageGetQuery: useUserSkillUsageQuery,
   useHandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetQuery: useActiveUsersOverTimeQuery,
   useHandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetQuery: useUniqueUsersTotalQuery,
   useHandlerControlPlaneV1KpiPresetsSessionsOverTimeGetQuery: useSessionsOverTimeQuery,

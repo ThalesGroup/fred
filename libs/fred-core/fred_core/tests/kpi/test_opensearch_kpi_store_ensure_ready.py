@@ -203,3 +203,13 @@ def test_ensure_ready_writes_nothing_when_the_index_is_current() -> None:
     indices = cast(_FakeIndices, cast(_FakeClient, store.client).indices)
     assert indices.put_calls == []
     assert indices.get_mapping_calls == 1
+
+
+@pytest.mark.parametrize("field", ["skill_name", "skill_origin"])
+def test_ensure_ready_repairs_existing_skill_dimensions(field: str) -> None:
+    store = _store_on_existing_index_missing(field)
+    store.ensure_ready()
+    indices = cast(_FakeIndices, cast(_FakeClient, store.client).indices)
+    assert indices.put_calls[0]["properties"]["dims"]["properties"][field] == {
+        "type": "keyword"
+    }

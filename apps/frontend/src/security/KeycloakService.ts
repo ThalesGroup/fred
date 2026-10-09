@@ -159,6 +159,7 @@ export function createKeycloakInstance(
       identityClientId,
       options.scope ?? undefined,
       options.redirect_uri ?? `${window.location.origin}/`,
+      identityProvider,
     );
   }
   return oidcSession.manager;

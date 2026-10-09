@@ -16,7 +16,7 @@ Defines how the Fred frontend signs people in, keeps their session alive and sig
 
 ### Requirement: Sign-in uses the configured provider
 
-For both `provider: keycloak` and `provider: oidc`, the frontend SHALL create an `oidc-client-ts` browser client from the issuer behind `KeyCloakService`, SHALL NOT require a `…/realms/<realm>` URL, SHALL use Authorization Code with PKCE (S256), and SHALL request `openid profile offline_access` plus the configured API scope. The API bearer SHALL be the access token, not the ID token. Sign-in SHALL redirect to the provider's own login page.
+For both `provider: keycloak` and `provider: oidc`, the frontend SHALL create an `oidc-client-ts` browser client from the issuer behind `KeyCloakService`, SHALL NOT require a `…/realms/<realm>` URL, and SHALL use Authorization Code with PKCE (S256). Both providers SHALL request `openid profile` plus the configured API scope; `provider: oidc` SHALL additionally request `offline_access`. Keycloak SHALL NOT require an offline-access grant for ordinary browser sign-in and refresh. The API bearer SHALL be the access token, not the ID token. Sign-in SHALL redirect to the provider's own login page.
 
 #### Scenario: Entra sign-in
 
@@ -24,6 +24,12 @@ For both `provider: keycloak` and `provider: oidc`, the frontend SHALL create an
 - **WHEN** an unauthenticated person opens Fred
 - **THEN** they are redirected to the Microsoft sign-in page
 - **AND** after sign-in, API calls carry an access token whose audience is the Fred API
+
+#### Scenario: Ordinary Keycloak sign-in without offline grants
+
+- **GIVEN** a Keycloak client and user authorized for ordinary browser login but not offline tokens
+- **WHEN** Fred starts sign-in with the default scope configuration
+- **THEN** it requests `openid profile` with PKCE and the code exchange does not require an offline-access grant
 
 ### Requirement: Session renewal and sign-out work with the provider
 

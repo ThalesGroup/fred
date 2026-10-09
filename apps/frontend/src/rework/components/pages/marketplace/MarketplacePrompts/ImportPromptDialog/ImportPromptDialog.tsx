@@ -55,7 +55,11 @@ export default function ImportPromptDialog({
       if (failed.length > 0) {
         showError({
           summary: t("rework.marketplace.prompts.import.errorToast", { count: failed.length }),
-          detail: failed.map((r) => r.error).join(" · "),
+          detail: failed
+            .map((r) =>
+              r.error_code === "prompt_command_reserved" ? t("rework.teams.prompts.form.commandReserved") : r.error,
+            )
+            .join(" · "),
         });
       }
       onClose();

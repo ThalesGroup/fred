@@ -16,6 +16,12 @@ app:
   max_chat_input_chars: 5000
   openai_compat: false # Direct template execution is forbidden by the c3 profile.
 
+# Opt in to skills shipped inside fred_runtime; a read-only mounted directory is
+# also accepted (relative paths are resolved against this configuration file).
+# Remove this section to disable the platform skill catalog and tools.
+skills:
+  directory: package
+
 security:
   profile: c3
   m2m:

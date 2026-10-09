@@ -33,6 +33,7 @@ from fred_runtime.react.react_tool_binding import (
     build_runtime_tool_prompt_suffix,
     tabular_tools_bound,
 )
+from fred_runtime.skills.catalog import PlatformSkills
 from fred_sdk import MCP_SERVER_KNOWLEDGE_FLOW_TABULAR
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
@@ -721,7 +722,6 @@ def test_compose_system_prompt_folds_selected_prompt_and_attachment(
         "</platform_prompt>",
         "<tools>",
         "TOOL-SUFFIX",
-        _EXPECTED_MERMAID_FRAGMENT,
         "</tools>",
         "<agent_instructions>",
         "BASE-TEMPLATE",
@@ -753,26 +753,36 @@ def test_compose_system_prompt_omits_a_blank_block_entirely() -> None:
     assert prompt.count("<tools>") == 1 and prompt.count("</tools>") == 1
 
 
-def test_compose_system_prompt_puts_the_output_contract_inside_the_tools_block() -> (
-    None
-):
-    # The Mermaid contract is no longer a block of its own: it closes the
-    # `tools` block, after the tool list and any runtime notice a caller
-    # appended to `tool_suffix` (Deep's filesystem note travels that way).
+def test_compose_system_prompt_advertises_mermaid_without_injecting_its_body() -> None:
+    skills = PlatformSkills.from_directory("package")
     prompt = compose_system_prompt(
         "BASE-TEMPLATE",
         binding=_binding(),
         agent_id="agent-1",
         tool_suffix="TOOL-LIST\n\nFILESYSTEM-NOTICE",
+        skills_prompt=skills.prompt,
         tabular_tools_available=True,
     )
-
     tools = prompt[prompt.index("<tools>") : prompt.index("</tools>")]
     assert "TOOL-LIST" in tools
     assert "FILESYSTEM-NOTICE" in tools
-    assert _EXPECTED_MERMAID_FRAGMENT in tools
-    assert tools.index("FILESYSTEM-NOTICE") < tools.index(_EXPECTED_MERMAID_FRAGMENT)
-    assert "<tools>\nTOOL-LIST" in prompt
+    assert "mermaid" in tools
+    assert "[diagram goal or source] [constraints]" in tools
+    assert _EXPECTED_MERMAID_FRAGMENT not in prompt
+    assert "subgraph SUBGRAPH_ID" not in prompt
+    assert tools.index("FILESYSTEM-NOTICE") < tools.index("Available platform skills")
+
+
+def test_compose_system_prompt_without_skills_has_no_mermaid_guidance() -> None:
+    prompt = compose_system_prompt(
+        "BASE-TEMPLATE",
+        binding=_binding(),
+        agent_id="agent-1",
+        tool_suffix="TOOL-LIST",
+        tabular_tools_available=True,
+    )
+    assert "mermaid" not in prompt.lower()
+    assert "Available platform skills" not in prompt
 
 
 def test_demote_markdown_headings_pushes_every_level_down_by_one() -> None:
@@ -827,11 +837,6 @@ def test_compose_system_prompt_frozen_render_of_an_example_agent(
         monkeypatch,
         platform_instructions="# Platform operating instructions\n\n## Precedence\n\nRULE",
     )
-    monkeypatch.setattr(
-        react_prompting,
-        "GLOBAL_BASE_PROMPT_MARKDOWN",
-        "# Output contract\n\n```mermaid\n# not a heading\n```",
-    )
     render_prompt_block.cache_clear()
     prompt = compose_system_prompt(
         "You are a document expert.\n\n## Retrieval rules\n\n- search first",
@@ -842,6 +847,7 @@ def test_compose_system_prompt_frozen_render_of_an_example_agent(
         ),
         agent_id="agent-1",
         tool_suffix="# Available tools (exact names)\n- search_documents: Search.",
+        skills_prompt="# Skill catalog\n\n```text\n# not a heading\n```",
         tabular_tools_available=False,
     )
 
@@ -854,7 +860,7 @@ def test_compose_system_prompt_frozen_render_of_an_example_agent(
         "</platform_prompt>\n\n"
         "<tools>\n"
         "## Available tools (exact names)\n- search_documents: Search.\n\n"
-        "## Output contract\n\n```mermaid\n# not a heading\n```\n"
+        "## Skill catalog\n\n```text\n# not a heading\n```\n"
         "</tools>\n\n"
         "<agent_instructions>\n"
         "You are a document expert.\n\n### Retrieval rules\n\n- search first\n"
@@ -960,8 +966,10 @@ def test_compose_system_prompt_puts_the_platform_instructions_first(
 
 
 @pytest.mark.parametrize("scope", ["corpus_only", "hybrid", "general_only", None])
+@pytest.mark.parametrize("skills_prompt", ["", "Available skill: grounded-research"])
 def test_document_only_scope_reaches_the_shared_system_prompt(
     scope: str | None,
+    skills_prompt: str,
 ) -> None:
     binding = _binding()
     binding = binding.model_copy(
@@ -976,7 +984,10 @@ def test_document_only_scope_reaches_the_shared_system_prompt(
         binding=binding,
         agent_id="test",
         tabular_tools_available=False,
+        skills_prompt=skills_prompt,
     )
+    if skills_prompt:
+        assert skills_prompt in prompt.split("<tools>", 1)[1].split("</tools>", 1)[0]
     instruction = "Do not supplement with general knowledge."
     assert (instruction in prompt) is (scope == "corpus_only")
     if scope == "corpus_only":

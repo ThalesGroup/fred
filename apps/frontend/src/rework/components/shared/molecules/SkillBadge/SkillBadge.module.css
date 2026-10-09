@@ -1,0 +1,42 @@
+/* Copyright Thales 2026
+ * Licensed under the Apache License, Version 2.0 (the "License").
+ * You may obtain a copy at http://www.apache.org/licenses/LICENSE-2.0 */
+
+.badge {
+  display: inline-flex;
+  align-items: baseline;
+  vertical-align: baseline;
+  gap: var(--spacing-2xs);
+  min-width: 0;
+  max-width: 100%;
+  color: var(--primary);
+  font: var(--font-body-large);
+  line-height: 1.5;
+}
+
+.badge > :first-child {
+  align-self: center;
+}
+
+.name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.action {
+  cursor: pointer;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  text-align: start;
+}
+
+.action:hover .name {
+  text-decoration: underline;
+}
+
+.action:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}

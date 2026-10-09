@@ -72,6 +72,8 @@ KPI_INDEX_MAPPING: Dict[str, Any] = {
                     "agent_id": {"type": "keyword"},
                     "agent_step": {"type": "keyword"},
                     "tool_name": {"type": "keyword"},
+                    "skill_name": {"type": "keyword"},
+                    "skill_origin": {"type": "keyword"},
                     "model": {"type": "keyword"},
                     "doc_uid": {"type": "keyword"},
                     "doc_source": {"type": "keyword"},

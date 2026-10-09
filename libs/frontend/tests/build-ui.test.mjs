@@ -67,7 +67,7 @@ test("UI output is deterministic, scoped, closed, and externalized", async () =>
   assert.doesNotMatch(js, /apps\/frontend|@shared|@rework|node_modules\/react/);
   assert.doesNotMatch(
     js,
-    /customAgent|material-symbols-(?:rounded|sharp)|\/images\/icons\//,
+    /customAgent|customPlatformSkill|material-symbols-(?:rounded|sharp)|\/images\/icons\//,
   );
   const runtime = await import(
     `${pathToFileURL(path.join(packageRoot, "dist/index.js")).href}?test=${Date.now()}`

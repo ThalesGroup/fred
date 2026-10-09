@@ -156,6 +156,7 @@ class ReActRuntimeToolResolver:
         services: RuntimeServices,
         binding: BoundRuntimeContext,
         capability_tool_names: tuple[str, ...] = (),
+        include_skill_tools: bool = True,
     ) -> None:
         """
         Store the collaborators needed to resolve one runtime tool surface.
@@ -177,6 +178,7 @@ class ReActRuntimeToolResolver:
         self._services = services
         self._binding = binding
         self._capability_tool_names = capability_tool_names
+        self._include_skill_tools = include_skill_tools
 
     def resolve_tools(self) -> list[FredRuntimeToolSpec]:
         """
@@ -202,6 +204,25 @@ class ReActRuntimeToolResolver:
         used_names: set[str] = set()
         specs.extend(self._resolve_declared_tools(used_names=used_names))
         specs.extend(self._resolve_runtime_provider_tools(used_names=used_names))
+        if (
+            self._include_skill_tools
+            and self._services.skills is not None
+            and self._services.skills.catalog.skills
+        ):
+            from fred_runtime.skills.tools import build_skill_tools
+
+            for spec in build_skill_tools(
+                self._services.skills, self._binding, self._services.kpi_writer
+            ):
+                if (
+                    spec.runtime_name in used_names
+                    or spec.runtime_name in self._capability_tool_names
+                ):
+                    raise RuntimeError(
+                        f"Platform skill tool collision: {spec.runtime_name}"
+                    )
+                used_names.add(spec.runtime_name)
+                specs.append(spec)
         if self._binding.runtime_context.ask_user is True:
             if "ask_user" in used_names or "ask_user" in self._capability_tool_names:
                 raise RuntimeError(

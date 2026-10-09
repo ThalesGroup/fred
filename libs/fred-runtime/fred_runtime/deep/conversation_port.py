@@ -19,6 +19,7 @@ from __future__ import annotations
 from pathlib import PurePosixPath
 from typing import Literal
 
+from deepagents.backends import CompositeBackend
 from deepagents.backends.protocol import BackendProtocol
 from deepagents.middleware.filesystem import FilesystemPermission
 from fred_sdk.contracts.runtime import (
@@ -58,6 +59,13 @@ class DeepConversationFilesystemPort(ConversationFilesystemPort):
     def _check(
         self, path: str, operation: Literal["read", "write"], origin: Origin
     ) -> None:
+        if (
+            operation == "write"
+            and (path == "/skills" or path.startswith("/skills/"))
+            and isinstance(self._backend, CompositeBackend)
+            and "/skills/" in self._backend.routes
+        ):
+            raise ConversationFilesystemPermissionError("Skills are read-only")
         if origin == "system":
             return
         if origin != "agent":

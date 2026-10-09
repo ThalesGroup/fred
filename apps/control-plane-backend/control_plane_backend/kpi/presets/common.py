@@ -80,6 +80,20 @@ class LabelValueResponse(BaseModel):
     until: AwareDatetime
 
 
+class SkillUsageRow(BaseModel):
+    skill_name: str
+    user_count: int
+    model_count: int
+    total: int
+
+
+class SkillUsageResponse(BaseModel):
+    rows: list[SkillUsageRow]
+    since: AwareDatetime
+    until: AwareDatetime
+    truncated: bool = False
+
+
 class DistributionResponse(BaseModel):
     """Histogram of a per-entity count, plus the median of the raw counts.
 

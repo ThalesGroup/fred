@@ -24,6 +24,20 @@ import { failedToolCallIds, parseWriteTodosSnapshot } from "./agentTodo";
 import { parseTabularTraceResult, tabularToolKind } from "./tabularTrace";
 import { parseWebResearchResult, webResearchTarget, webResearchToolKind } from "./webResearchTrace";
 
+export function skillLoadOf(
+  message: ChatMessage,
+): { name: string; origin: "user" | "agent"; load_id: string; child: boolean } | null {
+  const extras = message.metadata?.extras as Record<string, unknown> | undefined;
+  const value = extras?.skill_load;
+  if (!value || typeof value !== "object") return null;
+  const load = value as Record<string, unknown>;
+  return typeof load.name === "string" &&
+    typeof load.load_id === "string" &&
+    (load.origin === "user" || load.origin === "agent")
+    ? { name: load.name, origin: load.origin, load_id: load.load_id, child: load.child === true }
+    : null;
+}
+
 export const TRACE_CHANNELS: Channel[] = [
   "plan",
   "thought",
@@ -218,6 +232,37 @@ export function toolResultLatencyMs(result: ChatMessage): number | null {
 
 export function toolResultContent(result: ChatMessage): string {
   return toolResultPart(result)?.content ?? "";
+}
+
+/** Preview the authorized text this call returned, never a fresh file read. */
+function skillFilePathOf(entry: TraceEntry): { name: string; path: string; excerpt?: true } | null {
+  if (entry.kind !== "combo") return null;
+  const args = toolArgs(entry.call);
+  if (toolName(entry.call) === "read_skill_file") {
+    return typeof args.name === "string" && typeof args.path === "string" ? { name: args.name, path: args.path } : null;
+  }
+  if (toolName(entry.call) !== "read_file" || typeof args.file_path !== "string") return null;
+  // Match native validate_path: normalize redundant separators and dot segments,
+  // while refusing traversal and backslashes before normalization.
+  if (/[\\\u0000]/.test(args.file_path) || args.file_path.split("/").includes("..")) return null;
+  const path =
+    "/" +
+    args.file_path
+      .split("/")
+      .filter((part) => part && part !== ".")
+      .join("/");
+  const match = /^\/skills\/([a-z0-9]+(?:-[a-z0-9]+)*)\/(.+)$/.exec(path);
+  if (!match || match[2] === "SKILL.md") return null;
+  return { name: match[1], path: match[2], excerpt: true };
+}
+
+export function skillFileReadOf(
+  entry: TraceEntry,
+): { name: string; path: string; content: string; excerpt?: true } | null {
+  if (entry.kind !== "combo" || !entry.result) return null;
+  const result = toolResultPart(entry.result);
+  const file = skillFilePathOf(entry);
+  return result && result.ok !== false && file ? { ...file, content: result.content } : null;
 }
 
 export function textOf(msg: ChatMessage): string {
@@ -512,6 +557,9 @@ export function entryLabel(entry: TraceEntry, translate?: (key: string) => strin
       return "Observation";
     case "tool_call": {
       if (entry.kind !== "combo") return "Tool call";
+      if (skillFilePathOf(entry) && translate) {
+        return translate("rework.chatTrace.toolLabels.readSkillFile");
+      }
       if (toolSlug(toolName(entry.call)) === "read_query" && translate) {
         return translate("rework.chatTrace.toolLabels.readQuery");
       }
@@ -524,7 +572,9 @@ export function entryLabel(entry: TraceEntry, translate?: (key: string) => strin
     case "tool_result":
       return "Tool result";
     case "system_note":
-      return "System";
+      return entry.kind === "solo" && skillLoadOf(entry.message) && translate
+        ? translate("chatbot.skills.loaded")
+        : "System";
     case "error":
       return "Error";
     default:
@@ -534,6 +584,10 @@ export function entryLabel(entry: TraceEntry, translate?: (key: string) => strin
 
 // Short preview text shown inline in the row
 export function primaryTextForEntry(entry: TraceEntry): string {
+  const skillFile = skillFilePathOf(entry);
+  if (skillFile) {
+    return skillFile.path;
+  }
   if (entry.kind === "solo") {
     // Error rows keep the line short (a localized indication rendered by the
     // row); the raw message is browsable in the trace drawer, not dumped inline.
@@ -625,7 +679,21 @@ export function groupTraceEntries(messages: ChatMessage[]): TraceEntry[] {
     if (snapshot?.callId && !failedCallIds.has(snapshot.callId)) representedTodoCallIds.add(snapshot.callId);
   }
 
+  const skillLoads = new Set(
+    messages.flatMap((message) => {
+      const load = skillLoadOf(message);
+      return load ? [load.load_id] : [];
+    }),
+  );
+  const seenLoads = new Set<string>();
   const trace = messages.filter((m) => {
+    const load = skillLoadOf(m);
+    if (load) {
+      if (seenLoads.has(load.load_id)) return false;
+      seenLoads.add(load.load_id);
+    }
+    if ((isToolCall(m) && skillLoads.has(toolCallId(m))) || (isToolResult(m) && skillLoads.has(toolResultId(m))))
+      return false;
     if (!isTraceChannel(m.channel) || isRedundantToolUseThought(m)) return false;
     const todoSnapshot = parseWriteTodosSnapshot(m);
     if (todoSnapshot && representedTodoCallIds.has(todoSnapshot.callId)) return false;
@@ -702,8 +770,8 @@ export function totalLatencyMs(entries: TraceEntry[]): number {
 /** A tool call paired with its result (or still awaiting one). */
 export type ToolEntry = Extract<TraceEntry, { kind: "combo" }>;
 
-/** One row of the trace. `index` is the 1-based tool step number — null for
- *  reasoning, notes and errors, which are sequenced but are not steps.
+/** One row of the trace. `index` is the 1-based activity step number — null for
+ *  reasoning, ordinary notes and errors, which are sequenced but are not steps.
  *  `reasoningText` is the row's display text, null on a step row. `restated`
  *  marks a reasoning row with nothing new: every sentence was said earlier. */
 export type TraceRow = {
@@ -1095,7 +1163,7 @@ function isSentenceEnd(text: string, i: number): boolean {
 
 function isStepEntry(entry: TraceEntry): boolean {
   // Orphan tool_results (call never seen) land here too: they are tool activity.
-  return entry.kind === "combo" || entry.message.channel === "tool_result";
+  return entry.kind === "combo" || entry.message.channel === "tool_result" || skillLoadOf(entry.message) !== null;
 }
 
 function isReasoningEntry(entry: TraceEntry): boolean {
@@ -1171,7 +1239,7 @@ function restatedLead(
 
 /** The trace as one chronological list, each row tagged with how it renders. */
 export function traceRows(entries: TraceEntry[]): TraceRow[] {
-  let toolIndex = 0;
+  let stepIndex = 0;
   // Every sentence of the turn so far: a row drops the restatement of ANY earlier
   // block, not only the previous one. Only the leading run goes, never a sentence
   // in the middle, and the full markdown stays in the detail drawer.
@@ -1208,8 +1276,8 @@ export function traceRows(entries: TraceEntry[]): TraceRow[] {
       };
     }
     const step = { entry, lane: "step" as const, reasoningText: null, reasoningMarkdown: null, restated: false };
-    if (isStepEntry(entry)) return { ...step, index: ++toolIndex };
-    // system_note / error — sequenced with the steps, but unnumbered.
+    if (isStepEntry(entry)) return { ...step, index: ++stepIndex };
+    // Ordinary system_note / error — sequenced with the steps, but unnumbered.
     return { ...step, index: null };
   });
 }

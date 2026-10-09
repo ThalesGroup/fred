@@ -16,6 +16,12 @@ app:
   openai_compat: true
 
 
+# Opt in to skills shipped inside fred_runtime; a read-only mounted directory is
+# also accepted (relative paths are resolved against this configuration file).
+# Remove this section to disable the platform skill catalog and tools.
+skills:
+  directory: package
+
 security:
   m2m:
     enabled: false

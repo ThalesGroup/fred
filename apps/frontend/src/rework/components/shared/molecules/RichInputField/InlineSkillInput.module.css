@@ -1,0 +1,41 @@
+/* Copyright Thales 2026 — Licensed under the Apache License, Version 2.0. */
+.editor {
+  overflow-y: auto;
+  color: var(--on-surface);
+  font: var(--font-body-large);
+  line-height: 1.5;
+}
+.editor :global(.cm-editor) {
+  background: transparent;
+  font: inherit;
+}
+.editor :global(.cm-focused) {
+  outline: none;
+}
+.editor :global(.cm-scroller) {
+  overflow: visible;
+  font: inherit;
+  line-height: inherit;
+}
+.editor :global(.cm-content) {
+  padding: 0;
+  caret-color: var(--on-surface);
+}
+.editor :global(.cm-line) {
+  padding: 0 var(--spacing-xs);
+}
+.editor :global(.cm-placeholder),
+.hint {
+  color: var(--on-surface-muted);
+}
+.editor[aria-disabled="true"] {
+  color: var(--state-on-surface-disabled);
+}
+.hint {
+  margin-inline-start: var(--spacing-xs);
+  pointer-events: none;
+}
+
+.promptToken {
+  color: var(--info);
+}
