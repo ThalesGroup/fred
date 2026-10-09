@@ -14,7 +14,9 @@
 
 from __future__ import annotations
 
+import json
 import logging
+from collections.abc import Collection
 from datetime import datetime, timezone
 
 from fred_core.common import TeamId
@@ -25,6 +27,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from control_plane_backend.config.models import ManagedAgentTuning
 from control_plane_backend.models.agent_instance_models import AgentInstanceRow
+from control_plane_backend.models.routing_policy_models import TeamRoutingPolicyRow
+from control_plane_backend.routing_policy.schemas import ModelDisabledForTeamError
 
 logger = logging.getLogger(__name__)
 
@@ -128,6 +132,59 @@ def _row_to_record(row: AgentInstanceRow) -> AgentInstanceRecord:
     )
 
 
+async def clear_recommended_chat_profiles(
+    session: AsyncSession,
+    *,
+    profile_ids: Collection[str],
+    team_id: TeamId | None,
+) -> list[str]:
+    """Clear `recommended_chat_profile_id` on instances naming one of
+    `profile_ids`, inside the caller's transaction. Edits the stored JSON in
+    place so unknown keys survive, and leaves `updated_at` alone: this is a
+    platform side effect, not a user edit. Returns the cleared instance ids."""
+
+    # Row locks serialize this with a concurrent agent save (see `update`).
+    statement = select(AgentInstanceRow).with_for_update()
+    if team_id is not None:
+        statement = statement.where(AgentInstanceRow.team_id == str(team_id))
+    cleared: list[str] = []
+    for row in (await session.execute(statement)).scalars().all():
+        try:
+            tuning = json.loads(row.tuning_json) if row.tuning_json else None
+        except ValueError:
+            continue
+        if not isinstance(tuning, dict):
+            continue
+        if tuning.get("recommended_chat_profile_id") not in profile_ids:
+            continue
+        tuning["recommended_chat_profile_id"] = None
+        row.tuning_json = json.dumps(tuning)
+        cleared.append(row.agent_instance_id)
+    return cleared
+
+
+async def _require_model_enabled_for_team(
+    session: AsyncSession, *, team_id: TeamId, capability_id: str, profile_id: str
+) -> None:
+    """Re-check a recommendation against the team policy inside the write
+    transaction. The shared lock makes a concurrent disable wait for this
+    write, and its clear then sees the new recommendation."""
+
+    disabled_json = (
+        await session.execute(
+            select(TeamRoutingPolicyRow.disabled_model_ids_json)
+            .where(TeamRoutingPolicyRow.team_id == str(team_id))
+            .with_for_update(read=True)
+        )
+    ).scalar_one_or_none()
+    try:
+        disabled = json.loads(disabled_json or "[]")
+    except ValueError:
+        disabled = []
+    if isinstance(disabled, list) and capability_id in disabled:
+        raise ModelDisabledForTeamError(team_id=team_id, profile_ids=[profile_id])
+
+
 class AgentInstanceStore:
     def __init__(self, engine: AsyncEngine) -> None:
         self._sessions = make_session_factory(engine)
@@ -136,7 +193,11 @@ class AgentInstanceStore:
         self,
         record: AgentInstanceRecord,
         session: AsyncSession | None = None,
+        *,
+        recommended_capability_id: str | None = None,
     ) -> AgentInstanceRecord:
+        """`recommended_capability_id`, when set, is the model of the record's
+        recommendation, re-checked against the team policy in this write."""
         created_at = record.created_at or _utcnow()
         updated_at = record.updated_at or created_at
         tuning_json = record.tuning.model_dump_json()
@@ -157,6 +218,14 @@ class AgentInstanceStore:
             updated_at=updated_at,
         )
         async with use_session(self._sessions, session) as s:
+            recommended = record.tuning.recommended_chat_profile_id
+            if recommended_capability_id is not None and recommended is not None:
+                await _require_model_enabled_for_team(
+                    s,
+                    team_id=record.team_id,
+                    capability_id=recommended_capability_id,
+                    profile_id=recommended,
+                )
             s.add(row)
         return await self.get(record.agent_instance_id)  # type: ignore[return-value]
 
@@ -244,20 +313,37 @@ class AgentInstanceStore:
         tuning: ManagedAgentTuning | None = None,
         updated_by: str | None = None,
         session: AsyncSession | None = None,
+        recommended_capability_id: str | None = None,
+        keep_stored_recommendation: bool = False,
     ) -> AgentInstanceRecord | None:
         """Update one instance scoped to team_id. Returns None if not found.
 
         ``updated_by`` stamps the acting user's uid (#1952); None leaves the
         stored value unchanged (seed/startup saves have no acting user).
+        ``recommended_capability_id`` re-checks the new tuning's recommendation
+        against the team policy in this transaction (policy lock first, the
+        same order as a policy write). ``keep_stored_recommendation`` keeps
+        the row's current recommendation, which a policy write may have
+        cleared since ``tuning`` was loaded.
         """
         async with use_session(self._sessions, session) as s:
+            recommended = tuning.recommended_chat_profile_id if tuning else None
+            if recommended_capability_id is not None and recommended is not None:
+                await _require_model_enabled_for_team(
+                    s,
+                    team_id=team_id,
+                    capability_id=recommended_capability_id,
+                    profile_id=recommended,
+                )
             rows = (
                 (
                     await s.execute(
-                        select(AgentInstanceRow).where(
+                        select(AgentInstanceRow)
+                        .where(
                             AgentInstanceRow.agent_instance_id == agent_instance_id,
                             AgentInstanceRow.team_id == str(team_id),
                         )
+                        .with_for_update()
                     )
                 )
                 .scalars()
@@ -266,6 +352,14 @@ class AgentInstanceStore:
             if not rows:
                 return None
             row = rows[0]
+            if tuning is not None and keep_stored_recommendation:
+                tuning = tuning.model_copy(
+                    update={
+                        "recommended_chat_profile_id": _row_to_record(
+                            row
+                        ).tuning.recommended_chat_profile_id
+                    }
+                )
             if display_name is not None:
                 row.display_name = display_name
             if description is not None:

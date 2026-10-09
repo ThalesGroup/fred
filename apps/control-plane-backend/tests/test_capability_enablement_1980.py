@@ -69,7 +69,7 @@ from fred_core.security.rebac.rebac_engine import (
 from fred_sdk.contracts.capability import CapabilityCatalogEntry
 from fred_sdk.contracts.capability.manifest import TeamScopePolicy
 from fred_sdk.contracts.models import FieldSpec
-from test_main import _FakeAgentInstanceStore, _make_record
+from test_main import _FakeAgentInstanceStore, _FakeRoutingPolicyStore, _make_record
 
 _EXAMPLE_APPLICATION = ApplicationSourceConfig(
     app_id="example",
@@ -266,7 +266,7 @@ class _FakeSettingsStore:
             updated_at=None,
         )
 
-    async def list_for_team(self, team_id):
+    async def list_for_team(self, team_id, session=None):
         return {
             cap: settings
             for (tid, cap), settings in self._rows.items()
@@ -2275,9 +2275,11 @@ def _availability_deps(
     )
     monkeypatch.setattr(impact_mod, "usable_capability_ids", _fake_usable)
 
+    routing_policy_store = _FakeRoutingPolicyStore(instances=store)
     return SimpleNamespace(
         team_dependencies=SimpleNamespace(rebac=rebac),
         get_agent_instance_store=lambda: store,
+        get_team_routing_policy_store=lambda: routing_policy_store,
         get_kpi_writer=lambda: None,
     )
 
@@ -2754,7 +2756,7 @@ class _FakeReasoningStore:
     def __init__(self, enabled_model_ids: set[str] | None = None) -> None:
         self._enabled_model_ids = enabled_model_ids or set()
 
-    async def list_enabled_model_ids(self) -> set[str]:
+    async def list_enabled_model_ids(self, session=None) -> set[str]:
         return set(self._enabled_model_ids)
 
 
@@ -2762,7 +2764,7 @@ class _FakeNoPlatformPromptStore:
     """No platform-prompt row saved — `get_runtime_binding_for_team` must then
     carry `platform_prompt=None`, i.e. "fall back to the pod default"."""
 
-    async def get(self):
+    async def get(self, session=None):
         return None
 
 
@@ -2771,7 +2773,7 @@ class _FakeNoPlatformModelBindingStore:
     now reads this store on the same per-turn call as the reasoning
     snapshot, so every deps bundle exercising that function needs one."""
 
-    async def get(self):
+    async def get(self, session=None):
         return None
 
 
@@ -2806,6 +2808,8 @@ async def test_runtime_binding_carries_selected_team_settings() -> None:
         get_model_reasoning_store=_FakeReasoningStore,
         get_platform_model_binding_store=_FakeNoPlatformModelBindingStore,
         get_platform_prompt_store=_FakeNoPlatformPromptStore,
+        get_sql_session_factory=None,
+        get_team_routing_policy_store=_FakeRoutingPolicyStore,
     )
 
     binding = await service.get_runtime_binding_for_team("inst", "team-a", deps)  # type: ignore[arg-type]
@@ -2836,6 +2840,8 @@ async def test_runtime_binding_carries_fresh_reasoning_enabled_snapshot() -> Non
         ),
         get_platform_model_binding_store=_FakeNoPlatformModelBindingStore,
         get_platform_prompt_store=_FakeNoPlatformPromptStore,
+        get_sql_session_factory=None,
+        get_team_routing_policy_store=_FakeRoutingPolicyStore,
     )
 
     binding = await service.get_runtime_binding_for_team("inst", "team-a", deps)  # type: ignore[arg-type]
@@ -2845,6 +2851,275 @@ async def test_runtime_binding_carries_fresh_reasoning_enabled_snapshot() -> Non
         "model__mistral__small",
         "model__openai__gpt-5.1",
     ]
+
+
+@pytest.mark.asyncio
+async def test_runtime_binding_carries_team_disabled_models_from_one_gather(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The pod trusts only this copy of the team-disabled set. Every read runs
+    in one gather of two sessions, so a turn holds at most 2 pooled
+    connections, whatever the number of reads."""
+
+    import asyncio
+    from types import SimpleNamespace
+
+    import control_plane_backend.product.service as service
+
+    record = _make_record(agent_instance_id="inst", team_id="team-a")
+    record.tuning = record.tuning.model_copy(
+        update={"recommended_chat_profile_id": "chat.small"}
+    )
+    policy_store = _FakeRoutingPolicyStore(
+        {"team-a": {"disabled_model_ids": ["model__b", "model__a"]}}
+    )
+    gathers: list[int] = []
+    real_gather = asyncio.gather
+
+    def _counting_gather(*aws, **kwargs):
+        gathers.append(len(aws))
+        return real_gather(*aws, **kwargs)
+
+    monkeypatch.setattr(service.asyncio, "gather", _counting_gather)
+    deps = SimpleNamespace(
+        get_agent_instance_store=lambda: _FakeAgentInstanceStore([record]),
+        get_team_capability_settings_store=_FakeSettingsStore,
+        get_model_reasoning_store=_FakeReasoningStore,
+        get_platform_model_binding_store=_FakeNoPlatformModelBindingStore,
+        get_platform_prompt_store=_FakeNoPlatformPromptStore,
+        get_sql_session_factory=None,
+        get_team_routing_policy_store=lambda: policy_store,
+    )
+
+    binding = await service.get_runtime_binding_for_team("inst", "team-a", deps)  # type: ignore[arg-type]
+
+    assert binding is not None
+    assert binding.team_disabled_model_ids == ["model__a", "model__b"]
+    assert binding.tuning.recommended_chat_profile_id == "chat.small"
+    assert gathers == [2]
+    assert policy_store.get_calls == 1
+
+
+def _model_catalog_entry(capability_id: str, profile_ids: list[str]):
+    from fred_sdk.contracts.capability.manifest import CapabilityCatalogEntry
+
+    return CapabilityCatalogEntry(
+        id=capability_id,
+        version="1",
+        name=capability_id,
+        description=capability_id,
+        icon="neurology",
+        kind="model",
+        model_profile_ids=tuple(profile_ids),
+        model_chat_profile_ids=tuple(profile_ids),
+    )
+
+
+def _recommending(agent_instance_id: str, team_id: str, profile_id: str | None):
+    record = _make_record(agent_instance_id=agent_instance_id, team_id=team_id)
+    record.tuning = record.tuning.model_copy(
+        update={"recommended_chat_profile_id": profile_id}
+    )
+    return record
+
+
+@pytest.mark.asyncio
+async def test_team_grant_removal_clears_recommendations_and_prunes_exceptions(
+    monkeypatch,
+) -> None:
+    """A model revoked for one team: its agents recommending it follow the
+    team default again, with no team action, and the team's exception lists
+    forget it. Other models and other teams are untouched."""
+
+    from types import SimpleNamespace
+
+    from control_plane_backend.capabilities import service as capability_service
+
+    model_id = "model__openai__gpt-5.1"
+    rebac = _FakeRebac()
+    rebac.tuples.add(("team:team-a", "enabled", f"capability:{model_id}"))
+    store = _FakeAgentInstanceStore(
+        [
+            _recommending("a1", "team-a", "chat.gpt51"),
+            _recommending("a2", "team-a", "chat.other"),
+            _recommending("b1", "team-b", "chat.gpt51"),
+        ]
+    )
+
+    async def _catalog(_deps):
+        return {model_id: _model_catalog_entry(model_id, ["chat.gpt51"])}
+
+    monkeypatch.setattr(capability_service, "aggregate_capability_catalog", _catalog)
+    deps = _availability_deps(
+        monkeypatch,
+        store,
+        rebac,
+        available_by_source={"runtime-a": frozenset()},
+        usable_ids=set(),
+    )
+    policy_store = _FakeRoutingPolicyStore(
+        {
+            "team-a": {
+                "chat_default_profile_id": "chat.gpt51",
+                "disabled_model_ids": [model_id, "model__x"],
+                "reasoning_default_off_model_ids": [model_id],
+            }
+        },
+        instances=store,
+    )
+    deps.get_team_routing_policy_store = lambda: policy_store
+    deps.get_team_capability_settings_store = lambda: None
+
+    await capability_service.disable_team_capability(
+        user=SimpleNamespace(uid="admin"),
+        capability_id=model_id,
+        team_id="team-a",
+        deps=deps,
+    )
+
+    by_id = {r.agent_instance_id: r for r in await store.list_all()}
+    assert by_id["a1"].tuning.recommended_chat_profile_id is None
+    assert by_id["a2"].tuning.recommended_chat_profile_id == "chat.other"
+    assert by_id["b1"].tuning.recommended_chat_profile_id == "chat.gpt51"
+    stored = await policy_store.get(team_id="team-a")
+    assert stored is not None
+    # The revoked default is cleared, so the pod default takes over.
+    assert stored.chat_default_profile_id is None
+    assert stored.disabled_model_ids == ("model__x",)
+    assert stored.reasoning_default_off_model_ids == ()
+
+
+@pytest.mark.asyncio
+async def test_platform_wide_switch_off_clears_only_teams_that_lost_the_model(
+    monkeypatch,
+) -> None:
+    """Default-on OFF withdraws inherited access; a team holding an explicit
+    grant keeps the model, so its agents keep their recommendation."""
+
+    from types import SimpleNamespace
+
+    from control_plane_backend.capabilities import service as capability_service
+
+    model_id = "model__openai__gpt-5.1"
+
+    class _GrantRebac(_FakeRebac):
+        async def has_permission(self, subject, permission, resource, **kwargs):
+            return (
+                f"team:{subject.id}",
+                "enabled",
+                f"capability:{resource.id}",
+            ) in self.tuples
+
+    rebac = _GrantRebac()
+    rebac.tuples.add(
+        (f"organization:{ORGANIZATION_ID}", "default_on", f"capability:{model_id}")
+    )
+    rebac.tuples.add(("team:team-b", "enabled", f"capability:{model_id}"))
+    store = _FakeAgentInstanceStore(
+        [
+            _recommending("a1", "team-a", "chat.gpt51"),
+            _recommending("b1", "team-b", "chat.gpt51"),
+        ]
+    )
+
+    class _EmptyReasoningStore:
+        async def list_enabled_model_ids(self) -> set[str]:
+            return set()
+
+    async def _catalog(_deps):
+        return {model_id: _model_catalog_entry(model_id, ["chat.gpt51"])}
+
+    monkeypatch.setattr(capability_service, "aggregate_capability_catalog", _catalog)
+    deps = _availability_deps(
+        monkeypatch,
+        store,
+        rebac,
+        available_by_source={"runtime-a": frozenset()},
+        usable_ids=set(),
+    )
+    deps.get_model_reasoning_store = lambda: _EmptyReasoningStore()
+    # Team C has no agent on the model, only its default: the scan finds it.
+    policy_store = _FakeRoutingPolicyStore(
+        {
+            "team-b": {"chat_default_profile_id": "chat.gpt51"},
+            "team-c": {"chat_default_profile_id": "chat.gpt51"},
+        },
+        instances=store,
+    )
+    deps.get_team_routing_policy_store = lambda: policy_store
+
+    await capability_service.set_default_on(
+        user=SimpleNamespace(uid="admin"),
+        capability_id=model_id,
+        default_on=False,
+        deps=deps,
+    )
+
+    by_id = {r.agent_instance_id: r for r in await store.list_all()}
+    assert by_id["a1"].tuning.recommended_chat_profile_id is None
+    assert by_id["b1"].tuning.recommended_chat_profile_id == "chat.gpt51"
+    team_b = await policy_store.get(team_id="team-b")
+    team_c = await policy_store.get(team_id="team-c")
+    assert team_b is not None and team_b.chat_default_profile_id == "chat.gpt51"
+    assert team_c is not None and team_c.chat_default_profile_id is None
+
+
+@pytest.mark.asyncio
+async def test_personal_scope_revoke_cleans_up_personal_spaces_that_lost_the_model(
+    monkeypatch,
+) -> None:
+    """enabled -> disabled on the personal class: the personal spaces' agents
+    recommending the model follow the team default again; a regular team
+    with its own grant keeps its recommendation."""
+
+    from types import SimpleNamespace
+
+    from control_plane_backend.capabilities import service as capability_service
+
+    model_id = "model__openai__gpt-5.1"
+
+    class _GrantRebac(_FakeRebac):
+        async def has_permission(self, subject, permission, resource, **kwargs):
+            return (
+                f"team:{subject.id}",
+                "enabled",
+                f"capability:{resource.id}",
+            ) in self.tuples
+
+    rebac = _GrantRebac()
+    rebac.tuples.add(
+        (f"organization:{ORGANIZATION_ID}", "personal_on", f"capability:{model_id}")
+    )
+    rebac.tuples.add(("team:team-b", "enabled", f"capability:{model_id}"))
+    store = _FakeAgentInstanceStore(
+        [
+            _recommending("p1", "personal-u1", "chat.gpt51"),
+            _recommending("b1", "team-b", "chat.gpt51"),
+        ]
+    )
+
+    async def _catalog(_deps):
+        return {model_id: _model_catalog_entry(model_id, ["chat.gpt51"])}
+
+    monkeypatch.setattr(capability_service, "aggregate_capability_catalog", _catalog)
+    deps = _availability_deps(
+        monkeypatch,
+        store,
+        rebac,
+        available_by_source={"runtime-a": frozenset()},
+        usable_ids=set(),
+    )
+
+    await capability_service.set_personal_scope(
+        user=SimpleNamespace(uid="admin"),
+        capability_id=model_id,
+        scope="disabled",
+        deps=deps,
+    )
+
+    by_id = {r.agent_instance_id: r for r in await store.list_all()}
+    assert by_id["p1"].tuning.recommended_chat_profile_id is None
+    assert by_id["b1"].tuning.recommended_chat_profile_id == "chat.gpt51"
 
 
 # ---------------------------------------------------------------------------

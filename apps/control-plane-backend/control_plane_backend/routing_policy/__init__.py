@@ -13,13 +13,10 @@
 # limitations under the License.
 
 """
-Team (and personal-space) LLM model routing policy (TEAM-05, #2118,
-``docs/swift/rfc/TEAM-ROUTING-POLICY-RFC.md``).
+Team (and personal-space) model settings (TEAM-05, #2118, extended by the
+chat model and reasoning picker change).
 
-Lets a team_editor (or a personal-space owner, who holds team_editor
-implicitly) choose a default chat model profile and per-operation
-overrides, bounded by the ``kind="model"`` capability enablement system
-(#2110) rather than a separate platform-policy allowlist — see the RFC's
-§7 for why that supersedes the original ``TeamPlatformPolicy.model_guardrails``
-design.
+Lets a team_admin (or a personal-space owner) choose the team's default chat
+model, the models disabled for its members and the per-model reasoning
+default, bounded by the ``kind="model"`` capability enablement system (#2110).
 """

@@ -92,9 +92,6 @@ RAGS_SAMPLE_ECHO_TEMPLATE_ID = service.template_capability_id(
 
 def _template_payload(
     default_capability_ids: list[str] | None = None,
-    *,
-    reasoning_enabled: bool = False,
-    reasoning_default_on: bool = False,
 ) -> service._RuntimeTemplatePayload:
     return service._RuntimeTemplatePayload(
         template_agent_id="rags.sample.echo",
@@ -104,10 +101,6 @@ def _template_payload(
         default_tuning=ManagedAgentTuning(
             role="Echo Agent",
             description="Echo template description",
-            # #2473: the template's declared reasoning defaults ride
-            # `default_tuning`, the same wire object as role/description.
-            reasoning_enabled=reasoning_enabled,
-            reasoning_default_on=reasoning_default_on,
         ),
         available_capabilities=[_DEMO_ENTRY, _PROBE_ENTRY],
         default_capability_ids=default_capability_ids,
@@ -130,9 +123,6 @@ def _setup(
     monkeypatch: pytest.MonkeyPatch,
     records=None,
     default_capability_ids: list[str] | None = None,
-    *,
-    reasoning_enabled: bool = False,
-    reasoning_default_on: bool = False,
 ):
     monkeypatch.setattr(
         "control_plane_backend.product.api.require_team_access",
@@ -146,13 +136,7 @@ def _setup(
     async def _fake_fetch_runtime_templates(
         _base_url: str, include_non_public: bool = False
     ):
-        return [
-            _template_payload(
-                default_capability_ids=default_capability_ids,
-                reasoning_enabled=reasoning_enabled,
-                reasoning_default_on=reasoning_default_on,
-            )
-        ]
+        return [_template_payload(default_capability_ids=default_capability_ids)]
 
     monkeypatch.setattr(
         "control_plane_backend.product.service._fetch_runtime_templates",
@@ -1060,64 +1044,11 @@ async def test_list_agent_templates_exposes_default_capability_ids(
 
 
 @pytest.mark.asyncio
-async def test_list_agent_templates_exposes_reasoning_defaults(
+async def test_list_agent_templates_ignores_legacy_reasoning_keys_from_old_pods(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """
-    #2473: the template summary carries the template's declared reasoning
-    defaults, read off `default_tuning`, so the agent form can pre-tick its
-    Reasoning card the way `default_capability_ids` pre-ticks capabilities.
-
-    Without this the form hardcoded both to false and a template had no way to
-    express "this agent's job needs reasoning" — the gap that made platform_ops
-    ship with reasoning off unless every operator found the switch by hand.
-    """
-
-    _wire_rebac(monkeypatch, {"personal": {RAGS_SAMPLE_ECHO_TEMPLATE_ID}})
-    app, _store = _setup(monkeypatch, reasoning_enabled=True, reasoning_default_on=True)
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
-        resp = await client.get("/control-plane/v1/teams/personal/agent-templates")
-
-    assert resp.status_code == 200
-    (template,) = resp.json()
-    assert template["reasoning_enabled"] is True
-    assert template["reasoning_default_on"] is True
-
-
-@pytest.mark.asyncio
-async def test_list_agent_templates_reasoning_defaults_off_when_undeclared(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """
-    A template declaring neither field reports both false — the pre-#2473
-    behaviour, and what a pod predating #2473 sends (its `default_tuning`
-    simply omits the keys, and both models default them to False).
-
-    Pinned because this is the rolling-upgrade case: a new control-plane
-    reading an old pod must not invent a reasoning offer no template asked for.
-    """
-
-    _wire_rebac(monkeypatch, {"personal": {RAGS_SAMPLE_ECHO_TEMPLATE_ID}})
-    app, _store = _setup(monkeypatch)
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
-        resp = await client.get("/control-plane/v1/teams/personal/agent-templates")
-
-    assert resp.status_code == 200
-    (template,) = resp.json()
-    assert template["reasoning_enabled"] is False
-    assert template["reasoning_default_on"] is False
-
-
-def test_runtime_template_payload_defaults_reasoning_for_old_pods() -> None:
-    """
-    #2473 rolling upgrade, at the parsing seam: a pod payload whose
-    `default_tuning` predates the reasoning fields still deserializes, with
-    both defaulting to False rather than raising.
-    """
+    """A pod still declaring the retired per-agent reasoning settings in its
+    `default_tuning` parses, and the template summary exposes none of them."""
 
     payload = service._RuntimeTemplatePayload.model_validate(
         {
@@ -1128,12 +1059,24 @@ def test_runtime_template_payload_defaults_reasoning_for_old_pods() -> None:
             "default_tuning": {
                 "role": "Echo Agent",
                 "description": "Echo template description",
+                "reasoning_enabled": True,
+                "reasoning_default_on": True,
             },
         }
     )
+    assert "reasoning_enabled" not in payload.default_tuning.model_dump()
 
-    assert payload.default_tuning.reasoning_enabled is False
-    assert payload.default_tuning.reasoning_default_on is False
+    _wire_rebac(monkeypatch, {"personal": {RAGS_SAMPLE_ECHO_TEMPLATE_ID}})
+    app, _store = _setup(monkeypatch)
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get("/control-plane/v1/teams/personal/agent-templates")
+
+    assert resp.status_code == 200
+    (template,) = resp.json()
+    assert "reasoning_enabled" not in template
+    assert "reasoning_default_on" not in template
 
 
 @pytest.mark.asyncio
