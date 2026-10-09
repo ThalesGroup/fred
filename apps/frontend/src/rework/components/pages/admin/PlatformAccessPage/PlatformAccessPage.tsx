@@ -44,7 +44,9 @@ export default function PlatformAccessPage() {
   const [busy, setBusy] = useState(false);
   const [filterConfirmation, setFilterConfirmation] = useState<boolean>();
   const state = usePlatformAccessStateQuery(undefined, { skip: !enabled });
-  const users = usePlatformAccessUsersQuery({ offset, limit: 25, query }, { skip: !enabled });
+  const searchQuery = query.trim();
+  const searching = enabled && searchQuery.length > 0;
+  const users = usePlatformAccessUsersQuery({ offset, limit: 25, query: searchQuery }, { skip: !searching });
   const t0 = usePlatformAccessT0Query(undefined, { skip: !enabled });
   const teams = usePlatformAccessTeamsQuery(undefined, { skip: !enabled });
   const [filter] = useSetPlatformFilteringMutation();
@@ -101,7 +103,7 @@ export default function PlatformAccessPage() {
         <p>{t("rework.platformAccess.disabled")}</p>
       ) : (
         <>
-          {(state.isError || users.isError || teams.isError || t0.isError) && (
+          {(state.isError || (searching && users.isError) || teams.isError || t0.isError) && (
             <p role="alert">{t("rework.platformAccess.failed")}</p>
           )}
           <div className={styles.navigation}>
@@ -229,92 +231,96 @@ export default function PlatformAccessPage() {
                       {t("rework.platformAccess.clearSelection")}
                     </Button>
                   </div>
-                  <DataTable
-                    data={users.data?.items ?? []}
-                    rowKey={(user) => user.user_id}
-                    serverPagination={{
-                      offset,
-                      limit: 25,
-                      totalCount: users.data?.total ?? 0,
-                      onOffsetChange: setOffset,
-                    }}
-                    columns={[
-                      {
-                        label: t("rework.platformAccess.select"),
-                        size: "0.5fr",
-                        cellRenderer: (user) => (
-                          <Checkbox
-                            aria-label={t("rework.platformAccess.selectUser", { user: user.username || user.user_id })}
-                            checked={selected.includes(user.user_id)}
-                            disabled={locked || users.isFetching}
-                            onChange={(event) => {
-                              const checked = event.target.checked;
-                              setSelected((current) =>
-                                checked
-                                  ? current.includes(user.user_id)
-                                    ? current
-                                    : [...current, user.user_id]
-                                  : current.filter((id) => id !== user.user_id),
-                              );
-                            }}
-                          />
-                        ),
-                      },
-                      {
-                        label: t("rework.teamSettings.members.table.identifiant"),
-                        size: "2fr",
-                        cellRenderer: (user) => user.username || user.email || "-",
-                      },
-                      {
-                        label: t("rework.teamSettings.members.table.firstName"),
-                        size: "1fr",
-                        cellRenderer: (user) => user.first_name || "-",
-                      },
-                      {
-                        label: t("rework.teamSettings.members.table.lastName"),
-                        size: "1fr",
-                        cellRenderer: (user) => user.last_name || "-",
-                      },
-                      {
-                        label: t("rework.platformAccess.sources"),
-                        size: "3fr",
-                        cellRenderer: (user) => (
-                          <div className={styles.accessSources}>
-                            {user.sources.length
-                              ? user.sources.map((source, index) => (
-                                  <Chip
-                                    key={index}
-                                    label={`${t(`rework.platformAccess.source.${source.kind}`)}${source.team_name ? `: ${source.team_name}` : ""}`}
-                                  />
-                                ))
-                              : "-"}
-                          </div>
-                        ),
-                      },
-                      {
-                        label: t("rework.platformAccess.exception"),
-                        size: "1.5fr",
-                        cellRenderer: (user) => {
-                          const hasIndividual = user.sources.some(
-                            (source) => source.kind === "manual" || source.kind === "t0",
-                          );
-                          return (
-                            <Button
-                              color="primary"
-                              variant="filled"
-                              size="medium"
+                  {searching && !users.isFetching && !users.isError && (
+                    <DataTable
+                      data={users.currentData?.items ?? []}
+                      rowKey={(user) => user.user_id}
+                      serverPagination={{
+                        offset,
+                        limit: 25,
+                        totalCount: users.currentData?.total ?? 0,
+                        onOffsetChange: setOffset,
+                      }}
+                      columns={[
+                        {
+                          label: t("rework.platformAccess.select"),
+                          size: "0.5fr",
+                          cellRenderer: (user) => (
+                            <Checkbox
+                              aria-label={t("rework.platformAccess.selectUser", {
+                                user: user.username || user.user_id,
+                              })}
+                              checked={selected.includes(user.user_id)}
                               disabled={locked || users.isFetching}
-                              onClick={() =>
-                                void run(() => (hasIndividual ? revoke : grant)({ userId: user.user_id }).unwrap())
-                              }
-                            >
-                              {t(hasIndividual ? "rework.platformAccess.remove" : "rework.platformAccess.allow")}
-                            </Button>
-                          );
+                              onChange={(event) => {
+                                const checked = event.target.checked;
+                                setSelected((current) =>
+                                  checked
+                                    ? current.includes(user.user_id)
+                                      ? current
+                                      : [...current, user.user_id]
+                                    : current.filter((id) => id !== user.user_id),
+                                );
+                              }}
+                            />
+                          ),
                         },
-                      },
-                    ]}
-                  />
+                        {
+                          label: t("rework.teamSettings.members.table.identifiant"),
+                          size: "2fr",
+                          cellRenderer: (user) => user.username || user.email || "-",
+                        },
+                        {
+                          label: t("rework.teamSettings.members.table.firstName"),
+                          size: "1fr",
+                          cellRenderer: (user) => user.first_name || "-",
+                        },
+                        {
+                          label: t("rework.teamSettings.members.table.lastName"),
+                          size: "1fr",
+                          cellRenderer: (user) => user.last_name || "-",
+                        },
+                        {
+                          label: t("rework.platformAccess.sources"),
+                          size: "3fr",
+                          cellRenderer: (user) => (
+                            <div className={styles.accessSources}>
+                              {user.sources.length
+                                ? user.sources.map((source, index) => (
+                                    <Chip
+                                      key={index}
+                                      label={`${t(`rework.platformAccess.source.${source.kind}`)}${source.team_name ? `: ${source.team_name}` : ""}`}
+                                    />
+                                  ))
+                                : "-"}
+                            </div>
+                          ),
+                        },
+                        {
+                          label: t("rework.platformAccess.exception"),
+                          size: "1.5fr",
+                          cellRenderer: (user) => {
+                            const hasIndividual = user.sources.some(
+                              (source) => source.kind === "manual" || source.kind === "t0",
+                            );
+                            return (
+                              <Button
+                                color="primary"
+                                variant="filled"
+                                size="medium"
+                                disabled={locked || users.isFetching}
+                                onClick={() =>
+                                  void run(() => (hasIndividual ? revoke : grant)({ userId: user.user_id }).unwrap())
+                                }
+                              >
+                                {t(hasIndividual ? "rework.platformAccess.remove" : "rework.platformAccess.allow")}
+                              </Button>
+                            );
+                          },
+                        },
+                      ]}
+                    />
+                  )}
                 </section>
               </div>
               <div

@@ -103,7 +103,7 @@ Only people holding the existing platform-management permission SHALL read or mo
 - **WHEN** a save uses an older revision than the active policy
 - **THEN** the system SHALL return HTTP 409 and retain the newer policy, while the UI preserves the unsaved draft and explains the conflict
 
-User rows SHALL show identifier, first name and last name using the team-member table presentation, with email and source information retained. Selection SHALL survive paging without a fixed total cap; SQL batches SHALL remain bounded and grants atomic.
+User rows SHALL show identifier, first name and last name using the team-member table presentation, with email and source information retained. Selection SHALL survive paging without a fixed total cap; SQL batches SHALL remain bounded and grants atomic. The user search SHALL NOT load the directory or display cached results for an empty or whitespace-only query. Typing the first non-whitespace character SHALL request paginated server results using the existing search bar and table. Only the current search response SHALL provide rows; loading, failed or cleared searches SHALL hide previous rows without clearing user selection.
 
 #### Scenario: Grant more than 100 people
 

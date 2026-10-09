@@ -13,6 +13,9 @@ const state = vi.hoisted(() => ({
       sources: [{ kind: "free", team_id: "demo", team_name: "Demo" }],
     },
   ],
+  searchUsers: vi.fn(),
+  usersFetching: false,
+  usersError: false,
   completed: false,
   filteringEnabled: false,
   importFetching: false,
@@ -62,12 +65,15 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
       users: state.previewUsers,
     },
   }),
-  usePlatformAccessUsersQuery: () => ({
-    data: {
-      total: state.users.length,
-      items: state.users,
-    },
-  }),
+  usePlatformAccessUsersQuery: (args: unknown, options: unknown) => {
+    state.searchUsers(args, options);
+    return {
+      isFetching: state.usersFetching,
+      isError: state.usersError,
+      data: { total: 1, items: [{ user_id: "old", username: "Previous search", sources: [] }] },
+      currentData: { total: state.users.length, items: state.users },
+    };
+  },
   usePlatformAccessT0Query: () => ({
     isFetching: state.importFetching,
     isError: state.importError,
@@ -113,6 +119,8 @@ beforeEach(() => {
     },
   ];
   state.completed = false;
+  state.usersFetching = false;
+  state.usersError = false;
   state.filteringEnabled = false;
   state.importFetching = false;
   state.importError = false;
@@ -148,10 +156,44 @@ const openWhitelistTab = (tab: string) =>
   );
 const visiblePanels = () =>
   [...host.querySelectorAll<HTMLElement>('[role="tabpanel"]')].filter((p) => !p.closest("[hidden]"));
-const render = () => {
+const search = (value: string) => {
+  const input = host.querySelector<HTMLInputElement>('[id$="-whitelist-users-panel"] input[type="text"]')!;
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+};
+const render = (query = "Al") => {
   act(() => root.render(<PlatformAccessPage />));
   openTab("users");
+  search(query);
 };
+
+it("loads users only after typing and hides results when the search is cleared", () => {
+  render("");
+  expect(state.searchUsers.mock.calls.every(([, options]) => options.skip)).toBe(true);
+  expect(host.textContent).not.toContain("Alice");
+  search(" ");
+  expect(state.searchUsers.mock.lastCall?.[1]).toEqual({ skip: true });
+  search(" A ");
+  expect(state.searchUsers.mock.lastCall).toEqual([{ offset: 0, limit: 25, query: "A" }, { skip: false }]);
+  expect(host.textContent).toContain("Alice");
+  expect(host.textContent).not.toContain("Previous search");
+  search("");
+  expect(state.searchUsers.mock.lastCall?.[1]).toEqual({ skip: true });
+  expect(host.textContent).not.toContain("Alice");
+});
+
+it("hides earlier rows during a search request or a failed search", () => {
+  render();
+  state.usersFetching = true;
+  act(() => root.render(<PlatformAccessPage />));
+  expect(host.textContent).not.toContain("Alice");
+  state.usersFetching = false;
+  state.usersError = true;
+  act(() => root.render(<PlatformAccessPage />));
+  expect(host.textContent).not.toContain("Alice");
+});
 
 it("exposes only the selected panel and supports keyboard section navigation", () => {
   act(() => root.render(<PlatformAccessPage />));
@@ -220,6 +262,7 @@ it("preserves rule drafts and user selections across tabs without mutations", as
   act(() => root.render(<PlatformAccessPage />));
   act(() => [...host.querySelectorAll("button")].find((node) => node.textContent === "Edit draft")!.click());
   openTab("users");
+  search("Al");
   const selection = host.querySelector<HTMLInputElement>('input[aria-label="rework.platformAccess.selectUser"]')!;
   await act(async () => selection.click());
   openTab("rules");
