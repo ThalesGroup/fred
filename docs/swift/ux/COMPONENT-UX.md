@@ -5197,8 +5197,9 @@ session metadata before deletion, including renamed agents.
 Legacy names already lost use the existing localized generic agent fallback.
 The composer stays visible and natively disabled with a read-only placeholder,
 matching disabled surface/text tokens and no active elevation. Existing drafts
-remain visible but cannot be submitted. In dark mode, the disabled composer's
-outline blends into its surroundings instead of forming a strong boundary.
+remain visible but cannot be submitted. In dark mode, selected sidebar rows use
+a softer 8% secondary tint, including the matching delete-action hover overlay.
+Grouped rows retain the full list width even when a tooltip wraps a short title.
 History loads independently of execution preparation. Missing routing or a failed
 history request shows an unavailable notice while retaining already cached text.
 

@@ -52,6 +52,11 @@
   }
 }
 
+:global([data-theme="dark"]) .chatItemContainer[data-selected="true"] {
+  --tile-hover-bg: color-mix(in srgb, var(--secondary) 8%, var(--surface-container-high));
+  background-color: color-mix(in srgb, var(--secondary), transparent 92%);
+}
+
 .chatDescription {
   display: flex;
   flex: 1;

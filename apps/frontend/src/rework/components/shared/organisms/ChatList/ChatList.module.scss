@@ -47,6 +47,11 @@
   overflow-y: auto;
 }
 
+.agentGroup {
+  display: flex;
+  flex-direction: column;
+}
+
 /* Sub-list header shown above each agent's conversations when grouping is on.
  * Truncated like the inline agent name below it — a long name must not wrap the
  * header onto a second line. */

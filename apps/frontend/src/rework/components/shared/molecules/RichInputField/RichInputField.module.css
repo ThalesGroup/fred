@@ -76,10 +76,6 @@
   color: var(--state-text-disabled);
 }
 
-:global([data-theme="dark"]) .field:has(.textarea:disabled) {
-  border-color: color-mix(in srgb, var(--outline-muted) 35%, transparent);
-}
-
 /* Off-screen but announced: the durable form of the placeholder's hint. */
 .accessibleDescription {
   position: absolute;

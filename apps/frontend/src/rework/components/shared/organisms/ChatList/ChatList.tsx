@@ -169,7 +169,7 @@ export default function ChatList({ teamId }: ChatListProps) {
         )}
         {groups
           ? groups.map(([agentId, groupSessions]) => (
-              <div key={agentId}>
+              <div key={agentId} className={styles.agentGroup}>
                 <div
                   className={styles.groupHeader}
                   data-agent-deleted={agentDeleted(agentId)}
