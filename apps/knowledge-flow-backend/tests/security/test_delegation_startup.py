@@ -97,7 +97,7 @@ async def test_delegation_startup_refuses_a_model_without_suspended() -> None:
     ids=["act_for_people", "accept_delegated_calls", "off"],
 )
 @pytest.mark.parametrize("local_directory", [False, True])
-def test_app_startup_installs_the_engine_when_account_status_is_required(
+def test_app_startup_installs_account_status_engine_in_both_directories(
     app_context: ApplicationContext,
     monkeypatch,
     delegation: DelegationConfig,
@@ -133,9 +133,8 @@ def test_app_startup_installs_the_engine_when_account_status_is_required(
         # The request's account status check reaches the engine startup installed.
         asyncio.run(require_active_subject(_PERSON))
 
-    required = delegation.in_use or local_directory
-    assert len(built) == (1 if required else 0)
-    assert client.checks == ([("user:synthetic-person", "suspended", "organization:fred")] if required else [])
+    assert len(built) == 1
+    assert client.checks == [("user:synthetic-person", "suspended", "organization:fred")]
     assert client.writes == []
 
 

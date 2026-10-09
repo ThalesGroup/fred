@@ -6560,6 +6560,10 @@ the operator migration note.
 See the migration note at `docs/swift/ops/migrations/extract-mcp-agent-instructions.md`
 and `openspec/specs/mcp-capabilities/spec.md` for the current contract.
 
+### 8.105 Shared platform admission (2026-10-05)
+
+In authenticated deployments with enforced ReBAC, HTTP principal resolution checks suspension then live platform admission before legal/resource gates. This also covers runtime query-token resolution and cached verified JWTs. Pure service operations retain their existing checks; delegated people use their own live sources or compatible unexpired verified human evidence. Runtime startup requires the control-plane-owned migrated PostgreSQL authority. Each request reads the saved live policy, without a deployment flag or seed. Bounded internal verified human facts survive decoding-cache reuse; delegated callers use only current selected, unexpired, noncontradictory observations. Missing or incompatible authority fails closed with 503. See `openspec/specs/platform-access-control/spec.md` and the platform-access migration note for current contracts and rollout.
+
 ### 2026-10-06 — Native web research (#2980)
 
 The optional `RuntimeServices.web_research` SDK port is bound by the existing

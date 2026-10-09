@@ -261,7 +261,7 @@ x-kf-security: &kf-security
     # sync_schema_on_init: true         # Pushes the default Fred authorization model
     # authorization_model_id: null      # Authorization model id to use in case `sync_schema_on_init: false`
     # token_env_var: "OPENFGA_API_TOKEN" # Env var holding the bearer token
-    # timeout_millisec: 2000            # Optional request timeout
+    timeout_millisec: 5000             # Bound account-status and membership checks
     # headers:
     #   X-Custom-Header: "value"
   delegation:
@@ -479,6 +479,7 @@ x-cp-security: &cp-security
     enabled: true
     type: openfga
     api_url: "http://openfga:8080"
+    timeout_millisec: 5000
   delegation:
     # Delegation lets a program act for a person. The program (a "workload") signs
     # in with its own service account: a Keycloak client identity that belongs to
@@ -777,7 +778,7 @@ applications:
           # sync_schema_on_init: true         # Pushes the default Fred authorization model
           # authorization_model_id: null      # Authorization model id to use in case `sync_schema_on_init: false`
           # token_env_var: "OPENFGA_API_TOKEN" # Env var holding the bearer token
-          # timeout_millisec: 2000            # Optional request timeout
+          timeout_millisec: 5000             # Bound account-status and membership checks
           # headers:
           #   X-Custom-Header: "value"
         delegation:

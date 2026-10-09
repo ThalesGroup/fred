@@ -67,6 +67,14 @@ class KeycloakUser(BaseModel):
     )
     # Whether the verified token bears Keycloak's service-account markers.
     service_account: bool = Field(default=False, exclude=True, repr=False)
+    admission_claims: dict[str, str | list[str]] = Field(
+        default_factory=dict, exclude=True, repr=False
+    )
+    admission_invalid_claims: frozenset[str] = Field(
+        default_factory=frozenset, exclude=True, repr=False
+    )
+    admission_issued_at: float | None = Field(default=None, exclude=True, repr=False)
+    admission_expires_at: float | None = Field(default=None, exclude=True, repr=False)
 
     def __repr_args__(self):
         # Directly identifying data must never reach a log line, and an

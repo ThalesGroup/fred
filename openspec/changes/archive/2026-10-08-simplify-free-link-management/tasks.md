@@ -1,0 +1,15 @@
+## 1. Invitation views and copying
+
+- [x] 1.1 Split the manager into list/create/success/revoke views with no creation inputs in initial history; reuse the KPI popover layout with shared DateTimeInput, future shortcuts and Apply for note-then-expiration layout and retain future/busy/Free guards.
+- [x] 1.2 Replace history Show URL with explicit recovery-and-copy, add created-URL copying and separate successful creation/copy/error feedback; clear reusable mutation payloads and transient URLs.
+- [x] 1.3 Localize the short Clicks heading and counting explanation, retain pagination/statuses/revocation, and cover cancellation, expiry conversion, copy success/refusal and mutation failures in focused UI tests.
+
+## 2. Verification and delivery
+
+- [x] 2.1 Exercise desktop/narrow creation/history/copy/revocation with real local accounts and services, capture safe screenshots and verify clipboard fallback without publishing reusable URLs.
+- [x] 2.2 Reconcile existing UX/operator docs and capability specs, run grouped root quality and obtain author/independent read-only review; resolve supported findings and record coverage/exclusions in the existing tasks and PR #2966.
+- [x] 2.3 Commit link UI separately from filter editing and synchronize/archive verified capability requirements.
+
+Verification: real-account Playwright used the existing local identity provider, PostgreSQL and OpenFGA without intercepted requests. History opens without creation inputs, Free suspension disables generation, creation and original-URL recovery both copy successfully, and the temporary validation invitation was revoked. The KPI-style panel stays visible with its note at desktop and 720x650; Apply/custom UTC conversion, future shortcuts and Escape from date or note preserve the creation dialog. Ten focused link UI tests pass. Independent read-only review found an Escape propagation issue, corrected with a document handler and note-focus regression, and verified the strengthened CSS precedence.
+
+Final local verification: root `make code-quality` passes across all modules. Fifty-eight focused frontend tests, seventy shared admission tests and fifty-four control-plane tests with PostgreSQL pass; the population projection typing correction passes its three targeted regressions. The packed UI consumer and full browser smoke pass, including the shared Dialog child-scroll contract. Fresh migration upgrade/downgrade/upgrade and Alembic schema check pass. Generated clients were produced through the existing OpenAPI/RTK toolchain; intermediate clients preserve coherent separate commits. Independent full branch review covered base `05a773919` and head `2ce04bf27` plus all working implementation, contracts and safe screenshots. Its incorrect route/error wording finding was corrected and replayed; no supported production findings remain. Author review covers the same full scope plus final typing correction. Production load, private overlays and external SDK deployments remain excluded. Final GitHub CI/mergeability and bot discussions remain tracked in PR #2966.

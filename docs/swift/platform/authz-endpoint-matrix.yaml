@@ -16,6 +16,127 @@
 
 version: 1
 operations:
+  # Platform admission uses its own narrow self-status/enrollment boundary.
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/platform/access
+    review_status: approved
+    required_permission: can_manage_platform
+  - service: control-plane
+    method: PATCH
+    path: /control-plane/v1/admin/platform/access
+    review_status: approved
+    required_permission: can_manage_platform
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/platform/access/activation-preview
+    review_status: approved
+    required_permission: can_manage_platform
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/platform/access/own-claims
+    review_status: approved
+    required_permission: can_manage_platform_and_authenticated_own_human_credential
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/admin/platform/access/policy-preview
+    review_status: approved
+    required_permission: can_manage_platform_and_authenticated_own_human_credential
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/admin/platform/access/policy
+    review_status: approved
+    required_permission: can_manage_platform
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/platform/access/users
+    review_status: approved
+    required_permission: can_manage_platform
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/admin/platform/access/users
+    review_status: approved
+    required_permission: can_manage_platform
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/admin/platform/access/users/{user_id}
+    review_status: approved
+    required_permission: can_manage_platform
+  - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/admin/platform/access/users/{user_id}
+    review_status: approved
+    required_permission: can_manage_platform
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/platform/access/t0-preview
+    review_status: approved
+    required_permission: can_manage_platform
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/admin/platform/access/t0-import
+    review_status: approved
+    required_permission: can_manage_platform
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/platform/access/teams
+    review_status: approved
+    required_permission: can_manage_platform
+  - service: control-plane
+    method: PATCH
+    path: /control-plane/v1/admin/platform/access/teams/{team_id}
+    review_status: approved
+    required_permission: can_manage_platform
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/admin/platform/access/teams/{team_id}/enrollment-link
+    review_status: approved
+    required_permission: can_manage_platform_and_own_human_credential
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/platform/access/teams/{team_id}/enrollment-links
+    review_status: approved
+    required_permission: can_manage_platform
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/admin/platform/access/teams/{team_id}/enrollment-links/{link_id}/reveal
+    review_status: approved
+    required_permission: can_manage_platform_and_own_human_credential
+  - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/admin/platform/access/teams/{team_id}/enrollment-links/{link_id}
+    review_status: approved
+    required_permission: can_manage_platform
+  - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/admin/platform/access/teams/{team_id}/enrollment-links/inactive
+    review_status: approved
+    required_permission: can_manage_platform
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/platform-access/free/{token}/opening
+    review_status: approved
+    required_permission: authenticated_unsuspended_own_credential_and_valid_free_link
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/platform-access/status
+    review_status: approved
+    required_permission: authenticated_unsuspended_own_credential
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/platform-access/free/{token}
+    review_status: approved
+    required_permission: authenticated_unsuspended_own_credential_and_valid_free_link
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/platform-access/free/{token}/gcu
+    review_status: approved
+    required_permission: authenticated_unsuspended_own_credential_and_valid_free_link
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/platform-access/free/{token}/enroll
+    review_status: approved
+    required_permission: authenticated_unsuspended_own_credential_and_valid_free_link_and_cgu
   - service: control-plane
     method: GET
     path: /control-plane/v1/evaluation-campaigns

@@ -33,7 +33,12 @@ async def test_frontend_config_exposes_public_oidc_settings() -> None:
         roles_claim=["roles"],
     )
     configuration = SimpleNamespace(
-        security=SimpleNamespace(user=user, user_directory="local"),
+        security=SimpleNamespace(
+            user=user,
+            user_directory="local",
+            m2m=SimpleNamespace(enabled=True),
+            rebac=SimpleNamespace(enabled=True),
+        ),
         app=SimpleNamespace(gcu_version=None),
         platform=SimpleNamespace(frontend=SimpleNamespace(info_banner=None)),
     )
@@ -47,6 +52,9 @@ async def test_frontend_config_exposes_public_oidc_settings() -> None:
 
     payload = await build_frontend_config(cast(ProductServiceDependencies, deps))
 
+    assert payload.platform_access_enabled is True
+    assert "supportLink" not in payload.model_dump()
+
     assert payload.user_auth.model_dump() == {
         "enabled": True,
         "realm_url": "https://identity.example/tenant/v2.0",
@@ -57,3 +65,8 @@ async def test_frontend_config_exposes_public_oidc_settings() -> None:
         "uid_claim": "oid",
         "roles_claim": ["roles"],
     }
+
+    configuration.security.user.enabled = False
+    configured = await build_frontend_config(cast(ProductServiceDependencies, deps))
+    assert configured.platform_access_enabled is False
+    assert "supportLink" not in configured.model_dump()

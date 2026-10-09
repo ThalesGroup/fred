@@ -38,6 +38,209 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.lifecycleManagerInput,
       }),
     }),
+    getPlatformAccessStateControlPlaneV1AdminPlatformAccessGet: build.query<
+      GetPlatformAccessStateControlPlaneV1AdminPlatformAccessGetApiResponse,
+      GetPlatformAccessStateControlPlaneV1AdminPlatformAccessGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/access` }),
+    }),
+    setPlatformAccessFilteringControlPlaneV1AdminPlatformAccessPatch: build.mutation<
+      SetPlatformAccessFilteringControlPlaneV1AdminPlatformAccessPatchApiResponse,
+      SetPlatformAccessFilteringControlPlaneV1AdminPlatformAccessPatchApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/access`,
+        method: "PATCH",
+        body: queryArg.setPlatformFiltering,
+      }),
+    }),
+    previewPlatformAccessActivationControlPlaneV1AdminPlatformAccessActivationPreviewGet: build.query<
+      PreviewPlatformAccessActivationControlPlaneV1AdminPlatformAccessActivationPreviewGetApiResponse,
+      PreviewPlatformAccessActivationControlPlaneV1AdminPlatformAccessActivationPreviewGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/access/activation-preview` }),
+    }),
+    getPlatformAccessOwnClaimsControlPlaneV1AdminPlatformAccessOwnClaimsGet: build.query<
+      GetPlatformAccessOwnClaimsControlPlaneV1AdminPlatformAccessOwnClaimsGetApiResponse,
+      GetPlatformAccessOwnClaimsControlPlaneV1AdminPlatformAccessOwnClaimsGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/access/own-claims` }),
+    }),
+    previewPlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPreviewPost: build.mutation<
+      PreviewPlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPreviewPostApiResponse,
+      PreviewPlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPreviewPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/access/policy-preview`,
+        method: "POST",
+        body: queryArg.platformAccessPolicy,
+      }),
+    }),
+    savePlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPut: build.mutation<
+      SavePlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPutApiResponse,
+      SavePlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/access/policy`,
+        method: "PUT",
+        body: queryArg.setPlatformAccessPolicy,
+      }),
+    }),
+    listPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGet: build.query<
+      ListPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGetApiResponse,
+      ListPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/access/users`,
+        params: {
+          offset: queryArg.offset,
+          limit: queryArg.limit,
+          query: queryArg.query,
+        },
+      }),
+    }),
+    grantPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersPost: build.mutation<
+      GrantPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersPostApiResponse,
+      GrantPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/access/users`,
+        method: "POST",
+        body: queryArg.grantPlatformAccessUsers,
+      }),
+    }),
+    grantPlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdPut: build.mutation<
+      GrantPlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdPutApiResponse,
+      GrantPlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdPutApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/admin/platform/access/users/${queryArg.userId}`, method: "PUT" }),
+    }),
+    revokePlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdDelete: build.mutation<
+      RevokePlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdDeleteApiResponse,
+      RevokePlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/access/users/${queryArg.userId}`,
+        method: "DELETE",
+      }),
+    }),
+    previewPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0PreviewGet: build.query<
+      PreviewPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0PreviewGetApiResponse,
+      PreviewPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0PreviewGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/access/t0-preview` }),
+    }),
+    importPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0ImportPost: build.mutation<
+      ImportPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0ImportPostApiResponse,
+      ImportPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0ImportPostApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/access/t0-import`, method: "POST" }),
+    }),
+    listPlatformAccessTeamsControlPlaneV1AdminPlatformAccessTeamsGet: build.query<
+      ListPlatformAccessTeamsControlPlaneV1AdminPlatformAccessTeamsGetApiResponse,
+      ListPlatformAccessTeamsControlPlaneV1AdminPlatformAccessTeamsGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/access/teams` }),
+    }),
+    setPlatformAccessTeamControlPlaneV1AdminPlatformAccessTeamsTeamIdPatch: build.mutation<
+      SetPlatformAccessTeamControlPlaneV1AdminPlatformAccessTeamsTeamIdPatchApiResponse,
+      SetPlatformAccessTeamControlPlaneV1AdminPlatformAccessTeamsTeamIdPatchApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/access/teams/${queryArg.teamId}`,
+        method: "PATCH",
+        body: queryArg.setPlatformAccessTeam,
+      }),
+    }),
+    generatePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinkPost: build.mutation<
+      GeneratePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinkPostApiResponse,
+      GeneratePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinkPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/access/teams/${queryArg.teamId}/enrollment-link`,
+        method: "POST",
+        body: queryArg.createPlatformEnrollmentLink,
+      }),
+    }),
+    listPlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksGet: build.query<
+      ListPlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksGetApiResponse,
+      ListPlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/access/teams/${queryArg.teamId}/enrollment-links`,
+        params: {
+          offset: queryArg.offset,
+          limit: queryArg.limit,
+          status: queryArg.status,
+        },
+      }),
+    }),
+    deleteInactivePlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksInactiveDelete:
+      build.mutation<
+        DeleteInactivePlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksInactiveDeleteApiResponse,
+        DeleteInactivePlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksInactiveDeleteApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/control-plane/v1/admin/platform/access/teams/${queryArg.teamId}/enrollment-links/inactive`,
+          method: "DELETE",
+        }),
+      }),
+    revealPlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdRevealPost:
+      build.mutation<
+        RevealPlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdRevealPostApiResponse,
+        RevealPlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdRevealPostApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/control-plane/v1/admin/platform/access/teams/${queryArg.teamId}/enrollment-links/${queryArg.linkId}/reveal`,
+          method: "POST",
+        }),
+      }),
+    revokePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdDelete: build.mutation<
+      RevokePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdDeleteApiResponse,
+      RevokePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/access/teams/${queryArg.teamId}/enrollment-links/${queryArg.linkId}`,
+        method: "DELETE",
+      }),
+    }),
+    getPlatformAccessStatusControlPlaneV1PlatformAccessStatusGet: build.query<
+      GetPlatformAccessStatusControlPlaneV1PlatformAccessStatusGetApiResponse,
+      GetPlatformAccessStatusControlPlaneV1PlatformAccessStatusGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/platform-access/status` }),
+    }),
+    previewFreeEnrollmentControlPlaneV1PlatformAccessFreeTokenGet: build.query<
+      PreviewFreeEnrollmentControlPlaneV1PlatformAccessFreeTokenGetApiResponse,
+      PreviewFreeEnrollmentControlPlaneV1PlatformAccessFreeTokenGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/platform-access/free/${queryArg.token}` }),
+    }),
+    recordFreeEnrollmentOpeningControlPlaneV1PlatformAccessFreeTokenOpeningPost: build.mutation<
+      RecordFreeEnrollmentOpeningControlPlaneV1PlatformAccessFreeTokenOpeningPostApiResponse,
+      RecordFreeEnrollmentOpeningControlPlaneV1PlatformAccessFreeTokenOpeningPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/platform-access/free/${queryArg.token}/opening`,
+        method: "POST",
+      }),
+    }),
+    acceptFreeEnrollmentCguControlPlaneV1PlatformAccessFreeTokenGcuPost: build.mutation<
+      AcceptFreeEnrollmentCguControlPlaneV1PlatformAccessFreeTokenGcuPostApiResponse,
+      AcceptFreeEnrollmentCguControlPlaneV1PlatformAccessFreeTokenGcuPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/platform-access/free/${queryArg.token}/gcu`,
+        method: "POST",
+        body: queryArg.acceptFreeEnrollmentCgu,
+      }),
+    }),
+    enrollFreeTeamControlPlaneV1PlatformAccessFreeTokenEnrollPost: build.mutation<
+      EnrollFreeTeamControlPlaneV1PlatformAccessFreeTokenEnrollPostApiResponse,
+      EnrollFreeTeamControlPlaneV1PlatformAccessFreeTokenEnrollPostApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/platform-access/free/${queryArg.token}/enroll`, method: "POST" }),
+    }),
     listUsersControlPlaneV1UsersGet: build.query<
       ListUsersControlPlaneV1UsersGetApiResponse,
       ListUsersControlPlaneV1UsersGetApiArg
@@ -1655,6 +1858,120 @@ export type TriggerLifecycleRunOnceControlPlaneV1LifecycleRunOncePostApiResponse
 export type TriggerLifecycleRunOnceControlPlaneV1LifecycleRunOncePostApiArg = {
   lifecycleManagerInput: LifecycleManagerInput;
 };
+export type GetPlatformAccessStateControlPlaneV1AdminPlatformAccessGetApiResponse =
+  /** status 200 Successful Response */ PlatformAccessState;
+export type GetPlatformAccessStateControlPlaneV1AdminPlatformAccessGetApiArg = void;
+export type SetPlatformAccessFilteringControlPlaneV1AdminPlatformAccessPatchApiResponse =
+  /** status 200 Successful Response */ PlatformAccessState;
+export type SetPlatformAccessFilteringControlPlaneV1AdminPlatformAccessPatchApiArg = {
+  setPlatformFiltering: SetPlatformFiltering;
+};
+export type PreviewPlatformAccessActivationControlPlaneV1AdminPlatformAccessActivationPreviewGetApiResponse =
+  /** status 200 Successful Response */ PlatformAccessActivationPreview;
+export type PreviewPlatformAccessActivationControlPlaneV1AdminPlatformAccessActivationPreviewGetApiArg = void;
+export type GetPlatformAccessOwnClaimsControlPlaneV1AdminPlatformAccessOwnClaimsGetApiResponse =
+  /** status 200 Successful Response */ PlatformAccessOwnClaims;
+export type GetPlatformAccessOwnClaimsControlPlaneV1AdminPlatformAccessOwnClaimsGetApiArg = void;
+export type PreviewPlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPreviewPostApiResponse =
+  /** status 200 Successful Response */ PlatformAccessPolicyPreview;
+export type PreviewPlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPreviewPostApiArg = {
+  platformAccessPolicy: PlatformAccessPolicy;
+};
+export type SavePlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPutApiResponse =
+  /** status 200 Successful Response */ PlatformAccessState;
+export type SavePlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPutApiArg = {
+  setPlatformAccessPolicy: SetPlatformAccessPolicy;
+};
+export type ListPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGetApiResponse =
+  /** status 200 Successful Response */ PlatformAccessUsersPage;
+export type ListPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGetApiArg = {
+  offset?: number;
+  limit?: number;
+  query?: string;
+};
+export type GrantPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersPostApiResponse = unknown;
+export type GrantPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersPostApiArg = {
+  grantPlatformAccessUsers: GrantPlatformAccessUsers;
+};
+export type GrantPlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdPutApiResponse = unknown;
+export type GrantPlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdPutApiArg = {
+  userId: string;
+};
+export type RevokePlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdDeleteApiResponse = unknown;
+export type RevokePlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdDeleteApiArg = {
+  userId: string;
+};
+export type PreviewPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0PreviewGetApiResponse =
+  /** status 200 Successful Response */ PlatformT0Preview;
+export type PreviewPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0PreviewGetApiArg = void;
+export type ImportPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0ImportPostApiResponse =
+  /** status 200 Successful Response */ PlatformT0Preview;
+export type ImportPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0ImportPostApiArg = void;
+export type ListPlatformAccessTeamsControlPlaneV1AdminPlatformAccessTeamsGetApiResponse =
+  /** status 200 Successful Response */ PlatformAccessTeam[];
+export type ListPlatformAccessTeamsControlPlaneV1AdminPlatformAccessTeamsGetApiArg = void;
+export type SetPlatformAccessTeamControlPlaneV1AdminPlatformAccessTeamsTeamIdPatchApiResponse =
+  /** status 200 Successful Response */ PlatformAccessTeam;
+export type SetPlatformAccessTeamControlPlaneV1AdminPlatformAccessTeamsTeamIdPatchApiArg = {
+  teamId: string;
+  setPlatformAccessTeam: SetPlatformAccessTeam;
+};
+export type GeneratePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinkPostApiResponse =
+  /** status 200 Successful Response */ PlatformEnrollmentLink;
+export type GeneratePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinkPostApiArg = {
+  teamId: string;
+  createPlatformEnrollmentLink: CreatePlatformEnrollmentLink;
+};
+export type ListPlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksGetApiResponse =
+  /** status 200 Successful Response */ PlatformEnrollmentLinksPage;
+export type ListPlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksGetApiArg = {
+  teamId: string;
+  offset?: number;
+  limit?: number;
+  status?: ("active" | "suspended" | "expired" | "revoked") | null;
+};
+export type DeleteInactivePlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksInactiveDeleteApiResponse =
+  /** status 200 Successful Response */ DeletedPlatformEnrollmentLinks;
+export type DeleteInactivePlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksInactiveDeleteApiArg =
+  {
+    teamId: string;
+  };
+export type RevealPlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdRevealPostApiResponse =
+  /** status 200 Successful Response */ PlatformEnrollmentLink;
+export type RevealPlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdRevealPostApiArg =
+  {
+    teamId: string;
+    linkId: string;
+  };
+export type RevokePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdDeleteApiResponse =
+  unknown;
+export type RevokePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdDeleteApiArg =
+  {
+    teamId: string;
+    linkId: string;
+  };
+export type GetPlatformAccessStatusControlPlaneV1PlatformAccessStatusGetApiResponse =
+  /** status 200 Successful Response */ PlatformAccessStatus;
+export type GetPlatformAccessStatusControlPlaneV1PlatformAccessStatusGetApiArg = void;
+export type PreviewFreeEnrollmentControlPlaneV1PlatformAccessFreeTokenGetApiResponse =
+  /** status 200 Successful Response */ FreeEnrollmentPreview;
+export type PreviewFreeEnrollmentControlPlaneV1PlatformAccessFreeTokenGetApiArg = {
+  token: string;
+};
+export type RecordFreeEnrollmentOpeningControlPlaneV1PlatformAccessFreeTokenOpeningPostApiResponse = unknown;
+export type RecordFreeEnrollmentOpeningControlPlaneV1PlatformAccessFreeTokenOpeningPostApiArg = {
+  token: string;
+};
+export type AcceptFreeEnrollmentCguControlPlaneV1PlatformAccessFreeTokenGcuPostApiResponse = unknown;
+export type AcceptFreeEnrollmentCguControlPlaneV1PlatformAccessFreeTokenGcuPostApiArg = {
+  token: string;
+  acceptFreeEnrollmentCgu: AcceptFreeEnrollmentCgu;
+};
+export type EnrollFreeTeamControlPlaneV1PlatformAccessFreeTokenEnrollPostApiResponse =
+  /** status 200 Successful Response */ PlatformAccessStatus;
+export type EnrollFreeTeamControlPlaneV1PlatformAccessFreeTokenEnrollPostApiArg = {
+  token: string;
+};
 export type ListUsersControlPlaneV1UsersGetApiResponse = /** status 200 Successful Response */ UserSummary[];
 export type ListUsersControlPlaneV1UsersGetApiArg = void;
 export type CreateUserControlPlaneV1UsersPostApiResponse = /** status 201 Successful Response */ UserSummary;
@@ -2778,6 +3095,136 @@ export type LifecycleManagerInput = {
   dry_run?: boolean;
   batch_size?: number;
 };
+export type PlatformAccessCondition = {
+  claim: string[];
+  operator: "equals" | "not_equals" | "contains" | "not_contains" | "regex";
+  value: string;
+  case_sensitive?: boolean;
+};
+export type PlatformAccessPolicy = {
+  mode?: "allow" | "block";
+  combination?: "all" | "any";
+  conditions: PlatformAccessCondition[];
+};
+export type PlatformAccessState = {
+  filtering_enabled: boolean;
+  t0_completed_at: string | null;
+  policy: PlatformAccessPolicy | null;
+  revision: number;
+  has_admission_sources: boolean;
+};
+export type SetPlatformFiltering = {
+  filtering_enabled: boolean;
+  expected_revision?: number | null;
+};
+export type AdmissionSource = {
+  kind: "attribute" | "manual" | "t0" | "team" | "free";
+  team_id?: string | null;
+  team_name?: string | null;
+  granted_by?: string | null;
+  granted_at?: string | null;
+};
+export type PlatformAccessActivationUser = {
+  user_id: string;
+  username: string | null;
+  email: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  sources: AdmissionSource[];
+  outcome: "allowed" | "blocked" | "unknown";
+};
+export type PlatformAccessActivationPreview = {
+  users: PlatformAccessActivationUser[];
+  allowed: number;
+  blocked: number;
+  unknown: number;
+  revision: number;
+  checked_at: string;
+};
+export type JsonValue = any;
+export type PlatformAccessOwnClaims = {
+  claims: {
+    [key: string]: JsonValue;
+  };
+  selectable_paths: string[][];
+  truncated: boolean;
+};
+export type PlatformAccessPolicyPreview = {
+  matched: boolean;
+  admitted: boolean;
+  conditions: ("matched" | "not_matching" | "missing" | "incompatible" | "timeout" | "unavailable")[];
+};
+export type SetPlatformAccessPolicy = {
+  expected_revision: number;
+  policy: PlatformAccessPolicy;
+};
+export type PlatformAccessUser = {
+  user_id: string;
+  username: string | null;
+  email: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  sources: AdmissionSource[];
+};
+export type PlatformAccessUsersPage = {
+  items: PlatformAccessUser[];
+  total: number;
+};
+export type GrantPlatformAccessUsers = {
+  user_ids: string[];
+};
+export type PlatformT0Preview = {
+  candidates: number;
+  matching: number;
+  completed_at: string | null;
+};
+export type PlatformAccessTeam = {
+  team_id: string;
+  name: string | null;
+  allowed: boolean;
+  free: boolean;
+};
+export type SetPlatformAccessTeam = {
+  allowed: boolean;
+  free: boolean;
+};
+export type PlatformEnrollmentLink = {
+  token: string;
+};
+export type CreatePlatformEnrollmentLink = {
+  note?: string | null;
+  expires_at?: string | null;
+};
+export type PlatformEnrollmentLinkInfo = {
+  id: string;
+  note: string | null;
+  created_at: string;
+  expires_at: string | null;
+  revoked_at: string | null;
+  status: "active" | "suspended" | "expired" | "revoked";
+  opening_count: number;
+  last_opened_at: string | null;
+  recoverable: boolean;
+};
+export type PlatformEnrollmentLinksPage = {
+  items: PlatformEnrollmentLinkInfo[];
+  total: number;
+  inactive_count: number;
+};
+export type DeletedPlatformEnrollmentLinks = {
+  deleted_count: number;
+};
+export type PlatformAccessStatus = {
+  admitted: boolean;
+  cgu_required: boolean;
+};
+export type FreeEnrollmentPreview = {
+  team_name: string;
+  cgu_required: boolean;
+};
+export type AcceptFreeEnrollmentCgu = {
+  version: string;
+};
 export type UserSummary = {
   id: string;
   first_name?: string | null;
@@ -2998,6 +3445,7 @@ export type FrontendUiThemes = {
   hidden_themes?: string[];
 };
 export type FrontendConfig = {
+  platform_access_enabled?: boolean;
   user_auth: FrontendUserAuthConfig;
   gcu_version?: string | null;
   /** Whether POST /bootstrap/platform-admin (AUTHZ-07) has ever succeeded on this deployment. True once the durable PlatformBootstrapStore marker is set, permanently — never re-derived from live OpenFGA state, so removing every platform_admin relation later does not flip this back to False (same rationale as BootstrapAlreadyCompletedError). Not sensitive: it reveals only 'has anyone ever bootstrapped this instance', never who, never the secret, never any identity — safe on this public/unauthenticated surface, same as gcu_version. */
@@ -4464,6 +4912,39 @@ export const {
   useLazyGetPurgePolicySummaryControlPlaneV1PoliciesPurgeGetQuery,
   useResolvePurgeControlPlaneV1PoliciesPurgeResolvePostMutation,
   useTriggerLifecycleRunOnceControlPlaneV1LifecycleRunOncePostMutation,
+  useGetPlatformAccessStateControlPlaneV1AdminPlatformAccessGetQuery,
+  useLazyGetPlatformAccessStateControlPlaneV1AdminPlatformAccessGetQuery,
+  useSetPlatformAccessFilteringControlPlaneV1AdminPlatformAccessPatchMutation,
+  usePreviewPlatformAccessActivationControlPlaneV1AdminPlatformAccessActivationPreviewGetQuery,
+  useLazyPreviewPlatformAccessActivationControlPlaneV1AdminPlatformAccessActivationPreviewGetQuery,
+  useGetPlatformAccessOwnClaimsControlPlaneV1AdminPlatformAccessOwnClaimsGetQuery,
+  useLazyGetPlatformAccessOwnClaimsControlPlaneV1AdminPlatformAccessOwnClaimsGetQuery,
+  usePreviewPlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPreviewPostMutation,
+  useSavePlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPutMutation,
+  useListPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGetQuery,
+  useLazyListPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGetQuery,
+  useGrantPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersPostMutation,
+  useGrantPlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdPutMutation,
+  useRevokePlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdDeleteMutation,
+  usePreviewPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0PreviewGetQuery,
+  useLazyPreviewPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0PreviewGetQuery,
+  useImportPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0ImportPostMutation,
+  useListPlatformAccessTeamsControlPlaneV1AdminPlatformAccessTeamsGetQuery,
+  useLazyListPlatformAccessTeamsControlPlaneV1AdminPlatformAccessTeamsGetQuery,
+  useSetPlatformAccessTeamControlPlaneV1AdminPlatformAccessTeamsTeamIdPatchMutation,
+  useGeneratePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinkPostMutation,
+  useListPlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksGetQuery,
+  useLazyListPlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksGetQuery,
+  useDeleteInactivePlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksInactiveDeleteMutation,
+  useRevealPlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdRevealPostMutation,
+  useRevokePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdDeleteMutation,
+  useGetPlatformAccessStatusControlPlaneV1PlatformAccessStatusGetQuery,
+  useLazyGetPlatformAccessStatusControlPlaneV1PlatformAccessStatusGetQuery,
+  usePreviewFreeEnrollmentControlPlaneV1PlatformAccessFreeTokenGetQuery,
+  useLazyPreviewFreeEnrollmentControlPlaneV1PlatformAccessFreeTokenGetQuery,
+  useRecordFreeEnrollmentOpeningControlPlaneV1PlatformAccessFreeTokenOpeningPostMutation,
+  useAcceptFreeEnrollmentCguControlPlaneV1PlatformAccessFreeTokenGcuPostMutation,
+  useEnrollFreeTeamControlPlaneV1PlatformAccessFreeTokenEnrollPostMutation,
   useListUsersControlPlaneV1UsersGetQuery,
   useLazyListUsersControlPlaneV1UsersGetQuery,
   useCreateUserControlPlaneV1UsersPostMutation,

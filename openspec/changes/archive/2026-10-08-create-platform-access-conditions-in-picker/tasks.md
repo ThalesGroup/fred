@@ -1,0 +1,18 @@
+## 1. Picker-first editing
+
+- [x] 1.1 Start null policies with an empty local draft, load saved conditions unchanged, allow local final-condition removal and keep empty Test/Save disabled; verify empty/saved drafts and unchanged persistence.
+- [x] 1.2 Open the existing own-session JSON modal directly for add/edit, append only after confirmation, replace field dropdowns with exact-path text/edit actions and retain the optional value prompt; verify cancellation, field bounds, nested paths and background revision races.
+- [x] 1.3 Move the explicit save-rule action near the title and add localized unsaved/saving/saved feedback and persistence guidance; verify successful saves, failed/conflicting saves, busy guards and preview without saving.
+- [x] 1.4 Reuse the home navigation control for four accessible panels, preserve draft/selection across navigation, summarize filtering in the last view while its reviewed activation action remains available across tabs and standardize page/modal typography with concise help; verify keyboard navigation, state retention, real-account rendering and focused regressions.
+
+- [x] 1.5 Remove shared observed-claim collection, API, table and consumers; regenerate the client, retain selected evidence, and verify own-only authorization and JSON-only scrolling by keyboard and real browser.
+
+## 2. Verification and delivery
+
+- [x] 2.1 Validate real-account desktop/narrow journeys with actual local services before broad tests, capture safe screenshots and run focused editor/picker/page regressions.
+- [x] 2.2 Update existing UX/operator docs, run root quality once for the series and obtain author/independent read-only branch review; resolve supported findings and record coverage/exclusions in the existing tasks and PR #2966.
+- [x] 2.3 Commit this UI refinement separately, record safe screenshots and synchronize/archive verified capability requirements.
+
+Presentation verification: root `make code-quality` passed after correcting CSS property order. 36 focused page/editor/link tests passed. Real-account Playwright confirmed four tabs, one exposed panel, keyboard End/Home navigation, preserved draft and selection, and zero admission writes while navigating. The 418 px content view fits without horizontal page overflow. Ordinary text computes to 16 px and section headings to 22 px; real picker and invitation dialogs also compute to 16 px. Safe desktop/narrow rule screenshots contain only a generic unsaved operand. An independent read-only review of the delta against 679cd54e105443226e89427351e08a70bcffd2ad found no actionable issues; backend/SQL and pending picker/link/dry-run work were excluded.
+
+Final local verification: root `make code-quality` passes across all modules. Fifty-eight focused frontend tests, seventy shared admission tests and fifty-four control-plane tests with PostgreSQL pass; the population projection typing correction passes its three targeted regressions. The packed UI consumer and full browser smoke pass, including the shared Dialog child-scroll contract. Fresh migration upgrade/downgrade/upgrade and Alembic schema check pass. Generated clients were produced through the existing OpenAPI/RTK toolchain; intermediate clients preserve coherent separate commits. Independent full branch review covered base `05a773919` and head `2ce04bf27` plus all working implementation, contracts and safe screenshots. Its incorrect route/error wording finding was corrected and replayed; no supported production findings remain. Author review covers the same full scope plus final typing correction. Production load, private overlays and external SDK deployments remain excluded. Final GitHub CI/mergeability and bot discussions remain tracked in PR #2966.

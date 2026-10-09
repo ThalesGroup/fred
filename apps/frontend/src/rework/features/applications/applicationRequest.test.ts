@@ -13,6 +13,8 @@
 // limitations under the License.
 
 import { describe, expect, it, vi } from "vitest";
+const admission = vi.hoisted(() => ({ handle: vi.fn(async (_response: Response) => undefined) }));
+vi.mock("../../../common/platformAccess", () => ({ handlePlatformAccessResponse: admission.handle }));
 import { createApplicationRequest } from "./applicationRequest.ts";
 
 function dependencies(responses: Response[]) {
@@ -127,4 +129,18 @@ describe("createApplicationRequest", () => {
     expect(result).toBe(streaming);
     expect(new Uint8Array(await result.arrayBuffer())).toEqual(new Uint8Array([7]));
   });
+});
+
+it("checks exact admission responses on the original request and after refresh", async () => {
+  admission.handle.mockClear();
+  const denied = new Response(JSON.stringify({ detail: "platform_access_denied" }), { status: 403 });
+  const first = dependencies([denied]);
+  expect(await createApplicationRequest("sample", "team", first)("resource")).toBe(denied);
+  expect(admission.handle).toHaveBeenLastCalledWith(denied);
+  admission.handle.mockClear();
+  const unauthorized = new Response(null, { status: 401 });
+  const retry = dependencies([unauthorized, denied]);
+  expect(await createApplicationRequest("sample", "team", retry)("resource")).toBe(denied);
+  expect(admission.handle.mock.calls.map((call) => call[0])).toEqual([unauthorized, denied]);
+  expect(retry.logout).not.toHaveBeenCalled();
 });

@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import { useNavigate } from "react-router-dom";
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button.tsx";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
@@ -21,22 +22,30 @@ import styles from "./PageError.module.css";
 interface PageErrorProps {
   title?: string;
   message?: string;
+  actions?: ReactNode;
 }
 
-export const PageError = ({ title = "Page Not Found", message = "Resource not found" }: PageErrorProps) => {
+function DefaultErrorAction() {
   const navigate = useNavigate();
   const { t } = useTranslation();
-
   return (
-    <div className={styles.page}>
+    <Button color="primary" variant="outlined" size="medium" onClick={() => navigate("/")}>
+      {t("pageError.message")}
+    </Button>
+  );
+}
+
+export const PageError = ({ title = "Page Not Found", message = "Resource not found", actions }: PageErrorProps) => {
+  return (
+    <div className={styles.page} role="region" aria-label={title}>
       <span className={styles.icon}>
         <Icon category="outlined" type="error" filled />
       </span>
-      <span className={styles.title}>{title}</span>
-      <span className={styles.message}>{message}</span>
-      <Button color="primary" variant="outlined" size="medium" onClick={() => navigate("/")}>
-        {t("pageError.message")}
-      </Button>
+      <h1 className={styles.title}>{title}</h1>
+      <span className={styles.message} role="alert">
+        {message}
+      </span>
+      {actions ?? <DefaultErrorAction />}
     </div>
   );
 };

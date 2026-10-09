@@ -366,3 +366,32 @@ async def test_base_class_fallback_materializes_contextual_relations_once() -> N
 
     assert len(engine.seen) == 3
     assert all(seen == (contextual_relation,) for seen in engine.seen)
+
+
+@pytest.mark.asyncio
+async def test_admission_memberships_check_all_targets_in_bounded_consistent_batches():
+    client = _FakeBatchCheckClient()
+    engine = _make_engine(client)
+    teams = [f"team-{index}" for index in range(101)]
+    assert await engine.has_team_memberships("person", teams) == [True] * 101
+    assert [len(body.checks) for body, _ in client.calls] == [50, 50, 1]
+    checks = [item for body, _ in client.calls for item in body.checks]
+    assert [item.object for item in checks] == [f"team:{team}" for team in teams]
+    assert all(
+        item.user == "user:person" and item.relation == "team_member" for item in checks
+    )
+    assert all(
+        options["consistency"] == engine.HIGHER_CONSISTENCY
+        for _, options in client.calls
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "results",
+    [[], [_SingleResult(True, "wrong")], [_SingleResult(True, "0", "unavailable")]],
+)
+async def test_admission_membership_incomplete_or_failed_batch_is_unavailable(results):
+    client = _FakeBatchCheckClient(results)
+    with pytest.raises(RuntimeError, match="membership batch response"):
+        await _make_engine(client).has_team_memberships("person", ["demo"])

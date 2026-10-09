@@ -24,6 +24,7 @@
 // key, so a re-fill (new version) re-fetches instead of showing a browser-cached
 // stale deck. The object URL is revoked on cleanup so blobs never leak.
 
+import { handlePlatformAccessResponse } from "../../../../common/platformAccess";
 import { useCallback, useEffect, useState } from "react";
 import { KeyCloakService } from "../../../../security/KeycloakService";
 import type { PptPreviewPartData } from "./types";
@@ -76,6 +77,7 @@ export function usePptPreview(preview: PptPreviewPartData | null): UsePptPreview
         const res = await fetch(withVersion(downloadUrl, version), {
           headers: { Authorization: `Bearer ${KeyCloakService.GetToken() ?? ""}` },
         });
+        await handlePlatformAccessResponse(res);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const blob = await res.blob();
         if (cancelled) return;

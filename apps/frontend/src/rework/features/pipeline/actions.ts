@@ -1,3 +1,4 @@
+import { handlePlatformAccessResponse } from "../../../common/platformAccess";
 // Copyright Thales 2026
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -93,6 +94,7 @@ export async function awaitIngestion(taskId: string, signal: AbortSignal): Promi
     headers: { Authorization: `Bearer ${await bearer()}`, Accept: "text/event-stream" },
     signal,
   });
+  await handlePlatformAccessResponse(response);
   if (!response.ok || !response.body) throw new Error(`ingestion task ${taskId}: HTTP ${response.status}`);
   for await (const event of parseSseFrames(response.body)) {
     const state = event.state;
@@ -157,6 +159,7 @@ export async function streamAgentTurn(
     body: JSON.stringify(body),
     signal: args.signal,
   });
+  await handlePlatformAccessResponse(response);
   if (!response.ok) throw new AgentTurnRejectedError(response.status);
   if (!response.body) throw new AgentTurnExecutionError({});
 

@@ -71,7 +71,11 @@ const typedIconButton: IconButtonProps = {
   icon: { type: "add" },
   "aria-label": "Add item",
 };
-const typedInput: TextInputProps = { label: "Project name", maxLength: 12 };
+const typedInput: TextInputProps = {
+  label: "Project name",
+  maxLength: 12,
+  showCharacterCount: true,
+};
 const typedSpinner: SpinnerProps = { statusText: "Saving package" };
 const typedCheckbox: CheckboxProps = { "aria-label": "Accept terms" };
 const typedChip: ChipProps = { label: "Draft", tone: "default" };
@@ -94,6 +98,7 @@ function App() {
   const [clicks, setClicks] = useState(0);
   const [name, setName] = useState("Fred");
   const [resetCount, setResetCount] = useState(0);
+  const [childDialogOpen, setChildDialogOpen] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selection, setSelection] = useState<string | undefined>(undefined);
   const [dialogSelection, setDialogSelection] = useState<string | undefined>(
@@ -255,6 +260,31 @@ function App() {
             <Tooltip text="Inside dialog">
               <button type="button">Dialog hint</button>
             </Tooltip>
+          </Dialog>
+          <button type="button" onClick={() => setChildDialogOpen(true)}>
+            Open region dialog
+          </button>
+          <Dialog
+            open={childDialogOpen}
+            title="Scroll a region"
+            confirmLabel="Done"
+            scrollMode="children"
+            onConfirm={() => setChildDialogOpen(false)}
+            onCancel={() => setChildDialogOpen(false)}
+          >
+            <div className="region-dialog-body">
+              <p>Fixed context</p>
+              <div
+                role="region"
+                aria-label="Long text"
+                tabIndex={0}
+                className="region-dialog-scroll"
+              >
+                {Array.from({ length: 80 }, (_, index) => (
+                  <p key={index}>Text line {index + 1}</p>
+                ))}
+              </div>
+            </div>
           </Dialog>
         </section>
       </section>

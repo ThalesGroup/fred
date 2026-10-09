@@ -22,6 +22,7 @@
 // the ppt_filler `downloadAuthed` pattern. The FORMAT type is still imported from
 // the generated client; only the transport is hand-written.
 
+import { handlePlatformAccessResponse } from "../../../../common/platformAccess";
 import { KeyCloakService } from "../../../../security/KeycloakService";
 import type { WritableDocumentExportFormat } from "./api/writableDocumentCapabilityOpenApi";
 import { sanitizeFilename } from "./writableDocumentUtils";
@@ -49,6 +50,7 @@ export async function downloadWritableDocument(params: {
     cache: "no-store",
     headers: { Authorization: `Bearer ${KeyCloakService.GetToken() ?? ""}` },
   });
+  await handlePlatformAccessResponse(res);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
   const blob = await res.blob();

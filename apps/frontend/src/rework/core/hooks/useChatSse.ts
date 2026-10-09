@@ -1,3 +1,4 @@
+import { handlePlatformAccessResponse } from "../../../common/platformAccess";
 // Copyright Thales 2026
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -213,6 +214,7 @@ function recordValue(value: unknown): Record<string, unknown> | undefined {
 }
 
 async function runtimeHttpError(response: Response): Promise<RuntimeHttpError> {
+  await handlePlatformAccessResponse(response);
   let body: unknown;
   try {
     body = await response.json();

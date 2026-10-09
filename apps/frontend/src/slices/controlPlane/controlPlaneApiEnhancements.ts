@@ -62,9 +62,48 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     "ControlPlanePlatformRole",
     "ControlPlaneTeamWiki",
     "ControlPlaneKnowledgeBase",
+    "PlatformAccess",
+    "PlatformAccessLinks",
     "ControlPlaneAnnouncement",
   ],
   endpoints: {
+    validateGcuControlPlaneV1GcuPost: { invalidatesTags: ["PlatformAccess"] },
+    getPlatformAccessStateControlPlaneV1AdminPlatformAccessGet: { providesTags: ["PlatformAccess"] },
+    getPlatformAccessOwnClaimsControlPlaneV1AdminPlatformAccessOwnClaimsGet: { keepUnusedDataFor: 0 },
+    savePlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPut: { invalidatesTags: ["PlatformAccess"] },
+    listPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGet: { providesTags: ["PlatformAccess"] },
+    previewPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0PreviewGet: { providesTags: ["PlatformAccess"] },
+    listPlatformAccessTeamsControlPlaneV1AdminPlatformAccessTeamsGet: { providesTags: ["PlatformAccess"] },
+    getPlatformAccessStatusControlPlaneV1PlatformAccessStatusGet: { providesTags: ["PlatformAccess"] },
+    previewFreeEnrollmentControlPlaneV1PlatformAccessFreeTokenGet: { providesTags: ["PlatformAccess"] },
+    setPlatformAccessFilteringControlPlaneV1AdminPlatformAccessPatch: { invalidatesTags: ["PlatformAccess"] },
+    grantPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersPost: { invalidatesTags: ["PlatformAccess"] },
+    grantPlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdPut: { invalidatesTags: ["PlatformAccess"] },
+    revokePlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdDelete: { invalidatesTags: ["PlatformAccess"] },
+    importPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0ImportPost: { invalidatesTags: ["PlatformAccess"] },
+    setPlatformAccessTeamControlPlaneV1AdminPlatformAccessTeamsTeamIdPatch: {
+      invalidatesTags: ["PlatformAccess", "PlatformAccessLinks"],
+    },
+    generatePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinkPost: {
+      invalidatesTags: ["PlatformAccessLinks"],
+    },
+    listPlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksGet: {
+      providesTags: (_result, _error, arg) => [{ type: "PlatformAccessLinks", id: arg.teamId }],
+    },
+    deleteInactivePlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksInactiveDelete: {
+      invalidatesTags: (_result, _error, arg) => [{ type: "PlatformAccessLinks", id: arg.teamId }],
+    },
+    revokePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdDelete: {
+      invalidatesTags: ["PlatformAccessLinks"],
+    },
+    recordFreeEnrollmentOpeningControlPlaneV1PlatformAccessFreeTokenOpeningPost: {
+      invalidatesTags: ["PlatformAccessLinks"],
+    },
+    acceptFreeEnrollmentCguControlPlaneV1PlatformAccessFreeTokenGcuPost: { invalidatesTags: ["PlatformAccess"] },
+    enrollFreeTeamControlPlaneV1PlatformAccessFreeTokenEnrollPost: {
+      invalidatesTags: ["PlatformAccess", "ControlPlaneTeam", "ControlPlaneTeamMember"],
+    },
+
     // Platform announcements. Both reads share one LIST tag: an admin mutation
     // must refresh the admin table AND the banner stack behind it, since the
     // admin is looking at the same app the banner renders in.
@@ -348,7 +387,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
       providesTags: (_, __, arg) => [{ type: "ControlPlaneTeam", id: arg.teamId }],
     },
     createTeamControlPlaneV1TeamsPost: {
-      invalidatesTags: [{ type: "ControlPlaneTeam", id: "LIST" }],
+      invalidatesTags: [{ type: "ControlPlaneTeam", id: "LIST" }, "PlatformAccess"],
     },
     // Platform-wide default teams for new users: replaced as a whole, one LIST tag.
     getDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsGet: {
@@ -370,6 +409,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     // refresh with the caller now a member.
     joinTeamControlPlaneV1TeamsTeamIdJoinPost: {
       invalidatesTags: (_, __, arg) => [
+        "PlatformAccess",
         { type: "ControlPlaneTeam", id: arg.teamId },
         { type: "ControlPlaneTeam", id: "LIST" },
       ],
@@ -404,12 +444,14 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     },
     addTeamMemberControlPlaneV1TeamsTeamIdMembersPost: {
       invalidatesTags: (_, __, arg) => [
+        "PlatformAccess",
         { type: "ControlPlaneTeamMember", id: `LIST-${arg.teamId}` },
         { type: "ControlPlaneTeam", id: arg.teamId },
       ],
     },
     grantTeamMemberRoleControlPlaneV1TeamsTeamIdMembersUserIdRolesPost: {
       invalidatesTags: (_, __, arg) => [
+        "PlatformAccess",
         { type: "ControlPlaneTeamMember", id: `${arg.teamId}-${arg.userId}` },
         { type: "ControlPlaneTeamMember", id: `LIST-${arg.teamId}` },
         { type: "ControlPlaneTeam", id: arg.teamId },
@@ -417,6 +459,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     },
     revokeTeamMemberRoleControlPlaneV1TeamsTeamIdMembersUserIdRolesRelationDelete: {
       invalidatesTags: (_, __, arg) => [
+        "PlatformAccess",
         { type: "ControlPlaneTeamMember", id: `${arg.teamId}-${arg.userId}` },
         { type: "ControlPlaneTeamMember", id: `LIST-${arg.teamId}` },
         { type: "ControlPlaneTeam", id: arg.teamId },
@@ -424,6 +467,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     },
     removeTeamMemberControlPlaneV1TeamsTeamIdMembersUserIdDelete: {
       invalidatesTags: (_, __, arg) => [
+        "PlatformAccess",
         { type: "ControlPlaneTeamMember", id: `${arg.teamId}-${arg.userId}` },
         { type: "ControlPlaneTeamMember", id: `LIST-${arg.teamId}` },
         { type: "ControlPlaneTeam", id: arg.teamId },
@@ -827,4 +871,36 @@ export const {
   // Team administrator charter acceptance.
   useAcceptTeamAdminCharterControlPlaneV1TeamAdminCharterPostMutation: useAcceptTeamAdminCharterMutation,
   useGetTeamAdminCharterAcceptanceControlPlaneV1TeamAdminCharterGetQuery: useGetTeamAdminCharterAcceptanceQuery,
+  useGetPlatformAccessStateControlPlaneV1AdminPlatformAccessGetQuery: usePlatformAccessStateQuery,
+  useListPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGetQuery: usePlatformAccessUsersQuery,
+  usePreviewPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0PreviewGetQuery: usePlatformAccessT0Query,
+  useListPlatformAccessTeamsControlPlaneV1AdminPlatformAccessTeamsGetQuery: usePlatformAccessTeamsQuery,
+  useGetPlatformAccessStatusControlPlaneV1PlatformAccessStatusGetQuery: usePlatformAccessStatusQuery,
+  useLazyGetPlatformAccessStatusControlPlaneV1PlatformAccessStatusGetQuery: useLazyPlatformAccessStatusQuery,
+  usePreviewFreeEnrollmentControlPlaneV1PlatformAccessFreeTokenGetQuery: useFreeEnrollmentPreviewQuery,
+  useSetPlatformAccessFilteringControlPlaneV1AdminPlatformAccessPatchMutation: useSetPlatformFilteringMutation,
+  useGrantPlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdPutMutation: useGrantPlatformUserMutation,
+  useGrantPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersPostMutation: useGrantPlatformUsersMutation,
+  useRevokePlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdDeleteMutation: useRevokePlatformUserMutation,
+  useImportPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0ImportPostMutation: useImportPlatformT0Mutation,
+  useSetPlatformAccessTeamControlPlaneV1AdminPlatformAccessTeamsTeamIdPatchMutation: useSetPlatformTeamMutation,
+  useGeneratePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinkPostMutation:
+    useGeneratePlatformLinkMutation,
+  useAcceptFreeEnrollmentCguControlPlaneV1PlatformAccessFreeTokenGcuPostMutation: useAcceptFreeCguMutation,
+  useEnrollFreeTeamControlPlaneV1PlatformAccessFreeTokenEnrollPostMutation: useEnrollFreeTeamMutation,
+  usePreviewPlatformAccessActivationControlPlaneV1AdminPlatformAccessActivationPreviewGetQuery:
+    usePlatformAccessActivationPreviewQuery,
+  useGetPlatformAccessOwnClaimsControlPlaneV1AdminPlatformAccessOwnClaimsGetQuery: usePlatformAccessOwnClaimsQuery,
+  usePreviewPlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPreviewPostMutation:
+    usePreviewPlatformPolicyMutation,
+  useSavePlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPutMutation: useSavePlatformPolicyMutation,
+  useListPlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksGetQuery:
+    usePlatformEnrollmentLinksQuery,
+  useRevealPlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdRevealPostMutation:
+    useRevealPlatformLinkMutation,
+  useRevokePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdDeleteMutation:
+    useRevokePlatformLinkMutation,
+  useDeleteInactivePlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksInactiveDeleteMutation:
+    useDeleteInactivePlatformLinksMutation,
+  useRecordFreeEnrollmentOpeningControlPlaneV1PlatformAccessFreeTokenOpeningPostMutation: useRecordFreeOpeningMutation,
 } = enhancedControlPlaneApi;

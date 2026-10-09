@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { handlePlatformAccessResponse } from "../common/platformAccess";
 import JSZip from "jszip";
 import { KeyCloakService } from "../security/KeycloakService";
 
@@ -41,6 +42,7 @@ export const fetchAuthedBlob = async (url: string): Promise<Blob> => {
   const response = await fetch(url, {
     headers: { Authorization: `Bearer ${KeyCloakService.GetToken() ?? ""}` },
   });
+  await handlePlatformAccessResponse(response);
   if (!response.ok) {
     throw new Error(`Download failed (${response.status})`);
   }

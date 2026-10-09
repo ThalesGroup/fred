@@ -99,7 +99,12 @@ export class OidcBrowserSession {
         return;
       }
       this.user = user;
-      window.history.replaceState({}, "", user.url_state ?? this.redirectUri);
+      const requestedPath = user.url_state ?? user.state;
+      const returnPath =
+        typeof requestedPath === "string" && requestedPath.startsWith("/") && !requestedPath.startsWith("//")
+          ? requestedPath
+          : this.redirectUri;
+      window.history.replaceState({}, "", returnPath);
     } else if (query.has("state")) {
       await this.manager.signoutRedirectCallback();
       window.history.replaceState({}, "", this.redirectUri);
@@ -115,9 +120,9 @@ export class OidcBrowserSession {
       onAuthenticated();
       return;
     }
-    // redirect_uri is the site root; carry the requested page through the provider round trip.
+    // Keep return routes in local OIDC state so invitation tokens never reach the provider.
     const { pathname, search, hash } = window.location;
-    await this.manager.signinRedirect({ url_state: pathname + search + hash });
+    await this.manager.signinRedirect({ state: pathname + search + hash });
   }
 
   async logout(): Promise<void> {

@@ -14,7 +14,18 @@
 
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, Index, String, Text, Uuid, text
+from sqlalchemy import (
+    JSON,
+    BigInteger,
+    Boolean,
+    DateTime,
+    Float,
+    Index,
+    String,
+    Text,
+    Uuid,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from fred_core.models import Base
@@ -34,6 +45,14 @@ class UserRow(Base):
     last_name: Mapped[str | None] = mapped_column(String, nullable=True)
     last_seen_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
+    )
+    admission_attribute: Mapped[dict[str, str | list[str] | None] | None] = (
+        mapped_column(JSON, nullable=True)
+    )
+    admission_issued_at: Mapped[float | None] = mapped_column(Float, nullable=True)
+    admission_expires_at: Mapped[float | None] = mapped_column(Float, nullable=True)
+    admission_conflicted: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
     )
     gcuVersionAccepted: Mapped[str | None] = mapped_column(Text(), nullable=True)
     gcuAcceptedAt: Mapped[datetime | None] = mapped_column(

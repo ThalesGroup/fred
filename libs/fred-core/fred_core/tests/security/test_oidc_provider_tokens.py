@@ -172,3 +172,54 @@ def test_entra_shaped_token_uses_api_audience_oid_and_flat_app_roles(
     with pytest.raises(HTTPException) as exc:
         oidc.decode_jwt(sign(ISSUER, "fred-ui", **claims))
     assert exc.value.status_code == 401
+
+
+def test_selected_admission_attribute_is_signature_verified_and_hidden(
+    signed_tokens, monkeypatch
+):
+    from fred_core.security.platform_access import access_control
+
+    sign, _ = signed_tokens
+    monkeypatch.setattr(access_control, "_available", True)
+    oidc.initialize_user_security(
+        UserSecurity(realm_url=AnyUrl(REALM), client_id="app")
+    )
+    oidc._REALM_ISSUERS = frozenset({REALM})
+    token = sign(REALM, "app", sub=PERSON_ID, profile={"unit": ["other", "accepted"]})
+    user = oidc.decode_jwt(token)
+    assert oidc.decode_jwt(token) is user
+    from fred_core.security.platform_access.rules import path_key
+
+    assert user.admission_claims[path_key(["profile", "unit"])] == ["other", "accepted"]
+    assert user.admission_issued_at is not None
+    assert user.admission_expires_at is not None
+    assert user.admission_expires_at > user.admission_issued_at
+    assert "admission_claims" not in user.model_dump()
+    assert "accepted" not in repr(user)
+
+
+@pytest.mark.parametrize(
+    "claims",
+    [
+        {
+            "preferred_username": "service-account-backend",
+            "azp": "backend",
+            "client_id": "backend",
+        },
+        {"resource_access": {"app": {"roles": ["service_agent"]}}},
+    ],
+)
+def test_workload_claims_are_not_retained(signed_tokens, monkeypatch, claims):
+    from fred_core.security.platform_access import access_control
+
+    sign, _ = signed_tokens
+    monkeypatch.setattr(access_control, "_available", True)
+    oidc.initialize_user_security(
+        UserSecurity(realm_url=AnyUrl(REALM), client_id="app")
+    )
+    oidc._REALM_ISSUERS = frozenset({REALM})
+    user = oidc.decode_jwt(
+        sign(REALM, "app", sub=PERSON_ID, profile={"unit": "private"}, **claims)
+    )
+    assert user.admission_claims == {}
+    assert user.admission_invalid_claims == frozenset()
