@@ -621,3 +621,27 @@ it("keeps authority read failures recoverable without allowing confirmation", ()
   );
   expect(document.querySelector('[role="dialog"]')).toBeNull();
 });
+
+it("shows a supported page size and lets the administrator change it", () => {
+  state.previewUsers = Array.from({ length: 21 }, (_, index) => ({
+    user_id: `preview-${index}`,
+    username: `Preview person ${index}`,
+    email: null,
+    outcome: "allowed",
+    sources: [],
+  }));
+  render();
+  act(() => filteringAction().click());
+  const dialog = document.querySelector('[role="dialog"]')!;
+  const pageSize = dialog.querySelector<HTMLButtonElement>('[aria-label="dataTable.pagination.itemsPerPage"]')!;
+  expect(pageSize.textContent).toContain("20");
+  expect(dialog.textContent).not.toContain("Preview person 20");
+  act(() => pageSize.click());
+  const fifty = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(
+    (option) => option.textContent === "50",
+  )!;
+  act(() => fifty.click());
+  expect(pageSize.textContent).toContain("50");
+  expect(dialog.textContent).toContain("Preview person 20");
+  expect(state.filter).not.toHaveBeenCalled();
+});

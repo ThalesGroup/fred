@@ -58,7 +58,7 @@ export default function PlatformAccessActivationDialog({
       <DataTable
         data={(preview.data?.users ?? []).filter((user) => user.outcome === outcome)}
         rowKey={(user) => user.user_id}
-        pageSize={25}
+        pageSize={20}
         columns={[
           {
             label: t("rework.teamSettings.members.table.identifiant"),
