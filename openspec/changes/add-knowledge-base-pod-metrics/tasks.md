@@ -10,6 +10,12 @@
 - [x] 2.3 Review `telemetry.py`, `worker.py`, `documents.py` and `client.py` against each spec requirement (counted once per attempt, duration span, `interrupted` vs `error`, transport errors, no excluded label) and record any gap as a fix; verify by a short audit note in the PR description
 - [x] 2.4 Check that author-registered series on the default registry are served on `/metrics`; verify with a test registering a custom counter
 - [x] 2.5 Correct the `PodObservability` docstring to "nothing is reachable from outside unless bound outward" (D5); verify by review
+- [x] 2.6 Preserve issue totals independently of the 50-detail limit, including JSON round-trips and later list edits; verify warnings, errors, late codes, repeated observations and the process-wide code limit with offline regression tests
+
+  Verified with `make test TEST_DIRS=libs/fred-sdk` (621 passed, 3 skipped),
+  `make code-quality CODE_QUALITY_DIRS=libs/fred-sdk`, and strict OpenSpec validation.
+  Independent review of the correction against `73839e3` found no remaining
+  actionable issue after verifying mutable reports and repeated JSON round-trips.
 
 ## 3. Structured logs
 

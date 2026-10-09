@@ -408,7 +408,9 @@ a run makes to Fred and every ingestion wait is then measured as `fred_kb_*` ser
 output carrying the same `service` (`observability.logs.format: text` for a
 terminal). To count something of your own, use `prometheus_client` as usual: the
 same endpoint serves it. Never label a series with a team, an instance or a
-document. The contract, and the questions it answers, are in
+document. Issue totals are computed automatically before warning/error details
+are limited to 50 per severity; `issue_counts` preserves these totals when a
+result is serialized and reconstructed. The contract, and the questions it answers, are in
 [KNOWLEDGE-BASE.md §8](https://github.com/ThalesGroup/fred/blob/swift/docs/swift/design/KNOWLEDGE-BASE.md#8-operational-metrics).
 
 **This surface is beta: pin your `fred-sdk` version, as it may change between beta

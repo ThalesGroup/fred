@@ -268,9 +268,9 @@ def _count_result(
         count = getattr(result, change)
         if count:
             instruments.items.labels(*kb, change).inc(count)
-    for severity, issues in (("warning", result.warnings), ("error", result.errors)):
-        for issue in issues:
-            instruments.issues.labels(*kb, severity, _bounded_code(issue.code)).inc()
+    for severity, totals in result.issue_counts.items():
+        for code, count in totals.items():
+            instruments.issues.labels(*kb, severity, _bounded_code(code)).inc(count)
 
 
 def _bounded_code(code: str) -> str:

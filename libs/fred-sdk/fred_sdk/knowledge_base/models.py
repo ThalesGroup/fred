@@ -20,8 +20,9 @@ returns. Everything here is JSON-safe: `model_dump(mode="json")` round-trips.
 from __future__ import annotations
 
 import json
+from collections import Counter
 from enum import StrEnum
-from typing import Any
+from typing import Annotated, Any, Literal
 
 from pydantic import (
     BaseModel,
@@ -42,6 +43,14 @@ MAX_SUMMARY_CHARS = 2_000
 MAX_ISSUE_MESSAGE_CHARS = 500
 MAX_ISSUE_SUBJECT_CHARS = 200
 MAX_ISSUES = 50
+
+_IssueCounts = dict[
+    Literal["warning", "error"],
+    dict[
+        Annotated[str, Field(min_length=1, max_length=100)],
+        Annotated[int, Field(strict=True, gt=0)],
+    ],
+]
 
 
 def _clip(value: str, bound: int) -> tuple[str, bool]:
@@ -167,8 +176,27 @@ class KnowledgeBaseSyncResult(BaseModel):
     truncated_upstream: bool = Field(
         default=False, alias="content_truncated", exclude=True
     )
+    issue_counts_upstream: _IssueCounts = Field(
+        default_factory=dict, alias="issue_counts", exclude=True, repr=False
+    )
 
     _truncated: bool = PrivateAttr(default=False)
+    _omitted_issue_counts: _IssueCounts = PrivateAttr(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _count_issues(self) -> "KnowledgeBaseSyncResult":
+        for severity in ("warning", "error"):
+            if severity in self._omitted_issue_counts:
+                continue
+            issues = self.warnings if severity == "warning" else self.errors
+            observed = Counter(issue.code for issue in issues)
+            totals = self.issue_counts_upstream.get(severity, observed)
+            if any(totals.get(code, 0) < count for code, count in observed.items()):
+                raise ValueError(
+                    f"{severity} issue_counts must cover the supplied details"
+                )
+            self._omitted_issue_counts[severity] = dict(Counter(totals) - observed)
+        return self
 
     @model_validator(mode="after")
     def _up_to_date_wrote_nothing(self) -> "KnowledgeBaseSyncResult":
@@ -180,6 +208,7 @@ class KnowledgeBaseSyncResult(BaseModel):
             or self.updated
             or self.removed
             or self.errors
+            or self.issue_counts["error"]
         ):
             raise ValueError(
                 "reconciliation 'up_to_date' means the run succeeded and wrote, "
@@ -191,10 +220,15 @@ class KnowledgeBaseSyncResult(BaseModel):
     def _bound_free_form_content(self) -> "KnowledgeBaseSyncResult":
         # Clip and record in one pass: re-measuring an already-clipped value
         # cannot tell "exactly at the bound" from "cut down to it".
-        clipped = self.truncated_upstream
+        clipped = self.truncated_upstream or self._truncated
         self.summary, summary_clipped = _clip(self.summary, MAX_SUMMARY_CHARS)
         clipped = clipped or summary_clipped
         dropped = len(self.warnings) > MAX_ISSUES or len(self.errors) > MAX_ISSUES
+        for severity in ("warning", "error"):
+            issues = self.warnings if severity == "warning" else self.errors
+            omitted = Counter(self._omitted_issue_counts[severity])
+            omitted.update(issue.code for issue in issues[MAX_ISSUES:])
+            self._omitted_issue_counts[severity] = dict(omitted)
         self.warnings = self.warnings[:MAX_ISSUES]
         self.errors = self.errors[:MAX_ISSUES]
 
@@ -222,6 +256,18 @@ class KnowledgeBaseSyncResult(BaseModel):
         except (TypeError, ValueError) as exc:
             raise ValueError(f"metrics must be JSON-safe: {exc}") from exc
         return value
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def issue_counts(self) -> _IssueCounts:
+        """All occurrences, including clipped details and later list edits."""
+        totals: _IssueCounts = {}
+        for severity in ("warning", "error"):
+            issues = self.warnings if severity == "warning" else self.errors
+            counts = Counter(issue.code for issue in issues)
+            counts.update(self._omitted_issue_counts.get(severity, {}))
+            totals[severity] = dict(counts)
+        return totals
 
     @computed_field  # type: ignore[prop-decorator]
     @property

@@ -150,6 +150,115 @@ def test_a_reported_failure_and_a_partial_pass_are_their_own_series(kb):
     )
 
 
+@pytest.mark.parametrize("count", [49, 50, 51, 200])
+@pytest.mark.parametrize("round_trip", [False, True])
+def test_all_issues_are_counted_even_when_details_are_clipped(kb, count, round_trip):
+    result = _result(
+        outcome=KnowledgeBaseRunOutcome.failed,
+        warnings=[KnowledgeBaseIssue(code="shared")] * count,
+        errors=[KnowledgeBaseIssue(code="shared")] * count
+        + [KnowledgeBaseIssue(code="late")] * 3,
+    )
+    if round_trip:
+        result = KnowledgeBaseSyncResult.model_validate_json(result.model_dump_json())
+
+    with telemetry.observing_run() as run:
+        run.result = result
+
+    for severity in ("warning", "error"):
+        assert (
+            _value(
+                "fred_kb_issues_total",
+                knowledge_base=kb,
+                severity=severity,
+                code="shared",
+            )
+            == count
+        )
+    assert (
+        _value("fred_kb_issues_total", knowledge_base=kb, severity="error", code="late")
+        == 3
+    )
+    assert len(result.warnings) <= 50
+    assert len(result.errors) <= 50
+
+
+def test_issue_totals_keep_the_process_code_limit_across_runs(kb, monkeypatch):
+    monkeypatch.setattr(telemetry, "_issue_codes", set())
+    for start, stop in ((0, 50), (50, 150)):
+        with telemetry.observing_run() as run:
+            run.result = _result(
+                warnings=[
+                    KnowledgeBaseIssue(code=f"code_{index}")
+                    for index in range(start, stop)
+                    for _ in range(2)
+                ],
+            )
+
+    samples = [
+        sample
+        for family in REGISTRY.collect()
+        for sample in family.samples
+        if sample.name == "fred_kb_issues_total"
+        and sample.labels["knowledge_base"] == kb
+    ]
+    assert len(samples) == 101  # 100 codes and the overflow bucket
+    assert {sample.labels["code"] for sample in samples} == {
+        *(f"code_{index}" for index in range(100)),
+        "other",
+    }
+    assert sum(sample.value for sample in samples) == 300
+    assert (
+        _value(
+            "fred_kb_issues_total",
+            knowledge_base=kb,
+            severity="warning",
+            code="code_99",
+        )
+        == 2
+    )
+    assert (
+        _value(
+            "fred_kb_issues_total", knowledge_base=kb, severity="warning", code="other"
+        )
+        == 100
+    )
+
+
+@pytest.mark.parametrize("initial_count", [0, 200])
+def test_issue_totals_follow_list_edits_after_result_construction(kb, initial_count):
+    result = _result(
+        outcome=KnowledgeBaseRunOutcome.failed,
+        errors=[KnowledgeBaseIssue(code="original")] * initial_count,
+    )
+    result.errors.append(KnowledgeBaseIssue(code="late"))
+    result.warnings.append(KnowledgeBaseIssue(code="late"))
+    if initial_count:
+        result.errors[0] = KnowledgeBaseIssue(code="reclassified")
+
+    with telemetry.observing_run() as run:
+        run.result = result
+
+    assert _value(
+        "fred_kb_issues_total", knowledge_base=kb, severity="error", code="original"
+    ) == max(0, initial_count - 1)
+    for severity in ("warning", "error"):
+        assert (
+            _value(
+                "fred_kb_issues_total",
+                knowledge_base=kb,
+                severity=severity,
+                code="late",
+            )
+            == 1
+        )
+    expected = result.issue_counts
+    for _ in range(2):
+        result = KnowledgeBaseSyncResult.model_validate_json(result.model_dump_json())
+        assert result.issue_counts == expected
+        assert len(result.errors) <= 50
+
+
 def test_a_raise_is_counted_once_under_its_stage_and_still_raised(kb):
     with pytest.raises(RuntimeError, match="boom"):
         with telemetry.observing_run() as run:

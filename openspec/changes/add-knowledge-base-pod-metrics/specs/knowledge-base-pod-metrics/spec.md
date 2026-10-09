@@ -194,6 +194,22 @@ From each reported run result the pod SHALL add:
 or `error`; `code` SHALL be the issue's stable code. A pod SHALL keep at most
 100 distinct codes per process and count any further code as `other`.
 
+Issue totals SHALL include every reported occurrence, independently of the
+50-detail limit per severity. The Python result SHALL derive `issue_counts`
+by severity and code before clipping details and preserve these totals through
+JSON serialization. Supplied totals SHALL cover every supplied detail; they
+SHALL NOT be added to the details a second time. An `up_to_date` result SHALL
+also reject nonempty error totals.
+
+#### Scenario: Issue details exceed their bound
+- **WHEN** a run reports 200 errors, including a code first seen after detail 50
+- **THEN** its report retains at most 50 error details but the metric counts all 200 occurrences under their codes
+- **AND** serializing and reconstructing the report preserves those totals
+
+#### Scenario: Author edits a result's issues before returning it
+- **WHEN** an author appends or edits issues after constructing the result
+- **THEN** its totals reflect the current details plus any previously omitted occurrences, both in metrics and after a JSON round-trip
+
 #### Scenario: Codes past the bound
 - **WHEN** a pod has seen 100 distinct issue codes and a run reports a new one
 - **THEN** that issue is counted under `code="other"`

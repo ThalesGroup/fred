@@ -117,6 +117,14 @@ fields whose combinations would need rules an enum makes impossible.
 
 ## Risks / Trade-offs
 
+`KnowledgeBaseSyncResult` retains counts for omitted details; its computed
+`issue_counts` adds the current warning/error lists, including later edits.
+The serialized aggregate survives a JSON round-trip; reconstruction subtracts
+the supplied details once to recover omitted counts. Telemetry applies the
+existing process-wide code limit. Authors still supply ordinary issues.
+Reconstructed totals must cover supplied details; error totals invalidate
+`up_to_date`.
+
 - [The spec and the Python code drift] → a contract test asserts every series
   name, label set and closed value set from the spec against a live registry.
 - [An author's own series carry team or instance labels] → the spec forbids it

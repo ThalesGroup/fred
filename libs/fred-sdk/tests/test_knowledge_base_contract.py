@@ -531,6 +531,7 @@ def test_an_up_to_date_run_wrote_nothing() -> None:
         {"created": 1},
         {"removed": 1},
         {"errors": [KnowledgeBaseIssue(code="read_failed")]},
+        {"issue_counts": {"error": {"read_failed": 1}}},
         {"outcome": KnowledgeBaseRunOutcome.failed},
     ):
         with pytest.raises(ValidationError, match="up_to_date"):
@@ -597,6 +598,46 @@ def test_content_truncated_reports_a_dropped_issue_beyond_the_cap() -> None:
     )
     assert len(result.warnings) == MAX_ISSUES
     assert result.content_truncated is True
+
+
+def test_issue_totals_survive_revalidation_and_json_without_double_counting() -> None:
+    result = KnowledgeBaseSyncResult(
+        outcome=KnowledgeBaseRunOutcome.failed,
+        reconciliation=KnowledgeBaseReconciliation.partial,
+        warnings=[KnowledgeBaseIssue(code="shared")] * 200,
+        errors=[KnowledgeBaseIssue(code="shared")] * 60
+        + [KnowledgeBaseIssue(code="late")] * 7,
+    )
+    expected = {"warning": {"shared": 200}, "error": {"shared": 60, "late": 7}}
+    for _ in range(2):
+        result = KnowledgeBaseSyncResult.model_validate(result)
+        result = KnowledgeBaseSyncResult.model_validate_json(result.model_dump_json())
+        assert result.issue_counts == expected
+        assert len(result.warnings) == len(result.errors) == MAX_ISSUES
+        assert result.content_truncated is True
+
+
+@pytest.mark.parametrize("totals", [{}, {"e": 1}, {"other": 2}])
+def test_issue_totals_cannot_undercount_supplied_details(
+    totals: dict[str, int],
+) -> None:
+    with pytest.raises(ValidationError, match="must cover the supplied details"):
+        KnowledgeBaseSyncResult(
+            outcome=KnowledgeBaseRunOutcome.failed,
+            reconciliation=KnowledgeBaseReconciliation.partial,
+            errors=[KnowledgeBaseIssue(code="e")] * 2,
+            issue_counts={"error": totals},
+        )
+
+
+@pytest.mark.parametrize("count", [0, -1, 1.5, True])
+def test_reconstructed_issue_totals_require_positive_integer_counts(count: Any) -> None:
+    with pytest.raises(ValidationError):
+        KnowledgeBaseSyncResult(
+            outcome=KnowledgeBaseRunOutcome.failed,
+            reconciliation=KnowledgeBaseReconciliation.partial,
+            issue_counts={"error": {"e": count}},
+        )
 
 
 def test_content_truncated_cannot_be_forced_false_by_the_caller() -> None:
