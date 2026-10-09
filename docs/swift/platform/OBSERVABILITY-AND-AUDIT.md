@@ -252,6 +252,26 @@ first-party origin, including handshake/listing and tool invocation. Delegated t
 do not follow redirects. External/no-token tools and authentication endpoints receive no
 Fred context. This metadata requires no new delegation switch and never enables delegation.
 
+### 6.2 Worker and ingestion diagnostic context
+
+Knowledge Flow and Control Plane worker entrypoints use the selected `app.log_format`
+and role `worker`. Knowledge Flow workers/extraction children keep stdout-only generic
+logging with `NullLogStore`; workflow logging remains Temporal's replay-aware adapter.
+
+Ingestion admission captures the optional bounded envelope before persisting its immutable
+pending submission. Existing scheduler authorization and trusted worker delivery govern
+this handoff; it does not create or prolong an HTTP delegated grant. Request-local document,
+task, attachment and tool fields are removed before batch capture. A scheduled submission
+without an initiating operation creates a correlation outside workflow code.
+
+Metadata/extraction/output activity scopes restore the envelope and then use the payload's
+person/document/task and actual Temporal workflow/run/activity/attempt references as local
+authority for diagnostics. Thread work and spawned extraction children retain that snapshot.
+Retries keep operation/workflow identity and change attempt metadata; scopes restore on all
+exits. Legacy jobs without an envelope remain executable with local activity references.
+Workflow code only forwards optional plain data, never imports logging/auth helpers, generates
+random identifiers or exports arbitrary context. Prometheus and audit boundaries are unchanged.
+
 ## 7. Data protection summary
 
 | Field category | Example fields | Where it may appear |

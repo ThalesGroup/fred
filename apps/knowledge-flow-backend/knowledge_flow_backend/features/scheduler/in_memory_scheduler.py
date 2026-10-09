@@ -120,6 +120,8 @@ async def _run_push_ingestion_pipeline(definition: PipelineDefinition) -> str:
                 metadata=metadata,
                 input_file="",
                 profile=file.profile,
+                logging_context=file.logging_context,
+                task_id=file.task_id,
             )
             metadata = await output_process(
                 file=file,
@@ -170,6 +172,8 @@ async def _run_pull_ingestion_pipeline(definition: PipelineDefinition) -> str:
                 user=file.processed_by,
                 metadata=metadata,
                 profile=file.profile,
+                logging_context=file.logging_context,
+                task_id=file.task_id,
             )
             metadata = await output_process(
                 file=file,

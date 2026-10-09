@@ -554,9 +554,12 @@ def test_transient_errors_stay_retryable(exc) -> None:
 
 # This target must be importable by spawn: no inherited Temporal context/writer.
 def _child_with_pdf_timings(request, pipe, _parent_pid) -> None:
+    import logging
+
     from knowledge_flow_backend.common.processing_metrics import processing_timer
 
     os.setsid()
+    logging.getLogger("test.extraction.child").info("Extraction child running", extra={"count": 1})
     failed = request.profile == "rich"
     try:
         with processing_timer("knowledge_flow.pdf.image_loop_latency_ms", {"pdf_stage": "image_loop", "file_type": "pdf"}):
@@ -571,30 +574,55 @@ def _child_with_pdf_timings(request, pipe, _parent_pid) -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("failed", [False, True])
-async def test_spawned_child_forwards_pdf_timings_on_success_and_failure(tmp_path, monkeypatch, failed):
+@pytest.mark.parametrize("failed, telemetry", [(False, True), (True, True), (False, False)])
+async def test_spawned_child_forwards_pdf_timings_on_success_and_failure(tmp_path, monkeypatch, failed, telemetry, capfd):
+    import json
     from dataclasses import replace
     from types import SimpleNamespace
     from unittest.mock import Mock
+
+    from fred_core.logs.propagation import encode_log_context
 
     from knowledge_flow_backend.application_context import ApplicationContext
 
     writer = Mock()
     monkeypatch.setattr(ApplicationContext, "get_instance", lambda: SimpleNamespace(get_kpi_writer=lambda: writer))
-    request = replace(_request(tmp_path), profile="rich" if failed else "medium")
+    context = {
+        "correlation_id": "upload-journey",
+        "document_uid": "document-a",
+        "task_id": "task-a",
+        "workflow_id": "workflow-a",
+        "workflow_run_id": "execution-a",
+        "activity_id": "extract-a",
+        "activity_attempt": 2,
+    }
+    request = replace(_request(tmp_path), profile="rich" if failed else "medium", log_format="json", logging_context=encode_log_context(context))
+    if not telemetry:
+
+        def unavailable(*args, **kwargs):
+            raise OSError("telemetry unavailable")
+
+        monkeypatch.setattr(extraction_process.socket, "socketpair", unavailable)
+    capfd.readouterr()
     try:
         await run_extraction_in_process(request=request, budget_seconds=30, heartbeat=lambda: None, target=_child_with_pdf_timings, start_method="spawn")
     except ExtractionProcessError as exc:
         assert failed and exc.permanent
     else:
         assert not failed
+    lines = [json.loads(line) for line in capfd.readouterr().out.splitlines()]
+    child = next(event for event in lines if event["logger"] == "test.extraction.child")
+    assert {key: child[key] for key in context} == context
+    assert child["service"] == "knowledge-flow" and child["service_role"] == "worker"
+    assert child["severity"] == "INFO" and "timestamp" in child
     events = [call.kwargs for call in writer.emit.call_args_list]
-    assert [event["name"] for event in events] == ["knowledge_flow.pdf.image_description_latency_ms", "knowledge_flow.pdf.image_loop_latency_ms"]
+    assert [event["name"] for event in events] == (["knowledge_flow.pdf.image_description_latency_ms", "knowledge_flow.pdf.image_loop_latency_ms"] if telemetry else [])
     for event in events:
         assert event["type"] == "timer"
         assert event["unit"] == "ms"
         assert event["value"] >= 0
         assert event["actor"].type == "system"
         assert event["dims"]["status"] == ("error" if failed else "ok")
-    assert events[0]["dims"]["model_name"] == "test-vision"
-    assert events[1]["dims"]["file_type"] == "pdf"
+    if telemetry:
+        assert events[0]["dims"]["model_name"] == "test-vision"
+        assert events[1]["dims"]["file_type"] == "pdf"
