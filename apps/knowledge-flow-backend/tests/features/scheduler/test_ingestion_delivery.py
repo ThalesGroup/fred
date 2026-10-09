@@ -88,6 +88,32 @@ async def test_restart_before_delivery_preserves_profile_task_and_execution(deli
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("pull", [False, True])
+async def test_mixed_owner_batch_retains_each_document_team_after_restart(delivery, pull):
+    definition = batch("team-a-document", "team-b-document", "personal-document")
+    if pull:
+        for file in definition.files:
+            file.external_path = f"/{file.document_uid}.pdf"
+            file.hash = file.document_uid
+            file.document_uid = None
+    teams = {(file.to_virtual_metadata().document_uid if pull else file.document_uid): team for file, team in zip(definition.files, ("team-a", "team-b", None))}
+    with log_context(correlation_id="batch-journey", team_id="unrelated-request-team"):
+        await delivery.admit(USER, definition, teams)
+    await delivery.retry_pending()
+    sent = delivery.scheduler.start_document_processing.call_args.kwargs["definition"]
+    batch_values, reason = decode_log_context(sent.logging_context)
+    assert reason is None and "team_id" not in batch_values
+    for file in sent.files:
+        values, reason = decode_log_context(file.logging_context)
+        assert reason is None
+        assert values["correlation_id"] == "batch-journey"
+        uid = file.to_virtual_metadata().document_uid if pull else file.document_uid
+        assert values.get("team_id") == teams[uid]
+        run = await delivery.tasks.store.get_run(file.task_id)
+        assert values.get("team_id") == run.team_id
+
+
+@pytest.mark.asyncio
 async def test_ambiguous_start_keeps_reservation_and_retries_same_execution(delivery):
     definition = batch("doc")
     await delivery.admit(USER, definition, {})

@@ -239,3 +239,29 @@ def test_activity_context_survives_thread_work_and_retries_without_leaking(monke
         "activity_attempt": 1,
     }
     assert second == {**first, "activity_attempt": 2}
+
+
+def test_pull_failure_before_metadata_keeps_document_reference(caplog):
+    import logging
+
+    from fred_core import KeycloakUser
+    from fred_core.logs.context import current_context
+    from fred_core.logs.processors import install_context_capture
+
+    from knowledge_flow_backend.features.scheduler import logging_context as scoped
+    from knowledge_flow_backend.features.scheduler.scheduler_structures import FileToProcess
+
+    file = FileToProcess(source_tag="remote", external_path="/reports/source.pdf", hash="stable-hash", processed_by=KeycloakUser(uid="person-a", username="synthetic", roles=[]))
+
+    @scoped.ingestion_activity
+    async def fail_before_metadata(file):
+        raise OSError("Source unavailable")
+
+    install_context_capture()
+    with caplog.at_level(logging.INFO, logger=scoped.__name__):
+        with pytest.raises(OSError, match="Source unavailable"):
+            asyncio.run(fail_before_metadata(file))
+    completed = next(record for record in caplog.records if record.getMessage() == "Ingestion activity completed")
+    assert completed._fred_snapshot.values["document_uid"] == file.to_virtual_metadata().document_uid
+    assert completed.outcome == "failed"
+    assert current_context() == {}

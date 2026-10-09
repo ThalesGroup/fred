@@ -11,7 +11,7 @@
 import asyncio
 import inspect
 import logging
-from collections.abc import Awaitable, Callable, Iterator
+from collections.abc import Awaitable, Callable, Iterator, Mapping
 from contextlib import contextmanager
 from functools import wraps
 from typing import ParamSpec, TypeVar
@@ -23,12 +23,20 @@ from fred_core.logs.propagation import bind_received_log_context, encode_log_con
 from fred_core.security.structure import is_service_agent
 from temporalio import activity
 
-from knowledge_flow_backend.features.scheduler.scheduler_structures import PipelineDefinition
+from knowledge_flow_backend.features.scheduler.scheduler_structures import FileToProcess, PipelineDefinition
 
 logger = logging.getLogger(__name__)
 P = ParamSpec("P")
 T = TypeVar("T")
 _STAGE_FIELDS = {"document_uid", "task_id", "attachment_id", "tool_name", "workflow_id", "workflow_run_id", "activity_id", "activity_attempt"}
+
+
+def _encode_ingestion_context(values: Mapping[str, object]) -> str | None:
+    encoded = encode_log_context(values)
+    if encoded is None:
+        logger.warning("Ingestion logging metadata reduced", extra={"reason": "invalid_context"})
+        encoded = encode_log_context({key: value for key, value in values.items() if key in {"correlation_id", "workflow_id", "user_id", "team_id"}})
+    return encoded
 
 
 def capture_ingestion_context(user: KeycloakUser, definition: PipelineDefinition, team_ids: dict[str, str | None]) -> None:
@@ -41,15 +49,15 @@ def capture_ingestion_context(user: KeycloakUser, definition: PipelineDefinition
     else:
         values.pop("user_id", None)
     teams = set(team_ids.values())
-    if len(teams) == 1 and None not in teams:
-        values["team_id"] = next(iter(teams))
-    encoded = encode_log_context(values)
-    if encoded is None:
-        logger.warning("Ingestion logging metadata reduced", extra={"reason": "invalid_context"})
-        encoded = encode_log_context({key: value for key, value in values.items() if key in {"correlation_id", "workflow_id", "user_id", "team_id"}})
-    definition.logging_context = encoded
+    batch_team = next(iter(teams)) if len(teams) == 1 else None
+    definition.logging_context = _encode_ingestion_context({**values, **({"team_id": batch_team} if batch_team is not None else {})})
+    envelopes = {batch_team: definition.logging_context}
     for file in definition.files:
-        file.logging_context = encoded
+        uid = file.to_virtual_metadata().document_uid if file.is_pull() else file.document_uid
+        team = team_ids.get(uid) if uid else None
+        if team not in envelopes:
+            envelopes[team] = _encode_ingestion_context({**values, **({"team_id": team} if team is not None else {})})
+        file.logging_context = envelopes[team]
 
 
 @contextmanager
@@ -77,6 +85,8 @@ def ingestion_activity(func: Callable[P, Awaitable[T]]) -> Callable[P, Awaitable
         header = bound.get("logging_context") or getattr(file, "logging_context", None)
         task_id = bound.get("task_id") or getattr(file, "task_id", None)
         document_uid = getattr(metadata, "document_uid", None) or getattr(file, "document_uid", None)
+        if not document_uid and isinstance(file, FileToProcess) and file.is_pull():
+            document_uid = file.to_virtual_metadata().document_uid
         local: dict[str, object] = {}
         if user is not None and not is_service_agent(user):
             local["user_id"] = user.uid

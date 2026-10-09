@@ -51,7 +51,7 @@ async def main() -> None:
     """
     configuration = load_configuration()
     log_setup(
-        service_name="control-plane-worker",
+        service_name="control-plane",
         service_role="worker",
         log_level=configuration.app.log_level,
         log_format=configuration.app.log_format,
