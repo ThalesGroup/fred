@@ -22,8 +22,10 @@
 
 .header {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
+  gap: var(--spacing-s);
   border-bottom: 1px solid var(--outline-muted);
   background: var(--surface-main);
   padding: var(--spacing-s) var(--spacing-l);
@@ -39,8 +41,24 @@
 
 .headerActions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--spacing-m);
+}
+
+.supportLink {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  color: var(--primary);
+  font: var(--font-label-large);
+  text-underline-offset: 3px;
+  white-space: nowrap;
+
+  &:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+  }
 }
 
 .headerIcon {

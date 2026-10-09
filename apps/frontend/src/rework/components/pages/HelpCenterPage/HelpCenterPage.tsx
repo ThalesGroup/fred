@@ -17,6 +17,7 @@ import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
+import { useFrontendProperties } from "src/hooks/useFrontendProperties.ts";
 import { getHelpPage, getHelpTree, helpPagePath } from "@rework/features/helpCenter/content";
 import { DEFAULT_SECTION_ID, HELP_LANGS, isHelpLang, type HelpLang } from "@rework/features/helpCenter/manifest";
 import HelpSidebar from "./HelpSidebar";
@@ -39,6 +40,7 @@ export default function HelpCenterPage() {
   const params = useParams<{ lang: string; sectionId: string; pageId: string }>();
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
+  const { contactSupportLink } = useFrontendProperties();
 
   const lang = isHelpLang(params.lang) ? params.lang : null;
   const tree = useMemo(() => (lang ? getHelpTree(lang) : []), [lang]);
@@ -84,6 +86,12 @@ export default function HelpCenterPage() {
           <span>{t("rework.helpCenter.title")}</span>
         </div>
         <div className={styles.headerActions}>
+          {contactSupportLink && (
+            <a className={styles.supportLink} href={contactSupportLink} target="_blank" rel="noopener noreferrer">
+              {t("rework.profileMenu.contactSupport")}
+              <Icon category="outlined" type="open_in_new" />
+            </a>
+          )}
           <HelpSearch lang={lang} tree={tree} />
           <ButtonGroup
             variant="radio"
