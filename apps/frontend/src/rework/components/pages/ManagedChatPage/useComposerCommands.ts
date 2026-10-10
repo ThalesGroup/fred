@@ -14,7 +14,7 @@
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import type { CommandMenuEntry } from "@shared/molecules/CommandMenu/CommandMenu";
-import type { CommandTriggerBinding } from "@shared/molecules/RichInputField/RichInputField";
+import { commandQueryOf, type CommandTriggerBinding } from "@shared/molecules/RichInputField/RichInputField";
 import {
   useGetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetQuery,
   useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery,
@@ -59,7 +59,12 @@ export function useComposerCommands(params: {
   onSend: () => void;
   /** The prompt behind a command could not be read. */
   onResolveError: () => void;
-}): { trigger: CommandTriggerBinding; menu: ComposerCommandsMenu | null; submit: () => void } {
+}): {
+  trigger: CommandTriggerBinding;
+  menu: ComposerCommandsMenu | null;
+  submit: () => void;
+  dismiss: (line: string) => void;
+} {
   const { teamId } = params;
   const listboxId = useId();
   const optionIdPrefix = useId();
@@ -112,7 +117,9 @@ export function useComposerCommands(params: {
   // nothing to offer it says so rather than vanishing under a placeholder that
   // just invited the user to type `/`. It only *claims keys* when it has
   // entries, so `/nosuchcommand` + Enter still reaches the ordinary send.
-  const panelOpen = focused && query !== null && query !== dismissedQuery;
+  // `query` is reported after the render that changed the value, so a recall
+  // leaving `/summary` would otherwise flash the menu for one frame.
+  const panelOpen = focused && query !== null && query === commandQueryOf(params.input) && query !== dismissedQuery;
   const hasEntries = entries.length > 0;
 
   const entriesRef = useRef(entries);
@@ -129,10 +136,14 @@ export function useComposerCommands(params: {
     // Re-filtering re-focuses the best match, so the focus is never left on
     // something that is no longer on screen.
     setActiveIndex(0);
-    // A closed trigger clears the dismissal, or retyping the same query after
-    // an Esc would find the menu still shut.
-    if (next === null) setDismissedQuery(null);
+    // Any other query clears the dismissal, or deleting then retyping the last
+    // character after an Esc (or a recall) would find the menu still shut.
+    setDismissedQuery((dismissed) => (dismissed === next ? dismissed : null));
   }, []);
+
+  // A line put back by the recall keys was not typed: its query starts out
+  // dismissed, so the menu waits for the first keyboard edit.
+  const dismiss = useCallback((line: string) => setDismissedQuery(commandQueryOf(line)), []);
 
   // Prefetch keeps the detail fetch off the critical path when the command
   // runs; the set makes moving the focus back over an entry a no-op.
@@ -258,5 +269,5 @@ export function useComposerCommands(params: {
     [panelOpen, listboxId, entries, safeIndex, teamHasCommands, optionId, onActivate, onFocusEntry],
   );
 
-  return { trigger, menu, submit };
+  return { trigger, menu, submit, dismiss };
 }
