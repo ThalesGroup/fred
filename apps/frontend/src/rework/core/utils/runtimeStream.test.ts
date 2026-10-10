@@ -94,36 +94,21 @@ describe("mergeContextPromptText", () => {
 
 describe("mergeRoutingPolicy", () => {
   it("adds chat_default_profile_id when present", () => {
-    expect(mergeRoutingPolicy({ search_policy: "hybrid" }, "chat.openai.gpt5", null)).toEqual({
+    expect(mergeRoutingPolicy({ search_policy: "hybrid" }, "chat.openai.gpt5")).toEqual({
       search_policy: "hybrid",
       chat_default_profile_id: "chat.openai.gpt5",
     });
   });
 
-  it("adds agent_profile_overrides when non-empty", () => {
-    const overrides = { mindmap: "chat.openai.gpt5" };
-    expect(mergeRoutingPolicy({}, null, overrides)).toEqual({ agent_profile_overrides: overrides });
+  it("omits the key when no default is present", () => {
+    expect(mergeRoutingPolicy({ search_policy: "hybrid" }, null)).toEqual({ search_policy: "hybrid" });
+    expect(mergeRoutingPolicy({ search_policy: "hybrid" }, undefined)).toEqual({ search_policy: "hybrid" });
   });
 
-  it("omits both keys when neither is present", () => {
-    expect(mergeRoutingPolicy({ search_policy: "hybrid" }, null, null)).toEqual({
-      search_policy: "hybrid",
-    });
-    expect(mergeRoutingPolicy({ search_policy: "hybrid" }, undefined, undefined)).toEqual({
-      search_policy: "hybrid",
-    });
-  });
-
-  it("omits agent_profile_overrides when the object is empty", () => {
-    expect(mergeRoutingPolicy({}, null, {})).toEqual({});
-  });
-
-  it("carries chat_default_profile_id alongside agent_profile_overrides", () => {
-    const overrides = { mindmap: "chat.openai.gpt5" };
-    expect(mergeRoutingPolicy({ search_policy: "hybrid" }, "chat.openai.gpt5", overrides)).toEqual({
-      search_policy: "hybrid",
-      chat_default_profile_id: "chat.openai.gpt5",
-      agent_profile_overrides: overrides,
+  it("keeps the composer's chat_profile_id from the base context", () => {
+    expect(mergeRoutingPolicy({ chat_profile_id: "chat.gpt5" }, "default.chat.team")).toEqual({
+      chat_profile_id: "chat.gpt5",
+      chat_default_profile_id: "default.chat.team",
     });
   });
 });
@@ -157,7 +142,6 @@ describe("mergePreparation", () => {
         {
           context_prompt_text: "prompt",
           chat_default_profile_id: "default.chat.team",
-          agent_profile_overrides: { a: "p" },
           reasoning_enabled_model_ids: ["m"],
         },
       ),
@@ -166,7 +150,6 @@ describe("mergePreparation", () => {
       selected_document_libraries_ids: ["lib-1"],
       context_prompt_text: "prompt",
       chat_default_profile_id: "default.chat.team",
-      agent_profile_overrides: { a: "p" },
       reasoning_enabled_model_ids: ["m"],
     });
   });

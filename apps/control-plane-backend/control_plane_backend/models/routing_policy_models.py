@@ -38,11 +38,17 @@ class TeamRoutingPolicyRow(Base):
     team_id: Mapped[str] = mapped_column(String, primary_key=True)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     chat_default_profile_id: Mapped[str | None] = mapped_column(String, nullable=True)
-    agent_profile_overrides_json: Mapped[str] = mapped_column(
+    disabled_model_ids_json: Mapped[str] = mapped_column(
         Text,
         nullable=False,
-        default="{}",
-        comment="JSON-serialized {agent_id: target_profile_id} dict.",
+        default="[]",
+        comment="JSON list of model capability ids the team disabled.",
+    )
+    reasoning_default_off_model_ids_json: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        default="[]",
+        comment="JSON list of model capability ids whose reasoning starts off.",
     )
     updated_by: Mapped[str | None] = mapped_column(String, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(

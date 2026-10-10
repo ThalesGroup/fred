@@ -334,6 +334,11 @@ radius, padding) plus an optional header and groups of rows separated by thin di
 it does **not** position itself (consumers place it). `MenuPopoverItem` is one homogeneous
 row: leading icon + label + optional inline muted value + optional badge + optional trailing
 affordance (e.g. `chevron_right` for sub-rows, `add` for actions), with a `danger` variant.
+Opt-in `dense` (2026-10-09, used by the composer model chip only) tightens the surface
+padding, the rows' side padding (vertical stays `--spacing-xs`) and dividers; every other
+menu keeps the default rhythm. Opt-in `quietUnselected` (same chip only): unselected labels in
+`--on-surface-retreat`, the selected and the hovered row's label in `--on-surface`
+(the accent state layer and check stay).
 Sub-menu rows are rows with a chevron whose anchored panel is rendered by the parent as a
 sibling. Uses the profile-menu token set (`--surface-container-*`, `--on-surface*`,
 `--outline-variant`, `--radius-*`). Current instances: `UserProfile`, `SearchConfig`.
@@ -374,67 +379,9 @@ Uppercase section labels are gone (sentence case: "Recherche", "Portée"). Searc
 only owns its box width and the anchored sub-menus; the surface and row grammar come from the
 shared molecule.
 
-As of REASON-01 (#2166) the platform contributed its first non-capability control: a
-`Reasoning` On/Off row (`stockKit/ReasoningControl.tsx`). As of 2026-08-12 that row is
-**gone from the tune menu**: reasoning is now a **plain text button + chevron**
-(`features/capabilities/ReasoningChip.tsx`) pinned at the composer's **right
-edge** before the mic — the designer's Composer.html mockup (2026-08-12) is the
-reference. The button leads with the MODEL IDENTITY, followed by the reasoning
-MODE: "Mistral Small · Boost" when on, "Mistral Small · Rapide" when off (bare
-"Raisonnement"/mode labels when no model resolves at all); its menu opens
-above, right-aligned, with the effort/latency explainer as a muted header and
-the two modes as check-circle rows.
-
-**Two modes, not an on/off switch (#2387).** "Mistral Small · Désactivé" read
-as though the MODEL were disabled — the state word sat beside the model name
-with nothing tying it to reasoning. Naming both modes removes that reading:
-neither describes anything as off. EN uses Fast / Boost.
-
-`Boost` also wears the Chat button's spectrum (`.state[data-on]`), so the one
-"the AI is doing more" signal reads the same on the agent card and in the
-composer. Two departures from that border: linear rather than conic (a conic
-sweep across ~40px of text smears), and no white stops (white travels a border
-but is a hole in text, invisible on the light theme) — leaving cyan → violet →
-pink. A solid `--primary` sits underneath as the fallback for engines that
-ignore `background-clip: text`, and `forced-colors` drops the gradient for the
-system palette. The WORD carries the state either way, so colour is
-reinforcement, never the only signal. 2026-08-21: the shared stops were
-saturated and moderately darkened (same hues) in both places — the original
-pastels were near-invisible on the light surface, a fully darkened pass sank
-into the dark one; the retained stops sit halfway between, so the single
-gradient reads on both themes.
-
-Deliberately NOT a low/medium/high picker — a same-day effort picker was
-withdrawn (providers 400 on values they don't support,
-`RUNTIME-EXECUTION-CONTRACT.md` §8.48) — and since #2387 not a level DISPLAY
-either. The level a reasoning turn runs with is the model's ops-authored
-`settings.reasoning_effort`, applied live by the pod; showing it implied a
-per-question choice that never existed, and it took two snapshot columns to
-reach the composer at all (§8.54). The wire stays the on/off tri-state.
-
-**Superseded in part by #2387 — see "Composer model label" below.** Until then
-the model identity came from `params.model_id` on this very control, i.e. the
-single model whose REASONING was enabled platform-wide, which is unrelated to
-routing; and the chip as a whole was gated on the reasoning control existing.
-Both changed: the identity now comes from
-`GET /teams/{team_id}/routing-policy/effective-chat-model`, the model shows even
-when no reasoning is offered, and the reasoning MENU additionally requires the
-routed model to be reasoning-enabled. The author/admin gates below still decide
-whether the control is emitted at all — a closed upstream gate removes it
-entirely rather than disabling it (`CONTROL-PLANE-PRODUCT-CONTRACT.md` §33). The offer itself lived in the General
-section until Amendment C (2026-08-02) moved it into the Capabilities tab, rendered
-through the same `CapabilityCard` component every real capability uses (generalized
-to a plain `name`/`description`/`subForm` API for this) even though the reasoning
-offer still isn't a capability underneath.
-
-As of Amendment B (#2175) that row's **starting** value is the agent author's, not a
-constant: the reasoning card grows a second switch nested under `Reasoning` in its own
-sub-form area — visible only while `Reasoning` is on, matching how a real capability's
-own boolean config field renders — and it seeds the composer row's initial state for
-every new conversation. Nothing about the row itself changes: still a per-question
-choice the user can flip, still removed entirely when an upstream gate is closed. The
-form hint carries the cost of the opt-in (slower, may repeat tool calls on tool-using
-agents) so the decision is informed at the point it is made.
+Reasoning is not a tune-menu row: since 2026-08-12 it lives in the composer's
+right-edge model control, `ReasoningChip` (see "Composer model and reasoning
+control" below).
 
 #### Open UX issues
 
@@ -4458,48 +4405,100 @@ _Priority order for the next UX session. Update before each session._
 23. **AgentFormModal — single-template auto-collapse** — when one template available, hide browser or show non-interactive card?
 24. **HitlPrompt — focus management** — focus should move to the first actionable element when the prompt appears (interaction design; may require Figma update). Elevation/containment resolved 2026-08-05 (see component section).
 
-## Composer model label (#2387, 2026-08-17)
+## Composer model and reasoning control (2026-10-09)
 
 ### `ReasoningChip`
 
 **Location:** `src/rework/features/capabilities/ReasoningChip.tsx`
 **Status:** `Functional`
 
-The composer's right-edge chip. Two concerns, now independent:
+A text button + chevron at the composer's right edge, before the mic: the
+current model's name, then the reasoning mode one step fainter
+(`--on-surface-retreat`; Faible / Élevé, EN Low / High). Its menu opens above,
+right-aligned, with two sections:
 
-- **Model identity** — the model the next turn will actually route to, from
-  `GET /teams/{team_id}/routing-policy/effective-chat-model`. Read-only; the
-  choice lives in the team routing policy and the platform binding.
-- **Reasoning toggle** — still emitted only when the agent's author enabled
-  reasoning and a platform-enabled reasoning model exists (REASON-01 §8's
-  diagnosability rule: a control that can do nothing must be absent).
+- **Models** — `EffectiveChatModel.selectable_models` as check-circle rows.
+  Picking one sets the conversation's `chat_profile_id`
+  (`useComposerSettings`, session storage `chat.composer.{sessionId}`); picking
+  the recommended model clears it. A new conversation starts on the
+  recommended model.
+- **Effort** — Faible / Élevé (Raisonnement), no hint line (removed
+  2026-10-09: it took too much room). For a model without reasoning the section
+  stays, with a muted "Aucun niveau d'effort disponible" line. Rows shown only
+  when the platform emitted the `reasoning_toggle` control and the current
+  model's `reasoning_enabled` is true. The row starts in that model's
+  `reasoning_default_on` (the team's default), at conversation start and on
+  every model switch. Never an effort level (`RUNTIME-EXECUTION-CONTRACT.md`
+  §8.48).
 
-Previously the model identity rode on the `reasoning_toggle` control's own
-`params`, i.e. the single model whose _reasoning_ an admin had enabled
-platform-wide. That is unrelated to routing, so the chip contradicted any
-platform binding or team override in force. The name is kept (`ReasoningChip`)
-because the reasoning menu is still what makes it interactive.
+| Condition                                            | Renders                                                                     |
+| ---------------------------------------------------- | --------------------------------------------------------------------------- |
+| Two or more selectable models, or a reasoning row    | Interactive button and menu                                                 |
+| `choice_locked` (platform binding, pod override)     | No model rows; the menu keeps only the reasoning row, if any                |
+| One model and no reasoning row                       | Static `<span>` with the model name, same metrics, not a disabled button    |
+| Nothing resolved and no reasoning row                | Nothing (`null`)                                                            |
 
-Three render states:
+**Stale choice.** When a refetch no longer lists the chosen model, or the user
+switches to a conversation whose stored choice the current list does not offer,
+the choice is dropped and a snackbar names it ("… is no longer available"). An
+empty `selectable_models` (locked, pod down) keeps the choice: the pod ignores
+an invalid one anyway. The page reads the agent's `currentData`, so another
+agent's list never judges this agent's choice.
+The page re-reads the list on mount, on window focus and when another
+conversation opens, so an admin change made in another browser lands without a
+reload (no polling). Mount and focus skip the read within 30 s of the last one:
+each read also fetches the pod catalog.
 
-| Condition                                                   | Renders                                                                                                                                                                                                                           |
-| ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Reasoning control present **and** `reasoning_enabled`       | Interactive `<button>`: model name, then reasoning state one step fainter (`--on-surface-muted`), then chevron. Menu on click.                                                                                                    |
-| Reasoning control present but `reasoning_enabled === false` | Static label only. The toggle would be inert — the pod strips reasoning for this model — so it is hidden rather than shown as a no-op. `undefined` (not resolved yet, or an older backend) keeps the control the platform served. |
-| No reasoning control at all, model resolved                 | Non-interactive `<span class="static">`, same 38px metrics so the composer row keeps its rhythm. Deliberately **not** a disabled button — no action is being withheld, so nothing should look clickable.                          |
-| Neither                                                     | Nothing (`null`). An empty chip would be worse than none.                                                                                                                                                                         |
+**Menu name.** The popover's accessible name follows its sections: "Model and
+reasoning" with both, "Models" or "Reasoning" with one.
 
-**Unavailable model.** When `enabled_for_team` is `false` the turn will fail
-with `ModelNotUsableError` before the LLM call. The model name takes
-`--error` + `line-through` via `.model[data-unavailable]`, an `error_outline`
-icon sits beside it, and the reason reaches the accessible name and `title` —
-colour alone would leave a colour-blind reader with no signal.
+**Unavailable model.** When `enabled_for_team` is `false` the model name takes
+`--error` + `line-through` (`.model[data-unavailable]`), with an
+`error_outline` icon, and the reason reaches the accessible name and `title`.
 
-**Label fallback**: `modelLabel(display_name, name, capability_id)` prefers the
-ops-authored `model_display_name`, then prettifies the real model `name`, then
-falls back to splitting the capability id. The `name` step matters because
-`model_capability_id` normalizes non-id-safe characters — derived from the id,
-`mistral:latest` would read "Mistral Latest".
+**Label fallback:** `modelLabel(display_name, name, capability_id)` prefers the
+ops-authored `model_display_name`, then prettifies the model `name`, then the
+capability id.
+
+### `TeamSettingsRouting` — team Models section
+
+**Location:** `src/rework/components/shared/organisms/TeamSettingsPanel/TeamSettingsRouting/`
+**Status:** `Functional`
+
+Team settings "Models" entry. One row per model the platform allows the team,
+following the admin UI themes page grammar: a "Default" badge or a "Set as
+default" `Button`, an "enabled for the team" `Switch` (disabled on the
+default), and a "Reasoning on by default" `Switch` only when
+`reasoning_available`. The default row says, in visible helper text tied to its
+switch by `aria-describedby`, that the default cannot be disabled (a tooltip on
+a disabled switch is unreachable by keyboard). Disabling a model opens a
+critical `ConfirmationDialog` (filled primary Cancel, text error confirm, like
+deleting an agent; confirm does nothing until the impact is loaded) listing the
+agents that use it as their recommended model (disable-impact read), naming the
+model that takes over (the team default; body-medium text)
+and the conversation fallback line: those conversations go back to the agent's
+recommended model; cancel writes nothing. Editable by team admins and a
+personal space's owner; read-only for editors and analysts.
+
+Writes are locked while a save or a refetch is in flight; each save sends the
+policy `version` it was built on, and its response is written straight into the
+cache so a switch never snaps back. A 409 (someone saved meanwhile) reloads the
+policy and shows a warning toast. A failed read of the policy or of the
+available models shows a `ServiceNotice` and no controls, never the
+"platform allows no model" empty state. A stored default no longer served
+shows a generic "no longer available" line.
+
+### `RecommendedModelField` — agent form
+
+**Location:** `src/rework/components/pages/TeamAgentsPage/AgentFormModal/RecommendedModelField/`
+**Status:** `Functional`
+
+"Recommended model" `Select` in the agent form's General section. First option
+"Team default model" (helper line: "Currently <name>. Follows changes made by
+the team admin.") saves `null`; then every team-enabled model, today's default
+included, which pins it. A
+stored value no longer selectable is shown flagged "No longer available". The
+form's former Reasoning card is removed.
 
 ### `PlatformRolesPage` (`/admin/platform-roles`, 2026-08-21, #2405)
 

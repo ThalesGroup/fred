@@ -15,12 +15,12 @@
 """
 Team routing policy.
 
-Covers: the store's upsert/get + version increment, the service's
-write-time validation (id-space translation + enablement check — uniqueness
-of the override itself is structural, `agent_profile_overrides` is a
-`dict`), the authz gate each service function requests
-(read=can_read_members, write=can_update_resources), and the session-prep
-snapshot resolver.
+Covers: the store's upsert/get + version increment and its atomic
+recommendation clearing, the service's write-time validation (default usable
+and never disabled, exceptions pruned), the authz gate each service function
+requests (read=can_read_members+elevated role, write and disable-impact=
+can_update_info), the effective-chat-model read with its selectable models,
+and the session-prep snapshot resolver.
 """
 
 from __future__ import annotations
@@ -32,17 +32,27 @@ import pytest
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 from control_plane_backend.routing_policy import service as routing_policy_service
 from control_plane_backend.routing_policy.schemas import (
+    DefaultModelNotDisableableError,
+    ModelCatalogUnavailableError,
+    ModelDisabledForTeamError,
     ProfileNotUsableError,
+    RoutingPolicyVersionConflictError,
     UnknownProfileError,
     UpdateTeamRoutingPolicyRequest,
 )
 from control_plane_backend.routing_policy.service import resolve_effective_chat_model
 from control_plane_backend.routing_policy.store import TeamRoutingPolicyStore
-from fred_core import AuthorizationError, KeycloakUser, TeamPermission
+from fred_core import AuthorizationError, KeycloakUser, Resource, TeamPermission
 from fred_core.common import TeamId
 from fred_sdk.contracts.capability.manifest import CapabilityCatalogEntry
 from fred_sdk.contracts.context import ModelBinding
 from sqlalchemy.ext.asyncio import AsyncEngine
+from test_main import _FakeAgentInstanceStore, _FakeRoutingPolicyStore, _make_record
+
+_POD = "runtime-a"
+_POD_URL = "http://pod-a"
+# Captured before the autouse fixture stubs it, to test the real helper.
+_REAL_UNREACHABLE_TEAM_PODS = routing_policy_service._unreachable_team_pods
 
 
 def _user() -> KeycloakUser:
@@ -62,23 +72,36 @@ async def test_get_returns_none_when_no_policy_stored(
     assert await store.get(team_id=TeamId("team-1")) is None
 
 
+async def _upsert(store: TeamRoutingPolicyStore, team_id: str, **kwargs: Any):
+    values: dict[str, Any] = {
+        "chat_default_profile_id": None,
+        "disabled_model_ids": [],
+        "reasoning_default_off_model_ids": [],
+        "updated_by": "u1",
+    }
+    values.update(kwargs)
+    return await store.upsert(team_id=TeamId(team_id), **values)
+
+
 @pytest.mark.asyncio
 async def test_upsert_then_get_round_trips(
     control_plane_sql_engine: AsyncEngine,
 ) -> None:
     store = TeamRoutingPolicyStore(engine=control_plane_sql_engine)
-    await store.upsert(
-        team_id=TeamId("team-1"),
+    await _upsert(
+        store,
+        "team-1",
         chat_default_profile_id="default.chat.mistral",
-        agent_profile_overrides={"rico": "chat.gpt5"},
-        updated_by="u1",
+        disabled_model_ids=["model__b"],
+        reasoning_default_off_model_ids=["model__a"],
     )
 
     stored = await store.get(team_id=TeamId("team-1"))
 
     assert stored is not None
     assert stored.chat_default_profile_id == "default.chat.mistral"
-    assert stored.agent_profile_overrides == {"rico": "chat.gpt5"}
+    assert stored.disabled_model_ids == ("model__b",)
+    assert stored.reasoning_default_off_model_ids == ("model__a",)
     assert stored.version == 1
 
 
@@ -87,18 +110,8 @@ async def test_second_upsert_increments_version_and_replaces(
     control_plane_sql_engine: AsyncEngine,
 ) -> None:
     store = TeamRoutingPolicyStore(engine=control_plane_sql_engine)
-    await store.upsert(
-        team_id=TeamId("team-1"),
-        chat_default_profile_id="p1",
-        agent_profile_overrides={},
-        updated_by="u1",
-    )
-    await store.upsert(
-        team_id=TeamId("team-1"),
-        chat_default_profile_id="p2",
-        agent_profile_overrides={},
-        updated_by="u2",
-    )
+    await _upsert(store, "team-1", chat_default_profile_id="p1")
+    await _upsert(store, "team-1", chat_default_profile_id="p2", updated_by="u2")
 
     stored = await store.get(team_id=TeamId("team-1"))
 
@@ -113,14 +126,266 @@ async def test_upsert_is_scoped_per_team(
     control_plane_sql_engine: AsyncEngine,
 ) -> None:
     store = TeamRoutingPolicyStore(engine=control_plane_sql_engine)
-    await store.upsert(
-        team_id=TeamId("team-1"),
-        chat_default_profile_id="p1",
-        agent_profile_overrides={},
-        updated_by="u1",
-    )
+    await _upsert(store, "team-1", chat_default_profile_id="p1")
 
     assert await store.get(team_id=TeamId("team-2")) is None
+
+
+async def _seed_instance(
+    engine: AsyncEngine, agent_instance_id: str, team_id: str, recommended: str | None
+) -> None:
+    from control_plane_backend.agent_instances.store import (
+        AgentInstanceRecord,
+        AgentInstanceStore,
+    )
+    from control_plane_backend.config.models import ManagedAgentTuning
+
+    await AgentInstanceStore(engine).create(
+        AgentInstanceRecord(
+            agent_instance_id=agent_instance_id,
+            team_id=TeamId(team_id),
+            template_id="runtime-a:rico",
+            source_runtime_id="runtime-a",
+            source_agent_id="rico",
+            display_name=agent_instance_id,
+            description=None,
+            enabled=True,
+            created_by=None,
+            tuning=ManagedAgentTuning(
+                role="r", description="d", recommended_chat_profile_id=recommended
+            ),
+        )
+    )
+
+
+async def _recommendation(engine: AsyncEngine, agent_instance_id: str) -> str | None:
+    from control_plane_backend.agent_instances.store import AgentInstanceStore
+
+    record = await AgentInstanceStore(engine).get(agent_instance_id)
+    assert record is not None
+    return record.tuning.recommended_chat_profile_id
+
+
+@pytest.mark.asyncio
+async def test_upsert_clears_the_team_recommendations_in_the_same_write(
+    control_plane_sql_engine: AsyncEngine,
+) -> None:
+    await _seed_instance(control_plane_sql_engine, "x", "team-1", "chat.b")
+    await _seed_instance(control_plane_sql_engine, "z", "team-1", None)
+    await _seed_instance(control_plane_sql_engine, "other", "team-2", "chat.b")
+    store = TeamRoutingPolicyStore(engine=control_plane_sql_engine)
+
+    await _upsert(
+        store,
+        "team-1",
+        disabled_model_ids=["model__b"],
+        cleared_recommendation_profile_ids=frozenset({"chat.b"}),
+    )
+
+    assert await _recommendation(control_plane_sql_engine, "x") is None
+    assert await _recommendation(control_plane_sql_engine, "z") is None
+    assert await _recommendation(control_plane_sql_engine, "other") == "chat.b"
+
+
+@pytest.mark.asyncio
+async def test_an_agent_save_rechecks_its_recommendation_in_the_write(
+    control_plane_sql_engine: AsyncEngine,
+) -> None:
+    """A model disabled after the service validated the recommendation is
+    still refused, by the check inside the agent's own write."""
+
+    from control_plane_backend.agent_instances.store import AgentInstanceStore
+
+    await _seed_instance(control_plane_sql_engine, "x", "team-1", None)
+    await _upsert(
+        TeamRoutingPolicyStore(engine=control_plane_sql_engine),
+        "team-1",
+        disabled_model_ids=["model__b"],
+    )
+    instances = AgentInstanceStore(control_plane_sql_engine)
+    record = await instances.get("x")
+    assert record is not None
+
+    with pytest.raises(ModelDisabledForTeamError):
+        await instances.update(
+            "x",
+            TeamId("team-1"),
+            tuning=record.tuning.model_copy(
+                update={"recommended_chat_profile_id": "chat.b"}
+            ),
+            recommended_capability_id="model__b",
+        )
+    assert await _recommendation(control_plane_sql_engine, "x") is None
+
+    with pytest.raises(ModelDisabledForTeamError):
+        await _seed_instance_checked(control_plane_sql_engine, "y", "chat.b")
+    assert await instances.get("y") is None
+
+
+async def _seed_instance_checked(
+    engine: AsyncEngine, agent_instance_id: str, recommended: str
+) -> None:
+    from control_plane_backend.agent_instances.store import (
+        AgentInstanceRecord,
+        AgentInstanceStore,
+    )
+    from control_plane_backend.config.models import ManagedAgentTuning
+
+    await AgentInstanceStore(engine).create(
+        AgentInstanceRecord(
+            agent_instance_id=agent_instance_id,
+            team_id=TeamId("team-1"),
+            template_id="runtime-a:rico",
+            source_runtime_id="runtime-a",
+            source_agent_id="rico",
+            display_name=agent_instance_id,
+            description=None,
+            enabled=True,
+            created_by=None,
+            tuning=ManagedAgentTuning(
+                role="r", description="d", recommended_chat_profile_id=recommended
+            ),
+        ),
+        recommended_capability_id="model__b",
+    )
+
+
+@pytest.mark.asyncio
+async def test_an_unrelated_agent_save_never_resurrects_a_cleared_recommendation(
+    control_plane_sql_engine: AsyncEngine,
+) -> None:
+    """The agent form loaded "chat.b", a disable cleared it, then the form
+    saved a prompt edit: the stored (cleared) value wins."""
+
+    from control_plane_backend.agent_instances.store import AgentInstanceStore
+
+    await _seed_instance(control_plane_sql_engine, "x", "team-1", "chat.b")
+    instances = AgentInstanceStore(control_plane_sql_engine)
+    loaded = await instances.get("x")
+    assert loaded is not None
+    await _upsert(
+        TeamRoutingPolicyStore(engine=control_plane_sql_engine),
+        "team-1",
+        disabled_model_ids=["model__b"],
+        cleared_recommendation_profile_ids=frozenset({"chat.b"}),
+    )
+
+    await instances.update(
+        "x",
+        TeamId("team-1"),
+        tuning=loaded.tuning.model_copy(update={"role": "edited"}),
+        keep_stored_recommendation=True,
+    )
+
+    saved = await instances.get("x")
+    assert saved is not None
+    assert saved.tuning.role == "edited"
+    assert saved.tuning.recommended_chat_profile_id is None
+
+
+@pytest.mark.asyncio
+async def test_upsert_refuses_a_stale_expected_version(
+    control_plane_sql_engine: AsyncEngine,
+) -> None:
+    store = TeamRoutingPolicyStore(engine=control_plane_sql_engine)
+    await _upsert(store, "team-1", expected_version=0)
+    with pytest.raises(RoutingPolicyVersionConflictError) as exc_info:
+        await _upsert(store, "team-1", disabled_model_ids=["m"], expected_version=0)
+    assert (exc_info.value.expected, exc_info.value.actual) == (0, 1)
+    stored = await _upsert(
+        store, "team-1", disabled_model_ids=["m"], expected_version=1
+    )
+    assert stored.version == 2
+
+
+@pytest.mark.asyncio
+async def test_a_failed_clear_rolls_the_policy_write_back(
+    control_plane_sql_engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from control_plane_backend.routing_policy import store as store_module
+
+    await _seed_instance(control_plane_sql_engine, "x", "team-1", "chat.b")
+    store = TeamRoutingPolicyStore(engine=control_plane_sql_engine)
+    await _upsert(store, "team-1", chat_default_profile_id="chat.a")
+
+    async def _boom(*args: Any, **kwargs: Any) -> list[str]:
+        raise RuntimeError("clear failed")
+
+    monkeypatch.setattr(store_module, "clear_recommended_chat_profiles", _boom)
+    with pytest.raises(RuntimeError):
+        await _upsert(
+            store,
+            "team-1",
+            chat_default_profile_id="chat.a",
+            disabled_model_ids=["model__b"],
+            cleared_recommendation_profile_ids=frozenset({"chat.b"}),
+        )
+
+    stored = await store.get(team_id=TeamId("team-1"))
+    assert stored is not None
+    assert stored.version == 1
+    assert stored.disabled_model_ids == ()
+    assert await _recommendation(control_plane_sql_engine, "x") == "chat.b"
+
+
+@pytest.mark.asyncio
+async def test_model_revocation_prunes_exceptions_and_clears_recommendations(
+    control_plane_sql_engine: AsyncEngine,
+) -> None:
+    await _seed_instance(control_plane_sql_engine, "x", "team-1", "chat.b")
+    store = TeamRoutingPolicyStore(engine=control_plane_sql_engine)
+    await _upsert(
+        store,
+        "team-1",
+        disabled_model_ids=["model__b", "model__c"],
+        reasoning_default_off_model_ids=["model__b"],
+    )
+
+    assert await store.list_team_ids_referencing_model("model__b") == ["team-1"]
+    cleared = await store.apply_model_revocation(
+        team_id=TeamId("team-1"),
+        capability_id="model__b",
+        recommendation_profile_ids=frozenset({"chat.b"}),
+    )
+
+    assert cleared == ["x"]
+    stored = await store.get(team_id=TeamId("team-1"))
+    assert stored is not None
+    assert stored.disabled_model_ids == ("model__c",)
+    assert stored.reasoning_default_off_model_ids == ()
+    assert stored.version == 1
+    assert await store.list_team_ids_referencing_model("model__b") == []
+
+
+@pytest.mark.asyncio
+async def test_model_revocation_clears_a_team_default_naming_the_model(
+    control_plane_sql_engine: AsyncEngine,
+) -> None:
+    """A revoked stored default is cleared, so the pod default takes over and
+    turns keep working; a default on another model is kept."""
+
+    store = TeamRoutingPolicyStore(engine=control_plane_sql_engine)
+    await _upsert(store, "team-1", chat_default_profile_id="chat.b")
+    await _upsert(store, "team-2", chat_default_profile_id="chat.c")
+
+    assert await store.list_team_ids_referencing_model(
+        "model__b", frozenset({"chat.b"})
+    ) == ["team-1"]
+    await store.apply_model_revocation(
+        team_id=TeamId("team-1"),
+        capability_id="model__b",
+        recommendation_profile_ids=frozenset({"chat.b"}),
+    )
+    await store.apply_model_revocation(
+        team_id=TeamId("team-2"),
+        capability_id="model__b",
+        recommendation_profile_ids=frozenset({"chat.b"}),
+    )
+
+    team_1 = await store.get(team_id=TeamId("team-1"))
+    team_2 = await store.get(team_id=TeamId("team-2"))
+    assert team_1 is not None and team_1.chat_default_profile_id is None
+    assert team_2 is not None and team_2.chat_default_profile_id == "chat.c"
 
 
 # ---------------------------------------------------------------------------
@@ -128,50 +393,16 @@ async def test_upsert_is_scoped_per_team(
 # ---------------------------------------------------------------------------
 
 
-class _FakeStore:
-    def __init__(self) -> None:
+class _FakeStore(_FakeRoutingPolicyStore):
+    """`_FakeRoutingPolicyStore` that records the last write."""
+
+    def __init__(self, stored: dict[str, Any] | None = None, **kwargs: Any) -> None:
+        super().__init__(stored, **kwargs)
         self.upserted: dict[str, Any] | None = None
-        self._stored = None
 
-    async def get(self, *, team_id):
-        return self._stored
-
-    async def upsert(
-        self, *, team_id, chat_default_profile_id, agent_profile_overrides, updated_by
-    ):
-        from control_plane_backend.routing_policy.store import StoredTeamRoutingPolicy
-
-        self.upserted = {
-            "team_id": team_id,
-            "chat_default_profile_id": chat_default_profile_id,
-            "agent_profile_overrides": agent_profile_overrides,
-            "updated_by": updated_by,
-        }
-        record = StoredTeamRoutingPolicy(
-            team_id=team_id,
-            version=1,
-            chat_default_profile_id=chat_default_profile_id,
-            agent_profile_overrides=dict(agent_profile_overrides),
-            updated_by=updated_by,
-            updated_at=None,
-        )
-        self._stored = record
-        return record
-
-
-class _FakeAgentInstance:
-    def __init__(self, source_runtime_id: str) -> None:
-        self.source_runtime_id = source_runtime_id
-
-
-class _FakeAgentInstanceStore:
-    def __init__(self, source_runtime_ids: list[str] | None = None) -> None:
-        self._instances = [
-            _FakeAgentInstance(rid) for rid in (source_runtime_ids or [])
-        ]
-
-    async def list_by_team(self, team_id):
-        return self._instances
+    async def upsert(self, **kwargs: Any):
+        self.upserted = kwargs
+        return await super().upsert(**kwargs)
 
 
 class _FakeDeps:
@@ -184,10 +415,28 @@ class _FakeDeps:
         store: _FakeStore,
         rebac: Any,
         source_runtime_ids: list[str] | None = None,
+        instances: list[Any] | None = None,
+        reasoning_enabled_ids: set[str] | None = None,
     ) -> None:
         self._store = store
         self.team_dependencies = type("_TD", (), {"rebac": rebac})()
-        self._agent_instance_store = _FakeAgentInstanceStore(source_runtime_ids)
+        records = list(instances or [])
+        records.extend(
+            _make_record(
+                agent_instance_id=f"inst-{rid}", team_id="team-1", source_runtime_id=rid
+            )
+            for rid in (source_runtime_ids or [])
+        )
+        self._agent_instance_store = _FakeAgentInstanceStore(records)
+        store._instances = self._agent_instance_store
+        self._reasoning_enabled_ids = reasoning_enabled_ids or set()
+        self.configuration = SimpleNamespace(
+            platform=SimpleNamespace(
+                runtime_catalog_sources=[
+                    SimpleNamespace(enabled=True, base_url=_POD_URL, runtime_id=_POD)
+                ]
+            )
+        )
 
     def get_team_routing_policy_store(self):
         return self._store
@@ -195,16 +444,34 @@ class _FakeDeps:
     def get_agent_instance_store(self):
         return self._agent_instance_store
 
+    def get_model_reasoning_store(self):
+        ids = self._reasoning_enabled_ids
+
+        class _Store:
+            async def list_enabled_model_ids(self):
+                return set(ids)
+
+        return _Store()
+
 
 def _deps(
-    *, store: _FakeStore, rebac: Any, source_runtime_ids: list[str] | None = None
+    *,
+    store: _FakeStore,
+    rebac: Any,
+    source_runtime_ids: list[str] | None = None,
+    instances: list[Any] | None = None,
+    reasoning_enabled_ids: set[str] | None = None,
 ) -> ProductServiceDependencies:
     """`_FakeDeps` duck-types `ProductServiceDependencies` (only the
     attributes `routing_policy.service` reads) — one acknowledged type: ignore
     here instead of one per call site below."""
 
     return _FakeDeps(  # type: ignore[return-value]
-        store=store, rebac=rebac, source_runtime_ids=source_runtime_ids
+        store=store,
+        rebac=rebac,
+        source_runtime_ids=source_runtime_ids,
+        instances=instances,
+        reasoning_enabled_ids=reasoning_enabled_ids,
     )
 
 
@@ -291,6 +558,21 @@ def _stub_catalog(monkeypatch: pytest.MonkeyPatch):
         "universally_available_chat_model_profile_ids",
         _fake_universal,
     )
+
+    async def _no_pod_defaults(deps, source_runtime_ids):
+        return []
+
+    # Never reach a real pod; tests needing a pod default override this.
+    monkeypatch.setattr(
+        routing_policy_service, "_team_pod_default_profiles", _no_pod_defaults
+    )
+
+    async def _all_reachable(deps, source_runtime_ids):
+        return []
+
+    monkeypatch.setattr(
+        routing_policy_service, "_unreachable_team_pods", _all_reachable
+    )
     return catalog
 
 
@@ -318,12 +600,76 @@ def _elevated_rebac(
 
 
 @pytest.mark.asyncio
-async def test_write_requires_can_update_resources(_stub_team_lookup) -> None:
+async def test_write_requires_can_update_info(_stub_team_lookup) -> None:
     deps = _deps(store=_FakeStore(), rebac=None)
     await routing_policy_service.update_team_routing_policy(
         _user(), TeamId("team-1"), UpdateTeamRoutingPolicyRequest(), deps
     )
-    assert _stub_team_lookup[-1] == [TeamPermission.CAN_UPDATE_RESOURCES]
+    assert _stub_team_lookup[-1] == [TeamPermission.CAN_UPDATE_INFO]
+
+
+def _role_gate(monkeypatch: pytest.MonkeyPatch, held: set[TeamPermission]) -> None:
+    """`require_team_access` for a caller holding exactly `held`."""
+
+    async def _gate(user, team_id, team_deps, required_permissions):
+        if not set(required_permissions) <= held:
+            raise AuthorizationError(
+                user_id=user.uid,
+                action="update",
+                resource=Resource.TEAM,
+                message="denied",
+            )
+        return team_id
+
+    monkeypatch.setattr(routing_policy_service, "require_team_access", _gate)
+
+
+_EDITOR = {TeamPermission.CAN_READ_MEMEBERS, TeamPermission.CAN_UPDATE_RESOURCES}
+_ADMIN = {TeamPermission.CAN_READ_MEMEBERS, TeamPermission.CAN_UPDATE_INFO}
+
+
+@pytest.mark.asyncio
+async def test_team_editor_cannot_write_the_team_models(monkeypatch) -> None:
+    _role_gate(monkeypatch, _EDITOR)
+    store = _FakeStore()
+    with pytest.raises(AuthorizationError):
+        await routing_policy_service.update_team_routing_policy(
+            _user(),
+            TeamId("team-1"),
+            UpdateTeamRoutingPolicyRequest(),
+            _deps(store=store, rebac=None),
+        )
+    assert store.upserted is None
+
+
+@pytest.mark.asyncio
+async def test_team_admin_can_write_the_team_models(monkeypatch) -> None:
+    _role_gate(monkeypatch, _ADMIN)
+    policy = await routing_policy_service.update_team_routing_policy(
+        _user(),
+        TeamId("team-1"),
+        UpdateTeamRoutingPolicyRequest(),
+        _deps(store=_FakeStore(), rebac=None),
+    )
+    assert policy.version == 1
+
+
+@pytest.mark.asyncio
+async def test_personal_space_owner_can_write_the_team_models(monkeypatch) -> None:
+    """No stub: the real `require_team_access` lets the owner of a personal
+    space through its system-team bypass, with no ReBAC round trip."""
+
+    from control_plane_backend.teams import service as teams_service
+
+    monkeypatch.setattr(
+        routing_policy_service, "require_team_access", teams_service.require_team_access
+    )
+    deps = _deps(store=_FakeStore(), rebac=None)
+    deps.team_dependencies = SimpleNamespace(rebac=None)  # type: ignore[attr-defined]
+    policy = await routing_policy_service.update_team_routing_policy(
+        _user(), TeamId("personal"), UpdateTeamRoutingPolicyRequest(), deps
+    )
+    assert policy.team_id == "personal-u1"
 
 
 @pytest.mark.asyncio
@@ -343,26 +689,14 @@ async def test_get_with_no_stored_policy_returns_empty_version_zero() -> None:
     )
     assert policy.version == 0
     assert policy.chat_default_profile_id is None
-    assert policy.agent_profile_overrides == {}
+    assert policy.disabled_model_ids == []
+    assert policy.reasoning_default_off_model_ids == []
 
 
 @pytest.mark.asyncio
 async def test_unknown_profile_id_rejected() -> None:
     deps = _deps(store=_FakeStore(), rebac=None)
     request = UpdateTeamRoutingPolicyRequest(chat_default_profile_id="ghost.profile")
-    with pytest.raises(UnknownProfileError) as exc_info:
-        await routing_policy_service.update_team_routing_policy(
-            _user(), TeamId("team-1"), request, deps
-        )
-    assert exc_info.value.profile_ids == ["ghost.profile"]
-
-
-@pytest.mark.asyncio
-async def test_override_targeting_unknown_profile_rejected() -> None:
-    deps = _deps(store=_FakeStore(), rebac=None)
-    request = UpdateTeamRoutingPolicyRequest(
-        agent_profile_overrides={"rico": "ghost.profile"}
-    )
     with pytest.raises(UnknownProfileError) as exc_info:
         await routing_policy_service.update_team_routing_policy(
             _user(), TeamId("team-1"), request, deps
@@ -435,40 +769,13 @@ async def test_not_usable_profile_rejected() -> None:
 async def test_usable_profile_accepted_and_persisted() -> None:
     fake_store = _FakeStore()
     deps = _deps(store=fake_store, rebac=_FakeRebacAllowAll())
-    request = UpdateTeamRoutingPolicyRequest(
-        chat_default_profile_id="chat.openai.gpt5",
-        agent_profile_overrides={"rico": "chat.openai.gpt4o"},
-    )
+    request = UpdateTeamRoutingPolicyRequest(chat_default_profile_id="chat.openai.gpt5")
     result = await routing_policy_service.update_team_routing_policy(
         _user(), TeamId("team-1"), request, deps
     )
     assert result.chat_default_profile_id == "chat.openai.gpt5"
     assert fake_store.upserted is not None
     assert fake_store.upserted["updated_by"] == "u1"
-
-
-@pytest.mark.asyncio
-async def test_sibling_profiles_sharing_capability_only_checked_once() -> None:
-    # chat.openai.gpt5 and chat.openai.gpt5.creative share model__openai__gpt-5
-    # (see _stub_catalog) — referencing both in one write must not require two
-    # separate can_use checks against the same capability id.
-    calls = 0
-
-    class _CountingRebac:
-        async def has_permission(self, *args, **kwargs) -> bool:
-            nonlocal calls
-            calls += 1
-            return True
-
-    deps = _deps(store=_FakeStore(), rebac=_CountingRebac())
-    request = UpdateTeamRoutingPolicyRequest(
-        chat_default_profile_id="chat.openai.gpt5",
-        agent_profile_overrides={"rico": "chat.openai.gpt5.creative"},
-    )
-    await routing_policy_service.update_team_routing_policy(
-        _user(), TeamId("team-1"), request, deps
-    )
-    assert calls == 1
 
 
 @pytest.mark.asyncio
@@ -481,6 +788,345 @@ async def test_empty_request_skips_catalog_and_rebac_entirely(monkeypatch) -> No
     await routing_policy_service.update_team_routing_policy(
         _user(), TeamId("team-1"), UpdateTeamRoutingPolicyRequest(), deps
     )
+
+
+def _usable(monkeypatch: pytest.MonkeyPatch, ids: set[str] | None) -> None:
+    async def _fake_usable(rebac, team_id):
+        return ids
+
+    monkeypatch.setattr(routing_policy_service, "usable_capability_ids", _fake_usable)
+
+
+def _pod_defaults(monkeypatch: pytest.MonkeyPatch, defaults: list[tuple[str, str]]):
+    async def _fake(deps, source_runtime_ids):
+        return defaults
+
+    monkeypatch.setattr(routing_policy_service, "_team_pod_default_profiles", _fake)
+
+
+@pytest.mark.asyncio
+async def test_set_as_default_on_an_enabled_model(monkeypatch) -> None:
+    _usable(monkeypatch, None)
+    store = _FakeStore({"team-1": {"chat_default_profile_id": "chat.openai.gpt4o"}})
+    result = await routing_policy_service.update_team_routing_policy(
+        _user(),
+        TeamId("team-1"),
+        UpdateTeamRoutingPolicyRequest(
+            chat_default_profile_id="chat.openai.gpt5",
+            disabled_model_ids=["model__openai__gpt-4o"],
+        ),
+        _deps(store=store, rebac=_FakeRebacAllowAll()),
+    )
+    assert result.chat_default_profile_id == "chat.openai.gpt5"
+    assert result.disabled_model_ids == ["model__openai__gpt-4o"]
+
+
+@pytest.mark.asyncio
+async def test_disabling_the_default_model_is_rejected(monkeypatch) -> None:
+    _usable(monkeypatch, None)
+    store = _FakeStore()
+    with pytest.raises(DefaultModelNotDisableableError) as exc_info:
+        await routing_policy_service.update_team_routing_policy(
+            _user(),
+            TeamId("team-1"),
+            # A sibling profile of the same model is still that model.
+            UpdateTeamRoutingPolicyRequest(
+                chat_default_profile_id="chat.openai.gpt5.creative",
+                disabled_model_ids=["model__openai__gpt-5"],
+            ),
+            _deps(store=store, rebac=_FakeRebacAllowAll()),
+        )
+    assert exc_info.value.capability_ids == ["model__openai__gpt-5"]
+    assert store.upserted is None
+
+
+@pytest.mark.asyncio
+async def test_the_effective_pod_default_cannot_be_disabled_either(monkeypatch) -> None:
+    """With no stored team default the pod default is shown as Default, and
+    the same rule protects it."""
+
+    _usable(monkeypatch, None)
+    _pod_defaults(monkeypatch, [("chat.openai.gpt4o", "model__openai__gpt-4o")])
+    with pytest.raises(DefaultModelNotDisableableError):
+        await routing_policy_service.update_team_routing_policy(
+            _user(),
+            TeamId("team-1"),
+            UpdateTeamRoutingPolicyRequest(
+                disabled_model_ids=["model__openai__gpt-4o"]
+            ),
+            _deps(store=_FakeStore(), rebac=_FakeRebacAllowAll()),
+        )
+
+
+@pytest.mark.asyncio
+async def test_ids_the_team_can_no_longer_use_are_pruned_on_write(monkeypatch) -> None:
+    _usable(monkeypatch, {"model__openai__gpt-5", "model__openai__gpt-4o"})
+    _pod_defaults(monkeypatch, [])
+    result = await routing_policy_service.update_team_routing_policy(
+        _user(),
+        TeamId("team-1"),
+        UpdateTeamRoutingPolicyRequest(
+            disabled_model_ids=["model__openai__gpt-4o", "model__revoked"],
+            reasoning_default_off_model_ids=["model__openai__gpt-5", "model__gone"],
+        ),
+        _deps(store=_FakeStore(), rebac=_FakeRebacAllowAll()),
+    )
+    assert result.disabled_model_ids == ["model__openai__gpt-4o"]
+    assert result.reasoning_default_off_model_ids == ["model__openai__gpt-5"]
+
+
+@pytest.mark.asyncio
+async def test_disabling_a_model_clears_its_recommendations_atomically(
+    monkeypatch,
+) -> None:
+    """Agents X and Y recommend the disabled model (via two of its profiles),
+    Z follows the team: X and Y lose their recommendation in the same write.
+    A model already disabled before this write clears nothing new."""
+
+    _usable(monkeypatch, None)
+    _pod_defaults(monkeypatch, [])
+    instances = [
+        _make_record(agent_instance_id="x", team_id="team-1"),
+        _make_record(agent_instance_id="y", team_id="team-1"),
+        _make_record(agent_instance_id="z", team_id="team-1"),
+    ]
+    for record, profile in zip(
+        instances, ["chat.openai.gpt5", "chat.openai.gpt5.creative", None]
+    ):
+        record.tuning = record.tuning.model_copy(
+            update={"recommended_chat_profile_id": profile}
+        )
+    store = _FakeStore({"team-1": {"disabled_model_ids": ["model__openai__gpt-4o"]}})
+    await routing_policy_service.update_team_routing_policy(
+        _user(),
+        TeamId("team-1"),
+        UpdateTeamRoutingPolicyRequest(
+            disabled_model_ids=["model__openai__gpt-5", "model__openai__gpt-4o"]
+        ),
+        _deps(store=store, rebac=_FakeRebacAllowAll(), instances=instances),
+    )
+    assert store.upserted is not None
+    assert store.upserted["cleared_recommendation_profile_ids"] == frozenset(
+        {"chat.openai.gpt5", "chat.openai.gpt5.creative"}
+    )
+    assert [r.tuning.recommended_chat_profile_id for r in instances] == [
+        None,
+        None,
+        None,
+    ]
+    assert sorted(store.cleared) == ["x", "y"]
+
+
+@pytest.mark.asyncio
+async def test_a_write_from_a_stale_read_is_refused(monkeypatch) -> None:
+    _usable(monkeypatch, None)
+    store = _FakeStore({"team-1": {"chat_default_profile_id": "chat.openai.gpt5"}})
+    with pytest.raises(RoutingPolicyVersionConflictError):
+        await routing_policy_service.update_team_routing_policy(
+            _user(),
+            TeamId("team-1"),
+            UpdateTeamRoutingPolicyRequest(
+                chat_default_profile_id="chat.openai.gpt4o", expected_version=0
+            ),
+            _deps(store=store, rebac=_FakeRebacAllowAll()),
+        )
+    stored = await store.get(team_id="team-1")
+    assert stored is not None and stored.chat_default_profile_id == "chat.openai.gpt5"
+
+
+def _unreachable(monkeypatch: pytest.MonkeyPatch, runtime_ids: list[str]) -> None:
+    async def _fake(deps, source_runtime_ids):
+        return runtime_ids
+
+    monkeypatch.setattr(routing_policy_service, "_unreachable_team_pods", _fake)
+
+
+@pytest.mark.asyncio
+async def test_disabling_with_no_stored_default_refuses_when_a_pod_is_unreachable(
+    monkeypatch,
+) -> None:
+    """The unreachable pod's default is unknown, so it could be the model
+    being disabled: refuse (503) rather than fail open."""
+
+    _usable(monkeypatch, None)
+    _unreachable(monkeypatch, ["pod-b"])
+    store = _FakeStore()
+    with pytest.raises(ModelCatalogUnavailableError) as exc_info:
+        await routing_policy_service.update_team_routing_policy(
+            _user(),
+            TeamId("team-1"),
+            UpdateTeamRoutingPolicyRequest(
+                disabled_model_ids=["model__openai__gpt-4o"]
+            ),
+            _deps(store=store, rebac=_FakeRebacAllowAll()),
+        )
+    assert exc_info.value.runtime_ids == ["pod-b"]
+    assert store.upserted is None
+
+
+@pytest.mark.asyncio
+async def test_newly_disabling_refuses_when_a_pod_is_unreachable_even_with_a_default(
+    monkeypatch,
+) -> None:
+    """Recommendations naming the unreachable pod's profiles could not be
+    cleared, so a newly disabled model is refused too."""
+
+    _usable(monkeypatch, None)
+    _unreachable(monkeypatch, ["pod-b"])
+    store = _FakeStore()
+    with pytest.raises(ModelCatalogUnavailableError):
+        await routing_policy_service.update_team_routing_policy(
+            _user(),
+            TeamId("team-1"),
+            UpdateTeamRoutingPolicyRequest(
+                chat_default_profile_id="chat.openai.gpt5",
+                disabled_model_ids=["model__openai__gpt-4o"],
+            ),
+            _deps(store=store, rebac=_FakeRebacAllowAll()),
+        )
+    assert store.upserted is None
+
+
+@pytest.mark.asyncio
+async def test_an_unreachable_pod_does_not_block_writes_that_disable_nothing_new(
+    monkeypatch,
+) -> None:
+    _usable(monkeypatch, None)
+    _unreachable(monkeypatch, ["pod-b"])
+    store = _FakeStore(
+        {
+            "team-1": {
+                "chat_default_profile_id": "chat.openai.gpt5",
+                "disabled_model_ids": ["model__openai__gpt-4o"],
+            }
+        }
+    )
+    result = await routing_policy_service.update_team_routing_policy(
+        _user(),
+        TeamId("team-1"),
+        UpdateTeamRoutingPolicyRequest(
+            chat_default_profile_id="chat.openai.gpt5",
+            disabled_model_ids=["model__openai__gpt-4o"],
+            reasoning_default_off_model_ids=["model__openai__gpt-5"],
+        ),
+        _deps(store=store, rebac=_FakeRebacAllowAll()),
+    )
+    assert result.reasoning_default_off_model_ids == ["model__openai__gpt-5"]
+
+
+@pytest.mark.asyncio
+async def test_unreachable_team_pods_names_the_pods_whose_catalog_is_missing(
+    monkeypatch,
+) -> None:
+    from control_plane_backend.product import service as product_service
+
+    async def _fake(base_url: str):
+        return None if base_url == "http://pod-b" else object()
+
+    monkeypatch.setattr(product_service, "_model_capabilities_for_source", _fake)
+    deps = SimpleNamespace(
+        configuration=SimpleNamespace(
+            platform=SimpleNamespace(
+                runtime_catalog_sources=[
+                    SimpleNamespace(
+                        enabled=True, base_url="http://pod-a", runtime_id="a"
+                    ),
+                    SimpleNamespace(
+                        enabled=True, base_url="http://pod-b", runtime_id="b"
+                    ),
+                    SimpleNamespace(
+                        enabled=True, base_url="http://pod-c", runtime_id="c"
+                    ),
+                ]
+            )
+        )
+    )
+    assert await _REAL_UNREACHABLE_TEAM_PODS(deps, {"a", "b"}) == ["b"]  # type: ignore[arg-type]
+    assert await _REAL_UNREACHABLE_TEAM_PODS(deps, {"a"}) == []  # type: ignore[arg-type]
+
+
+# ---------------------------------------------------------------------------
+# service.py — disable-impact read
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_disable_impact_lists_only_agents_recommending_the_model() -> None:
+    instances = [
+        _make_record(agent_instance_id="x", team_id="team-1", display_name="Xavier"),
+        _make_record(agent_instance_id="y", team_id="team-1", display_name="Yann"),
+        _make_record(agent_instance_id="z", team_id="team-1", display_name="Zoe"),
+        _make_record(agent_instance_id="w", team_id="team-1", display_name="Walt"),
+    ]
+    for record, profile in zip(
+        instances,
+        ["chat.openai.gpt5.creative", "chat.openai.gpt5", None, "chat.openai.gpt4o"],
+    ):
+        record.tuning = record.tuning.model_copy(
+            update={"recommended_chat_profile_id": profile}
+        )
+    impact = await routing_policy_service.get_disable_impact(
+        _user(),
+        TeamId("team-1"),
+        "model__openai__gpt-5",
+        _deps(store=_FakeStore(), rebac=None, instances=instances),
+    )
+    assert [(a.agent_instance_id, a.display_name) for a in impact.agents] == [
+        ("x", "Xavier"),
+        ("y", "Yann"),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_disable_impact_query_count_is_constant(
+    monkeypatch, _stub_catalog
+) -> None:
+    """One instance read and one catalog aggregation, whatever the number of
+    agents: no per-instance call."""
+
+    calls = {"list_by_team": 0, "catalog": 0}
+
+    async def _counting_catalog(deps):
+        calls["catalog"] += 1
+        return _stub_catalog
+
+    monkeypatch.setattr(
+        routing_policy_service, "aggregate_capability_catalog", _counting_catalog
+    )
+    instances = []
+    for index in range(25):
+        record = _make_record(agent_instance_id=f"a{index}", team_id="team-1")
+        record.tuning = record.tuning.model_copy(
+            update={"recommended_chat_profile_id": "chat.openai.gpt5"}
+        )
+        instances.append(record)
+    deps = _deps(store=_FakeStore(), rebac=None, instances=instances)
+    real_list = deps.get_agent_instance_store().list_by_team
+
+    async def _counting_list(team_id):
+        calls["list_by_team"] += 1
+        return await real_list(team_id)
+
+    deps.get_agent_instance_store().list_by_team = _counting_list  # type: ignore[method-assign]
+    impact = await routing_policy_service.get_disable_impact(
+        _user(), TeamId("team-1"), "model__openai__gpt-5", deps
+    )
+    assert len(impact.agents) == 25
+    assert calls == {"list_by_team": 1, "catalog": 1}
+
+
+@pytest.mark.asyncio
+async def test_disable_impact_requires_team_admin(monkeypatch) -> None:
+    _role_gate(monkeypatch, _EDITOR)
+    with pytest.raises(AuthorizationError):
+        await routing_policy_service.get_disable_impact(
+            _user(), TeamId("team-1"), "model__x", _deps(store=_FakeStore(), rebac=None)
+        )
+    _role_gate(monkeypatch, _ADMIN)
+    impact = await routing_policy_service.get_disable_impact(
+        _user(), TeamId("team-1"), "model__x", _deps(store=_FakeStore(), rebac=None)
+    )
+    assert impact.agents == []
 
 
 # ---------------------------------------------------------------------------
@@ -581,6 +1227,85 @@ async def test_available_models_excludes_profile_missing_from_some_pods(
     assert [p.profile_id for p in result.profiles] == ["chat.openai.gpt4o"]
 
 
+@pytest.mark.asyncio
+async def test_available_models_carry_display_name_and_reasoning_availability(
+    monkeypatch, _stub_catalog
+) -> None:
+    _usable(monkeypatch, None)
+    _stub_catalog["model__openai__gpt-5"] = _stub_catalog[
+        "model__openai__gpt-5"
+    ].model_copy(update={"model_display_name": "GPT-5"})
+    result = await routing_policy_service.list_available_model_profiles(
+        _user(),
+        TeamId("team-1"),
+        _deps(
+            store=_FakeStore(),
+            rebac=_elevated_rebac(),
+            reasoning_enabled_ids={"model__openai__gpt-5"},
+        ),
+    )
+    by_profile = {p.profile_id: p for p in result.profiles}
+    assert by_profile["chat.openai.gpt5"].display_name == "GPT-5"
+    assert by_profile["chat.openai.gpt5"].reasoning_available is True
+    assert by_profile["chat.openai.gpt4o"].reasoning_available is False
+
+
+@pytest.mark.asyncio
+async def test_available_models_name_the_effective_default(monkeypatch) -> None:
+    _usable(monkeypatch, None)
+    stored = _FakeStore({"team-1": {"chat_default_profile_id": "chat.openai.gpt5"}})
+    result = await routing_policy_service.list_available_model_profiles(
+        _user(), TeamId("team-1"), _deps(store=stored, rebac=_elevated_rebac())
+    )
+    assert result.effective_default_profile_id == "chat.openai.gpt5"
+
+    _pod_defaults(monkeypatch, [("chat.openai.gpt4o", "model__openai__gpt-4o")])
+    result = await routing_policy_service.list_available_model_profiles(
+        _user(), TeamId("team-1"), _deps(store=_FakeStore(), rebac=_elevated_rebac())
+    )
+    assert result.effective_default_profile_id == "chat.openai.gpt4o"
+
+    _pod_defaults(
+        monkeypatch,
+        [
+            ("chat.openai.gpt4o", "model__openai__gpt-4o"),
+            ("chat.openai.gpt5", "model__openai__gpt-5"),
+        ],
+    )
+    result = await routing_policy_service.list_available_model_profiles(
+        _user(), TeamId("team-1"), _deps(store=_FakeStore(), rebac=_elevated_rebac())
+    )
+    assert result.effective_default_profile_id is None
+
+
+@pytest.mark.asyncio
+async def test_a_model_granted_after_the_policy_was_saved_arrives_enabled(
+    monkeypatch,
+) -> None:
+    """No write on grant: the new model is in `available-models`, absent from
+    the stored exception lists, so it reads enabled with reasoning on."""
+
+    _usable(monkeypatch, {"model__openai__gpt-5"})
+    store = _FakeStore({"team-1": {"chat_default_profile_id": "chat.openai.gpt5"}})
+    deps = _deps(
+        store=store,
+        rebac=_elevated_rebac(),
+        reasoning_enabled_ids={"model__openai__gpt-4o"},
+    )
+    _usable(monkeypatch, {"model__openai__gpt-5", "model__openai__gpt-4o"})
+    result = await routing_policy_service.list_available_model_profiles(
+        _user(), TeamId("team-1"), deps
+    )
+    policy = await routing_policy_service.get_team_routing_policy(
+        _user(), TeamId("team-1"), deps
+    )
+    new = next(p for p in result.profiles if p.capability_id == "model__openai__gpt-4o")
+    assert new.reasoning_available is True
+    assert "model__openai__gpt-4o" not in policy.disabled_model_ids
+    assert "model__openai__gpt-4o" not in policy.reasoning_default_off_model_ids
+    assert store.upserted is None
+
+
 # ---------------------------------------------------------------------------
 # service.py — _require_elevated_team_role read gate
 # ---------------------------------------------------------------------------
@@ -645,38 +1370,26 @@ async def test_elevated_role_check_skipped_for_personal_space() -> None:
 
 
 @pytest.mark.asyncio
-async def test_snapshot_resolves_none_and_empty_when_no_policy_stored() -> None:
+async def test_snapshot_resolves_none_when_no_policy_stored() -> None:
     deps = _deps(store=_FakeStore(), rebac=None)
-    (
-        default_id,
-        overrides,
-    ) = await routing_policy_service.resolve_execution_routing_snapshot(
-        TeamId("team-1"), deps
+    assert (
+        await routing_policy_service.resolve_execution_routing_snapshot(
+            TeamId("team-1"), deps
+        )
+        is None
     )
-    assert default_id is None
-    assert overrides == {}
 
 
 @pytest.mark.asyncio
-async def test_snapshot_resolves_stored_policy() -> None:
-    fake_store = _FakeStore()
-    await fake_store.upsert(
-        team_id=TeamId("team-1"),
-        chat_default_profile_id="chat.openai.gpt5",
-        agent_profile_overrides={"rico": "chat.openai.gpt4o"},
-        updated_by="u1",
+async def test_snapshot_resolves_the_stored_default() -> None:
+    store = _FakeStore({"team-1": {"chat_default_profile_id": "chat.openai.gpt5"}})
+    deps = _deps(store=store, rebac=None)
+    assert (
+        await routing_policy_service.resolve_execution_routing_snapshot(
+            TeamId("team-1"), deps
+        )
+        == "chat.openai.gpt5"
     )
-    deps = _deps(store=fake_store, rebac=None)
-
-    (
-        default_id,
-        overrides,
-    ) = await routing_policy_service.resolve_execution_routing_snapshot(
-        TeamId("team-1"), deps
-    )
-
-    assert default_id == "chat.openai.gpt5"
-    assert overrides == {"rico": "chat.openai.gpt4o"}
 
 
 # ---------------------------------------------------------------------------
@@ -687,14 +1400,18 @@ async def test_snapshot_resolves_stored_policy() -> None:
 # be the reasoning-enabled model that used to be displayed instead.
 # ---------------------------------------------------------------------------
 
-_POD = "runtime-a"
-_POD_URL = "http://pod-a"
-
 
 class _FakeInstanceForResolution:
-    def __init__(self, *, source_agent_id: str, source_runtime_id: str = _POD) -> None:
+    def __init__(
+        self,
+        *,
+        source_agent_id: str,
+        source_runtime_id: str = _POD,
+        recommended: str | None = None,
+    ) -> None:
         self.source_agent_id = source_agent_id
         self.source_runtime_id = source_runtime_id
+        self.tuning = SimpleNamespace(recommended_chat_profile_id=recommended)
 
 
 class _FakeRebacUnscoped:
@@ -762,24 +1479,13 @@ class _ResolutionDeps(_FakeDeps):
 
         return _Store()
 
-    def get_model_reasoning_store(self):
-        """Only the enabled-model-id list is read by the resolution."""
-
-        ids = self._reasoning_enabled_ids
-
-        class _Store:
-            async def list_enabled_model_ids(self):
-                return set(ids)
-
-        return _Store()
-
     def get_platform_model_binding_store(self):
         """No platform binding configured — the common case on every deployment
         that has not set one, and the precondition for the profile-valued
         precedence below to be reachable at all."""
 
         class _Store:
-            async def get(self, *, model_capability="chat"):
+            async def get(self, *, model_capability="chat", session=None):
                 return None
 
         return _Store()
@@ -788,26 +1494,22 @@ class _ResolutionDeps(_FakeDeps):
 def _resolution_deps(
     *,
     stored_default: str | None = None,
-    stored_overrides: dict[str, str] | None = None,
+    stored_disabled: list[str] | None = None,
+    stored_reasoning_off: list[str] | None = None,
     rebac: Any = None,
     instance: _FakeInstanceForResolution | None = None,
     sources: list[Any] | None = None,
     reasoning_enabled_ids: set[str] | None = None,
 ) -> ProductServiceDependencies:
-    from control_plane_backend.routing_policy.store import StoredTeamRoutingPolicy
-
-    store = _FakeStore()
-    if stored_default is not None or stored_overrides:
-        store._stored = StoredTeamRoutingPolicy(
-            team_id=TeamId("team-1"),
-            version=1,
-            chat_default_profile_id=stored_default,
-            agent_profile_overrides=dict(stored_overrides or {}),
-            updated_by="someone",
-            updated_at=None,
-        )
+    stored: dict[str, Any] = {}
+    if stored_default is not None or stored_disabled or stored_reasoning_off:
+        stored["team-1"] = {
+            "chat_default_profile_id": stored_default,
+            "disabled_model_ids": stored_disabled or [],
+            "reasoning_default_off_model_ids": stored_reasoning_off or [],
+        }
     return _ResolutionDeps(  # type: ignore[return-value]
-        store=store,
+        store=_FakeStore(stored),
         rebac=rebac if rebac is not None else _FakeRebacUnscoped(),
         instance=instance
         if instance is not None
@@ -898,31 +1600,169 @@ async def test_effective_model_prefers_the_team_default_over_the_pod_default(
     assert result.name == "gpt-4.1"
 
 
+def _three_models() -> list[CapabilityCatalogEntry]:
+    return [
+        _chat_entry("model__a", "chat.a", name="model-a"),
+        _chat_entry("model__b", "chat.b", name="model-b"),
+        _chat_entry("model__c", "chat.c", name="model-c"),
+    ]
+
+
 @pytest.mark.asyncio
-async def test_effective_model_prefers_the_team_agent_override(
+async def test_effective_model_prefers_the_instance_recommendation(
     monkeypatch: pytest.MonkeyPatch, _stub_team_lookup
 ) -> None:
-    """The exact case that looked broken in the UI: a per-agent override set,
-    and the composer must name IT, not the team default and not the pod's."""
-
     _stub_pod_catalog(
-        monkeypatch,
-        entries=[
-            _chat_entry("model__openai__gpt-5.1", "chat.pod", name="gpt-5.1"),
-            _chat_entry("model__openai__gpt-4.1", "chat.team", name="gpt-4.1"),
-            _chat_entry("model__openai__gpt-4o", "chat.rico", name="gpt-4o"),
-        ],
-        default_chat_profile_id="chat.pod",
+        monkeypatch, entries=_three_models(), default_chat_profile_id="chat.c"
     )
     result = await resolve_effective_chat_model(
         _user(),
         TeamId("team-1"),
         "inst-1",
         _resolution_deps(
-            stored_default="chat.team", stored_overrides={"rico": "chat.rico"}
+            stored_default="chat.b",
+            instance=_FakeInstanceForResolution(
+                source_agent_id="rico", recommended="chat.a"
+            ),
         ),
     )
-    assert result.name == "gpt-4o"
+    assert result.name == "model-a"
+    assert result.choice_locked is False
+
+
+@pytest.mark.parametrize("why", ["team-disabled", "not-usable", "unknown"])
+@pytest.mark.asyncio
+async def test_an_invalid_recommendation_falls_back_to_the_team_default(
+    monkeypatch: pytest.MonkeyPatch, _stub_team_lookup, why: str
+) -> None:
+    """Same validation as the pod: a recommendation of a disabled, revoked or
+    unknown model is ignored, and the team default names the model."""
+
+    class _OnlyBUsable:
+        async def has_permission(self, *args, **kwargs) -> bool:
+            return True
+
+        async def lookup_resources(self, *args, **kwargs):
+            return [SimpleNamespace(id="model__b")]
+
+    _stub_pod_catalog(
+        monkeypatch, entries=_three_models(), default_chat_profile_id="chat.c"
+    )
+    result = await resolve_effective_chat_model(
+        _user(),
+        TeamId("team-1"),
+        "inst-1",
+        _resolution_deps(
+            stored_default="chat.b",
+            stored_disabled=["model__a"] if why == "team-disabled" else None,
+            rebac=_OnlyBUsable() if why == "not-usable" else None,
+            instance=_FakeInstanceForResolution(
+                source_agent_id="rico",
+                recommended="chat.ghost" if why == "unknown" else "chat.a",
+            ),
+        ),
+    )
+    assert result.name == "model-b"
+
+
+@pytest.mark.asyncio
+async def test_selectable_models_exclude_disabled_and_unusable_models(
+    monkeypatch: pytest.MonkeyPatch, _stub_team_lookup
+) -> None:
+    """A plain member reads the recommended model plus the models the team
+    allows: D disabled by the team and C not usable are left out. Models of
+    another pod never appear because only the instance's own pod is read."""
+
+    class _NoC:
+        async def has_permission(self, *args, **kwargs) -> bool:
+            return True
+
+        async def lookup_resources(self, *args, **kwargs):
+            return [SimpleNamespace(id=i) for i in ("model__a", "model__b", "model__d")]
+
+    _stub_pod_catalog(
+        monkeypatch,
+        entries=[*_three_models(), _chat_entry("model__d", "chat.d", name="model-d")],
+        default_chat_profile_id="chat.a",
+    )
+    result = await resolve_effective_chat_model(
+        _user(),
+        TeamId("team-1"),
+        "inst-1",
+        _resolution_deps(
+            stored_disabled=["model__d"],
+            stored_reasoning_off=["model__b"],
+            rebac=_NoC(),
+            reasoning_enabled_ids={"model__a", "model__b"},
+        ),
+    )
+    assert result.name == "model-a"
+    assert [
+        (m.profile_id, m.reasoning_enabled, m.reasoning_default_on)
+        for m in result.selectable_models
+    ] == [("chat.a", True, True), ("chat.b", True, False)]
+
+
+@pytest.mark.asyncio
+async def test_selectable_models_offer_one_row_per_model_keyed_by_the_resolved_profile(
+    monkeypatch: pytest.MonkeyPatch, _stub_team_lookup
+) -> None:
+    gpt5 = _model_entry(
+        "model__openai__gpt-5", ["chat.gpt5", "chat.gpt5.creative"]
+    ).model_copy(update={"name": "gpt-5"})
+    _stub_pod_catalog(monkeypatch, entries=[gpt5], default_chat_profile_id="chat.gpt5")
+    result = await resolve_effective_chat_model(
+        _user(),
+        TeamId("team-1"),
+        "inst-1",
+        _resolution_deps(stored_default="chat.gpt5.creative"),
+    )
+    assert [m.profile_id for m in result.selectable_models] == ["chat.gpt5.creative"]
+
+
+@pytest.mark.asyncio
+async def test_the_choice_is_locked_by_a_pod_per_agent_override(
+    monkeypatch: pytest.MonkeyPatch, _stub_team_lookup
+) -> None:
+    _stub_pod_catalog(
+        monkeypatch,
+        entries=_three_models(),
+        default_chat_profile_id="chat.a",
+        agent_chat_profile_overrides={"rico": "chat.c"},
+    )
+    result = await resolve_effective_chat_model(
+        _user(), TeamId("team-1"), "inst-1", _resolution_deps()
+    )
+    assert result.name == "model-c"
+    assert result.choice_locked is True
+    assert result.selectable_models == []
+
+
+@pytest.mark.asyncio
+async def test_a_newly_granted_model_is_selectable_with_reasoning_on_by_default(
+    monkeypatch: pytest.MonkeyPatch, _stub_team_lookup
+) -> None:
+    """Exceptions storage: a model granted after the policy was saved needs
+    no team write to arrive enabled, reasoning on by default."""
+
+    _stub_pod_catalog(
+        monkeypatch, entries=_three_models(), default_chat_profile_id="chat.a"
+    )
+    result = await resolve_effective_chat_model(
+        _user(),
+        TeamId("team-1"),
+        "inst-1",
+        _resolution_deps(
+            stored_default="chat.a",
+            stored_disabled=["model__b"],
+            reasoning_enabled_ids={"model__c"},
+        ),
+    )
+    new_model = next(
+        m for m in result.selectable_models if m.capability_id == "model__c"
+    )
+    assert new_model.reasoning_enabled is True
+    assert new_model.reasoning_default_on is True
 
 
 @pytest.mark.asyncio
@@ -945,12 +1785,10 @@ async def test_effective_model_lets_the_pod_static_override_win(
         _user(),
         TeamId("team-1"),
         "inst-1",
-        _resolution_deps(
-            stored_default="chat.team", stored_overrides={"rico": "chat.team"}
-        ),
+        _resolution_deps(stored_default="chat.team"),
     )
-    # Both team levels named chat.team/gpt-4.1; the pod's static override wins,
-    # so gpt-4o is what answers and what the composer must say.
+    # The team default names chat.team/gpt-4.1; the pod's static override
+    # wins, so gpt-4o is what answers and what the composer must say.
     assert result.name == "gpt-4o"
     assert result.capability_id == "model__openai__gpt-4o"
 
@@ -1135,6 +1973,8 @@ async def test_effective_model_platform_binding_outranks_everything(
     )
     assert result.name == "claude-sonnet-4-6"
     assert result.enabled_for_team is True
+    assert result.choice_locked is True
+    assert result.selectable_models == []
 
 
 @pytest.mark.asyncio

@@ -28,6 +28,9 @@ const h = vi.hoisted(() => ({
   relations: [] as string[],
   charterEnabled: true,
   bootstrapLoading: false,
+  teamId: "team-1",
+  canUpdateInfo: false,
+  elevated: false,
 }));
 
 vi.mock("react-router-dom", () => ({
@@ -44,17 +47,17 @@ vi.mock("../../../../hooks/useFrontendBootstrap.ts", () => ({
 
 vi.mock("../../../../hooks/useSelectedTeam.ts", () => ({
   useSelectedTeam: () => ({
-    teamId: "team-1",
-    selectedTeam: { id: "team-1", permissions: [], my_relations: h.relations },
+    teamId: h.teamId,
+    selectedTeam: { id: h.teamId, permissions: [], my_relations: h.relations },
     canOpenTeamSettings: true,
   }),
 }));
 
 vi.mock("@hooks/useTeamCapabilities.ts", () => ({
-  useTeamCapabilities: () => ({ canUpdateInfo: false, canUpdateAgents: true, canUpdateResources: false }),
+  useTeamCapabilities: () => ({ canUpdateInfo: h.canUpdateInfo, canUpdateAgents: true, canUpdateResources: false }),
 }));
 
-vi.mock("@hooks/teamCapabilities.ts", () => ({ hasElevatedTeamRole: () => false }));
+vi.mock("@hooks/teamCapabilities.ts", () => ({ hasElevatedTeamRole: () => h.elevated }));
 
 vi.mock("@shared/organisms/TeamSettingsPanel/TeamSettingsMembers/TeamSettingsMembers.tsx", () => ({
   default: () => "members-section",
@@ -63,7 +66,7 @@ vi.mock("@shared/organisms/TeamSettingsPanel/TeamSettingsParameters/TeamSettings
   default: () => "parameters-section",
 }));
 vi.mock("@shared/organisms/TeamSettingsPanel/TeamSettingsRouting/TeamSettingsRouting.tsx", () => ({
-  default: () => "routing-section",
+  default: ({ canWrite }: { canWrite: boolean }) => `routing-section:${canWrite}`,
 }));
 vi.mock("@shared/organisms/TaskActivity/TaskActivity.tsx", () => ({ default: () => "activity-section" }));
 vi.mock("@shared/organisms/TeamSettingsPanel/TeamSettingsResponsibilities/TeamSettingsResponsibilities.tsx", () => ({
@@ -93,6 +96,9 @@ afterEach(() => {
   container.remove();
   h.charterEnabled = true;
   h.bootstrapLoading = false;
+  h.teamId = "team-1";
+  h.canUpdateInfo = false;
+  h.elevated = false;
 });
 
 describe("TeamSettingsPage responsibilities", () => {
@@ -135,5 +141,28 @@ describe("retired evaluation settings", () => {
   it("redirects an old evaluation settings URL to Members", () => {
     render("evaluations", ["team_editor"]);
     expect(container.textContent).toBe("navigate:/team/team-1/settings/members");
+  });
+});
+
+// Team admins write the team's models; editors and analysts only read them.
+describe("Models section write access", () => {
+  it("lets a team admin edit", () => {
+    h.elevated = true;
+    h.canUpdateInfo = true;
+    render("routing", ["team_admin"]);
+    expect(container.textContent).toBe("routing-section:true");
+  });
+
+  it("keeps a team editor or analyst read-only", () => {
+    h.elevated = true;
+    render("routing", ["team_editor", "team_analyst"]);
+    expect(container.textContent).toBe("routing-section:false");
+  });
+
+  it("lets a personal space's owner edit", () => {
+    h.elevated = true;
+    h.teamId = "personal-user-1";
+    render("routing", ["team_editor"]);
+    expect(container.textContent).toBe("routing-section:true");
   });
 });

@@ -32,12 +32,23 @@ agent de votre équipe que vous parlez.
   consulter. Sans rattachement, il ne voit aucun document.
 - **Les fonctions** — ce qu'il sait faire au-delà de répondre.
 
+## Le modèle de langage conseillé
+
+Dans la section **Général**, **Modèle conseillé** choisit le modèle de langage
+sur lequel démarrent les conversations avec cet agent. **Modèle par défaut de
+l'équipe** (le premier choix) reprend le modèle par défaut de l'équipe, et le
+suit quand l'admin d'équipe en change. Choisir un modèle précis, même celui qui
+est le défaut aujourd'hui, le garde quoi qu'il arrive au défaut. Seuls les modèles activés pour l'équipe sont
+proposés. Les membres peuvent toujours choisir un autre modèle dans la
+conversation (voir [Les conversations](/help/fr/features/chat)).
+
+Le raisonnement ne se règle plus dans l'agent : il suit le modèle choisi.
+
 ## Ce qu'un agent sait faire en plus de répondre
 
 L'onglet **Capacités** décide de ce que l'agent a le droit de faire : chercher
 dans les documents de l'équipe, exploiter une pièce jointe, rédiger un document
-Word, remplir une présentation PowerPoint, produire une page web, prendre le
-temps de raisonner par étapes…
+Word, remplir une présentation PowerPoint, produire une page web…
 
 Deux façons de choisir, via l'interrupteur **Avancé** en haut de l'onglet :
 

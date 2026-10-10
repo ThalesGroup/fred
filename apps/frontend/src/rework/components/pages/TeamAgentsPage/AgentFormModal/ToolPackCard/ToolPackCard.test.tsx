@@ -30,7 +30,6 @@ import { ToolPackCard } from "./ToolPackCard";
 
 const pack: ToolPack = {
   id: "powerpoint_document",
-  kind: "capabilities",
   icon: "slideshow",
   titleKey: "pack.title",
   descriptionKey: "pack.description",

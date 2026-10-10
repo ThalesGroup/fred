@@ -172,7 +172,7 @@ class _FakeAgentInstanceStore:
         )
 
     async def get_for_team(
-        self, agent_instance_id: str, team_id: TeamId
+        self, agent_instance_id: str, team_id: TeamId, session=None
     ) -> AgentInstanceRecord | None:
         return next(
             (
@@ -183,7 +183,9 @@ class _FakeAgentInstanceStore:
             None,
         )
 
-    async def create(self, record: AgentInstanceRecord) -> AgentInstanceRecord:
+    async def create(
+        self, record: AgentInstanceRecord, *, recommended_capability_id=None
+    ) -> AgentInstanceRecord:
         self._records.append(record)
         return record
 
@@ -197,6 +199,8 @@ class _FakeAgentInstanceStore:
         enabled: bool | None = None,
         tuning: ManagedAgentTuning | None = None,
         updated_by: str | None = None,
+        recommended_capability_id: str | None = None,
+        keep_stored_recommendation: bool = False,
     ) -> AgentInstanceRecord | None:
         record = next(
             (
@@ -215,6 +219,14 @@ class _FakeAgentInstanceStore:
         if enabled is not None:
             record.enabled = enabled
         if tuning is not None:
+            if keep_stored_recommendation:
+                tuning = tuning.model_copy(
+                    update={
+                        "recommended_chat_profile_id": (
+                            record.tuning.recommended_chat_profile_id
+                        )
+                    }
+                )
             record.tuning = tuning
         if updated_by is not None:
             record.updated_by = updated_by
@@ -251,6 +263,125 @@ class _FakeAgentInstanceStore:
             if not (r.agent_instance_id == agent_instance_id and r.team_id == team_id)
         ]
         return len(self._records) < before
+
+
+class _FakeRoutingPolicyStore:
+    """In-memory stand-in for TeamRoutingPolicyStore. Clears recommendations
+    on `instances` (when given) the way the real store does in one session."""
+
+    def __init__(
+        self,
+        stored: dict[str, Any] | None = None,
+        *,
+        instances: _FakeAgentInstanceStore | None = None,
+    ) -> None:
+        from control_plane_backend.routing_policy.store import StoredTeamRoutingPolicy
+
+        self._stored: dict[TeamId, StoredTeamRoutingPolicy] = {}
+        self._instances = instances
+        self.get_calls = 0
+        for team_id, values in (stored or {}).items():
+            self._stored[TeamId(team_id)] = StoredTeamRoutingPolicy(
+                team_id=TeamId(team_id),
+                version=1,
+                chat_default_profile_id=values.get("chat_default_profile_id"),
+                disabled_model_ids=tuple(values.get("disabled_model_ids", ())),
+                reasoning_default_off_model_ids=tuple(
+                    values.get("reasoning_default_off_model_ids", ())
+                ),
+                updated_by="someone",
+                updated_at=None,
+            )
+
+    async def get(self, *, team_id, session=None):
+        self.get_calls += 1
+        return self._stored.get(TeamId(team_id))
+
+    def _clear(self, team_id, profile_ids) -> list[str]:
+        cleared: list[str] = []
+        if self._instances is None:
+            return cleared
+        for record in self._instances._records:
+            if (
+                record.team_id == team_id
+                and record.tuning.recommended_chat_profile_id in profile_ids
+            ):
+                record.tuning = record.tuning.model_copy(
+                    update={"recommended_chat_profile_id": None}
+                )
+                cleared.append(record.agent_instance_id)
+        return cleared
+
+    async def upsert(
+        self,
+        *,
+        team_id,
+        chat_default_profile_id,
+        disabled_model_ids,
+        reasoning_default_off_model_ids,
+        updated_by,
+        cleared_recommendation_profile_ids=frozenset(),
+        expected_version=None,
+    ):
+        from control_plane_backend.routing_policy.schemas import (
+            RoutingPolicyVersionConflictError,
+        )
+        from control_plane_backend.routing_policy.store import StoredTeamRoutingPolicy
+
+        previous = self._stored.get(TeamId(team_id))
+        actual = previous.version if previous else 0
+        if expected_version is not None and expected_version != actual:
+            raise RoutingPolicyVersionConflictError(
+                expected=expected_version, actual=actual
+            )
+        record = StoredTeamRoutingPolicy(
+            team_id=TeamId(team_id),
+            version=(previous.version + 1) if previous else 1,
+            chat_default_profile_id=chat_default_profile_id,
+            disabled_model_ids=tuple(disabled_model_ids),
+            reasoning_default_off_model_ids=tuple(reasoning_default_off_model_ids),
+            updated_by=updated_by,
+            updated_at=None,
+        )
+        self._stored[TeamId(team_id)] = record
+        self.cleared = self._clear(TeamId(team_id), cleared_recommendation_profile_ids)
+        return record
+
+    async def list_team_ids_referencing_model(
+        self, capability_id, default_profile_ids=frozenset()
+    ):
+        return [
+            team_id
+            for team_id, record in self._stored.items()
+            if capability_id in record.disabled_model_ids
+            or capability_id in record.reasoning_default_off_model_ids
+            or record.chat_default_profile_id in default_profile_ids
+        ]
+
+    async def apply_model_revocation(
+        self, *, team_id, capability_id, recommendation_profile_ids
+    ):
+        from dataclasses import replace
+
+        record = self._stored.get(TeamId(team_id))
+        if record is not None:
+            self._stored[TeamId(team_id)] = replace(
+                record,
+                chat_default_profile_id=(
+                    None
+                    if record.chat_default_profile_id in recommendation_profile_ids
+                    else record.chat_default_profile_id
+                ),
+                disabled_model_ids=tuple(
+                    i for i in record.disabled_model_ids if i != capability_id
+                ),
+                reasoning_default_off_model_ids=tuple(
+                    i
+                    for i in record.reasoning_default_off_model_ids
+                    if i != capability_id
+                ),
+            )
+        return self._clear(TeamId(team_id), recommendation_profile_ids)
 
 
 def _patch_store(
@@ -1600,11 +1731,6 @@ async def test_team_agent_templates_aggregates_runtime_catalog(
             "available_capabilities": [],
             "supports_capabilities": True,
             "default_capability_ids": [],
-            # #2473: a template declaring neither reasoning field reports both
-            # false — the platform default, and what a pod predating #2473
-            # sends.
-            "reasoning_enabled": False,
-            "reasoning_default_on": False,
         }
     ]
 
@@ -1634,10 +1760,6 @@ async def test_team_agent_instances_returns_managed_identity(
             "description": "Managed echo agent",
             "role": "Echo Team Agent",
             "usage_statement": "",
-            # REASON-01 level 3 — a plain agent property, default off.
-            "reasoning_enabled": False,
-            # Amendment B — where the composer's toggle starts, also default off.
-            "reasoning_default_on": False,
             "status": "enabled",
             "created_by": "internal-admin",
             "tuning_field_values": {},

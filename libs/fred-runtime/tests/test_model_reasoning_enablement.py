@@ -273,7 +273,7 @@ def test_a_different_model_being_enabled_does_not_enable_this_one() -> None:
 def test_toggle_on_builds_a_client_that_sends_the_reasoning_setting() -> None:
     # The other half of the proof: the strip is conditional, not unconditional.
     # Without this, "no reasoning setting" would pass by simply never working.
-    params = _build([THINKING_MODEL_ID])
+    params = _build([THINKING_MODEL_ID], reasoning=True)
 
     assert params["reasoning_effort"] == "high"
 
@@ -282,8 +282,8 @@ def test_the_toggle_does_not_leak_into_the_next_build() -> None:
     # The profile lives in the catalog and is reused for every turn. A strip
     # implemented by mutation would silently disable reasoning platform-wide
     # after the first toggle-off turn.
-    assert "reasoning_effort" not in _build([])
-    assert _build([THINKING_MODEL_ID])["reasoning_effort"] == "high"
+    assert "reasoning_effort" not in _build([], reasoning=True)
+    assert _build([THINKING_MODEL_ID], reasoning=True)["reasoning_effort"] == "high"
 
 
 # ---------------------------------------------------------------------------
@@ -311,13 +311,12 @@ def test_a_turn_that_asks_for_reasoning_keeps_it() -> None:
     assert params["reasoning_effort"] == "high"
 
 
-def test_no_per_question_choice_leaves_levels_1_and_2_in_charge() -> None:
-    # `None` means the agent never offered the toggle, which is NOT the same as
-    # the user answering no — the pre-REASON-01 behaviour must be preserved for
-    # every agent that does not opt in.
+def test_no_reasoning_value_runs_without_reasoning() -> None:
+    # Non-composer callers (OpenAI-compatible, evaluation) send nothing; they
+    # must not reason by accident now that no agent-level gate exists.
     params = _build([THINKING_MODEL_ID], reasoning=None)
 
-    assert params["reasoning_effort"] == "high"
+    assert "reasoning_effort" not in params
 
 
 def test_level_2_stays_a_ceiling_the_user_cannot_raise() -> None:
@@ -371,7 +370,7 @@ def _gateway_factory() -> RoutedChatModelFactory:
 def _gateway_build(agent_id: str, enabled_ids: list[str]) -> tuple[dict[str, Any], str]:
     model, selection = _gateway_factory().build_for_chat(
         definition=SimpleNamespace(agent_id=agent_id),
-        binding=_binding(enabled_ids),
+        binding=_binding(enabled_ids, reasoning=True),
     )
     return _outbound_params(model), selection.capability_id
 

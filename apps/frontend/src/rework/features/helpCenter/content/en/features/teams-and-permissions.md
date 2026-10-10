@@ -17,7 +17,7 @@ They **stack**: one person can hold several, each granted separately.
 | Role        | Can                                                                     | Cannot, without another role                      |
 | ----------- | ----------------------------------------------------------------------- | ------------------------------------------------- |
 | **Member**  | Use the agents, read the team's conversations and files, leave the team | Change anything shared                            |
-| **Editor**  | Create and edit agents, prompts, resources and model routing            | Manage members or team settings                   |
+| **Editor**  | Create and edit agents, prompts and resources                           | Manage members or team settings                   |
 | **Admin**   | Manage members and their roles, the team's settings and policy          | **Create or edit an agent, a prompt, a document** |
 | **Analyst** | Create and run evaluation campaigns, manage evaluation corpora          | Touch the general corpus, members or settings     |
 
@@ -60,8 +60,13 @@ depends on your role.
 - **Settings** — the team's description, its marketplace visibility, how it is
   joined, and the **retention** period after which deleted conversations are
   permanently erased (**Admin**).
-- **Model routing** — which model profile the team's agents use, by default and
-  per operation. Left empty, the deployment's profile applies (**Editor**).
+- **Models** — among the language models the platform opens to the team: which
+  ones members can use, the default one, and whether reasoning starts on for
+  each (**Admin**; Editors and Analysts can view it). The default model cannot
+  be disabled. Disabling a model first shows the agents that recommended it:
+  they then follow the team's default model. Conversations that were using it
+  go back to the agent's recommended model. A model the platform newly opens
+  arrives enabled.
 
 ## Evaluation application
 

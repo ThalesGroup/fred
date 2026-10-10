@@ -20,11 +20,10 @@ kind="model" runtime enforcement (OBSERV-02 v3, `AGENT-CAPABILITY-RFC.md` §8.7)
 - `usable_model_capability_ids` — the pod-side ReBAC query computed once per
   turn, mirroring control-plane's `usable_capability_ids`.
 
-Also covers the team-routing-policy fallback layer:
-`RoutedChatModelFactory.select` applying
-`RuntimeContext.chat_default_profile_id`/`.agent_profile_overrides` only
-when the static `models_catalog.yaml` resolver falls through to its
-capability default, and the drift/fail-closed rules on top of it.
+Also covers the team and user levels of `RoutedChatModelFactory.select`: the
+user's choice (`RuntimeContext.chat_profile_id`), the trusted instance
+recommendation and team-disabled set, the team default, and the
+drift/fail-closed rules on top of them.
 """
 
 # pyright: reportArgumentType=false
@@ -109,15 +108,19 @@ def _binding(
     usable_model_ids: tuple[str, ...] | None = None,
     *,
     chat_default_profile_id: str | None = None,
-    agent_profile_overrides: dict[str, str] | None = None,
+    chat_profile_id: str | None = None,
+    recommended_chat_profile_id: str | None = None,
+    team_disabled_model_ids: tuple[str, ...] = (),
 ) -> BoundRuntimeContext:
     return BoundRuntimeContext(
         runtime_context=RuntimeContext(
             team_id="team-a",
             user_id="u1",
             chat_default_profile_id=chat_default_profile_id,
-            agent_profile_overrides=agent_profile_overrides,
+            chat_profile_id=chat_profile_id,
         ),
+        recommended_chat_profile_id=recommended_chat_profile_id,
+        team_disabled_model_ids=team_disabled_model_ids,
         portable_context=PortableContext(
             request_id="r1",
             correlation_id="r1",
@@ -255,38 +258,129 @@ def test_static_override_wins_over_team_default() -> None:
     assert selection.profile_id == "p1"
 
 
-def test_team_agent_override_applies_for_this_agent() -> None:
-    _, selection = _factory().build_for_chat(
-        definition=_DEFINITION,
-        binding=_binding(agent_profile_overrides={"test-agent": "team.planning"}),
-    )
-    assert selection.source == ModelSelectionSource.TEAM_POLICY
-    assert selection.profile_id == "team.planning"
+_GPT51 = model_capability_id("openai", "gpt-5.1")
+_GPT52 = model_capability_id("openai", "gpt-5.2")
+_GPT53 = model_capability_id("openai", "gpt-5.3")
 
 
-def test_team_agent_override_with_wrong_capability_raises_drift_error() -> None:
-    with pytest.raises(TeamRoutingProfileDriftError) as exc_info:
-        _factory().build_for_chat(
-            definition=_DEFINITION,
-            binding=_binding(
-                agent_profile_overrides={"test-agent": "team.language-only"}
-            ),
-        )
-    assert exc_info.value.profile_id == "team.language-only"
-    assert exc_info.value.expected_capability == ModelCapability.CHAT
-    assert exc_info.value.actual_capability == ModelCapability.LANGUAGE
-
-
-def test_chat_default_used_when_no_team_override_matches_this_agent() -> None:
+def test_user_choice_beats_recommendation_and_team_default() -> None:
     _, selection = _factory().build_for_chat(
         definition=_DEFINITION,
         binding=_binding(
             chat_default_profile_id="team.preferred",
-            # Override is scoped to a different agent — must not apply here.
-            agent_profile_overrides={"other-agent": "team.planning"},
+            recommended_chat_profile_id="p1",
+            chat_profile_id="team.planning",
+        ),
+    )
+    assert selection.source == ModelSelectionSource.USER_CHOICE
+    assert selection.profile_id == "team.planning"
+
+
+def test_recommendation_beats_team_default() -> None:
+    _, selection = _factory().build_for_chat(
+        definition=_DEFINITION,
+        binding=_binding(
+            chat_default_profile_id="team.preferred",
+            recommended_chat_profile_id="team.planning",
+        ),
+    )
+    assert selection.source == ModelSelectionSource.INSTANCE_RECOMMENDATION
+    assert selection.profile_id == "team.planning"
+
+
+def test_static_override_beats_user_choice() -> None:
+    _, selection = _factory(
+        agent_profile_overrides={"test-agent": "p1"}
+    ).build_for_chat(
+        definition=_DEFINITION,
+        binding=_binding(chat_profile_id="team.planning"),
+    )
+    assert selection.source == ModelSelectionSource.AGENT_OVERRIDE
+    assert selection.profile_id == "p1"
+
+
+def test_spoofed_choice_of_a_model_the_team_cannot_use_is_ignored() -> None:
+    _, selection = _factory().build_for_chat(
+        definition=_DEFINITION,
+        binding=_binding(
+            (_GPT52,),
+            chat_default_profile_id="team.preferred",
+            chat_profile_id="team.planning",
         ),
     )
     assert selection.profile_id == "team.preferred"
+    assert selection.capability_id != _GPT53
+
+
+@pytest.mark.parametrize("profile_id", ["ghost.profile", "team.language-only"])
+def test_unknown_or_non_chat_choice_is_ignored(profile_id: str) -> None:
+    _, selection = _factory().build_for_chat(
+        definition=_DEFINITION,
+        binding=_binding(
+            chat_default_profile_id="team.preferred", chat_profile_id=profile_id
+        ),
+    )
+    assert selection.source == ModelSelectionSource.TEAM_POLICY
+    assert selection.profile_id == "team.preferred"
+
+
+def test_team_disabled_choice_is_ignored() -> None:
+    _, selection = _factory().build_for_chat(
+        definition=_DEFINITION,
+        binding=_binding(
+            chat_default_profile_id="team.preferred",
+            chat_profile_id="team.planning",
+            team_disabled_model_ids=(_GPT53,),
+        ),
+    )
+    assert selection.profile_id == "team.preferred"
+
+
+def test_team_disabled_recommendation_falls_to_team_default() -> None:
+    _, selection = _factory().build_for_chat(
+        definition=_DEFINITION,
+        binding=_binding(
+            chat_default_profile_id="team.preferred",
+            recommended_chat_profile_id="team.planning",
+            team_disabled_model_ids=(_GPT53,),
+        ),
+    )
+    assert selection.source == ModelSelectionSource.TEAM_POLICY
+    assert selection.profile_id == "team.preferred"
+
+
+def test_revoked_recommendation_falls_to_team_default() -> None:
+    _, selection = _factory().build_for_chat(
+        definition=_DEFINITION,
+        binding=_binding(
+            (_GPT52,),
+            chat_default_profile_id="team.preferred",
+            recommended_chat_profile_id="team.planning",
+        ),
+    )
+    assert selection.profile_id == "team.preferred"
+
+
+def test_team_disabled_default_fails_closed() -> None:
+    with pytest.raises(ModelNotUsableError) as exc_info:
+        _factory().build_for_chat(
+            definition=_DEFINITION,
+            binding=_binding(
+                chat_default_profile_id="team.preferred",
+                team_disabled_model_ids=(_GPT52,),
+            ),
+        )
+    assert exc_info.value.capability_id == _GPT52
+
+
+def test_team_disabled_set_does_not_touch_the_pod_default() -> None:
+    # The pod default is ops-authored; the team-disabled set narrows team and
+    # user choices only. `can_use` still gates it in `build_for_chat`.
+    _, selection = _factory().build_for_chat(
+        definition=_DEFINITION,
+        binding=_binding(team_disabled_model_ids=(_GPT51,)),
+    )
+    assert selection.source == ModelSelectionSource.DEFAULT
 
 
 def test_unknown_team_profile_raises_drift_error() -> None:

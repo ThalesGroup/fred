@@ -27,10 +27,12 @@ import {
   usePatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchMutation,
   usePostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostMutation,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { EffectiveChatModel } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { useSessionHistory } from "./useSessionHistory";
 import { setCachedSessionHistory } from "./sessionHistoryCache";
 import { useChatAttachments } from "./useChatAttachments";
 import { buildComposerRuntimeContext } from "./runtimeContextBuilder";
+import { offersReasoning } from "../../../features/capabilities/modelChoice";
 import { reconstructPendingHitls, toThreadMessages } from "./toThreadMessages";
 import type { ChatMessage, TurnCommand } from "../../../../slices/runtime/runtimeOpenApi";
 import { countUnicodeCodePoints } from "@core/utils/chatInput";
@@ -82,11 +84,13 @@ function resolvedHitlAnswer(
 interface UseManagedChatParams {
   teamId: string;
   agentInstanceId: string;
+  /** The agent's resolved model and the models a member may pick for it. */
+  effectiveChatModel?: EffectiveChatModel;
 }
 
-export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams) {
+export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: UseManagedChatParams) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const { showError } = useToast();
+  const { showError, showWarn } = useToast();
   const { notifyApiError } = useApiErrorToast();
   const { t } = useTranslation();
 
@@ -479,7 +483,11 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     };
   }, [sessionId]);
 
-  const composer = useComposerSettings(sessionId, chatControls);
+  const handleModelChoiceDropped = useCallback(
+    (model: string) => showWarn({ summary: t("chatbot.composerSettings.modelChoiceLost", { model }) }),
+    [showWarn, t],
+  );
+  const composer = useComposerSettings(sessionId, chatControls, effectiveChatModel, handleModelChoiceDropped);
 
   useEffect(() => {
     if (skipResetOnSessionBindRef.current) {
@@ -663,15 +671,9 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
             },
           }
         : undefined;
-    // REASON-01 level 4 (MODEL-REASONING-ENABLEMENT-RFC.md §7): reasoning is a
-    // platform chat option, not a capability's turn_options slice — it travels
-    // on RuntimeContext exactly like search policy and RAG scope. Sent ONLY
-    // when the composer actually offers the control: its absence means the
-    // agent does not offer reasoning (or a gate upstream is closed, §8), and
-    // that must reach the runtime as "no choice made", never as an explicit
-    // `false` that would suppress reasoning the agent never offered to begin
-    // with.
-    const offersReasoning = chatControls.some((c) => c.widget === "reasoning_toggle");
+    // The reasoning value is explicit while the composer shows its row, and
+    // absent otherwise; the model choice rides along when one is made.
+    const reasoningShown = offersReasoning(chatControls, effectiveChatModel, composer.chatProfileId);
     return {
       runtimeContext: buildComposerRuntimeContext({
         selectedLibraryIds: composer.selectedLibraryIds,
@@ -680,8 +682,9 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
         ragScope: composer.ragScope,
         boundLibraryIds,
         attachmentsMarkdown: attachments.attachmentsMarkdown,
-        ...(offersReasoning ? { reasoning: composer.reasoning } : {}),
+        ...(reasoningShown ? { reasoning: composer.reasoning } : {}),
         askUser: composer.askUser,
+        chatProfileId: composer.chatProfileId,
       }),
       turnOptions,
     };
@@ -694,6 +697,8 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     composer.ragScope,
     composer.reasoning,
     composer.askUser,
+    composer.chatProfileId,
+    effectiveChatModel,
   ]);
 
   // Read at answer time so handleHitlAnswer keeps its identity across keystrokes.
@@ -1216,6 +1221,8 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     setReasoning: composer.setReasoning,
     askUser: composer.askUser,
     setAskUser: composer.setAskUser,
+    chatProfileId: composer.chatProfileId,
+    setChatProfileId: composer.setChatProfileId,
     contextPromptIds,
     setContextPrompts,
     threadMessages,

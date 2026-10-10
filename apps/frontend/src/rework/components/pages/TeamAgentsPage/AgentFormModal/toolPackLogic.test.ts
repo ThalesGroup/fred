@@ -46,7 +46,6 @@ const ATTACHMENTS = packById("attachments");
 const TEAM_DOCUMENTS = packById("team_documents");
 const WORD = packById("word_document");
 const PPT = packById("powerpoint_document");
-const REASONING = packById("reasoning");
 const SHARED_IDS = [
   CAP_DOCUMENT_ACCESS,
   CAP_TABULAR,
@@ -63,7 +62,7 @@ const ALL_IDS: ReadonlySet<string> = new Set([
 ]);
 
 function empty(): CapabilitySelectionState {
-  return { selectedCapabilityIds: [], capabilityConfigValues: {}, reasoningEnabled: false };
+  return { selectedCapabilityIds: [], capabilityConfigValues: {} };
 }
 
 function sources(state: CapabilitySelectionState) {
@@ -137,7 +136,6 @@ describe("document packs", () => {
       ...empty(),
       selectedCapabilityIds: [CAP_TEAM_WIKI],
       capabilityConfigValues: { [CAP_TEAM_WIKI]: { mode: "read" } },
-      reasoningEnabled: true,
     };
     let state = applyPackToggle(TEAM_DOCUMENTS, true, seeded, ALL_IDS);
     state = {
@@ -150,7 +148,6 @@ describe("document packs", () => {
     state = applyPackToggle(TEAM_DOCUMENTS, false, state, ALL_IDS);
 
     expect(state.selectedCapabilityIds).toEqual([CAP_TEAM_WIKI]);
-    expect(state.reasoningEnabled).toBe(true);
     expect(state.capabilityConfigValues[CAP_TEAM_WIKI]).toEqual({ mode: "read" });
     // No both-off config: the capability is deselected, both sources reset, library scope kept.
     expect(state.capabilityConfigValues[CAP_DOCUMENT_ACCESS]).toMatchObject({
@@ -290,17 +287,14 @@ describe("applyDocumentAccessConfigChange", () => {
 });
 
 describe("plain packs and included capability status", () => {
-  it("keeps word, PowerPoint, and reasoning independent", () => {
+  it("keeps word and PowerPoint independent", () => {
     let state = applyPackToggle(WORD, true, empty(), ALL_IDS);
     state = applyPackToggle(PPT, true, state, ALL_IDS);
-    state = applyPackToggle(REASONING, true, state, ALL_IDS);
     expect(state.selectedCapabilityIds).toEqual([CAP_WRITABLE_DOCUMENT, CAP_PPT_FILLER]);
-    expect(state.reasoningEnabled).toBe(true);
 
     state = applyPackToggle(WORD, false, state, ALL_IDS);
     expect(state.selectedCapabilityIds).toEqual([CAP_PPT_FILLER]);
     expect(derivePackChecked(PPT, state, ALL_IDS)).toBe(true);
-    expect(derivePackChecked(REASONING, state, ALL_IDS)).toBe(true);
   });
 
   it("reads active, inactive, and unavailable from live selection and availability", () => {

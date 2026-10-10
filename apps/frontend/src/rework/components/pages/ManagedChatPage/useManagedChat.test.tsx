@@ -35,6 +35,7 @@
 import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { EffectiveChatModel } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -77,7 +78,7 @@ vi.mock("react-router-dom", () => ({
 
 const showErrorMock = vi.fn();
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
-  useToast: () => ({ showError: showErrorMock, showSuccess: vi.fn() }),
+  useToast: () => ({ showError: showErrorMock, showSuccess: vi.fn(), showWarn: vi.fn() }),
 }));
 
 const notifyApiErrorMock = vi.fn();
@@ -106,6 +107,8 @@ const replaceAllMessagesMock = vi.fn();
 // thread on screen; reset to [] in beforeEach.
 let chatSseMessages: unknown[] = [];
 let chatSseMaxChatInputChars: number | undefined;
+let chatSseChatControls: unknown[] = [];
+let hostEffectiveModel: EffectiveChatModel | undefined;
 let capturedFlushPendingWrites: ((sid: string | null) => Promise<boolean>) | undefined;
 let capturedOnTurnStarted: (() => void) | undefined;
 let capturedOnTurnRejected: ((draft: string, sessionId: string) => void) | undefined;
@@ -130,7 +133,7 @@ vi.mock("@hooks/useChatSse", () => ({
     return {
       messages: chatSseMessages,
       waitResponse: false,
-      chatControls: [],
+      chatControls: chatSseChatControls,
       maxChatInputChars: chatSseMaxChatInputChars,
       prepareChatControls: prepareChatControlsMock,
       send: sendMock,
@@ -151,6 +154,10 @@ const composerValue = {
   selectedDocumentUids: [] as string[],
   askUser: true,
   setAskUser: vi.fn(),
+  reasoning: false,
+  setReasoning: vi.fn(),
+  chatProfileId: null as string | null,
+  setChatProfileId: vi.fn(),
   setSearchPolicy: vi.fn(),
   setRagScope: vi.fn(),
   setSelectedLibraryIds: vi.fn(),
@@ -248,7 +255,7 @@ import { clearSessionHistoryCache, getCachedSessionHistory } from "./sessionHist
 import { hasToolApprovalGrants, rememberToolApprovalGrants } from "@core/utils/toolApprovalGrants";
 
 function TestHost({ onRender }: { onRender: (hook: ReturnType<typeof useManagedChat>) => void }) {
-  const hook = useManagedChat({ teamId: "team-1", agentInstanceId: "agent-1" });
+  const hook = useManagedChat({ teamId: "team-1", agentInstanceId: "agent-1", effectiveChatModel: hostEffectiveModel });
   onRender(hook);
   return null;
 }
@@ -293,6 +300,10 @@ describe("useManagedChat — session write reliability", () => {
   beforeEach(() => {
     localStorage.clear();
     composerValue.askUser = true;
+    composerValue.reasoning = false;
+    composerValue.chatProfileId = null;
+    chatSseChatControls = [];
+    hostEffectiveModel = undefined;
     clearSessionHistoryCache();
     chatSseMessages = [];
     chatSseMaxChatInputChars = undefined;
@@ -430,6 +441,49 @@ describe("useManagedChat — session write reliability", () => {
 
     expect(sendMock).toHaveBeenCalledTimes(1);
     expect(sendMock.mock.calls[0][2]).toMatchObject({ ask_user: askUser });
+  });
+
+  it("sends the conversation's model choice and an explicit reasoning value while the row is shown", async () => {
+    composerValue.chatProfileId = "chat.large";
+    composerValue.reasoning = false;
+    chatSseChatControls = [{ capability_id: "platform", widget: "reasoning_toggle", params: {} }];
+    hostEffectiveModel = {
+      capability_id: "model__mistral__small",
+      selectable_models: [
+        { profile_id: "chat.small", capability_id: "model__mistral__small", name: "small", reasoning_enabled: true },
+        { profile_id: "chat.large", capability_id: "model__mistral__large", name: "large", reasoning_enabled: true },
+      ],
+    } as EffectiveChatModel;
+    mount();
+    act(() => latest.setInput("question"));
+    rerender();
+
+    await act(async () => {
+      await latest.handleSend();
+    });
+
+    expect(sendMock.mock.calls[0][2]).toMatchObject({ chat_profile_id: "chat.large", reasoning: false });
+  });
+
+  it("sends no reasoning value when the chosen model cannot reason, and no choice when none is made", async () => {
+    chatSseChatControls = [{ capability_id: "platform", widget: "reasoning_toggle", params: {} }];
+    hostEffectiveModel = {
+      capability_id: "model__mistral__large",
+      selectable_models: [
+        { profile_id: "chat.large", capability_id: "model__mistral__large", name: "large", reasoning_enabled: false },
+      ],
+    } as EffectiveChatModel;
+    mount();
+    act(() => latest.setInput("question"));
+    rerender();
+
+    await act(async () => {
+      await latest.handleSend();
+    });
+
+    const context = sendMock.mock.calls[0][2] as Record<string, unknown>;
+    expect("reasoning" in context).toBe(false);
+    expect("chat_profile_id" in context).toBe(false);
   });
 
   // #2369: a brand-new conversation's composer settings live only in memory —

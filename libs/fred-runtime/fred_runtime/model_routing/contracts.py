@@ -249,8 +249,8 @@ class ModelRoutingPolicy(FrozenModel):
     - `default_profile_by_capability`: fallback profile per capability
     - `profiles`: known profile definitions
     - `agent_profile_overrides`: optional `agent_id -> profile_id` override,
-      the ops-level escape hatch equivalent of a team's own routing policy
-      (`RuntimeContext.agent_profile_overrides`). An override only applies
+      the ops-level escape hatch that outranks every team and user level.
+      An override only applies
       when it exists for the requested `agent_id` and the referenced
       profile's capability matches the request; otherwise resolution falls
       through to the capability default.
@@ -300,8 +300,8 @@ class ModelSelectionRequest(FrozenModel):
     This is emitted by runtimes per invocation with contextual dimensions:
     `capability`, `agent_id`. `team_id` is deliberately not a matching
     dimension here — the static `agent_profile_overrides` policy is
-    deployment-wide, not per-team; per-team routing is the separate
-    `resolve_team_override` pass (`RuntimeContext.agent_profile_overrides`).
+    deployment-wide, not per-team; team and user levels are applied by
+    `RoutedChatModelFactory.select`.
     """
 
     capability: ModelCapability
@@ -314,6 +314,8 @@ class ModelSelectionSource(str, Enum):
     DEFAULT = "default"
     AGENT_OVERRIDE = "agent_override"
     TEAM_POLICY = "team_policy"
+    USER_CHOICE = "user_choice"
+    INSTANCE_RECOMMENDATION = "instance_recommendation"
     PLATFORM_BINDING = "platform_binding"
 
 

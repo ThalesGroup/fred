@@ -303,6 +303,7 @@ def create_openai_compat_router(
                     tuning=target.tuning,
                     team_settings=target.team_settings,
                     reasoning_enabled_model_ids=target.reasoning_enabled_model_ids,
+                    team_disabled_model_ids=target.team_disabled_model_ids,
                     platform_chat_model_binding=target.platform_chat_model_binding,
                     platform_prompt=target.platform_prompt,
                     credential_provider=target.credential_provider,

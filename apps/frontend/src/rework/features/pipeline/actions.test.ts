@@ -21,7 +21,6 @@ const PREP = {
   execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
   context_prompt_text: null,
   chat_default_profile_id: null,
-  agent_profile_overrides: {},
   reasoning_enabled_model_ids: [],
 } as unknown as ExecutionPreparation;
 

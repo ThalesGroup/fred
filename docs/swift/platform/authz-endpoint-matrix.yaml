@@ -486,7 +486,7 @@ operations:
     method: PATCH
     path: /control-plane/v1/teams/{team_id}/routing-policy
     review_status: approved
-    required_permission: can_update_resources # TEAM-05, #2118, CONTROL-PLANE-PRODUCT-CONTRACT.md §37 — team_editor only, team_admin has zero write authority (hard cross-write rule)
+    required_permission: can_update_info # 2026-10-09: narrowed from can_update_resources (team_editor) to team_admin by owner decision — once per-template overrides left the policy, every remaining field (default, enabled models, reasoning defaults) belongs to the team's Models section; editors keep a read-only view and edit each agent's recommended model through the agent form. Personal-space owners pass via require_team_access's system-team bypass. CONTROL-PLANE-PRODUCT-CONTRACT.md §37
   - service: control-plane
     method: GET
     path: /control-plane/v1/teams/{team_id}/routing-policy/available-models
@@ -494,9 +494,14 @@ operations:
     required_permission: can_read_members+elevated_team_role # TEAM-05.1, #2167, CONTROL-PLANE-PRODUCT-CONTRACT.md §37 — same read gate as GET .../routing-policy (team_admin/team_editor/team_analyst); team-facing can_use-enabled model list backing the routing-policy picker
   - service: control-plane
     method: GET
+    path: /control-plane/v1/teams/{team_id}/routing-policy/disable-impact
+    review_status: approved
+    required_permission: can_update_info # team_admin only, same gate as the PATCH it precedes: it lists the team's agent names whose recommended model a disable would clear
+  - service: control-plane
+    method: GET
     path: /control-plane/v1/teams/{team_id}/routing-policy/effective-chat-model
     review_status: approved
-    required_permission: can_read_members # #2387 — DELIBERATELY the plain-membership gate, not the elevated-role gate the two reads above use: this reports which model answers a conversation, and anyone entitled to hold that conversation is entitled to know. Editing the policy stays team_editor-only; this is read-only and derives nothing a chat participant cannot already observe from the turn itself
+    required_permission: can_read_members # #2387 — DELIBERATELY the plain-membership gate, not the elevated-role gate the two reads above use: this reports which model a new conversation starts on and the models a member may pick for it, and anyone entitled to hold that conversation is entitled to know. It names models only, never which policy level chose them. Editing the policy is team_admin-only
   - service: control-plane
     method: POST
     path: /control-plane/v1/teams/{team_id}/wiki/proposals/page

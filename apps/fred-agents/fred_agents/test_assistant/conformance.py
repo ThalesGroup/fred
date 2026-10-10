@@ -399,12 +399,11 @@ class HttpDriver:
         for key in (
             "context_prompt_text",
             "chat_default_profile_id",
+            "chat_profile_id",
             "reasoning_enabled_model_ids",
         ):
             if prep.get(key) is not None:
                 context[key] = prep[key]
-        if prep.get("agent_profile_overrides"):
-            context["agent_profile_overrides"] = prep["agent_profile_overrides"]
         return context
 
     async def await_history(self, session_id: str, timeout_s: float = 10.0) -> bool:

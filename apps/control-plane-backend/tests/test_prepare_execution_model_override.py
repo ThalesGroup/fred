@@ -16,8 +16,8 @@
 
 `prepare_execution()`'s `agent_model_override` param forces the target
 instance's chat model for that one call only, never persisted. Covers:
-- a service-identity caller with a usable profile gets it written into the
-  returned `agent_profile_overrides` for this instance's source_agent_id
+- a service-identity caller with a usable profile gets it returned as the
+  user-level `chat_profile_id` (above the instance recommendation)
 - a regular user token is rejected (403) before profile validation ever runs
 - a profile the team can't use is rejected (422), not silently ignored
 - a workload holding the caller role is refused as itself whatever the
@@ -34,7 +34,10 @@ from control_plane_backend.app.dependencies import get_application_container_fro
 from control_plane_backend.config.models import RuntimeCatalogSourceConfig
 from control_plane_backend.main import create_app
 from control_plane_backend.routing_policy import service as routing_policy_service
-from control_plane_backend.routing_policy.schemas import ProfileNotUsableError
+from control_plane_backend.routing_policy.schemas import (
+    ModelDisabledForTeamError,
+    ProfileNotUsableError,
+)
 from fred_core import (
     AssertedUser,
     KeycloakUser,
@@ -117,9 +120,8 @@ async def test_service_agent_with_usable_profile_overwrites_the_response(
         )
 
     assert resp.status_code == 200
-    assert (
-        resp.json()["agent_profile_overrides"][_SOURCE_AGENT_ID] == "chat.openai.gpt52"
-    )
+    assert resp.json()["chat_profile_id"] == "chat.openai.gpt52"
+    assert "agent_profile_overrides" not in resp.json()
 
 
 async def test_regular_user_token_is_rejected_before_any_validation(
@@ -153,8 +155,14 @@ async def test_regular_user_token_is_rejected_before_any_validation(
     )
 
 
+@pytest.mark.parametrize(
+    "error",
+    [ProfileNotUsableError, ModelDisabledForTeamError],
+    ids=["revoked", "team-disabled"],
+)
 async def test_non_usable_profile_is_rejected_not_silently_ignored(
     monkeypatch: pytest.MonkeyPatch,
+    error: type[ProfileNotUsableError] | type[ModelDisabledForTeamError],
 ) -> None:
     app = _build_app(monkeypatch)
     app.dependency_overrides[get_current_user] = lambda: KeycloakUser(
@@ -164,7 +172,7 @@ async def test_non_usable_profile_is_rejected_not_silently_ignored(
     async def _fake_check(
         deps: Any, *, team_id: Any, profile_id: Any, source_runtime_ids: Any
     ) -> None:
-        raise ProfileNotUsableError(team_id=team_id, profile_ids=[profile_id])
+        raise error(team_id=team_id, profile_ids=[profile_id])
 
     monkeypatch.setattr(
         routing_policy_service, "check_profile_usable_for_team", _fake_check
@@ -248,9 +256,8 @@ async def test_delegated_override_is_honored_for_a_caller_role_holder(
     resp = await _post_override(app)
 
     assert resp.status_code == 200
-    assert (
-        resp.json()["agent_profile_overrides"][_SOURCE_AGENT_ID] == "chat.openai.gpt52"
-    )
+    assert resp.json()["chat_profile_id"] == "chat.openai.gpt52"
+    assert "agent_profile_overrides" not in resp.json()
 
 
 _SWITCHES = pytest.mark.parametrize(
@@ -287,9 +294,8 @@ async def test_a_service_identity_without_the_role_keeps_the_override(
     resp = await _post_override(app)
 
     assert resp.status_code == 200
-    assert (
-        resp.json()["agent_profile_overrides"][_SOURCE_AGENT_ID] == "chat.openai.gpt52"
-    )
+    assert resp.json()["chat_profile_id"] == "chat.openai.gpt52"
+    assert "agent_profile_overrides" not in resp.json()
 
 
 @_SWITCHES

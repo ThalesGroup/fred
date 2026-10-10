@@ -14,7 +14,7 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, FastAPI, Path
+from fastapi import APIRouter, Depends, FastAPI, Path, Query
 from fastapi.responses import JSONResponse
 from fred_core import KeycloakUser, get_current_user
 from fred_core.common import TeamId
@@ -25,9 +25,14 @@ from control_plane_backend.product.dependencies import (
 )
 from control_plane_backend.routing_policy.schemas import (
     AvailableModelProfileList,
+    DefaultModelNotDisableableError,
+    DisableImpact,
     EffectiveChatModel,
+    ModelCatalogUnavailableError,
+    ModelDisabledForTeamError,
     PlatformModelBinding,
     ProfileNotUsableError,
+    RoutingPolicyVersionConflictError,
     SetPlatformModelBindingRequest,
     TeamRoutingPolicy,
     UnknownProfileError,
@@ -35,6 +40,9 @@ from control_plane_backend.routing_policy.schemas import (
 )
 from control_plane_backend.routing_policy.service import (
     delete_platform_model_binding as delete_platform_model_binding_from_service,
+)
+from control_plane_backend.routing_policy.service import (
+    get_disable_impact as get_disable_impact_from_service,
 )
 from control_plane_backend.routing_policy.service import (
     get_platform_model_binding as get_platform_model_binding_from_service,
@@ -74,6 +82,30 @@ def register_exception_handlers(app: FastAPI) -> None:
         _request, exc: UnknownProfileError
     ) -> JSONResponse:
         return JSONResponse(status_code=400, content={"detail": str(exc)})
+
+    @app.exception_handler(ModelDisabledForTeamError)
+    async def model_disabled_handler(
+        _request, exc: ModelDisabledForTeamError
+    ) -> JSONResponse:
+        return JSONResponse(status_code=422, content={"detail": str(exc)})
+
+    @app.exception_handler(RoutingPolicyVersionConflictError)
+    async def version_conflict_handler(
+        _request, exc: RoutingPolicyVersionConflictError
+    ) -> JSONResponse:
+        return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+    @app.exception_handler(ModelCatalogUnavailableError)
+    async def model_catalog_unavailable_handler(
+        _request, exc: ModelCatalogUnavailableError
+    ) -> JSONResponse:
+        return JSONResponse(status_code=503, content={"detail": str(exc)})
+
+    @app.exception_handler(DefaultModelNotDisableableError)
+    async def default_not_disableable_handler(
+        _request, exc: DefaultModelNotDisableableError
+    ) -> JSONResponse:
+        return JSONResponse(status_code=422, content={"detail": str(exc)})
 
 
 @router.get(
@@ -120,11 +152,25 @@ async def get_effective_chat_model(
     )
 
 
+@router.get(
+    "/teams/{team_id}/routing-policy/disable-impact",
+    response_model=DisableImpact,
+    summary="Agents whose recommended model would be cleared by disabling a model (team_admin only)",
+)
+async def get_routing_policy_disable_impact(
+    team_id: Annotated[TeamId, Path()],
+    capability_id: Annotated[str, Query(min_length=1)],
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> DisableImpact:
+    return await get_disable_impact_from_service(user, team_id, capability_id, deps)
+
+
 @router.patch(
     "/teams/{team_id}/routing-policy",
     response_model=TeamRoutingPolicy,
     response_model_exclude_none=True,
-    summary="Replace one team's LLM model routing policy (team_editor only, TEAM-05, #2118)",
+    summary="Replace one team's model settings (team_admin only)",
 )
 async def update_team_routing_policy(
     team_id: Annotated[TeamId, Path()],

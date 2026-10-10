@@ -315,7 +315,7 @@ class _RecordingPlatformModelBindingStore:
         self.set_calls: list[dict[str, Any]] = []
         self.delete_calls: int = 0
 
-    async def get(self) -> StoredPlatformModelBinding | None:
+    async def get(self, session=None) -> StoredPlatformModelBinding | None:
         return self._row
 
     async def set(self, *, binding, updated_by) -> StoredPlatformModelBinding:
@@ -521,7 +521,7 @@ class _RaisingPlatformModelBindingStore:
     exhaustion, table not yet migrated) — anything other than malformed
     stored data."""
 
-    async def get(self) -> StoredPlatformModelBinding | None:
+    async def get(self, session=None) -> StoredPlatformModelBinding | None:
         raise RuntimeError("simulated platform_model_binding store failure")
 
 

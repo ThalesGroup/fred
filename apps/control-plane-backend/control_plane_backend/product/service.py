@@ -64,6 +64,7 @@ from fred_sdk.contracts.capability import (
 from fred_sdk.contracts.models import TeamScopePolicy
 from fred_sdk.contracts.prompt_utils import find_reserved_prompt_tag
 from pydantic import ValidationError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from control_plane_backend.agent_instances.store import AgentInstanceRecord
 from control_plane_backend.agent_instances.suspension import (
@@ -1145,89 +1146,24 @@ PLATFORM_CHAT_CONTROL_OWNER = "platform"
 
 def _platform_reasoning_control(
     *,
-    reasoning_enabled: bool,
-    reasoning_default_on: bool,
     reasoning_enabled_model_ids: Sequence[str],
 ) -> ChatControlDescriptor | None:
-    """The composer's reasoning toggle, or `None` when a gate upstream is closed
-    (`MODEL-REASONING-ENABLEMENT-RFC.md` §7/§8).
+    """The composer's reasoning row, or `None` when no model has its reasoning
+    enabled platform-wide (`MODEL-REASONING-ENABLEMENT-RFC.md` §8: a control
+    that cannot do anything must be absent, never present-and-inert).
 
-    Emitted here, not by a capability, because reasoning is not a tool: an agent
-    does not "use" reasoning the way it uses document search, so putting it in
-    the capability/tool system would ask an author to enable it in the wrong
-    place. Level 3 is a plain agent property (`tuning.reasoning_enabled`, set in
-    the General section of the agent form) and this function is where it meets
-    the platform gate.
-
-    §8's diagnosability rule decides the return type. Three of the four gates are
-    invisible from the chat page, so a control that cannot do anything must be
-    **absent**, never present-and-inert — otherwise the predictable support
-    ticket is "I turned reasoning on and nothing happened" with no way to tell
-    which gate blocked:
-
-    - the agent's author did not offer it → no control;
-    - no model has its reasoning enabled platform-wide → no control.
-
-    `reasoning_default_on` (Amendment B) is read only once past those gates: it
-    decides where the emitted switch *starts*, never whether one is emitted.
-    An author who left the offer off but the default on gets no control — the
-    stored value simply stays inert until the offer comes back.
-
-    Checking "is any model's reasoning on?" also covers the aptitude gate,
-    because the write path already enforces it: `set_model_reasoning` refuses
-    (409 `ReasoningNotSupported`) a model with no `supports_thinking` profile, so
-    a stored enabled row can only ever name a reasoning-capable model. No catalog
-    fetch is needed on this send path.
-
-    NOT narrowed to the model this turn routes to, and that is now a deliberate
-    division of labour rather than the compromise it used to be (#2387). The
-    reason recorded here before — "routing resolves per *operation* at runtime
-    while chat controls are computed once per session" — had become false twice
-    over: #2365 removed operations, and prepare-execution returns a fresh
-    `chat_controls` on every send.
-
-    Narrowing it here is still not possible, for a different and durable reason:
-    resolving the routed model needs the pod's `/agents/models-catalog`, and this
-    send path must stay free of pod-catalog fetches. So this function answers
-    only "did the platform enable reasoning anywhere, and does this agent offer
-    it" — the two gates it can answer cheaply — and the composer combines that
-    with `EffectiveChatModel.reasoning_enabled` from its own read to decide
-    whether the toggle is worth showing for the model actually answering.
+    Emitted by the platform, not a capability: reasoning is how the model is
+    called, not a tool. It is not narrowed to the routed model because that
+    needs a pod-catalog fetch this send path must not make; the composer shows
+    the row only for a chosen model whose `reasoning_enabled` is true, and
+    seeds it from that model's team default (no `params.default` here).
     """
 
-    if not reasoning_enabled:
-        return None
     if not reasoning_enabled_model_ids:
-        logger.debug(
-            "[reasoning] no %s control: the agent offers it but no model has "
-            "its reasoning enabled platform-wide (REASON-01 §8)",
-            _REASONING_TOGGLE_WIDGET,
-        )
         return None
-    # NOTE (#2387): this control used to carry three more params —
-    # `model_id`/`display_name` (the single reasoning-enabled model's identity,
-    # which the composer showed as its model label) and `effort` (that model's
-    # ops-authored `settings.reasoning_effort`, snapshotted at toggle time).
-    #
-    # All three are gone. The identity was simply wrong: it named the model
-    # whose REASONING was on, not the model a turn routes to, so the composer
-    # contradicted every platform binding and team override. The effort went
-    # with it because the menu is now a plain on/off — the level a turn runs
-    # with is the pod's business (it applies the live `settings.reasoning_effort`
-    # either way), not something the user picks or needs quoted back at them.
-    #
-    # What remains is the only thing this function is authoritative about:
-    # whether a reasoning toggle should exist at all, and where it starts.
     return ChatControlDescriptor(
         capability_id=PLATFORM_CHAT_CONTROL_OWNER,
         widget=_REASONING_TOGGLE_WIDGET,
-        # Seeds the composer's initial value only (RFC §3.7) — the user can
-        # still flip it off for this question. Author-chosen since Amendment B
-        # (`tuning.reasoning_default_on`); it was hardcoded False before, and
-        # False remains the default because `AGENT-THINKING-API-RFC.md`
-        # Amendment C measured reasoning re-issuing duplicate tool calls in
-        # 10/10 turns on this stack. Starting ON is an author's opt-in.
-        params={"default": reasoning_default_on},
     )
 
 
@@ -1640,14 +1576,6 @@ async def list_agent_templates(
                     # rendered) — same result as filtering here, without
                     # making the field lie about what the template declares.
                     default_capability_ids=list(template.default_capability_ids),
-                    # REASON-01 level 3 + Amendment B (#2473), read off the
-                    # pod's `default_tuning`. Unfiltered by platform state on
-                    # purpose: this is what the template DECLARES. Levels 1-2
-                    # are send-path gates (`_platform_reasoning_control`), so a
-                    # declared True on a deployment with no reasoning-enabled
-                    # model simply never produces a composer control.
-                    reasoning_enabled=template.default_tuning.reasoning_enabled,
-                    reasoning_default_on=template.default_tuning.reasoning_default_on,
                 )
             )
     return templates
@@ -2361,8 +2289,7 @@ def _record_to_summary(
         description=record.description,
         role=record.tuning.role,
         usage_statement=record.tuning.usage_statement,
-        reasoning_enabled=record.tuning.reasoning_enabled,
-        reasoning_default_on=record.tuning.reasoning_default_on,
+        recommended_chat_profile_id=record.tuning.recommended_chat_profile_id,
         status="enabled" if record.enabled else "disabled",
         suspension_reason=(
             SuspensionReason(record.suspension_reason)
@@ -2610,6 +2537,43 @@ async def _delete_knowledge_flow_attachment(
     )
 
 
+async def _recommendation_capability_id(
+    profile_id: str | None,
+    *,
+    team_id: TeamId,
+    source_runtime_id: str,
+    deps: ProductServiceDependencies,
+) -> str | None:
+    """The model capability id of `profile_id` once it is a usable,
+    team-enabled chat profile served by the instance's pod (`None` for no
+    recommendation); raises a 422 `EnrollmentError` otherwise."""
+
+    if profile_id is None:
+        return None
+    from control_plane_backend.routing_policy.schemas import (
+        ModelDisabledForTeamError,
+        ProfileNotUsableError,
+        UnknownProfileError,
+    )
+    from control_plane_backend.routing_policy.service import (
+        check_profile_usable_for_team,
+    )
+
+    try:
+        return await check_profile_usable_for_team(
+            deps,
+            team_id=team_id,
+            profile_id=profile_id,
+            source_runtime_ids={source_runtime_id},
+        )
+    except (
+        UnknownProfileError,
+        ProfileNotUsableError,
+        ModelDisabledForTeamError,
+    ) as exc:
+        raise EnrollmentError(str(exc), http_status=422) from exc
+
+
 async def enroll_agent_instance(
     *,
     user: KeycloakUser,
@@ -2713,18 +2677,18 @@ async def enroll_agent_instance(
             http_status=404,
         )
 
+    recommended_capability_id = await _recommendation_capability_id(
+        request.recommended_chat_profile_id,
+        team_id=team_id,
+        source_runtime_id=source_runtime_id,
+        deps=deps,
+    )
     tuning = template.default_tuning.model_copy(
         update={
             "role": request.role or request.display_name,
             "description": request.description or request.display_name,
             "usage_statement": request.usage_statement,
-            # REASON-01 level 3 — a plain agent property set on the General
-            # section of the form, alongside role/description. Not a capability.
-            "reasoning_enabled": request.reasoning_enabled,
-            # Amendment B — where the composer's toggle starts on a new
-            # conversation. Stored even when the offer above is off: inert, but
-            # it survives the author toggling the offer off and back on.
-            "reasoning_default_on": request.reasoning_default_on,
+            "recommended_chat_profile_id": request.recommended_chat_profile_id,
         }
     )
     if request.tuning_field_values:
@@ -2773,7 +2737,9 @@ async def enroll_agent_instance(
     )
 
     store = deps.get_agent_instance_store()
-    created = await store.create(record)
+    created = await store.create(
+        record, recommended_capability_id=recommended_capability_id
+    )
     emit_agent_created_kpi(created, user=user, deps=deps)
     return _record_to_summary(created)
 
@@ -2984,20 +2950,18 @@ async def update_agent_instance(
             update={"usage_statement": request.usage_statement}
         )
 
-    if request.reasoning_enabled is not None:
-        # REASON-01 level 3, same "None means unchanged" convention as role and
-        # usage_statement above: a partial update (e.g. the enable/disable
-        # toggle) must not silently switch an agent's reasoning offer off.
-        new_tuning = (new_tuning or record.tuning).model_copy(
-            update={"reasoning_enabled": request.reasoning_enabled}
+    recommendation_set = "recommended_chat_profile_id" in tuning_fields_set
+    recommended_capability_id: str | None = None
+    if recommendation_set:
+        # Absent leaves it unchanged; an explicit null follows the team again.
+        recommended_capability_id = await _recommendation_capability_id(
+            request.recommended_chat_profile_id,
+            team_id=team_id,
+            source_runtime_id=record.source_runtime_id,
+            deps=deps,
         )
-
-    if request.reasoning_default_on is not None:
-        # Amendment B, same "None means unchanged" convention. Independent of
-        # reasoning_enabled above on purpose: switching the offer off must not
-        # erase the author's default, so the two fields never write each other.
         new_tuning = (new_tuning or record.tuning).model_copy(
-            update={"reasoning_default_on": request.reasoning_default_on}
+            update={"recommended_chat_profile_id": request.recommended_chat_profile_id}
         )
 
     updated = await store.update(
@@ -3008,6 +2972,9 @@ async def update_agent_instance(
         enabled=request.status == "enabled" if request.status is not None else None,
         tuning=new_tuning,
         updated_by=user.uid,
+        recommended_capability_id=recommended_capability_id,
+        # Never write back a recommendation a policy write cleared meanwhile.
+        keep_stored_recommendation=not recommendation_set,
     )
     # A save that re-validated every ACTIVE capability slice through the pod
     # clears any suspension — the single clearing mechanism (#1975, RFC §3.9).
@@ -3242,9 +3209,9 @@ async def prepare_execution(
     - pass request-scoped product dependencies when available
     - the returned payload now includes `effective_chat_options`, the typed
       chat-affordance surface resolved from the stored managed-agent config
-    - `agent_model_override`, when set, replaces this instance's entry in the
-      `agent_profile_overrides` snapshot for THIS call only — never persisted,
-      never visible via `GET .../routing-policy`. Restricted to the evaluator's
+    - `agent_model_override`, when set, is returned as `chat_profile_id` (the
+      user level, above the instance recommendation) for THIS call only —
+      never persisted, never visible via `GET .../routing-policy`. Restricted to the evaluator's
       service identity (`is_service_agent`, without the delegation caller role);
       rejected outright for any other caller, and rejected if the profile isn't
       `can_use`-enabled for the team.
@@ -3394,10 +3361,7 @@ async def prepare_execution(
     # Two independent reads, so gathered rather than chained — this is a
     # user-facing send path.
     (
-        (
-            chat_default_profile_id,
-            agent_profile_overrides,
-        ),
+        chat_default_profile_id,
         reasoning_enabled_ids,
     ) = await asyncio.gather(
         resolve_execution_routing_snapshot(team_id, deps),
@@ -3408,8 +3372,8 @@ async def prepare_execution(
         deps.get_model_reasoning_store().list_enabled_model_ids(),
     )
 
-    # One-shot evaluator override (fred-agent-evaluator): replaces this
-    # instance's entry in the snapshot for this call only, never persisted.
+    # One-shot evaluator override (fred-agent-evaluator): a user-level choice
+    # for this call only, never persisted.
     # Fails closed rather than silently falling back to the team default —
     # a caller who asked for model X and silently got the team default would
     # draw wrong conclusions from the resulting evaluation scores.
@@ -3427,6 +3391,7 @@ async def prepare_execution(
         # cycle (same reason routing_policy/service.py imports this module
         # lazily for `_pod_catalog_fetch_scope`).
         from control_plane_backend.routing_policy.schemas import (
+            ModelDisabledForTeamError,
             ProfileNotUsableError,
             UnknownProfileError,
         )
@@ -3441,23 +3406,21 @@ async def prepare_execution(
                 profile_id=agent_model_override,
                 source_runtime_ids={instance.source_runtime_id},
             )
-        except (UnknownProfileError, ProfileNotUsableError) as exc:
+        except (
+            UnknownProfileError,
+            ProfileNotUsableError,
+            ModelDisabledForTeamError,
+        ) as exc:
             # 422, not 400: fred-agent-evaluator's error mapper only classifies
             # 401/403/404/409/422 from this endpoint, and 422 ("target_invalid")
             # is the closest existing fit for a bad request parameter.
             raise ExecutionPreparationError(str(exc), http_status=422) from exc
-        agent_profile_overrides = {
-            **agent_profile_overrides,
-            instance.source_agent_id: agent_model_override,
-        }
 
     sorted_reasoning_model_ids = sorted(reasoning_enabled_ids)
     # The reasoning toggle (REASON-01 §7) is contributed by the PLATFORM, not by
     # a capability — appended last so it sits after the capability-owned rows in
     # the composer menu, and omitted entirely when a gate upstream is closed (§8).
     reasoning_control = _platform_reasoning_control(
-        reasoning_enabled=instance.tuning.reasoning_enabled,
-        reasoning_default_on=instance.tuning.reasoning_default_on,
         reasoning_enabled_model_ids=sorted_reasoning_model_ids,
     )
     if reasoning_control is not None:
@@ -3484,10 +3447,20 @@ async def prepare_execution(
         context_prompt_text=context_prompt_text,
         capability_base_urls=capability_base_urls,
         chat_default_profile_id=chat_default_profile_id,
-        agent_profile_overrides=agent_profile_overrides,
+        chat_profile_id=agent_model_override,
         reasoning_enabled_model_ids=sorted_reasoning_model_ids,
         max_chat_input_chars=max_chat_input_chars,
     )
+
+
+async def _in_read_session(deps: ProductServiceDependencies, reads):
+    """Run `reads(session)` on one pooled connection when a session factory is
+    wired, else let each store open its own session."""
+
+    if deps.get_sql_session_factory is None:
+        return await reads(None)
+    async with deps.get_sql_session_factory()() as session, session.begin():
+        return await reads(session)
 
 
 async def get_runtime_binding_for_team(
@@ -3525,28 +3498,45 @@ async def get_runtime_binding_for_team(
     - call from the team-scoped resolution endpoint after a team ReBAC check
     - returns None when no instance with that id exists in that team
     """
-    store = deps.get_agent_instance_store()
-    instance = await store.get_for_team(agent_instance_id, team_id)
-    if instance is None:
-        return None
-    # Resolve this team's per-capability enablement settings and ship only the
-    # slices for the capabilities this instance actually selected (CAPAB-01 /
-    # #1980, RFC §8.2). The pod carries each to `CapabilityContext.team_settings`.
-    selected = set(instance.tuning.selected_capability_ids or [])
-    # Independent reads (none depends on another's result) — run concurrently
-    # rather than stacking sequential DB round trips on the per-turn
-    # runtime-binding path (2026-08-04, PR #2204 review).
-    (
-        all_team_settings,
-        reasoning_enabled_model_ids,
-        platform_chat_model_binding,
-        platform_prompt,
-    ) = await asyncio.gather(
-        deps.get_team_capability_settings_store().list_for_team(team_id),
-        deps.get_model_reasoning_store().list_enabled_model_ids(),
-        resolve_platform_chat_model_binding(deps),
-        resolve_platform_prompt_text(deps),
+
+    # Two concurrent sessions of short sequential reads: at most 2 pooled
+    # connections per turn instead of one per read (design.md, D12 notes).
+    async def _team_reads(session: AsyncSession | None):
+        instance = await deps.get_agent_instance_store().get_for_team(
+            agent_instance_id, team_id, session=session
+        )
+        if instance is None:
+            return None
+        settings = await deps.get_team_capability_settings_store().list_for_team(
+            team_id, session=session
+        )
+        # Primary-key read; the pod trusts only this copy of the disabled set.
+        policy = await deps.get_team_routing_policy_store().get(
+            team_id=team_id, session=session
+        )
+        return instance, settings, policy
+
+    async def _platform_reads(session: AsyncSession | None):
+        reasoning = await deps.get_model_reasoning_store().list_enabled_model_ids(
+            session=session
+        )
+        binding = await resolve_platform_chat_model_binding(deps, session=session)
+        prompt = await resolve_platform_prompt_text(deps, session=session)
+        return reasoning, binding, prompt
+
+    team_result, platform_result = await asyncio.gather(
+        _in_read_session(deps, _team_reads),
+        _in_read_session(deps, _platform_reads),
     )
+    if team_result is None:
+        return None
+    instance, all_team_settings, routing_policy = team_result
+    reasoning_enabled_model_ids, platform_chat_model_binding, platform_prompt = (
+        platform_result
+    )
+    # Ship only the settings slices of the capabilities this instance selected
+    # (CAPAB-01, RFC §8.2); the pod carries each to `CapabilityContext`.
+    selected = set(instance.tuning.selected_capability_ids or [])
     team_capability_settings = {
         cap_id: settings
         for cap_id, settings in all_team_settings.items()
@@ -3561,6 +3551,11 @@ async def get_runtime_binding_for_team(
         tuning=instance.tuning,
         team_capability_settings=team_capability_settings,
         reasoning_enabled_model_ids=sorted(reasoning_enabled_model_ids),
+        team_disabled_model_ids=(
+            sorted(routing_policy.disabled_model_ids)
+            if routing_policy is not None
+            else []
+        ),
         platform_chat_model_binding=platform_chat_model_binding,
         platform_prompt=platform_prompt,
     )

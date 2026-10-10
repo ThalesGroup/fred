@@ -30,11 +30,23 @@ freely. You always talk to an agent of your own team.
   attached, it sees no document at all.
 - **Functions** — what it can do beyond answering.
 
+## The recommended language model
+
+In the **General** section, **Recommended model** picks the language model
+conversations with this agent start on. **Team default model** (the first
+option) uses the team's default model and follows it when the team admin
+changes it. Picking a specific model, even today's default, keeps that model
+whatever happens to the default. Only the
+models enabled for the team are offered. Members can still pick another model
+in the conversation (see [Conversations](/help/en/features/chat)).
+
+Reasoning is no longer set on the agent: it follows the chosen model.
+
 ## What an agent can do beyond answering
 
 The **Capabilities** tab decides what the agent is allowed to do: search the
 team's documents, use an attachment, write a Word document, fill a PowerPoint
-deck, produce a web page, take the time to reason step by step…
+deck, produce a web page…
 
 Two ways to choose, via the **Advanced** switch at the top of the tab:
 

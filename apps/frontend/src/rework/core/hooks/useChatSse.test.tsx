@@ -982,7 +982,6 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       capability_base_urls: {},
       context_prompt_text: "session prompt",
       chat_default_profile_id: "default.chat.team",
-      agent_profile_overrides: { "agent-1": "default.chat.fred-test-mock" },
       reasoning_enabled_model_ids: ["model__x__y"],
     });
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("no network in test"));
@@ -1008,7 +1007,6 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     expect(body.runtime_context).toMatchObject({
       context_prompt_text: "session prompt",
       chat_default_profile_id: "default.chat.team",
-      agent_profile_overrides: { "agent-1": "default.chat.fred-test-mock" },
       reasoning_enabled_model_ids: ["model__x__y"],
       selected_document_libraries_ids: ["lib-1"],
       language: "fr",

@@ -168,12 +168,3 @@ class ModelRoutingResolver:
         and raise its own typed `TeamRoutingProfileDriftError` instead."""
 
         return self._profiles_by_id.get(profile_id)
-
-
-# NOTE (#2387): `resolve_team_override` lived here and implemented the
-# team-vs-pod cascade for the chat capability alone. It is gone, not renamed:
-# control-plane needs the identical answer at prepare-execution to tell the
-# composer which model the next turn will use, and two implementations of a
-# precedence rule drift. The one implementation is now
-# `fred_sdk.contracts.context.resolve_effective_chat_profile`, which both this
-# package (`provider.RoutedChatModelFactory.select`) and control-plane call.

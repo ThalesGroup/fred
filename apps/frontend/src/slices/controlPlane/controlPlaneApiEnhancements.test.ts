@@ -215,3 +215,56 @@ describe("team creation admission invalidation", () => {
     }
   });
 });
+
+describe("team models save", () => {
+  const policyPath = "/control-plane/v1/teams/team-a/routing-policy";
+  const agentsPath = "/control-plane/v1/teams/team-a/agent-instances";
+
+  it("writes the saved policy into the cache and refetches the team's agent list", async () => {
+    let policyReads = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: Request | string) => {
+        const request = typeof input === "string" ? new Request(input) : input;
+        requested.push(request.url);
+        const { pathname } = new URL(request.url);
+        if (pathname === policyPath && request.method === "PATCH") {
+          return json({ team_id: "team-a", version: 2, disabled_model_ids: ["model__b"] });
+        }
+        if (pathname === policyPath) {
+          policyReads += 1;
+          // The refetch never answers: only the PATCH response can update the cache.
+          if (policyReads > 1) return new Promise<Response>(() => {});
+          return json({ team_id: "team-a", version: 1, disabled_model_ids: [] });
+        }
+        return json([]);
+      }),
+    );
+    const store = makeStore();
+    const policy = store.dispatch(
+      api.endpoints.getTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGet.initiate({ teamId: "team-a" }),
+    );
+    const agents = store.dispatch(
+      api.endpoints.getTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGet.initiate({ teamId: "team-a" }),
+    );
+    await Promise.all([policy, agents]);
+
+    await store.dispatch(
+      api.endpoints.updateTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyPatch.initiate({
+        teamId: "team-a",
+        updateTeamRoutingPolicyRequest: { disabled_model_ids: ["model__b"], expected_version: 1 },
+      }),
+    );
+
+    await vi.waitFor(() =>
+      expect(
+        api.endpoints.getTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGet.select({ teamId: "team-a" })(
+          store.getState(),
+        ).data?.version,
+      ).toBe(2),
+    );
+    await vi.waitFor(() => expect(callsTo(agentsPath)).toBe(2));
+    policy.unsubscribe();
+    agents.unsubscribe();
+  });
+});
