@@ -31,7 +31,7 @@ vi.mock("../TuningFieldRenderer.tsx", () => ({
   TuningFieldRenderer: ({ field }: { field: { key: string } }) => <span>{`field:${field.key}`}</span>,
 }));
 
-import { CapabilityConfigForm } from "./CapabilityCard";
+import { CapabilityCard, CapabilityConfigForm } from "./CapabilityCard";
 
 const FIELDS = [
   { key: "team_documents", type: "boolean", title: "t", default: true },
@@ -63,5 +63,18 @@ describe("CapabilityConfigForm visible_when", () => {
     const html = render({ team_documents: false, bind_libraries: true });
     expect(html).not.toContain("field:bind_libraries");
     expect(html).not.toContain("field:library_tag_ids");
+  });
+});
+
+describe("CapabilityCard included with the agent", () => {
+  it("shows its badge and configuration, and no switch to turn it off", () => {
+    const html = renderToStaticMarkup(
+      <CapabilityCard name="Documents" includedLabel="Included" subForm={<span>config</span>} />,
+    );
+
+    expect(html).toContain("Included");
+    expect(html).toContain("config");
+    expect(html).toContain('data-checked="true"');
+    expect(html).not.toContain('type="checkbox"');
   });
 });

@@ -14,6 +14,8 @@
 
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import type { CapabilityCatalogEntry } from "../../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+import { CapabilityCard } from "../CapabilityCard/CapabilityCard.tsx";
 import { ToolPackCard } from "../ToolPackCard/ToolPackCard.tsx";
 import {
   applyPackToggle,
@@ -27,9 +29,13 @@ import styles from "./SimpleCapabilitiesView.module.css";
 interface SimpleCapabilitiesViewProps {
   /** Team's admin-enabled capability ids (from the template's available_capabilities). */
   availableIds: ReadonlySet<string>;
-  /** Template's own supports_capabilities (unfiltered by team grants) — distinguishes
-   *  "this agent doesn't support selection" from "the team has zero usable capabilities". */
+  /** Template's own supports_capabilities (unfiltered by team grants). False: no
+   *  packs to pick, the agent's included capabilities are listed instead. */
   supportsCapabilities: boolean;
+  /** Capabilities included with an agent that offers no free selection. */
+  includedCapabilities?: readonly CapabilityCatalogEntry[];
+  /** Config UI shown inside one included capability's card. */
+  renderIncludedOptions?: (capability: CapabilityCatalogEntry) => ReactNode;
   selection: CapabilitySelectionState;
   disabled: boolean;
   onSelectionChange: (next: CapabilitySelectionState) => void;
@@ -44,11 +50,15 @@ interface SimpleCapabilitiesViewProps {
  * that bundle related capabilities behind one switch, so a non-technical user
  * enables a coherent feature without reasoning about individual capabilities.
  * A pure presentation layer over the form's existing capability selection —
- * see `toolPackLogic.ts` for the derive/toggle rules.
+ * see `toolPackLogic.ts` for the derive/toggle rules. An agent without free
+ * selection gets no capability packs: its included capabilities are listed,
+ * always on and configurable.
  */
 export function SimpleCapabilitiesView({
   availableIds,
   supportsCapabilities,
+  includedCapabilities = [],
+  renderIncludedOptions,
   selection,
   disabled,
   onSelectionChange,
@@ -62,38 +72,53 @@ export function SimpleCapabilitiesView({
       {TOOL_PACK_SECTIONS.map((section) => {
         const isCapabilityBackedSection =
           section.packs.length > 0 && section.packs.every((pack) => pack.kind === "capabilities");
-        const showNotSupported = isCapabilityBackedSection && !supportsCapabilities;
+        if (isCapabilityBackedSection && !supportsCapabilities) return null;
         // A pack the admin has opened nothing for is a dead switch; drop it,
         // and drop a section left with none rather than print a bare heading.
         // An agent still carrying a withdrawn capability is not left
         // unexplained: the form's suspension banner names it.
         const visiblePacks = section.packs.filter((pack) => isPackSelectable(pack, availableIds));
-        if (!showNotSupported && visiblePacks.length === 0) return null;
+        if (visiblePacks.length === 0) return null;
 
         return (
           <section key={section.id} className={styles.section}>
             <h3 className={styles.sectionHeader}>{t(section.titleKey)}</h3>
-            {showNotSupported ? (
-              <p className={styles.emptyState}>{t("rework.teams.formAgent.capabilities.notSupported")}</p>
-            ) : (
-              <ul className={styles.packList}>
-                {visiblePacks.map((pack) => (
-                  <ToolPackCard
-                    key={pack.id}
-                    pack={pack}
-                    checked={derivePackChecked(pack, selection, availableIds)}
-                    disabled={disabled}
-                    availableIds={availableIds}
-                    activeIds={activeIds}
-                    onToggle={(nextOn) => onSelectionChange(applyPackToggle(pack, nextOn, selection, availableIds))}
-                    options={renderPackOptions?.(pack)}
-                  />
-                ))}
-              </ul>
-            )}
+            <ul className={styles.packList}>
+              {visiblePacks.map((pack) => (
+                <ToolPackCard
+                  key={pack.id}
+                  pack={pack}
+                  checked={derivePackChecked(pack, selection, availableIds)}
+                  disabled={disabled}
+                  availableIds={availableIds}
+                  activeIds={activeIds}
+                  onToggle={(nextOn) => onSelectionChange(applyPackToggle(pack, nextOn, selection, availableIds))}
+                  options={renderPackOptions?.(pack)}
+                />
+              ))}
+            </ul>
           </section>
         );
       })}
+      {!supportsCapabilities &&
+        (includedCapabilities.length > 0 ? (
+          <section className={styles.section}>
+            <h3 className={styles.sectionHeader}>{t("rework.teams.formAgent.capabilities.builtIn.section")}</h3>
+            <ul className={styles.packList}>
+              {includedCapabilities.map((capability) => (
+                <CapabilityCard
+                  key={capability.id}
+                  name={t(capability.name, { defaultValue: capability.name })}
+                  description={t(capability.description, { defaultValue: capability.description })}
+                  includedLabel={t("rework.teams.formAgent.capabilities.builtIn.badge")}
+                  subForm={renderIncludedOptions?.(capability)}
+                />
+              ))}
+            </ul>
+          </section>
+        ) : (
+          <p className={styles.emptyState}>{t("rework.teams.formAgent.capabilities.builtIn.none")}</p>
+        ))}
     </div>
   );
 }
