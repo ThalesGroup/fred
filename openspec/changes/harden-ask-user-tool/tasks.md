@@ -13,5 +13,10 @@
 
 - [x] 2.1 Quality gates in `libs/fred-runtime`: `make code-quality`, `make test`. Run the `fred-performance-reviewer` skill on the tool call site (validation only, no I/O added). Verify: green, counts recorded here. Done: code-quality clean (0 errors); `make test` 1911 passed, 11 skipped. The `test_tool_call_recovery` case that rejected a question-only call was removed, since that call is now valid. Performance: reviewed by hand rather than through the skill. The change adds only argument normalisation over at most a handful of choice labels: no I/O, no shared state, no new KPI.
 - [x] 2.2 Migration note `docs/swift/ops/migrations/3035-harden-ask-user-tool.md` (impact `none`). Verify: `make migration-check`.
-- [ ] 2.3 Manual check: in managed chat with agent questions on, ask "pose-moi une question à choix" and an open question. Verify: the agent uses the tool (best effort), shows no duplicate "Other", and the open question pauses for free text.
+- [x] 2.3 Manual check: in managed chat with agent questions on, ask "pose-moi une question à choix" and an open question. Verify: the agent uses the tool (best effort), shows no duplicate "Other", and the open question pauses for free text.
+  - Done 2026-10-10 on mistral-small-latest, in a new conversation (local session a05371ce):
+    - "Pose moi une question" called `ask_user` with no choices and no `allow_free_text`; the question paused as free text (#3014).
+    - "pose moi une question à plusieurs choix" called `ask_user` with four choices and no "Other"; the card showed a single editable "Other" row.
+    - Residual: after a garbled answer, the agent asked a follow-up in plain text.
+  - The first wording ("whenever you need a decision…") was not enough. In a conversation where the agent had already asked in text, it judged that "ask me a question" did not require the tool. The description now says the tool is the only way to ask the user anything, including when the user asks to be asked a question.
 - [ ] 2.4 Archive after merge, then close #3035 and #3014. Verify: `openspec validate harden-ask-user-tool --strict`.
