@@ -1430,6 +1430,7 @@ async def _apply_capability_selection(
     context_label: str,
     deps: ProductServiceDependencies | None = None,
     asset_uploads: Mapping[str, Sequence[CapabilityAssetFile]] | None = None,
+    supports_capabilities: bool = True,
 ) -> ManagedAgentTuning:
     """
     Resolve one save's capability selection into pod-validated tuning slices
@@ -1460,7 +1461,12 @@ async def _apply_capability_selection(
       capability it is not enabled for (→ 403). The team subject — not the
       acting user — is what keeps a capability enabled for one of the user's
       other teams from being saved here.
+    - a template without free selection (`supports_capabilities=False`)
+      ignores any submitted selection, as the runtime does: its included
+      defaults always take the template-default path, configured like any other
     """
+    if not supports_capabilities:
+        selected_ids = None
     if selected_ids is not None:
         _validate_capability_ids(
             submitted_ids=selected_ids,
@@ -2759,6 +2765,7 @@ async def enroll_agent_instance(
         context_label="agent enrollment",
         deps=deps,
         asset_uploads=asset_uploads,
+        supports_capabilities=template.supports_capabilities,
     )
     record = AgentInstanceRecord(
         agent_instance_id=agent_instance_id,
@@ -2963,6 +2970,7 @@ async def update_agent_instance(
                 context_label="agent update",
                 deps=deps,
                 asset_uploads=asset_uploads,
+                supports_capabilities=template.supports_capabilities,
             )
         new_tuning = base
 

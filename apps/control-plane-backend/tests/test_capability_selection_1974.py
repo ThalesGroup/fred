@@ -95,6 +95,7 @@ def _template_payload(
     *,
     reasoning_enabled: bool = False,
     reasoning_default_on: bool = False,
+    supports_capabilities: bool = True,
 ) -> service._RuntimeTemplatePayload:
     return service._RuntimeTemplatePayload(
         template_agent_id="rags.sample.echo",
@@ -109,7 +110,12 @@ def _template_payload(
             reasoning_enabled=reasoning_enabled,
             reasoning_default_on=reasoning_default_on,
         ),
-        available_capabilities=[_DEMO_ENTRY, _PROBE_ENTRY],
+        # A pod lists only the included defaults of a template without free
+        # selection (`_template_capability_entries`).
+        available_capabilities=(
+            [_DEMO_ENTRY, _PROBE_ENTRY] if supports_capabilities else [_DEMO_ENTRY]
+        ),
+        supports_capabilities=supports_capabilities,
         default_capability_ids=default_capability_ids,
     )
 
@@ -133,6 +139,7 @@ def _setup(
     *,
     reasoning_enabled: bool = False,
     reasoning_default_on: bool = False,
+    supports_capabilities: bool = True,
 ):
     monkeypatch.setattr(
         "control_plane_backend.product.api.require_team_access",
@@ -151,6 +158,7 @@ def _setup(
                 default_capability_ids=default_capability_ids,
                 reasoning_enabled=reasoning_enabled,
                 reasoning_default_on=reasoning_default_on,
+                supports_capabilities=supports_capabilities,
             )
         ]
 
@@ -883,6 +891,70 @@ async def test_update_null_config_resets_selected_to_defaults(
     assert calls[0]["config_values"] == {}
     stored = store._records[0].tuning.capability_config["demo_echo"]["config"]
     assert "uppercase" not in stored
+
+
+@pytest.mark.asyncio
+async def test_enroll_without_free_selection_configures_included_capabilities(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A Graph template keeps its included capabilities active whatever the
+    # form submits, and saves their config through the same pod round-trip.
+    app, store = _setup(
+        monkeypatch, default_capability_ids=["demo_echo"], supports_capabilities=False
+    )
+    calls = _fake_pod_validate(monkeypatch)
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/teams/personal/agent-instances",
+            json={
+                "usage_statement": "Test usage statement covering purpose, users, data, and error impact.",
+                "template_id": "runtime-a:rags.sample.echo",
+                "display_name": "Bound graph agent",
+                "capability_ids": [],
+                "capability_config_values": {"demo_echo": {"uppercase": True}},
+            },
+        )
+    assert resp.status_code == 201
+    tuning = store._records[0].tuning
+    assert tuning.selected_capability_ids == ["demo_echo"]
+    assert tuning.capability_config["demo_echo"]["config"]["uppercase"] is True
+    assert [(c["capability_id"], c["config_values"]) for c in calls] == [
+        ("demo_echo", {"uppercase": True})
+    ]
+
+
+@pytest.mark.asyncio
+async def test_update_without_free_selection_saves_included_capability_config(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # An instance saved before this change holds an empty selection; editing
+    # it stores the included capability and its config, never another one.
+    record = _make_record()
+    record.tuning = record.tuning.model_copy(update={"selected_capability_ids": []})
+    app, store = _setup(
+        monkeypatch,
+        records=[record],
+        default_capability_ids=["demo_echo"],
+        supports_capabilities=False,
+    )
+    calls = _fake_pod_validate(monkeypatch)
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.patch(
+            "/control-plane/v1/teams/personal/agent-instances/instance-1",
+            json={
+                "capability_ids": ["probe_echo"],
+                "capability_config_values": {"demo_echo": {"uppercase": True}},
+            },
+        )
+    assert resp.status_code == 200
+    tuning = store._records[0].tuning
+    assert tuning.selected_capability_ids == ["demo_echo"]
+    assert set(tuning.capability_config) == {"demo_echo"}
+    assert [c["capability_id"] for c in calls] == ["demo_echo"]
 
 
 @pytest.mark.asyncio

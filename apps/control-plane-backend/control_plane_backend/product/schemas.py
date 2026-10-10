@@ -209,7 +209,9 @@ class AgentTemplateSummary(BaseModel):
             "advertisement. MCP servers surface here as ordinary capabilities "
             "keyed by their plain catalog server id (#1988). Drives the one "
             "Tools tab in agent creation; config_fields render through the "
-            "metadata-driven form."
+            "metadata-driven form. For a template with "
+            "`supports_capabilities=False` it lists only the capabilities "
+            "included with the agent."
         ),
     )
     supports_capabilities: bool = Field(
@@ -218,7 +220,9 @@ class AgentTemplateSummary(BaseModel):
             "Whether this template genuinely participates in capability "
             "selection, unfiltered by the team's can_use grants — unlike "
             "available_capabilities, which an empty team grant also empties. "
-            "False means the frontend should say so, not imply zero grants."
+            "False means the agent offers no free selection: every entry of "
+            "available_capabilities is included with it, always active and "
+            "configurable, and a submitted selection is ignored."
         ),
     )
     default_capability_ids: list[str] = Field(
