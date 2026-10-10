@@ -21,6 +21,7 @@ import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
 import { useChatSse } from "@hooks/useChatSse";
 import type { HitlBatchAnswer, InterruptedRunChoice, RuntimeAwaitingHumanEvent } from "@hooks/useChatSse";
+import { hitlHoldsComposer } from "./hitlHoldsComposer";
 import {
   useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery,
   useGetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetQuery,
@@ -37,6 +38,7 @@ import { countUnicodeCodePoints } from "@core/utils/chatInput";
 import { hasToolApprovalGrants, rememberToolApprovalGrants } from "@core/utils/toolApprovalGrants";
 import { KeyCloakService } from "../../../../security/KeycloakService";
 import type { AttachmentSource } from "@rework/types/attachments";
+import type { HitlQuestionState } from "@shared/molecules/HitlPrompt/HitlPrompt";
 
 type StagedHitlAnswer = {
   answer: string | boolean | undefined;
@@ -65,16 +67,12 @@ function answerWithOtherPriority(
     : answer;
 }
 
+// Typed text stays a draft until the person validates it (button or shortcut).
 function resolvedHitlAnswer(
   event: RuntimeAwaitingHumanEvent,
   stagedAnswers: ReadonlyMap<string, StagedHitlAnswer>,
-  drafts: ReadonlyMap<string, string>,
 ): StagedHitlAnswer | undefined {
-  const key = hitlKey(event);
-  const staged = stagedAnswers.get(key);
-  if (staged) return staged;
-  const freeText = event.payload.free_text ? drafts.get(key) : undefined;
-  return freeText?.trim() ? { answer: undefined, freeText, skipped: false } : undefined;
+  return stagedAnswers.get(hitlKey(event));
 }
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
@@ -116,12 +114,14 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   }, []);
   const pendingHitl = pendingHitls.find((event) => hitlKey(event) === selectedHitlKey) ?? pendingHitls[0] ?? null;
   const pendingHitlTabs = pendingHitl?.payload.stage === "agent_question" ? pendingHitls : [];
-  const stagedHitlAnswer = pendingHitl
-    ? resolvedHitlAnswer(pendingHitl, stagedHitlAnswers, hitlDraftsRef.current)
-    : undefined;
-  const stagedHitlCount = pendingHitlTabs.filter((event) =>
-    resolvedHitlAnswer(event, stagedHitlAnswers, hitlDraftsRef.current),
-  ).length;
+  const stagedHitlAnswer = pendingHitl ? resolvedHitlAnswer(pendingHitl, stagedHitlAnswers) : undefined;
+  const stagedHitlCount = pendingHitlTabs.filter((event) => resolvedHitlAnswer(event, stagedHitlAnswers)).length;
+  // One state per tab, in tab order, for the tab icons.
+  const hitlTabStates: HitlQuestionState[] = pendingHitlTabs.map((event) => {
+    const answer = resolvedHitlAnswer(event, stagedHitlAnswers);
+    if (!answer) return "waiting";
+    return answer.skipped ? "skipped" : "answered";
+  });
   const [resumingAgentQuestionSessionId, setResumingAgentQuestionSessionId] = useState<string | null>(null);
   const hitlResumeOwnerRef = useRef<RuntimeAwaitingHumanEvent | null>(null);
   const submittedBatchKeysRef = useRef<Set<string>>(new Set());
@@ -137,17 +137,11 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
       if (selected) {
         const key = hitlKey(selected);
         hitlDraftsRef.current.set(key, value);
+        // Editing the text withdraws a validated answer until it is validated again.
         const staged = stagedHitlAnswersRef.current.get(key);
-        if (staged && (!staged.skipped || value.trim())) {
+        if (staged && value !== (staged.freeText ?? "")) {
           const next = new Map(stagedHitlAnswersRef.current);
-          if (staged.answer === undefined && !value.trim()) next.delete(key);
-          else
-            next.set(key, {
-              ...staged,
-              answer: answerWithOtherPriority(selected, staged.answer, value),
-              freeText: value.trim() ? value : undefined,
-              skipped: false,
-            });
+          next.delete(key);
           replaceStagedHitlAnswers(next);
         }
       }
@@ -175,7 +169,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
       replaceStagedHitlAnswers(nextAnswers);
       const index = current.findIndex((event) => hitlKey(event) === hitlKey(selected));
       const next = [...current.slice(index + 1), ...current.slice(0, index)].find(
-        (event) => !resolvedHitlAnswer(event, nextAnswers, hitlDraftsRef.current),
+        (event) => !resolvedHitlAnswer(event, nextAnswers),
       );
       if (next) {
         setSelectedHitlKey(hitlKey(next));
@@ -433,7 +427,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   const canSendAllHitl =
     pendingHitlTabs.length > 1 &&
     pendingHitlTabs.every((event) => {
-      const answer = resolvedHitlAnswer(event, stagedHitlAnswers, hitlDraftsRef.current);
+      const answer = resolvedHitlAnswer(event, stagedHitlAnswers);
       if (!answer) return false;
       if (!answer.skipped && answer.answer === undefined && !answer.freeText?.trim()) return false;
       return (
@@ -711,10 +705,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
         `[useManagedChat] sendTurn() — inputChars=${inputCharacterCount} waitResponse=${waitResponse} sessionId=${sessionId ?? "null"}`,
       );
       const awaitingAgentQuestion =
-        (pendingHitl?.session_id === sessionId && pendingHitl.payload.stage === "agent_question") ||
-        (sessionId !== null &&
-          hitlResumeOwnerRef.current?.session_id === sessionId &&
-          hitlResumeOwnerRef.current.payload.stage === "agent_question");
+        hitlHoldsComposer(pendingHitl, sessionId) || hitlHoldsComposer(hitlResumeOwnerRef.current, sessionId);
       if (
         (!text && !attachmentContext) ||
         waitResponse ||
@@ -1004,7 +995,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
       for (const event of prompts) {
         const staged = skipAll
           ? { answer: undefined, freeText: undefined, skipped: true }
-          : resolvedHitlAnswer(event, stagedHitlAnswersRef.current, hitlDraftsRef.current);
+          : resolvedHitlAnswer(event, stagedHitlAnswersRef.current);
         if (!staged || !event.payload.interrupt_id || !event.payload.occurrence_id) return;
         if (!staged.skipped && staged.answer === undefined && !staged.freeText?.trim()) return;
         if (
@@ -1191,6 +1182,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     pendingHitlTabs,
     stagedHitlAnswer,
     stagedHitlCount,
+    hitlTabStates,
     canSendAllHitl,
     stageHitlAnswer,
     selectHitlTab,

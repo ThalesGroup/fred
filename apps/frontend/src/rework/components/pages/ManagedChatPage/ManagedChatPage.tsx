@@ -47,6 +47,7 @@ import { conversationTokenTotals } from "./toThreadMessages";
 import { useChatAutoScroll } from "../../../core/hooks/useChatAutoScroll";
 import { useConversationJump } from "../../../core/hooks/useConversationJump";
 import { useOutlineScrollSpy } from "../../../core/hooks/useOutlineScrollSpy";
+import { hitlHoldsComposer } from "./hitlHoldsComposer";
 import { useManagedChat } from "./useManagedChat";
 import { useComposerCommands } from "./useComposerCommands";
 import { useUploadWarningAcknowledgement } from "../../../core/hooks/useUploadWarningAcknowledgement";
@@ -532,10 +533,10 @@ export default function ManagedChatPage() {
   const hasToolControls = chat.chatControls.some(
     (control) => control.widget !== "attach_files" && !COMPOSER_CHIP_WIDGETS.has(control.widget),
   );
-  const awaitingAgentQuestion =
-    (chat.pendingHitl?.session_id === chat.sessionId && chat.pendingHitl.payload.stage === "agent_question") ||
+  const awaitingHumanAnswer =
+    hitlHoldsComposer(chat.pendingHitl, chat.sessionId) ||
     (chat.sessionId !== null && chat.resumingAgentQuestionSessionId === chat.sessionId);
-  const composerControlsDisabled = chat.waitResponse || chat.isLoadingHistory || awaitingAgentQuestion;
+  const composerControlsDisabled = chat.waitResponse || chat.isLoadingHistory || awaitingHumanAnswer;
 
   // `/` at the start of an empty composer. Owns the menu and resolves the
   // first token on submit, so `Tab` then `Enter` and `Enter` from the open
@@ -771,6 +772,7 @@ export default function ManagedChatPage() {
                         hitlBusy={chat.resumingAgentQuestionSessionId === chat.sessionId}
                         stagedHitlAnswer={chat.stagedHitlAnswer}
                         canSendAllHitl={chat.canSendAllHitl}
+                        hitlTabStates={chat.hitlTabStates}
                         onStageHitlAnswer={chat.stageHitlAnswer}
                         onSendAllHitl={chat.handleSendAllHitl}
                         onSkipAllHitl={chat.handleSkipAllHitl}

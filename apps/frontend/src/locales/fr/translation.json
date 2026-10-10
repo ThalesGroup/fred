@@ -552,12 +552,11 @@
       "empty": "Aucun aperçu markdown disponible."
     },
     "recordAudio": "Enregistrer de l'audio",
-    "nextHitlQuestion": "Suivant",
+    "hitlAnswerValidated": "Réponse validée",
+    "validateHitlAnswer": "Valider",
     "sendAllHitlAnswers": "Tout envoyer",
     "sendHitlAnswer": "Envoyer",
     "skipHitlQuestion": "Passer",
-    "skipHitlQuestionAria": "Passer cette question",
-    "skipAllHitlQuestionsAria": "Passer toutes les questions",
     "approveForConversation": "Approuver pour toute la conversation",
     "sendMessage": "Envoyer le message",
     "sessionAttachments": {
@@ -603,6 +602,13 @@
       "empty": "Aucun prompt dans cet espace.",
       "emptyFilters": "Aucun prompt ne correspond aux filtres.",
       "categoryLabel": "Catégorie"
+    },
+    "skipAllHitlQuestions": "Tout passer",
+    "hitlOtherAnswerHint": "écrire votre réponse…",
+    "hitlQuestionState": {
+      "waiting": "En attente de réponse",
+      "answered": "Répondue",
+      "skipped": "Passée"
     }
   },
   "comingSoon": {
@@ -1790,7 +1796,9 @@
       "selected": "Choisi",
       "skipped": "Passé",
       "accepted": "Accepté",
-      "refused": "Refusé"
+      "refused": "Refusé",
+      "toolRecall_one": "Outil : {{tools}}",
+      "toolRecall_other": "{{count}} outils : {{tools}}"
     },
     "knowledgeHub": {
       "loading": "Chargement..."
