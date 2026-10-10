@@ -29,9 +29,9 @@ type CapabilityCardProps = {
    *  when truthy — omit or pass `false` for a card with nothing to configure. */
   subForm?: ReactNode;
 } & (
-  | { checked: boolean; disabled: boolean; onToggle: () => void; includedLabel?: undefined }
+  | { checked: boolean; disabled: boolean; onToggle: () => void; included?: undefined }
   /** A capability included with the agent: always on, so a badge replaces the switch. */
-  | { includedLabel: string; checked?: undefined; disabled?: undefined; onToggle?: undefined }
+  | { included: true; checked?: undefined; disabled?: undefined; onToggle?: undefined }
 );
 
 /**
@@ -42,7 +42,7 @@ type CapabilityCardProps = {
  * (REASON-01, Amendment C — a `SwitchRow` as `subForm`) alike, so the tab has
  * exactly one card component regardless of what's actually being toggled.
  * A capability included with an agent that offers no free selection passes
- * `includedLabel`: it stays on, with a badge in place of the switch.
+ * `included`: it stays on, with a badge in place of the switch.
  */
 export function CapabilityCard({
   name,
@@ -50,10 +50,11 @@ export function CapabilityCard({
   checked,
   disabled,
   onToggle,
-  includedLabel,
+  included,
   subForm,
 }: CapabilityCardProps) {
-  const active = includedLabel !== undefined || checked;
+  const { t } = useTranslation();
+  const active = included || checked;
   const meta = (
     <div className={styles.meta}>
       <span className={`${styles.name} ${active ? styles.nameActive : ""}`}>{name}</span>
@@ -62,10 +63,10 @@ export function CapabilityCard({
   );
   return (
     <li className={styles.card} data-checked={active}>
-      {includedLabel !== undefined ? (
+      {included ? (
         <div className={`${styles.header} ${styles.headerStatic}`}>
           {meta}
-          <StatusBadge label={includedLabel} tone="neutral" />
+          <StatusBadge label={t("rework.teams.formAgent.capabilities.builtIn.badge")} tone="neutral" />
         </div>
       ) : (
         /* The whole header is the click target, padding included — <label>

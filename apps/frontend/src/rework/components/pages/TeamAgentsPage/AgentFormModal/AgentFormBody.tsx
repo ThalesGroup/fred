@@ -528,7 +528,7 @@ export function AgentFormBody({
                             key={capability.id}
                             name={name}
                             description={description}
-                            includedLabel={t("rework.teams.formAgent.capabilities.builtIn.badge")}
+                            included
                             subForm={renderConfigForm(capability)}
                           />
                         );

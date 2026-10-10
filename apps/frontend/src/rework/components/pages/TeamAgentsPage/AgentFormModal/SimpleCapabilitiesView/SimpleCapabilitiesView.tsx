@@ -110,7 +110,7 @@ export function SimpleCapabilitiesView({
                   key={capability.id}
                   name={t(capability.name, { defaultValue: capability.name })}
                   description={t(capability.description, { defaultValue: capability.description })}
-                  includedLabel={t("rework.teams.formAgent.capabilities.builtIn.badge")}
+                  included
                   subForm={renderIncludedOptions?.(capability)}
                 />
               ))}

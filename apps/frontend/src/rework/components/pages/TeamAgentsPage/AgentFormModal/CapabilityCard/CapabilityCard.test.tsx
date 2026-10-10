@@ -68,11 +68,9 @@ describe("CapabilityConfigForm visible_when", () => {
 
 describe("CapabilityCard included with the agent", () => {
   it("shows its badge and configuration, and no switch to turn it off", () => {
-    const html = renderToStaticMarkup(
-      <CapabilityCard name="Documents" includedLabel="Included" subForm={<span>config</span>} />,
-    );
+    const html = renderToStaticMarkup(<CapabilityCard name="Documents" included subForm={<span>config</span>} />);
 
-    expect(html).toContain("Included");
+    expect(html).toContain("rework.teams.formAgent.capabilities.builtIn.badge");
     expect(html).toContain("config");
     expect(html).toContain('data-checked="true"');
     expect(html).not.toContain('type="checkbox"');
