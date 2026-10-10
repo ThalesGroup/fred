@@ -244,7 +244,6 @@ async def test_marked_questions_with_literal_line_breaks_recover_all_calls() -> 
         '{"question":"Which\t island?","allow_free_text":true}',
         '{"question":"Which island?","allow_free_text":true,"unexpected":1}',
         '{"question":"Which island?","allow_free_text":true,"tool_call_id":"spoof"}',
-        '{"question":"Which island?"}',
         (
             '{"question":"Which island?","choices":['
             '{"id":"same","label":"First"},{"id":"same","label":"Second"}]}'

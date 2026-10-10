@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 from collections.abc import Sequence
 from types import SimpleNamespace
-from typing import cast
+from typing import Any, cast
 
 import pytest
 from fred_core.store import VectorSearchHit
@@ -275,7 +275,6 @@ def test_ask_user_colliding_with_declared_tool_is_rejected() -> None:
     "payload",
     [
         {"question": " ", "allow_free_text": True, "tool_call_id": "call-1"},
-        {"question": "Choose", "tool_call_id": "call-1"},
         {
             "question": "Choose",
             "choices": [{"id": " yes ", "label": "Yes"}],
@@ -407,3 +406,125 @@ def test_ask_user_colliding_with_provider_tool_is_rejected() -> None:
     )
     with pytest.raises(RuntimeError, match="collides"):
         resolver.resolve_tools()
+
+
+@pytest.mark.parametrize(
+    "label",
+    [
+        "Autre",
+        "Other",
+        "Autre (précise si tu veux)",
+        "Something else",
+        "autre réponse.",
+    ],
+)
+def test_ask_user_drops_generic_other_choice(label: str) -> None:
+    from fred_runtime.runtime_support.ask_user import AskUserArgs
+
+    args = AskUserArgs.model_validate(
+        {
+            "question": "Mode?",
+            "choices": [
+                {"id": "1", "label": "Office"},
+                {"id": "2", "label": "Remote"},
+                {"id": "3", "label": label},
+            ],
+            "tool_call_id": "call-1",
+        }
+    )
+    assert [choice.label for choice in args.choices] == ["Office", "Remote"]
+    assert args.allow_free_text is True
+
+
+def test_ask_user_keeps_specific_other_choice() -> None:
+    from fred_runtime.runtime_support.ask_user import AskUserArgs
+
+    args = AskUserArgs.model_validate(
+        {
+            "question": "Where?",
+            "choices": [
+                {"id": "fr", "label": "France"},
+                {"id": "other", "label": "Other country"},
+            ],
+            "tool_call_id": "call-1",
+        }
+    )
+    assert [choice.id for choice in args.choices] == ["fr", "other"]
+    assert args.allow_free_text is False
+
+
+def test_ask_user_counts_choices_after_dropping_other() -> None:
+    from fred_runtime.runtime_support.ask_user import AskUserArgs
+
+    choices = [{"id": str(index), "label": f"Option {index}"} for index in range(4)]
+    args = AskUserArgs.model_validate(
+        {
+            "question": "Pick",
+            "choices": [*choices, {"id": "x", "label": "Autre"}],
+            "tool_call_id": "call-1",
+        }
+    )
+    assert len(args.choices) == 4
+
+
+@pytest.mark.asyncio
+async def test_ask_user_single_choice_plus_other_allows_free_text(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request = await _captured_request(
+        monkeypatch,
+        {
+            "question": "Continue?",
+            "choices": [{"id": "yes", "label": "Oui"}, {"id": "o", "label": "Autre"}],
+            "tool_call_id": "call-1",
+        },
+    )
+    assert [choice["id"] for choice in request["choices"]] == ["yes"]
+    assert request["free_text"] is True
+
+
+@pytest.mark.asyncio
+async def test_ask_user_without_choices_is_a_free_text_question(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request = await _captured_request(
+        monkeypatch,
+        {
+            "title": "Adresse email",
+            "question": "Quelle est l'adresse email du destinataire ?",
+            "tool_call_id": "x",
+        },
+    )
+    assert request["choices"] == []
+    assert request["free_text"] is True
+
+
+@pytest.mark.asyncio
+async def test_ask_user_single_choice_keeps_free_text_off(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request = await _captured_request(
+        monkeypatch,
+        {
+            "question": "Confirm?",
+            "choices": [{"id": "ok", "label": "OK"}],
+            "tool_call_id": "call-1",
+        },
+    )
+    assert request["free_text"] is False
+
+
+async def _captured_request(
+    monkeypatch: pytest.MonkeyPatch, payload: dict[str, object]
+) -> dict[str, Any]:
+    from fred_runtime.runtime_support import ask_user as ask_user_module
+
+    captured: dict[str, Any] = {}
+
+    def fake_interrupt(value: dict[str, Any]) -> dict[str, Any]:
+        captured.update(value)
+        return {"skipped": True}
+
+    monkeypatch.setattr(ask_user_module, "interrupt", fake_interrupt)
+    await ask_user_module.ask_user(payload)
+    return captured

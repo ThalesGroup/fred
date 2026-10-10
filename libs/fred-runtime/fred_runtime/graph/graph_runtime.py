@@ -45,7 +45,11 @@ from pydantic import BaseModel
 from fred_runtime.capabilities.assembly import CapabilityAgentBlock
 from fred_runtime.capabilities.errors import CapabilityAssemblyError
 from fred_runtime.graph.graph_executor import GraphExecutor
-from fred_runtime.runtime_support.ask_user import AskUserArgs, ask_user
+from fred_runtime.runtime_support.ask_user import (
+    ASK_USER_DESCRIPTION,
+    AskUserArgs,
+    ask_user,
+)
 from fred_runtime.runtime_support.checkpoints import (
     checkpoint_namespace,
 )
@@ -179,12 +183,7 @@ def _ask_user_tool(
             func=None,
             coroutine=invoke,
             name="ask_user",
-            description=(
-                "Ask the user one question and continue after their answer. "
-                "When possible, give the question a short subject title of a few words. "
-                "Hard limit: at most four choices. Select the four best matches before calling; "
-                "multiple choices always include an Other free-text answer."
-            ),
+            description=ASK_USER_DESCRIPTION,
             args_schema=AskUserArgs,
             response_format="content_and_artifact",
         ),
