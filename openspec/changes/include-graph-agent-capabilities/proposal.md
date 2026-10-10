@@ -30,8 +30,9 @@ ignores any binding.
   the `document_scope` chat control its active capabilities compute from their
   stored config, are a ceiling on the turn's library selection, whatever the
   client sends.
-- **`document_access` (capability):** a turn selection disjoint from the
-  configured scope searches nothing, instead of reaching the port as `[]`.
+- **Document search and tree ports (runtime):** an empty scope, passed by the
+  capability or left by intersecting it with the session's selection, finds
+  nothing instead of reaching Knowledge Flow as no filter.
 
 Out of scope: graph nodes consuming capability-provided tools, merging
 `knowledge.search` with the `document_access` tool, the general agent scope

@@ -42,4 +42,5 @@ An instance created before this release keeps an empty stored selection, so its
 chat shows no capability controls until it is edited and saved once. The
 builtin `knowledge.search` now stays within an instance's bound libraries for
 every client, including API runs without the chat UI, and the `document_access`
-search finds nothing for a turn selection outside the libraries it is bound to.
+search and tree find nothing for a selection outside the libraries the agent is
+bound to, where they used to search unfiltered.

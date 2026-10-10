@@ -18,6 +18,6 @@
 ## 4. Close-out
 
 - [x] 4.1 Contract entries, authoring guide, migration note.
-- [x] 4.2 Stop `document_access`'s search and tree tools when the turn selection is disjoint from the configured scope (design, Risks). Verify with `test_turn_option_outside_the_bound_libraries_searches_nothing`.
+- [x] 4.2 Make `DocumentSearchAdapter.search` and `DocumentTreeAdapter.tree` find nothing for an empty scope (design, D5); state it in the port docstrings. Verify with `test_document_ports_find_nothing_for_an_empty_scope`.
 - [ ] 4.3 Manual check on k3d with `mindmap`: an instance bound to one library pins the chat picker and cites only that library.
 - [ ] 4.4 Create the GitHub issue, open the PR, archive this change after merge.

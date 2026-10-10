@@ -968,11 +968,10 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
             return _no_hits("Corpus retrieval skipped in general-only mode.")
 
         # Bound libraries are a ceiling: the turn's selection only narrows them.
-        # An empty intersection must find nothing, never search unfiltered.
         library_ids = _narrow_scope_ids(
             self._bound_library_ids, get_document_library_tags_ids(runtime_context)
         )
-        if library_ids == []:
+        if _matches_nothing(library_ids):
             return _no_hits("None of the selected libraries is bound to this agent.")
 
         include_session_scope, include_corpus_scope = get_vector_search_scopes(
@@ -1324,6 +1323,13 @@ def _narrow_scope_ids(
     return [value for value in inner if value in allowed]
 
 
+def _matches_nothing(*scopes: Sequence[str] | None) -> bool:
+    """An empty (not None) scope selects nothing; Knowledge Flow would read it as
+    no filter at all, so the caller must stop instead of sending it."""
+
+    return any(scope is not None and not scope for scope in scopes)
+
+
 def _ensure_uid_in_turn_scope(
     runtime_context: RuntimeContext | None, document_uid: str
 ) -> None:
@@ -1435,6 +1441,10 @@ class DocumentSearchAdapter(DocumentSearchPort):
         effective_uids = _narrow_scope_ids(
             get_document_uids(runtime_context), document_uids
         )
+        if _matches_nothing(
+            library_tag_ids, document_uids, effective_libs, effective_uids
+        ):
+            return DocumentSearchResult(hits=())
         policy = search_policy or get_search_policy(runtime_context)
 
         team_id = self._settings.team_id
@@ -1814,6 +1824,10 @@ class DocumentTreeAdapter(DocumentTreePort):
         effective_uids = _narrow_scope_ids(
             get_document_uids(runtime_context), document_uids
         )
+        if _matches_nothing(
+            library_tag_ids, document_uids, effective_libs, effective_uids
+        ):
+            return DocumentTreeResult(tree="", truncated=False)
         team_id = self._settings.team_id
         scoped_team = bool(team_id) and not is_personal_team_id(team_id)
         try:

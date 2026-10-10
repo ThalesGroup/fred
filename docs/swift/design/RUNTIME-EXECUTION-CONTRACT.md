@@ -6605,8 +6605,10 @@ picker from. `FredKnowledgeSearchToolInvoker` narrows the turn's library
 selection by it with `_narrow_scope_ids`: no selection searches the bound
 libraries, and a selection with no bound library returns no hits instead of an
 unfiltered search. Document picks are not narrowed, as in `document_access`.
-That capability's own search and tree tools now stop the same way when the turn's
-selection is disjoint from their configured scope, rather than passing `[]` to
-the port, which reads it as "no narrowing". This is a ceiling for one port; the
+`DocumentSearchAdapter.search` and `DocumentTreeAdapter.tree` apply the same rule:
+an empty scope, passed by the capability or left by the session-binding
+intersection, finds nothing (`DocumentSearchPort` / `DocumentTreePort`: `[]` =
+nothing in scope, `None` = no narrowing). They used to send it on as no filter.
+This is a ceiling for one port; the
 general agent scope descriptor stays open in `CAPABILITY-SCOPE-CEILING-RFC.md`.
 

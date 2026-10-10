@@ -860,8 +860,9 @@ class DocumentSearchPort(ABC):
         Run one scoped vector search and return typed hits.
 
         `library_tag_ids` / `document_uids` are the capability's already-narrowed
-        scope (None = "no capability-side narrowing at this level"); the adapter
-        further bounds them by the session binding. `search_policy` overrides the
+        scope (None = "no capability-side narrowing at this level", an empty list
+        = nothing in scope); the adapter further bounds them by the session
+        binding, and an empty result finds nothing. `search_policy` overrides the
         binding's default policy when provided. `include_attachments` /
         `include_team_documents` are ceilings on the conversation's attached
         files and the team corpus: the per-turn RAG scope can only narrow them.
@@ -1113,9 +1114,11 @@ class DocumentTreePort(ABC):
         Return the caller's authorized folder/document tree as rendered text.
 
         `library_tag_ids` / `document_uids` are the capability's already-narrowed
-        scope (None = "no capability-side narrowing at that level"); the adapter
-        further bounds them by the session binding before calling Knowledge Flow,
-        completing `turn_option ⊆ capability_config ⊆ session_binding`. A
+        scope (None = "no capability-side narrowing at that level", an empty list
+        = nothing in scope); the adapter further bounds them by the session
+        binding before calling Knowledge Flow, completing
+        `turn_option ⊆ capability_config ⊆ session_binding`, and an empty result
+        lists nothing. A
         document scope prunes the listing to those leaves and drops the folders
         left empty, so a one-document selection renders one document. Raises
         `DocumentPortCallError` on transport failure.

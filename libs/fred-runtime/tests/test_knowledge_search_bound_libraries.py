@@ -17,7 +17,8 @@ Server-side library binding of the builtin `knowledge.search` tool.
 An agent instance bound to libraries (a capability's `document_scope` chat
 control carrying `bound_library_ids`) keeps that scope whatever the client
 sends: the turn's selection may only narrow it, and a selection wholly outside
-it finds nothing rather than searching unfiltered.
+it finds nothing rather than searching unfiltered. The document search and tree
+ports apply the same "empty scope finds nothing" rule.
 """
 
 from __future__ import annotations
@@ -58,6 +59,7 @@ from fred_sdk.contracts.models import (
     GraphNodeDefinition,
     MCPServerRef,
 )
+from fred_sdk.contracts.runtime import DocumentTreeResult
 from fred_sdk.support.builtins.catalog import TOOL_REF_KNOWLEDGE_SEARCH
 from pydantic import BaseModel
 
@@ -170,6 +172,56 @@ async def test_unbound_agent_keeps_the_client_selection(
     assert [
         call["document_library_tags_ids"] for call in _RecordingSearchClient.calls
     ] == [["lib-x"]]
+
+
+class _RecordingTreeClient:
+    """Stand-in for KfDocumentClient's tree call."""
+
+    calls: list[dict[str, Any]] = []
+
+    def __init__(self, agent: object) -> None:
+        del agent
+
+    async def tree(self, **kwargs: Any) -> DocumentTreeResult:
+        type(self).calls.append(kwargs)
+        return DocumentTreeResult(tree="Sales/", truncated=False)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "session_libraries,capability_libraries",
+    [
+        # The capability's bound libraries miss everything the client selected.
+        (["lib-x"], ["lib-a"]),
+        # The capability's own turn-option narrowing already came out empty.
+        (None, []),
+    ],
+)
+async def test_document_ports_find_nothing_for_an_empty_scope(
+    monkeypatch: pytest.MonkeyPatch,
+    session_libraries: list[str] | None,
+    capability_libraries: list[str],
+) -> None:
+    _RecordingSearchClient.calls = []
+    _RecordingTreeClient.calls = []
+    monkeypatch.setattr(adapters_module, "VectorSearchClient", _RecordingSearchClient)
+    monkeypatch.setattr(adapters_module, "KfDocumentClient", _RecordingTreeClient)
+    binding = _binding(session_libraries)
+    search = adapters_module.DocumentSearchAdapter(
+        binding=binding, settings=_FakeSettings()
+    )
+    tree = adapters_module.DocumentTreeAdapter(
+        binding=binding, settings=_FakeSettings()
+    )
+
+    result = await search.search("alpha", library_tag_ids=capability_libraries)
+    listing = await tree.tree(library_tag_ids=capability_libraries)
+
+    # An empty filter would reach Knowledge Flow as no filter at all.
+    assert _RecordingSearchClient.calls == []
+    assert result.hits == ()
+    assert _RecordingTreeClient.calls == []
+    assert listing.tree == ""
 
 
 class _ScopeConfig(BaseModel):

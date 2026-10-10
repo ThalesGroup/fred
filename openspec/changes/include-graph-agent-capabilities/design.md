@@ -48,6 +48,18 @@ intersection returns no hits: `VectorSearchClient` drops an empty filter, so it
 must never reach the search. Document picks are not narrowed, as in
 `document_access`, where libraries and documents union.
 
+### D5. An empty scope finds nothing, at the port seam
+
+Found while doing D4: `DocumentSearchAdapter` and `DocumentTreeAdapter` sent an
+empty intersection on, and `VectorSearchClient` / the tree drop an empty filter.
+Two ways reach it with `document_access`: the turn's `turn_options` disjoint from
+the bound libraries (the capability passes `[]`, which the adapter read as "no
+narrowing"), or the `RuntimeContext` selection disjoint from them. Both searched
+the session's selection or the whole corpus. The adapters now return nothing for
+an empty scope (`_matches_nothing`), as `DocumentSimilarityAdapter` already
+refuses one, and the port docstrings say `[]` means nothing in scope. One owner,
+no capability-side guard.
+
 ## Risks / Trade-offs
 
 - Instances saved before this change keep `selected_capability_ids: []`, so their
@@ -55,9 +67,3 @@ must never reach the search. Document picks are not narrowed, as in
   runtime behaviour of those instances does not change.
 - This is a ceiling for one port, the kind CAPAB-SCOPE-01 wants generalized. That
   RFC stays open; this change does not preempt its descriptor design.
-- Found while doing this: in `document_access`'s own tools, a turn selection
-  disjoint from the configured scope narrowed to `[]`, which the port reads as
-  "no narrowing", so the search ran on the session's selection or unfiltered. The
-  capability now stops there (no search, no tree). The port contract is
-  unchanged; whether an explicit `[]` should mean "nothing" at the port stays a
-  question for CAPAB-SCOPE-01.
