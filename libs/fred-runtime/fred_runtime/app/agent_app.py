@@ -1281,13 +1281,13 @@ class _AgentTemplateSummary(BaseModel):
     kind: ExecutionCategory
     default_tuning: AgentTuning
     available_mcp_servers: list[MCPServerConfiguration] = Field(default_factory=list)
-    # Filtered by supports_capabilities below: [] outright for a template that
-    # opts out, so a coincidentally pod-registered capability is never offered.
+    # Filtered by supports_capabilities below: only the template's included
+    # defaults for one that opts out, so a coincidentally pod-registered
+    # capability is never offered.
     available_capabilities: list[CapabilityCatalogEntry] = Field(default_factory=list)
     # Mirrors AgentDefinition.supports_capabilities verbatim (unfiltered by team
-    # grants) — the only way control-plane can tell "this team has zero usable
-    # capabilities" apart from "this template doesn't support selection at all"
-    # once available_capabilities has been narrowed to the team's can_use set.
+    # grants). False means available_capabilities lists capabilities included
+    # with the agent: always active, configurable, never selectable.
     supports_capabilities: bool = True
     # This template's declared default capability ids (RFC §2), verbatim from
     # `definition.default_mcp_servers` — MCP-derived and native ids alike, no
@@ -1666,6 +1666,31 @@ def _apply_runtime_tuning(
         ):
             update["system_prompt_template"] = system_prompt
     return definition.model_copy(update=update)
+
+
+def _template_capability_entries(
+    definition: ReActAgentDefinition | GraphAgentDefinition,
+    entries: Sequence[CapabilityCatalogEntry],
+) -> list[CapabilityCatalogEntry]:
+    """
+    The pod's capability entries one template advertises.
+
+    A ReAct-only capability (CAPAB-02 `execution_models`) is never listed on a
+    Graph template: `_build_capability_block` would refuse it at run time. A
+    definition with `supports_capabilities=False` lists only its included
+    defaults, which the form shows and configures but never lets anyone pick.
+    """
+
+    included_ids = {ref.id for ref in definition.default_mcp_servers}
+    return [
+        entry
+        for entry in entries
+        if (
+            not isinstance(definition, GraphAgentDefinition)
+            or "graph" in entry.execution_models
+        )
+        and (definition.supports_capabilities or entry.id in included_ids)
+    ]
 
 
 def _available_mcp_servers_for_definition(
@@ -5066,26 +5091,8 @@ def _build_agent_router(
                 kind=definition.execution_category,
                 default_tuning=_definition_to_agent_tuning(definition),
                 available_mcp_servers=_available_mcp_servers_for_definition(definition),
-                # CAPAB-02: a capability declared `execution_models=("react",)`
-                # must not even be offered for selection on a Graph template —
-                # `_build_capability_block` would refuse it loudly at save/run
-                # time regardless, but a picker that lists it first invites the
-                # exact "select it, save it, discover the incompatibility at
-                # first launch" flow the loud refusal exists to prevent.
-                #
-                # A definition opting out via supports_capabilities=False never
-                # offers one, regardless of pod registration — short-circuit
-                # rather than let that leak into the picker.
-                available_capabilities=(
-                    []
-                    if not definition.supports_capabilities
-                    else all_capability_entries
-                    if not isinstance(definition, GraphAgentDefinition)
-                    else [
-                        entry
-                        for entry in all_capability_entries
-                        if "graph" in entry.execution_models
-                    ]
+                available_capabilities=_template_capability_entries(
+                    definition, all_capability_entries
                 ),
                 supports_capabilities=definition.supports_capabilities,
                 default_capability_ids=[

@@ -395,8 +395,8 @@ def test_templates_hide_all_capabilities_for_definition_that_opts_out(
 ) -> None:
     """
     `available_capabilities` must be `[]` for a definition that declares
-    `supports_capabilities=False` (`GraphAgentDefinition`'s default),
-    regardless of what happens to be registered on this pod — this is exactly
+    `supports_capabilities=False` (`GraphAgentDefinition`'s default) and no
+    default capability, regardless of what happens to be registered on this pod — this is exactly
     the Eva bug: `available_capabilities` used to be computed purely from the
     pod's `capability_registry`, so a Graph agent's list was only accidentally
     empty when the pod happened to have nothing graph-compatible registered.
@@ -429,6 +429,54 @@ def test_templates_hide_all_capabilities_for_definition_that_opts_out(
         by_id = {t["template_agent_id"]: t for t in response.json()}
 
         assert by_id[graph_definition.agent_id]["available_capabilities"] == []
+
+
+class _OtherGraphCapability(TracerEchoCapability):
+    """A second graph-compatible capability, registered but not a default."""
+
+    manifest = TracerEchoCapability.manifest.model_copy(
+        update={"id": "other_graph_probe"}
+    )
+
+
+def test_templates_list_only_included_capabilities_for_definition_that_opts_out(
+    tmp_path, monkeypatch
+) -> None:
+    """
+    A definition without free selection still advertises the capabilities it
+    includes (its `default_mcp_servers`), so the form can show and configure
+    them; nothing else registered on the pod is offered beside them.
+    """
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(
+            ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+        ),
+        raising=True,
+    )
+    install_tracer_entry_point(monkeypatch)
+    graph_definition = _MinGraphOptedOutAgent().model_copy(
+        update={"default_mcp_servers": (MCPServerRef(id="tracer_echo"),)}
+    )
+    app = create_agent_app(
+        registry={graph_definition.agent_id: graph_definition},
+        config=_build_test_config(tmp_path),
+    )
+    client = TestClient(app)
+    with client:
+        app.state.capability_registry.register(_OtherGraphCapability())
+        response = client.get("/pod/v1/agents/templates")
+        assert response.status_code == 200
+        template = {t["template_agent_id"]: t for t in response.json()}[
+            graph_definition.agent_id
+        ]
+
+        assert [e["id"] for e in template["available_capabilities"]] == ["tracer_echo"]
+        # Its config form travels with it: included, yet still configurable.
+        assert template["available_capabilities"][0]["config_fields"]
+        assert template["supports_capabilities"] is False
+        assert template["default_capability_ids"] == ["tracer_echo"]
 
 
 def test_default_capability_id_unknown_fails_pod_boot(tmp_path, monkeypatch) -> None:
