@@ -28,6 +28,6 @@
 
 - [x] 3.1 Update `docs/swift/ux/COMPONENT-UX.md` (HITL cards: tokens, choice styling, actions order, tab states, tool-approval labels, answer bubble) and check the fr/en Help Center for any mention of the close cross. Verify: `rg -i "croix|close" apps/frontend/src/rework/features/helpCenter/content` has no HITL hit.
 - [x] 3.2 Add the migration note (impact `none`). Verify: `make migration-check`.
-- [x] 3.3 Quality gates: `npx tsc --noEmit`, `npx prettier --check src`, `npx vitest run` (not the make targets). Verify: all green, counts recorded here. Done: tsc and prettier clean; vitest 303 files, 3514 passed, 7 skipped.
+- [x] 3.3 Quality gates: `npx tsc --noEmit`, `npx prettier --check src`, `npx vitest run` (not the make targets). Verify: all green, counts recorded here. Done: tsc and prettier clean; vitest 304 files, 3519 passed, 7 skipped (2026-10-10, after the history regroup); migration note check valid.
 - [x] 3.4 Visual check in the app, Pebble light and dark, for every workbench state (compact, grouped, approval, Graph, history, thread, trace, drawer). Verify: owner confirmation. Done: owner confirmed on 2026-10-10.
 - [ ] 3.5 Record evidence, then archive after merge. Verify: `openspec validate refresh-hitl-card-visuals --strict`.
