@@ -177,6 +177,7 @@ from fred_runtime.capabilities import (
     build_capability_contexts,
     enforce_asset_slots,
     evaluate_chat_controls_batch,
+    resolve_bound_library_ids,
     validate_turn_options,
 )
 from fred_runtime.capabilities.copy import (
@@ -928,6 +929,7 @@ def _build_runtime_services(
     capability_registry: CapabilityRegistry | None = None,
     credential_provider: OutboundCredentialProvider | None = None,
     conversation_filesystem: ConversationFilesystemService | None = None,
+    bound_library_ids: Sequence[str] | None = None,
 ) -> RuntimeServices:
     """
     Assemble the full `RuntimeServices` bundle for one pod request.
@@ -961,6 +963,7 @@ def _build_runtime_services(
         binding=binding,
         settings=settings,
         credentials=credential_provider,
+        bound_library_ids=bound_library_ids,
     )
     # Capability-safe scoped vector search (CAPAB-01 #1906). Wraps the same
     # per-turn binding as the builtin invoker but exposes ONLY the parameterized
@@ -3830,6 +3833,28 @@ def _effective_capability_ids(
     ]
 
 
+def _instance_bound_library_ids(
+    capability_registry: CapabilityRegistry | None,
+    tuning: AgentTuning | None,
+    definition: ReActAgentDefinition | GraphAgentDefinition,
+) -> list[str] | None:
+    """
+    The libraries this instance's active capabilities bind it to, from its
+    stored config. Enforced on `knowledge.search` whatever context the client
+    sent, so a run without the chat UI cannot widen the binding.
+    """
+
+    if capability_registry is None:
+        return None
+    return resolve_bound_library_ids(
+        capability_registry,
+        capability_ids=_effective_capability_ids(
+            tuning, definition, capability_registry
+        ),
+        capability_config=tuning.capability_config if tuning is not None else {},
+    )
+
+
 def _enforce_turn_options(
     request: RuntimeExecuteRequest,
     target: _ResolvedExecutionTarget,
@@ -4566,6 +4591,9 @@ async def _iterate_runtime_event_payloads_inner(
         capability_registry=capability_registry,
         credential_provider=credential_provider,
         conversation_filesystem=conversation_filesystem,
+        bound_library_ids=_instance_bound_library_ids(
+            capability_registry, tuning, definition
+        ),
     )
     # session_id drives LangGraph checkpointing: the agent resumes its graph
     # state on every turn. Falls back to request_id for one-shot calls so

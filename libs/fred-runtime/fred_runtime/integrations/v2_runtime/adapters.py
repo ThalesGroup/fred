@@ -895,9 +895,13 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
         binding: BoundRuntimeContext,
         settings: AgentSettingsLike,
         credentials: OutboundCredentialProvider | None = None,
+        bound_library_ids: Sequence[str] | None = None,
     ) -> None:
         self._credentials = credentials
         self._settings = settings
+        # The agent instance's library binding, resolved server-side from its
+        # stored capability config: the client's selection can only narrow it.
+        self._bound_library_ids = list(bound_library_ids or ()) or None
         self.rebind(binding)
 
     def rebind(self, binding: BoundRuntimeContext) -> None:
@@ -947,21 +951,29 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
             top_k_raw = nested_dict.get("top_k", 8)
         top_k = top_k_raw if isinstance(top_k_raw, int) and top_k_raw > 0 else 8
 
-        runtime_context = self._binding.runtime_context
-        if get_rag_knowledge_scope(runtime_context) == "general_only":
+        def _no_hits(note: str) -> ToolInvocationResult:
             return ToolInvocationResult(
                 tool_ref=request.tool_ref,
                 blocks=(
                     ToolContentBlock(
                         kind=ToolContentKind.JSON,
-                        data={
-                            "sources": [],
-                            "note": "Corpus retrieval skipped in general-only mode.",
-                        },
+                        data={"sources": [], "note": note},
                     ),
                 ),
                 sources=(),
             )
+
+        runtime_context = self._binding.runtime_context
+        if get_rag_knowledge_scope(runtime_context) == "general_only":
+            return _no_hits("Corpus retrieval skipped in general-only mode.")
+
+        # Bound libraries are a ceiling: the turn's selection only narrows them.
+        # An empty intersection must find nothing, never search unfiltered.
+        library_ids = _narrow_scope_ids(
+            self._bound_library_ids, get_document_library_tags_ids(runtime_context)
+        )
+        if library_ids == []:
+            return _no_hits("None of the selected libraries is bound to this agent.")
 
         include_session_scope, include_corpus_scope = get_vector_search_scopes(
             runtime_context
@@ -969,7 +981,7 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
         hits = await self._search_client.search(
             question=query,
             top_k=top_k,
-            document_library_tags_ids=get_document_library_tags_ids(runtime_context),
+            document_library_tags_ids=library_ids,
             document_uids=get_document_uids(runtime_context),
             search_policy=get_search_policy(runtime_context),
             owner_filter=OwnerFilter.TEAM
