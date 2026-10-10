@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 from fred_runtime.capabilities.errors import CapabilityAssemblyError
 from fred_runtime.graph.graph_runtime import _ask_user_tool
-from fred_runtime.runtime_support.ask_user import AskUserArgs
+from fred_runtime.runtime_support.ask_user import ASK_USER_DESCRIPTION, AskUserArgs
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
     PortableContext,
@@ -39,6 +39,7 @@ def test_graph_ask_user_tool_is_mounted_only_when_enabled() -> None:
     assert tool.name == "ask_user"
     assert tool.args_schema is AskUserArgs
     assert tool.response_format == "content_and_artifact"
+    assert tool.description == ASK_USER_DESCRIPTION
 
 
 def test_graph_ask_user_tool_rejects_name_collision() -> None:
