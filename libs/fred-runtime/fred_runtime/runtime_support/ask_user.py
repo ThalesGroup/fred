@@ -31,11 +31,13 @@ from langgraph.types import interrupt
 from pydantic import BaseModel, Field, model_validator
 
 ASK_USER_DESCRIPTION = (
-    "Ask the user one question and continue after their answer. "
+    "Ask the user a question and continue after their answer; each call asks one question. "
     "This is the only way to ask the user anything: whenever you need a decision, a preference "
     "or a missing detail, or the user asks you to ask them a question, call this tool; "
     "never write a question or a list of options for the user in your reply. "
-    "When possible, give the question a short subject title of a few words. "
+    "To ask several questions, call this tool once per question in the same response: "
+    "the interface shows them together, one tab per question; never merge them into one question. "
+    "When possible, give each question a short subject title of a few words. "
     "Hard limit: at most four choices; with five or more candidates, keep the four that best fit the user's constraints. "
     "Never add an 'Other' choice: the interface always offers an editable Other answer alongside two or more choices. "
     "Ask without choices for an open answer."

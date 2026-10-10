@@ -19,4 +19,5 @@
     - "pose moi une question à plusieurs choix" called `ask_user` with four choices and no "Other"; the card showed a single editable "Other" row.
     - Residual: after a garbled answer, the agent asked a follow-up in plain text.
   - The first wording ("whenever you need a decision…") was not enough. In a conversation where the agent had already asked in text, it judged that "ask me a question" did not require the tool. The description now says the tool is the only way to ask the user anything, including when the user asks to be asked a question.
+- [x] 2.5 Several questions: the description says each call asks one question and several questions are separate calls in the same response, shown together as tabs, never merged. Found 2026-10-10 in local session a05371ce: asked for three questions, mistral-small merged them into one question with four combined choices, reasoning that the tool takes one question with at most four choices. Verify: ask_user tests (102 passed); manual check after merge.
 - [ ] 2.4 Archive after merge, then close #3035 and #3014. Verify: `openspec validate harden-ask-user-tool --strict`.
