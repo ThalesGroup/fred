@@ -193,3 +193,75 @@ def test_to_thread_cancel_drain_gives_up_after_the_bound(monkeypatch):
 
     asyncio.run(_scenario())
     assert events == ["activity-cancelled", "thread-stopped"]
+
+
+def test_activity_context_survives_thread_work_and_retries_without_leaking(monkeypatch):
+    from types import SimpleNamespace
+
+    from fred_core import KeycloakUser
+    from fred_core.logs.context import current_context, log_context
+    from fred_core.logs.propagation import encode_log_context
+
+    from knowledge_flow_backend.features.scheduler import logging_context as scoped
+
+    info = SimpleNamespace(workflow_id="workflow-a", workflow_run_id="execution-a", activity_id="extract-a", attempt=1)
+    monkeypatch.setattr(scoped.activity, "in_activity", lambda: True)
+    monkeypatch.setattr(scoped.activity, "info", lambda: info)
+    monkeypatch.setattr(activity_utils.activity, "heartbeat", lambda details: None)
+    header = encode_log_context(
+        {"correlation_id": "upload-journey", "team_id": "team-a", "custom": "retained", "user_id": "spoof", "document_uid": "wrong-document", "task_id": "wrong-task", "workflow_id": "wrong-workflow"}
+    )
+
+    @scoped.ingestion_activity
+    async def run(user, metadata, logging_context=None, task_id=None):
+        return await activity_utils.to_thread_with_heartbeat(current_context)
+
+    async def scenario():
+        with log_context(correlation_id="unrelated", user_id="other-person"):
+            first = await run(KeycloakUser(uid="person-a", username="synthetic", roles=[]), SimpleNamespace(document_uid="document-a"), header, "task-a")
+            info.attempt = 2
+            second = await run(KeycloakUser(uid="person-a", username="synthetic", roles=[]), SimpleNamespace(document_uid="document-a"), header, "task-a")
+            assert current_context() == {"correlation_id": "unrelated", "user_id": "other-person"}
+        assert current_context() == {}
+        return first, second
+
+    first, second = asyncio.run(scenario())
+    assert first == {
+        "correlation_id": "upload-journey",
+        "user_id": "person-a",
+        "team_id": "team-a",
+        "custom": "retained",
+        "document_uid": "document-a",
+        "task_id": "task-a",
+        "workflow_id": "workflow-a",
+        "workflow_run_id": "execution-a",
+        "activity_id": "extract-a",
+        "activity_attempt": 1,
+    }
+    assert second == {**first, "activity_attempt": 2}
+
+
+def test_pull_failure_before_metadata_keeps_document_reference(caplog):
+    import logging
+
+    from fred_core import KeycloakUser
+    from fred_core.logs.context import current_context
+    from fred_core.logs.processors import install_context_capture
+
+    from knowledge_flow_backend.features.scheduler import logging_context as scoped
+    from knowledge_flow_backend.features.scheduler.scheduler_structures import FileToProcess
+
+    file = FileToProcess(source_tag="remote", external_path="/reports/source.pdf", hash="stable-hash", processed_by=KeycloakUser(uid="person-a", username="synthetic", roles=[]))
+
+    @scoped.ingestion_activity
+    async def fail_before_metadata(file):
+        raise OSError("Source unavailable")
+
+    install_context_capture()
+    with caplog.at_level(logging.INFO, logger=scoped.__name__):
+        with pytest.raises(OSError, match="Source unavailable"):
+            asyncio.run(fail_before_metadata(file))
+    completed = next(record for record in caplog.records if record.getMessage() == "Ingestion activity completed")
+    assert completed._fred_snapshot.values["document_uid"] == file.to_virtual_metadata().document_uid
+    assert completed.outcome == "failed"
+    assert current_context() == {}

@@ -269,6 +269,12 @@ def _wf_activity_retry_policy(file: Any) -> RetryPolicy:
     )
 
 
+def _wf_activity_context_args(file: Any) -> list[Any]:
+    """Optional plain-data extension; legacy payloads retain their original args."""
+    header = _wf_get(file, "logging_context", None)
+    return [header, _wf_get(file, "task_id", None)] if isinstance(header, str) else []
+
+
 def _wf_log_policy(file: Any) -> None:
     workflow.logger.info(
         "[INGESTION POLICY] task=%s document=%s profile=%s extraction_queue=%s "
@@ -541,7 +547,7 @@ class PullInputProcess:
         timeout_seconds = _wf_timeout_seconds(input_activity_timeout_seconds)
         return await workflow.execute_activity(
             "pull_input_process",
-            args=[user, metadata, profile],
+            args=[user, metadata, profile, *_wf_activity_context_args(file)],
             # The one hop off the common queue: extraction runs on the pods
             # dedicated to this document's profile. Everything around it —
             # metadata, progress events, indexing — stays where the workflow is.
@@ -583,7 +589,7 @@ class PushInputProcess:
         timeout_seconds = _wf_timeout_seconds(input_activity_timeout_seconds)
         return await workflow.execute_activity(
             "push_input_process",
-            args=[user, metadata, input_file, profile],
+            args=[user, metadata, input_file, profile, *_wf_activity_context_args(file)],
             # The one hop off the common queue: extraction runs on the pods
             # dedicated to this document's profile. `input_file` is empty on this
             # path, so the activity restores its input from shared storage.
