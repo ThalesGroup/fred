@@ -1,3 +1,5 @@
+import PlatformAdmissionGuard from "./PlatformAdmissionGuard";
+import { getConfig } from "../../../common/config";
 // Copyright Thales 2026
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,6 +22,14 @@ import { UserDetails } from "../../../slices/controlPlane/controlPlaneOpenApi.ts
 import { useFrontendProperties } from "src/hooks/useFrontendProperties.ts";
 
 export default function GcuGuard({ children }: PropsWithChildren) {
+  return getConfig()?.platform_access_enabled ? (
+    <PlatformAdmissionGuard>{children}</PlatformAdmissionGuard>
+  ) : (
+    <LegacyGcuGuard>{children}</LegacyGcuGuard>
+  );
+}
+
+function LegacyGcuGuard({ children }: PropsWithChildren) {
   const { gcuVersion } = useFrontendProperties();
   const dispatch = useDispatch();
   // `gcuVersion` comes from the public pre-auth config, so it is known even

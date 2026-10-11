@@ -24,22 +24,22 @@ ENV TIKTOKEN_CACHE_DIR=/app/encodings
 
 WORKDIR /workspace/apps/knowledge-flow-backend
 
-# Copy python dependency files and Makefile
+# Third-party dependencies only, from the manifests alone: this multi-GB venv,
+# and the model downloads made with it below, change only with the lock. The
+# local packages are installed last, in the runtime stage.
 COPY apps/knowledge-flow-backend/pyproject.toml apps/knowledge-flow-backend/uv.lock* ./
 COPY apps/knowledge-flow-backend/Makefile ./
-
-# Copy shared scripts and local lib dependency
-COPY scripts /workspace/scripts
-COPY libs/fred-pod /workspace/libs/fred-pod
-COPY libs/fred-core /workspace/libs/fred-core
-
-# Install dependencies using make
-RUN make prod VENV=/app/venv TARGET=/app/target
+COPY scripts/makefiles /workspace/scripts/makefiles
+COPY libs/fred-pod/pyproject.toml /workspace/libs/fred-pod/
+COPY libs/fred-core/pyproject.toml /workspace/libs/fred-core/
+RUN make prod VENV=/app/venv TARGET=/app/target \
+    UV_SYNC_ARGS="--no-install-project --no-install-local"
 
 # Prepare local encodings directory
 RUN mkdir -p $TIKTOKEN_CACHE_DIR
 
 # Download encodings for offline usage
+COPY scripts/download_encodings.py /workspace/scripts/
 RUN python /workspace/scripts/download_encodings.py https://openaipublic.blob.core.windows.net/encodings/cl100k_base.tiktoken
 
 # -----------------------------------------------------------------------------
@@ -126,16 +126,22 @@ ENV HF_HUB_DISABLE_TELEMETRY=1
 # Set working directory
 WORKDIR /app
 
-# `make prod` installs local projects in editable mode, so the runtime image
-# must keep the same source roots available under /workspace/...
-COPY --chown=${USER_ID}:${GROUP_ID} apps/knowledge-flow-backend/pyproject.toml /workspace/apps/knowledge-flow-backend/pyproject.toml
+# Preload PaddleOCR and docling models for offline-friendly runtime, before the
+# sources below, so a change there does not download them again.
+# HF_HUB_OFFLINE must be unset here — download_models.py fetches docling models from HuggingFace
+COPY --chown=${USER_ID}:${GROUP_ID} scripts/download_models.py /workspace/scripts/download_models.py
+RUN HF_HUB_OFFLINE=0 TRANSFORMERS_OFFLINE=0 python /workspace/scripts/download_models.py --models-dir ${PADDLE_MODELS_DIR}
+
+# The local packages, installed in editable mode from their source roots under
+# /workspace/..., which the image keeps. Only their small install changes when
+# they do: the venv copied above stays cached.
+COPY --chown=${USER_ID}:${GROUP_ID} apps/knowledge-flow-backend/pyproject.toml apps/knowledge-flow-backend/uv.lock /workspace/apps/knowledge-flow-backend/
 COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-pod /workspace/libs/fred-pod
 COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-core /workspace/libs/fred-core
 COPY --chown=${USER_ID}:${GROUP_ID} scripts /workspace/scripts
-
-# Preload PaddleOCR and docling models for offline-friendly runtime
-# HF_HUB_OFFLINE must be unset here — download_models.py fetches docling models from HuggingFace
-RUN HF_HUB_OFFLINE=0 TRANSFORMERS_OFFLINE=0 python /workspace/scripts/download_models.py --models-dir ${PADDLE_MODELS_DIR}
+RUN cd /workspace/apps/knowledge-flow-backend && \
+    UV_PROJECT_ENVIRONMENT=/app/venv SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt \
+    /app/venv/bin/uv sync --locked --no-default-groups --no-cache
 
 COPY --chown=${USER_ID}:${GROUP_ID} apps/knowledge-flow-backend/. /app/
 

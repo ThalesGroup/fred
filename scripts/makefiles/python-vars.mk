@@ -9,6 +9,10 @@ PYTHON?=$(VENV)/bin/python
 PIP?=$(VENV)/bin/pip
 UV?=$(VENV)/bin/uv
 
+# Extra `uv sync` flags for `make prod`, e.g. a Dockerfile installing the
+# third-party dependencies before the local packages' sources are copied.
+UV_SYNC_ARGS ?=
+
 # Default uv cache directory inside the project to avoid relying on user-global cache paths
 # (which can be restricted on some macOS setups and CI sandboxes).
 export UV_CACHE_DIR ?= $(TARGET)/.uv-cache

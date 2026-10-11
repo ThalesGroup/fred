@@ -1,0 +1,106 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+.content {
+  --font-body-small: var(--font-body-medium);
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--spacing-m);
+  min-width: 0;
+  min-height: 0;
+  font: var(--font-body-large);
+}
+.content > :not(.json) {
+  flex-shrink: 0;
+}
+.content p {
+  margin: 0;
+}
+.json {
+  flex: 1 1 20rem;
+  border-radius: var(--radius-ms);
+  background: var(--surface-container);
+  padding: var(--spacing-m);
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  color: var(--on-surface);
+  font-family: var(--font-family-mono);
+}
+.children {
+  padding-inline-start: var(--spacing-m);
+}
+.branch {
+  margin-block: var(--spacing-xs);
+}
+.branch summary {
+  cursor: pointer;
+}
+.leaf {
+  padding-block: var(--spacing-xs);
+  overflow-wrap: anywhere;
+}
+.key {
+  cursor: pointer;
+  border: 1px solid transparent;
+  border-radius: var(--radius-ms);
+  background: transparent;
+  padding: var(--spacing-xs);
+  color: var(--primary);
+  font: inherit;
+  text-align: start;
+  overflow-wrap: anywhere;
+}
+.key:hover,
+.key[aria-pressed="true"] {
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+}
+.key:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.key:disabled {
+  cursor: default;
+  color: var(--on-surface-retreat);
+}
+.claimValue {
+  overflow-wrap: anywhere;
+}
+.explanation {
+  margin-inline-start: var(--spacing-s);
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
+.selection {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
+  border-top: 1px solid var(--outline-muted);
+  padding-block-start: var(--spacing-m);
+  min-width: 0;
+  min-height: calc(2.5rem + var(--spacing-m));
+}
+.selection > span {
+  flex-shrink: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
+.selection code[data-empty="true"] {
+  background: var(--surface-container);
+  color: var(--on-surface-retreat);
+  font-family: inherit;
+}
+
+@media (max-height: 600px) {
+  .content {
+    gap: var(--spacing-xs);
+  }
+  .json {
+    padding: var(--spacing-s);
+  }
+  .selection {
+    padding-block-start: var(--spacing-xs);
+    min-height: calc(2.5rem + var(--spacing-xs));
+    font: var(--font-body-medium);
+  }
+}

@@ -28,7 +28,7 @@ dev: $(TARGET)/.compiled _ensure-tool-shims ## Install from compiled lock
 
 .PHONY: prod
 prod: $(TARGET)/.uv-installed ## Install locked runtime dependencies only
-	$(UV) sync --locked --no-default-groups
+	$(UV) sync --locked --no-default-groups $(UV_SYNC_ARGS)
 	@echo "✅ Production dependencies installed using uv."
 
 

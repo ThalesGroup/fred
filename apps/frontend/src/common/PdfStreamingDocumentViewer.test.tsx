@@ -29,6 +29,21 @@ declare global {
 }
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
+const admission = vi.hoisted(() => ({
+  status: { admitted: true, cgu_required: false },
+  trigger: vi.fn(),
+  denied: vi.fn(),
+  pages: [] as any[],
+}));
+vi.mock("./config", () => ({ getConfig: () => ({ platform_access_enabled: true }) }));
+vi.mock("../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  useLazyPlatformAccessStatusQuery: () => [admission.trigger],
+}));
+vi.mock("./platformAccess", async (original) => ({
+  ...(await original<typeof import("./platformAccess")>()),
+  handlePlatformAccessDenial: admission.denied,
+}));
+
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
@@ -44,7 +59,10 @@ vi.mock("react-pdf", () => ({
     documentProps.current = props;
     return <div data-testid="pdf-document">{props.children}</div>;
   },
-  Page: ({ pageNumber }: any) => <canvas data-testid="pdf-page" data-page={pageNumber} />,
+  Page: (props: any) => {
+    admission.pages.push(props);
+    return <canvas data-testid="pdf-page" data-page={props.pageNumber} />;
+  },
   pdfjs: { GlobalWorkerOptions: {} },
 }));
 
@@ -153,6 +171,10 @@ const mountedPageNumbers = () =>
   );
 
 beforeEach(() => {
+  admission.status = { admitted: true, cgu_required: false };
+  admission.trigger.mockReset().mockImplementation(() => ({ unwrap: async () => admission.status }));
+  admission.denied.mockClear();
+  admission.pages = [];
   documentProps.current = null;
   io.callback = null;
   io.observed = [];
@@ -339,4 +361,27 @@ describe("reduceMountedPages", () => {
     const prev = new Set([2]);
     expect(reduceMountedPages(prev, [{ pageNumber: NaN, isIntersecting: true }])).toBe(prev);
   });
+});
+
+it("rechecks current admission after a PDF document network failure", async () => {
+  await render(<PdfStreamingDocumentViewer documentUid="doc-1" />);
+  admission.status.admitted = false;
+  await act(async () => documentProps.current.onLoadError(new Error("HTTP 403")));
+  expect(admission.trigger).toHaveBeenCalledWith(undefined, false);
+  expect(admission.denied).toHaveBeenCalledWith(403, { detail: "platform_access_denied" });
+});
+
+it("keeps a document-specific failure local when the person remains admitted", async () => {
+  await render(<PdfStreamingDocumentViewer documentUid="doc-1" />);
+  await act(async () => documentProps.current.onLoadError(new Error("Document unavailable")));
+  expect(admission.denied).not.toHaveBeenCalled();
+  expect(container.textContent).toContain("Document unavailable");
+});
+
+it("detects admission revocation during a later PDF page range/render failure", async () => {
+  await render(<PdfStreamingDocumentViewer documentUid="doc-1" />);
+  await loadDocument(2);
+  admission.status.admitted = false;
+  await act(async () => admission.pages[admission.pages.length - 1].onRenderError(new Error("Range refused")));
+  expect(admission.denied).toHaveBeenCalledWith(403, { detail: "platform_access_denied" });
 });

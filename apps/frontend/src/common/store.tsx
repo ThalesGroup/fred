@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { platformAccessDenied } from "./platformAccess";
 import { combineReducers, configureStore, createReducer, isFulfilled, isPending, isRejected } from "@reduxjs/toolkit";
 import { controlPlaneApi } from "../slices/controlPlane/controlPlaneApi.ts";
 import { knowledgeFlowApi } from "../slices/knowledgeFlow/knowledgeFlowApi.ts";
@@ -62,7 +63,7 @@ const combinedReducer = combineReducers({
 
 // Configure store
 export const store = configureStore({
-  reducer: combinedReducer,
+  reducer: (state, action) => combinedReducer(action.type === platformAccessDenied ? undefined : state, action),
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(
       knowledgeFlowApi.middleware,
@@ -76,3 +77,7 @@ export const store = configureStore({
 
 // Export types
 export type AppState = ReturnType<typeof store.getState>;
+
+window.addEventListener(platformAccessDenied, () => {
+  store.dispatch({ type: platformAccessDenied });
+});

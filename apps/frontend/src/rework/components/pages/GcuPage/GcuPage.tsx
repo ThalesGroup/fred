@@ -15,7 +15,7 @@
 import Button from "@shared/atoms/Button/Button.tsx";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
+import { platformPath } from "../../../../common/platformAccess";
 import { useFrontendProperties } from "../../../../hooks/useFrontendProperties.ts";
 import {
   useGetUserDetailsControlPlaneV1UserGetQuery,
@@ -26,16 +26,39 @@ import { useLegalMarkdown } from "@hooks/useLegalMarkdown.ts";
 import styles from "./GcuPage.module.css";
 
 export default function GcuPage() {
-  const { t } = useTranslation();
   const [trigger, { isLoading }] = useValidateGcuControlPlaneV1GcuPostMutation();
   const { data: userDetails, refetch } = useGetUserDetailsControlPlaneV1UserGetQuery();
   const { gcuVersion } = useFrontendProperties();
 
+  return (
+    <GcuPageContent
+      accepted={!gcuVersion || userDetails?.cguValidated?.toString() === gcuVersion}
+      isLoading={isLoading}
+      onAccept={async () => {
+        await trigger().unwrap();
+        await refetch().unwrap();
+      }}
+    />
+  );
+}
+
+export function GcuPageContent({
+  accepted = false,
+  isLoading,
+  onAccept,
+}: {
+  accepted?: boolean;
+  isLoading: boolean;
+  onAccept: () => Promise<void>;
+}) {
+  const { t } = useTranslation();
+  const { gcuVersion } = useFrontendProperties();
   const gcuMarkdown = useLegalMarkdown("gcu");
   const [hasReachedBottom, setHasReachedBottom] = useState(false);
   const bottomRef = useRef(null);
 
   useEffect(() => {
+    setHasReachedBottom(false);
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
@@ -57,11 +80,6 @@ export default function GcuPage() {
     return () => observer.disconnect();
   }, [gcuMarkdown]);
 
-  const handleAcceptGcu = async () => {
-    await trigger().unwrap();
-    refetch();
-  };
-
   return (
     <div className={styles.gcuContainer}>
       <div className={styles.gcuTitle}>{t("rework.gcu.title")}</div>
@@ -70,12 +88,15 @@ export default function GcuPage() {
         <div ref={bottomRef} className={styles.gcuEnd} />
       </div>
       <div className={styles.gcuActions}>
-        {!gcuVersion || (userDetails?.cguValidated != null && userDetails.cguValidated.toString() === gcuVersion) ? (
-          <Link to={"/"}>
-            <Button color={"primary"} variant={"filled"} size={"medium"}>
-              {t("rework.gcu.backToApp")}
-            </Button>
-          </Link>
+        {accepted ? (
+          <Button
+            color={"primary"}
+            variant={"filled"}
+            size={"medium"}
+            onClick={() => window.location.replace(platformPath("/"))}
+          >
+            {t("rework.gcu.backToApp")}
+          </Button>
         ) : (
           <>
             <span className={styles.gcuLockInformation}>{t("rework.gcu.lockInformation")}</span>
@@ -83,8 +104,8 @@ export default function GcuPage() {
               color={"primary"}
               variant={"filled"}
               size={"medium"}
-              disabled={!hasReachedBottom || isLoading}
-              onClick={handleAcceptGcu}
+              disabled={!gcuVersion || !gcuMarkdown || !hasReachedBottom || isLoading}
+              onClick={onAccept}
             >
               {t("rework.gcu.validate")}
             </Button>

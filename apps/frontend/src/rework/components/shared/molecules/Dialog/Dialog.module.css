@@ -63,6 +63,12 @@
   overflow-y: auto;
 }
 
+.content[data-scroll-mode="children"] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 .actions {
   display: flex;
   justify-content: flex-end;
