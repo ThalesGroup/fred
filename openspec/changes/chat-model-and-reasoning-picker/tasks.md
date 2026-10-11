@@ -61,7 +61,7 @@
 
 ## 7. Docs and close-out
 
-- [x] 7.1 Add a dated `RUNTIME-EXECUTION-CONTRACT.md` §8 entry: new levels, team per-agent level removed, trust boundary, reasoning ceiling without the agent gate, tri-state redefined, §8.48 still withdrawn. Verify: cross-linked from §8.30 and §8.32. Done: §8.105, with 2026-10-09 pointers at the top of §8.30 and §8.32.
+- [x] 7.1 Add a dated `RUNTIME-EXECUTION-CONTRACT.md` §8 entry: new levels, team per-agent level removed, trust boundary, reasoning ceiling without the agent gate, tri-state redefined, §8.48 still withdrawn. Verify: cross-linked from §8.30 and §8.32. Done: §8.108 (renumbered: §8.105 to §8.107 are taken by swift and other open PRs), with 2026-10-09 pointers at the top of §8.30 and §8.32.
 - [x] 7.2 Add a dated `CONTROL-PLANE-PRODUCT-CONTRACT.md` entry amending §33, §37 (policy shape, exceptions, disable-impact, overrides removed, write gate narrowed from team_editor to team_admin, non-goal reversed) and §41 (selectable models, picker non-goal reversed). Verify: the §37/§41 non-goal lines point to it. Done: §62; §33 addendum, §37 header and non-goal, §41 non-goal and write-gate line point to it.
 - [x] 7.3 Update `COMPONENT-UX.md` (ReasoningChip, team Models section) and the fr/en Help Center (team settings Models, `features/agents.md`, `features/capabilities.md` "Raisonnement", `features/chat.md`). Verify: `npx vitest run src/rework/features/helpCenter`. Done: 17 passed; prettier check clean on the changed Help Center pages; the obsolete ReasoningChip/SearchConfig history was trimmed, and the Models section is in `teams-and-permissions.md`.
 - [x] 7.4 Trim `TEAM-PLATFORM-POLICY-RFC.md:63`. Verify: line removed. Done.
