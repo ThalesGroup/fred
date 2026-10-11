@@ -16,9 +16,10 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, String, Text
+from sqlalchemy import Boolean, DateTime, Index, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
+from control_plane_backend.agent_instances.names import AGENT_NAME_INDEX
 from control_plane_backend.models.base import Base, utcnow
 
 
@@ -77,3 +78,12 @@ class AgentInstanceRow(Base):
         default=utcnow,
         onupdate=utcnow,
     )
+
+
+# One name per team, ignoring case and surrounding spaces (see agent_instances/names.py).
+Index(
+    AGENT_NAME_INDEX,
+    AgentInstanceRow.team_id,
+    func.lower(func.trim(AgentInstanceRow.display_name)),
+    unique=True,
+)

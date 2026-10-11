@@ -309,6 +309,76 @@ async def test_duplicate_keeps_the_chosen_name_in_the_source_team(
 
 
 @pytest.mark.asyncio
+async def test_name_conflict_ignores_case_and_spaces(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    taken = _make_record(
+        agent_instance_id="b-1", team_id="team-b", display_name=" echo team AGENT "
+    )
+    app, _store, _calls, _audits = _wire(
+        monkeypatch, {_SOURCE: _ALL, "team-b": _ALL}, records=[_source_record(), taken]
+    )
+
+    resp = await _post_copy(app, {"target_team_ids": ["team-b"]})
+
+    assert (
+        resp.json()["results"][0]["agent"]["display_name"]
+        == "Echo Team Agent_imported-1"
+    )
+
+
+@pytest.mark.asyncio
+async def test_duplicate_under_a_taken_name_is_refused_before_the_pod(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app, store, pod_calls, _audits = _wire(monkeypatch, {_SOURCE: _ALL})
+
+    resp = await _post_copy(
+        app, {"target_team_ids": [_SOURCE], "display_name": "  echo team agent "}
+    )
+
+    [result] = resp.json()["results"]
+    assert result["error_code"] == "agent_name_conflict"
+    assert "agent" not in result
+    assert pod_calls == []
+    assert len(store._records) == 1
+
+
+@pytest.mark.asyncio
+async def test_copy_losing_a_name_race_takes_the_next_free_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app, store, _calls, _audits = _wire(monkeypatch, {_SOURCE: _ALL, "team-b": _ALL})
+    create = store.create
+    raced = False
+
+    async def _create_after_a_concurrent_copy(record):
+        nonlocal raced
+        if record.team_id == "team-b" and not raced:
+            raced = True
+            await create(
+                _make_record(
+                    agent_instance_id="b-race",
+                    team_id="team-b",
+                    display_name=record.display_name,
+                )
+            )
+            raise agent_copy.AgentNameAlreadyExistsError(
+                TeamId("team-b"), record.display_name
+            )
+        return await create(record)
+
+    monkeypatch.setattr(store, "create", _create_after_a_concurrent_copy)
+
+    resp = await _post_copy(app, {"target_team_ids": ["team-b"]})
+
+    assert (
+        resp.json()["results"][0]["agent"]["display_name"]
+        == "Echo Team Agent_imported-1"
+    )
+
+
+@pytest.mark.asyncio
 async def test_chosen_name_is_refused_for_another_team(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
