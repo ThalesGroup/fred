@@ -4255,7 +4255,7 @@ OpenSpec `user-profile-picture`.
 are compared after trimming and ignoring case; the same name stays free in
 another team. The request schemas trim `display_name`, and the database holds
 the unique index `uq_agent_instance_team_name` on
-`(team_id, lower(trim(display_name)))`.
+`(team_id, lower(display_name))` (names are stored trimmed).
 
 **Refusals.** Create (`POST …/agent-instances`, JSON or with assets) and rename
 (`PATCH …/agent-instances/{id}`) under a taken name answer **409** with

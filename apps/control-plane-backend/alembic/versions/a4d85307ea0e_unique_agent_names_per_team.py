@@ -3,7 +3,9 @@
 
 Trims every agent name, renames the later agents of a colliding name
 `<name> (2)`, `<name> (3)`... in creation order, then adds the unique index on
-`(team_id, lower(trim(display_name)))`. The downgrade only drops the index.
+`(team_id, lower(display_name))`; names are stored trimmed, so `trim` is not
+indexed (PostgreSQL would reflect it as `TRIM(BOTH FROM …)`, failing the
+autogenerate check). The downgrade only drops the index.
 
 Revision ID: a4d85307ea0e
 Revises: f9a2c7d81e40
@@ -83,7 +85,7 @@ def upgrade() -> None:
     op.create_index(
         _INDEX,
         "agent_instance",
-        ["team_id", sa.text("lower(trim(display_name))")],
+        ["team_id", sa.text("lower(display_name)")],
         unique=True,
     )
 

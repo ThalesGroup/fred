@@ -16,13 +16,13 @@
 
 from __future__ import annotations
 
-# Name of the unique index on `(team_id, lower(trim(display_name)))`, matched in
-# integrity errors to tell a name conflict from any other violation.
+# Name of the unique index on `(team_id, lower(display_name))` (names are stored
+# trimmed), matched in integrity errors to tell a name conflict from others.
 AGENT_NAME_INDEX = "uq_agent_instance_team_name"
 
 
 def normalize_agent_name(name: str) -> str:
-    """The form two agent names are compared in, mirroring the index expression."""
+    """The form two agent names are compared in: trimmed on write, lowered by the index."""
 
     return name.strip().lower()
 

@@ -21,7 +21,7 @@ None. The `agent-copy` naming rule (in the completed `copy-agent-across-teams` c
 ## Impact
 
 - Control plane:
-  - an Alembic migration (rename duplicates, then a unique index on `team_id, lower(trim(display_name))`);
+  - an Alembic migration (rename duplicates, then a unique index on `team_id, lower(display_name)`, names being stored trimmed);
   - the agent instance store (conflict error);
   - `product/service.py` (enroll, update);
   - `product/agent_copy.py` (normalised comparison, duplicate check);

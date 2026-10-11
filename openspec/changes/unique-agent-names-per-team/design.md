@@ -21,7 +21,7 @@ Prompts already enforce `UniqueConstraint("team_id", "name")`, translate the `In
 
 ## Decisions
 
-1. **A unique functional index on `(team_id, lower(trim(display_name)))`.** The database is the only place that closes the race between two concurrent creations or copies, which the copy design accepted until now. `lower` and `trim` exist in PostgreSQL and in the SQLite used by the tests.
+1. **A unique functional index on `(team_id, lower(display_name))`.** The database is the only place that closes the race between two concurrent creations or copies, which the copy design accepted until now. Every write path stores the name trimmed, so `trim` is not indexed: PostgreSQL reflects `trim(x)` as `TRIM(BOTH FROM x)`, which the autogenerate check reads as a different index (the existing `ix_users_lower_username` follows the same `lower(...)` pattern).
    - **Alternative:** a stored `normalized_name` column. Rejected: one more column to keep in sync for something an expression index does on its own.
 2. **Trim on write, compare normalised.** The request schemas strip `display_name` (a validator, so the OpenAPI shape does not change), and every comparison in Python uses the same `normalize_agent_name = lower(strip)`. Case is kept as typed.
 3. **Store error, service 409.** The store catches the `IntegrityError` of that index and raises `AgentNameAlreadyExistsError`. Enroll, update and duplicate map it to `EnrollmentError(409, code="agent_name_conflict")`; `EnrollmentError` gains the optional `code` that `PromptRequestError` already has, and the API puts it on the body. The service also checks before writing, so the common case fails fast without a rolled-back transaction; the index stays the guarantee.

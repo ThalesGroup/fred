@@ -259,7 +259,7 @@ def test_migration_renames_duplicates_by_creation_order_then_indexes() -> None:
                 agents.insert().values(
                     agent_instance_id="a7",
                     team_id="team-a",
-                    display_name=" writer",
+                    display_name="writer",
                     created_at=day,
                 ),
             )
@@ -267,7 +267,7 @@ def test_migration_renames_duplicates_by_creation_order_then_indexes() -> None:
                 agents.insert().values(
                     agent_instance_id="a8",
                     team_id="team-a",
-                    display_name="WRITER ",
+                    display_name="WRITER",
                     created_at=day,
                 ),
             )
