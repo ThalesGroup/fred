@@ -280,3 +280,6 @@ class KpiObservabilityConfig(BaseModel):
         default=10,
         description="Emit process/SQL-pool KPIs every N seconds. 0 to disable.",
     )
+
+
+LogOutputFormat = Literal["json", "text"]
