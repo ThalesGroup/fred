@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { handlePlatformAccessResponse } from "../../../common/platformAccess";
 import { useEffect } from "react";
 import { useDispatch } from "react-redux";
 import { KeyCloakService } from "../../../security/KeycloakService";
@@ -48,7 +49,8 @@ export function useTaskRehydration(): void {
       fetch(`${base}/tasks?scope=user`, {
         headers: { Authorization: `Bearer ${token}` },
       })
-        .then((res) => {
+        .then(async (res) => {
+          await handlePlatformAccessResponse(res);
           if (!res.ok) return null;
           return res.json() as Promise<TaskListResponse>;
         })

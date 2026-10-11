@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { handlePlatformAccessResponse } from "../../../common/platformAccess";
 import { KeyCloakService } from "../../../security/KeycloakService";
 
 // Downloads a swift-native snapshot .zip (agents, tags, document metadata) and
@@ -25,6 +26,7 @@ export async function exportPlatform(): Promise<void> {
     method: "GET",
     headers: { Authorization: `Bearer ${token}` },
   });
+  await handlePlatformAccessResponse(response);
   if (!response.ok) {
     throw new Error(`Échec de l'export (HTTP ${response.status})`);
   }

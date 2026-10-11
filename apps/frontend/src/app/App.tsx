@@ -1,3 +1,4 @@
+import { isPlatformAccessStandalone } from "../common/platformAccess";
 // Copyright Thales 2025
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -110,22 +111,26 @@ function FredUiContent() {
             rest, so routed pages keep sizing with height: 100%, never 100vh. */}
         <div className={styles.appShell}>
           <div className={styles.appContent}>
-            <GcuGuard>
-              <BootstrapGuard>
-                <AnnouncementStack />
-                <div className={styles.routedContent}>
-                  <ConfirmationDialogProvider>
-                    <ToastProvider
-                      onCopy={async (text) => {
-                        await writeRichClipboard("", text);
-                      }}
-                    >
-                      <RouterProvider router={router} />
-                    </ToastProvider>
-                  </ConfirmationDialogProvider>
-                </div>
-              </BootstrapGuard>
-            </GcuGuard>
+            {isPlatformAccessStandalone() ? (
+              <RouterProvider router={router} />
+            ) : (
+              <GcuGuard>
+                <BootstrapGuard>
+                  <AnnouncementStack />
+                  <div className={styles.routedContent}>
+                    <ConfirmationDialogProvider>
+                      <ToastProvider
+                        onCopy={async (text) => {
+                          await writeRichClipboard("", text);
+                        }}
+                      >
+                        <RouterProvider router={router} />
+                      </ToastProvider>
+                    </ConfirmationDialogProvider>
+                  </div>
+                </BootstrapGuard>
+              </GcuGuard>
+            )}
           </div>
         </div>
       </AuthProvider>

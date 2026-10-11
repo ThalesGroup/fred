@@ -1,0 +1,28 @@
+// SPDX-License-Identifier: Apache-2.0
+const TOKEN_METADATA = new Set([
+  "iss",
+  "sub",
+  "aud",
+  "typ",
+  "azp",
+  "sid",
+  "acr",
+  "amr",
+  "jti",
+  "nonce",
+  "scope",
+  "exp",
+  "iat",
+  "nbf",
+  "auth_time",
+  "at_hash",
+  "c_hash",
+  "s_hash",
+  "cnf",
+  "act",
+  "may_act",
+  "client_id",
+  "session_state",
+  "allowed-origins",
+]);
+export const isRootAttribute = (path: string[]) => path.length === 1 && !TOKEN_METADATA.has(path[0]);

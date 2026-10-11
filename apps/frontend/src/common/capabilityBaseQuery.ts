@@ -22,6 +22,7 @@
 
 import { fetchBaseQuery, type FetchArgs, type FetchBaseQueryError } from "@reduxjs/toolkit/query/react";
 import type { BaseQueryFn } from "@reduxjs/toolkit/query";
+import { handlePlatformAccessDenial } from "./platformAccess";
 import { KeyCloakService } from "../security/KeycloakService";
 import { selectCapabilityBaseUrl, type CapabilityRoutingState } from "./capabilityRoutingSlice";
 
@@ -61,6 +62,7 @@ export const createCapabilityBaseQuery = (
       if (ok) result = await raw(requestArgs, api, extraOptions);
       if (result.error && result.error.status === 401) KeyCloakService.CallLogout();
     }
+    if (result.error) handlePlatformAccessDenial(result.error.status, result.error.data);
     return result;
   };
 };

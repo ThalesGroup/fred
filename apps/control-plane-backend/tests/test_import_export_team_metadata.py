@@ -121,12 +121,17 @@ async def test_team_metadata_round_trips_through_export_import(tmp_path: Path) -
                 team_delete_grace="P30D",
                 max_idle="P90D",
                 retention_updated_by="kc-sub-owner-123",
+                platform_access_allowed=True,
+                platform_access_free=True,
                 created_at=created,
                 updated_at=updated,
             ),
         )
 
         snapshot = await run_export(source)
+        exported = next(open_bundle(snapshot).iter_table("team_metadata"))
+        assert "platform_access_allowed" not in exported
+        assert "platform_access_free" not in exported
         report = await _import(snapshot, dest)
 
         assert report.teams_imported == 1
@@ -150,6 +155,8 @@ async def test_team_metadata_round_trips_through_export_import(tmp_path: Path) -
         assert imported.team_delete_grace == "P30D"
         assert imported.max_idle == "P90D"
         assert imported.retention_updated_by == "kc-sub-owner-123"
+        assert not imported.platform_access_allowed
+        assert not imported.platform_access_free
         # SQLite returns naive datetimes; normalise before comparing to the aware
         # originals. The wall-clock value is what must round-trip.
         assert _as_utc(imported.created_at) == created

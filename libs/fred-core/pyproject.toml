@@ -14,6 +14,7 @@ classifiers = [
 ]
 urls = { Homepage = "https://site.fredlab.dev", Repository = "https://github.com/ThalesGroup/fred" }
 dependencies = [
+    "regex>=2025.1.0",
     # The pod floor: configuration, identity, naming. Every name it holds is
     # re-exported from here, so this library's own surface is unchanged.
     "fred-pod>=4.4.3",
