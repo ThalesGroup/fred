@@ -5075,6 +5075,22 @@ prompt's name, plus any text typed after the command, falling back to
 query `Enter` matched, and not the prompt's body, which would name every run of
 one command identically. Nothing retitles a session afterwards.
 
+### Recalling sent messages — 2026-10-10
+
+ArrowUp in an empty composer puts back the last message sent in the current
+conversation; further presses go back, ArrowDown goes forward, and ArrowDown
+past the newest empties the composer. Browsing lasts only while the recalled
+line is untouched: any edit hands the arrows back to the caret, so a draft is
+never replaced. The list is the thread itself, never browser storage, and a
+command turn comes back as the typed `/command` line, not the prompt it ran.
+
+The command menu answers typing, not a recall: a recalled `/command` keeps it
+shut (its query starts out dismissed, as after `Esc`), and the first edit
+opens it as usual. A dismissal lasts only while the query is unchanged, so
+deleting then retyping a character after `Esc` reopens the menu too. The
+field only exposes `onRecallKeyDown`, offered each key the menu did not
+consume; the history itself lives in `useComposerRecall`.
+
 ### `TextInput` — `prefix`
 
 Fixed, non-editable text before the input's own text, mirroring the existing

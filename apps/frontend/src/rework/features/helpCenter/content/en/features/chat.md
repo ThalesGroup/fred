@@ -54,6 +54,13 @@ lasting setting of the conversation.
 A prompt carrying a command runs shorter still: type `/` in an empty field —
 see [Commands](/help/en/features/commands).
 
+## Reusing a sent message
+
+In an empty field, the up arrow brings back your last message of the
+conversation; press it again to go further back, and the down arrow to come
+forward. Edit the text, then send it. A message run through a command comes
+back as its `/command` line.
+
 ## Collecting a produced document
 
 Some agents produce a file — a written document, a deck, a web page. It appears
