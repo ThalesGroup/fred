@@ -71,7 +71,7 @@ Both from the monorepo root, after the review fixes below:
 ## Independent review (`/code-review high`)
 
 Six findings; three were mine and are fixed, one was adjacent and is fixed, two
-are out of scope and left open:
+were left open at review time (#4 has since been fixed, #6 stays open):
 
 | # | Finding | Outcome |
 | --- | --- | --- |
@@ -79,5 +79,5 @@ are out of scope and left open:
 | 2 | The member route discarded the canonical `TeamId` from `require_team_access`, so the `personal` alias read the wrong key | **Fixed** |
 | 5 | The `javascript:` marker matched the bare word in prose, refusing a legitimate static page about JavaScript and looping the model | **Fixed**, anchored to a value position, with regressions both ways |
 | 3 | `<meta http-equiv="refresh">` navigates the export/fit-width measuring frames, which have no enclosing `frame-src`; opened when DOMPurify was retired on this branch | **Fixed** (author `<meta>` defused like `<link>`). Not caused by this change — worth its own commit if the branch is split |
-| 4 | Personal spaces can never be granted `allow_javascript`: the personal-scope row has no settings form | **Open** — a product decision, not a defect. Personal spaces stay restricted |
+| 4 | Personal spaces can never be granted `allow_javascript`: the personal-scope row has no settings form | **Fixed** later on this branch. Personal spaces share one `__personal_scope__` settings record, edited from the personal-class row's options form, so they can be granted JavaScript as a class (spec: "Personal spaces are governed as one class, never per user") |
 | 6 | `_open_artifact_id` is re-derived from the transcript, so a history trim makes "revise" mint a second artifact | **Open** — pre-existing, unrelated to this change |
