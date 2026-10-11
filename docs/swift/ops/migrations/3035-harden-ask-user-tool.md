@@ -25,9 +25,9 @@ Deploy Fred normally; no additional operator or user action is required.
 ## Validation
 
 With agent questions enabled, ask an agent to ask you a multiple-choice
-question: the card shows a single editable "Other" row, never a second plain
-"Other" choice. Ask it for information it cannot guess, such as a recipient's
-email address: the conversation pauses on a free-text question instead of
+question: the card shows the editable "Other" row, and the agent should not
+add its own "Other" choice. Ask it for information it cannot guess, such as a
+recipient's email address: the conversation pauses on a free-text question instead of
 failing the turn.
 
 ## Rollback
@@ -37,4 +37,5 @@ Use the normal rollback procedure; this change introduces no data migration.
 ## Limitations
 
 The tool description asks agents to use the tool instead of asking in their
-reply, but cannot force them to; a model may still ask in plain text.
+reply and not to add an "Other" choice, but cannot force them to; a model may
+still ask in plain text or add a redundant "Other" choice.

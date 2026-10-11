@@ -408,79 +408,22 @@ def test_ask_user_colliding_with_provider_tool_is_rejected() -> None:
         resolver.resolve_tools()
 
 
-@pytest.mark.parametrize(
-    "label",
-    [
-        "Autre",
-        "Other",
-        "Autre (précise si tu veux)",
-        "Something else",
-        "autre réponse.",
-    ],
-)
-def test_ask_user_drops_generic_other_choice(label: str) -> None:
+def test_ask_user_keeps_an_other_choice_as_given() -> None:
     from fred_runtime.runtime_support.ask_user import AskUserArgs
 
+    # The tool description is the guard against a redundant Other choice.
     args = AskUserArgs.model_validate(
         {
             "question": "Mode?",
             "choices": [
                 {"id": "1", "label": "Office"},
-                {"id": "2", "label": "Remote"},
-                {"id": "3", "label": label},
+                {"id": "2", "label": "Autre"},
             ],
             "tool_call_id": "call-1",
         }
     )
-    assert [choice.label for choice in args.choices] == ["Office", "Remote"]
-    assert args.allow_free_text is True
-
-
-def test_ask_user_keeps_specific_other_choice() -> None:
-    from fred_runtime.runtime_support.ask_user import AskUserArgs
-
-    args = AskUserArgs.model_validate(
-        {
-            "question": "Where?",
-            "choices": [
-                {"id": "fr", "label": "France"},
-                {"id": "other", "label": "Other country"},
-            ],
-            "tool_call_id": "call-1",
-        }
-    )
-    assert [choice.id for choice in args.choices] == ["fr", "other"]
+    assert [choice.label for choice in args.choices] == ["Office", "Autre"]
     assert args.allow_free_text is False
-
-
-def test_ask_user_counts_choices_after_dropping_other() -> None:
-    from fred_runtime.runtime_support.ask_user import AskUserArgs
-
-    choices = [{"id": str(index), "label": f"Option {index}"} for index in range(4)]
-    args = AskUserArgs.model_validate(
-        {
-            "question": "Pick",
-            "choices": [*choices, {"id": "x", "label": "Autre"}],
-            "tool_call_id": "call-1",
-        }
-    )
-    assert len(args.choices) == 4
-
-
-@pytest.mark.asyncio
-async def test_ask_user_single_choice_plus_other_allows_free_text(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    request = await _captured_request(
-        monkeypatch,
-        {
-            "question": "Continue?",
-            "choices": [{"id": "yes", "label": "Oui"}, {"id": "o", "label": "Autre"}],
-            "tool_call_id": "call-1",
-        },
-    )
-    assert [choice["id"] for choice in request["choices"]] == ["yes"]
-    assert request["free_text"] is True
 
 
 @pytest.mark.asyncio

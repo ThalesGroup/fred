@@ -17,9 +17,7 @@
 from __future__ import annotations
 
 import json
-import re
-import unicodedata
-from typing import Annotated, Any
+from typing import Annotated
 
 from fred_sdk.contracts.runtime import (
     HumanChoiceOption,
@@ -43,30 +41,6 @@ ASK_USER_DESCRIPTION = (
     "Ask without choices for an open answer."
 )
 
-# Labels that only mean "something else": the UI already offers an editable Other field.
-_GENERIC_OTHER_LABELS = frozenset(
-    {
-        "autre",
-        "autres",
-        "autre chose",
-        "autre reponse",
-        "other",
-        "others",
-        "other answer",
-        "something else",
-    }
-)
-
-
-def _is_generic_other(label: object) -> bool:
-    if not isinstance(label, str):
-        return False
-    text = unicodedata.normalize("NFKD", label.casefold())
-    text = "".join(char for char in text if not unicodedata.combining(char))
-    text = re.sub(r"\([^)]*\)\s*$", "", text)
-    text = re.sub(r"[^\w\s]", " ", text)
-    return " ".join(text.split()) in _GENERIC_OTHER_LABELS
-
 
 class AskUserArgs(BaseModel):
     question: str = Field(min_length=1)
@@ -82,28 +56,6 @@ class AskUserArgs(BaseModel):
     )
     allow_free_text: bool = False
     tool_call_id: Annotated[str, InjectedToolCallId]
-
-    @model_validator(mode="before")
-    @classmethod
-    def drop_generic_other_choices(cls, data: Any) -> Any:
-        """Drop a generic Other choice before the four-choice limit; it means free text."""
-        if not isinstance(data, dict) or not isinstance(
-            data.get("choices"), list | tuple
-        ):
-            return data
-        choices = list(data["choices"])
-        kept = [
-            choice
-            for choice in choices
-            if not _is_generic_other(
-                choice.get("label")
-                if isinstance(choice, dict)
-                else getattr(choice, "label", None)
-            )
-        ]
-        if len(kept) == len(choices):
-            return data
-        return {**data, "choices": kept, "allow_free_text": True}
 
     @model_validator(mode="after")
     def validate_question(self) -> AskUserArgs:

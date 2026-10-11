@@ -2,7 +2,7 @@
 
 ### Requirement: An interactive agent can ask one question through a platform tool
 
-The platform SHALL offer one `ask_user` tool to an interactive ReAct or Deep agent, and to Graph steps that invoke it explicitly, when the conversation enables agent questions. The tool SHALL accept a question, an optional short subject title, and zero to four single-choice options. An agent question with two or more choices SHALL also allow free text, regardless of the agent's `allow_free_text` argument; other question forms SHALL follow that argument. The agent SHALL select the most relevant options before calling; the runtime SHALL reject more than four rather than truncate them. A question without options SHALL allow free text, regardless of that argument. An option whose label only says "Other" in a generic way SHALL be dropped before the four-option limit is checked, and the question SHALL then allow free text. The tool's description SHALL tell the agent to use it whenever it needs a decision, a preference or a missing detail from the person instead of asking in its reply, to call it once per question when it has several, and never to offer a generic "Other" option. Its prompt SHALL use the existing human-input contract and carry the raising tool call's occurrence identity.
+The platform SHALL offer one `ask_user` tool to an interactive ReAct or Deep agent, and to Graph steps that invoke it explicitly, when the conversation enables agent questions. The tool SHALL accept a question, an optional short subject title, and zero to four single-choice options. An agent question with two or more choices SHALL also allow free text, regardless of the agent's `allow_free_text` argument; other question forms SHALL follow that argument. The agent SHALL select the most relevant options before calling; the runtime SHALL reject more than four rather than truncate them. A question without options SHALL allow free text, regardless of that argument. The tool's description SHALL tell the agent to use it whenever it needs a decision, a preference or a missing detail from the person instead of asking in its reply, to call it once per question when it has several, and never to offer a generic "Other" option. Its prompt SHALL use the existing human-input contract and carry the raising tool call's occurrence identity.
 
 #### Scenario: Single choice
 
@@ -125,7 +125,7 @@ The platform SHALL offer one `ask_user` tool to an interactive ReAct or Deep age
 
 #### Scenario: Invalid question form
 
-- **WHEN** the agent calls `ask_user` with a blank question, with duplicate or empty option identifiers, or with more than four options once generic "Other" options are dropped
+- **WHEN** the agent calls `ask_user` with a blank question, with duplicate or empty option identifiers, or with more than four options
 - **THEN** the call returns a tool error without pausing the conversation
 
 #### Scenario: Question without options
@@ -133,14 +133,6 @@ The platform SHALL offer one `ask_user` tool to an interactive ReAct or Deep age
 - **GIVEN** an interactive agent with agent questions enabled
 - **WHEN** it asks a question with no options and does not enable free text
 - **THEN** the question is shown as a free-text question and the conversation pauses for the answer, instead of the call failing
-
-#### Scenario: Generic Other option
-
-- **GIVEN** an interactive agent with agent questions enabled
-- **WHEN** it asks a question whose options include one labelled only "Autre", "Other" or a similar generic wording, with or without a parenthesis
-- **THEN** that option is not shown, the question allows free text, and managed chat shows a single editable "Other" row
-- **AND** an option with a specific label such as "Other country" is kept
-- **AND** four specific options plus a generic "Other" option are accepted as four options
 
 #### Scenario: Tool guidance
 
