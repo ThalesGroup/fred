@@ -299,7 +299,9 @@ The control plane is a **pure proxy** for these values — it does not interpret
 
 - `agent_instance_id` — primary identifier
 - `team_id`, `template_id`
-- `display_name`, `description`, `status`
+- `display_name`, `description`, `status`. `display_name` is unique within the
+  team or personal space, ignoring case and surrounding spaces, and stored
+  trimmed (§60).
 - `role: str` — **added 2026-07-23 (#2076).** Short one-line summary of what
   the agent does, distinct from the longer `description`; shown on the agent
   card. Independently settable via `CreateAgentInstanceRequest.role` /
@@ -2437,7 +2439,7 @@ client removed outright. The dedicated Activity surfaces (`/admin/tasks`,
 for this data; no replacement preset was added.
 
 **`top_agents_by_conversations` series carry their owning team (2026-09-03).**
-Agent instance names are not unique across teams, and the chart's previous
+Agent instance names are unique within a team but not across teams, and the chart's previous
 tie-breaker was a truncated instance id - unreadable in a cross-team ranking.
 Each series label is now `"<agent name> - <team name>"`, resolved through the
 same `TeamMetadataStore` lookup `top_teams_by_sessions` uses (now shared as
@@ -4203,7 +4205,8 @@ the audit event.
   stored under its canonical id (`personal` → `personal-<uid>`). A target where
   the template is not enabled fails; a failed target never stops the others.
   `display_name` is only accepted for a single target equal to the source
-  (Duplicate), otherwise 422.
+  (Duplicate), otherwise 422. A Duplicate under a taken name fails with
+  `error_code: "agent_name_conflict"` on its result (§60).
 
 **What a copy carries.** Name (kept when free in the destination, else the
 first free `<name>_imported-<n>`), description, template, tuning values and
@@ -4244,6 +4247,29 @@ where a picture renders: the bootstrap `current_user` and team admin summaries
 display-name cache, so a change shows on the next call; presigns of one batch
 run concurrently, at most 8 at a time. Never exported or logged. Full behavior:
 OpenSpec `user-profile-picture`.
+
+
+## 60. Contract Notes — agent names unique per team (2026-10-11, #3042)
+
+**Rule.** Two agents of one team or personal space cannot share a name. Names
+are compared after trimming and ignoring case; the same name stays free in
+another team. The request schemas trim `display_name`, and the database holds
+the unique index `uq_agent_instance_team_name` on
+`(team_id, lower(trim(display_name)))`.
+
+**Refusals.** Create (`POST …/agent-instances`, JSON or with assets) and rename
+(`PATCH …/agent-instances/{id}`) under a taken name answer **409** with
+`detail = {"code": "agent_name_conflict", "message": …}`; a rename to the
+agent's own name in another case is accepted. A Duplicate reports the same
+code as `AgentCopyResult.error_code`. Create checks before any pod call.
+
+**Resolutions.** A copy to another team keeps `<name>_imported-<n>`, compared
+the same way, and retries once with the next free name if a concurrent copy
+took it. A platform import renames a conflicting agent the same way.
+
+**Upgrade.** Migration `a4d85307ea0e` trims every name and renames later
+duplicates `<name> (2)`, `<name> (3)`… in creation order (the oldest keeps its
+name) before creating the index. Full behavior: OpenSpec `agent-names`.
 
 ## Knowledge Flow ingestion cancellation — 2026-09-23
 
