@@ -328,6 +328,34 @@ describe("toThreadMessages — open HITL gate rendering", () => {
     expect(rows.filter((row) => row.role === "hitl_response").map((row) => row.text)).toEqual(["cancel"]);
   });
 
+  it("recalls the gated tools and the decision on a tool approval reply", () => {
+    const single = toThreadMessages(
+      [hitlRequestMsg("e1", {}, 1), hitlResponseMsg("e1", { choice_id: "proceed" }, 2)],
+      false,
+    ).find((row) => row.role === "hitl_response")?.hitlAnswerSummary;
+    expect(single?.toolNames).toHaveLength(1);
+    expect(single?.answerKey).toBe("rework.hitlPrompt.accepted");
+
+    const batch = toThreadMessages(
+      [
+        hitlRequestMsg(
+          "e1",
+          {
+            pending_calls: [
+              { tool_call_id: "call-1", tool_name: "send_email", args_preview: "{}" },
+              { tool_call_id: "call-2", tool_name: "update_ticket", args_preview: "{}" },
+            ],
+          },
+          1,
+        ),
+        hitlResponseMsg("e1", { choice_id: "cancel" }, 2),
+      ],
+      false,
+    ).find((row) => row.role === "hitl_response")?.hitlAnswerSummary;
+    expect(batch?.toolNames).toHaveLength(2);
+    expect(batch?.answerKey).toBe("rework.hitlPrompt.refused");
+  });
+
   it("omits the trailing UNANSWERED gate's readonly card (the live prompt renders it instead)", () => {
     const messages = [hitlRequestMsg("e1"), hitlResponseMsg("e1"), hitlRequestMsg("e2")];
     const rows = toThreadMessages(messages, false);

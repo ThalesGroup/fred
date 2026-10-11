@@ -858,7 +858,7 @@ how `ThoughtTrace` trims the rail when a reasoning row opens or closes the seque
 
 #### Resolved
 
-_(none yet)_
+- **Soft elevation (2026-10-10)** — the user bubble takes the new `--shadow-xs` token (`0 1px 2px`, black 8% light / 32% dark), shared with the HITL answer bubble so both read as the person's own turns.
 
 ---
 
@@ -1864,12 +1864,24 @@ _(none yet)_
 **Location:** `src/rework/components/shared/molecules/HitlPrompt/HitlPrompt.tsx`
 **Status:** `Functional`
 
-#### Open UX issues
-
-- **Focus management** — when `HitlPrompt` appears, focus should move to the first
-  actionable element (first choice button or the free-text input). Not yet implemented.
-
 #### Resolved
+
+- **Focus management (2026-10-10)** — closed without autofocus (owner decision): the card never takes focus, and number keys, Enter and Escape answer it instead (see the visual refresh below).
+
+- **Visual refresh, design tokens only (2026-10-10)** — OpenSpec `refresh-hitl-card-visuals`.
+  - **Tokens:** no hard-coded font size, spacing or colour mix remains. Only layout widths stay literal, and the glow shared with `RichInputField`.
+  - **Radii:** cards use `--radius-ms`. Inner controls (choices, "Other", free text, recap rows) use `--radius-xs`.
+  - **Choices:** full-width rows with left-aligned text, label in `--on-surface`, `--spacing-xs` vertical padding. Border `--outline-muted` at rest, `--outline-variant` on hover; a staged choice uses `--state-primary-selected`.
+  - **"Other" row:** it reads as a field, with the input surface (`--surface-container-low`, `--outline-variant`), an `edit` icon, the "Other" label styled like the choices, a placeholder, and typed text in `--font-body-large`.
+  - **Close cross removed:** a single question has "Skip" left of "Send".
+  - **Grouped questions:** no "Next". Skipping one question is its last choice (neutral ESC key hint); the action row keeps "Skip all" and "Send all". Typed text counts once validated with a small primary check icon button or its shortcut, which advances; the button becomes a `--success` check while that text stays validated, and editing brings it back.
+  - **Question header:** title and question share a full-bleed `--surface-container-highest` band, question in `--font-body-medium-emphasized`. Grouped tabs (`ButtonGroup` `2xs`) sit above it.
+  - **Number badges and keys:** square `--secondary-container` badge before each choice. Keys 1 to 9 pick it, Enter sends grouped answers, Escape skips (Skip shows an ESC key hint); never from a field, Escape never with a drawer or dialog open, no autofocus.
+  - **Composer held:** every pending card holds the composer (draft kept), not only agent questions; the interrupted-run card leaves it free.
+  - **Tab states:** `radio_button_unchecked`, then `check_circle` in `--success`, then `do_not_disturb_on`.
+  - **Tool approval:** only the labels carry meaning. Accept is in `--success`, refuse in `--error`, both `--font-title-small-emphasized`; "Approve for this conversation" stays neutral.
+  - **Answers in the conversation:** `HitlAnswerSummary` is a light card in the user bubble's family: `--surface-container-highest` fill, 1px `--secondary-container` border, `--radius-s`, `--shadow-xs`, text `--on-surface`, `reply` icon `--secondary`. A translucent secondary fill was tried and dropped: it read grey in every light theme. The same bubble shows below the `ask_user` line in the trace, left-aligned, which is where a ReAct question's answer appears. A tool-approval reply now recalls the gated tools.
+  - **Superseded:** this replaces the centered choice rows and the gray "Other" label.
 
 - **Choice row hidden once answered; active-state border/shadow (2026-08-05)** — the
   choices row (and its right-alignment fix below) now renders only when `!readonly`:
@@ -4456,7 +4468,7 @@ _Priority order for the next UX session. Update before each session._
 21. **AgentFormModal — tuning field groups** — accordion vs. flat scroll for agents with many fields (UX decision — still open)
 22. **AgentFormModal — template browser on mobile** — single-column grid vs. list layout on narrow viewports (UX decision)
 23. **AgentFormModal — single-template auto-collapse** — when one template available, hide browser or show non-interactive card?
-24. **HitlPrompt — focus management** — focus should move to the first actionable element when the prompt appears (interaction design; may require Figma update). Elevation/containment resolved 2026-08-05 (see component section).
+24. **HitlPrompt — focus management** — closed 2026-10-10 without autofocus; keyboard answers replace it (see component section).
 
 ## Composer model label (#2387, 2026-08-17)
 
@@ -5123,9 +5135,9 @@ descriptions and actions stay readable. Simultaneous questions share one card
 with short subject tabs that scroll horizontally when needed. The mouse wheel
 and trackpad scroll overflowing titles without dragging the scrollbar; page
 scrolling continues at the ends. A choice or Skip records a local draft and advances
-to the next unanswered tab. Nonblank free text counts as an answer while typing,
-without requiring Next or switching tabs; clearing it removes that answer unless
-a choice remains selected. The person can revisit any tab and revise the choice
+to the next unanswered tab. Typed text counts as an answer once validated with
+the small Confirm action or its shortcut, which also advances; editing it withdraws
+the answer until it is validated again. The person can revisit any tab and revise the choice
 or text. Send all becomes available only when every tab has an answer or skip;
 it sends one request for the complete set. Closing the grouped card skips all
 pending questions in one request, replacing any local drafts. The card stays

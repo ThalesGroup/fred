@@ -21,7 +21,7 @@ import type { RuntimeAwaitingHumanEvent } from "@hooks/useChatSse";
 import { useAssistantCopyInterception } from "@hooks/useAssistantCopyInterception";
 import type { CommandDescriptor } from "../../../../../slices/runtime/runtimeOpenApi";
 import type { ThreadMessage } from "@rework/types/thread";
-import { HitlPrompt } from "@shared/molecules/HitlPrompt/HitlPrompt.tsx";
+import { HitlPrompt, type HitlQuestionState } from "@shared/molecules/HitlPrompt/HitlPrompt.tsx";
 import { HitlAnswerSummary } from "@shared/molecules/HitlAnswerSummary/HitlAnswerSummary";
 import { UserTurn } from "@shared/organisms/UserTurn/UserTurn";
 import { AssistantTurn } from "@shared/organisms/AssistantTurn/AssistantTurn";
@@ -36,6 +36,7 @@ interface ConversationThreadProps {
   hitlBusy?: boolean;
   stagedHitlAnswer?: { answer: string | boolean | undefined; freeText?: string; skipped: boolean };
   canSendAllHitl?: boolean;
+  hitlTabStates?: HitlQuestionState[];
   onStageHitlAnswer?: (answer: string | boolean | undefined, freeText?: string, skipped?: boolean) => void;
   onSendAllHitl?: () => void;
   onSkipAllHitl?: () => void;
@@ -69,6 +70,7 @@ export const ConversationThread = memo(function ConversationThread({
   hitlBusy = false,
   stagedHitlAnswer,
   canSendAllHitl,
+  hitlTabStates,
   onStageHitlAnswer,
   onSendAllHitl,
   onSkipAllHitl,
@@ -152,6 +154,7 @@ export const ConversationThread = memo(function ConversationThread({
           busy={hitlBusy}
           stagedAnswer={stagedHitlAnswer}
           canSendAll={canSendAllHitl}
+          questionStates={hitlTabStates}
           onStageAnswer={onStageHitlAnswer}
           onSendAll={onSendAllHitl}
           onSkipAll={onSkipAllHitl}
