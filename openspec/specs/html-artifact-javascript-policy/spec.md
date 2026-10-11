@@ -99,7 +99,11 @@ receive a page whose interactive parts silently do nothing.
 When a team is not opted in, the render request SHALL be rejected if the
 submitted page contains script, and the rejection SHALL be reported back to the
 model as a recoverable error so it can re-render without script. The rejected
-page SHALL NOT be stored or displayed.
+page SHALL NOT be stored or displayed. URL-bearing attribute values (links,
+form actions, SVG animation targets) SHALL be checked after entity decoding and
+the browser's URL normalisation (leading control characters and spaces, and
+tabs or newlines anywhere, removed); frames count as script. Text that merely
+shows such markup SHALL still render.
 
 #### Scenario: Model submits script for a restricted team
 
@@ -109,6 +113,13 @@ page SHALL NOT be stored or displayed.
 - **AND** the model receives an error explaining that JavaScript is not
   available for this team
 - **AND** no artifact is created from the refused page
+
+#### Scenario: Obfuscated script URL for a restricted team
+
+- **WHEN** a page for a team that is not opted in carries a `javascript:` URL
+  hidden by entity encoding or a leading control character, in a link, a form
+  action or an SVG `set`/`animate` value
+- **THEN** the render is refused
 
 #### Scenario: Model retries without script
 

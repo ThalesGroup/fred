@@ -345,7 +345,8 @@ do reliably — so "change the heading" opened a second view. Revising is now th
 DEFAULT: an omitted `artifact_id` targets the artifact already in the viewer, and
 `new_artifact=true` is what opens a separate one. Because capability middleware is
 rebuilt per turn, the open id cannot be held in memory; it is recovered from the
-transcript (the tool announces it in its own result text) and named in the prompt
+transcript (the tool announces it in its own result text, and only that tool's
+results are read, matched by tool name or call id) and named in the prompt
 overlay, so the model is told the id rather than asked to recall it. The viewer's
 tabs each carry a close control; a closed artifact keeps its snapshot so its chat
 card reopens it, and a close is undone by a genuine new revision but not by a
