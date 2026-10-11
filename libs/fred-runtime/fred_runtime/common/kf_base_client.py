@@ -23,6 +23,7 @@ from fred_core.common.fastapi_handlers import (
     DENIAL_CAUSE_HEADER,
 )
 from fred_core.kpi.kpi_writer_structures import KPIActor
+from fred_core.logs.propagation import CONTEXT_HEADER, outbound_context_headers
 from fred_core.security.backend_to_backend_auth import M2MBearerAuth
 from fred_sdk.contracts.context import RuntimeContext as AgentRuntimeContext
 
@@ -243,14 +244,22 @@ class KfBaseClient:
         override_token = kwargs.pop("access_token", None)
         credentials = await provider.credentials(override_token=override_token)
 
-        headers: Dict[str, str] = kwargs.pop("headers", {})
+        headers: Dict[str, str] = {
+            key: value
+            for key, value in kwargs.pop("headers", {}).items()
+            if key.lower() != CONTEXT_HEADER.lower()
+        }
         if credentials.authorization:
             headers["Authorization"] = credentials.authorization
+        if credentials.delegated:
+            headers.update(outbound_context_headers())
         kwargs = attach_grant(kwargs, credentials.parameters)
 
         # httpx>=0.28 path: build a Request then send it with explicit stream mode.
         stream = bool(kwargs.pop("stream", False))
         follow_redirects = kwargs.pop("follow_redirects", httpx.USE_CLIENT_DEFAULT)
+        if credentials.delegated:
+            follow_redirects = False
         auth = kwargs.pop("auth", httpx.USE_CLIENT_DEFAULT)
         if auth is httpx.USE_CLIENT_DEFAULT:
             if isinstance(provider, DelegatedCredentialProvider):
@@ -261,6 +270,8 @@ class KfBaseClient:
             headers=headers,
             **kwargs,
         )
+        if not credentials.delegated:
+            request.headers.pop(CONTEXT_HEADER, None)
         return await self.client.send(
             request,
             stream=stream,

@@ -223,6 +223,35 @@ Normal turns get fresh operation references; HITL resumes retain their existing 
 identity with a new ingress request reference. Runtime/SDK traceability uses ingress
 references when present, with fresh references for standalone invocations.
 
+### 6.1 Delegated downstream diagnostic context
+
+The delegated first-party REST/MCP paths attach `X-Fred-Log-Context` to each invocation.
+It is unpadded URL-safe base64 of UTF-8 JSON `{"v":1,"context":{...}}`. Receivers read it
+only after the existing verified caller/grant admission succeeds; ordinary user bearer
+calls and disabled delegation ignore it. Context never participates in authorization.
+
+All safe bound fields propagate, including team references and small custom properties;
+one-off event `extra` does not. Limits are 8,192 encoded ASCII bytes, 4,096 decoded envelope
+bytes, 32 fields, 64 ASCII characters per key, 1,024 UTF-8 bytes per string, three collection
+levels, signed 64-bit integers and finite floats. Validation also shares a 4,096-byte/
+128-node aggregate budget. Duplicate keys, credentials/content keys, opaque objects and
+invalid/oversized envelopes are dropped without echoing input or failing business calls.
+An imported correlation reference must be a nonempty string of visible ASCII characters
+so returning it in an HTTP response header remains safe. Inherited metadata that exceeds
+the available local context budget is dropped after reserving receiver/grant identities.
+
+The receiver creates its own request ID and local service/role/process/task/time/severity/
+source/category/tracing metadata. Admitted principal and grant override forwarded
+`user_id`, `run_id` and `agent_id`; other inherited references remain until locally resolved
+or explicitly cleared. Bound context wins over event extras. Nested tool/run scopes restore
+on exit. Audit records retain only their independent explicit schema, including before
+queueing or formatting.
+
+REST calls use request-local headers; MCP stamps live context on requests to its configured
+first-party origin, including handshake/listing and tool invocation. Delegated transports
+do not follow redirects. External/no-token tools and authentication endpoints receive no
+Fred context. This metadata requires no new delegation switch and never enables delegation.
+
 ## 7. Data protection summary
 
 | Field category | Example fields | Where it may appear |
