@@ -38,7 +38,7 @@ import hashlib
 import logging
 import re
 import uuid
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Container, Sequence
 from html.parser import HTMLParser
 from typing import Literal, cast
 
@@ -179,21 +179,41 @@ def html_instructions(allow_javascript: bool) -> str:
 # The tool announces its id in its own result text, which is the only trace that
 # outlives a turn: capability middleware is rebuilt per turn, so there is no memory
 # to keep it in. Reading it back from the transcript is what lets a revision target
-# the open artifact without the model having to remember an id. Matched against tool
-# messages only — see `_artifact_id_in_history`.
+# the open artifact without the model having to remember an id. Matched against this
+# tool's own results only — see `_artifact_id_in_history`.
 _RENDERED_ID = re.compile(r"rendered \(id=([0-9a-f]+)\)")
+_TOOL_NAME = "render_html_artifact"
+
+
+def _is_render_result(message: object, render_call_ids: Container[object]) -> bool:
+    """A tool message produced by `render_html_artifact`, by name or call id."""
+
+    if getattr(message, "type", None) != "tool":
+        return False
+    name = getattr(message, "name", None)
+    if name:
+        return name == _TOOL_NAME
+    # A rehydrated transcript may drop the name; the AI call that issued it remains.
+    return getattr(message, "tool_call_id", None) in render_call_ids
 
 
 def _artifact_id_in_history(messages: Sequence[object]) -> str | None:
     """The most recently rendered artifact id in this conversation, if any.
 
-    Only TOOL messages are scanned. The marker is text, and a user message, a
-    retrieved document or another tool's output could carry the same wording and
-    retarget which artifact a revision replaces.
+    Only results of `render_html_artifact` are scanned. The marker is text, and a
+    user message, a retrieved document or another tool's output could carry the
+    same wording and retarget which artifact a revision replaces.
     """
 
-    for message in reversed(list(messages)):
-        if getattr(message, "type", None) != "tool":
+    history = list(messages)
+    render_call_ids = {
+        call.get("id")
+        for message in history
+        for call in (getattr(message, "tool_calls", None) or ())
+        if isinstance(call, dict) and call.get("name") == _TOOL_NAME and call.get("id")
+    }
+    for message in reversed(history):
+        if not _is_render_result(message, render_call_ids):
             continue
         content = getattr(message, "content", None)
         if not isinstance(content, str):
@@ -349,7 +369,7 @@ class _HtmlArtifactMiddleware(AgentMiddleware):
         self._open_artifact_id: str | None = None
 
         @tool(
-            "render_html_artifact",
+            _TOOL_NAME,
             response_format="content_and_artifact",
             # The schema the model sees must state the posture too: a team that
             # cannot run script should never be offered it in the tool contract
