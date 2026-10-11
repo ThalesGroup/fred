@@ -3776,6 +3776,8 @@ export type AgentCopyResult = {
   /** What an editor must redo in the destination, per capability. */
   notices?: AgentCopyNotice[];
   error?: string | null;
+  /** Stable code of the failure, e.g. `agent_name_conflict` for a duplicate under a taken name. */
+  error_code?: string | null;
 };
 export type AgentCopyResponse = {
   results: AgentCopyResult[];

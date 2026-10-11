@@ -117,7 +117,8 @@
   padding-left: var(--spacing-m);
 }
 
-.error .information {
+/* As specific as the data-compact rule above, so the error colour wins. */
+.input.error .information {
   color: var(--error);
 }
 

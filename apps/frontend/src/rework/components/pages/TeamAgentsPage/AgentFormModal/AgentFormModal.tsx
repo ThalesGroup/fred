@@ -27,6 +27,7 @@ import { TemplateBrowser } from "./TemplateBrowser/TemplateBrowser.tsx";
 import { applyDocumentAccessConfigChange, normalizeDocumentAccessConfig } from "./toolPackLogic.ts";
 import { CAP_DOCUMENT_ACCESS } from "./toolPacks.ts";
 import { reservedTagInPromptField } from "@rework/utils/promptValidation";
+import { isAgentNameTaken } from "../agentNames.ts";
 import styles from "./AgentFormModal.module.css";
 
 export type AgentFormPayload = {
@@ -76,6 +77,8 @@ type AgentFormModalProps = {
   onClose: () => void;
   onSubmit: (payload: AgentFormPayload) => Promise<void>;
   onDelete?: () => void;
+  /** Normalised names of the team's other agents (see agentNames.ts). */
+  takenNames?: ReadonlySet<string>;
 };
 
 type FormState = {
@@ -238,6 +241,8 @@ function isCapabilityBlocked(form: Pick<FormState, "selectedCapabilityIds" | "ca
   return form.selectedCapabilityIds.some((id) => !!form.capabilityBlockingErrors[id]);
 }
 
+const NO_NAMES: ReadonlySet<string> = new Set();
+
 export default function AgentFormModal({
   isOpen,
   isSubmitting,
@@ -249,6 +254,7 @@ export default function AgentFormModal({
   onClose,
   onSubmit,
   onDelete,
+  takenNames = NO_NAMES,
 }: AgentFormModalProps) {
   const { t, i18n } = useTranslation();
   const { agentsNicknameSingular } = useFrontendProperties();
@@ -272,8 +278,12 @@ export default function AgentFormModal({
   });
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [activeSection, setActiveSection] = useState<SectionKey>("general");
+  // The name is checked when the field is left, never while typing; a name the
+  // form filled in itself (template, edited agent) counts as checked.
+  const [nameChecked, setNameChecked] = useState(false);
 
   useEffect(() => {
+    setNameChecked(isOpen);
     if (!isOpen) {
       setSubmitAttempted(false);
       setActiveSection("general");
@@ -342,6 +352,7 @@ export default function AgentFormModal({
     });
     setActiveSection("general");
     setSubmitAttempted(false);
+    setNameChecked(true);
     setStep(2);
   };
 
@@ -395,13 +406,15 @@ export default function AgentFormModal({
   // A capability config widget may block the save (e.g. ppt_filler while its
   // mandatory template is missing, #1903) — only ACTIVE capabilities count.
   const capabilityBlocked = isCapabilityBlocked(form);
+  const nameTaken = nameChecked && isAgentNameTaken(form.displayName, takenNames);
   const isFormValid =
     !!form.templateId &&
     !!form.displayName.trim() &&
     !!form.usageStatement.trim() &&
     !missingRequired &&
     reservedTagFields.length === 0 &&
-    !capabilityBlocked;
+    !capabilityBlocked &&
+    !nameTaken;
   const canSave = isFormValid && !isSubmitting;
 
   // Every section holding a blocking problem, computed once: the tab badges
@@ -409,7 +422,7 @@ export default function AgentFormModal({
   const sectionsWithErrors = new Set<SectionKey>([
     ...requiredFields.filter((f) => !form.tuningValues[f.key]).map((f) => sectionOfField(f)),
     ...reservedTagFields.map((f) => sectionOfField(f)),
-    ...(!form.displayName.trim() ? (["general"] as const) : []),
+    ...(!form.displayName.trim() || nameTaken ? (["general"] as const) : []),
     ...(capabilityBlocked ? (["tools"] as const) : []),
     ...(!form.usageStatement.trim() ? (["commitments"] as const) : []),
   ]);
@@ -455,6 +468,7 @@ export default function AgentFormModal({
               color={submitAttempted && !isFormValid ? "warning" : "primary"}
               variant="filled"
               size="medium"
+              disabled={nameTaken}
               onClick={handleSubmit}
             >
               {mode === "edit" ? t("rework.save") : t("rework.create")}
@@ -494,7 +508,12 @@ export default function AgentFormModal({
           errorSections={errorSections}
           editInstance={editInstance}
           teamId={teamId}
-          onDisplayNameChange={(v) => setForm((prev) => ({ ...prev, displayName: v }))}
+          nameTaken={nameTaken}
+          onDisplayNameChange={(v) => {
+            setForm((prev) => ({ ...prev, displayName: v }));
+            setNameChecked(false);
+          }}
+          onDisplayNameBlur={() => setNameChecked(true)}
           onRoleChange={(v) => setForm((prev) => ({ ...prev, role: v }))}
           onDescriptionChange={(v) => setForm((prev) => ({ ...prev, description: v }))}
           onUsageStatementChange={(v) => setForm((prev) => ({ ...prev, usageStatement: v }))}

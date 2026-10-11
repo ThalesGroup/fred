@@ -2811,7 +2811,8 @@
           },
           "name": {
             "label": "Nom",
-            "placeholder": "Entrez un nom original"
+            "placeholder": "Entrez un nom original",
+            "taken": "Nom déjà utilisé"
           },
           "role": {
             "label": "Rôle",
