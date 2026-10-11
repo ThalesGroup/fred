@@ -500,7 +500,6 @@ def test_store_emit_handler_categorizes_reserved_kpi_logger_as_kpi() -> None:
     assert store.indexed[0].category == "kpi"
 
 
-<<<<<<< HEAD
 def test_shared_output_contract_and_repeat_setup(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -749,7 +748,8 @@ def test_startup_diagnostics_wait_for_selected_output(
         assert json.loads(output)["config_file"] == lazy_config_file
     else:
         assert f"config_file={lazy_config_file}" in output
-=======
+
+
 @pytest.mark.parametrize(
     "path",
     [
@@ -765,4 +765,3 @@ def test_free_enrollment_capability_is_redacted_without_delegation(path, monkeyp
     UvicornSensitiveQueryFilter().filter(record)
     assert "opaque-token" not in record.getMessage()
     assert "<redacted>" in record.getMessage()
->>>>>>> origin/swift
