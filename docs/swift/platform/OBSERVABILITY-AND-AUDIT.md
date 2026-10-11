@@ -272,6 +272,34 @@ exits. Legacy jobs without an envelope remain executable with local activity ref
 Workflow code only forwards optional plain data, never imports logging/auth helpers, generates
 random identifiers or exports arbitrary context. Prometheus and audit boundaries are unchanged.
 
+### 6.3 Frontend pod logs
+
+The production frontend entrypoint selects nginx `fred_json` access output on stdout
+with `escape=json`. Each completed request records ISO 8601 event time, status-derived
+cloud severity (4xx WARNING, 5xx ERROR, otherwise INFO), stable `frontend` identity,
+`proxy` role, `nginx.access` logger, local nginx request ID, method, bounded route
+family, duration in seconds and response bytes. Route families use the original URI
+only to select a fixed name; raw paths/query strings, addresses, headers, bodies and
+upstream response content never enter the access record. Internal rewrites therefore
+do not turn application-service events into unrelated frontend routes.
+
+The output inventory is deliberately mixed: access events are JSON stdout; nginx
+startup notices and native error diagnostics use their existing stderr text, and
+entrypoint configuration/theme messages remain text on their existing streams.
+The server sends warning/error diagnostics to stderr. Native nginx errors can include
+request lines with queries and upstream/file details, and theme failures can include
+source locations. These streams are not covered by the access-log content exclusions.
+Collector parsing, event time and severity promotion for native text are **unverified**;
+GKE may retain them as text with stream-derived severity rather than parse nginx levels.
+
+Before rollout acceptance, inspect 2xx/4xx/5xx access events and a native upstream/startup
+failure in the managed collector; confirm severity, timestamp promotion and field
+filters. Do not infer native error parsing from a successful JSON unit/container check.
+No sidecar is required solely to turn native output into JSON. Roll back the frontend
+image to restore its previous access format; no application configuration changes.
+See [nginx log format](https://nginx.org/en/docs/http/ngx_http_log_module.html#log_format)
+and [GKE logging](https://docs.cloud.google.com/kubernetes-engine/docs/concepts/about-logs).
+
 ## 7. Data protection summary
 
 | Field category | Example fields | Where it may appear |
