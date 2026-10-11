@@ -9,6 +9,7 @@ app:
   host: "0.0.0.0"
   port: 8000
   log_level: "info"
+  log_format: text
   # Optional hard ceiling on concurrent HTTP/WebSocket connections accepted by
   # Uvicorn. Set to null to disable the limit.
   limit_concurrency: null

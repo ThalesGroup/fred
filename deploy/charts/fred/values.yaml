@@ -261,7 +261,7 @@ x-kf-security: &kf-security
     # sync_schema_on_init: true         # Pushes the default Fred authorization model
     # authorization_model_id: null      # Authorization model id to use in case `sync_schema_on_init: false`
     # token_env_var: "OPENFGA_API_TOKEN" # Env var holding the bearer token
-    # timeout_millisec: 2000            # Optional request timeout
+    timeout_millisec: 5000             # Bound account-status and membership checks
     # headers:
     #   X-Custom-Header: "value"
   delegation:
@@ -479,6 +479,7 @@ x-cp-security: &cp-security
     enabled: true
     type: openfga
     api_url: "http://openfga:8080"
+    timeout_millisec: 5000
   delegation:
     # Delegation lets a program act for a person. The program (a "workload") signs
     # in with its own service account: a Keycloak client identity that belongs to
@@ -723,6 +724,7 @@ applications:
         host: "0.0.0.0"
         port: 8000
         log_level: "info"
+        log_format: "json"
         # Optional hard ceiling on concurrent HTTP/WebSocket connections
         # accepted by Uvicorn. Set to null to disable the limit.
         limit_concurrency: null
@@ -777,7 +779,7 @@ applications:
           # sync_schema_on_init: true         # Pushes the default Fred authorization model
           # authorization_model_id: null      # Authorization model id to use in case `sync_schema_on_init: false`
           # token_env_var: "OPENFGA_API_TOKEN" # Env var holding the bearer token
-          # timeout_millisec: 2000            # Optional request timeout
+          timeout_millisec: 5000             # Bound account-status and membership checks
           # headers:
           #   X-Custom-Header: "value"
         delegation:
@@ -1407,6 +1409,7 @@ applications:
         address: "127.0.0.1"
         port: 8111
         log_level: "info"
+        log_format: "json"
         reload: false
         reload_dir: "."
         pdf_render_ttl_days: 30
@@ -1627,6 +1630,7 @@ applications:
         address: "127.0.0.1"
         port: 8112
         log_level: "info"
+        log_format: "json"
         reload: false
         reload_dir: "."
         # Same key as the API pod: the worker is what runs the nightly sweep.
@@ -1980,6 +1984,7 @@ applications:
         address: "127.0.0.1"
         port: 8222
         log_level: "info"
+        log_format: "json"
         # Env var Control Plane reads the one-time root bootstrap secret from
         # (AUTHZ-07 Part 8 §40-42). Just a variable name, never a secret value
         # — see `extraEnvVars` above for how the instance overlay supplies the
@@ -2220,6 +2225,7 @@ applications:
         address: "127.0.0.1"
         port: 8223
         log_level: "info"
+        log_format: "json"
 
       observability:
         kpi:

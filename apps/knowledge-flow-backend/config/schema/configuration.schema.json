@@ -34,6 +34,15 @@
           "title": "Log Level",
           "type": "string"
         },
+        "log_format": {
+          "default": "text",
+          "enum": [
+            "json",
+            "text"
+          ],
+          "title": "Log Format",
+          "type": "string"
+        },
         "reload": {
           "default": false,
           "title": "Reload",

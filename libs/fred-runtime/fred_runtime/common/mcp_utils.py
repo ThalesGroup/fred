@@ -44,6 +44,7 @@ from fred_core.common.fastapi_handlers import (
     ACCOUNT_STATUS_UNAVAILABLE_CAUSE,
     DENIAL_CAUSE_HEADER,
 )
+from fred_core.logs.propagation import CONTEXT_HEADER, outbound_context_headers
 from fred_core.security.backend_to_backend_auth import M2MBearerAuth
 from fred_core.security.delegation import scrub_grant_text
 from fred_sdk.contracts.context import RuntimeContext
@@ -52,6 +53,7 @@ from fred_sdk.contracts.runtime import unwrap_run_stop_error
 from langchain_core.tools import BaseTool
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_mcp_adapters.sessions import Connection, StreamableHttpConnection
+from mcp.shared._httpx_utils import create_mcp_http_client
 
 from fred_runtime.common.outbound_credentials import (
     DelegatedCredentialProvider,
@@ -275,6 +277,26 @@ def _build_streamable_http_kwargs(
     return kw
 
 
+def _delegated_mcp_http_client(
+    headers: dict[str, str] | None = None,
+    timeout: httpx.Timeout | None = None,
+    auth: httpx.Auth | None = None,
+    *,
+    origin: tuple[str, str, int | None],
+) -> httpx.AsyncClient:
+    """A per-session client stamps each first-party request and refuses redirects."""
+    client = create_mcp_http_client(headers=headers, timeout=timeout, auth=auth)
+    client.follow_redirects = False
+
+    async def attach_context(request: httpx.Request) -> None:
+        request.headers.pop(CONTEXT_HEADER, None)
+        if (request.url.scheme, request.url.host, request.url.port) == origin:
+            request.headers.update(outbound_context_headers())
+
+    client.event_hooks["request"].append(attach_context)
+    return client
+
+
 async def _cleanup_client_quiet(client: MultiServerMCPClient) -> None:
     """No-op cleanup for MultiServerMCPClient (no persistent contexts).
 
@@ -408,6 +430,11 @@ async def get_connected_mcp_client_for_agent(
                     provider, DelegatedCredentialProvider
                 ):
                     conn_cfg["auth"] = M2MBearerAuth(provider)
+                    endpoint = httpx.URL(str(conn_cfg["url"]))
+                    conn_cfg["httpx_client_factory"] = partial(
+                        _delegated_mcp_http_client,
+                        origin=(endpoint.scheme, endpoint.host, endpoint.port),
+                    )
             elif transport == "stdio":
                 conn_cfg = _build_stdio_kwargs(server, headers, env)
             else:

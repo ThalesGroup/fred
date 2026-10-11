@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { ErrorResponse, User } from "oidc-client-ts";
+import { ErrorResponse, OidcClient, User } from "oidc-client-ts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApplicationRequest } from "../rework/features/applications/applicationRequest";
 import { OidcBrowserSession } from "./OidcBrowserSession";
@@ -313,14 +313,31 @@ describe("OIDC renewal with real user storage", () => {
   });
 });
 
+it("preserves a Free enrollment route through the OIDC round trip", async () => {
+  const target = "/fred/join-free/opaque-link";
+  window.history.replaceState({}, "", target);
+  const session = newSession();
+  const signin = vi.spyOn(session.manager, "signinRedirect").mockResolvedValue();
+  await session.login(vi.fn());
+  expect(signin).toHaveBeenCalledWith({ state: target });
+  window.history.replaceState({}, "", "/?code=callback&state=opaque-state");
+  const signedIn = person();
+  Object.defineProperty(signedIn, "state", { value: target });
+  vi.spyOn(session.manager, "signinRedirectCallback").mockResolvedValue(signedIn);
+  const authenticated = vi.fn();
+  await session.login(authenticated);
+  expect(window.location.pathname).toBe(target);
+  expect(authenticated).toHaveBeenCalledOnce();
+});
+
 describe("OIDC sign-in redirect keeps the requested page", () => {
-  it("sends the current path, query and hash as url_state", async () => {
+  it("stores the current path, query and hash in local state", async () => {
     window.history.replaceState({}, "", "/help?topic=agents#tools");
     const session = newSession();
     const redirect = vi.spyOn(session.manager, "signinRedirect").mockResolvedValue();
 
     await session.login(vi.fn());
-    expect(redirect).toHaveBeenCalledWith({ url_state: "/help?topic=agents#tools" });
+    expect(redirect).toHaveBeenCalledWith({ state: "/help?topic=agents#tools" });
   });
 
   it("returns to url_state after the callback, or to the root without it", async () => {
@@ -339,4 +356,41 @@ describe("OIDC sign-in redirect keeps the requested page", () => {
       expect(window.location.pathname + window.location.search + window.location.hash).toBe(expected);
     }
   });
+});
+
+it("rejects external callback destinations", async () => {
+  for (const destination of ["//example.org/", "https://example.org/"]) {
+    const session = newSession();
+    vi.spyOn(session.manager, "signinRedirectCallback").mockResolvedValue(person(600, "person", destination));
+    window.history.replaceState({}, "", "/?code=synthetic&state=synthetic");
+    await session.login(vi.fn());
+    expect(window.location.pathname).toBe("/");
+  }
+});
+
+it("keeps invitation capabilities out of the provider authorization state", async () => {
+  const capability = "synthetic-capability-token".padEnd(43, "x");
+  const target = `/fred/join-free/${capability}?source=invitation#terms`;
+  window.history.replaceState({}, "", target);
+  const session = newSession();
+  const signin = vi.spyOn(session.manager, "signinRedirect").mockResolvedValue();
+  await session.login(vi.fn());
+  const client = new OidcClient({
+    authority: "https://identity.example",
+    client_id: "ui",
+    redirect_uri: "https://fred.example/",
+    response_type: "code",
+    scope: "openid",
+    metadata: {
+      issuer: "https://identity.example",
+      authorization_endpoint: "https://identity.example/authorize",
+      token_endpoint: "https://identity.example/token",
+    },
+  });
+  const request = await client.createSigninRequest(signin.mock.calls[0][0]);
+  const authorizationState = new URL(request.url).searchParams.get("state");
+  expect(request.state.data).toBe(target);
+  expect(authorizationState).toBe(request.state.id);
+  expect(decodeURIComponent(request.url)).not.toContain(capability);
+  expect(request.state.url_state).toBeUndefined();
 });

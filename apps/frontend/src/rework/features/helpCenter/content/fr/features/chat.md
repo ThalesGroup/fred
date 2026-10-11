@@ -56,6 +56,13 @@ raccourci pour ce message, pas un réglage durable de la conversation.
 Un prompt porteur d'une commande se lance plus court encore : tapez `/` dans un
 champ vide — voir [Les commandes](/help/fr/features/commands).
 
+## Reprendre un message envoyé
+
+Dans un champ vide, la flèche du haut remet votre dernier message de la
+conversation ; appuyez encore pour remonter, la flèche du bas pour revenir.
+Modifiez le texte puis envoyez-le. Un message lancé par une commande revient
+sous sa forme `/commande`.
+
 ## Récupérer un document produit
 
 Certains agents produisent un fichier — un document rédigé, une présentation,

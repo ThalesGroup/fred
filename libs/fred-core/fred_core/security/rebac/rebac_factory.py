@@ -57,10 +57,7 @@ def rebac_factory(
         return OpenFgaRebacEngine(
             rebac_config,
             kpi_writer=kpi_writer,
-            requires_active_accounts=(
-                security_config.delegation.in_use
-                or security_config.user_directory == "local"
-            ),
+            requires_active_accounts=True,
         )
     else:
         # Should not happen

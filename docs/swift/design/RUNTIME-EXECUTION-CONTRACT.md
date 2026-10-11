@@ -6560,6 +6560,10 @@ the operator migration note.
 See the migration note at `docs/swift/ops/migrations/extract-mcp-agent-instructions.md`
 and `openspec/specs/mcp-capabilities/spec.md` for the current contract.
 
+### 8.105 Shared platform admission (2026-10-05)
+
+In authenticated deployments with enforced ReBAC, HTTP principal resolution checks suspension then live platform admission before legal/resource gates. This also covers runtime query-token resolution and cached verified JWTs. Pure service operations retain their existing checks; delegated people use their own live sources or compatible unexpired verified human evidence. Runtime startup requires the control-plane-owned migrated PostgreSQL authority. Each request reads the saved live policy, without a deployment flag or seed. Bounded internal verified human facts survive decoding-cache reuse; delegated callers use only current selected, unexpired, noncontradictory observations. Missing or incompatible authority fails closed with 503. See `openspec/specs/platform-access-control/spec.md` and the platform-access migration note for current contracts and rollout.
+
 ### 2026-10-06 — Native web research (#2980)
 
 The optional `RuntimeServices.web_research` SDK port is bound by the existing
@@ -6573,3 +6577,13 @@ owns the restricted SQL activity sink, the engine and the search providers
 package holds only the tools, and the runtime imports no capability package.
 The deployment is default-off. See the [activity contract](../platform/OBSERVABILITY-AND-AUDIT.md#restricted-web-research-activity)
 and [migration guide](../ops/migrations/2980-native-web-research.md).
+
+### Structured request and journey diagnostics (2026-10-01)
+
+Runtime logging binds ingress request/correlation references into PortableContext
+and RuntimeContext, with fresh references for standalone execution. Resolved session,
+exchange, team, instance/template and admitted run references scope generic execution
+and tool diagnostics; tool/run outcomes remain distinct from successful SSE transport.
+HITL resumes keep the existing exchange identity. Scope teardown retires retained-task
+metadata. See [observability §6/§7](../platform/OBSERVABILITY-AND-AUDIT.md) for field,
+sensitive-data and audit boundaries.

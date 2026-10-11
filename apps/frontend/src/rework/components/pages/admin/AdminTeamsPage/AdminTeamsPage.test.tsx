@@ -24,6 +24,15 @@ type DefaultTeam = { team_id: string; name: string };
 
 const h = vi.hoisted(() => ({
   canAdmin: true,
+  admissionEnabled: true,
+  admissionFetching: false,
+  admissionTeams: [
+    { team_id: "uid-alpha", name: "Alpha", allowed: true, free: false },
+    { team_id: "uid-beta", name: "Beta", allowed: false, free: true },
+  ],
+  admissionQuery: vi.fn(),
+  admissionTeamsQuery: vi.fn(),
+  setAdmissionTeam: vi.fn(),
   gcuVersion: "v1" as string | null,
   teams: [
     { id: "uid-alpha", name: "Alpha" },
@@ -62,6 +71,14 @@ vi.mock("@core/hooks/useUserCapabilities.ts", () => ({
 vi.mock("../../../../../hooks/useFrontendProperties.ts", () => ({
   useFrontendProperties: () => ({ gcuVersion: h.gcuVersion }),
 }));
+vi.mock("../../../../../common/config", () => ({
+  getConfig: () => ({ platform_access_enabled: h.admissionEnabled }),
+}));
+vi.mock("../PlatformAccessPage/PlatformAccessLinkManager", () => ({
+  default: ({ team }: { team: { team_id: string; free: boolean } }) => (
+    <div role="dialog" data-team={team.team_id} data-free={team.free} />
+  ),
+}));
 
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useListAllTeamsQuery: () => ({ data: h.teams }),
@@ -71,6 +88,15 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
   useSearchCandidateTeamAdminsQuery: () => ({ data: undefined }),
   useCreateTeamMutation: () => [vi.fn(), { isLoading: false }],
   useSetDefaultTeamsForNewUsersMutation: () => [h.setDefaultTeams, { isLoading: false }],
+  usePlatformAccessStateQuery: (arg: unknown, options: { skip: boolean }) => {
+    h.admissionQuery(arg, options);
+    return { data: options.skip ? undefined : {}, isFetching: h.admissionFetching };
+  },
+  usePlatformAccessTeamsQuery: (arg: unknown, options: { skip: boolean }) => {
+    h.admissionTeamsQuery(arg, options);
+    return { data: options.skip ? undefined : h.admissionTeams };
+  },
+  useSetPlatformTeamMutation: () => [h.setAdmissionTeam, { isLoading: false }],
 }));
 
 import AdminTeamsPage from "./AdminTeamsPage";
@@ -105,6 +131,12 @@ const searchInput = () => defaultTeamSection()!.querySelector("input")!;
 
 beforeEach(() => {
   h.canAdmin = true;
+  h.admissionEnabled = true;
+  h.admissionFetching = false;
+  h.admissionQuery.mockClear();
+  h.admissionTeamsQuery.mockClear();
+  h.setAdmissionTeam.mockReset();
+  h.setAdmissionTeam.mockReturnValue({ unwrap: () => Promise.resolve() });
   h.gcuVersion = "v1";
   h.defaultTeams = [{ team_id: "uid-beta", name: "Beta" }] satisfies DefaultTeam[];
   h.setDefaultTeams.mockReset();
@@ -128,6 +160,65 @@ describe("AdminTeamsPage layout", () => {
       "rework.adminTeams.createTeam.title",
       "rework.adminTeams.existingTeams.title",
     ]);
+  });
+});
+
+describe("AdminTeamsPage Free enrollment", () => {
+  it("does not expose controls or request admission authority for ordinary team managers", () => {
+    h.canAdmin = false;
+    render();
+    expect(h.admissionQuery).toHaveBeenLastCalledWith(undefined, { skip: true });
+    expect(h.admissionTeamsQuery).toHaveBeenLastCalledWith(undefined, { skip: true });
+    expect(container.querySelector('input[aria-label^="rework.platformAccess.free"]')).toBeNull();
+    expect(container.textContent).not.toContain("rework.platformAccess.links.manage");
+  });
+
+  it("skips admission controls when authenticated admission administration is unavailable", () => {
+    h.admissionEnabled = false;
+    render();
+    expect(h.admissionTeamsQuery).toHaveBeenLastCalledWith(undefined, { skip: true });
+    expect(container.textContent).not.toContain("rework.platformAccess.links.manage");
+  });
+
+  it("changes Free while preserving independent authorization for the exact team", async () => {
+    render();
+    const toggle = container.querySelector<HTMLInputElement>('input[aria-label="rework.platformAccess.free Alpha"]')!;
+    expect(toggle.checked).toBe(false);
+    await act(async () => toggle.click());
+    expect(h.setAdmissionTeam).toHaveBeenCalledWith({
+      teamId: "uid-alpha",
+      setPlatformAccessTeam: { allowed: true, free: true },
+    });
+  });
+
+  it("retains invitation history for teams whose Free flag is disabled", () => {
+    render();
+    const manage = [...container.querySelectorAll<HTMLButtonElement>("button")].find(
+      (button) => button.textContent === "rework.platformAccess.links.manage",
+    )!;
+    expect(manage.disabled).toBe(false);
+    act(() => manage.click());
+    const dialog = container.querySelector('[role="dialog"]')!;
+    expect(dialog.getAttribute("data-team")).toBe("uid-alpha");
+    expect(dialog.getAttribute("data-free")).toBe("false");
+    h.canAdmin = false;
+    act(() => root.render(<AdminTeamsPage />));
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it("disables team actions until authority is loaded and hides missing team state behind disabled controls", () => {
+    h.admissionFetching = true;
+    render();
+    const toggles = [
+      ...container.querySelectorAll<HTMLInputElement>('input[aria-label^="rework.platformAccess.free"]'),
+    ];
+    expect(toggles.length).toBeGreaterThan(0);
+    expect(toggles.every((toggle) => toggle.disabled)).toBe(true);
+    h.admissionFetching = false;
+    act(() => root.render(<AdminTeamsPage />));
+    expect(
+      container.querySelector<HTMLInputElement>('input[aria-label="rework.platformAccess.free Gamma"]')!.disabled,
+    ).toBe(true);
   });
 });
 

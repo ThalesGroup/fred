@@ -1391,6 +1391,41 @@ async function verifyUiTheme(browser, origin, theme) {
       ),
       true,
     );
+    await observation.page
+      .getByRole("button", { name: "Open region dialog" })
+      .click();
+    const regionDialog = observation.page.getByRole("dialog", {
+      name: "Scroll a region",
+    });
+    const region = regionDialog.getByRole("region", { name: "Long text" });
+    await region.focus();
+    const stationaryBefore = await regionDialog.evaluate((node) => ({
+      top: node.querySelector(".region-dialog-body > p").getBoundingClientRect()
+        .top,
+      footer: node.lastElementChild.getBoundingClientRect().top,
+    }));
+    await observation.page.keyboard.press("PageDown");
+    await observation.page.waitForFunction(
+      () => document.querySelector(".region-dialog-scroll")?.scrollTop > 0,
+    );
+    assert.deepEqual(
+      await regionDialog.evaluate((node) => ({
+        top: node
+          .querySelector(".region-dialog-body > p")
+          .getBoundingClientRect().top,
+        footer: node.lastElementChild.getBoundingClientRect().top,
+      })),
+      stationaryBefore,
+    );
+    assert.equal(
+      await regionDialog
+        .locator('[data-scroll-mode="children"]')
+        .evaluate((node) => node.scrollTop),
+      0,
+    );
+    await regionDialog
+      .getByRole("button", { name: "Done", exact: true })
+      .click();
     const tonalStates = {};
     for (const name of ["Surface tonal", "Retreat tonal"]) {
       const button = observation.page.getByRole("button", { name });

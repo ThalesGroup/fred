@@ -162,6 +162,22 @@ an infrastructure guarantee, not an application one.
 
 ## 6. Generic application / diagnostic logs
 
+Python APIs select `app.log_format: json | text` explicitly. Chart reference values
+select JSON; omitted settings and local examples select readable text. JSON stdout
+uses `severity`, `message`, creation-time `timestamp` (seconds/nanoseconds), `logger`,
+existing stable `service`, API role, source location and structural category. Context
+and safe event properties are top-level JSON fields; collisions cannot replace core
+metadata or bound identity. The optional generic store keeps its existing DTO shape.
+Readable text has no terminal-width wrapping and disables colors when redirected.
+Audit output remains independently formatted and excluded from generic context/store
+processing. Dependency warnings/errors are console-only to avoid sink recursion.
+Collector timestamp/severity recognition requires a rollout canary.
+
+Existing standard-library `%s`, `%d` and named-placeholder log calls remain supported
+in both output formats. They can also supply `extra={...}` structured properties,
+allowing gradual migration without rewriting every message or switching to f-strings.
+
+
 Ordinary application logs (startup messages, warnings, day-to-day diagnostics) are the lowest-
 sensitivity, highest-volume stream. They are stored in OpenSearch alongside — but in a separate
 index from — product analytics, with no long-retention requirement. Their diagnostic value
@@ -186,21 +202,116 @@ logger does). Real audit events (Stream 3) never appear in this store at all —
 `fred.security.audit` does not propagate to the root logger, and the store's ingestion handler
 independently drops any record from that logger by name.
 
-With either delegation switch on, request access lines carry only a neutral event, outcome, method
-and status; the request route is available through the KPI `route` dimension (§3).
+HTTP uses one shared ASGI completion event at response/stream termination. It carries
+method, safe route template when resolved, numeric duration, outcome and status only
+when a response was sent. Successful health/readiness probes are suppressed; failures
+remain visible. The readable message summarizes `METHOD route → status | durationms`;
+non-responded outcomes are appended so an interrupted stream cannot look successful
+from its status alone. Missing routes use `<unmatched>` and absent status uses
+`no response`; the separate numeric duration and other structured fields are retained.
+Raw paths, queries, client addresses, headers, bodies and redirect
+locations are excluded. Each ingress creates fresh `request_id` and root `correlation_id`;
+`X-Request-ID` and `X-Correlation-ID` response headers are exposed through CORS.
+
+Scoped diagnostic context may carry authenticated/admitted `user_id` and resolved
+team/session/exchange/run/agent/document/task references. Identity is bound after
+admission/resolution, never decoded from an access-log bearer preview. Nested tool/run
+scopes restore on exit; retained tasks cannot reuse closed scope identities. A request-owned
+snapshot makes explicit business bindings visible to completion across middleware task
+boundaries. Per-event `extra` cannot override bound identity or core event fields.
+Normal turns get fresh operation references; HITL resumes retain their existing exchange
+identity with a new ingress request reference. Runtime/SDK traceability uses ingress
+references when present, with fresh references for standalone invocations.
+
+### 6.1 Delegated downstream diagnostic context
+
+The delegated first-party REST/MCP paths attach `X-Fred-Log-Context` to each invocation.
+It is unpadded URL-safe base64 of UTF-8 JSON `{"v":1,"context":{...}}`. Receivers read it
+only after the existing verified caller/grant admission succeeds; ordinary user bearer
+calls and disabled delegation ignore it. Context never participates in authorization.
+
+All safe bound fields propagate, including team references and small custom properties;
+one-off event `extra` does not. Limits are 8,192 encoded ASCII bytes, 4,096 decoded envelope
+bytes, 32 fields, 64 ASCII characters per key, 1,024 UTF-8 bytes per string, three collection
+levels, signed 64-bit integers and finite floats. Validation also shares a 4,096-byte/
+128-node aggregate budget. Duplicate keys, credentials/content keys, opaque objects and
+invalid/oversized envelopes are dropped without echoing input or failing business calls.
+An imported correlation reference must be a nonempty string of visible ASCII characters
+so returning it in an HTTP response header remains safe. Inherited metadata that exceeds
+the available local context budget is dropped after reserving receiver/grant identities.
+
+The receiver creates its own request ID and local service/role/process/task/time/severity/
+source/category/tracing metadata. Admitted principal and grant override forwarded
+`user_id`, `run_id` and `agent_id`; other inherited references remain until locally resolved
+or explicitly cleared. Bound context wins over event extras. Nested tool/run scopes restore
+on exit. Audit records retain only their independent explicit schema, including before
+queueing or formatting.
+
+REST calls use request-local headers; MCP stamps live context on requests to its configured
+first-party origin, including handshake/listing and tool invocation. Delegated transports
+do not follow redirects. External/no-token tools and authentication endpoints receive no
+Fred context. This metadata requires no new delegation switch and never enables delegation.
+
+### 6.2 Worker and ingestion diagnostic context
+
+Knowledge Flow and Control Plane worker entrypoints use the selected `app.log_format`
+and role `worker`. Knowledge Flow workers/extraction children keep stdout-only generic
+logging with `NullLogStore`; workflow logging remains Temporal's replay-aware adapter.
+
+Ingestion admission captures the optional bounded envelope before persisting its immutable
+pending submission. Existing scheduler authorization and trusted worker delivery govern
+this handoff; it does not create or prolong an HTTP delegated grant. Request-local document,
+task, attachment and tool fields are removed before batch capture. A scheduled submission
+without an initiating operation creates a correlation outside workflow code.
+
+Metadata/extraction/output activity scopes restore the envelope and then use the payload's
+person/document/task and actual Temporal workflow/run/activity/attempt references as local
+authority for diagnostics. Thread work and spawned extraction children retain that snapshot.
+Retries keep operation/workflow identity and change attempt metadata; scopes restore on all
+exits. Legacy jobs without an envelope remain executable with local activity references.
+Workflow code only forwards optional plain data, never imports logging/auth helpers, generates
+random identifiers or exports arbitrary context. Prometheus and audit boundaries are unchanged.
+
+### 6.3 Frontend pod logs
+
+The production frontend entrypoint selects nginx `fred_json` access output on stdout
+with `escape=json`. Each completed request records ISO 8601 event time, status-derived
+cloud severity (4xx WARNING, 5xx ERROR, otherwise INFO), stable `frontend` identity,
+`proxy` role, `nginx.access` logger, local nginx request ID, method, bounded route
+family, duration in seconds and response bytes. Route families use the original URI
+only to select a fixed name; raw paths/query strings, addresses, headers, bodies and
+upstream response content never enter the access record. Internal rewrites therefore
+do not turn application-service events into unrelated frontend routes.
+
+The output inventory is deliberately mixed: access events are JSON stdout; nginx
+startup notices and native error diagnostics use their existing stderr text, and
+entrypoint configuration/theme messages remain text on their existing streams.
+The server sends warning/error diagnostics to stderr. Native nginx errors can include
+request lines with queries and upstream/file details, and theme failures can include
+source locations. These streams are not covered by the access-log content exclusions.
+Collector parsing, event time and severity promotion for native text are **unverified**;
+GKE may retain them as text with stream-derived severity rather than parse nginx levels.
+
+Before rollout acceptance, inspect 2xx/4xx/5xx access events and a native upstream/startup
+failure in the managed collector; confirm severity, timestamp promotion and field
+filters. Do not infer native error parsing from a successful JSON unit/container check.
+No sidecar is required solely to turn native output into JSON. Roll back the frontend
+image to restore its previous access format; no application configuration changes.
+See [nginx log format](https://nginx.org/en/docs/http/ngx_http_log_module.html#log_format)
+and [GKE logging](https://docs.cloud.google.com/kubernetes-engine/docs/concepts/about-logs).
 
 ## 7. Data protection summary
 
 | Field category | Example fields | Where it may appear |
 |---|---|---|
 | Directly identifying | user email, full name | **Nowhere** — Fred uses opaque platform identifiers everywhere an identity reference is needed |
-| Pseudonymous / opaque identity | `user_id`, `session_id`, `team_id` | Product analytics (Stream 2, access-scoped) and the audit trail (Stream 3, per delegation setting as §5 details) — never in operational metrics (Stream 1) |
+| Pseudonymous / opaque identity | `user_id`, `session_id`, `team_id` | Scoped generic diagnostic logs (§6), product analytics (Stream 2, access-scoped) and the audit trail (Stream 3, per delegation setting as §5 details) — never in operational metrics (Stream 1) |
 | Content | prompts, tool arguments/results, documents, attachments | **Nowhere** in any observability or audit stream — content lives only in the product's own storage, under the product's own access control. One deliberate, default-off local exception: `observability.langfuse.capture_content` (see below) |
 | Secrets | tokens, cookies, signed URLs | **Nowhere**, ever |
 | Technical/bounded | tool name, error code, HTTP status, model name | All streams as relevant — none of this is personal data |
 
-**Practical reading for an RSSI:** the only stream that intentionally carries user identity is
-Stream 2 (product analytics, itself access-scoped per viewer) and Stream 3 (the audit trail, whose
+**Practical reading for an RSSI:** scoped generic diagnostic logs intentionally carry opaque
+identity references for investigations, alongside Stream 2 (product analytics, itself access-scoped per viewer) and Stream 3 (the audit trail, whose
 entire purpose is to attribute an action to a principal). With a delegation switch on, runtime,
 grant and account status audit events carry no identity; relation-write events still do (§5). Stream 1
 (what a platform-wide Grafana audience can see) is designed to never carry it at all — not

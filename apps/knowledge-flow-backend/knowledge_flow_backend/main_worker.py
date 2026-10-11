@@ -24,18 +24,16 @@ import logging
 import os
 from contextlib import suppress
 
+from fred_core import log_setup
 from fred_core.diagnostics import install_gc_diagnostics
 from fred_core.kpi import emit_process_kpis, emit_sql_pool_kpis
+from fred_core.logs.null_log_store import NullLogStore
 from fred_core.scheduler import SchedulerBackend
 from fred_core.sql import require_tables
 from prometheus_client import start_http_server
 
 from knowledge_flow_backend.application_context import ApplicationContext
-from knowledge_flow_backend.common.config_loader import (
-    get_loaded_config_file_path,
-    get_loaded_env_file_path,
-    load_configuration,
-)
+from knowledge_flow_backend.common.config_loader import load_configuration
 from knowledge_flow_backend.features.scheduler.worker import run_worker
 from knowledge_flow_backend.models.table_ownership import REQUIRED_TABLES
 
@@ -83,17 +81,18 @@ async def main() -> None:
         optional Prometheus exporter and KPI background tasks, then run the Temporal worker.
     """
     configuration = load_configuration()
-    ApplicationContext(configuration)
-    app_context = ApplicationContext.get_instance()
     # Keep worker logging local-only: Temporal workflow sandbox must not trigger
     # external log sinks (OpenSearch/HTTP imports) from workflow threads.
-    logging.basicConfig(
-        level=getattr(logging, configuration.app.log_level.upper(), logging.INFO),
-        format="%(asctime)s | %(levelname)s | [pid=%(process)d %(threadName)s] | %(message)s",
+    log_setup(
+        service_name="knowledge-flow",
+        service_role="worker",
+        log_level=configuration.app.log_level,
+        log_format=configuration.app.log_format,
+        store=NullLogStore(),
+        use_rich=False,
     )
-    env_file = get_loaded_env_file_path() or "<unset>"
-    config_file = get_loaded_config_file_path() or "<unset>"
-    logger.info("Environment file: %s | Configuration file: %s", env_file, config_file)
+    ApplicationContext(configuration)
+    app_context = ApplicationContext.get_instance()
 
     if not configuration.scheduler.enabled:
         logger.warning("Scheduler disabled via configuration.scheduler.enabled=false")

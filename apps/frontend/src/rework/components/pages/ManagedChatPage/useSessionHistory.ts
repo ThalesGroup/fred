@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { handlePlatformAccessResponse } from "../../../../common/platformAccess";
 import { useEffect, useRef, useState } from "react";
 import { KeyCloakService } from "../../../../security/KeycloakService";
 import type { ChatMessage } from "../../../../slices/runtime/runtimeOpenApi";
@@ -104,6 +105,7 @@ export function useSessionHistory({
         const prep = await preparation;
         const url = new URL(expandMessagesUrl(prep.messages_url_template, sessionId), window.location.origin);
         const resp = await fetch(url.toString(), { headers: { Authorization: `Bearer ${token}` } });
+        await handlePlatformAccessResponse(resp);
         if (!resp.ok) return;
         const msgs: ChatMessage[] = await resp.json();
         // Guards, in order:
