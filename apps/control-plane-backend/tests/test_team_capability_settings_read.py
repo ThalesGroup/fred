@@ -328,6 +328,7 @@ async def test_admin_read_resolves_personal_route_alias(monkeypatch):
     )
 
     assert result == "view"
+    assert read.await_args is not None
     assert read.await_args.kwargs["team_id"] == "personal-u-1"
 
 
