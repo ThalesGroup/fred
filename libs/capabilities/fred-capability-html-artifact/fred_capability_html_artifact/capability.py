@@ -245,8 +245,25 @@ _SCRIPT_MARKERS = (
     ),
     # `<svg>`'s scripting vectors and `<iframe srcdoc>` reintroduce execution
     # without the word "script" appearing as a tag name.
-    re.compile(r"<\s*(?:iframe|object|embed)", re.IGNORECASE),
+    re.compile(r"<\s*(?:i?frame|object|embed)", re.IGNORECASE),
 )
+
+
+# Attributes whose value a browser may navigate to or animate into a link target.
+_URL_ATTRIBUTES = frozenset(
+    {"href", "xlink:href", "src", "action", "formaction", "to", "from", "by", "values"}
+)
+_JAVASCRIPT_SCHEME = re.compile(
+    r"j\s*a\s*v\s*a\s*s\s*c\s*r\s*i\s*p\s*t\s*:", re.IGNORECASE
+)
+_LEADING_C0_OR_SPACE = "".join(chr(code) for code in range(0x21))
+
+
+def _is_javascript_url(value: str) -> bool:
+    """URL-parser normalisation: drop tab/newline anywhere, C0/space in front."""
+
+    cleaned = re.sub(r"[\t\n\r]", "", value).lstrip(_LEADING_C0_OR_SPACE)
+    return _JAVASCRIPT_SCHEME.match(cleaned) is not None
 
 
 class _ScriptUrlParser(HTMLParser):
@@ -257,15 +274,13 @@ class _ScriptUrlParser(HTMLParser):
         self.found = False
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if any(
-            name in {"href", "xlink:href", "formaction"}
-            and value is not None
-            and re.match(
-                r"^\s*j\s*a\s*v\s*a\s*s\s*c\s*r\s*i\s*p\s*t\s*:", value, re.IGNORECASE
-            )
-            for name, value in attrs
-        ):
-            self.found = True
+        for name, value in attrs:
+            if name not in _URL_ATTRIBUTES or value is None:
+                continue
+            # SMIL `values` is a `;`-separated list; any entry can be the target.
+            candidates = value.split(";") if name == "values" else (value,)
+            if any(_is_javascript_url(candidate) for candidate in candidates):
+                self.found = True
 
 
 def script_reason(html: str, css: str) -> str | None:
@@ -278,11 +293,11 @@ def script_reason(html: str, css: str) -> str | None:
     for pattern in _SCRIPT_MARKERS:
         if pattern.search(html) or pattern.search(css):
             return pattern.pattern
-    if "&" in html:
-        parser = _ScriptUrlParser()
-        parser.feed(html)
-        if parser.found:
-            return "decoded javascript: URL"
+    parser = _ScriptUrlParser()
+    parser.feed(html)
+    parser.close()
+    if parser.found:
+        return "normalised javascript: URL"
     return None
 
 

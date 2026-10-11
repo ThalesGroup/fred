@@ -58,6 +58,37 @@ SCRIPT_MARKUP = [
         '<a href="javascript&colon;alert(1)">x</a>', id="javascript-colon-entity"
     ),
     pytest.param('<iframe srcdoc="<script>x</script>"></iframe>', id="nested-frame"),
+    # Browsers strip leading C0 controls/spaces and every tab/newline in a URL.
+    pytest.param('<a href="\x01javascript:alert(1)">x</a>', id="leading-control"),
+    pytest.param(
+        '<a href=" \x1fjava\nscr\tipt:alert(1)">x</a>', id="control-and-newline"
+    ),
+    pytest.param(
+        '<form action="java&#115;cript:alert(1)"><button>go</button></form>',
+        id="form-action-entity",
+    ),
+    pytest.param(
+        '<svg><a><set attributeName="href" to="java&#115;cript:alert(1)"/>'
+        "<text>x</text></a></svg>",
+        id="svg-set-to-entity",
+    ),
+    pytest.param(
+        '<svg><a><animate attributeName="href" values="#;java&#115;cript:alert(1)"/>'
+        "<text>x</text></a></svg>",
+        id="svg-animate-values-entity",
+    ),
+    pytest.param(
+        '<svg><a><animate attributeName="href" from="java&#115;cript:alert(1)"/>'
+        "</a></svg>",
+        id="svg-animate-from-entity",
+    ),
+    pytest.param(
+        '<svg><a><animate attributeName="href" by="java&#115;cript:alert(1)"/>'
+        "</a></svg>",
+        id="svg-animate-by-entity",
+    ),
+    pytest.param('<frameset><frame src="about:blank"></frameset>', id="frameset"),
+    pytest.param('<frame src="about:blank">', id="frame"),
 ]
 
 # Markup that merely LOOKS like script and must still render.
@@ -74,6 +105,11 @@ STATIC_MARKUP = [
     pytest.param("<p>See javascript: URLs below.</p>", id="prose-javascript-url-word"),
     pytest.param(
         "<pre>&lt;a href=java&#115;cript:example&gt;</pre>", id="escaped-url-tutorial"
+    ),
+    pytest.param(
+        '<form action="/search"><svg><animate attributeName="opacity" '
+        'values="0;1" from="0" to="1" by="1"/></svg></form>',
+        id="static-form-and-animation",
     ),
 ]
 
