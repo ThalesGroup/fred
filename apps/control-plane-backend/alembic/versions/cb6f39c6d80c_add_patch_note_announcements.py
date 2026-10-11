@@ -18,7 +18,7 @@ partial unique index keeps at most one patch note enabled. Downgrading deletes
 patch notes, which would otherwise come back as broken banners.
 
 Revision ID: cb6f39c6d80c
-Revises: aac66348e27b
+Revises: f9a2c7d81e40
 """
 
 from typing import Sequence, Union
@@ -28,7 +28,7 @@ from alembic import op
 
 revision: str = "cb6f39c6d80c"  # pragma: allowlist secret
 down_revision: Union[str, Sequence[str], None] = (
-    "aac66348e27b"  # pragma: allowlist secret
+    "f9a2c7d81e40"  # pragma: allowlist secret
 )
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
