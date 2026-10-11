@@ -283,32 +283,83 @@ export function CapabilityTeamMatrixDrawer({
   // control must not touch enablement; opening from the disabled -> enabled
   // transition must.
   const [editingIsSettingsOnly, setEditingIsSettingsOnly] = useState(false);
+  const [settingsLoad, setSettingsLoad] = useState<"loading" | "error" | "ready">("loading");
+  // Drops a stale read that lands after the admin opened another row's form.
+  const settingsRequestRef = useRef(0);
 
   /**
    * Open the settings form for one team, seeded from what that team ACTUALLY
-   * has stored.
-   *
-   * Seeding from the declared defaults instead is not a cosmetic difference:
-   * disabling keeps the settings row precisely so a re-enable restores what the
-   * team had, and a form opened on defaults would submit those defaults and
-   * silently erase it. On a load failure it falls back to the defaults — a worse
-   * starting point, but still usable, and the admin is told.
+   * has stored. No editable form until that read succeeds: a form seeded with
+   * the declared defaults would submit them and erase the stored settings.
    */
   const openSettingsForm = async (teamId: string, settingsOnly: boolean) => {
     if (!capability) return;
+    const request = ++settingsRequestRef.current;
     setEditingIsSettingsOnly(settingsOnly);
-    let stored: Record<string, unknown> | undefined;
+    setEditingTeamId(teamId);
+    setSettingsLoad("loading");
     try {
       const view = await loadStoredSettings({ capabilityId: capability.id, teamId }).unwrap();
-      stored = view.settings ?? undefined;
+      if (request !== settingsRequestRef.current) return;
+      setFormValues(seedSettingsFromFields(fields, view.settings ?? undefined));
+      setSettingsLoad("ready");
     } catch {
-      showError({
-        summary: t("rework.admin.capabilities.matrix.settingsLoadError"),
-      });
+      if (request === settingsRequestRef.current) setSettingsLoad("error");
     }
-    setFormValues(seedSettingsFromFields(fields, stored));
-    setEditingTeamId(teamId);
   };
+
+  /** The settings form shared by the personal class row and the team rows. */
+  const renderSettingsForm = (teamId: string, onSubmit: () => void) => (
+    <form
+      className={styles.settingsForm}
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (settingsLoad === "ready") onSubmit();
+      }}
+    >
+      {settingsLoad === "loading" && (
+        <p className={`${styles.hint} ${styles.loadingHint}`} role="status">
+          <Spinner size={16} decorative />
+          {t("common.loading")}
+        </p>
+      )}
+      {settingsLoad === "error" && (
+        <p className={styles.error} role="alert">
+          {t("rework.admin.capabilities.matrix.settingsLoadError")}
+        </p>
+      )}
+      {settingsLoad === "ready" &&
+        fields.map((field) => (
+          <TuningFieldRenderer
+            key={field.key}
+            field={field as ManagedAgentFieldSpec}
+            value={formValues[field.key]}
+            onChange={(key, value) => setFormValues((prev) => ({ ...prev, [key]: value }))}
+            disabled={busy}
+          />
+        ))}
+      <div className={styles.settingsActions}>
+        <Button color="on-surface" variant="text" size="small" onClick={() => setEditingTeamId(null)}>
+          {t("rework.admin.capabilities.matrix.cancel")}
+        </Button>
+        {settingsLoad === "error" && (
+          <Button
+            color="primary"
+            variant="filled"
+            size="small"
+            onClick={() => void openSettingsForm(teamId, editingIsSettingsOnly)}
+          >
+            {t("common.retry")}
+          </Button>
+        )}
+        {settingsLoad === "ready" && (
+          <Button color="primary" variant="filled" size="small" type="submit" disabled={busy}>
+            {t("rework.admin.capabilities.matrix.saveEnable")}
+          </Button>
+        )}
+      </div>
+    </form>
+  );
 
   const startEnable = (teamId: string, depsAlreadyGranted = false) => {
     if (!capability) return;
@@ -709,41 +760,13 @@ export function CapabilityTeamMatrixDrawer({
                                 }))}
                               />
                             </div>
-                            {isEditingPersonal && (
-                              <form
-                                className={styles.settingsForm}
-                                onSubmit={(e) => {
-                                  e.preventDefault();
-                                  // Always settings-only: the class tri-state is
-                                  // the ButtonGroup's job, and this form must not
-                                  // move it.
-                                  void submitSettingsOnly(PERSONAL_SCOPE_ROW_ID, formValues);
-                                }}
-                              >
-                                {fields.map((field) => (
-                                  <TuningFieldRenderer
-                                    key={field.key}
-                                    field={field as ManagedAgentFieldSpec}
-                                    value={formValues[field.key]}
-                                    onChange={(key, value) => setFormValues((prev) => ({ ...prev, [key]: value }))}
-                                    disabled={busy}
-                                  />
-                                ))}
-                                <div className={styles.settingsActions}>
-                                  <Button
-                                    color="on-surface"
-                                    variant="text"
-                                    size="small"
-                                    onClick={() => setEditingTeamId(null)}
-                                  >
-                                    {t("rework.admin.capabilities.matrix.cancel")}
-                                  </Button>
-                                  <Button color="primary" variant="filled" size="small" type="submit" disabled={busy}>
-                                    {t("rework.admin.capabilities.matrix.saveEnable")}
-                                  </Button>
-                                </div>
-                              </form>
-                            )}
+                            {isEditingPersonal &&
+                              // Always settings-only: the class tri-state is the
+                              // ButtonGroup's job, and this form must not move it.
+                              renderSettingsForm(
+                                PERSONAL_SCOPE_ROW_ID,
+                                () => void submitSettingsOnly(PERSONAL_SCOPE_ROW_ID, formValues),
+                              )}
                           </li>
                         );
                       })()}
@@ -830,44 +853,17 @@ export function CapabilityTeamMatrixDrawer({
                                 }))}
                               />
                             </div>
-                            {isEditing && (
-                              <form
-                                className={styles.settingsForm}
-                                onSubmit={(e) => {
-                                  e.preventDefault();
-                                  // Two different writes behind one form: editing
-                                  // an option must leave the tri-state alone, or a
-                                  // team merely INHERITING a default-on capability
-                                  // would be promoted to an explicit grant.
+                            {isEditing &&
+                              // Two different writes behind one form: editing an
+                              // option must leave the tri-state alone, or a team
+                              // INHERITING a default-on capability would be promoted.
+                              renderSettingsForm(
+                                team.id,
+                                () =>
                                   void (editingIsSettingsOnly
                                     ? submitSettingsOnly(team.id, formValues)
-                                    : submitEnable(team.id, formValues));
-                                }}
-                              >
-                                {fields.map((field) => (
-                                  <TuningFieldRenderer
-                                    key={field.key}
-                                    field={field as ManagedAgentFieldSpec}
-                                    value={formValues[field.key]}
-                                    onChange={(key, value) => setFormValues((prev) => ({ ...prev, [key]: value }))}
-                                    disabled={busy}
-                                  />
-                                ))}
-                                <div className={styles.settingsActions}>
-                                  <Button
-                                    color="on-surface"
-                                    variant="text"
-                                    size="small"
-                                    onClick={() => setEditingTeamId(null)}
-                                  >
-                                    {t("rework.admin.capabilities.matrix.cancel")}
-                                  </Button>
-                                  <Button color="primary" variant="filled" size="small" type="submit" disabled={busy}>
-                                    {t("rework.admin.capabilities.matrix.saveEnable")}
-                                  </Button>
-                                </div>
-                              </form>
-                            )}
+                                    : submitEnable(team.id, formValues)),
+                              )}
                           </li>
                         );
                       })}

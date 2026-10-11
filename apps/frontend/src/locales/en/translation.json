@@ -1160,7 +1160,7 @@
           "settingsSavedToast": "Options saved for {{team}}.",
           "settingsSaveError": "Could not save the options.",
           "editSettingsAria": "Options for {{team}}",
-          "settingsLoadError": "Could not load the current options; showing the defaults.",
+          "settingsLoadError": "Could not load the current options. Saving stays unavailable until they load.",
           "enabledToast": "Feature enabled for {{team}}.",
           "enableError": "Could not enable the feature.",
           "disabledToast": "Feature disabled for {{team}}.",

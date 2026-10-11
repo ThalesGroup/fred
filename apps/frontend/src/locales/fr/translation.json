@@ -1160,7 +1160,7 @@
           "settingsSavedToast": "Options enregistrées pour {{team}}.",
           "settingsSaveError": "Impossible d'enregistrer les options.",
           "editSettingsAria": "Options pour {{team}}",
-          "settingsLoadError": "Impossible de charger les options actuelles ; les valeurs par défaut sont affichées.",
+          "settingsLoadError": "Impossible de charger les options actuelles. L'enregistrement reste indisponible tant qu'elles ne sont pas chargées.",
           "enabledToast": "Fonctionnalité activée pour {{team}}.",
           "enableError": "Impossible d'activer la fonctionnalité.",
           "disabledToast": "Fonctionnalité désactivée pour {{team}}.",
