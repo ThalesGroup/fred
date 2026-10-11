@@ -1099,7 +1099,9 @@ The name `small` is scoped to this component. On the shared scale, 24px is
   counters follow the current value, including an uncontrolled input's actual value
   after an uncancelled native form reset. A canceled reset leaves both value and count
   unchanged. Compact presentation keeps any visually omitted help/error text associated
-  through `aria-describedby`.
+  through `aria-describedby`. An error message is shown in `--error`, like the label
+  and the border (2026-10-11: the non-compact hint rule had been overriding it with
+  `--on-surface-retreat`).
 - `Spinner` keeps `Loading` as its default status name, accepts caller-supplied status
   text, and remains label-free when decorative.
 
