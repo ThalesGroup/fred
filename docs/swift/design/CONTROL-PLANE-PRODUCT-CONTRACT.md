@@ -4263,7 +4263,7 @@ template is resolved exactly as for agent creation (404 when missing or not
 usable by the team). Only candidate ids the template advertises and the team
 `can_use` reach the pod, and only those can come back. Forwarded with the
 caller's token to the pod's `/agents/creation-assistant/draft`
-(`RUNTIME-EXECUTION-CONTRACT.md` §8.105); the pod reads the admin settings
+(`RUNTIME-EXECUTION-CONTRACT.md` §8.106); the pod reads the admin settings
 below itself. The 404 also covers edit mode when the agent's template is no
 longer usable; the frontend shows its "not available" copy for 404 and 501.
 Errors: 422 invalid body or pod 422; 403/503/504 passed through; 504 when the

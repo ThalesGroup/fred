@@ -6588,7 +6588,7 @@ HITL resumes keep the existing exchange identity. Scope teardown retires retaine
 metadata. See [observability §6/§7](../platform/OBSERVABILITY-AND-AUDIT.md) for field,
 sensitive-data and audit boundaries.
 
-### 8.105 Agent creation assistant (2026-10-08)
+### 8.106 Agent creation assistant (2026-10-08)
 
 Additive. `POST /agents/creation-assistant/draft` (body `AgentDraftPodRequest`:
 the control plane's `AgentDraftRequest`, up to 500 capabilities, plus the
