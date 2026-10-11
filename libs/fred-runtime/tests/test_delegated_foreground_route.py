@@ -730,7 +730,10 @@ async def test_the_stream_route_has_no_reconnect_surface(monkeypatch, tmp_path) 
     assert len(run_ids) == 1  # the streamed turn's; the reconnect body admitted none
     assert streamed.status_code == 200
     assert streamed.headers["access-control-allow-origin"] == "http://ui.test"
-    assert "access-control-expose-headers" not in streamed.headers
+    assert set(streamed.headers["access-control-expose-headers"].split(", ")) == {
+        "X-Request-ID",
+        "X-Correlation-ID",
+    }
     assert "x-fred-run-id" not in streamed.headers
     schema = app.openapi()
     assert not {"RuntimeReconnect", "RuntimeReconnectRequest"} & set(
