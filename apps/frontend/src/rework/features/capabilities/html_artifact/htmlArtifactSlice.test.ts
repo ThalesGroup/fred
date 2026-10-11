@@ -54,6 +54,6 @@ describe("htmlArtifactSlice", () => {
   it("clears everything", () => {
     let state = reducer(undefined, upsertFromPart({ sessionId: "s1", art: art() }));
     state = reducer(state, clearHtmlArtifacts());
-    expect(state).toEqual({ sessionId: null, liveById: {}, selectedId: null });
+    expect(state).toEqual({ sessionId: null, liveById: {}, selectedId: null, closedIds: {} });
   });
 });

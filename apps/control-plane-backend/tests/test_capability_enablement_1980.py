@@ -50,7 +50,10 @@ from control_plane_backend.capabilities.enablement import (
     suspend_dependent_instances,
     validate_team_settings,
 )
-from control_plane_backend.capabilities.settings_store import TeamCapabilitySettings
+from control_plane_backend.capabilities.settings_store import (
+    PERSONAL_SCOPE_SETTINGS_ID,
+    TeamCapabilitySettings,
+)
 from control_plane_backend.product import service as product_service
 from control_plane_backend.product.service import PodModelCatalog
 from fred_core import (
@@ -330,7 +333,7 @@ async def test_enable_writes_settings_row_before_enabled_tuple() -> None:
     )
 
     # Settings row present, enabled tuple present.
-    assert (("team-a", "corp_drive")) in settings._rows
+    assert ("team-a", "corp_drive") in settings._rows
     assert ("team:team-a", "enabled", "capability:corp_drive") in rebac.tuples
     # Anchor written so can_manage/can_use resolve.
     assert (
@@ -338,6 +341,30 @@ async def test_enable_writes_settings_row_before_enabled_tuple() -> None:
         "organization",
         "capability:corp_drive",
     ) in rebac.tuples
+
+
+@pytest.mark.asyncio
+async def test_personal_enable_writes_shared_settings_but_grants_actual_team() -> None:
+    rebac = _FakeRebac()
+    settings = _FakeSettingsStore()
+    entry = _entry(
+        team_settings_fields=[
+            FieldSpec(key="allow_javascript", type="boolean", title="JS")
+        ]
+    )
+
+    await enable_capability_for_team(
+        rebac=rebac,
+        settings_store=settings,
+        catalog_entry=entry,
+        team_id="personal-alice",
+        settings={"allow_javascript": False},
+        updated_by="admin",
+    )
+
+    assert (PERSONAL_SCOPE_SETTINGS_ID, "corp_drive") in settings._rows
+    assert ("personal-alice", "corp_drive") not in settings._rows
+    assert ("team:personal-alice", "enabled", "capability:corp_drive") in rebac.tuples
 
 
 @pytest.mark.asyncio

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Fred agent capability: agent-generated static HTML/CSS with a sandboxed preview."""
+"""Fred agent capability: agent-generated HTML/CSS/JS with a sandboxed preview."""
 
 from fred_capability_html_artifact.capability import (
     HTML_ARTIFACT_CAPABILITY_ID,

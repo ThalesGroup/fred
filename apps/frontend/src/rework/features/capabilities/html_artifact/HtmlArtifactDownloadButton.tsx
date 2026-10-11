@@ -21,14 +21,28 @@ import { useTranslation } from "react-i18next";
 import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import type { OptionModel } from "@models/Option.model.ts";
-import { downloadHtmlArtifact } from "./htmlArtifactDocument";
+import { artifactHasScript, downloadHtmlArtifact } from "./htmlArtifactDocument";
 import { downloadHtmlArtifactPdf, downloadHtmlArtifactPng } from "./htmlArtifactExport";
+import { useCheckHtmlArtifactJavaScriptAllowed } from "./useHtmlArtifactJavaScript";
 
 type DownloadFormat = "html" | "pdf" | "png";
 
-export default function HtmlArtifactDownloadButton({ html, css, title }: { html: string; css: string; title: string }) {
+export default function HtmlArtifactDownloadButton({
+  html,
+  css,
+  title,
+  allowJavaScript = false,
+}: {
+  html: string;
+  css: string;
+  title: string;
+  /** This team's JavaScript posture — the saved file must carry the same one.
+   *  Defaults to denied: a forgotten prop must not hand out a runnable file. */
+  allowJavaScript?: boolean;
+}) {
   const { t } = useTranslation();
-  const { showError } = useToast();
+  const { showError, showInfo } = useToast();
+  const checkJavaScriptAllowed = useCheckHtmlArtifactJavaScriptAllowed();
   const label = t("capability.html_artifact.download", { defaultValue: "Download" });
 
   const options: OptionModel<DownloadFormat>[] = [
@@ -54,8 +68,22 @@ export default function HtmlArtifactDownloadButton({ html, css, title }: { html:
 
   const onSelect = async (format: DownloadFormat) => {
     if (format === "html") {
-      downloadHtmlArtifact(html, css, title);
+      // The saved file opens outside the app, where nothing else would deny
+      // script — so the posture has to travel INSIDE the document.
+      downloadHtmlArtifact(html, css, title, await checkJavaScriptAllowed());
       return;
+    }
+    // The rasterizing frame cannot run script (it grants same-origin, so granting
+    // allow-scripts too would be unsafe), so an interactive artifact is captured as
+    // it looks before its JS runs. Say so rather than hand over a puzzling image.
+    if (allowJavaScript && artifactHasScript(html)) {
+      showInfo({
+        summary: t("capability.html_artifact.exportStaticCapture", {
+          format: format.toUpperCase(),
+          defaultValue:
+            "The {{format}} captures the page before its JavaScript runs, so interactive parts appear in their initial state.",
+        }),
+      });
     }
     try {
       if (format === "pdf") {

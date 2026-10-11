@@ -154,6 +154,22 @@
   position: relative;
 }
 
+/* M3 SMALL badge: a bare dot. The spec is 6dp; the token ladder goes 4 -> 8 and
+   deliberately has no 6, so this takes --spacing-xs rather than an off-ladder
+   value. Same corner and same primary role as the count badge below, so the two
+   read as one family. */
+.badgeDot {
+  position: absolute;
+  top: 0;
+  right: 0;
+  transform: translate(35%, -35%);
+  border-radius: var(--radius-full);
+  background: var(--primary);
+  width: var(--spacing-xs);
+  height: var(--spacing-xs);
+  pointer-events: none;
+}
+
 /* M3: 16dp min box, full radius, 4dp side padding, Label Small. Overlaps the
    button's top-right corner. `line-height: 1` or the digit sits low in the pill.
    Primary, not the error role M3 defaults to: this is a neutral count, and a red

@@ -37,6 +37,11 @@ export interface HtmlArtifactState {
   liveById: Record<string, HtmlArtifactPartData>;
   /** The artifact_id the pane currently shows, or null. */
   selectedId: string | null;
+  /**
+   * Artifacts the reader closed in the viewer. They stay in `liveById` — the chat
+   * card must still be able to reopen them — they are just hidden from the pane.
+   */
+  closedIds: Record<string, true>;
 }
 
 // Local root-state shape — avoids a circular import with common/store.tsx. The
@@ -45,7 +50,7 @@ interface HtmlArtifactRootState {
   htmlArtifact: HtmlArtifactState;
 }
 
-const initialState: HtmlArtifactState = { sessionId: null, liveById: {}, selectedId: null };
+const initialState: HtmlArtifactState = { sessionId: null, liveById: {}, selectedId: null, closedIds: {} };
 
 export const htmlArtifactSlice = createSlice({
   name: "htmlArtifact",
@@ -63,13 +68,37 @@ export const htmlArtifactSlice = createSlice({
         state.sessionId = sessionId;
         state.liveById = {};
         state.selectedId = null;
+        state.closedIds = {};
       }
+      const previous = state.liveById[art.artifact_id];
       state.liveById[art.artifact_id] = art;
+      // A genuine NEW revision reopens a view the reader had closed — they asked
+      // the agent to change it, so hiding the result would be wrong. A replay of
+      // the same content must not: cards remount in message order on every
+      // conversation re-render, and that would undo the close.
+      if (previous && previous.version !== art.version) {
+        delete state.closedIds[art.artifact_id];
+      }
     },
 
-    /** Set the pane's active artifact (a card's Open button or the pane's switcher). */
+    /**
+     * Set the pane's active artifact (a card's Open button or the pane's switcher).
+     * Selecting also REOPENS it: the chat card's "Open preview" is the documented
+     * way back after closing a view, so it must undo the close.
+     */
     selectHtmlArtifact(state, action: PayloadAction<string | null>) {
       state.selectedId = action.payload;
+      if (action.payload) delete state.closedIds[action.payload];
+    },
+
+    /**
+     * Hide one artifact's view. The snapshot is kept, so the chat card can reopen
+     * it. Dropping the selection lets the pane fall back to another open artifact,
+     * or to its empty state when that was the last one.
+     */
+    closeHtmlArtifact(state, action: PayloadAction<string>) {
+      state.closedIds[action.payload] = true;
+      if (state.selectedId === action.payload) state.selectedId = null;
     },
 
     /** Clear all live snapshots and selection (e.g. on session teardown). */
@@ -77,11 +106,12 @@ export const htmlArtifactSlice = createSlice({
       state.sessionId = null;
       state.liveById = {};
       state.selectedId = null;
+      state.closedIds = {};
     },
   },
 });
 
-export const { upsertFromPart, selectHtmlArtifact, clearHtmlArtifacts } = htmlArtifactSlice.actions;
+export const { upsertFromPart, selectHtmlArtifact, closeHtmlArtifact, clearHtmlArtifacts } = htmlArtifactSlice.actions;
 
 // ── Selectors ─────────────────────────────────────────────────────────────────
 
@@ -96,5 +126,9 @@ export const selectHtmlArtifactSessionId = (state: HtmlArtifactRootState): strin
 /** The artifact_id the pane should show, or null. */
 export const selectHtmlArtifactSelectedId = (state: HtmlArtifactRootState): string | null =>
   state.htmlArtifact.selectedId;
+
+/** Artifacts the reader closed in the viewer (still reopenable from their card). */
+export const selectHtmlArtifactClosedIds = (state: HtmlArtifactRootState): Record<string, true> =>
+  state.htmlArtifact.closedIds;
 
 export default htmlArtifactSlice.reducer;
