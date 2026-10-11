@@ -20,7 +20,7 @@ the assistant's own model call (off/low/medium/high, default off). Single
 row keyed `id="default"`; no seed row.
 
 Revision ID: 93427a5fe874
-Revises: aac66348e27b
+Revises: f9a2c7d81e40
 Create Date: 2026-10-08 00:00:00.000000
 
 """
@@ -33,7 +33,7 @@ from alembic import op
 # revision identifiers, used by Alembic.
 revision: str = "93427a5fe874"  # pragma: allowlist secret
 down_revision: Union[str, Sequence[str], None] = (
-    "aac66348e27b"  # pragma: allowlist secret
+    "f9a2c7d81e40"  # pragma: allowlist secret
 )
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
