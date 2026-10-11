@@ -31,25 +31,27 @@ The platform SHALL offer one `ask_user` tool to an interactive ReAct or Deep age
 #### Scenario: Choices in managed chat
 
 - **WHEN** an agent asks a question with multiple choices
-- **THEN** managed chat displays them in their given order, one per centered row, followed by a matching text-input row with a fixed gray label "Other" in English or "Autre" in French to the left of the editable area
+- **THEN** managed chat displays them in their given order, one per full-width row with left-aligned text, followed by a matching text-input row that reads as an input field rather than a choice: it shows an edit icon, the localized label "Other" in English or "Autre" in French styled like the choice labels, and a placeholder inviting the person to type, on an input surface, with the typed text in the large body text style and at least the height of a choice
 - **AND** the text-input row submits a text answer without fabricating an option identifier
 
 #### Scenario: Compact active question card
 
 - **WHEN** managed chat displays an active agent question
-- **THEN** the card uses compact width, spacing, and typography, while keeping choice descriptions, free-text input, and actions readable
+- **THEN** the card uses compact width and spacing and design-system text styles, while keeping choice descriptions, free-text input, and actions readable
+- **AND** the card shows no close control
 
 #### Scenario: Simultaneous questions in one card
 
 - **GIVEN** several `ask_user` calls in one exchange are awaiting answers
 - **WHEN** managed chat receives their pauses or reloads their history
 - **THEN** it displays one HITL card with a tab for each unanswered question in call order, selecting the first by default
-- **AND** each tab displays a short subject title, or a localized numbered fallback when no title exists; overflowing titles scroll horizontally with the mouse wheel or trackpad without dragging the scrollbar, while vertical page scrolling remains available at the ends
+- **AND** each tab displays a state icon before its short subject title, or before a localized numbered fallback when no title exists: waiting, answered in the success colour, or skipped, each with an accessible label and the same footprint so the tab width does not change when the state changes; overflowing titles scroll horizontally with the mouse wheel or trackpad without dragging the scrollbar, while vertical page scrolling remains available at the ends
 - **AND** selecting a choice records a draft answer and advances to the next question without resuming the agent
-- **AND** nonblank free text counts as a draft answer while the person types, without requiring Next or changing the active tab; clearing it removes that draft unless a choice remains selected
+- **AND** typed text counts as an answer only once validated, with a small Confirm action or the field's keyboard shortcut, which also advances to the next unanswered question; editing a validated text withdraws it until it is validated again, and picking a choice clears the typed text and replaces it
 - **AND** the person can revisit a tab, change its choice or text answer, and skip an individual question
-- **AND** closing the grouped card submits a skip for every pending question, including tabs with drafted answers, in one batch
+- **AND** a "Skip all" action submits a skip for every pending question, including tabs with drafted answers, in one batch
 - **AND** once every tab has a draft answer or skip, one Send action submits all answers together to their own calls
+- **AND** skipping one question is offered as the last choice of that question, marked with the Escape key, and the card's action row keeps only "Skip all" and the Send action, which alone uses the primary emphasis
 - **AND** the card stays open until the batch is accepted, then removes the submitted tabs even while the resumed stream continues; later questions in that exchange appear without the submitted tabs
 - **AND** failed submission preserves editable answers
 
@@ -75,12 +77,21 @@ The platform SHALL offer one `ask_user` tool to an interactive ReAct or Deep age
 - **THEN** a compact card below the matching `ask_user` tool line shows its question and selected choice label, text answer, or skipped state, including an optional comment, without waiting for reload
 - **AND** the `ask_user` tool detail drawer lists the offered choices and highlights the selected one when the response is available
 - **AND** a free-text answer to a question with choices appears once as a highlighted localized "Other: <answer>" row in that drawer, even when the agent offered an option named Other
+- **AND** the record below the tool line uses the same reply bubble as an answer in the conversation, aligned with the trace steps
+
+#### Scenario: Answer recorded as a user reply in the conversation
+
+- **GIVEN** an agent question has been answered or skipped
+- **WHEN** managed chat shows that answer as a reply in the conversation flow, outside the agent trace
+- **THEN** the reply sits on the same side as a message the person sends, in a lighter, outlined treatment of the same colour family
+- **AND** it recalls the question in a smaller text above the answer, and shows a skipped answer as the localized skipped label
 
 #### Scenario: Tool execution approval response in managed chat
 
 - **GIVEN** a tool execution confirmation is awaiting a person's choice
 - **WHEN** the runtime accepts approval, refusal, or skip
 - **THEN** managed chat shows the localized user response below the confirmation card without waiting for history reload
+- **AND** the response uses the same reply bubble as an answered agent question, recalls which tool or tools the decision concerned, and names the decision
 - **AND** the same response remains visible after history reload
 - **AND** a resume rejected before acceptance leaves no response in the chat
 
@@ -95,7 +106,7 @@ The platform SHALL offer one `ask_user` tool to an interactive ReAct or Deep age
 
 - **WHEN** an `ask_user` call waits for a human answer
 - **THEN** its tool line remains in progress until the person answers or skips, without showing an error result for the pause
-- **AND** a free-text question shows a compact raised Send button directly left of Skip at the bottom right; tool approvals keep their separate approval actions
+- **AND** a free-text question shows a compact raised Send button at the bottom right with Skip directly to its left; tool approvals keep their separate approval actions
 
 #### Scenario: Earlier tool failure followed by an agent question
 
@@ -122,6 +133,13 @@ The platform SHALL offer one `ask_user` tool to an interactive ReAct or Deep age
 - **WHEN** the person tries to send a new chat message or command in that conversation
 - **THEN** the composer and send path block the new turn until the question is answered or skipped and its resume completes
 - **AND** another conversation remains usable
+
+#### Scenario: Composer waits for any human-input card
+
+- **GIVEN** a tool approval or a Graph question is pending in the conversation
+- **WHEN** the person tries to type or send a new chat message or command there
+- **THEN** the composer is held, keeping any draft, until the card is answered, so its number keys reach the card
+- **AND** an interrupted-run card, which offers to continue later, leaves the composer usable
 
 #### Scenario: Invalid question form
 
