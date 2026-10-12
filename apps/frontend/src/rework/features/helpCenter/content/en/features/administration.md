@@ -73,6 +73,9 @@ theme changes. When a single theme is offered, the profile only shows the mode. 
 for the administrator, and for other users when they return to the
 application or within a minute.
 
+To add a theme in your organization's colors, see
+[Create a custom theme](/help/en/guides/custom-theme).
+
 ## Who opens functions to your team
 
 Opening a function is the responsibility of a **Platform admin** or a **Feature

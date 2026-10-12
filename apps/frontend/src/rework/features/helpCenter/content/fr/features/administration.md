@@ -80,6 +80,9 @@ profil n'affiche plus que le mode. Les changements s'appliquent aussitôt pour
 l'administrateur, et pour les autres utilisateurs à leur retour sur
 l'application ou dans la minute.
 
+Pour ajouter un thème aux couleurs de votre organisation, voir
+[Créer un thème personnalisé](/help/fr/guides/custom-theme).
+
 ## Qui ouvre les fonctions à votre équipe
 
 L'ouverture d'une fonction relève d'un **Admin plateforme** ou d'un
