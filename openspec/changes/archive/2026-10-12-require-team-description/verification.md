@@ -7,7 +7,7 @@ Run on 2026-10-12, branch `feat/team-description-required`, Alembic revision
 
 | Check | Command (from the project root named) | Result |
 | --- | --- | --- |
-| fred-core tests | `libs/fred-core`: `pytest -q -m "not integration" --disable-socket --allow-unix-socket` | 1276 passed, 1 skipped |
+| fred-core tests | `libs/fred-core`: `pytest -q -m "not integration" --disable-socket --allow-unix-socket` | 1278 passed, 1 skipped |
 | fred-core lint | `ruff check .` and `ruff format --check .` | clean |
 | Control-plane tests | `apps/control-plane-backend`: same pytest command | 1801 passed, 9 skipped |
 | Control-plane lint | `ruff check .` and `ruff format --check .` | clean |
@@ -19,7 +19,8 @@ Run on 2026-10-12, branch `feat/team-description-required`, Alembic revision
 | Migration round trip on PostgreSQL | throwaway database (`DATABASE_URL`), dropped afterwards: upgrade to `93427a5fe874`, seed NULL / blank / "Ops" / padded / 180-character rows, `upgrade head`, three invalid inserts, add a 300-character row, `downgrade -1`, `upgrade head` | NULL, blank and "Ops" become the placeholder, the padded row is trimmed; NULL, "Short" and 501 characters are refused (NOT NULL, `ck_teammetadata_description_min_length`, `VARCHAR(500)`); downgrade restores nullable `VARCHAR(180)`, placeholders become NULL, 300 characters cut to 180; second upgrade ends on `c9acb7dd3ad0 (head)` |
 | Frontend types | `apps/frontend`: `npx tsc --noEmit -p .` | clean |
 | Frontend lint | `npx eslint` and `npx prettier --check` on the changed files | clean |
-| Frontend tests | `npx vitest run` | 329 files passed, 3976 tests passed, 7 skipped |
+| Frontend tests | `npx vitest run` | 331 files passed, 3983 tests passed, 7 skipped |
+| Owner check in the app | create, edit, reminder, marketplace cards | confirmed by the owner, 2026-10-12 |
 | OpenSpec | `openspec validate require-team-description --strict` | valid |
 | Migration note | `scripts/migration_guides.py check-pr --base origin/swift --worktree` | 1 new declaration, valid |
 
@@ -48,7 +49,6 @@ Scenario coverage:
   its payloads were updated and linted only.
 - **Root `make code-quality` and the frontend make targets.** Not run (they
   wipe a running Vite cache); the same tools were run directly.
-- **Owner check in the app** (task 6.2) and the visual result of the reminder.
 
 ## Divergences from design.md
 
