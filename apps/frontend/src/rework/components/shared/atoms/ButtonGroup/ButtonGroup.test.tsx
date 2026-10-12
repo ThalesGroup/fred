@@ -251,3 +251,21 @@ describe("ButtonGroup keyboard activation", () => {
     expect(first.getAttribute("aria-checked")).toBeNull();
   });
 });
+
+describe("ButtonGroup track surface", () => {
+  const base = { size: "small", color: "secondary", variant: "radio", "aria-label": "Mode" } as const;
+  const group = () => container.querySelector('[role="radiogroup"]');
+
+  it("defaults to surface-container and sets no inline style", () => {
+    render(<ButtonGroup {...base} items={[{ label: "A" }, { label: "B" }]} />);
+
+    expect(group()?.getAttribute("data-surface")).toBe("surface-container");
+    expect(group()?.getAttribute("style")).toBeNull();
+  });
+
+  it("carries the requested surface", () => {
+    render(<ButtonGroup {...base} surface="surface-container-lowest" items={[{ label: "A" }, { label: "B" }]} />);
+
+    expect(group()?.getAttribute("data-surface")).toBe("surface-container-lowest");
+  });
+});

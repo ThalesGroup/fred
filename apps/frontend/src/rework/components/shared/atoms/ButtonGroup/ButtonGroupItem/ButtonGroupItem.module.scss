@@ -28,8 +28,10 @@
   font: var(--font-label-large);
   text-wrap: nowrap;
 
+  /* Unselected items are transparent so the group's track shows through,
+   * whichever surface it uses. */
   .stateLayer {
-    --item-background-color: var(--surface-container);
+    --item-background-color: transparent;
     corner-shape: round;
     display: flex;
     justify-content: center;

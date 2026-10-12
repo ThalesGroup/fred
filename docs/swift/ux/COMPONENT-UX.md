@@ -2268,6 +2268,13 @@ supports the `color` override prop, but no shipped consumer uses it — the
 plain group-level color pattern is what every `ButtonGroup` consumer
 follows now.
 
+2026-10-12: the track color of a `ButtonGroup` is the typed `surface` prop
+(`surface-container-lowest` … `-highest`, default `surface-container`), which
+replaces the free `backgroundColor` string and its inline custom property.
+Unselected items are transparent, so the track shows through on any surface.
+Both groups here use `surface-container-lowest`, because their `form-section`
+is already `surface-container`.
+
 **Visibility control (TEAM-10, 2026-07-26).** New `ButtonGroup`
 (`public`/`private`; default `public` at the time — new teams default to
 `private` since 2026-08-26, #2433) gating marketplace discoverability
