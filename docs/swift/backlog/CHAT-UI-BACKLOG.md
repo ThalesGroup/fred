@@ -923,7 +923,7 @@ The target authoring model is:
 and returns a `LinkPart(kind="download")`.~~ **Superseded** — first by the
 shipped `ppt_filler` capability (#1903, template-fill), then doubly by the
 shipped `pptx_generator` capability
-([RFC](../rfc/PPTX-GENERATOR-CAPABILITY-RFC.md), from-scratch deck generation
+([README](../../../libs/capabilities/fred-capability-pptx-generator/README.md), from-scratch deck generation
 with an optional brand template), both of which cover this and more. Nothing
 left to build here.
 

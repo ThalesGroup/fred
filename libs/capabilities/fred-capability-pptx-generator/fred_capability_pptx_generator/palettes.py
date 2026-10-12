@@ -12,14 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Curated theme-preset catalog for `ThemeSpec.preset` (RFC §12.2).
+"""Curated theme-preset catalog for `ThemeSpec.preset`.
 
-Hand-picked visual identities, not procedurally generated — the whole point
-is real, contrast-checked color/font pairings an agent can select by name
-instead of inventing hex values on the fly (RFC §12.1 item 1). Three of the
-eight presets use a `pattern` background (RFC §12.2's "extra visual
-sophistication") rather than a flat solid/gradient for their `strong`
-treatment.
+Hand-picked, contrast-checked color/font pairings the agent selects by name
+instead of inventing hex values.
 """
 
 from __future__ import annotations
@@ -32,7 +28,7 @@ from fred_capability_pptx_generator.models import BackgroundSpec, _check_hex_col
 class ThemePresetDef(BaseModel):
     """One curated preset: fonts, a 'strong' treatment for `title`/
     `section_header` slides, and a 'soft' background tint + accent color for
-    every other slide kind (RFC §12.2)."""
+    every other slide kind."""
 
     heading_font: str
     body_font: str

@@ -12,12 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Local, minimal inline-Markdown parser for `BulletItem.text` (RFC §11.3).
-
-Scope is deliberately narrower than `ppt_filler`'s sibling parser (no code
-spans, no `_italic_` underscore form): bold and italic only, the RFC's stated
-scope. Reimplemented locally rather than imported cross-package — this
-package's established no-cross-import convention (RFC §4.3, §11.3).
+"""Minimal inline-Markdown parser for `BulletItem.text`: `**bold**` and
+`*italic*` only. Local rather than imported, as capability packages do not
+cross-import.
 """
 
 from __future__ import annotations

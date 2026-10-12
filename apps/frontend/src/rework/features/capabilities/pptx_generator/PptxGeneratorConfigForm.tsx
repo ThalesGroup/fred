@@ -12,11 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// The pptx_generator agent-creation form widget: upload the optional .pptx
-// brand template the deck builder uses for masters/theme/palette
-// (PPTX-GENERATOR-CAPABILITY-RFC.md §4.2.1). Unlike ppt_filler's mandatory
-// template, there is nothing to parse/preview client-side and no Save-gating
-// blocking error — just stage the file for the atomic multipart save.
+// Advanced-view upload for the optional .pptx brand template. Unlike ppt_filler's,
+// there is nothing to parse client-side and no blocking error: just stage the file.
 
 import { useRef } from "react";
 import { useTranslation } from "react-i18next";

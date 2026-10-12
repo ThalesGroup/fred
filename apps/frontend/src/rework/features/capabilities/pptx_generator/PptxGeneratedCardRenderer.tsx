@@ -12,9 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// The pptx_generator capability's `pptx_generated` chat-part card, mirroring
-// ppt_filler's PptPreviewCardRenderer (same auto-open-once-live heuristic —
-// see that file for the full history-replay-vs-live-generation rationale).
+// `pptx_generated` chat-part card; same auto-open-once-live heuristic as
+// ppt_filler's PptPreviewCardRenderer (see that file for the rationale).
 
 import { useEffect } from "react";
 import { useDispatch } from "react-redux";

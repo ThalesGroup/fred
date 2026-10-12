@@ -14,22 +14,9 @@
 
 """Pod-local admission control for heavy pptx_generator CPU work.
 
-`generate_pptx` and `validate_config`'s brand-template parse-check both run
-python-pptx/matplotlib work off the event loop via `asyncio.to_thread`.
-Without a bound, a burst of concurrent calls can still exhaust the pod's
-thread pool and starve every other agent sharing it. Adapted from
-`fred_capability_ppt_filler.concurrency` rather than imported cross-package
-— each capability package stays self-contained
-(`docs/swift/capabilities/AUTHORING.md`, lane model).
-
-This is a plain module-level counter, not an `asyncio.Semaphore`: the
-check-then-increment has no `await` between the two steps, so it is
-race-free on the single-threaded event loop without needing a
-non-blocking-acquire workaround.
-
-In-process / per-pod only by design (CONVENTIONS.md perf section — no
-cross-replica coordination needed). Callers MUST fail fast when the slot is
-unavailable, never queue.
+Bounds `asyncio.to_thread` work so a burst cannot starve the pod's thread pool.
+A plain counter is race-free here: no `await` between check and increment.
+Callers MUST fail fast when no slot is available, never queue.
 """
 
 from __future__ import annotations

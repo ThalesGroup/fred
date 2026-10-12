@@ -12,16 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// pptx_generator preview routing state (mirrors ppt_filler's pptPreviewSlice).
-//
-// The `pptx_generated` chat part lives in the message stream; this slice holds the
-// one piece of cross-component UI state the side panel and the chat cards share:
-// which deck the pane should render. A chat-part renderer sits far from the panel
-// host in the tree, so Redux replaces prop-drilling.
-//
-// Opening the panel is NOT this slice's job: the card dispatches the
-// capability-agnostic `requestSidePanelOpen` for that, and the chat page stays the
-// single open-state authority.
+// Which deck the preview pane renders, shared by chat cards and the side panel
+// (far apart in the tree). Opening the panel is not this slice's job: cards
+// dispatch the capability-agnostic `requestSidePanelOpen`.
 
 import { createSlice, type PayloadAction } from "@reduxjs/toolkit";
 import type { PptxGeneratedPartData } from "./types";
@@ -29,11 +22,8 @@ import type { PptxGeneratedPartData } from "./types";
 export interface PptxPreviewState {
   /** The conversation this state belongs to; a write from another one replaces it. */
   sessionId: string | null;
-  /**
-   * The deck the pane renders. Only an explicit open moves it: the pane keys its
-   * pdf.js worker on this value, and that lifecycle does not survive a value that
-   * churns with re-renders.
-   */
+  /** The deck the pane renders. Only an explicit open moves it: the pane keys its
+   *  pdf.js worker on it, and that lifecycle does not survive a churning value. */
   current: PptxGeneratedPartData | null;
 }
 
@@ -56,11 +46,8 @@ export const pptxPreviewSlice = createSlice({
   name: "pptxPreview",
   initialState,
   reducers: {
-    /**
-     * Every rendered card registers its deck, history replay included: that is how
-     * the launcher knows this conversation produced one. It seeds `current` only
-     * while the pane has nothing, so later re-renders cannot move what it shows.
-     */
+    /** Every rendered card registers its deck (how the launcher knows one exists);
+     *  it seeds `current` only while the pane is empty, so re-renders can't move it. */
     registerPreview(state, action: PayloadAction<{ sessionId: string; preview: PptxGeneratedPartData }>) {
       rebase(state, action.payload.sessionId);
       if (state.current === null) state.current = action.payload.preview;
@@ -82,9 +69,8 @@ export const { registerPreview, openPreview } = pptxPreviewSlice.actions;
 export const selectCurrentPptxPreview = (state: PptxPreviewRootState): PptxGeneratedPartData | null =>
   state.pptxPreview.current;
 
-/** Did the registered conversation produce a deck at all? No separate `produced`
- * flag: every reducer above sets `current` in lockstep with it, so it's fully
- * derivable and there's nothing to keep in sync by hand. */
+/** Did the registered conversation produce a deck? Derived from `current`, which
+ *  every reducer sets in lockstep, so there is no separate flag to keep in sync. */
 export const selectPptxPreviewProduced = (state: PptxPreviewRootState): boolean => state.pptxPreview.current !== null;
 
 /** The conversation this state belongs to, or null. */

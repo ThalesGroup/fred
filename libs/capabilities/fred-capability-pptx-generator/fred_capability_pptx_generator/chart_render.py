@@ -12,19 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Matplotlib fallback recipes for the chart kinds `python-pptx` cannot
-express natively (RFC §4.3, §9 item 4): heatmap, waterfall, funnel, Gantt.
-
-Each function is a pure, synchronous transform (typed input -> PNG bytes) —
-no capability state, no I/O. `deck_builder.py` calls these from inside its
-own `asyncio.to_thread` worker (one call per deck generation), so nothing
-here needs its own thread-offload.
-
-Uses the object-oriented `Figure`/`FigureCanvasAgg` API rather than
-`matplotlib.pyplot`: pyplot keeps a global "current figure" registry that is
-not safe to share across the bounded-but-concurrent generation workers this
-capability runs (`concurrency.py`); a `Figure` built directly has no shared
-state with any other in-flight render.
+"""Matplotlib fallbacks for chart kinds `python-pptx` cannot express natively:
+heatmap, waterfall, funnel, Gantt. Pure sync functions (input -> PNG bytes),
+called from `deck_builder`'s worker thread. Never `matplotlib.pyplot`: its
+global figure registry is unsafe across concurrent generation workers.
 """
 
 from __future__ import annotations

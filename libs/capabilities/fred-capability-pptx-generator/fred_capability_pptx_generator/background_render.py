@@ -12,17 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Procedural pattern-background recipes for `BackgroundSpec.kind == "pattern"`
-(RFC §12.2), sibling to `chart_render.py` and following the exact same
-conventions: pure, synchronous, `Figure`/`FigureCanvasAgg`-based (never
-`matplotlib.pyplot`, whose global "current figure" state isn't safe to share
-across this capability's concurrent generation workers), returning PNG bytes.
+"""Procedural pattern backgrounds for `BackgroundSpec.kind == "pattern"`.
 
-Every composition below is FIXED geometry — colors are the only input, never
-randomness — so the same `(base_color, accent_color)` always renders the same
-pattern (RFC §12.2: "deterministic ... output stays predictable and
-testable"). `deck_builder.py` calls these from inside its own
-`asyncio.to_thread` worker, same as the chart fallbacks.
+Same conventions as `chart_render.py` (pure, `Figure`-based, PNG bytes out).
+Fixed geometry, no randomness: the same colors always render the same pattern.
 """
 
 from __future__ import annotations
@@ -40,17 +33,15 @@ from matplotlib.patches import Circle
 from fred_capability_pptx_generator._matplotlib_render import figure_to_png_bytes
 
 _DPI = 150
-# Fixed render height; width is derived from the caller's aspect_ratio so the
-# picture always matches the deck's actual slide dimensions (never a
-# hardcoded 16:9/4:3 guess — see deck_builder._apply_background).
+# Width derives from the caller's aspect_ratio so the picture matches the
+# deck's actual slide dimensions.
 _HEIGHT_IN = 5.625
 _DEFAULT_ASPECT_RATIO = 16 / 9
 
 
 def _new_full_bleed_axes(base_color: str, aspect_ratio: float):
-    """A `Figure`/`Axes` pair sized to `aspect_ratio`, filled edge-to-edge
-    with `base_color` and no ticks/spines/margins — every pattern below draws
-    into unit axes coordinates (0.0-1.0 on both axes) on top of this."""
+    """A `Figure`/`Axes` pair filled edge-to-edge with `base_color`; patterns
+    draw on it in unit axes coordinates."""
 
     width_in = _HEIGHT_IN * aspect_ratio
     fig = Figure(figsize=(width_in, _HEIGHT_IN), dpi=_DPI)
@@ -72,9 +63,7 @@ def render_soft_circles(
 
     fig, ax = _new_full_bleed_axes(base_color, aspect_ratio)
     accent_rgb = to_rgb(accent_color)
-    # (center_x, center_y, radius, alpha) in axes-fraction coordinates —
-    # deliberately corner-anchored and low-count (RFC §12.2: "tasteful
-    # density, 2-4 circles").
+    # (center_x, center_y, radius, alpha) in axes-fraction coordinates.
     circles = (
         (0.90, 0.88, 0.46, 0.30),
         (1.00, 0.55, 0.26, 0.28),
@@ -90,17 +79,13 @@ def render_soft_circles(
 def render_diagonal_bands(
     base_color: str, accent_color: str, *, aspect_ratio: float = _DEFAULT_ASPECT_RATIO
 ) -> bytes:
-    """A few subtle, angled bands of `accent_color` crossing the slide — a
-    modern SaaS-deck look. Bands are thick, semi-transparent strokes (a
-    lighter tint of `accent_color`, not a full-opacity block) so text placed
-    on top stays legible."""
+    """A few subtle, angled semi-transparent bands of `accent_color`, light
+    enough for text on top to stay legible."""
 
     fig, ax = _new_full_bleed_axes(base_color, aspect_ratio)
     accent_rgb = to_rgb(accent_color)
-    # Each band is one very thick line drawn well past the axes bounds (so a
-    # wide aspect ratio never leaves a gap at the edges) and clipped to the
-    # unit square by the axes' own clip path. Alphas increase left-to-right
-    # so the composition reads as layered ribbons, not a flat stripe.
+    # Thick lines drawn past the axes bounds (no edge gap on wide slides) and
+    # clipped to the unit square; rising alphas read as layered ribbons.
     bands = (
         (-0.35, 0.55),
         (-0.05, 0.85),
@@ -123,9 +108,8 @@ def render_diagonal_bands(
 def render_dot_grid(
     base_color: str, accent_color: str, *, aspect_ratio: float = _DEFAULT_ASPECT_RATIO
 ) -> bytes:
-    """A low-density, muted-tint dot grid texture — small enough to read as
-    texture, not clutter. Grid density adapts to `aspect_ratio` so dot
-    spacing stays roughly square regardless of slide shape."""
+    """A low-density, muted dot grid; density adapts to `aspect_ratio` so
+    spacing stays roughly square."""
 
     fig, ax = _new_full_bleed_axes(base_color, aspect_ratio)
     accent_rgb = to_rgb(accent_color)

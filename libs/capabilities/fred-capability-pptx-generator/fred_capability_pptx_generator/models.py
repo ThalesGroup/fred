@@ -12,12 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Typed slide/tool models for the `pptx_generator` capability (RFC §4.3).
+"""Typed slide/tool models for the `pptx_generator` capability.
 
-`GeneratePptxArgs` is the static `args_schema` of the one tool this
-capability ships (`generate_pptx`) — unlike `ppt_filler`, whose fill-tool
-schema is rebuilt per turn from a parsed template, this schema is fixed, so
-it can be declared once here rather than synthesized with `create_model`.
+`GeneratePptxArgs` is the static `args_schema` of `generate_pptx`. Class
+docstrings and field descriptions here reach the LLM's tool schema.
 """
 
 from __future__ import annotations
@@ -27,8 +25,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-# RFC §11.4: hex colors are validated eagerly so a malformed value is a clear,
-# actionable pydantic error the agent can self-correct on its next call.
+# Validated eagerly so a malformed color is an error the agent can self-correct.
 _HEX_COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
 
 
@@ -41,9 +38,8 @@ def _check_hex_color(value: str | None) -> str | None:
     return value
 
 
-# Curated shape set (RFC §11.2): every entry maps to a real python-pptx
-# MSO_SHAPE/MSO_AUTO_SHAPE_TYPE member (or, for "line", MSO_CONNECTOR) in
-# `deck_builder.py` — no freeform/curved shapes (RFC §11.5).
+# Each entry maps to a python-pptx MSO_SHAPE member (MSO_CONNECTOR for "line")
+# in `deck_builder.py`; no freeform/curved shapes.
 ShapeType = Literal[
     "rectangle",
     "rounded_rectangle",
@@ -62,10 +58,8 @@ ShapeType = Literal[
     "cloud",
 ]
 
-# Native XL_CHART_TYPE-backed kinds (editable afterward in PowerPoint/Impress)
-# vs. matplotlib-rendered image fallback kinds (RFC §4.3, §9 item 4). The
-# split is a build-time decision in `deck_builder.py` — invisible to the
-# agent, which only ever picks a `chart_type`.
+# Native (editable in PowerPoint) vs. matplotlib image fallback kinds; the
+# agent only picks a `chart_type`, `deck_builder.py` decides the rendering.
 NATIVE_CHART_TYPES = frozenset(
     {"bar", "column", "line", "pie", "doughnut", "area", "radar", "scatter", "bubble"}
 )
@@ -136,9 +130,8 @@ class ChartSeries(BaseModel):
     values: list[float] = Field(default_factory=list)
     x_values: list[float] | None = None
     sizes: list[float] | None = None
-    # RFC §11.2: honored for bar/column/line/area/radar only — pie/doughnut
-    # color per-point, a different API `deck_builder.py` does not implement
-    # in this pass. Ignored (not an error) for any other chart_type.
+    # Honored for bar/column/line/area/radar only: pie/doughnut color per
+    # point, which `deck_builder.py` does not implement. Ignored elsewhere.
     color: str | None = None
 
     _check_color = field_validator("color")(_check_hex_color)
@@ -146,7 +139,7 @@ class ChartSeries(BaseModel):
 
 class TextStyle(BaseModel):
     """Font/color/alignment overlay applied to the runs a slide's title or
-    body text is written with (RFC §11.2). Every field is optional and left
+    body text is written with. Every field is optional and left
     at the layout's inherited default when unset."""
 
     font: str | None = None
@@ -163,10 +156,10 @@ PatternType = Literal["soft_circles", "diagonal_bands", "dot_grid"]
 
 
 class BackgroundSpec(BaseModel):
-    """A slide or deck-wide background (RFC §11.2, §12.2). `image_ref` reuses
+    """A slide or deck-wide background. `image_ref` reuses
     the same corpus `document_uid` / `document_content.fetch_raw()` path as
     `SlideSpec.image_ref`. `pattern` (+ `accent_color`) is a procedurally
-    rendered, deterministic texture (RFC §12.2) — `color` doubles as its base
+    rendered, deterministic texture — `color` doubles as its base
     fill, the same field `kind="solid"` uses."""
 
     kind: Literal["solid", "gradient", "image", "pattern"]
@@ -174,9 +167,7 @@ class BackgroundSpec(BaseModel):
     gradient_colors: list[str] | None = None
     image_ref: str | None = None
     pattern: PatternType | None = None
-    # Falls back to `theme.primary_color` at build time when unset
-    # (`deck_builder._apply_background`) — same fallback-chain style
-    # `_resolve_text_style` already uses for theme vs. slide.
+    # Falls back to `theme.primary_color` at build time when unset.
     accent_color: str | None = None
 
     _check_color = field_validator("color")(_check_hex_color)
@@ -192,16 +183,12 @@ class BackgroundSpec(BaseModel):
 
     @model_validator(mode="after")
     def _check_required_fields_for_kind(self) -> BackgroundSpec:
-        # A model_validator, not a field_validator: `gradient_colors`/
-        # `pattern` are never explicitly passed for most `kind`s, and a
-        # field_validator is SKIPPED ENTIRELY for a field left at its
-        # default (never runs at all) — only a model_validator reliably
-        # catches a `kind="gradient"`/`"pattern"` call that simply omits the
-        # field it needs, not just an explicitly-passed bad value.
+        # A model_validator: a field_validator never runs for a field left at
+        # its default, so it would miss an omitted `gradient_colors`/`pattern`.
         if self.kind == "gradient" and (
             self.gradient_colors is None or len(self.gradient_colors) != 2
         ):
-            # A simple 2-stop diagonal gradient (RFC §11.2) — no more, no fewer.
+            # A simple 2-stop diagonal gradient, no more, no fewer.
             raise ValueError(
                 "a 'gradient' background needs exactly 2 'gradient_colors'."
             )
@@ -214,7 +201,7 @@ class BackgroundSpec(BaseModel):
 
 
 class ShapeSpec(BaseModel):
-    """One decorative/diagram shape (RFC §11.2), additive on top of whatever
+    """One decorative/diagram shape, additive on top of whatever
     the slide's `kind` already renders. `left`/`top`/`width`/`height` are
     FRACTIONS of the slide size (0.0-1.0), not inches, so a shape lands
     correctly whether the deck uses the default blank presentation or an
@@ -239,17 +226,15 @@ class ShapeSpec(BaseModel):
 
 
 class ThemeSpec(BaseModel):
-    """Deck-wide defaults (RFC §11.2), applied to every slide that doesn't
+    """Deck-wide defaults, applied to every slide that doesn't
     set its own override."""
 
     heading_font: str | None = None
     body_font: str | None = None
     primary_color: str | None = None
     background: BackgroundSpec | None = None
-    # RFC §12.2: a curated catalog key (`palettes.THEME_PRESETS`) — the
-    # RECOMMENDED way to set visual identity instead of hand-picking hex
-    # colors. `deck_builder` layers it beneath the fields above: an explicit
-    # theme field always wins, the preset only fills what's left unset.
+    # A `palettes.THEME_PRESETS` key; explicit theme fields above always win,
+    # the preset only fills what's left unset.
     preset: str | None = None
 
     _check_primary_color = field_validator("primary_color")(_check_hex_color)
@@ -257,9 +242,8 @@ class ThemeSpec(BaseModel):
     @field_validator("preset")
     @classmethod
     def _check_preset(cls, value: str | None) -> str | None:
-        # Imported inside the validator, not at module scope: palettes.py
-        # itself builds `ThemePresetDef` on top of `BackgroundSpec` above, so
-        # a top-level import here would be circular.
+        # Local import: palettes.py builds on `BackgroundSpec`, so a top-level
+        # import would be circular.
         if value is None:
             return value
         from fred_capability_pptx_generator.palettes import THEME_PRESETS
@@ -295,9 +279,8 @@ class ChartSpec(BaseModel):
 
     @model_validator(mode="after")
     def _check_has_required_data(self) -> ChartSpec:
-        """Catch an empty/degenerate chart at the schema boundary, so the
-        agent gets a clean, actionable pydantic error instead of an opaque
-        failure deep inside `deck_builder.build()`."""
+        """Reject an empty chart at the schema boundary with an actionable
+        error, instead of an opaque failure inside `deck_builder.build()`."""
 
         if self.chart_type == "gantt":
             if not self.gantt_tasks:
@@ -336,25 +319,20 @@ class SlideSpec(BaseModel):
     # slide has one (a label zone sharing a column's left edge above it).
     group_label: str | None = None
     speaker_notes: str | None = None
-    # RFC §11.2 — visual styling, additive on top of the slide's `kind`.
+    # Visual styling, additive on top of the slide's `kind`.
     background: BackgroundSpec | None = None
     title_style: TextStyle | None = None
     body_style: TextStyle | None = None
     shapes: list[ShapeSpec] | None = None
-    # RFC §13: when set, this slide is built by duplicating the slide at this
-    # 0-based position in the uploaded brand template (its background,
-    # decorative shapes, and placeholder layout) instead of starting from a
-    # generic layout resolved from `kind` — `kind` still governs which of the
-    # fields above get written into the duplicated slide's placeholders.
-    # Valid indices are listed in the tool description when a template with
-    # slides is configured.
+    # Duplicate this brand-template slide instead of a generic layout; `kind`
+    # still governs which fields are written into its placeholders.
     template_slide_index: int | None = Field(default=None, ge=0)
 
 
 class GeneratePptxArgs(BaseModel):
-    """The `generate_pptx` tool's static args schema (RFC §4.3)."""
+    """The `generate_pptx` tool's static args schema."""
 
     title: str
     slides: list[SlideSpec]
-    # RFC §11.2 — deck-wide font/color/background defaults.
+    # Deck-wide font/color/background defaults.
     theme: ThemeSpec | None = None

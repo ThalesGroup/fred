@@ -13,8 +13,7 @@
 # limitations under the License.
 
 """Each slide variant must produce a valid, openable `.pptx` with the right
-shapes/content (RFC §4.3) — including table/chart embedding and the
-native-vs-fallback chart routing decision."""
+shapes/content, including table/chart embedding and native-vs-fallback routing."""
 
 from __future__ import annotations
 
@@ -128,10 +127,8 @@ def test_bullets_slide_has_nested_levels():
 
 
 def test_title_and_bullets_text_frames_shrink_to_fit():
-    # Regression guard: text must shrink on overflow rather than spill out of
-    # its box (verified empirically against the installed LibreOffice, which
-    # also renders the PDF preview — it computes a real shrink from this
-    # marker, not just PowerPoint proper).
+    # Text must shrink on overflow rather than spill out of its box; LibreOffice
+    # (which renders the PDF preview) honours this marker too, not just PowerPoint.
     slides = [
         SlideSpec(
             kind="bullets",
@@ -324,11 +321,8 @@ def test_fallback_chart_slide_embeds_picture(chart_type, categories, values):
 
 
 def test_fallback_chart_picture_is_aspect_fit_not_stretched():
-    # The heatmap fallback's matplotlib figure (8x3in, aspect ~2.67) has a
-    # different aspect ratio than the default content box (9x5in, aspect
-    # 1.8) — if the picture were naively stretched to the box, both its
-    # width AND height would exactly equal the box's; aspect-fit leaves at
-    # least one dimension strictly smaller.
+    # Heatmap figure (aspect ~2.67) vs content box (1.8): a stretched picture
+    # would match both box dimensions; aspect-fit leaves one strictly smaller.
     chart = ChartSpec(
         chart_type="heatmap",
         categories=["Mon", "Tue"],
@@ -383,10 +377,8 @@ def test_chart_spec_scatter_does_not_require_categories():
 
 
 def test_gantt_fallback_requires_tasks():
-    # `ChartSpec`'s own model_validator now rejects a gantt chart with no
-    # gantt_tasks at the pydantic boundary (the earlier, clean-error gate) —
-    # bypass it at both levels via model_construct to exercise deck_builder's
-    # own defense-in-depth guard for the same case.
+    # `ChartSpec`'s validator already rejects this; model_construct bypasses it
+    # to exercise deck_builder's own defense-in-depth guard.
     chart = ChartSpec.model_construct(
         chart_type="gantt", categories=[], series=[], gantt_tasks=None
     )
@@ -513,15 +505,12 @@ def test_unknown_slide_kind_raises():
 
 
 # ---------------------------------------------------------------------------
-# Layout resolution — structural fallback for a custom-named template (RFC §14)
+# Layout resolution — structural fallback for a custom-named template
 # ---------------------------------------------------------------------------
 
 
 def _custom_named_template_bytes() -> bytes:
-    """The default python-pptx template's layouts, RENAMED so none of them
-    match `_LAYOUT_NAMES_BY_KIND` — same trap a real, non-English/custom
-    brand template falls into. Their actual placeholder STRUCTURE (which
-    `_best_structural_layout_match` reads) is untouched."""
+    """Default layouts renamed to miss `_LAYOUT_NAMES_BY_KIND`, structure intact."""
 
     prs = Presentation()
     for layout in prs.slide_layouts:
@@ -532,13 +521,8 @@ def _custom_named_template_bytes() -> bytes:
 
 
 def test_structural_fallback_gives_image_its_own_picture_placeholder_layout():
-    # Before RFC §14: bullets/image/table/chart all fell back to the SAME
-    # hardcoded index whenever names didn't match — an image slide would
-    # never land on a layout with an actual picture placeholder in a
-    # custom-named template. Checked on `slide_layout` (the resolved layout)
-    # rather than the built slide's own placeholders: `_take_content_box`
-    # removes and replaces the content placeholder regardless of kind, by
-    # design, same as every other kind.
+    # Checked on `slide_layout`, not the built slide: `_take_content_box`
+    # replaces the content placeholder regardless of kind.
     template_bytes = _custom_named_template_bytes()
     slides = [SlideSpec(kind="image", title="Cover", image_ref="doc-1")]
     slide = _open(
@@ -587,22 +571,16 @@ def test_structural_fallback_prefers_layout_with_two_content_placeholders():
 
 
 def test_resolve_layout_raises_a_clear_error_for_a_template_with_no_layouts():
-    # A pathological/corrupted template `validate_config` only checked opens
-    # as a `.pptx`, not that it has any layout to build from — this must
-    # surface as the same agent-correctable ValueError as every other
-    # structural problem, never an unhandled IndexError. Exercised directly
-    # against `_resolve_layout` — constructing a real zero-layout `.pptx`
-    # would mean reaching into python-pptx's private slide-master XML.
+    # A zero-layout template must raise an agent-correctable ValueError, not an
+    # IndexError. Tested on `_resolve_layout` directly: building a real one
+    # would mean editing python-pptx's private slide-master XML.
     with pytest.raises(ValueError, match="no slide layouts"):
         deck_builder._resolve_layout("title", [], {})
 
 
 def test_default_content_box_scales_with_custom_slide_size():
-    # Regression guard (RFC §14): a fixed Inches() fallback box, sized for
-    # the default 10x7.5in presentation, could extend past the bounds of a
-    # smaller or differently-proportioned brand template's actual slide —
-    # including past a furniture placeholder (footer/page number) near the
-    # bottom. The box must scale with the presentation it's built for.
+    # The fallback box must scale with the presentation: a fixed 10x7.5in box
+    # overflows smaller templates and their footer placeholders.
     prs = Presentation()
     prs.slide_width = Inches(6)
     prs.slide_height = Inches(4)
@@ -612,7 +590,7 @@ def test_default_content_box_scales_with_custom_slide_size():
 
 
 # ---------------------------------------------------------------------------
-# Shapes (RFC §11.2)
+# Shapes
 # ---------------------------------------------------------------------------
 
 
@@ -727,8 +705,7 @@ def test_shape_invalid_hex_color_raises():
 
 
 # ---------------------------------------------------------------------------
-# Shape/content overlap guard (RFC §12 amendment — labeled badge shapes
-# dropped on top of running bullet text, both illegible)
+# Shape/content overlap guard (badge shapes dropped on bullet text)
 # ---------------------------------------------------------------------------
 
 
@@ -796,20 +773,16 @@ def test_only_the_overlapping_shape_is_dropped():
 
 
 def test_shape_overlapping_only_the_title_does_not_raise():
-    # Deliberate exclusion, not an oversight: PowerPoint/python-pptx default
-    # layouts give the title placeholder a box spanning nearly the full
-    # slide width regardless of how short the title text actually is, so
-    # checking against it would false-positive-reject the exact corner
-    # accent near the title this capability's own prompt guidance
-    # recommends. Only BODY content (bullets/table/chart/image) is guarded.
+    # Deliberate: default title placeholders span nearly the full width, so
+    # guarding them would reject the corner accent the prompt recommends.
     shape = ShapeSpec(shape_type="oval", left=0.3, top=0.02, width=0.2, height=0.1)
     slides = [SlideSpec(kind="bullets", title="Agenda", shapes=[shape])]
     _build(slides)  # must not raise
 
 
 def test_shape_in_margin_corner_does_not_raise():
-    # A legitimate corner accent (RFC §12 prompt guidance) must still work —
-    # this is a regression guard against the overlap check being too strict.
+    # A legitimate corner accent must still work: guards against the overlap
+    # check being too strict.
     corner_circle = ShapeSpec(
         shape_type="oval", left=0.8, top=0.02, width=0.18, height=0.15
     )
@@ -865,7 +838,7 @@ def test_pattern_background_does_not_count_as_occupied_content():
 
 
 # ---------------------------------------------------------------------------
-# Backgrounds (RFC §11.2)
+# Backgrounds
 # ---------------------------------------------------------------------------
 
 
@@ -939,11 +912,8 @@ def test_background_gradient_requires_exactly_two_colors():
 
 
 def test_background_gradient_requires_gradient_colors_when_omitted_entirely():
-    # Regression guard: a plain `field_validator` on `gradient_colors` is
-    # SKIPPED ENTIRELY when the field is left at its default (never passed),
-    # so omitting it altogether previously slipped past pydantic and failed
-    # much later, deep inside the synchronous build — not at the schema
-    # boundary the other malformed-input errors are caught at.
+    # A `field_validator` is skipped for an omitted field, so a missing
+    # `gradient_colors` must be caught at the schema, not deep in the build.
     with pytest.raises(ValidationError, match="exactly 2"):
         BackgroundSpec(kind="gradient")
 
@@ -972,7 +942,7 @@ def test_theme_background_image_decode_is_cached_across_slides():
 
 
 # ---------------------------------------------------------------------------
-# Text styling (RFC §11.2)
+# Text styling
 # ---------------------------------------------------------------------------
 
 
@@ -1036,15 +1006,13 @@ def test_slide_body_style_overrides_theme_font_but_keeps_theme_color():
 
 
 # ---------------------------------------------------------------------------
-# Bullets: inline **bold**/*italic* (RFC §11.3)
+# Bullets: inline **bold**/*italic*
 # ---------------------------------------------------------------------------
 
 
 def test_slide_style_explicit_empty_font_is_not_overridden_by_theme():
-    # A regression guard: `_resolve_text_style` must treat an explicitly-set
-    # but falsy value (font="") as "set" and NOT fall back to the theme font
-    # for it — only a field the slide's style genuinely leaves unset (None)
-    # should inherit the theme's default.
+    # An explicitly-set falsy value (font="") counts as set; only None
+    # inherits the theme default.
     theme = ThemeSpec(heading_font="Georgia")
     slides = [SlideSpec(kind="title", title="Styled", title_style=TextStyle(font=""))]
     deck_bytes = deck_builder.build(
@@ -1089,7 +1057,7 @@ def test_bullet_without_markdown_yields_single_run():
 
 
 # ---------------------------------------------------------------------------
-# Native chart series coloring (RFC §11.2)
+# Native chart series coloring
 # ---------------------------------------------------------------------------
 
 
@@ -1128,13 +1096,13 @@ def test_chart_series_color_ignored_for_pie_chart():
         series=[ChartSeries(name="S1", values=[1, 2], color="#00FF00")],
     )
     slides = [SlideSpec(kind="chart", title="Pie", chart=chart)]
-    # Must not raise — pie colors per-point, not per-series (RFC §11.2, §11.5).
+    # Must not raise — pie colors per-point, not per-series.
     slide = _open(_build(slides)).slides[0]
     assert any(s.has_chart for s in slide.shapes)
 
 
 # ---------------------------------------------------------------------------
-# Curated theme presets (RFC §12.2a)
+# Curated theme presets
 # ---------------------------------------------------------------------------
 
 
@@ -1170,8 +1138,7 @@ def test_every_preset_resolves_without_error_with_strong_soft_split(preset_name)
     )
 
     # Soft slide: plain solid fill of the preset's pale tint; body text keeps
-    # its layout default color (no preset color injected for non-strong
-    # kinds, RFC §12.2a).
+    # its layout default color (no preset color for non-strong kinds).
     soft_slide = prs.slides[1]
     assert soft_slide.background.fill.fore_color.rgb == RGBColor.from_string(
         preset.soft_background_color.lstrip("#")
@@ -1229,7 +1196,7 @@ def test_unknown_theme_preset_raises_clear_error():
 
 
 # ---------------------------------------------------------------------------
-# Adaptive table layout (RFC §12.2b)
+# Adaptive table layout
 # ---------------------------------------------------------------------------
 
 
@@ -1292,7 +1259,7 @@ def test_table_column_width_never_crushed_below_floor():
 
 
 # ---------------------------------------------------------------------------
-# Procedural pattern backgrounds (RFC §12.2c)
+# Procedural pattern backgrounds
 # ---------------------------------------------------------------------------
 
 
@@ -1347,7 +1314,7 @@ def test_pattern_background_requires_pattern_name():
 
 
 # ---------------------------------------------------------------------------
-# template_slide_index — duplicating a real template slide (RFC §13)
+# template_slide_index — duplicating a real template slide
 # ---------------------------------------------------------------------------
 
 
@@ -1363,10 +1330,7 @@ def _template_bytes(build_slides) -> bytes:
 
 
 def _add_designed_slide(prs) -> None:
-    """A "Title and Content" slide with the template author's own sample
-    text, a decorative accent shape, and a solid background — the shape of
-    slide a real brand template would ship for `template_slide_index` to
-    duplicate."""
+    """A brand-template-like slide: sample text, accent shape, solid background."""
 
     slide = prs.slides.add_slide(prs.slide_layouts[1])
     title_shape = slide.shapes.title
@@ -1511,10 +1475,8 @@ def test_template_slide_index_rejects_chart_shape():
 
 
 def test_template_slide_index_rejects_chart_nested_inside_a_group():
-    # A chart's own `.shape_type` is GROUP once it's wrapped in a group
-    # shape — the unsupported-shape check must still catch it, since
-    # `_rewire_blip_relationship` only knows how to re-wire a picture's
-    # blip, not a chart's embedded-workbook relationship.
+    # A grouped chart reports shape_type GROUP but must still be rejected:
+    # `_rewire_blip_relationship` can't re-wire its embedded workbook.
     def _add_grouped_chart_slide(prs) -> None:
         slide = prs.slides.add_slide(prs.slide_layouts[6])
         rectangle = slide.shapes.add_shape(
@@ -1581,19 +1543,13 @@ def test_template_slide_index_notes_copied_from_source():
 
 
 # ---------------------------------------------------------------------------
-# section_header + template_slide_index — a real customer template gives the
-# numbered "chapter badge" shape type="title" and the real chapter-name
-# shape a generic type="body", backwards from the rest of the template (RFC
-# §13 amendment, 2026-09-22).
+# section_header + template_slide_index — a real template types the chapter
+# badge "title" and the chapter-name zone "body", backwards from the rest.
 # ---------------------------------------------------------------------------
 
 
 def _add_chapter_divider_slide(prs) -> None:
-    """A section_header-style slide whose OOXML placeholder TYPES are
-    inverted relative to their visual role: `type="title"` is the small
-    numbered badge shape, `type="body"` (a generic content placeholder) is
-    the real chapter title — the exact structure confirmed in a real
-    customer template's XML."""
+    """Divider whose `type="title"` is the number badge, `type="body"` the title."""
 
     slide = prs.slides.add_slide(prs.slide_layouts[1])
     title_shape = slide.shapes.title
@@ -1701,9 +1657,8 @@ def test_section_header_badge_numbering_only_counts_badge_slides():
 
 
 # ---------------------------------------------------------------------------
-# Template furniture (date/footer/slide number) and leftover sample text —
-# reproduced from a real brand template whose dividers and covers carry
-# furniture placeholders next to their content ones.
+# Template furniture (date/footer/slide number) and leftover sample text,
+# reproduced from a real brand template.
 # ---------------------------------------------------------------------------
 
 

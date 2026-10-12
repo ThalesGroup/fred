@@ -174,9 +174,8 @@ export const TOOL_PACK_SECTIONS: ToolPackSection[] = [
         enablesCapabilityIds: [CAP_PPT_FILLER],
       },
       {
-        // Separate pack from `powerpoint_document`: unlike ppt_filler's
-        // mandatory template, pptx_generator's brand template is optional
-        // (RFC §5) — but it IS uploadable, via PptxGeneratorPackOptions below.
+        // Separate pack from `powerpoint_document`: pptx_generator's brand
+        // template is optional, uploaded via PptxGeneratorPackOptions.
         id: "powerpoint_generation",
         kind: "capabilities",
         icon: "co_present",

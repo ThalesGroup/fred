@@ -12,9 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Each matplotlib fallback recipe must produce valid, non-empty PNG bytes
-(RFC §4.3, §9 item 4) — the deck builder embeds these directly via
-`add_picture`, so a malformed image would break every fallback chart kind."""
+"""Each matplotlib fallback recipe must produce valid, non-empty PNG bytes:
+the deck builder embeds them via `add_picture`, so a bad image breaks that kind."""
 
 from __future__ import annotations
 

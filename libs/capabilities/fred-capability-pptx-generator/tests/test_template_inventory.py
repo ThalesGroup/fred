@@ -12,10 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""`describe_template_slides` must produce an accurate, stable catalog string
-for the `generate_pptx` tool description (RFC §13) — wrong or missing slide
-summaries would leave the agent guessing at valid `template_slide_index`
-values."""
+"""`describe_template_slides` must produce an accurate, stable catalog for the
+`generate_pptx` tool description, or the agent guesses `template_slide_index`."""
 
 from __future__ import annotations
 
@@ -85,10 +83,8 @@ def test_picture_placeholder_is_tagged_image():
 
 
 def test_non_placeholder_picture_is_not_tagged():
-    # A manually inserted picture that ISN'T a placeholder — deck_builder's
-    # content-fill functions only ever look at `slide.placeholders`, so this
-    # one would never actually be replaced by a slide's `image_ref`. Tagging
-    # it "image" would wrongly promise the agent otherwise.
+    # A plain inserted picture is not a placeholder, so deck_builder never
+    # replaces it with `image_ref`; tagging it "image" would mislead the agent.
     prs = Presentation()
     slide = prs.slides.add_slide(prs.slide_layouts[5])
     _set_title(slide, "Cover")

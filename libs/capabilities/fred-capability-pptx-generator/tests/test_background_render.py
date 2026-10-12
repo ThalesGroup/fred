@@ -12,10 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Each procedural pattern-background recipe must produce a valid,
-correctly-sized PNG (RFC §12.2c, §12.4) — `deck_builder.py` embeds these
-directly as a full-bleed picture, so a malformed or mis-sized image would
-break every pattern background kind."""
+"""Each pattern-background recipe must produce a valid, correctly-sized PNG:
+`deck_builder.py` embeds it full-bleed, so a bad image breaks that kind."""
 
 from __future__ import annotations
 

@@ -12,14 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""The `pptx_generator` capability's contributed chat part (RFC §4.4).
+"""The `pptx_generator` capability's contributed chat part.
 
-Deliberately NOT a reuse of `fred_capability_ppt_filler.fill.PptPreviewPart`
-even though the shape is nearly identical: two independent capabilities each
-declaring `chat_parts=[PptPreviewPart]` for the same imported class would
-collide at the chat-part registry (each capability owns its discriminator).
-`"pptx_generated"` keeps this capability's registration independent of
-`ppt_filler`'s `"ppt_preview"` (RFC §4.4, §9 item 6).
+Not a reuse of `ppt_filler`'s `PptPreviewPart`: two capabilities registering
+the same class would collide at the chat-part registry.
 """
 
 from __future__ import annotations

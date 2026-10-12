@@ -12,17 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Local shape of the `pptx_generated` chat part emitted by the pptx_generator
-// runtime (PPTX-GENERATOR-CAPABILITY-RFC.md §4.4).
-//
-// The backend `UiPart` union is OPEN (capability packages extend it at pod boot),
-// so this build carries a hand-written narrowing type instead of a generated one —
-// the same pattern PptPreviewPartData / HtmlArtifactPartData use. Renderers narrow
-// the RAW part they receive via `as unknown as PptxGeneratedPartData`.
-//
-// Deliberately NOT PptPreviewPartData: a distinct backend class/discriminator
-// (`PptxGeneratedPart` / "pptx_generated") avoids a chat-part registry collision
-// between the two independent PPTX capabilities (RFC §4.4) — kept distinct here too.
+// Hand-written narrowing type for the `pptx_generated` chat part: the backend
+// `UiPart` union is open (extended at pod boot), so none is generated. Distinct
+// from PptPreviewPartData to avoid a registry collision with ppt_filler.
 
 /** Backend capability id (`manifest.id`) — the side-panel open-request key. */
 export const CAPABILITY_ID = "pptx_generator";
@@ -34,17 +26,11 @@ export interface PptxGeneratedPartData {
   preview_id: string;
   /** Human title shown on the card and the pane header. */
   title: string;
-  /**
-   * Durable, origin-relative Knowledge Flow `/fs/download` href for the rendered
-   * PDF. It is bearer-protected — fetch it WITH the Authorization header (never a
-   * bare anchor). Stays valid across chat reloads (no expiring signature baked in).
-   */
+  /** Bearer-protected, origin-relative KF `/fs/download` href for the PDF; fetch it
+   *  with the Authorization header. Stays valid across chat reloads. */
   pdf_download_url: string;
-  /**
-   * Per-generation content hash (sha256(pdf_bytes)[:16]). Doubles as the PDF
-   * cache-bust query value and the react-pdf remount key, so a regeneration
-   * re-fetches instead of showing a stale deck.
-   */
+  /** Per-generation content hash: PDF cache-bust value and react-pdf remount key,
+   *  so a regeneration re-fetches instead of showing a stale deck. */
   version: string;
   /** Bearer-protected KF href for the source `.pptx`, or null if PDF conversion
    *  failed and the tool fell back to a plain download link outside this part. */

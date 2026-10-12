@@ -12,17 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// The deck the OPEN conversation produced, or null (mirrors ppt_filler's
-// useSessionPptPreview).
-//
-// The slice keeps the last registered deck globally; scoping it to the open
-// conversation is what keeps a deck from a previous conversation out of the pane -
-// and, more visibly, keeps the panel's launcher dark on a conversation that never
-// produced one.
-//
-// pptx_generator has no list endpoint to ask: the slice, fed by every rendered
-// `pptx_generated` card, IS the "this conversation produced a deck" signal, so the
-// launcher appears once the cards have rendered.
+// The deck the open conversation produced, or null. Scoping it keeps an old deck
+// out of the pane and the launcher dark; with no list endpoint, the slice (fed by
+// rendered cards) is the "this conversation produced a deck" signal.
 
 import { useSelector } from "react-redux";
 import { useOpenSessionId } from "../useOpenSessionId";

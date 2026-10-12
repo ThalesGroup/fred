@@ -12,12 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Shared pptx_generator brand-template upload state, consumed by BOTH the
-// Advanced-view config widget (PptxGeneratorConfigForm) and the Simple-view
-// capability pack options (PptxGeneratorPackOptions). Unlike ppt_filler's
-// mandatory template, this slot is optional (RFC PPTX-GENERATOR-CAPABILITY §4.2.1)
-// and there is nothing to parse/preview client-side, so this hook is just the
-// staged-file/persisted-state plumbing — no analyze call, no blocking error.
+// Brand-template upload state shared by PptxGeneratorConfigForm (Advanced) and
+// PptxGeneratorPackOptions (Simple). The slot is optional with nothing to parse
+// client-side, so this is just staged-file/persisted-state plumbing.
 
 /** The manifest's one upload slot key (AssetSlot.key on the backend). */
 export const BRAND_TEMPLATE_SLOT = "brand_template";

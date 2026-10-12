@@ -12,12 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Summarizes an uploaded brand template's own slides for the `generate_pptx`
-tool description (RFC §13). Computed once in `capability.validate_config` at
-config-save time and stored on `PptxGeneratorConfig.template_slide_catalog`
-(mirroring `ppt_filler`'s placeholder-schema extraction) rather than fetched
-per turn — `tools(ctx)` is synchronous and this capability ships no
-`middleware()` escape hatch to await a fetch from (RFC §4.1)."""
+"""Summarizes an uploaded brand template's slides for the `generate_pptx` tool
+description. Computed once at config-save time, since the synchronous
+`tools(ctx)` cannot fetch the template per turn."""
 
 from __future__ import annotations
 
@@ -36,16 +33,14 @@ _NON_CONTENT_TYPES = (
     PP_PLACEHOLDER.SLIDE_NUMBER,
 )
 _BULLET_TAGS = ("buChar", "buAutoNum", "buBlip")
-# Mirrors deck_builder.MAX_SLIDES — an uploaded "template" with an unbounded
-# slide count would otherwise inject an unbounded block into the tool
+# Mirrors deck_builder.MAX_SLIDES: bounds the block injected into the tool
 # description on every turn.
 _MAX_CATALOG_SLIDES = 50
 
 
 def describe_template_slides(presentation) -> str | None:
-    """One numbered line per slide already in `presentation` (a template
-    opened by the caller), or None if it has no slides at all — the common
-    case for a template used only as a masters/theme source (RFC §4.2.1)."""
+    """One numbered line per slide in `presentation`, or None if it has none
+    (the common masters/theme-only template)."""
 
     slides = list(presentation.slides)
     lines = [
@@ -186,12 +181,8 @@ def _content_shape_kinds(slide) -> list[str]:
 
 
 def _shape_kind_tag(shape) -> str | None:
-    """Tag `shape` only when it's a PLACEHOLDER — the only kind of shape
-    `deck_builder`'s content-fill functions ever remove/replace
-    (`_body_placeholder`/`_take_content_box` iterate `slide.placeholders`
-    only). A static, non-placeholder picture/table/chart/textbox sitting
-    decoratively on the slide is left untouched either way, so tagging it
-    here would wrongly promise the agent that its content overwrites it."""
+    """Tag placeholders only: `deck_builder` never replaces a static shape, so
+    tagging one would wrongly promise the agent its content overwrites it."""
 
     if not shape.is_placeholder:
         return None

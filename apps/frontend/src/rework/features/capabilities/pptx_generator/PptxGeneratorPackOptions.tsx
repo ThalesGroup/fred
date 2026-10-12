@@ -12,13 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// The pptx_generator options shown INSIDE the "PowerPoint generation" capability
-// pack (Simple capabilities view): an optional brand-template upload, trimmed to
-// the pack's lighter surface — an upload button and a removable file chip.
-// Unlike ppt_filler's mandatory template, there is nothing to analyze/validate
-// client-side and no Save-gating error (PPTX-GENERATOR-CAPABILITY-RFC.md §4.2.1,
-// §5) — upload/clear logic is shared with PptxGeneratorConfigForm via
-// usePptxGeneratorTemplate.
+// Simple-view "PowerPoint generation" pack options: the optional brand-template
+// upload as a button plus removable chip, sharing logic via usePptxGeneratorTemplate.
 
 import { useRef } from "react";
 import { useTranslation } from "react-i18next";

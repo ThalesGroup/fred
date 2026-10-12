@@ -13,15 +13,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// The pane's pdf.js worker budget, iteration after iteration (mirrors ppt_filler's
-// PptPreviewPane.worker.test.tsx).
-//
-// Each worker is a real thread loading the pdf.js bundle, and each PORT may serve
-// exactly one load - pdf.js caches a PDFWorker per port and throws
-// "the worker is being destroyed" on the second. So the invariant is narrow:
-// ONE worker per document actually loaded, none while a fetch is in flight, and
-// every one of them terminated. This test counts them across a regeneration loop,
-// which is what a user correcting a deck does over and over.
+// pdf.js worker budget across regenerations (mirrors ppt_filler's test). Each port
+// serves exactly one load, so: one worker per loaded document, none while a fetch
+// is in flight, and every one terminated.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";

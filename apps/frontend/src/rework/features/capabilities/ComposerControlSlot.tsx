@@ -69,10 +69,8 @@ export function ComposerControlSlot({
   // (reasoning_toggle) are promoted to always-visible composer chips instead
   // (ReasoningChip, right edge), so they're excluded here to avoid the same
   // setting appearing twice.
-  // Multiple capabilities can independently request "attach_files" (e.g.
-  // document_access + an MCP capability + pptx_generator all on one agent);
-  // the control itself is capability-agnostic (AttachFilesControl reads no
-  // per-entry params), so render at most one row, not one per contributor.
+  // Several capabilities on one agent may each request "attach_files"; the
+  // control reads no per-entry params, so render one row, not one per contributor.
   const attachEntry = resolved.find((entry) => entry.widget === "attach_files");
   const attachControls = attachEntry ? [attachEntry] : [];
   const otherControls = resolved.filter(

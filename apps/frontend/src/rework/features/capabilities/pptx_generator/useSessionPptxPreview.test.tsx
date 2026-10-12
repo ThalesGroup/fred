@@ -12,11 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Two things this state has to get right (mirrors ppt_filler's
-// useSessionPptPreview.test.tsx): the deck belongs to ONE conversation (without the
-// stamp, a deck generated earlier lights the launcher up on a brand-new chat), and
-// what the pane shows moves only on an explicit open - the pane keys its pdf.js
-// worker on it, and that lifecycle does not survive a churning value.
+// The deck belongs to ONE conversation (else an old deck lights the launcher on a
+// new chat), and the pane's deck moves only on an explicit open, since the pane
+// keys its pdf.js worker on it.
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";

@@ -12,10 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// PptxPreviewPane — read-only PDF preview side panel for a generated deck.
-// Mirrors ppt_filler's PptPreviewPane exactly, including its pdf.js
-// worker-per-mount lifecycle handling — see that file's header comment for
-// the full worker-lifecycle rationale (the "PDFWorker.fromPort" race).
+// Read-only PDF preview side panel for a generated deck. Mirrors ppt_filler's
+// PptPreviewPane, whose header explains the pdf.js worker-per-mount lifecycle.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";

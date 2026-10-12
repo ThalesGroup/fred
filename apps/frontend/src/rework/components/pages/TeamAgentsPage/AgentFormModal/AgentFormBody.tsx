@@ -375,9 +375,8 @@ export function AgentFormBody({
         />
       );
     }
-    // PowerPoint generation → the optional brand-template upload, same
-    // config/asset state as the Advanced pptx_generator card. Unlike
-    // ppt_filler's, this slot is optional so there is no blocking error to wire.
+    // PowerPoint generation → optional brand-template upload (same state as the
+    // Advanced card); the slot is optional, so no blocking error to wire.
     if (pack.enablesCapabilityIds.includes(CAP_PPTX_GENERATOR) && availableCapabilityIds.has(CAP_PPTX_GENERATOR)) {
       return (
         <PptxGeneratorPackOptions

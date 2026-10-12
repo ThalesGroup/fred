@@ -12,14 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Download icon button for a generated deck's source `.pptx`, shared by BOTH the
-// in-chat preview card and the preview pane header so the two stay DRY (mirrors
-// ppt_filler's PptxDownloadButton).
-//
-// Why not a plain `<a href download>`: the deck lives behind the bearer-protected
-// Knowledge Flow `/fs/download` route. A bare anchor sends no Authorization header,
-// so the navigation 401s. `downloadAuthed` fetches the bytes WITH the live bearer,
-// then triggers a client-side blob save — the sanctioned pattern (ArtifactLinkChip).
+// Download button for a generated deck's `.pptx`, shared by the chat card and pane header.
+// Not a plain `<a download>`: the KF route is bearer-protected, so `downloadAuthed`
+// fetches with the bearer and saves the blob client-side.
 
 import { useState } from "react";
 import { useTranslation } from "react-i18next";

@@ -12,10 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// usePptxPreview — fetches the preview PDF for the side panel (mirrors
-// ppt_filler's usePptPreview). react-pdf can't attach an Authorization
-// header itself, so this hook fetches the bearer-protected bytes and hands
-// it a blob object URL instead of the raw `pdf_download_url`.
+// Fetches the preview PDF for the side panel: react-pdf can't send an
+// Authorization header, so it gets a blob URL of the bearer-fetched bytes.
 
 import { useCallback, useEffect, useState } from "react";
 import { KeyCloakService } from "../../../../security/KeycloakService";

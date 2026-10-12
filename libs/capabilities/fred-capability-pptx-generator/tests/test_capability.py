@@ -12,10 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""`PptxGeneratorCapability` tests: registry boot invariant, `validate_config`
-save-time state machine, and the `generate_pptx` tool's happy/error paths
-against a stubbed `RuntimeServices` (RFC §4, `docs/swift/capabilities/AUTHORING.md`
-testing expectations)."""
+"""`PptxGeneratorCapability` tests: boot invariant, `validate_config`, and the
+`generate_pptx` tool's happy/error paths against a stubbed `RuntimeServices`."""
 
 from __future__ import annotations
 
@@ -189,8 +187,8 @@ def test_capability_registers_via_entry_point_and_boots() -> None:
 
 
 def test_manifest_uses_default_execution_models() -> None:
-    # This capability implements only tools() (RFC §4.1) — the default
-    # ("react", "graph") is correct as-is, unlike ppt_filler/html_artifact.
+    # Only tools() is implemented, so the default ("react", "graph") holds,
+    # unlike ppt_filler/html_artifact.
     assert PptxGeneratorCapability.manifest.execution_models == ("react", "graph")
 
 
@@ -202,7 +200,7 @@ def test_manifest_declares_asset_slot_and_chat_surface() -> None:
     assert [part.__name__ for part in manifest.chat_parts] == ["PptxGeneratedPart"]
     assert [panel.widget for panel in manifest.side_panels] == ["pptx_preview_pane"]
     assert manifest.icon == "co_present"
-    # No owned table, no router — v1 has neither (RFC §3).
+    # No owned table, no router — v1 has neither.
     assert manifest.router is None
     assert manifest.tables == []
 
@@ -298,9 +296,8 @@ def _pptx_bytes_with_titled_slide(title: str) -> bytes:
 
 @pytest.mark.asyncio
 async def test_validate_config_with_slideless_template_leaves_catalog_unset() -> None:
-    # A blank Presentation() has masters/layouts but zero slides — the
-    # common "theme-only" brand template (RFC §4.2.1) — so there's nothing
-    # to list (RFC §13).
+    # A blank Presentation() has layouts but zero slides — the common
+    # "theme-only" brand template — so there's nothing to list.
     save_ctx = SaveContext(
         identity=_identity(), services=RuntimeServices(agent_assets=_FakeAgentAssets())
     )

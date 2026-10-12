@@ -12,36 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""`PptxGeneratorCapability` — compose a PowerPoint deck from scratch
-(`docs/swift/rfc/PPTX-GENERATOR-CAPABILITY-RFC.md`).
+"""`PptxGeneratorCapability` — compose a PowerPoint deck from scratch.
 
-Why this module exists:
-- `ppt_filler` (#1903) only FILLS an uploaded template's placeholders; this
-  capability composes a deck's structure, slide count, and content directly
-  from the LLM call — no pre-existing `.pptx` required.
-
-Divergence from `ppt_filler` (RFC §4.1, §5): the tool's argument schema is
-STATIC (`GeneratePptxArgs`, `models.py`) rather than rebuilt per turn from a
-parsed template, so this is the `tools(ctx)` case in AUTHORING.md's decision
-table — the canonical `document_access` pattern — not the `middleware()`
-escape hatch. This capability therefore implements only `tools()`, ships no
-`middleware()` override, and is left at the manifest's default
-`execution_models` (works on ReAct AND Graph agents, unlike `ppt_filler` /
-`html_artifact`, which are `middleware()`-only and ReAct-only).
-
-Save-time state machine (`validate_config`), mirroring `ppt_filler`'s but
-simpler — the brand template is OPTIONAL (RFC §4.2.1), and there is nothing
-to parse (no placeholder schema, just masters/theme):
-
-============================ ================================================
- Incoming state               Action
-============================ ================================================
- upload in `brand_template`   cap-check bytes -> validate it opens as a
-                               `.pptx` (no schema extraction) -> store the
-                               blob under the fixed key -> persist the key
- no upload                    pass through unchanged (template stays
-                               whatever it already was, possibly None)
-============================ ================================================
+Unlike `ppt_filler` (which only fills an uploaded template's placeholders), the
+tool schema is static, so this is a `tools()`-only capability that runs on both
+ReAct and Graph agents. The brand template is optional. Rationale: README.md
 """
 
 from __future__ import annotations
@@ -95,10 +70,7 @@ logger = logging.getLogger(__name__)
 
 PPTX_GENERATOR_CAPABILITY_ID = "pptx_generator"
 
-# The manifest's one (optional) upload slot; `validate_config` reads
-# uploads[BRAND_TEMPLATE_SLOT]. Fixed per-instance storage key, same
-# convention as `ppt_filler`'s `PPT_FILLER_TEMPLATE_KEY` — one template per
-# agent; re-uploading swaps it.
+# Fixed per-instance storage key: one template per agent, re-uploading swaps it.
 BRAND_TEMPLATE_SLOT = "brand_template"
 BRAND_TEMPLATE_KEY = "pptx_generator_brand_template.pptx"
 
@@ -147,16 +119,12 @@ def _warnings_note(warnings: Sequence[str]) -> str:
 
 
 class PptxGeneratorConfig(BaseModel):
-    """Stored config of the pptx_generator capability (ConfigModel ==
-    StoredConfigModel, RFC §4.2). The template bytes never appear here
-    (RFC §3.8 / AUTHORING.md) — only the storage key, once one is set.
-    """
+    """Stored config of the pptx_generator capability. Holds only the template
+    storage key, never the template bytes."""
 
     template_key: Annotated[str | None, AssetKey(BRAND_TEMPLATE_SLOT)] = None
-    # RFC §13: a numbered one-line-per-slide catalog of the uploaded
-    # template's own slides, computed once in `validate_config` and spliced
-    # into the tool description in `tools()` — `tools(ctx)` is synchronous,
-    # so this avoids fetching/parsing the template on every turn.
+    # Computed once at save time: `tools(ctx)` is synchronous, so the
+    # template must not be fetched/parsed on every turn.
     template_slide_catalog: str | None = None
 
 
@@ -276,13 +244,8 @@ _TOOL_DESCRIPTION = (
 
 
 def _tool_description(template_slide_catalog: str | None) -> str:
-    """RFC §13: `_TOOL_DESCRIPTION` plus, only when a brand template with
-    slides is configured, a per-agent listing of those slides so the agent
-    knows what `template_slide_index` values are valid — computed here from
-    `PptxGeneratorConfig.template_slide_catalog` (already extracted at
-    config-save time, RFC §13) rather than baked into the static base text,
-    which is shared by every agent regardless of whether one is configured.
-    """
+    """`_TOOL_DESCRIPTION` plus, when a brand template with slides is
+    configured, the catalog of valid `template_slide_index` values."""
 
     if not template_slide_catalog:
         return _TOOL_DESCRIPTION
@@ -309,8 +272,7 @@ def _tool_description(template_slide_catalog: str | None) -> str:
 
 
 def _open_template_and_catalog(pptx_bytes: bytes) -> str | None:
-    """Sync helper run under `asyncio.to_thread` (RFC §13) — opening and
-    cataloging both happen off the event loop in one offload, not two."""
+    """Open and catalog the template in a single `asyncio.to_thread` offload."""
 
     return describe_template_slides(Presentation(io.BytesIO(pptx_bytes)))
 
@@ -318,10 +280,7 @@ def _open_template_and_catalog(pptx_bytes: bytes) -> str | None:
 class PptxGeneratorCapability(
     AgentCapability[PptxGeneratorConfig, PptxGeneratorConfig, EmptyModel]
 ):
-    """Compose a PowerPoint deck from scratch via the `generate_pptx` tool.
-    See the module docstring for the save-time state machine and the
-    `tools()`-only / execution-model-agnostic design decision.
-    """
+    """Compose a PowerPoint deck from scratch via the `generate_pptx` tool."""
 
     manifest = CapabilityManifest(
         id=PPTX_GENERATOR_CAPABILITY_ID,
@@ -330,15 +289,8 @@ class PptxGeneratorCapability(
         description="capability.pptx_generator.description",
         icon="co_present",
         config_fields=[
-            # One field owned end-to-end by the plugin's custom form widget
-            # (mirrors ppt_filler's `schema_slides` field, RFC §9 item 4):
-            # `template_key` already exists on `PptxGeneratorConfig` purely as
-            # the round-tripped storage key, but naming it here with a
-            # `ui.widget` is what makes the frontend render an upload control
-            # for `BRAND_TEMPLATE_SLOT` at all — without a `config_fields`
-            # entry the generic form renderer has nothing to iterate over for
-            # this capability, so the slot was previously configurable via the
-            # API/backend but had no UI surface.
+            # Without a `config_fields` entry the generic form renders nothing,
+            # so this widget is what surfaces the brand-template upload control.
             FieldSpec(
                 key="template_key",
                 type="string",
@@ -354,28 +306,22 @@ class PptxGeneratorCapability(
             AssetSlot(
                 key=BRAND_TEMPLATE_SLOT,
                 accepted_types=[".pptx"],
-                # Optional (unlike ppt_filler's mandatory template, RFC
-                # §4.2.1): min_count=0 both so ordinary edits pass the
-                # platform slot gate AND because zero-config generation is
-                # the whole point of this capability (RFC §5).
+                # Optional: ordinary edits must pass the platform slot gate,
+                # and zero-config generation is the point of this capability.
                 min_count=0,
                 max_count=1,
             )
         ],
         chat_parts=[PptxGeneratedPart],
         side_panels=[SidePanelSpec(widget="pptx_preview_pane")],
-        # No execution_models override: this capability implements ONLY
-        # tools() (RFC §4.1) — the manifest default ("react", "graph") is
-        # exactly correct, unlike ppt_filler/html_artifact next to it.
+        # No execution_models override: tools()-only, so the default
+        # ("react", "graph") is correct.
     )
     ConfigModel = PptxGeneratorConfig
 
     def chat_controls(self, config: PptxGeneratorConfig) -> list[ChatControlSpec]:
-        """Composer file-attach control, so a source doc's content (delivered
-        generically via `RuntimeContext.attachments_markdown`) can seed slide
-        content — the default `AgentCapability.chat_controls` is `[]`, which
-        left this capability with no attach button despite being active.
-        """
+        """Composer file-attach control, so an attached source doc
+        (`RuntimeContext.attachments_markdown`) can seed slide content."""
         return [ChatControlSpec(widget="attach_files")]
 
     async def validate_config(
@@ -386,9 +332,7 @@ class PptxGeneratorCapability(
     ) -> PptxGeneratorConfig:
         template_uploads = list(uploads.get(BRAND_TEMPLATE_SLOT, ()))
 
-        # --- No upload: pass through unchanged. Unlike ppt_filler, a brand
-        # template is never mandatory (RFC §4.2.1, §5) — this covers both
-        # "never configured" and "ordinary edit, template unchanged".
+        # No upload: never configured, or an edit with the template unchanged.
         if not template_uploads:
             return config
 
@@ -405,10 +349,8 @@ class PptxGeneratorCapability(
             raise RuntimeError(_BUSY_MESSAGE)
         try:
             try:
-                # Opened (to validate it parses as a `.pptx`, RFC §4.2.1) and
-                # cataloged (RFC §13) in the SAME thread offload — a template
-                # with a pathological slide/shape count must not run that
-                # scan inline on the event loop.
+                # Off the event loop: a pathological slide/shape count must
+                # not block it.
                 slide_catalog = await asyncio.to_thread(
                     _open_template_and_catalog, pptx_bytes
                 )
@@ -442,14 +384,9 @@ class PptxGeneratorCapability(
     def tools(
         self, ctx: CapabilityContext[PptxGeneratorConfig, EmptyModel]
     ) -> Sequence[BaseTool]:
-        """Build the single `generate_pptx` tool, bound to the turn's typed
-        context (RFC §4.3). This is the ONLY runtime contribution of this
-        capability — the default `middleware()` wraps this for
-        `create_agent()`, and it is what `context.invoke_runtime_tool(...)`
-        binds for a Graph agent (see the `document_access` docstring for the
-        `content_and_artifact` return-convention rationale this tool
-        follows identically).
-        """
+        """Build the `generate_pptx` tool, the capability's only runtime
+        contribution (wrapped by the default `middleware()` for ReAct, bound
+        via `invoke_runtime_tool` for Graph)."""
 
         config = ctx.config
         services = ctx.services
@@ -480,25 +417,14 @@ class PptxGeneratorCapability(
                     "available on this execution path."
                 )
 
-            # Reserve the heavy-job slot BEFORE any fetch, not just before
-            # the CPU-bound build (previously acquired only around step 3): an
-            # already-overloaded pod should reject fast, not spend I/O fetching
-            # a brand template plus every referenced image only to discard the
-            # work at the build step. Held through steps 1-3; step 4
-            # (upload/PDF conversion) is unaffected, same as before.
+            # Reserved before any fetch so an overloaded pod rejects fast
+            # instead of fetching assets it would discard. Held through step 3.
             if not acquire_heavy_job_slot():
                 return _tool_error(_BUSY_MESSAGE)
             try:
-                # 1+2. Fetch the brand template (if configured) and prefetch
-                # every referenced image concurrently — the two share no
-                # dependency, so running them back-to-back would add
-                # avoidable wall-clock latency to every call (same reasoning
-                # already applied to step 4's upload/PDF-conversion pair).
-                # Background image_refs (per-slide or deck-wide via `theme`,
-                # RFC §11.2) fold into the SAME prefetch — same port, same
-                # concurrency gate. A ref that fails to fetch is simply left
-                # out of the map; `deck_builder` reports it as an actionable
-                # "unknown image_ref" error for the agent to self-correct.
+                # 1+2. Fetch the template and all image refs concurrently. A ref
+                # that fails is left out of the map; `deck_builder` reports it
+                # as an "unknown image_ref" the agent can self-correct.
                 image_refs = {
                     spec.image_ref
                     for spec in slides
@@ -527,10 +453,8 @@ class PptxGeneratorCapability(
                 ):
                     image_refs.add(theme.background.image_ref)
 
-                # Port availability is a configuration error, not a
-                # self-correctable agent mistake — checked synchronously,
-                # up front, so it still raises immediately (same as before
-                # parallelizing the two fetches below).
+                # A missing port is a configuration error, not an agent
+                # mistake: raise up front.
                 assets = services.agent_assets if config.template_key else None
                 if config.template_key and assets is None:
                     raise RuntimeError(
@@ -630,12 +554,8 @@ class PptxGeneratorCapability(
             finally:
                 release_heavy_job_slot()
 
-            # 4. Write the .pptx to the agent workspace (session-scoped path
-            # so outputs of different conversations never clobber each
-            # other) and, concurrently, build the best-effort PDF preview
-            # (convert + upload) — the two share no dependency (both only
-            # need `deck_bytes`), so running them back-to-back would add
-            # avoidable wall-clock latency to every call.
+            # 4. Write the .pptx (session-scoped path so conversations never
+            # clobber each other) and, concurrently, the best-effort PDF preview.
             output_file_name = _sanitize_output_file_name(title)
             output_path = (
                 f"outputs/{session_id}/{output_file_name}"
@@ -644,11 +564,8 @@ class PptxGeneratorCapability(
             )
 
             async def _build_pdf_preview() -> tuple[bytes | None, str | None]:
-                """Convert `deck_bytes` to PDF and upload it. Never raises —
-                any failure (conversion unavailable/timeout, upload error)
-                degrades to the plain download chip so a preview problem
-                never costs the user the deck (same two-tier contract as
-                ppt_filler/fill.py)."""
+                """Convert `deck_bytes` to PDF and upload it. Never raises: any
+                failure degrades to the plain download chip."""
 
                 pdf_bytes = await convert_office_bytes_to_pdf(
                     deck_bytes, suffix=".pptx"
@@ -694,9 +611,8 @@ class PptxGeneratorCapability(
                 )
                 return _tool_error(message)
             pptx_artifact: PublishedArtifact = pptx_result
-            # `_build_pdf_preview` never raises (it degrades to (None, None)
-            # internally) — `return_exceptions=True` only guards the pptx
-            # upload branch above sharing the same `gather` call.
+            # `_build_pdf_preview` never raises; `return_exceptions=True`
+            # only guards the pptx upload.
             pdf_bytes, pdf_download_url = cast(
                 "tuple[bytes | None, str | None]", pdf_preview_result
             )

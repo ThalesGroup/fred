@@ -14,20 +14,9 @@
 
 """Synchronous python-pptx deck construction for the `pptx_generator` capability.
 
-`build()` is the single entry point: it opens the (optional) brand template
-or a blank default presentation, builds every slide, and returns the final
-`.pptx` bytes. It is pure/synchronous and CPU-bound (python-pptx, Pillow, and
-— for the four matplotlib-fallback chart kinds — `chart_render.py` are all
-synchronous) — the capability's tool calls it via `asyncio.to_thread` under a
-bounded concurrency gate (`concurrency.py`), never inline on the event loop.
-
-Layout resolution (RFC §4.3, §14): an optional brand template can carry
-masters/layouts in any order or naming, so slide kinds are mapped to a layout
-first by matching common Office theme layout names (`_LAYOUT_NAMES_BY_KIND`),
-falling back to whichever of the template's OWN layouts structurally fits the
-kind best — by its actual placeholder count/types, not a guessed numeric
-index (RFC §14: a fixed index made unrelated kinds collapse onto the same
-layout whenever a custom template's names didn't match).
+`build()` is the single entry point. It is CPU-bound and synchronous, so the
+tool runs it via `asyncio.to_thread` under the `concurrency.py` gate, never
+inline on the event loop. Rationale: README.md
 """
 
 from __future__ import annotations
@@ -67,48 +56,34 @@ from fred_capability_pptx_generator.models import (
 )
 from fred_capability_pptx_generator.palettes import THEME_PRESETS, ThemePresetDef
 
-# v1 engineering guardrails (RFC §9 item 5) — not a hard product limit, a
-# bound on how much CPU/memory one tool call can commit the pod to.
+# Engineering guardrails, not product limits: they bound how much CPU/memory
+# one tool call can commit the pod to.
 MAX_SLIDES = 50
 MAX_TABLE_ROWS = 50  # includes the header row
 MAX_TABLE_COLS = 20
-MAX_SHAPES_PER_SLIDE = 20  # RFC §11.4
+MAX_SHAPES_PER_SLIDE = 20
 MAX_COLUMNS = 4
 
-# Adaptive table layout (RFC §12.2b): a deterministic step function from row
-# count to font size, tuned so a short table reads big and a dense one still
-# fits without overflowing its box — not a continuous formula, easier to
-# reason about and to test at the tier boundaries.
+# Row count -> font size step function: a short table reads big, a dense one
+# still fits its box. Steps, not a formula, so tier boundaries are testable.
 _TABLE_FONT_SIZE_TIERS: tuple[tuple[int, float], ...] = (
     (6, 16.0),
     (10, 13.0),
     (15, 11.0),
 )
 _TABLE_FONT_SIZE_FLOOR_PT = 9.0
-# A column never drops below this fraction of an even per-column split of the
-# table's total width, however lopsided its content length is relative to
-# its neighbors (RFC §12.2b: "a sane minimum floor ... so one huge column
-# doesn't crush the others to zero").
+# Minimum column width, as a fraction of an even split, so one long column
+# cannot crush its neighbors to zero.
 _TABLE_COLUMN_WIDTH_FLOOR_FRACTION = 0.1
 
-# Shape/content overlap guard: a decorative or diagram shape whose box
-# overlaps an already-placed content shape (title, bullets, table, chart,
-# picture) by more than this fraction of the SMALLER of the two areas is
-# dropped (with a warning) — the concrete, observed failure was a labeled badge shape
-# dropped squarely on top of running bullet text, both illegible. A small
-# grazing overlap (an accent shape lightly touching a content edge) is still
-# allowed; a shape covering a meaningful chunk of text is not. A shape
-# covering ~the whole slide (the background picture/pattern) is excluded
-# from the "occupied" set entirely — see `_occupied_content_boxes`.
+# A shape overlapping body content by more than this fraction of the smaller
+# area is dropped: observed failure was a badge shape covering bullet text.
+# Near-full-slide shapes (backgrounds) never count as occupied.
 _SHAPE_OVERLAP_AREA_FRACTION_THRESHOLD = 0.15
 _BACKGROUND_SHAPE_AREA_FRACTION = 0.9
 
-# Curated shape set (models.ShapeType) -> MSO_SHAPE/MSO_AUTO_SHAPE_TYPE member
-# (RFC §11.2). "line" is deliberately absent: python-pptx has no autoshape
-# line, it is a connector (`_add_shape` branches on it separately). "pentagon"
-# maps to REGULAR_PENTAGON, not MSO_SHAPE.PENTAGON — the latter is the
-# "home plate" process-arrow preset (`homePlate` in OOXML), not a true
-# 5-sided pentagon.
+# "line" is absent: python-pptx draws it as a connector (see `_add_shape`).
+# MSO_SHAPE.PENTAGON is the "home plate" arrow, hence REGULAR_PENTAGON.
 _MSO_SHAPE_BY_TYPE: dict[str, MSO_SHAPE] = {
     "rectangle": MSO_SHAPE.RECTANGLE,
     "rounded_rectangle": MSO_SHAPE.ROUNDED_RECTANGLE,
@@ -132,12 +107,8 @@ _PP_ALIGN_BY_NAME: dict[str, PP_ALIGN] = {
     "right": PP_ALIGN.RIGHT,
 }
 
-# Native chart types whose series coloring (RFC §11.2) goes through a fill
-# (bar/column/area draw a filled area per category) vs. a line color
-# (line/radar draw a stroked line). Pie/doughnut color per-point, not
-# per-series, a different API left out of this pass; scatter/bubble are
-# excluded for the same reason (their series are markers, not a single
-# fill/line either) — none of the four are in either set below.
+# Series color goes through a fill or a line color. Pie/doughnut (per-point)
+# and scatter/bubble (markers) are in neither set and stay uncolored.
 _SERIES_FILL_CHART_TYPES = frozenset({"bar", "column", "area"})
 _SERIES_LINE_CHART_TYPES = frozenset({"line", "radar"})
 
@@ -153,9 +124,8 @@ _NATIVE_CHART_XL_TYPE: dict[str, XL_CHART_TYPE] = {
     "bubble": XL_CHART_TYPE.BUBBLE,
 }
 
-# Preferred layout name(s) per slide kind, matched case-insensitively against
-# the template's own layout names — tried first since an exact name match is
-# a stronger signal than structure alone.
+# Office layout names per kind, tried before the structural fallback since a
+# name match is a stronger signal than placeholder structure.
 _LAYOUT_NAMES_BY_KIND: dict[str, tuple[str, ...]] = {
     "title": ("Title Slide",),
     "section_header": ("Section Header",),
@@ -166,13 +136,8 @@ _LAYOUT_NAMES_BY_KIND: dict[str, tuple[str, ...]] = {
     "table": ("Title and Content",),
     "chart": ("Title and Content",),
 }
-# RFC §14: an ALLOWLIST of "real content" placeholder types, for the
-# structural fallback below — every layout also carries furniture
-# placeholders (date/footer/slide-number, sometimes a header) regardless of
-# its actual content shape, which would swamp a plain count of "everything
-# but the title" (verified empirically: without this allowlist, a bare
-# "Title Only" layout out-scores "Title and Content" for kind="bullets",
-# since its 3 furniture placeholders read as "closer to 1" than 4).
+# Allowlist, not "everything but the title": furniture placeholders would
+# swamp the count (observed: "Title Only" out-scored "Title and Content").
 _GENERIC_CONTENT_PLACEHOLDER_TYPES = frozenset(
     {
         PP_PLACEHOLDER.BODY,
@@ -181,10 +146,8 @@ _GENERIC_CONTENT_PLACEHOLDER_TYPES = frozenset(
         PP_PLACEHOLDER.VERTICAL_OBJECT,
     }
 )
-# How many generic content placeholders each kind wants — replaces a numeric
-# layout-index guess that made every one of "bullets"/"image"/"table"/
-# "chart" collapse onto the SAME layout whenever name-matching failed (four
-# different kinds, one index).
+# Generic content placeholders each kind wants, for the structural fallback
+# (a fixed layout index collapsed several kinds onto one layout).
 _WANTED_GENERIC_CONTENT_BY_KIND: dict[str, int] = {
     "title": 0,
     "section_header": 1,
@@ -195,15 +158,12 @@ _WANTED_GENERIC_CONTENT_BY_KIND: dict[str, int] = {
     "table": 1,
     "chart": 1,
 }
-# "title" specifically prefers a real SUBTITLE placeholder over a same-count
-# generic one (`_set_secondary_text` fills whichever non-title placeholder
-# it finds, but a dedicated subtitle placeholder is the better visual match
-# for a cover slide) — checked ahead of the generic-count distance below.
+# A cover slide prefers a real SUBTITLE placeholder over a same-count
+# generic one.
 _WANTS_SUBTITLE_PLACEHOLDER = frozenset({"title"})
 
-# RFC §15: matches a chapter-divider "badge" shape's default text (e.g.
-# "01") — some brand templates assign it OOXML type="title" instead of the
-# real chapter-title shape, so type alone can't identify it.
+# A chapter-divider badge's default text ("01"): some templates type the
+# badge as the title, so placeholder type alone can't identify it.
 _SECTION_HEADER_BADGE_TEXT_RE = re.compile(r"^\d{2}$")
 
 # Never a content slot: slide content written here overwrote the cover date
@@ -217,9 +177,8 @@ _FURNITURE_PLACEHOLDER_TYPES = frozenset(
     }
 )
 
-# RFC §13: rejected rather than silently corrupted when duplicating a
-# template slide — each embeds relationships far more involved to re-wire
-# onto a new slide part than a picture's single blip reference.
+# Rejected when duplicating a template slide: their relationships are far
+# harder to re-wire than a picture's single blip reference.
 _UNSUPPORTED_TEMPLATE_SHAPE_TYPES = frozenset(
     {
         MSO_SHAPE_TYPE.CHART,
@@ -229,20 +188,16 @@ _UNSUPPORTED_TEMPLATE_SHAPE_TYPES = frozenset(
     }
 )
 
-# RFC §14: fractions of the ACTUAL presentation size, not fixed Inches() —
-# the fallback used only when a slide has no real placeholder to take a box
-# from. A hardcoded absolute box (sized for the default 10x7.5in
-# presentation) could overflow a differently-sized or differently
-# proportioned brand template, including past a furniture placeholder
-# (footer/page number) near the bottom of the slide.
+# Fallback content box when no placeholder exists, as fractions of the real
+# slide size: fixed Inches() overflowed differently-sized templates.
 _DEFAULT_CONTENT_BOX_FRACTIONS = (0.05, 0.20, 0.90, 0.65)
 _COLUMN_GAP = Inches(0.3)
 # Template zones whose left edges differ by less than this share a column.
 _COLUMN_ALIGN_TOLERANCE = Inches(0.25)
 
-# Pillow ``format`` values python-pptx's ``add_picture`` can actually embed
-# (same set `ppt_filler` uses) — anything else is transcoded to PNG in-memory.
+# Share of fully transparent pixels above which an image counts as an icon.
 _ICON_TRANSPARENT_SHARE = 0.5
+# Pillow formats `add_picture` can embed; anything else is transcoded to PNG.
 _PPTX_EMBEDDABLE_FORMATS = frozenset({"BMP", "GIF", "JPEG", "PNG", "TIFF", "WMF"})
 
 _Box = tuple[int, int, int, int]
@@ -269,40 +224,26 @@ def build(
 ) -> bytes:
     """Build the complete deck and return its `.pptx` bytes.
 
-    `image_bytes_by_ref` must already hold the bytes for every `image_ref`
-    the slides use (fetched by the caller before entering this synchronous,
-    thread-offloaded call — a worker thread cannot await a platform port) —
-    this now includes `background.image_ref` on any slide or on `theme`
-    (RFC §11.2), fetched through the same map. Raises `ValueError` for any
-    structural problem (an unresolved `image_ref`, an oversized table, a
-    malformed chart, too many shapes) with a message aimed at the calling
-    agent, so it can correct its next call. An optional field the chosen
-    template slide has no zone for, or a shape overlapping body content, is
-    dropped instead, with a note appended to `warnings`: one misfit
-    decoration should not cost the whole deck.
+    `image_bytes_by_ref` must be prefetched: a worker thread cannot await a
+    platform port. Structural problems raise `ValueError` aimed at the agent;
+    misfit optional fields and overlapping shapes are dropped into `warnings`.
     """
 
     presentation = (
         Presentation(io.BytesIO(template_bytes)) if template_bytes else Presentation()
     )
-    # RFC §13: the template's own slides are raw material for
-    # `template_slide_index` only — captured before any generated slide is
-    # appended, then stripped from the output at the end.
+    # The template's own slides are raw material for `template_slide_index`
+    # only, captured before any slide is appended and stripped at the end.
     template_source_slides = list(presentation.slides)
     presentation.core_properties.title = title
-    # RFC §12.2a: resolved once per build, not re-looked-up per slide.
     preset = _resolve_theme_preset(theme)
-    # Loop-invariant (depends only on theme/preset, not on any one slide) —
-    # hoisted here rather than recomputed inside _build_slide for every slide.
     accent_theme = _theme_with_preset_defaults(
         theme, preset, default_primary_color=preset.accent_color if preset else None
     )
-    # The template's layouts never change mid-build — hoisted here rather
-    # than rebuilt by `_resolve_layout` on every single slide.
     layouts = list(presentation.slide_layouts)
     layouts_by_name = {layout.name.strip().lower(): layout for layout in layouts}
-    # RFC §15: the chapter badge's number is this divider's own position
-    # among badge-shaped section_header slides, never the caller's.
+    # The chapter badge's number is this divider's position among badge
+    # dividers, never caller-supplied.
     next_badge_ordinal = 1
     for index, spec in enumerate(slides, start=1):
         used_badge_ordinal = _build_slide(
@@ -332,14 +273,13 @@ def build(
 def _resolve_theme_preset(theme: ThemeSpec | None) -> ThemePresetDef | None:
     if theme is None or theme.preset is None:
         return None
-    # `theme.preset` is validated against THEME_PRESETS at the pydantic
-    # boundary (models.ThemeSpec), so the key is guaranteed to exist here.
+    # Validated against THEME_PRESETS by models.ThemeSpec.
     return THEME_PRESETS[theme.preset]
 
 
 def _preset_background_for_kind(preset: ThemePresetDef, kind: str) -> BackgroundSpec:
-    """RFC §12.2a: `title`/`section_header` slides get the preset's 'strong'
-    treatment; every other kind gets a solid fill of its pale 'soft' tint."""
+    """Title/section_header slides get the preset's strong background, every
+    other kind a solid fill of its soft tint."""
 
     if kind in ("title", "section_header"):
         return preset.strong_background
@@ -352,12 +292,8 @@ def _theme_with_preset_defaults(
     *,
     default_primary_color: str | None,
 ) -> ThemeSpec | None:
-    """Layer `theme` over `preset`'s font defaults and `default_primary_color`
-    (RFC §12.2a): every explicit `theme` field wins over both. Callers pick
-    `default_primary_color` per use — the preset's `strong_text_color` for
-    title/section_header text, its `accent_color` for the pattern-background
-    fallback, or `None` to leave other slide kinds' text at its layout
-    default (full rationale: RFC §12.2)."""
+    """Layer `theme` over `preset`'s fonts and `default_primary_color`; every
+    explicit `theme` field wins. Rationale: README.md"""
 
     if preset is None:
         return theme
@@ -404,8 +340,7 @@ def _build_slide(
     badge_ordinal: int = 1,
     warnings: list[str],
 ) -> bool:
-    """Build one slide. Returns whether this slide consumed `badge_ordinal`
-    (RFC §13 amendment) — the caller only advances its counter when it did."""
+    """Build one slide. Returns whether it consumed `badge_ordinal`."""
 
     image_bytes = image_bytes_by_ref.get(spec.image_ref or "")
     if image_bytes is not None and _looks_like_icon(image_bytes):
@@ -431,12 +366,9 @@ def _build_slide(
         slide = presentation.slides.add_slide(layout)
         unfilled_snapshot = {}
 
-    # Background first (RFC §11.2): `slide.background.fill` always paints
-    # behind every shape regardless of ordering. Precedence (RFC §12.2a):
-    # slide's own background > preset's strong/soft split > deck-wide
-    # theme.background > nothing — except a template_slide_index slide skips
-    # both deck-wide defaults (RFC §13: it already has a real designed
-    # background; painting over it broke the template's text contrast).
+    # Slide background > preset > theme.background. A template slide skips
+    # both deck-wide defaults: painting over its designed background broke
+    # the template's text contrast.
     background = spec.background
     if background is None and preset is not None and not from_template:
         background = _preset_background_for_kind(preset, spec.kind)
@@ -451,9 +383,8 @@ def _build_slide(
         theme=accent_theme,
     )
 
-    # RFC §13: same reasoning as background — a template-sourced slide skips
-    # the preset and the deck-wide text color (one color cannot suit both the
-    # template's dark and light slides); deck-wide fonts still apply.
+    # A template slide also skips the deck-wide text color (one color cannot
+    # suit both dark and light template slides); fonts still apply.
     text_theme = (
         (theme.model_copy(update={"primary_color": None}) if theme else None)
         if from_template
@@ -618,13 +549,9 @@ def _has_placeholder_type(layout, placeholder_type) -> bool:
 
 
 def _best_structural_layout_match(kind: str, layouts: Sequence):
-    """RFC §14: when no layout NAME matches, pick the template's OWN layout
-    whose placeholder count/type structurally fits `kind` best, instead of a
-    numeric index that may point at an unrelated layout in a custom
-    (non-English-named) template. `image` prefers a real PICTURE placeholder
-    and `title` a real SUBTITLE placeholder when the template offers one —
-    checked ahead of (and independent from) the generic-content-count match,
-    which alone can't tell those two apart from same-sized layouts."""
+    """Pick the layout whose placeholders fit `kind` best when no name matches.
+    A PICTURE (image) or SUBTITLE (title) placeholder ranks ahead of the
+    content count, which alone can't tell same-sized layouts apart."""
 
     wanted = _WANTED_GENERIC_CONTENT_BY_KIND.get(kind, 1)
     best_layout = layouts[0]
@@ -665,13 +592,9 @@ def _duplicate_slide(
     *,
     index: int,
 ):
-    """Duplicate `template_source_slides[template_slide_index]` into a new
-    slide appended to `presentation` (RFC §13): its shapes, placeholders,
-    and images are deep-copied so the slide keeps the template author's
-    background/decoration/layout — the `_set_title`/`_fill_bullets_on_slide`/
-    etc. functions below then overwrite its placeholders exactly as they do
-    for a layout-based slide. python-pptx has no built-in slide-duplication
-    API, so this walks the shape tree by hand."""
+    """Append a deep copy of a template slide, keeping its design; the fill
+    functions then overwrite its placeholders. python-pptx has no slide
+    duplication API, so this walks the shape tree by hand."""
 
     if not template_source_slides:
         raise ValueError(
@@ -687,9 +610,8 @@ def _duplicate_slide(
         )
     source_slide = template_source_slides[template_slide_index]
 
-    # Recurse into groups too — a chart/OLE/media shape nested inside a
-    # group would otherwise dodge this check (its own `.shape_type` is
-    # `GROUP`) and get deep-copied with dangling relationship references.
+    # Recurse into groups: a nested chart/OLE/media shape would otherwise be
+    # copied with dangling relationship references.
     for shape in _iter_shapes_recursive(source_slide.shapes):
         if shape.shape_type in _UNSUPPORTED_TEMPLATE_SHAPE_TYPES:
             raise ValueError(
@@ -700,9 +622,8 @@ def _duplicate_slide(
             )
 
     new_slide = presentation.slides.add_slide(source_slide.slide_layout)
-    # add_slide() clones the LAYOUT's own placeholders into the new slide —
-    # discard them before copying the SOURCE SLIDE's actual shape tree so
-    # nothing is duplicated.
+    # add_slide() clones the layout's placeholders; drop them so the copied
+    # shape tree isn't duplicated.
     for shape in list(new_slide.shapes):
         _remove_shape(shape)
     _copy_slide_background(source_slide, new_slide)
@@ -721,12 +642,8 @@ def _duplicate_slide(
 
 
 def _copy_slide_background(source_slide, new_slide) -> None:
-    """Copy the source slide's own explicit `<p:bg>` override (if it set
-    one) — a sibling of `<p:spTree>` under `<p:cSld>`, not a shape, so the
-    shape-copy loop in `_duplicate_slide` never touches it. Left alone
-    (nothing to do) when the source slide has no explicit override and
-    simply inherits its background from the layout/master, same as any
-    other slide."""
+    """Copy the source slide's explicit `<p:bg>`, if any: it is not a shape,
+    so the shape-copy loop in `_duplicate_slide` never touches it."""
 
     source_bg = source_slide._element.cSld.find(qn("p:bg"))
     if source_bg is None:
@@ -742,9 +659,8 @@ def _copy_slide_background(source_slide, new_slide) -> None:
 
 
 def _rewire_blip_relationship(source_slide, new_slide, blip) -> None:
-    """A deep-copied `<a:blip r:embed="rIdN">` still points at the SOURCE
-    slide's relationship id, which doesn't exist on the new slide part —
-    re-point it at a fresh relationship to the same image part."""
+    """Re-point a deep-copied blip, whose rId belongs to the source slide, at
+    a fresh relationship to the same image part."""
 
     old_r_id = blip.get(qn("r:embed"))
     if not old_r_id:
@@ -755,10 +671,7 @@ def _rewire_blip_relationship(source_slide, new_slide, blip) -> None:
 
 
 def _strip_template_source_slides(presentation, source_slides: Sequence) -> None:
-    """Remove the uploaded template's own original slides from the output
-    deck (RFC §13) — they are raw material for `template_slide_index`
-    duplication only, never meant to appear in the generated deck verbatim
-    just for having been opened as the base presentation."""
+    """Remove the template's original slides from the output deck."""
 
     source_slide_ids = {slide.slide_id for slide in source_slides}
     sld_id_lst = presentation.slides._sldIdLst
@@ -782,9 +695,7 @@ def _rgb(hex_color: str) -> RGBColor:
 def _resolve_text_style(
     style: TextStyle | None, *, theme: ThemeSpec | None, theme_font_attr: str
 ) -> TextStyle | None:
-    """Merge a slide's `title_style`/`body_style` with the deck-wide theme
-    (RFC §11.2): the theme's font/color are used only for the fields the
-    slide's own style leaves unset, never overriding an explicit value."""
+    """Fill the unset font/color of a slide's text style from the theme."""
 
     theme_font = getattr(theme, theme_font_attr, None) if theme else None
     theme_color = theme.primary_color if theme else None
@@ -820,13 +731,8 @@ def _apply_run_style(run, style: TextStyle | None) -> None:
 
 
 def _enable_shrink_to_fit(text_frame) -> None:
-    """Turn on PowerPoint/Impress's native "shrink text on overflow": word
-    wrap plus `TEXT_TO_FIT_SHAPE` autofit. python-pptx writes only the
-    `<a:normAutofit/>` marker (no `fontScale`) — the actual shrink factor is
-    computed by whatever renders the deck. Verified empirically against the
-    installed LibreOffice (the same engine `fred_core.convert_office_bytes_to_pdf`
-    uses for the preview pane): it does compute and apply a real shrink at
-    render time, not just PowerPoint proper."""
+    """Enable native shrink-on-overflow. python-pptx writes no `fontScale`;
+    the renderer computes it (verified to work in the LibreOffice preview)."""
 
     text_frame.word_wrap = True
     text_frame.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
@@ -839,9 +745,7 @@ def _resolve_align(style: TextStyle | None) -> PP_ALIGN | None:
 
 
 def _apply_text_frame_style(text_frame, style: TextStyle | None) -> None:
-    """Apply `style` to every existing run/paragraph of `text_frame` (used
-    for title/subtitle text boxes written as a single block, not per-run —
-    bullets apply styling per-run themselves, see `_fill_bullets`)."""
+    """Apply `style` to every run of a single-block text frame."""
 
     if style is None:
         return
@@ -1005,10 +909,8 @@ def _require_image_for_picture_placeholders(
 
 
 def _section_header_badge_and_title_placeholders(slide):
-    """Identify a chapter-divider slide's badge/title zones by default
-    content, not type (RFC §15). Returns `(None, None)` when the slide
-    doesn't unambiguously match, so a normal template keeps the type-based
-    fill below. Footer/date/slide-number furniture is ignored."""
+    """Find a chapter divider's badge/title zones by default content, not
+    type. `(None, None)` unless the match is unambiguous."""
 
     placeholders = [
         placeholder
@@ -1044,8 +946,7 @@ def _fill_section_header_from_template(
     style: TextStyle | None,
     index: int,
 ) -> None:
-    """Fill a content-detected chapter-divider slide (RFC §15). `ordinal` is
-    always computed by the caller, never supplied by `spec`."""
+    """Fill a content-detected chapter-divider slide."""
 
     if not spec.title:
         raise ValueError(
@@ -1060,7 +961,7 @@ def _fill_section_header_from_template(
     _enable_shrink_to_fit(title_placeholder.text_frame)
     _apply_text_frame_style(title_placeholder.text_frame, style)
 
-    # RFC §15: fail loudly rather than ship a half-filled divider.
+    # Fail loudly rather than ship a half-filled divider.
     badge_paragraphs = badge_placeholder.text_frame.paragraphs
     badge_written_cleanly = (
         len(badge_paragraphs) == 1
@@ -1086,8 +987,8 @@ def _placeholder_box(placeholder) -> _Box:
 
 
 def _take_content_box(presentation, slide) -> _Box:
-    """Geometry of the slide's body placeholder, removing it (RFC §4.3): the
-    caller replaces it wholesale with a table/chart/picture."""
+    """Geometry of the body placeholder, removed so the caller can replace it
+    with a table/chart/picture."""
 
     placeholder = _body_placeholder(slide)
     if placeholder is None:
@@ -1188,11 +1089,8 @@ def _strip_hyperlinks(r_pr):
 def _fill_bullets(
     text_frame, bullets: Sequence[BulletItem], *, style: TextStyle | None = None
 ) -> None:
-    """Write each bullet as its own paragraph, one run per inline-markdown
-    span (RFC §11.3) so `**bold**`/`*italic*` spans land as separate runs.
-    `style` (font/size/color/base bold-italic/align) is applied to every
-    run first; a span's own emphasis only ever turns bold/italic ON, never
-    off, so it layers on top of the base style rather than replacing it."""
+    """One paragraph per bullet, one run per inline-markdown span. A span's
+    emphasis only turns bold/italic on, layering over `style`."""
 
     base_level = _sample_text_level(text_frame)
     level_formats = _sample_level_formats(text_frame)
@@ -1272,10 +1170,8 @@ def _fill_lead_zone(
 def _fit_inside_box(
     img_w: int, img_h: int, box_left: int, box_top: int, box_w: int, box_h: int
 ) -> _Box:
-    """Scale `(img_w, img_h)` to fit inside `(box_w, box_h)` preserving aspect
-    ratio, centered within the box (same geometry `ppt_filler` uses — a small
-    pure helper, duplicated rather than imported cross-package per
-    `AUTHORING.md`'s lane model)."""
+    """Fit the image inside the box, aspect preserved and centered. Duplicated
+    from `ppt_filler` rather than imported cross-package (AUTHORING.md)."""
 
     if img_w <= 0 or img_h <= 0 or box_w <= 0 or box_h <= 0:
         return (box_left, box_top, box_w, box_h)
@@ -1302,12 +1198,8 @@ def _resolve_image_bytes(
     field_label: str = "image_ref",
 ) -> bytes:
     if not image_ref:
-        # Actionable on purpose (mirrors the "could not be resolved" branch
-        # below): a bare schema complaint here just gets echoed back to the
-        # user verbatim by a model that doesn't retry with a fix. Also fixes
-        # a pre-existing bug — this branch used to hardcode "kind 'image'"
-        # even when called for `background.image_ref` (a bullets/table/etc.
-        # slide with an image background, not an 'image' slide at all).
+        # Actionable on purpose: a bare schema complaint gets echoed to the
+        # user verbatim by a model that doesn't retry with a fix.
         raise ValueError(
             f"slide {index}: '{field_label}' is required. Pass the "
             "document_uid of a document found via a document search/tree "
@@ -1342,21 +1234,9 @@ def _looks_like_icon(image_bytes: bytes) -> bool:
 
 @functools.lru_cache(maxsize=16)
 def _decode_and_maybe_transcode(image_bytes: bytes) -> tuple[bytes, int, int]:
-    """Pure decode/transcode core, cached on the raw bytes: a deck-wide
-    background image (or a logo reused across several slides) is fetched
-    once but was otherwise being re-decoded/re-transcoded by every slide
-    that placed it — this makes repeats a cache hit instead. `index`/
-    `image_ref` are deliberately NOT part of the cache key (they only affect
-    the error message, not the decoded result) — kept out of this function
-    entirely, see the wrapper below.
-
-    `maxsize` bounds ENTRY count only, not total bytes — a deliberately
-    small cap (not the >1 repeats-within-one-build actually needs) because
-    entries can each be several MB and this is a process-wide, unbounded-TTL
-    cache shared by every tenant's deck generation on the pod. A larger
-    cap would trade a marginal cross-request hit-rate gain for real,
-    unbounded-by-size memory growth under a workload with many large,
-    non-repeating images."""
+    """Decode/transcode cached on the raw bytes, so an image reused across
+    slides is decoded once. `maxsize` is small on purpose: entries can be
+    several MB in a process-wide cache shared by every tenant."""
 
     with Image.open(io.BytesIO(image_bytes)) as image:
         img_w, img_h = image.size
@@ -1424,12 +1304,8 @@ def _fill_picture_frame(frame, payload: bytes) -> None:
 
 
 def _send_to_back(shape) -> None:
-    """Move `shape` to the front of the slide's XML shape tree, i.e. behind
-    every other shape including inherited placeholders. python-pptx has no
-    public z-order API, and `add_slide()` already clones the layout's
-    placeholders into the slide before we add anything — a naively appended
-    picture would paint ON TOP of the title/body placeholders, not behind
-    them, so a full-bleed background image must be relocated explicitly."""
+    """Move `shape` behind every other shape. python-pptx has no z-order API,
+    and an appended picture would paint over the cloned placeholders."""
 
     sp_tree = shape._element.getparent()
     sp_tree.remove(shape._element)
@@ -1445,19 +1321,9 @@ def _apply_background(
     image_bytes_by_ref: Mapping[str, bytes],
     theme: ThemeSpec | None = None,
 ) -> None:
-    """Paint `background` (already resolved by the caller — RFC §11.2/§12.2a:
-    `spec.background`, else a theme preset's strong/soft split, else
-    `theme.background`).
-
-    Solid and gradient both go through `slide.background.fill`, which this
-    python-pptx version supports for both (verified against the installed
-    package rather than assumed) — a mechanism entirely separate from the
-    shape tree, so it always paints behind every shape with no z-order
-    concern. `python-pptx` has no first-class background-image primitive, so
-    "image" (and, identically, a rendered "pattern") is implemented as a
-    full-slide picture shape sent to the back via `_send_to_back`. `theme` is
-    used only to resolve a `pattern` background's `accent_color` when the
-    `BackgroundSpec` itself doesn't set one.
+    """Paint the caller-resolved `background`. python-pptx has no background
+    image primitive, so "image" and "pattern" are a full-slide picture sent
+    to the back. `theme` only supplies a pattern's fallback accent color.
     """
 
     if background is None:
@@ -1513,8 +1379,7 @@ def _apply_background(
                 "(or a deck-wide 'theme.primary_color' to fall back to)."
             )
         if background.pattern is None:
-            # Defense-in-depth: BackgroundSpec's own field_validator already
-            # rejects this at the pydantic boundary (models.py).
+            # Defense-in-depth: BackgroundSpec already rejects this.
             raise ValueError(f"slide {index}: a 'pattern' background needs 'pattern'")
         render_fn = background_render.PATTERN_RENDERERS[background.pattern]
         aspect_ratio = presentation.slide_width / presentation.slide_height
@@ -1532,9 +1397,7 @@ def _apply_background(
 
 
 def _fractional_box_to_emu(presentation, spec: ShapeSpec) -> _Box:
-    """Convert a `ShapeSpec`'s 0.0-1.0 fractional box to EMU using the
-    presentation's ACTUAL slide dimensions (not a hardcoded constant), so a
-    shape lands correctly on an uploaded brand template of any size."""
+    """Convert a `ShapeSpec`'s fractional box to EMU on the real slide size."""
 
     slide_width = presentation.slide_width
     slide_height = presentation.slide_height
@@ -1568,28 +1431,14 @@ def _significantly_overlaps(a: _Box, b: _Box) -> bool:
 
 
 def _occupied_content_boxes(presentation, slide) -> list[_Box]:
-    """Every shape already on `slide` that holds actual BODY content
-    (bullets/table/chart/image, or a `two_content` pair) at the moment this
-    is called — the slide's TITLE placeholder is deliberately excluded even
-    though it is a real shape: PowerPoint/python-pptx default layouts give
-    the title placeholder a box spanning nearly the full slide width
-    regardless of how short the title text actually is, so a legitimate
-    corner accent NEAR the title (the exact placement this capability's own
-    prompt guidance recommends) would otherwise be a false-positive reject.
-    A full-bleed background picture/pattern (~the whole slide) is excluded
-    too, or every new shape would spuriously "overlap" it. Snapshotted once,
-    before any of `spec.shapes` is added, so decorative shapes may still
-    overlap EACH OTHER (a deliberate design choice, e.g. layered accents) —
-    only overlap with actual body content drops a shape (RFC §12, the "risk
-    badges dropped on bullet text" bug)."""
+    """Boxes of the slide's body content, snapshotted before shapes are added
+    (so shapes may layer on each other). The title (near full-width box) and
+    full-bleed backgrounds are excluded to avoid false-positive overlaps."""
 
     slide_area = presentation.slide_width * presentation.slide_height
     title_shape = slide.shapes.title
-    # `slide.shapes.title` and each item yielded by iterating `slide.shapes`
-    # are separately-constructed python-pptx wrapper objects even when they
-    # represent the same underlying shape — `is` on the wrappers themselves
-    # is unreliable (confirmed by an earlier failing test run). `._element`
-    # is the shared underlying lxml node, stable across wrapper instances.
+    # python-pptx builds a new wrapper per access, so compare the shared
+    # lxml `_element`, not the wrappers.
     title_element = title_shape._element if title_shape is not None else None
     boxes = []
     for shape in slide.shapes:
@@ -1653,8 +1502,7 @@ def _add_shape(
 
 
 def _table_font_size_pt(n_rows: int) -> float:
-    """Step function from (header + data) row count to font size (RFC
-    §12.2b) — a short table reads big, a dense one still fits its box."""
+    """Font size for a (header + data) row count."""
 
     for max_rows, size in _TABLE_FONT_SIZE_TIERS:
         if n_rows <= max_rows:
@@ -1665,11 +1513,8 @@ def _table_font_size_pt(n_rows: int) -> float:
 def _table_column_widths(
     total_width: int, headers: Sequence[str], rows: Sequence[Sequence[str]]
 ) -> list[int]:
-    """Distribute `total_width` across columns proportionally to each
-    column's longest header/cell text (RFC §12.2b), instead of python-pptx's
-    equal-width default. Every column keeps a floor
-    (`_TABLE_COLUMN_WIDTH_FLOOR_FRACTION` of an even split) so one very long
-    column can't crush its neighbors to near-zero width."""
+    """Split `total_width` proportionally to each column's longest text, above
+    a per-column floor."""
 
     n_cols = len(headers)
     weights = []
@@ -1684,10 +1529,8 @@ def _table_column_widths(
     remaining = total_width - floor * n_cols
     weight_sum = sum(weights)
     widths = [floor + round(remaining * weight / weight_sum) for weight in weights]
-    # Rounding can leave the columns a few EMU short of/over total_width —
-    # python-pptx does not reflow a graphic frame whose column widths don't
-    # sum exactly to its own width, so the drift is folded into the last
-    # column rather than left to accumulate.
+    # python-pptx won't reflow a frame whose column widths don't sum to its
+    # width, so rounding drift goes into the last column.
     widths[-1] += total_width - sum(widths)
     return widths
 
@@ -1803,12 +1646,8 @@ def _add_native_chart(slide, chart: ChartSpec, box: _Box, *, index: int) -> None
 
 
 def _apply_series_colors(built_chart, chart: ChartSpec) -> None:
-    """`ChartSeries.color` (RFC §11.2): bar/column/area get a fill color,
-    line/radar get a line color. Pie/doughnut color per-point rather than
-    per-series (a different, more involved API, out of scope here);
-    scatter/bubble series are collections of markers, not a single fill/line
-    either, so both are silently skipped the same way pie/doughnut are —
-    never an error, just no-op for chart types this pass doesn't cover."""
+    """Apply `ChartSeries.color` as a fill or line color; a no-op for chart
+    types in neither set."""
 
     if chart.chart_type not in (_SERIES_FILL_CHART_TYPES | _SERIES_LINE_CHART_TYPES):
         return
@@ -1835,9 +1674,6 @@ def _render_fallback_chart(chart: ChartSpec, *, index: int) -> bytes:
                 [series.values for series in chart.series],
                 title=chart.title,
             )
-        # waterfall/funnel both read a single series' worth of 'values'
-        # against the shared 'categories' — hoisted since both branches
-        # need it identically.
         if chart.chart_type in ("waterfall", "funnel"):
             values = chart.series[0].values if chart.series else []
             if chart.chart_type == "waterfall":
@@ -1941,8 +1777,7 @@ def _build_two_content(
         _place_table(slide, right_box, spec.table, index=index)
     elif spec.chart:
         _place_chart(slide, right_box, spec.chart, index=index)
-    # else: right column intentionally left empty — a two_content slide with
-    # only bullets set is still a valid (if underused) call.
+    # else: right column left empty; bullets-only is still a valid call.
 
 
 class _ColumnZone(NamedTuple):

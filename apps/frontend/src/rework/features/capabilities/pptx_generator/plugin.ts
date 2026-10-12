@@ -12,11 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// The pptx_generator capability's UI plugin (PPTX-GENERATOR-CAPABILITY-RFC.md §4.5,
-// AGENT-CAPABILITY-RFC §9) — one object, registered once in ../index.ts. Mirrors
-// the backend `pptx_generator` capability: the `pptx_generated` chat part, the
-// PDF preview side pane, and the optional brand-template upload widget. No chat
-// control.
+// pptx_generator UI plugin, registered in ../index.ts: the `pptx_generated` chat
+// part, the PDF preview side pane, and the optional brand-template upload widget.
 
 import type { CapabilityUiPlugin } from "../types";
 import { PptxGeneratedCardRenderer } from "./PptxGeneratedCardRenderer";
@@ -26,15 +23,15 @@ import { useHasPptxPreview } from "./useSessionPptxPreview";
 
 export const pptxGeneratorCapability: CapabilityUiPlugin = {
   id: "pptx_generator",
-  // Keyed by the backend chat part's `type` discriminator. A distinct
-  // discriminator from ppt_filler's `ppt_preview` — see PPTX-GENERATOR-CAPABILITY-RFC.md §4.4.
+  // Keyed by the backend chat part's `type`; distinct from ppt_filler's
+  // `ppt_preview` to avoid a chat-part registry collision.
   partRenderers: { pptx_generated: PptxGeneratedCardRenderer },
   // Keyed by the backend manifest's `template_key` FieldSpec's `ui.widget`
   // (capability.py). Unlike ppt_filler's mandatory template, there is no
   // analyze/preview step — just the upload control.
   configWidgets: { pptx_generator_template: PptxGeneratorConfigForm },
   // Keyed by the backend manifest's SidePanelSpec.widget. `co_present`, distinct
-  // from ppt_filler's `slideshow` icon (RFC §4.5, §7).
+  // from ppt_filler's `slideshow` icon.
   sidePanels: {
     pptx_preview_pane: {
       Component: PptxPreviewPane,
