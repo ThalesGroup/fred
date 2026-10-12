@@ -50,7 +50,7 @@ function completionRange(input: string, range: { start: number; end: number }) {
   return { ...range, end: range.end + (/^[a-z0-9_-]+/.exec(input.slice(range.end))?.[0].length ?? 0) };
 }
 
-function promptEntries(prompts: PromptCommandSummary[], teamId: string, source?: "personal" | "team") {
+function promptEntries(prompts: PromptCommandSummary[], teamId: string, source: "personal" | "team") {
   return prompts
     .filter((prompt) => prompt.command !== "skill")
     .map((prompt) => ({
@@ -80,8 +80,7 @@ export interface ComposerCommandsMenu {
 export function useComposerCommands(params: {
   teamId: string;
   agentInstanceId?: string;
-  /** Enables personal prompt commands only for a resolved ReAct template. */
-  includePersonalCommands?: boolean;
+  /** The caller's personal space, whose prompt commands join the team's. */
   personalTeamId?: string;
   onRunSkill?: (run: { text: string; skills: SkillInvocation[] }) => void;
   onSkillError?: (reason: "usage" | "unavailable") => void;
@@ -101,7 +100,7 @@ export function useComposerCommands(params: {
   selectedSkills: { name: string; from: number; to: number }[];
   selectedPrompt:
     | (Omit<Extract<CommandMenuEntry, { kind: "prompt" }>, "source"> & {
-        source?: "personal" | "team";
+        source: "personal" | "team";
         from: number;
         to: number;
       })
@@ -111,8 +110,8 @@ export function useComposerCommands(params: {
   composerValue: string;
   onComposerChange: (value: string) => void;
 } {
-  const { teamId, agentInstanceId, includePersonalCommands = false, personalTeamId } = params;
-  const scopeKey = JSON.stringify([teamId, agentInstanceId, includePersonalCommands, personalTeamId]);
+  const { teamId, agentInstanceId, personalTeamId } = params;
+  const scopeKey = JSON.stringify([teamId, agentInstanceId, personalTeamId]);
   const scopeRef = useRef({ key: scopeKey, version: 0 });
   if (scopeRef.current.key !== scopeKey) scopeRef.current = { key: scopeKey, version: scopeRef.current.version + 1 };
   type Choice = CommandChoice;
@@ -153,22 +152,18 @@ export function useComposerCommands(params: {
   teamCommandsReadyRef.current = prompts !== undefined;
   const { currentData: personalPrompts } = useGetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetQuery(
     { teamId: personalTeamId ?? "" },
-    { skip: !includePersonalCommands || !personalTeamId || personalTeamId === teamId },
+    { skip: !personalTeamId || personalTeamId === teamId },
   );
   const [fetchPrompt] = useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery();
 
   const commands = useMemo(
     () => [
-      ...promptEntries(
-        prompts ?? [],
-        teamId,
-        includePersonalCommands ? (personalTeamId === teamId ? "personal" : "team") : undefined,
-      ),
-      ...(includePersonalCommands && personalTeamId && personalTeamId !== teamId
+      ...promptEntries(prompts ?? [], teamId, personalTeamId === teamId ? "personal" : "team"),
+      ...(personalTeamId && personalTeamId !== teamId
         ? promptEntries(personalPrompts ?? [], personalTeamId, "personal")
         : []),
     ],
-    [prompts, personalPrompts, teamId, personalTeamId, includePersonalCommands],
+    [prompts, personalPrompts, teamId, personalTeamId],
   );
   const commandsRef = useRef(commands);
   commandsRef.current = commands;
@@ -267,9 +262,9 @@ export function useComposerCommands(params: {
         description: skill.description,
         argumentHint: skill.argument_hint,
         kind: "skill",
-        source: includePersonalCommands ? "platform" : undefined,
+        source: "platform",
       })),
-    [skills, includePersonalCommands],
+    [skills],
   );
 
   // `null` while the composer holds no command query. `dismissedQuery` is the

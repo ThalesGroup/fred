@@ -121,9 +121,6 @@ vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useAddPromptFavoriteMutation: () => [vi.fn()],
   useRemovePromptFavoriteMutation: () => [vi.fn()],
 }));
-const templateQuery = vi.hoisted(() => ({
-  currentData: [] as { template_id: string; category: string }[] | undefined,
-}));
 const commandQueries = vi.hoisted(() => vi.fn());
 const skillPreviewQuery = vi.hoisted(() => vi.fn());
 const previewResult = vi.hoisted(() => ({
@@ -133,7 +130,6 @@ const previewResult = vi.hoisted(() => ({
   refetch: vi.fn(),
 }));
 vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
-  useGetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetQuery: () => templateQuery,
   useGetAgentInstanceSkillsQuery: () => ({
     currentData: {
       supported: true,
@@ -1147,29 +1143,16 @@ describe("ManagedChatPage skill reference preview", () => {
   );
 });
 
-describe("ManagedChatPage ReAct slash prompt sources", () => {
-  it.each(["react", "deep", "graph", "proxy", "unresolved", "other-template"])(
-    "enables personal commands only for the current resolved ReAct template: %s",
-    (category) => {
-      bootstrap.activeTeamId = "personal-1";
-      chatValue = { ...baseChatValue([]), agentInstance: { template_id: "runtime:agent-1" } };
-      templateQuery.currentData =
-        category === "unresolved"
-          ? undefined
-          : [
-              {
-                template_id: category === "other-template" ? "runtime:other" : "runtime:agent-1",
-                category: category === "other-template" ? "react" : category,
-              },
-            ];
-      commandQueries.mockClear();
-      renderToStaticMarkup(<ManagedChatPage />);
-      expect(commandQueries.mock.calls.slice(-2)).toEqual([
-        [{ teamId: "team-1" }, { skip: false }],
-        [{ teamId: "personal-1" }, { skip: category !== "react" }],
-      ]);
-      templateQuery.currentData = [];
-      bootstrap.activeTeamId = "team-1";
-    },
-  );
+describe("ManagedChatPage slash prompt sources", () => {
+  it("reads the personal commands in a team chat without waiting for the agent's kind", () => {
+    bootstrap.activeTeamId = "personal-1";
+    chatValue = { ...baseChatValue([]), agentInstance: { template_id: "runtime:agent-1" } };
+    commandQueries.mockClear();
+    renderToStaticMarkup(<ManagedChatPage />);
+    expect(commandQueries.mock.calls.slice(-2)).toEqual([
+      [{ teamId: "team-1" }, { skip: false }],
+      [{ teamId: "personal-1" }, { skip: false }],
+    ]);
+    bootstrap.activeTeamId = "team-1";
+  });
 });

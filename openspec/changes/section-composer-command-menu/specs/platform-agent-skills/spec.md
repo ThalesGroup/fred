@@ -1,17 +1,19 @@
-## RENAMED Requirements
+## REMOVED Requirements
 
-- FROM: `### Requirement: ReAct slash commands combine platform skills and two prompt libraries`
-- TO: `### Requirement: Slash commands combine platform skills and two prompt libraries`
+### Requirement: ReAct slash commands combine platform skills and two prompt libraries
 
-## MODIFIED Requirements
+**Reason**: Personal prompt commands are no longer limited to ReAct agents, and sources are shown by section instead of per-row labels. Replaced by "Slash commands combine platform skills and two prompt libraries" below.
+**Migration**: None. Every scenario is carried over to the replacing requirement, with the ReAct condition lifted.
+
+## ADDED Requirements
 
 ### Requirement: Slash commands combine platform skills and two prompt libraries
 
 For managed chat, whatever the agent's execution family, the slash menu SHALL offer prompts carrying commands from the current chat team and from the caller's personal library, alongside the platform skills the selected runtime provides. The menu SHALL identify each entry's source by the section it is listed under and preserve independently selectable homonyms. A personal chat SHALL offer its personal prompt library once. Prompts without commands SHALL remain available through the existing library panel. This requirement SHALL NOT change which agents are offered platform skills. Available prompt commands SHALL complete, render and resolve inline before or after selected skills in all managed chats, with the same blue prompt icon/name treatment in the draft and sent history.
 
-#### Scenario: ReAct team chat offers three sources
+#### Scenario: Team chat offers three sources
 
-- **GIVEN** a ReAct team agent, a personal prompt command and a team prompt command
+- **GIVEN** a team agent of any execution family, a personal prompt command and a team prompt command
 - **WHEN** the authorized user types `/`
 - **THEN** the menu offers both prompt commands alongside the runtime's platform skills, each under the section of its source
 - **AND** personal data is queried under the caller's own personal scope and team prompts under the chat team
@@ -44,13 +46,11 @@ For managed chat, whatever the agent's execution family, the slash menu SHALL of
 - **THEN** personal fallback is refused until the team's absence of that command is established
 - **AND** an explicit personal row selection remains independently usable while team discovery is pending
 
-#### Scenario: Other execution families retain current behavior
+#### Scenario: Personal commands do not depend on the agent kind
 
-- **WHEN** the selected template is Deep, Graph, Proxy or not yet resolved as ReAct
-- **THEN** the personal-plus-team command addition is enabled exactly as for a ReAct template
+- **WHEN** the selected template is ReAct, Deep, Graph, Proxy or not yet resolved
+- **THEN** the caller's personal prompt commands are offered in a team chat
 - **AND** the existing skill availability and skill dispatch behavior are preserved
-
-## ADDED Requirements
 
 ### Requirement: The slash menu lists its entries in titled sections by source
 

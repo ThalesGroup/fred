@@ -39,10 +39,11 @@
 
 .groupTitle {
   padding: var(--spacing-2xs) var(--spacing-s);
+  overflow: hidden;
   color: var(--on-surface-muted);
   font: var(--font-label-small);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .row {
@@ -120,10 +121,4 @@
   font: var(--font-body-small);
   font-style: italic;
   overflow-wrap: anywhere;
-}
-
-.sourceLabel {
-  flex-shrink: 0;
-  color: var(--on-surface-retreat);
-  font: var(--font-label-small);
 }

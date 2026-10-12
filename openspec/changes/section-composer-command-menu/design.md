@@ -60,8 +60,9 @@ See proposal.md for motivation. Current state, read from the code:
    than empty quotes or a hidden header (minor assumption).
 5. **Each section is a `role="group"` with `aria-labelledby` its own header**,
    inside the listbox, as the single group does today. Header ids come from one
-   `useId` plus the source name. The team header also carries the full label in
-   `title`, since the visible text may be truncated.
+   `useId` plus the source name. Every header carries its full label in
+   `title`, since the visible text may be truncated (one code path for the
+   three headers; only the team one is long enough to need it in practice).
 6. **Header style.** `.groupTitle` loses `text-transform: uppercase` and its
    `letter-spacing: 0.06em`: that tracking only existed to open up capitals and
    reads as loose in sentence case (minor assumption). It gains one-line
@@ -106,13 +107,13 @@ sectioned list" has to be reconciled with the section requirement added here
 This change records its requirements in `platform-agent-skills`, where the
 current multi-source behaviour already lives.
 
-### Scenario names kept in the delta
+### Shape of the delta
 
-`openspec validate --strict` refuses a MODIFIED requirement that drops a
-scenario the main spec has. The scenarios "ReAct team chat offers three
-sources" and "Other execution families retain current behavior" therefore keep
-their names; the second one now states that other families get the same
-personal-plus-team commands, with skill behaviour preserved.
+The requirement "ReAct slash commands combine platform skills and two prompt
+libraries" is REMOVED and re-ADDED under a name without "ReAct", rather than
+MODIFIED: `openspec validate --strict` refuses a MODIFIED requirement that
+drops a scenario of the main spec, which would have kept two scenario names
+that no longer describe the behaviour. Every scenario is carried over.
 
 ## Risks / Trade-offs
 

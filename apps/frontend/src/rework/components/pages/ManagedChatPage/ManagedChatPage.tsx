@@ -69,7 +69,6 @@ import {
 } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import {
   useGetAgentInstanceSkillDetailQuery,
-  useGetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetQuery,
   useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery,
   type ContextPromptSummary,
   type ManagedAgentInstanceSummary,
@@ -219,12 +218,6 @@ export default function ManagedChatPage() {
   const isAdmin = isPersonalTeam || canAdministerAdmins;
 
   const chat = useManagedChat({ teamId, agentInstanceId });
-  const { currentData: agentTemplates } = useGetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetQuery({
-    teamId,
-  });
-  const agentCategory = agentTemplates?.find(
-    (template) => template.template_id === chat.agentInstance?.template_id,
-  )?.category;
 
   // Opening a push drawer is a statement about ONE conversation, so switching
   // conversations closes it: the panels (capability, attachments, document
@@ -622,7 +615,6 @@ export default function ManagedChatPage() {
   const commands = useComposerCommands({
     teamId,
     agentInstanceId,
-    includePersonalCommands: agentCategory === "react",
     personalTeamId: activeTeam?.id,
     onRunSkill: (run) => void chat.runSkill(run),
     onSkillError: (reason) =>
@@ -678,7 +670,9 @@ export default function ManagedChatPage() {
       })}
       commandTrigger={commands.trigger}
       onRecallKeyDown={recallKeyDown}
-      aboveFieldSlot={!chat.executionDisabled && commands.menu ? <CommandMenu {...commands.menu} /> : undefined}
+      aboveFieldSlot={
+        !chat.executionDisabled && commands.menu ? <CommandMenu {...commands.menu} teamName={team?.name} /> : undefined
+      }
       disabled={composerControlsDisabled}
       sendDisabled={composerControlsDisabled || chat.attachmentsUploading || chat.inputTooLong}
       characterCount={chat.inputCharacterCount}

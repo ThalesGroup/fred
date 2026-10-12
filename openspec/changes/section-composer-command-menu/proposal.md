@@ -40,9 +40,10 @@ None.
 ### Modified Capabilities
 
 - `platform-agent-skills`: the requirement "ReAct slash commands combine
-  platform skills and two prompt libraries" is renamed and modified (personal
-  commands for every agent kind, sources shown by section instead of per-row
-  labels), and a requirement is added for the sectioned menu.
+  platform skills and two prompt libraries" is replaced by one without the
+  ReAct condition (personal commands for every agent kind, sources shown by
+  section instead of per-row labels), and a requirement is added for the
+  sectioned menu.
 
 ## Impact
 

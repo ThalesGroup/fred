@@ -19,7 +19,8 @@ import styles from "./CommandMenu.module.css";
 
 /** A library prompt command or a platform skill suggestion. */
 export type CommandMenuEntry = {
-  source?: "platform" | "personal" | "team";
+  /** Where the entry comes from, which is also the section it is listed under. */
+  source: CommandMenuSource;
   promptId: string;
   command: string;
   name: string;
@@ -27,6 +28,12 @@ export type CommandMenuEntry = {
   argumentHint?: string | null;
   emoji?: string | null;
 } & ({ kind: "skill" } | { kind: "prompt"; promptTeamId: string });
+
+type CommandMenuSource = "team" | "personal" | "platform";
+
+// Display order of the sections. `entries` arrives in this same order, so each
+// section is a contiguous slice and the flat index stays the visual order.
+const SECTION_ORDER: readonly CommandMenuSource[] = ["team", "personal", "platform"];
 
 interface CommandMenuProps {
   /** Id the composer points at with `aria-controls`. */
@@ -37,6 +44,8 @@ interface CommandMenuProps {
   /** False when the team holds no command at all, which is worth saying plainly
    *  — a different miss from a query that matches none of the ones it has. */
   teamHasCommands: boolean;
+  /** Name of the conversation's team, shown in its section heading. */
+  teamName?: string;
   /** Builds the id the composer's active-descendant names. */
   optionId: (index: number) => string;
   /** Pointer activation, which behaves as `Tab`: completes, never sends. */
@@ -45,19 +54,18 @@ interface CommandMenuProps {
   onFocusEntry: (index: number) => void;
 }
 
-// Sectioned from day one with a single section: adding a second kind of
-// invocable object is then a new entry rather than a visual change.
 export const CommandMenu = memo(function CommandMenu({
   id,
   entries,
   activeIndex,
   teamHasCommands,
+  teamName,
   optionId,
   onActivate,
   onFocusEntry,
 }: CommandMenuProps) {
   const { t } = useTranslation();
-  const headingId = useId();
+  const headingIdPrefix = useId();
   const listRef = useRef<HTMLDivElement>(null);
 
   // The list scrolls past 40vh, and the focus is conveyed by id rather than by
@@ -89,53 +97,66 @@ export const CommandMenu = memo(function CommandMenu({
     );
   }
 
+  const headings: Record<CommandMenuSource, string> = {
+    team: teamName
+      ? t("chatbot.commandMenu.sections.team", { name: teamName })
+      : t("chatbot.commandMenu.sections.teamFallback"),
+    personal: t("chatbot.commandMenu.sections.personal"),
+    platform: t("chatbot.commandMenu.sections.platform"),
+  };
+  // Rows keep their index in `entries`: option ids and the focus are global.
+  const indexed = entries.map((entry, index) => ({ entry, index }));
+  const sections = SECTION_ORDER.map((source) => ({
+    source,
+    rows: indexed.filter(({ entry }) => entry.source === source),
+  })).filter((section) => section.rows.length > 0);
+
   return (
     <div id={id} ref={listRef} className={styles.menu} role="listbox" aria-label={t("chatbot.commandMenu.ariaLabel")}>
-      <div className={styles.group} role="group" aria-labelledby={headingId}>
-        <div id={headingId} className={styles.groupTitle}>
-          {t(
-            entries.every((entry) => entry.kind === "skill")
-              ? "chatbot.skills.menuTitle"
-              : entries.some((entry) => entry.kind === "skill")
-                ? "chatbot.commandMenu.ariaLabel"
-                : "chatbot.commandMenu.promptsSection",
-          )}
-        </div>
-        {entries.map((entry, index) => (
-          <div
-            key={`${entry.kind === "prompt" ? entry.promptTeamId : "platform"}:${entry.promptId}`}
-            id={optionId(index)}
-            className={styles.row}
-            role="option"
-            aria-selected={index === activeIndex}
-            data-active={index === activeIndex}
-            title={entry.kind === "skill" ? t("chatbot.skills.platformProvided") : undefined}
-            aria-description={entry.kind === "skill" ? t("chatbot.skills.platformProvided") : undefined}
-            onMouseMove={() => onFocusEntry(index)}
-            onMouseDown={activate(index)}
-          >
-            <span className={`${styles.rowIcon} ${entry.kind === "prompt" ? styles.promptIcon : ""}`} aria-hidden>
-              {entry.kind === "skill" ? (
-                <Icon category="outlined" type="customPlatformSkill" />
-              ) : (
-                <Icon category="outlined" type="edit_note" />
-              )}
-            </span>
-            <span className={styles.rowText}>
-              <span className={styles.rowHeading}>
-                <span className={styles.rowLabel}>{entry.kind === "skill" ? entry.name : `/${entry.command}`}</span>
-                {entry.kind === "skill" && entry.argumentHint && (
-                  <span className={styles.argumentHint}>{` ${entry.argumentHint}`}</span>
+      {sections.map(({ source, rows }) => (
+        <div
+          key={source}
+          className={styles.group}
+          role="group"
+          aria-labelledby={`${headingIdPrefix}-${source}`}
+          data-source={source}
+        >
+          <div id={`${headingIdPrefix}-${source}`} className={styles.groupTitle} title={headings[source]}>
+            {headings[source]}
+          </div>
+          {rows.map(({ entry, index }) => (
+            <div
+              key={`${entry.kind === "prompt" ? entry.promptTeamId : "platform"}:${entry.promptId}`}
+              id={optionId(index)}
+              className={styles.row}
+              role="option"
+              aria-selected={index === activeIndex}
+              data-active={index === activeIndex}
+              title={entry.kind === "skill" ? t("chatbot.skills.platformProvided") : undefined}
+              aria-description={entry.kind === "skill" ? t("chatbot.skills.platformProvided") : undefined}
+              onMouseMove={() => onFocusEntry(index)}
+              onMouseDown={activate(index)}
+            >
+              <span className={`${styles.rowIcon} ${entry.kind === "prompt" ? styles.promptIcon : ""}`} aria-hidden>
+                {entry.kind === "skill" ? (
+                  <Icon category="outlined" type="customPlatformSkill" />
+                ) : (
+                  <Icon category="outlined" type="edit_note" />
                 )}
               </span>
-              <em className={styles.rowDescription}>{entry.description?.trim() || entry.name}</em>
-            </span>
-            {entry.source && (
-              <span className={styles.sourceLabel}>{t(`chatbot.commandMenu.sources.${entry.source}`)}</span>
-            )}
-          </div>
-        ))}
-      </div>
+              <span className={styles.rowText}>
+                <span className={styles.rowHeading}>
+                  <span className={styles.rowLabel}>{entry.kind === "skill" ? entry.name : `/${entry.command}`}</span>
+                  {entry.kind === "skill" && entry.argumentHint && (
+                    <span className={styles.argumentHint}>{` ${entry.argumentHint}`}</span>
+                  )}
+                </span>
+                <em className={styles.rowDescription}>{entry.description?.trim() || entry.name}</em>
+              </span>
+            </div>
+          ))}
+        </div>
+      ))}
     </div>
   );
 });

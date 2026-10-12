@@ -85,13 +85,11 @@ let setHostInput: (value: string) => void;
 
 function Host({
   inlineEditor = false,
-  includePersonalCommands = false,
   teamId = "team-1",
   agentInstanceId = "instance-1",
   personalTeamId,
 }: {
   inlineEditor?: boolean;
-  includePersonalCommands?: boolean;
   teamId?: string;
   agentInstanceId?: string;
   personalTeamId?: string;
@@ -101,7 +99,6 @@ function Host({
   const commands = useComposerCommands({
     teamId,
     agentInstanceId,
-    includePersonalCommands,
     personalTeamId,
     onRunSkill,
     onSkillError,
@@ -201,6 +198,16 @@ function labels(): string[] {
   return options().map((option) => option.querySelector("[class*=rowHeading]")?.textContent ?? "");
 }
 
+/** Each displayed section as its heading and the labels of its rows. */
+function sections(): [string, string[]][] {
+  return Array.from(container.querySelectorAll<HTMLElement>('[role="group"]')).map((group) => [
+    document.getElementById(group.getAttribute("aria-labelledby") ?? "")?.textContent ?? "",
+    Array.from(group.querySelectorAll('[role="option"]')).map(
+      (option) => option.querySelector("[class*=rowHeading]")?.textContent ?? "",
+    ),
+  ]);
+}
+
 function focusedLabel(): string | null {
   const active = textarea().getAttribute("aria-activedescendant");
   const option = options().find((candidate) => candidate.id === active);
@@ -246,7 +253,7 @@ describe("the command menu", () => {
     type("/");
 
     expect(container.querySelector('[role="listbox"]')).not.toBeNull();
-    expect(container.textContent).toContain("chatbot.commandMenu.promptsSection");
+    expect(sections()).toEqual([["chatbot.commandMenu.sections.teamFallback", ["/search", "/summary"]]]);
     expect(labels()).toEqual(["/search", "/summary"]);
     expect(focusedLabel()).toBe("/search");
   });
@@ -578,7 +585,7 @@ describe("platform skills", () => {
             : [],
       };
       if (owner === "personal-1") listResult = { data: [] };
-      act(() => root.render(<Host inlineEditor includePersonalCommands personalTeamId="personal-1" />));
+      act(() => root.render(<Host inlineEditor personalTeamId="personal-1" />));
       cmType("Before /review middle /su after /meeting-minutes Notes");
       act(() => cm().dispatch({ selection: { anchor: 25 } }));
       cmPress("Tab");
@@ -608,7 +615,7 @@ describe("platform skills", () => {
     async (command) => {
       activateSkills(true);
       listResult = { data: [{ ...PROMPTS[1], command }] };
-      act(() => root.render(<Host inlineEditor includePersonalCommands />));
+      act(() => root.render(<Host inlineEditor />));
       cmType(`Before /review middle /${command}`);
       expect(labels()).toEqual([`/${command}`]);
       cmPress("Tab");
@@ -709,7 +716,7 @@ describe("platform skills", () => {
     fetchPrompt.mockImplementation(({ teamId }: { teamId: string }) => ({
       unwrap: async () => ({ text: teamId === "personal-1" ? "Personal instructions" : "Team instructions" }),
     }));
-    act(() => root.render(<Host inlineEditor includePersonalCommands personalTeamId="personal-1" />));
+    act(() => root.render(<Host inlineEditor personalTeamId="personal-1" />));
     cmType("/su");
     cmPress("ArrowDown");
     cmPress("Tab");
@@ -960,11 +967,11 @@ describe("platform skills", () => {
     },
   );
 
-  it.each([false, true])(
-    "keeps both completion orders with ReAct libraries enabled=%s",
-    async (includePersonalCommands) => {
+  it.each([undefined, "personal-1"])(
+    "keeps both completion orders with the personal space %s",
+    async (personalTeamId) => {
       activateSkills(true);
-      act(() => root.render(<Host inlineEditor includePersonalCommands={includePersonalCommands} />));
+      act(() => root.render(<Host inlineEditor personalTeamId={personalTeamId} />));
       act(() => cm().contentDOM.focus());
       for (const promptFirst of [false, true]) {
         const before = promptFirst ? "Before" : "Before /review middle";
@@ -1105,7 +1112,7 @@ describe("platform skills", () => {
   });
 });
 
-describe("ReAct personal and team prompt commands", () => {
+describe("personal and team prompt commands", () => {
   const personalPrompt = {
     prompt_id: "personal-summary",
     command: "summary",
@@ -1115,7 +1122,7 @@ describe("ReAct personal and team prompt commands", () => {
   };
   const mountReact = () => {
     personalResult = { data: [personalPrompt] };
-    act(() => root.render(<Host includePersonalCommands personalTeamId="personal-1" />));
+    act(() => root.render(<Host personalTeamId="personal-1" />));
   };
   it.each(["personal", "skill-homonym"])(
     "preserves the chosen %s prompt after a legacy skill prefix",
@@ -1132,7 +1139,7 @@ describe("ReAct personal and team prompt commands", () => {
         unwrap: async () => ({ text: teamId === "personal-1" ? "Personal instructions" : "Team instructions" }),
       }));
       const react = variant === "personal";
-      act(() => root.render(<Host inlineEditor includePersonalCommands={react} personalTeamId="personal-1" />));
+      act(() => root.render(<Host inlineEditor personalTeamId={react ? "personal-1" : undefined} />));
       const view = EditorView.findFromDOM(container.querySelector(".cm-content")!)!;
       const draft = "  /skill review   /su";
       act(() => {
@@ -1164,7 +1171,7 @@ describe("ReAct personal and team prompt commands", () => {
     fetchPrompt.mockImplementation(({ teamId }: { teamId: string }) => ({
       unwrap: async () => ({ text: teamId === "personal-1" ? "Personal instructions" : "Team instructions" }),
     }));
-    act(() => root.render(<Host inlineEditor includePersonalCommands personalTeamId="personal-1" />));
+    act(() => root.render(<Host inlineEditor personalTeamId="personal-1" />));
     const view = EditorView.findFromDOM(container.querySelector(".cm-content")!)!;
     act(() => view.contentDOM.focus());
     act(() => view.dispatch({ changes: { from: 0, insert: "/su" }, selection: { anchor: 3 } }));
@@ -1191,7 +1198,7 @@ describe("ReAct personal and team prompt commands", () => {
     });
     expect(onRunSkill).not.toHaveBeenCalled();
   });
-  it("offers scoped prompts beside platform skills with visible source labels", () => {
+  it("lists team prompts, personal prompts and platform skills under their own section", () => {
     skillCatalog = { supported: true, skills: [{ name: "review", description: "Review" }] };
     mountReact();
     type("/");
@@ -1200,12 +1207,15 @@ describe("ReAct personal and team prompt commands", () => {
     expect(options()[0].querySelector("em")?.textContent).toBe("Chercher");
     expect(options()[3].querySelector("[class*=promptIcon]")).toBeNull();
     expect(options()[3].querySelector("em")?.textContent).toBe("Review");
-    expect(options().map((option) => option.querySelector("[class*=sourceLabel]")?.textContent)).toEqual([
-      "chatbot.commandMenu.sources.team",
-      "chatbot.commandMenu.sources.team",
-      "chatbot.commandMenu.sources.personal",
-      "chatbot.commandMenu.sources.platform",
+    expect(sections()).toEqual([
+      ["chatbot.commandMenu.sections.teamFallback", ["/search", "/summary"]],
+      ["chatbot.commandMenu.sections.personal", ["/summary"]],
+      ["chatbot.commandMenu.sections.platform", ["review"]],
     ]);
+    expect(container.textContent).not.toContain("chatbot.commandMenu.sources.");
+    type("/sea");
+    expect(sections()).toEqual([["chatbot.commandMenu.sections.teamFallback", ["/search"]]]);
+    type("/");
     press("ArrowUp");
     expect(focusedLabel()).toBe("review");
     press("ArrowDown");
@@ -1250,7 +1260,7 @@ describe("ReAct personal and team prompt commands", () => {
     await pressAsync("Enter");
     expect(onRunCommand.mock.calls[0][0].command.prompt_id).toBe("p-summary");
     personalResult = { data: [{ ...personalPrompt, command: "private-summary" }] };
-    act(() => root.render(<Host includePersonalCommands personalTeamId="personal-1" />));
+    act(() => root.render(<Host personalTeamId="personal-1" />));
     type("/private-summary notes");
     await pressAsync("Enter");
     expect(onRunCommand.mock.calls[1][0]).toMatchObject({
@@ -1290,7 +1300,7 @@ describe("ReAct personal and team prompt commands", () => {
     press("ArrowDown");
     press("Tab");
     personalResult = { data: [] };
-    act(() => root.render(<Host includePersonalCommands personalTeamId="personal-1" />));
+    act(() => root.render(<Host personalTeamId="personal-1" />));
     await pressAsync("Enter");
     expect(renders[renders.length - 1]?.selectedPrompt).toBeNull();
     expect(onResolveError).toHaveBeenCalledOnce();
@@ -1311,23 +1321,21 @@ describe("ReAct personal and team prompt commands", () => {
     expect(onResolveError).toHaveBeenCalledOnce();
     expect(onRunCommand).not.toHaveBeenCalled();
   });
-  it("queries a personal chat once and labels its prompts as personal", () => {
+  it("queries a personal chat once and lists its prompts in the personal section only", () => {
     personalResult = { data: [personalPrompt] };
-    act(() => root.render(<Host includePersonalCommands teamId="personal-1" personalTeamId="personal-1" />));
+    act(() => root.render(<Host teamId="personal-1" personalTeamId="personal-1" />));
     type("/");
     expect(labels()).toEqual(["/summary"]);
-    expect(options()[0].textContent).toContain("chatbot.commandMenu.sources.personal");
+    expect(sections()).toEqual([["chatbot.commandMenu.sections.personal", ["/summary"]]]);
     const calls = listCommands.mock.calls.slice(-2);
     expect(calls).toEqual([
       [{ teamId: "personal-1" }, { skip: false }],
       [{ teamId: "personal-1" }, { skip: true }],
     ]);
   });
-  it.each([false, true])("skips the personal source when unavailable (ReAct: %s)", (enabled) => {
+  it("skips the personal source while the personal space is unknown", () => {
     personalResult = { data: [personalPrompt] };
-    act(() =>
-      root.render(<Host includePersonalCommands={enabled} personalTeamId={enabled ? undefined : "personal-1"} />),
-    );
+    act(() => root.render(<Host />));
     type("/");
     expect(labels()).toEqual(["/search", "/summary"]);
     expect(listCommands.mock.calls[listCommands.mock.calls.length - 1]?.[1]).toEqual({ skip: true });
@@ -1336,11 +1344,11 @@ describe("ReAct personal and team prompt commands", () => {
     mountReact();
     listResult = { data: PROMPTS, currentData: undefined };
     personalResult = { data: [personalPrompt], currentData: undefined };
-    act(() => root.render(<Host includePersonalCommands teamId="team-2" personalTeamId="personal-1" />));
+    act(() => root.render(<Host teamId="team-2" personalTeamId="personal-1" />));
     type("/");
     expect(labels()).toEqual([]);
   });
-  it.each(["team", "agent", "category", "personal"])(
+  it.each(["team", "agent", "personal"])(
     "requires reselection after a completed personal command's scope changes: %s",
     async (variant) => {
       mountReact();
@@ -1350,7 +1358,6 @@ describe("ReAct personal and team prompt commands", () => {
       act(() =>
         root.render(
           <Host
-            includePersonalCommands={variant !== "category"}
             teamId={variant === "team" ? "team-2" : "team-1"}
             agentInstanceId={variant === "agent" ? "instance-2" : "instance-1"}
             personalTeamId={variant === "personal" ? undefined : "personal-1"}
@@ -1372,14 +1379,14 @@ describe("ReAct personal and team prompt commands", () => {
   it("waits for the team's catalog before resolving a typed personal fallback", async () => {
     mountReact();
     listResult = { data: PROMPTS, currentData: undefined };
-    act(() => root.render(<Host includePersonalCommands personalTeamId="personal-1" />));
+    act(() => root.render(<Host personalTeamId="personal-1" />));
     type("/summary notes");
     await pressAsync("Enter");
     expect(onRunCommand).not.toHaveBeenCalled();
     expect(onResolveError).toHaveBeenCalledOnce();
     // Once resolved, the same typed command takes the team's match.
     listResult = { currentData: PROMPTS };
-    act(() => root.render(<Host includePersonalCommands personalTeamId="personal-1" />));
+    act(() => root.render(<Host personalTeamId="personal-1" />));
     await pressAsync("Enter");
     expect(onRunCommand.mock.calls[0][0].command.prompt_id).toBe("p-summary");
   });
@@ -1387,14 +1394,14 @@ describe("ReAct personal and team prompt commands", () => {
     fetchPrompt.mockImplementation(() => ({ unwrap: async () => ({ text: "Personal instructions" }) }));
     mountReact();
     listResult = { currentData: undefined };
-    act(() => root.render(<Host includePersonalCommands personalTeamId="personal-1" />));
+    act(() => root.render(<Host personalTeamId="personal-1" />));
     type("/su");
     press("Tab");
     await pressAsync("Enter");
     expect(onResolveError).not.toHaveBeenCalled();
     expect(onRunCommand.mock.calls[0][0].command.prompt_id).toBe("personal-summary");
   });
-  it.each(["team", "agent", "category", "personal"])(
+  it.each(["team", "agent", "personal"])(
     "discards a pending personal command after a scope change: %s",
     async (variant) => {
       mountReact();
@@ -1412,7 +1419,6 @@ describe("ReAct personal and team prompt commands", () => {
       act(() =>
         root.render(
           <Host
-            includePersonalCommands={variant !== "category"}
             teamId={variant === "team" ? "team-2" : "team-1"}
             agentInstanceId={variant === "agent" ? "instance-2" : "instance-1"}
             personalTeamId={variant === "personal" ? undefined : "personal-1"}
@@ -1420,7 +1426,7 @@ describe("ReAct personal and team prompt commands", () => {
         ),
       );
       // Returning to the original scope cannot resurrect its earlier request.
-      act(() => root.render(<Host includePersonalCommands personalTeamId="personal-1" />));
+      act(() => root.render(<Host personalTeamId="personal-1" />));
       await act(async () => resolve({ text: "Late personal instructions" }));
       expect(onRunCommand).not.toHaveBeenCalled();
       expect(onResolveError).not.toHaveBeenCalled();
@@ -1442,7 +1448,7 @@ describe("restoring recalled invocations", () => {
       personalResult = { data: [{ ...PROMPTS[0], command: "review", prompt_id: "private-review" }] };
       skillCatalog = { supported: true, skills: [{ name: "review", description: "Review" }] };
       fetchPrompt.mockImplementation(() => ({ unwrap: async () => ({ text: "Selected instructions" }) }));
-      act(() => root.render(<Host includePersonalCommands personalTeamId="personal-1" />));
+      act(() => root.render(<Host personalTeamId="personal-1" />));
       const command = {
         command: "review",
         prompt_id: selectedId,
@@ -1461,7 +1467,7 @@ describe("restoring recalled invocations", () => {
       };
       if (variant === "missing" || variant === "loading") {
         listResult = { currentData: variant === "missing" ? [] : undefined };
-        act(() => root.render(<Host includePersonalCommands personalTeamId="personal-1" />));
+        act(() => root.render(<Host personalTeamId="personal-1" />));
       }
       act(() => {
         renders[renders.length - 1]!.dismiss(command.draft_text, message);
@@ -1469,7 +1475,7 @@ describe("restoring recalled invocations", () => {
       });
       if (variant === "loading") {
         listResult = { data: [{ ...PROMPTS[0], command: "review", prompt_id: "p-review" }] };
-        act(() => root.render(<Host includePersonalCommands personalTeamId="personal-1" />));
+        act(() => root.render(<Host personalTeamId="personal-1" />));
       }
       await act(async () => renders[renders.length - 1]!.submit());
       if (variant === "missing") {

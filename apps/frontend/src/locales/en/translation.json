@@ -399,12 +399,16 @@
     },
     "commandMenu": {
       "sources": {
-        "platform": "Platform skill",
         "personal": "Personal prompt",
         "team": "Team prompt"
       },
       "ariaLabel": "Available commands",
-      "promptsSection": "Prompt library",
+      "sections": {
+        "team": "Team \"{{name}}\"",
+        "teamFallback": "Team",
+        "personal": "Personal space",
+        "platform": "Platform skills"
+      },
       "noneInTeam": "No command in this team yet. An editor can give one to a prompt from the Prompts page.",
       "noMatch": "No command matches.",
       "runErrorSummary": "Could not run the command",
@@ -623,7 +627,6 @@
       "badge": "Skill: {{name}}",
       "platformProvided": "Skill provided by the platform",
       "requestPlaceholder": "Your request (optional)",
-      "menuTitle": "Skills",
       "usage": "Use /<skill-name> [request]. Select a skill; the request is optional.",
       "errorTitle": "Skill could not be used",
       "unavailable": "This skill’s content is unavailable.",
