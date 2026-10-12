@@ -2257,9 +2257,11 @@ bounds and the display helper live in `src/rework/core/utils/teamFields.ts`
   by a success toast (a failed save shows an error on the field instead).
 - **`TeamDescriptionReminder`.** A `ServiceNotice` in its `color="info"`
   variant (`info-container` / `on-info-container`; the default stays the
-  neutral surface) shown to team admins (`canUpdateInfo`) while `description_is_placeholder` is true: at the top of
-  `TeamAgentsPage` (the team's home) with an outlined button to the team
-  settings, and inside the description card of `TeamSettingsParameters`, above the
+  neutral surface) shown to team admins (`canUpdateInfo`) while
+  `description_is_placeholder` is true. At the top of `TeamAgentsPage` (the
+  team's home) it spans the full width and carries a filled `info` button to
+  the team settings in the notice's `action` slot, at its end. In
+  `TeamSettingsParameters` it sits inside the description card, above the
   field and without the button, so it points at the field to fill. It
   renders nothing for other members, described teams and personal spaces.
 

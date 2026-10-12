@@ -18,7 +18,6 @@ import Button from "@shared/atoms/Button/Button.tsx";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import type { TeamWithPermissions } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
-import styles from "./TeamDescriptionReminder.module.scss";
 
 export interface TeamDescriptionReminderProps {
   team: TeamWithPermissions | null | undefined;
@@ -34,21 +33,21 @@ export default function TeamDescriptionReminder({ team, withSettingsLink }: Team
 
   if (!team?.description_is_placeholder || !canUpdateInfo) return null;
   return (
-    <div className={styles.reminder} role="status">
-      <div className={styles.notice}>
-        <ServiceNotice
-          color="info"
-          title={t("rework.teamDescription.reminder.title")}
-          description={t("rework.teamDescription.reminder.description")}
-        />
-      </div>
-      {withSettingsLink && (
-        <Link to={`/team/${team.id}/settings/parameters`}>
-          <Button color="primary" variant="outlined" size="small">
-            {t("rework.teamDescription.reminder.action")}
-          </Button>
-        </Link>
-      )}
+    <div role="status">
+      <ServiceNotice
+        color="info"
+        title={t("rework.teamDescription.reminder.title")}
+        description={t("rework.teamDescription.reminder.description")}
+        action={
+          withSettingsLink && (
+            <Link to={`/team/${team.id}/settings/parameters`}>
+              <Button color="info" variant="filled" size="small">
+                {t("rework.teamDescription.reminder.action")}
+              </Button>
+            </Link>
+          )
+        }
+      />
     </div>
   );
 }

@@ -47,6 +47,12 @@
   gap: var(--spacing-2xs);
 }
 
+.action {
+  flex-shrink: 0;
+  align-self: center;
+  margin-left: auto;
+}
+
 .title {
   color: var(--on-surface);
   font: var(--font-body-medium-emphasized);

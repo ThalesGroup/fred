@@ -14,6 +14,7 @@
 
 import { MaterialIcon as Icon } from "../../atoms/Icon/Icon.tsx";
 import type { MaterialIconType } from "../../utils/Type.ts";
+import type { ReactNode } from "react";
 import styles from "./ServiceNotice.module.scss";
 
 export interface ServiceNoticeProps {
@@ -27,6 +28,9 @@ export interface ServiceNoticeProps {
   /** `info` paints the notice in info-container / on-info-container, for a
    *  reminder that asks the reader to act. Defaults to the neutral surface. */
   color?: "neutral" | "info";
+  /** A control shown at the end of the notice, e.g. a link to where the
+   *  reader can act on it. */
+  action?: ReactNode;
 }
 
 /**
@@ -52,6 +56,7 @@ export default function ServiceNotice({
   description,
   centered,
   color = "neutral",
+  action,
 }: ServiceNoticeProps) {
   const notice = (
     <div className={styles.serviceNotice} data-color={color}>
@@ -62,6 +67,7 @@ export default function ServiceNotice({
         <span className={styles.title}>{title}</span>
         {description && <span className={styles.description}>{description}</span>}
       </div>
+      {action && <div className={styles.action}>{action}</div>}
     </div>
   );
 
