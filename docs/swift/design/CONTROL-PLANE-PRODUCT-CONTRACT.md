@@ -4476,6 +4476,36 @@ returns `CreationAssistantUsageResponse`: `total_tokens`, `input_tokens`,
 `output_tokens` and `drafts` (calls the provider answered, usable or not) for
 the period, read from `agent.creation_assistant_completed` only.
 
+## 63. Contract Notes — agents marketplace publication settings (2026-10-12, #3044)
+
+**Settings.** Whether the team's editors may publish ("publication enabled") and how many agents it may publish. A default every collaborative team follows, `platform_marketplace_settings`
+(one row at most, `id = 'default'`; absent = switch off, quota 5), and two
+nullable overrides on `teammetadata`, `agents_publishing_enabled` and
+`agents_publish_quota` (null = Default; quota `>= 1` by CHECK). Effective value =
+override, else default, per setting; a team created later follows the default.
+
+**Endpoints** (all `organization#can_manage_platform`; team admins get 403):
+
+- `GET /control-plane/v1/admin/marketplace-settings` → `MarketplaceSettings`:
+  `default` (switch, quota, `updated_by`, `updated_at`) and per team its
+  overrides and effective values.
+- `PUT /control-plane/v1/admin/marketplace-settings/default` and
+  `PUT /control-plane/v1/admin/teams/{team_id}/marketplace-settings` (both
+  fields replaced, null = back to Default) → `MarketplaceSettingsUpdateResult`
+  (`settings` + `impact`). Quota below 1 or missing: 422.
+- `GET …/marketplace-settings/default/impact?agents_publishing_enabled=` and
+  `GET /control-plane/v1/admin/teams/{team_id}/marketplace-settings/impact?agents_publishing_enabled=`
+  (omitted = Default) → `MarketplaceSettingsImpact` (`affected_team_ids`: the
+  teams whose effective switch the change turns from on to off), read-only.
+- Audit events `marketplace.settings.default_updated` and
+  `marketplace.settings.team_updated`.
+
+**Permissions.** No dedicated role: `TeamPermission` gains
+`can_publish_marketplace_agents` (`team_editor`) and
+`can_unpublish_marketplace_agents` (`team_editor or team_admin`).
+`TeamWithPermissions.marketplace` (null for personal spaces) carries the
+effective switch and quota. ReBAC detail: `REBAC.md` §Team editor.
+
 ## Knowledge Flow ingestion cancellation — 2026-09-23
 
 `POST /knowledge-flow/v1/tasks/{task_id}/cancel` retains its existing task-mutation

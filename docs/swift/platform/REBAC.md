@@ -106,8 +106,12 @@ Responsible for team governance.
 
 Can:
 
-- assign and revoke `team_admin`, `team_editor`, `team_analyst`, `team_member`
-  on their team (after the team's first `team_admin` was set at bootstrap)
+- assign and revoke `team_admin`, `team_editor`, `team_analyst`,
+  `team_member` on their team (after the team's first
+  `team_admin` was set at bootstrap)
+- take a published agent down from the agents marketplace
+  (`can_unpublish_marketplace_agents`), but not publish one unless also
+  `team_editor`
 - define and update `TeamPlatformPolicy` (quotas, allowed model profiles,
   allowed MCP servers, storage and ingestion limits)
 - read any team configuration surface for audit purposes
@@ -138,6 +142,12 @@ Can:
 - configure `TeamRoutingPolicy`
 - manage shared team prompts (create, update, score, promote)
 - manage team agent instances (enroll, tune, archive)
+- publish them to the agents marketplace and take them down
+  (`can_publish_marketplace_agents`, `can_unpublish_marketplace_agents`),
+  while publication is enabled for the team. That switch and the agents quota
+  are platform settings, not ReBAC: a default in `platform_marketplace_settings`
+  plus nullable per-team overrides on `teammetadata`, edited only with
+  `can_manage_platform` (`/admin/marketplace-settings`)
 - add, update, move, and remove team corpus resources
 - read `TeamPlatformPolicy` as a constraint — not editable
 
