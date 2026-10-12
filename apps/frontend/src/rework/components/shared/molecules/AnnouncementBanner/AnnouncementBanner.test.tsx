@@ -40,6 +40,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 function announcement(overrides: Partial<Announcement> = {}): Announcement {
   return {
     id: "a1",
+    kind: "banner",
     severity: "warning",
     title: { en: "Scheduled maintenance" },
     description_short: { en: "Fred is down on Sunday." },

@@ -137,7 +137,7 @@ const inputLabelled = (label: string) => {
   return document.getElementById(node!.htmlFor) as HTMLInputElement | HTMLTextAreaElement;
 };
 
-function renderModal() {
+function renderModal(takenNames: ReadonlySet<string> = new Set()) {
   const onSubmit = vi.fn().mockResolvedValue(undefined);
   act(() => {
     root.render(
@@ -146,6 +146,7 @@ function renderModal() {
         isSubmitting={false}
         mode="create"
         teamId="team-1"
+        takenNames={takenNames}
         templates={[TEMPLATE]}
         onClose={vi.fn()}
         onSubmit={onSubmit}
@@ -182,6 +183,25 @@ describe("AgentFormModal + creation assistant (real body and dialog)", () => {
     expect((document.querySelector('[data-testid="prompt-editor"]') as HTMLTextAreaElement).value).toBe(
       DRAFT.system_prompt,
     );
+  });
+
+  it("checks an applied assistant name even after the user edits the name field", async () => {
+    const onSubmit = renderModal(new Set([DRAFT.name.toLowerCase()]));
+    await click("Template name");
+    const name = inputLabelled("rework.teams.formAgent.fields.name.label") as HTMLInputElement;
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+    act(() => {
+      setter.call(name, "Custom name");
+      name.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    await applyDraftThroughDialog();
+    await click(`${KEY}.overwrite.confirm`);
+
+    expect(name.value).toBe(DRAFT.name);
+    expect(document.body.textContent).toContain("rework.teams.formAgent.fields.name.taken");
+    expect(buttonWith("rework.create").disabled).toBe(true);
+    expect(onSubmit).not.toHaveBeenCalled();
   });
 
   it("keeps reasoning on when capabilities are applied with it", async () => {

@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import Icon from "@shared/atoms/Icon/Icon.tsx";
+import StatusBadge from "@shared/atoms/StatusBadge/StatusBadge.tsx";
 import Switch from "@shared/atoms/Switch/Switch.tsx";
 import { Fragment, type PropsWithChildren, type ReactNode, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -21,16 +22,17 @@ import type { CapabilityCatalogEntry } from "../../../../../../slices/controlPla
 import { TuningFieldRenderer } from "../TuningFieldRenderer.tsx";
 import styles from "./CapabilityCard.module.css";
 
-interface CapabilityCardProps {
+type CapabilityCardProps = {
   name: string;
   description?: string;
-  checked: boolean;
-  disabled: boolean;
-  onToggle: () => void;
   /** Rendered inside the card's own sub-form shell (background/divider/padding)
    *  when truthy — omit or pass `false` for a card with nothing to configure. */
   subForm?: ReactNode;
-}
+} & (
+  | { checked: boolean; disabled: boolean; onToggle: () => void; included?: undefined }
+  /** A capability included with the agent: always on, so a badge replaces the switch. */
+  | { included: true; checked?: undefined; disabled?: undefined; onToggle?: undefined }
+);
 
 /**
  * Generic toggle card for the agent form's Capabilities tab: a switch plus a
@@ -39,21 +41,43 @@ interface CapabilityCardProps {
  * {@link CapabilityConfigForm} as `subForm`) and the built-in reasoning offer
  * (REASON-01, Amendment C — a `SwitchRow` as `subForm`) alike, so the tab has
  * exactly one card component regardless of what's actually being toggled.
+ * A capability included with an agent that offers no free selection passes
+ * `included`: it stays on, with a badge in place of the switch.
  */
-export function CapabilityCard({ name, description, checked, disabled, onToggle, subForm }: CapabilityCardProps) {
+export function CapabilityCard({
+  name,
+  description,
+  checked,
+  disabled,
+  onToggle,
+  included,
+  subForm,
+}: CapabilityCardProps) {
+  const { t } = useTranslation();
+  const active = included || checked;
+  const meta = (
+    <div className={styles.meta}>
+      <span className={`${styles.name} ${active ? styles.nameActive : ""}`}>{name}</span>
+      {description && <span className={styles.description}>{description}</span>}
+    </div>
+  );
   return (
-    <li className={styles.card} data-checked={checked}>
-      {/* The whole header is the click target, padding included — <label>
-          wrapping the Switch as a descendant (same pattern as SwitchRow), not
-          a plain <div> whose padding sits outside a smaller inner <label>'s
-          box and swallows clicks near the card's edges. */}
-      <label className={styles.header}>
-        <Switch size="small" checked={checked} onChange={onToggle} disabled={disabled} aria-label={name} />
-        <div className={styles.meta}>
-          <span className={`${styles.name} ${checked ? styles.nameActive : ""}`}>{name}</span>
-          {description && <span className={styles.description}>{description}</span>}
+    <li className={styles.card} data-checked={active}>
+      {included ? (
+        <div className={`${styles.header} ${styles.headerStatic}`}>
+          {meta}
+          <StatusBadge label={t("rework.teams.formAgent.capabilities.builtIn.badge")} tone="neutral" />
         </div>
-      </label>
+      ) : (
+        /* The whole header is the click target, padding included — <label>
+           wrapping the Switch as a descendant (same pattern as SwitchRow), not
+           a plain <div> whose padding sits outside a smaller inner <label>'s
+           box and swallows clicks near the card's edges. */
+        <label className={styles.header}>
+          <Switch size="small" checked={checked} onChange={onToggle} disabled={disabled} aria-label={name} />
+          {meta}
+        </label>
+      )}
 
       {subForm && <div className={styles.subForm}>{subForm}</div>}
     </li>

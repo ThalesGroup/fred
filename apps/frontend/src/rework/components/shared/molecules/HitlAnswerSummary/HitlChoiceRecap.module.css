@@ -22,7 +22,7 @@
 .choices {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-xs);
+  gap: var(--spacing-2xs);
 }
 
 .choice {
@@ -30,8 +30,8 @@
   flex-wrap: wrap;
   align-items: baseline;
   gap: var(--spacing-2xs);
-  border: 1px solid var(--outline);
-  border-radius: var(--radius-s);
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-xs);
   padding: var(--spacing-xs) var(--spacing-s);
   color: var(--on-surface);
   overflow-wrap: anywhere;
@@ -39,7 +39,7 @@
 
 .choice[data-selected] {
   border-color: var(--primary);
-  background: color-mix(in srgb, var(--primary) 12%, var(--surface-container-high));
+  background: var(--state-primary-selected);
 }
 
 .label {

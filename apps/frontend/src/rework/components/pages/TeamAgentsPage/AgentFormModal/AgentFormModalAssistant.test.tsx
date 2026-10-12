@@ -97,7 +97,7 @@ afterEach(() => {
   document.getElementById("modal-portal")?.remove();
 });
 
-function render(mode: "create" | "edit") {
+function render(mode: "create" | "edit", template = TEMPLATE, instance = INSTANCE) {
   act(() => {
     root.render(
       <AgentFormModal
@@ -105,8 +105,8 @@ function render(mode: "create" | "edit") {
         isSubmitting={false}
         mode={mode}
         teamId="team-1"
-        templates={[TEMPLATE]}
-        editInstance={mode === "edit" ? INSTANCE : undefined}
+        templates={[template]}
+        editInstance={mode === "edit" ? instance : undefined}
         onClose={vi.fn()}
         onSubmit={vi.fn()}
       />,
@@ -123,6 +123,7 @@ const lastDialogProps = () =>
   h.dialog.mock.lastCall?.[0] as {
     open: boolean;
     offersReasoning: boolean;
+    capabilities: unknown[];
     onApply: (draft: unknown) => void;
     current: unknown;
   };
@@ -163,6 +164,29 @@ describe("AgentFormModal creation assistant", () => {
     expect(props.selectedCapabilityIds).toEqual(["team_wiki"]);
     expect(props.draftRevision).toBe(1);
     expect(document.querySelector('[data-testid="assistant-dialog"]')).toBeNull();
+  });
+
+  it("keeps included Graph capabilities and their saved configuration when applying a draft", () => {
+    const config = {
+      document_access: { schema_version: 1, config: { attachments: true, team_documents: false } },
+    };
+    render(
+      "edit",
+      {
+        ...TEMPLATE,
+        supports_capabilities: false,
+        available_capabilities: [{ id: "document_access" }],
+      } as AgentTemplateSummary,
+      { ...INSTANCE, capability_config: config },
+    );
+    act(() => assistantButton().click());
+    expect(lastDialogProps().capabilities).toEqual([]);
+
+    act(() => lastDialogProps().onApply({ name: "Graph helper", capabilityIds: ["document_access"] }));
+
+    expect(lastBodyProps().displayName).toBe("Graph helper");
+    expect(lastBodyProps().selectedCapabilityIds).toEqual([]);
+    expect(lastBodyProps().capabilityConfigValues).toEqual({ document_access: config.document_access.config });
   });
 
   it("turns reasoning on, starting conversations with it, only when the draft carries it", () => {

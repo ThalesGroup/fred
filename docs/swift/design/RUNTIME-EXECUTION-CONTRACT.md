@@ -6588,6 +6588,34 @@ HITL resumes keep the existing exchange identity. Scope teardown retires retaine
 metadata. See [observability §6/§7](../platform/OBSERVABILITY-AND-AUDIT.md) for field,
 sensitive-data and audit boundaries.
 
+### 2026-10-10 — Included capabilities of agents without free selection
+
+`GET /agents/templates`: for a definition with `supports_capabilities=False`,
+`available_capabilities` now lists the catalog entries of its
+`default_mcp_servers` (still filtered by execution model) instead of `[]`.
+`supports_capabilities=False` marks them as included: always active,
+configurable, never selectable. Execution is unchanged: the defaults run and
+`tuning.capability_config` configures them, a saved selection is ignored.
+
+The builtin `knowledge.search` now enforces the instance's library binding
+server-side. `resolve_bound_library_ids` (`capabilities/assembly.py`) reads the
+`document_scope` chat control's `bound_library_ids` that each active capability
+computes from its stored config, the descriptor the composer already locks its
+picker from. `FredKnowledgeSearchToolInvoker` narrows the turn's library
+selection by it with `_narrow_scope_ids`: no selection searches the bound
+libraries, and a selection with no bound library searches no library instead of
+running unfiltered. Document picks are not narrowed, as in `document_access`:
+Knowledge Flow unions libraries and documents, so picked documents are still
+searched, and the search returns no hits only when no document is picked either.
+`DocumentSearchAdapter.search` and `DocumentTreeAdapter.tree` apply the same rule:
+a library or document scope left empty, passed by the capability or by the
+session-binding intersection, selects nothing on that side (`DocumentSearchPort` /
+`DocumentTreePort`: `[]` = nothing in scope, `None` = no narrowing), and the call
+finds nothing when neither side selects anything. They used to send it on as no
+filter.
+This is a ceiling for one port; the
+general agent scope descriptor stays open in `CAPABILITY-SCOPE-CEILING-RFC.md`.
+
 ### 8.106 Agent creation assistant (2026-10-08)
 
 Additive. `POST /agents/creation-assistant/draft` (body `AgentDraftPodRequest`:

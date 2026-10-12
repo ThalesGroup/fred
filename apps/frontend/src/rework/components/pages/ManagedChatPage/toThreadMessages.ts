@@ -27,8 +27,8 @@ import type { RuntimeAwaitingHumanEvent } from "@hooks/useChatSse";
 import type { RawUiPart } from "@rework/types/parts";
 import type { ThreadMessage } from "@rework/types/thread";
 import type { TokenUsage } from "@rework/types/conversation";
-import { isTraceChannel, textOf, toolCallId, uiPartsOf } from "../../../utils/traceUtils";
-import { hitlAnswerSummary } from "../../../utils/hitlAnswerSummary";
+import { humanizeToolName, isTraceChannel, textOf, toolCallId, uiPartsOf } from "../../../utils/traceUtils";
+import { hitlAnswerSummary, type HitlAnswerSummary } from "../../../utils/hitlAnswerSummary";
 
 function isPauseMetadata(m: ChatMessage): boolean {
   return m.channel === "system_note" && m.metadata?.extras?.pause_metadata === true;
@@ -168,6 +168,15 @@ export function reconstructPendingHitl(messages: ChatMessage[]): RuntimeAwaiting
  * question) returns `null` so the caller can fall back to the raw text instead
  * of showing nothing.
  */
+// A tool-approval reply recalls which tools the decision was about.
+function toolApprovalSummary(request: HitlRequestPart, response: HitlResponsePart): HitlAnswerSummary {
+  return {
+    ...hitlAnswerSummary(request, response),
+    toolNames: (request.pending_calls ?? []).map((call) => humanizeToolName(call.tool_name)),
+    answerKey: response.choice_id ? hitlResponseKey(response.choice_id) : null,
+  };
+}
+
 export function hitlResponseKey(choiceId: string): string | null {
   if (choiceId === "proceed") return "rework.hitlPrompt.accepted";
   if (choiceId === "cancel") return "rework.hitlPrompt.refused";
@@ -348,7 +357,9 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
           hitlAnswerSummary:
             requestPart?.stage === "agent_question" && responsePart
               ? hitlAnswerSummary(requestPart, responsePart)
-              : undefined,
+              : requestPart?.stage === "tool_approval" && responsePart
+                ? toolApprovalSummary(requestPart, responsePart)
+                : undefined,
           isStreaming: false,
           traceMessages: [],
           sources: [],

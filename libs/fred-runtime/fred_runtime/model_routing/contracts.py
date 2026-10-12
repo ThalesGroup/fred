@@ -45,6 +45,8 @@ from fred_sdk.contracts.capability.manifest import (
 from fred_sdk.contracts.context import FrozenModel, ModelCapability
 from pydantic import Field, field_validator, model_validator
 
+from ..execution_errors import UserFacingExecutionError, sanitize_identifier
+
 # `FrozenModel` and `ModelCapability` are canonically defined in
 # `fred_sdk.contracts.context` (relocated there so control-plane, which
 # depends on fred_sdk but not fred_runtime, can speak `ModelCapability` too).
@@ -53,7 +55,7 @@ from pydantic import Field, field_validator, model_validator
 # import ModelCapability` caller keeps working without modification.
 
 
-class ModelNotUsableError(RuntimeError):
+class ModelNotUsableError(UserFacingExecutionError):
     """Raised when a resolved profile's model is not `can_use`-authorized for
     the requesting team (OBSERV-02 v3, AGENT-CAPABILITY-RFC.md §8.7) — the
     fail-closed gate `RoutedChatModelFactory.build_for_chat` enforces against
@@ -64,7 +66,8 @@ class ModelNotUsableError(RuntimeError):
     Propagates like any other resolver/provider exception from
     `build_for_chat` (see that method's docstring) — the runtime's generic
     turn-level exception handling surfaces it as an `execution_error` event,
-    never a raw crash.
+    never a raw crash. Its sentence reaches the user (`UserFacingExecutionError`):
+    the fix is an admin action, which a bare support reference never names.
     """
 
     def __init__(self, *, capability_id: str, provider: str, name: str) -> None:
@@ -72,7 +75,10 @@ class ModelNotUsableError(RuntimeError):
         self.provider = provider
         self.name = name
         super().__init__(
-            f"Model {provider}/{name} ({capability_id!r}) is not enabled for this team."
+            f"The model '{sanitize_identifier(name or capability_id)}' used by this "
+            "agent is not enabled for your team. Ask a platform administrator to "
+            "enable it for the team.",
+            f"Model {provider}/{name} ({capability_id!r}) is not enabled for this team.",
         )
 
 

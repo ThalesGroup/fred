@@ -32,9 +32,11 @@ from pathlib import Path
 from typing import Any, cast
 
 import pytest
+import sqlalchemy as sa
 from control_plane_backend.import_export import importer as importer_module
 from control_plane_backend.import_export.bundle import KBundle
 from control_plane_backend.import_export.importer import run_import
+from control_plane_backend.models.agent_instance_models import AgentInstanceRow
 from control_plane_backend.models.base import Base as CPBase
 from control_plane_backend.models.task_models import TASK_TABLES
 from fred_core.models import Base as CoreBase
@@ -278,3 +280,56 @@ async def test_import_skips_sweeps_when_no_product_deps_supplied(
 
     assert calls["materialize"] == []
     assert calls["grant"] == []
+
+
+@pytest.mark.asyncio
+async def test_import_renames_an_agent_whose_name_is_taken_in_its_team(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _patch_sweeps(monkeypatch)
+    engine = await _make_engine(tmp_path, "dest.sqlite3")
+
+    def _row(agent_id: str, team_id: str, name: str) -> dict[str, Any]:
+        return {
+            "agent_instance_id": agent_id,
+            "team_id": team_id,
+            "template_id": "runtime-a:sql_expert",
+            "source_runtime_id": "runtime-a",
+            "source_agent_id": "sql_expert",
+            "display_name": name,
+            "enabled": True,
+            "tuning_json": None,
+        }
+
+    try:
+        await _run(
+            engine,
+            _FakeBundle(agent_instance_rows=[_row("ai-1", "team-x", "SQL Expert")]),
+        )
+        await _run(
+            engine,
+            _FakeBundle(
+                agent_instance_rows=[
+                    _row("ai-2", "team-x", " sql expert "),
+                    _row("ai-3", "team-x", "SQL EXPERT"),
+                    _row("ai-4", "team-y", "SQL Expert"),
+                ]
+            ),
+            import_id="imp-names",
+        )
+        async with engine.connect() as conn:
+            rows = await conn.execute(
+                sa.select(
+                    AgentInstanceRow.agent_instance_id, AgentInstanceRow.display_name
+                )
+            )
+            names = {agent_id: name for agent_id, name in rows}
+    finally:
+        await engine.dispose()
+
+    assert names == {
+        "ai-1": "SQL Expert",
+        "ai-2": "sql expert_imported-1",
+        "ai-3": "SQL EXPERT_imported-2",
+        "ai-4": "SQL Expert",
+    }

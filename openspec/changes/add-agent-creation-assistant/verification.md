@@ -340,3 +340,45 @@ Fixed: sources section present 5/5, no English labels, no systematic confirmatio
 - `test_deadline_cancels_both_calls_and_is_504` was flaky on CI: on a slow runner the 0.2 s deadline could pass before the call without reasoning had started, so `plain.cancelled` was empty. It now runs on a loop whose clock the test moves forward 60 s once that call is running (calls block for 3,600 s, deadline at 30 s), so both calls are always started, then cancelled, with no task leaked and the same 504, log and KPI assertions. No product change: a task cancelled before it starts makes no provider call. `tests/test_creation_assistant.py` passed 20 runs in a row (70 tests each); full suite `-m "not integration"`: 1926 passed, 1 failed only locally (`test_pod_continues_again_after_its_continuing_process_dies` spawns a child interpreter that ignores the worktree `PYTHONPATH` and imports the main checkout's `fred_sdk`).
 - The `@fred-oss/ui` archive validator rejected `--dialog-title-padding-bottom`, a custom property absent from the design tokens. Both ad-hoc properties are gone: `Dialog` takes `compactTitle` (a class setting the title's bottom padding to 0) and `PromptEditor` takes `highlighted` (a class setting a `--primary` border, overridden by the focus ring); `CreationAssistantDialog` passes both. No other new custom property in the diff (the tonal `Button` sets its existing `--btn-*` variables). The UI archive test expects 137 glyphs (`remove_circle` was added to `materialIcons`).
 - Frontend: `npx tsc --noEmit` clean, `eslint` and `prettier --check` clean on the touched files; vitest on `Dialog`, `PromptEditor`, `AgentFormModal` and `PlatformPromptPage`: 15 files, 181 passed (new: `compactTitle` and `highlighted` classes, the prompt editor highlighted while its section is ticked). `libs/frontend`: `npm run release:check` ok, `npm run release:test` 153 passed, `npm test` 379 passed (1 skipped), `npm run pack:check` ok, lint and format clean. `consumer-provision` and `fixture-transfer-create` (network, registry caches) not run locally.
+
+
+## Merge integration verification (2026-10-12)
+
+Merged `swift` at `8d5b413d70294505f94e032af4a3919acd2c92f5` into feature
+parent `2106959101f96d38eccc9522db1ebe735875b892` in an isolated worktree.
+Resolved seven conflict files, retaining both parent changes. The assistant's
+migration now follows `cb6f39c6d80c`; `alembic heads` reports only
+`93427a5fe874`, and a real `alembic upgrade head` from base passed on a
+scratch SQLite database. No developer database was modified.
+
+An independent read-only merge review covered the conflict files, migration
+ancestry, affected API/generated-client consumers, model catalog projection,
+Dialog wrapper/CSS, and included Graph capabilities. It found that assistant
+recommendations could alter an included Graph capability's saved config. The
+resolution excludes these capabilities from recommendations and ignores stale
+recommendations for templates without free selection. The reviewer accepted
+that correction and its tests, with no remaining findings in this scope.
+This was an integration review, excluding a full feature/PR audit, unrelated
+incoming changes, browser checks, and the still-open design decisions.
+
+Targeted verification:
+
+- Frontend: 181 tests passed across the agent form/assistant, Dialog,
+  ConfirmationDialog, FullPageModal and PromptEditor suites. Three new
+  regression tests cover included Graph config preservation, an applied
+  duplicate name after manual editing, and both families of Dialog options.
+- Control plane: 44 tests passed in `test_unique_agent_names.py`,
+  `test_creation_assistant.py` and `test_product_api_authz.py`.
+- Runtime: 149 tests passed in `test_creation_assistant.py`,
+  `test_model_routing_provider.py`, `test_models_catalog_projection.py` and
+  `test_model_reasoning_enablement.py`.
+- Raw control-plane `basedpyright` without its baseline: 0 errors/warnings.
+- UI archive validation: all 58 tests passed, with 139 supported glyphs
+  matching the combined inventory from both parents.
+- Root `make code-quality`: all 17 modules passed. Existing runtime
+  unreachable-code/Bandit warnings remain; no new errors.
+- `make update-control-plane-api` and `make update-runtime-api`: both completed
+  and reproduced the automatically merged generated clients without a delta.
+- `make migration-check MIGRATION_BASE=origin/swift`: valid; existing
+  `openspec validate add-agent-creation-assistant --strict`: valid. The feature
+  change stays active while its previously open design decisions await review.

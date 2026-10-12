@@ -299,7 +299,9 @@ The control plane is a **pure proxy** for these values — it does not interpret
 
 - `agent_instance_id` — primary identifier
 - `team_id`, `template_id`
-- `display_name`, `description`, `status`
+- `display_name`, `description`, `status`. `display_name` is unique within the
+  team or personal space, ignoring case and surrounding spaces, and stored
+  trimmed (§60).
 - `role: str` — **added 2026-07-23 (#2076).** Short one-line summary of what
   the agent does, distinct from the longer `description`; shown on the agent
   card. Independently settable via `CreateAgentInstanceRequest.role` /
@@ -494,7 +496,7 @@ Accessed via:
 - `GET /agents/sessions/{session_id}/messages` — full message list for one session
 - `GET /agents/sessions` — session list for one user (or all users for admin)
 
-**Control-plane must not proxy or cache message content.** If the frontend needs message history, it calls runtime directly using the `messages_url_template` from `ExecutionPreparation`.
+**Control-plane must not proxy or cache message content.** The frontend reads history directly from the runtime using `SessionDetails.messages_url`, independently of execution preparation.
 
 **Session Metadata — owned by `control-plane-backend`** _(target state — implementation pending Phase 3b/FRONT-04)_
 
@@ -530,7 +532,7 @@ Freeze session metadata as a control-plane contract separate from runtime histor
 - `SessionPreferences`
 - `UpdateSessionPreferencesRequest`
 
-`SessionListItem` may include: `session_id`, `team_id`, `title`, `updated_at`, `created_at`, `agent_instance_id`, `context_prompt_ids` (ordered chat-context prompts — see §13).
+`SessionListItem` may include: `session_id`, `team_id`, `title`, `updated_at`, `created_at`, `agent_instance_id`, `agent_display_name`, `context_prompt_ids` (ordered chat-context prompts - see §13).
 
 `SessionAttachmentSummary` is the dedicated persisted attachment projection for the
 managed chat drawer. Freeze it as:
@@ -552,6 +554,28 @@ Session attachment routes live under the existing session surface:
 - `DELETE /teams/{team_id}/sessions/{session_id}/attachments/{attachment_id}`
 
 It must not inline full message history.
+
+The single-session GET returns `SessionDetails`, extending `SessionListItem`
+with `agent_deleted` and optional `messages_url`. Team membership and session
+ownership are both required; unknown, foreign-team and foreign-owner IDs return
+404. List, create and update responses retain `SessionListItem`.
+
+`agent_display_name` is a nullable session snapshot captured at creation and
+refreshed to the latest instance name atomically at deletion, without advancing
+conversation activity dates. Session details prefer the live name while the agent
+exists; list consumers prefer the live catalog name and fall back to this snapshot.
+Creation captures routing and name in the insertion transaction using the same
+instance lock as deletion; a missing or foreign-team instance returns 404 without
+inserting a session. Inactive-conversation previews retain the name too. One
+migration backfills names from still-present agents; names deleted before that
+migration remain unavailable.
+
+History routing uses the session's captured runtime ID, with the current live
+instance as a fallback only for legacy sessions without that snapshot. The URL
+uses the configured browser ingress and never exposes an internal runtime
+address. No execution preparation or runtime catalog call is needed. Missing
+routing leaves history explicitly unavailable; it does not imply agent deletion.
+See the [managed-conversation lifecycle spec](../../../openspec/specs/managed-conversations/spec.md).
 
 #### 3.5.5 Admin observability requirements
 
@@ -2437,7 +2461,7 @@ client removed outright. The dedicated Activity surfaces (`/admin/tasks`,
 for this data; no replacement preset was added.
 
 **`top_agents_by_conversations` series carry their owning team (2026-09-03).**
-Agent instance names are not unique across teams, and the chart's previous
+Agent instance names are unique within a team but not across teams, and the chart's previous
 tie-breaker was a truncated instance id - unreadable in a cross-team ranking.
 Each series label is now `"<agent name> - <team name>"`, resolved through the
 same `TeamMetadataStore` lookup `top_teams_by_sessions` uses (now shared as
@@ -4093,8 +4117,8 @@ banner show again.
 | PUT    | `/admin/platform/announcements/{id}/enabled`                     | `can_manage_platform` |
 | DELETE | `/admin/platform/announcements/{id}`                             | `can_manage_platform` |
 
-`/announcements/active` returns the enabled set and is gated by authentication
-only — an announcement is content every user is meant to see. Every admin
+`/announcements/active` returns the enabled banners (patch notes excluded since
+section 61) and is gated by authentication only — an announcement is content every user is meant to see. Every admin
 mutation emits an audit record (`platform.announcement.created` / `.updated` /
 `.toggled` / `.deleted`).
 
@@ -4203,7 +4227,8 @@ the audit event.
   stored under its canonical id (`personal` → `personal-<uid>`). A target where
   the template is not enabled fails; a failed target never stops the others.
   `display_name` is only accepted for a single target equal to the source
-  (Duplicate), otherwise 422.
+  (Duplicate), otherwise 422. A Duplicate under a taken name fails with
+  `error_code: "agent_name_conflict"` on its result (§60).
 
 **What a copy carries.** Name (kept when free in the destination, else the
 first free `<name>_imported-<n>`), description, template, tuning values and
@@ -4245,12 +4270,91 @@ display-name cache, so a change shows on the next call; presigns of one batch
 run concurrently, at most 8 at a time. Never exported or logged. Full behavior:
 OpenSpec `user-profile-picture`.
 
-## 60. Contract Notes — agent creation assistant (2026-10-08)
+## 60. Contract Notes — agent names unique per team (2026-10-11, #3042)
+
+**Rule.** Two agents of one team or personal space cannot share a name. Names
+are compared after trimming and ignoring case; the same name stays free in
+another team. The request schemas trim `display_name`, and the database holds
+the unique index `uq_agent_instance_team_name` on
+`(team_id, lower(display_name))` (names are stored trimmed).
+
+**Refusals.** Create (`POST …/agent-instances`, JSON or with assets) and rename
+(`PATCH …/agent-instances/{id}`) under a taken name answer **409** with
+`detail = {"code": "agent_name_conflict", "message": …}`; a rename to the
+agent's own name in another case is accepted. A Duplicate reports the same
+code as `AgentCopyResult.error_code`. Create checks before any pod call.
+
+**Resolutions.** A copy to another team keeps `<name>_imported-<n>`, compared
+the same way, and retries once with the next free name if a concurrent copy
+took it. A platform import renames a conflicting agent the same way.
+
+**Upgrade.** Migration `a4d85307ea0e` trims every name and renames later
+duplicates `<name> (2)`, `<name> (3)`… in creation order (the oldest keeps its
+name) before creating the index. Full behavior: OpenSpec `agent-names`.
+
+## 61. Contract Notes - patch-note announcements and activation history (2026-10-09)
+
+Extends section 55. OpenSpec change `add-patch-note-announcements`.
+
+**Kind.** `platform_announcement.kind` is `banner` (default, every pre-existing
+row) or `patch_note`, fixed at creation (an update changing it is refused,
+`422`). `Announcement.kind` is always present; `AnnouncementWriteRequest.kind`
+defaults to `banner`. A patch note keeps one markdown body per locale in
+`description_long` (same 20,000-character cap); the server stores it with
+`severity="info"`, `dismissible=true` and an empty `description_short`. Its
+`title` is a plain-text locale map validated like a banner's (200 characters),
+and must cover exactly the locales that have a body.
+
+**One active patch note.** Enabling a patch note (toggle, or create with
+`enabled=true`) disables the active one in the same transaction. Banners are
+untouched. A partial unique index (`uq_platform_announcement_active_patch_note`,
+`enabled AND kind = 'patch_note'`) makes two enabled patch notes impossible; a
+concurrent activation that loses on it gets `409`.
+
+**Dismissal and re-show.** Server-side, one row per user and patch note
+(`platform_announcement_dismissal`); a row present means hidden for that user.
+Every off-to-on toggle deletes all of the note's dismissals in the same
+transaction as the enable, so a re-enabled note is shown to everyone again; a
+content edit keeps them. A patch note's `content_version` never moves on a
+content edit and is bumped on every off-to-on toggle, as for a banner: it keys
+the client's "closed this sign-in" flag. Dismissals are also removed with the
+patch note and with the user (`DELETE /users/{id}`). Banners keep their
+per-browser dismissal. The admin list (`AdminAnnouncement`) gives each patch
+note a `dismissal_count`: its rows (one grouped count). Toggle, content update and delete read
+the row `FOR UPDATE`.
+
+**Activation history.** `platform_announcement_activation_event`, append-only,
+no foreign key so it outlives the announcement. One event per real `enabled`
+change: toggle on/off, creation enabled, automatic disable of the previous
+patch note (actor = the admin enabling the new one) and deletion of an enabled
+announcement (`deactivated`). Each event carries `announcement_id`, `kind`,
+`label` (title per locale at event time), `severity` (the
+banner's severity at event time; `null` for a patch note, whose stored
+severity is a placeholder), `action` (`activated | deactivated`), `actor_uid`
+and `occurred_at`, written in the same
+transaction as the change. The `.toggled` and `.created` audit records gain
+`auto_disabled_ids`.
+
+| Method | Path                                                  | Permission            | Response                                   |
+| ------ | ----------------------------------------------------- | --------------------- | ------------------------------------------ |
+| GET    | `/announcements/patch-note`                           | authenticated         | `ActivePatchNote { patch_note: Announcement \| null, dismissed: bool }`: the enabled patch note and whether the caller dismissed it since it was last enabled |
+| PUT    | `/announcements/{id}/dismissal`                       | authenticated         | `204`, idempotent (one row per user and note); `404` when the id is not a patch note. Identity from the token only |
+| GET    | `/admin/platform/announcements/activation-history`    | `can_manage_platform` | `AnnouncementActivationEvent[]`, 100 newest first |
+
+`GET /announcements/patch-note` is read once per application load (no
+polling); a patch note enabled mid-session is seen at the next load. The client
+opens it at load unless `dismissed`, and the profile menu reopens it on request.
+`GET /admin/platform/announcements` now returns `AdminAnnouncement[]`
+(`Announcement` plus `dismissal_count`, null for a banner).
+
+## 62. Contract Notes — agent creation assistant (2026-10-08)
 
 **What it is.** In the agent form header, a user describes in plain words what
 the agent should do; the platform drafts a short name, role and description, a
 system prompt and a capability selection. Nothing is saved: the form applies
-the items the user ticks.
+the items the user ticks. Templates without free capability selection offer
+no capability recommendations; their included capabilities and saved
+configuration remain unchanged.
 
 **Endpoint.** `POST …/teams/{team_id}/agent-templates/{template_id}/draft-agent`,
 body `AgentDraftRequest` (`description` 1-4000 chars, `language`,
@@ -4530,3 +4634,16 @@ references to the request's diagnostic context. Attachment persistence additiona
 binds attachment/document references after ownership validation. Generic completion
 uses a shared ASGI lifecycle event and never treats logging metadata as authority.
 See [observability §6/§7](../platform/OBSERVABILITY-AND-AUDIT.md).
+
+### 2026-10-10 — Included capabilities of agents without free selection
+
+`AgentTemplateSummary.available_capabilities` of a template with
+`supports_capabilities=False` lists the capabilities included with the agent
+(its defaults, filtered by the team's `can_use`). Agent create and update ignore
+a submitted `capability_ids` for such a template and take the template-default
+path of `_apply_capability_selection`: `selected_capability_ids` is the usable
+defaults, and each one's submitted or stored config is validated through the pod
+and persisted in `capability_config`, as for any capability (a 422 when no
+default is usable by the team, as for any template declaring defaults). Chat controls such
+as `document_scope.bound_library_ids` then follow from it. An instance saved
+earlier keeps `selected_capability_ids: []` until it is edited and saved.

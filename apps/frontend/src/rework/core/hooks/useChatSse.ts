@@ -277,6 +277,7 @@ export type ChatSseCallbacks = {
   onTurnRejected?: (draft: string, sessionId: string) => void;
   /** Reads current navigation ownership before applying late turn side effects. */
   isTurnCurrent?: (sessionId: string) => boolean;
+  isExecutionAllowed?: () => boolean;
   /**
    * Ordering barrier awaited immediately before prepare-execution, keyed on
    * the session id this turn is about to use. Lets the caller flush any
@@ -316,6 +317,7 @@ export function useChatSse(
     onTurnStarted,
     onTurnRejected,
     isTurnCurrent,
+    isExecutionAllowed,
     flushPendingWrites,
   } = params;
 
@@ -993,7 +995,7 @@ export function useChatSse(
           agentInstanceId,
           ...(sessionId ? { sessionId } : {}),
         }).unwrap();
-        if (ac.signal.aborted) {
+        if (ac.signal.aborted || isTurnCurrent?.(sessionId ?? "draft") === false || isExecutionAllowed?.() === false) {
           console.debug(`[useChatSse][${sendId}] aborted right after prepare-execution — never reaching onTurnStarted`);
           releasePreflightLock();
           return false;
@@ -1049,7 +1051,7 @@ export function useChatSse(
       // user can cancel — re-check before committing, exactly as every other
       // await above does. `failPreflight` would stay silent on an aborted
       // signal, but it would not stop the turn from starting below.
-      if (ac.signal.aborted) {
+      if (ac.signal.aborted || isTurnCurrent?.(effectiveSessionId) === false || isExecutionAllowed?.() === false) {
         console.debug(
           `[useChatSse][${sendId}] aborted during the wire-time token check — never reaching onTurnStarted`,
         );
@@ -1145,6 +1147,10 @@ export function useChatSse(
                 }),
           );
         } else {
+          if (err instanceof RuntimeHttpError && !accepted) {
+            dropOptimisticTurn(exchangeId);
+            if (!continuing) onTurnRejected?.(input, effectiveSessionId);
+          }
           console.error(`[useChatSse][${sendId}] streamToMessages error — ${name}: ${msg}`);
           onError?.(`Streaming failed: ${msg}`);
         }
@@ -1168,6 +1174,7 @@ export function useChatSse(
       onTurnRejected,
       dropOptimisticTurn,
       isTurnCurrent,
+      isExecutionAllowed,
       flushPendingWrites,
       applyPreparation,
       i18n,
@@ -1226,7 +1233,7 @@ export function useChatSse(
       // Preflight BEFORE any optimistic UI mutation: a refusal here never
       // reaches the backend, so nothing may already be shown as applied.
       const tokenProblem = await preflightTurnToken(degradedTokenWarnedRef);
-      if (ac.signal.aborted) {
+      if (ac.signal.aborted || isTurnCurrent?.(pending.session_id) === false || isExecutionAllowed?.() === false) {
         // Superseded before the backend heard anything: not reached. No toast
         // — the newer owner's flow speaks for the UI now.
         return bailOut(false);
@@ -1251,14 +1258,14 @@ export function useChatSse(
       // sendHitlResume) while prepare-execution was in flight — don't apply
       // a stale response's chat controls/capability URLs over the current
       // owner's state, and the resume itself was never sent: not reached.
-      if (ac.signal.aborted) {
+      if (ac.signal.aborted || isTurnCurrent?.(pending.session_id) === false || isExecutionAllowed?.() === false) {
         return bailOut(false);
       }
       const staleResumeToken = await verifyTokenStillUsable();
       // The gate now awaits a refresh, so it is one more window in which this
       // attempt can be superseded — re-check before committing, exactly as
       // every other await above does.
-      if (ac.signal.aborted) {
+      if (ac.signal.aborted || isTurnCurrent?.(pending.session_id) === false || isExecutionAllowed?.() === false) {
         return bailOut(false);
       }
       if (staleResumeToken) {
@@ -1522,7 +1529,17 @@ export function useChatSse(
       // prompt — the checkpoint was consumed. A failure before it never ran.
       return acceptedByRuntime;
     },
-    [agentInstanceId, teamId, prepareExecution, streamToMessages, onError, applyPreparation, i18n],
+    [
+      agentInstanceId,
+      teamId,
+      prepareExecution,
+      streamToMessages,
+      isTurnCurrent,
+      isExecutionAllowed,
+      onError,
+      applyPreparation,
+      i18n,
+    ],
   );
 
   // Eager prep (RFC §3.7): call prepare-execution at chat open — not only

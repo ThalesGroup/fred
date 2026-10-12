@@ -95,6 +95,7 @@ from control_plane_backend.product.schemas import (
     PromptSummary,
     RuntimeAgentExecutionPreparation,
     SessionAttachmentSummary,
+    SessionDetails,
     SessionListItem,
     UpdateAgentInstanceRequest,
     UpdatePromptCategoryRequest,
@@ -106,6 +107,7 @@ from control_plane_backend.product.service import (
     EnrollmentError,
     ExecutionPreparationError,
     PromptRequestError,
+    SessionAgentUnavailableError,
     SessionAlreadyExistsError,
     SessionAttachmentRequestError,
     build_frontend_bootstrap,
@@ -123,7 +125,6 @@ from control_plane_backend.product.service import (
     get_marketplace_prompt,
     get_prompt,
     get_runtime_binding_for_team,
-    get_session,
     import_published_prompt_into_team,
     list_agent_templates,
     list_context_prompts,
@@ -149,6 +150,7 @@ from control_plane_backend.product.service import (
     update_prompt_score,
     update_session_activity,
 )
+from control_plane_backend.product.session_details import get_session
 from control_plane_backend.teams.service import require_team_access
 
 router = APIRouter(tags=["Product"])
@@ -170,12 +172,14 @@ def _document_optional_delegation_grant_query(
     """
 
 
-def _prompt_error_detail(exc: PromptRequestError) -> str | dict[str, str]:
+def _coded_error_detail(
+    exc: PromptRequestError | EnrollmentError,
+) -> str | dict[str, str]:
     """Carry a machine-readable code when one exists, a plain string otherwise.
 
-    A name conflict and a command conflict are both 409 on the same endpoint,
-    so the form needs more than prose to mark the right input. Errors with no
-    code keep the string shape callers already handle.
+    A prompt name and command conflict share a 409, and an agent name conflict
+    must land on the form's name field, so forms need more than prose to mark
+    the right input. Errors with no code keep the string shape callers handle.
     """
 
     if exc.code is None:
@@ -368,7 +372,9 @@ async def post_team_agent_instance(
             authorization=http_request.headers.get("Authorization"),
         )
     except EnrollmentError as exc:
-        raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=exc.http_status, detail=_coded_error_detail(exc)
+        ) from exc
 
 
 @router.post(
@@ -478,7 +484,9 @@ async def patch_team_agent_instance(
             authorization=http_request.headers.get("Authorization"),
         )
     except EnrollmentError as exc:
-        raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=exc.http_status, detail=_coded_error_detail(exc)
+        ) from exc
     if result is None:
         raise HTTPException(
             status_code=404,
@@ -590,7 +598,9 @@ async def post_team_agent_instance_with_assets(
             asset_uploads=uploads,
         )
     except EnrollmentError as exc:
-        raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=exc.http_status, detail=_coded_error_detail(exc)
+        ) from exc
 
 
 @router.patch(
@@ -647,7 +657,9 @@ async def patch_team_agent_instance_with_assets(
             asset_uploads=uploads,
         )
     except EnrollmentError as exc:
-        raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=exc.http_status, detail=_coded_error_detail(exc)
+        ) from exc
     if result is None:
         raise HTTPException(
             status_code=404,
@@ -744,7 +756,9 @@ async def get_agent_instance_copy_targets(
     try:
         targets = await list_agent_copy_targets(user=user, record=record, deps=deps)
     except EnrollmentError as exc:
-        raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=exc.http_status, detail=_coded_error_detail(exc)
+        ) from exc
     return AgentCopyTargetsResponse(targets=targets)
 
 
@@ -810,7 +824,9 @@ async def post_agent_instance_copy(
             require_editor=require_editor,
         )
     except EnrollmentError as exc:
-        raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=exc.http_status, detail=_coded_error_detail(exc)
+        ) from exc
     return AgentCopyResponse(results=results)
 
 
@@ -924,7 +940,7 @@ async def post_team_prompt(
         return await create_prompt(user=user, team_id=team_id, request=body, deps=deps)
     except PromptRequestError as exc:
         raise HTTPException(
-            status_code=exc.http_status, detail=_prompt_error_detail(exc)
+            status_code=exc.http_status, detail=_coded_error_detail(exc)
         ) from exc
 
 
@@ -1085,7 +1101,7 @@ async def put_team_prompt(
         result = await update_prompt(team_id, prompt_id, body, deps)
     except PromptRequestError as exc:
         raise HTTPException(
-            status_code=exc.http_status, detail=_prompt_error_detail(exc)
+            status_code=exc.http_status, detail=_coded_error_detail(exc)
         ) from exc
     if result is None:
         raise HTTPException(
@@ -1113,7 +1129,7 @@ async def _set_team_prompt_favorite(
         await set_prompt_favorite(user, team_id, prompt_id, favorite, deps)
     except PromptRequestError as exc:
         raise HTTPException(
-            status_code=exc.http_status, detail=_prompt_error_detail(exc)
+            status_code=exc.http_status, detail=_coded_error_detail(exc)
         ) from exc
 
 
@@ -1243,7 +1259,7 @@ async def post_promote_prompt(
         return await promote_prompt(user, team_id, prompt_id, body, deps)
     except PromptRequestError as exc:
         raise HTTPException(
-            status_code=exc.http_status, detail=_prompt_error_detail(exc)
+            status_code=exc.http_status, detail=_coded_error_detail(exc)
         ) from exc
 
 
@@ -1282,7 +1298,7 @@ async def post_publish_prompt(
         result = await set_prompt_published(team_id, prompt_id, True, deps)
     except PromptRequestError as exc:
         raise HTTPException(
-            status_code=exc.http_status, detail=_prompt_error_detail(exc)
+            status_code=exc.http_status, detail=_coded_error_detail(exc)
         ) from exc
     if result is None:
         raise HTTPException(
@@ -1325,7 +1341,7 @@ async def post_unpublish_prompt(
         result = await set_prompt_published(team_id, prompt_id, False, deps)
     except PromptRequestError as exc:
         raise HTTPException(
-            status_code=exc.http_status, detail=_prompt_error_detail(exc)
+            status_code=exc.http_status, detail=_coded_error_detail(exc)
         ) from exc
     if result is None:
         raise HTTPException(
@@ -1577,7 +1593,7 @@ async def post_team_prompt_category(
         return await create_prompt_category(team_id, body, deps)
     except PromptRequestError as exc:
         raise HTTPException(
-            status_code=exc.http_status, detail=_prompt_error_detail(exc)
+            status_code=exc.http_status, detail=_coded_error_detail(exc)
         ) from exc
 
 
@@ -1611,7 +1627,7 @@ async def put_team_prompt_category(
         result = await update_prompt_category(team_id, category_id, body, deps)
     except PromptRequestError as exc:
         raise HTTPException(
-            status_code=exc.http_status, detail=_prompt_error_detail(exc)
+            status_code=exc.http_status, detail=_coded_error_detail(exc)
         ) from exc
     if result is None:
         raise HTTPException(
@@ -1653,7 +1669,7 @@ async def delete_team_prompt_category(
         deleted = await delete_prompt_category(team_id, category_id, deps)
     except PromptRequestError as exc:
         raise HTTPException(
-            status_code=exc.http_status, detail=_prompt_error_detail(exc)
+            status_code=exc.http_status, detail=_coded_error_detail(exc)
         ) from exc
     if not deleted:
         raise HTTPException(
@@ -1736,7 +1752,7 @@ async def post_team_session(
     Called by the frontend after generating a session_id (before or just after
     the first SSE turn). Does not affect runtime execution or history.
 
-    Returns 409 if the session_id already exists.
+    Returns 409 if the session_id already exists, or 404 if its agent is gone.
     """
     team_id = await require_team_access(user, team_id, deps.team_dependencies)
     try:
@@ -1748,6 +1764,8 @@ async def post_team_session(
         )
     except SessionAlreadyExistsError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except SessionAgentUnavailableError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.get(
@@ -1825,7 +1843,7 @@ async def post_bulk_delete_my_sessions(
 
 @router.get(
     "/teams/{team_id}/sessions/{session_id}",
-    response_model=SessionListItem,
+    response_model=SessionDetails,
     response_model_exclude_none=True,
     summary="Fetch metadata for one team-scoped session.",
 )
@@ -1834,7 +1852,7 @@ async def get_team_session(
     session_id: Annotated[str, Path(min_length=1)],
     deps: ProductDependencies,
     user: KeycloakUser = Depends(get_current_user),
-) -> SessionListItem:
+) -> SessionDetails:
     """
     Return control-plane metadata for one session by ID, scoped to a team.
 
@@ -1844,7 +1862,9 @@ async def get_team_session(
     Returns 404 when the session does not exist for the given team.
     """
     team_id = await require_team_access(user, team_id, deps.team_dependencies)
-    item = await get_session(team_id=team_id, session_id=session_id, deps=deps)
+    item = await get_session(
+        team_id=team_id, session_id=session_id, user_id=user.uid, deps=deps
+    )
     if item is None:
         raise HTTPException(
             status_code=404,

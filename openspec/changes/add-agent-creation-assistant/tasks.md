@@ -49,6 +49,8 @@
 - [x] 5.15 Code review 2 fixes: an empty or tag-only prompt is an unusable answer at parse time (never a hedge winner); remove `rationale` end to end (meta-prompt, SDK, clients, docs); neutral coined name examples and a new pinned hash; a single declared level is "on", a thinking profile with nothing to send is reported as not supporting reasoning (empty `model_reasoning_efforts` entry); `build_chat_for_profile` returns the fallback model and resolves the profile once (one accurate warning); the admin control keeps the stored effort when the model's control is unknown; doc and Help Center wording fixes; verify with runtime, control-plane and vitest tests
 - [x] 5.16 CI fixes: the hedge deadline test runs on a stepped loop clock (the deadline passes only once the call without reasoning runs, no real-time race); the shared `Dialog` gets a `compactTitle` prop and `PromptEditor` a `highlighted` prop instead of the ad-hoc `--dialog-title-padding-bottom` and `--prompt-editor-border` custom properties the `@fred-oss/ui` archive validator rejects; the UI archive glyph count follows the added `remove_circle`; verify with runtime tests (20 runs), vitest and the `libs/frontend` release checks
 
+- [x] 5.17 Integrate current swift without dropping either parent: preserve unique agent names and both Dialog prop families, keep included Graph capability configuration intact, reparent the assistant migration, regenerate both API clients and verify targeted tests, root quality and an independent merge review (evidence in verification.md)
+
 ## 6. Close-out
 
 - [x] 6.1 Manual check against a real model in fr and en, with and without capabilities (browser in fr; en through the smoke script; no-capability answer only unit-tested, see verification.md)

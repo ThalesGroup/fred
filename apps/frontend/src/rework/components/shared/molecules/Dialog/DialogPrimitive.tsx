@@ -55,6 +55,8 @@ export interface DialogProps {
   cancelLabel?: string;
   confirmDisabled?: boolean;
   hideCancel?: boolean;
+  /** Renders no confirm button, for a dialog whose choices live in its body; Cancel stays. */
+  hideConfirm?: boolean;
   confirmColor?: ColorTheme;
   maxWidth?: number;
   /** Let a bounded child region handle scrolling instead of the whole body. */
@@ -63,6 +65,13 @@ export interface DialogProps {
   titleAddon?: ReactNode;
   /** Optional element before the title, e.g. a back button in a multi-step dialog. */
   titlePrefix?: ReactNode;
+  /** Optional element shown in the action bar, right before the buttons, e.g. a checkbox. */
+  actionsAddon?: ReactNode;
+  /** Rules off the header and the action bar with `outline-variant`, for a long scrolling body. */
+  dividers?: boolean;
+  /** Where focus lands on open. `"dialog"` focuses the dialog itself, so a long body opens at
+   *  its top and screen readers start from the title rather than from a control deep inside. */
+  initialFocus?: "first-control" | "dialog";
   /** Optional caller-owned portal container inside the themed .fred-ui root. */
   portalContainer?: HTMLElement | null;
   /** Extra class on the dialog surface, e.g. to size it. */
@@ -84,11 +93,15 @@ export function DialogPrimitive({
   cancelLabel = "Cancel",
   confirmDisabled = false,
   hideCancel = false,
+  hideConfirm = false,
   confirmColor = "primary",
   maxWidth,
   scrollMode = "body",
   titleAddon,
   titlePrefix,
+  actionsAddon,
+  dividers = false,
+  initialFocus = "first-control",
   portalContainer,
   className,
   compactTitle = false,
@@ -101,15 +114,17 @@ export function DialogPrimitive({
   const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const [bodyScrolls, setBodyScrolls] = useState(false);
-  const callbacks = useRef({ onCancel, onConfirm, confirmDisabled });
-  callbacks.current = { onCancel, onConfirm, confirmDisabled };
+  const callbacks = useRef({ onCancel, onConfirm, confirmDisabled: confirmDisabled || hideConfirm });
+  callbacks.current = { onCancel, onConfirm, confirmDisabled: confirmDisabled || hideConfirm };
+  const focusDialogFirst = useRef(initialFocus === "dialog");
+  focusDialogFirst.current = initialFocus === "dialog";
   const attachDialog = useCallback((node: HTMLDivElement | null) => {
     dialogRef.current = node;
-    if (node)
-      (
-        [...node.querySelectorAll<HTMLElement>(FOCUSABLE)].find((candidate) => isVisibleFocusable(candidate, node)) ??
-        node
-      ).focus();
+    if (!node) return;
+    const firstControl = focusDialogFirst.current
+      ? undefined
+      : [...node.querySelectorAll<HTMLElement>(FOCUSABLE)].find((candidate) => isVisibleFocusable(candidate, node));
+    (firstControl ?? node).focus();
   }, []);
 
   useEffect(() => {
@@ -214,7 +229,7 @@ export function DialogPrimitive({
           >
             <div
               ref={attachDialog}
-              className={className ? `${styles.dialog} ${className}` : styles.dialog}
+              className={[styles.dialog, dividers && styles.dividers, className].filter(Boolean).join(" ")}
               role="dialog"
               aria-modal="true"
               aria-labelledby={titleId}
@@ -239,21 +254,24 @@ export function DialogPrimitive({
               </div>
               <div className={styles.actions}>
                 {footerStart && <div className={styles.actionsStart}>{footerStart}</div>}
+                {actionsAddon && <div className={styles.actionsAddon}>{actionsAddon}</div>}
                 {!hideCancel && (
                   <Button type="button" color="on-surface" variant="text" size="medium" onClick={onCancel}>
                     {cancelLabel}
                   </Button>
                 )}
-                <Button
-                  type="button"
-                  color={confirmColor}
-                  variant="filled"
-                  size="medium"
-                  disabled={confirmDisabled}
-                  onClick={onConfirm}
-                >
-                  {confirmLabel}
-                </Button>
+                {!hideConfirm && (
+                  <Button
+                    type="button"
+                    color={confirmColor}
+                    variant="filled"
+                    size="medium"
+                    disabled={confirmDisabled}
+                    onClick={onConfirm}
+                  >
+                    {confirmLabel}
+                  </Button>
+                )}
               </div>
             </div>
           </div>

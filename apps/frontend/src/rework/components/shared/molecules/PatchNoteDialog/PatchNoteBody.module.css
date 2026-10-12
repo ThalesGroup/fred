@@ -1,0 +1,60 @@
+/*
+ * Copyright Thales 2026
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/* Release-notes typography on top of MarkdownRenderer's prose defaults, shared by
+   the user dialog and the editor's inline preview. The doubled class out-ranks the
+   renderer's own `.root h2` rules. */
+.body {
+  width: 100%;
+}
+
+.body.body :global(h1),
+.body.body :global(h2),
+.body.body :global(h3) {
+  color: var(--on-surface);
+}
+
+.body.body :global(h1) {
+  font: var(--font-headline-small);
+}
+
+/* Section headings ("New", "Fixed"...) read as dividers between groups. */
+.body.body :global(h2) {
+  border-top: 1px solid var(--outline-muted);
+  padding-top: var(--spacing-m);
+  font: var(--font-title-medium-emphasized);
+}
+
+.body.body :global(h3) {
+  font: var(--font-title-small-emphasized);
+}
+
+/* The note's first heading is its headline: a neutral band across the full
+   width, so the release reads at a glance. */
+.body.body > * > :global(h1:first-child),
+.body.body > * > :global(h2:first-child) {
+  grid-column: 1 / -1;
+  border-top: none;
+  border-radius: var(--radius-m);
+  background: var(--surface-container);
+  padding: var(--spacing-m) var(--spacing-l);
+  color: var(--on-surface);
+  font: var(--font-headline-small);
+}
+
+.body.body :global(li::marker) {
+  color: var(--on-surface-retreat);
+}

@@ -168,7 +168,7 @@ Verify that a token exists before using it. The authoritative token files are:
 | `src/styles/themes/<id>.css`           | One UI theme: colors (light + dark), font, radii  |
 | `src/styles/colors-state-semantic.css` | Hover / pressed / disabled / focused state tokens |
 | `src/styles/shadow-dark.css`           | Shadow + elevation tokens (dark theme)            |
-| `src/styles/shadow-light.css`          | Shadow + elevation tokens (light theme)           |
+| `src/styles/shadow-light.css`          | Shadow + elevation tokens (light theme): `--shadow-xs` to `--shadow-l` |
 | `src/styles/spacings.css`              | `--spacing-*` tokens                              |
 | `src/styles/radius.css`                | `--radius-full` and `--border-radius-*` aliases   |
 | `src/styles/typography.css`            | `--font-*` composite tokens (size, weight, line)  |

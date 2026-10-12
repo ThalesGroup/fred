@@ -21,7 +21,7 @@ import type { RuntimeAwaitingHumanEvent } from "@hooks/useChatSse";
 import { useAssistantCopyInterception } from "@hooks/useAssistantCopyInterception";
 import type { CommandDescriptor } from "../../../../../slices/runtime/runtimeOpenApi";
 import type { ThreadMessage } from "@rework/types/thread";
-import { HitlPrompt } from "@shared/molecules/HitlPrompt/HitlPrompt.tsx";
+import { HitlPrompt, type HitlQuestionState } from "@shared/molecules/HitlPrompt/HitlPrompt.tsx";
 import { HitlAnswerSummary } from "@shared/molecules/HitlAnswerSummary/HitlAnswerSummary";
 import { UserTurn } from "@shared/organisms/UserTurn/UserTurn";
 import { AssistantTurn } from "@shared/organisms/AssistantTurn/AssistantTurn";
@@ -29,6 +29,7 @@ import { ChatMessagesArea } from "@shared/organisms/ChatMessagesArea/ChatMessage
 import { hitlResponseKey } from "../toThreadMessages";
 
 interface ConversationThreadProps {
+  readOnly?: boolean;
   messages: ThreadMessage[];
   pendingHitl: RuntimeAwaitingHumanEvent | null;
   pendingHitlTabs?: RuntimeAwaitingHumanEvent[];
@@ -36,6 +37,7 @@ interface ConversationThreadProps {
   hitlBusy?: boolean;
   stagedHitlAnswer?: { answer: string | boolean | undefined; freeText?: string; skipped: boolean };
   canSendAllHitl?: boolean;
+  hitlTabStates?: HitlQuestionState[];
   onStageHitlAnswer?: (answer: string | boolean | undefined, freeText?: string, skipped?: boolean) => void;
   onSendAllHitl?: () => void;
   onSkipAllHitl?: () => void;
@@ -62,6 +64,7 @@ interface ConversationThreadProps {
 // message — including its full markdown re-parse — re-rendered on every
 // character typed, with cost scaling with conversation length (#2221).
 export const ConversationThread = memo(function ConversationThread({
+  readOnly = false,
   messages,
   pendingHitl,
   pendingHitlTabs = [],
@@ -69,6 +72,7 @@ export const ConversationThread = memo(function ConversationThread({
   hitlBusy = false,
   stagedHitlAnswer,
   canSendAllHitl,
+  hitlTabStates,
   onStageHitlAnswer,
   onSendAllHitl,
   onSkipAllHitl,
@@ -144,7 +148,17 @@ export const ConversationThread = memo(function ConversationThread({
           />
         );
       })}
-      {pendingHitl && (
+      {pendingHitl &&
+        readOnly &&
+        (pendingHitlTabs.length ? pendingHitlTabs : [pendingHitl]).map((event) => (
+          <HitlPrompt
+            key={event.payload.occurrence_id ?? event.payload.interrupt_id ?? event.payload.question}
+            event={event}
+            readonly
+            onAnswer={() => {}}
+          />
+        ))}
+      {pendingHitl && !readOnly && (
         <HitlPrompt
           event={pendingHitl}
           siblingQuestions={pendingHitlTabs}
@@ -152,6 +166,7 @@ export const ConversationThread = memo(function ConversationThread({
           busy={hitlBusy}
           stagedAnswer={stagedHitlAnswer}
           canSendAll={canSendAllHitl}
+          questionStates={hitlTabStates}
           onStageAnswer={onStageHitlAnswer}
           onSendAll={onSendAllHitl}
           onSkipAll={onSkipAllHitl}

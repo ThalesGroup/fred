@@ -20,9 +20,10 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacing-m);
-  padding: var(--spacing-l) var(--spacing-xl);
+  box-sizing: border-box;
+  padding: var(--spacing-m);
   height: 100%;
-  overflow-y: auto;
+  min-height: 0;
 }
 
 .list {
@@ -59,4 +60,72 @@
   flex-shrink: 0;
   align-items: center;
   gap: var(--spacing-2xs);
+}
+
+/* Either view fills the page body below the header; the list scrolls here,
+   the history table scrolls its own rows. */
+.main {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Patch notes have no severity: a neutral card, so they never read as a
+   warning or an info banner. */
+.patchNote {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--spacing-s);
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-s);
+  background: var(--surface-container);
+  padding: var(--spacing-xs) var(--spacing-m);
+  min-width: 0;
+  color: var(--on-surface);
+}
+
+.patchNoteIcon {
+  display: inline-flex;
+  flex: none;
+  color: var(--on-surface-retreat);
+  font-size: 1.25rem;
+}
+
+.patchNoteText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.patchNoteKind {
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+}
+
+.patchNoteTitle {
+  overflow: hidden;
+  color: var(--on-surface);
+  font: var(--font-body-medium-emphasized);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.patchNoteDismissals {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+/* Phone width: the controls go under the banner or card instead of
+   squeezing it to nothing. */
+@media (max-width: 600px) {
+  .row {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .preview,
+  .patchNote {
+    flex-basis: 100%;
+  }
 }

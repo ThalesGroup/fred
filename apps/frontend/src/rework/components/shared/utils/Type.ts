@@ -145,6 +145,8 @@ export const materialIcons = [
   "video_file",
   "create_new_folder",
   "refresh",
+  "reply",
+  "do_not_disturb_on",
   "schedule",
   "pending",
   "edit_calendar",

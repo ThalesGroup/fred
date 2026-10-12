@@ -136,6 +136,10 @@
   color: var(--on-surface-retreat);
 }
 
+.host :global(.cm-cursor) {
+  border-left-color: var(--on-surface);
+}
+
 .editor.disabled .host :global(.cm-content) {
   color: var(--on-surface-retreat);
 }

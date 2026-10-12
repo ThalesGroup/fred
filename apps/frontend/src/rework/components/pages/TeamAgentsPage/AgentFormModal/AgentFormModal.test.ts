@@ -147,6 +147,36 @@ describe("buildAgentFormSubmitPayload", () => {
     });
   });
 
+  it("submits every included capability and its config for a template without free selection", () => {
+    // A Graph agent's included capability stays active whatever the stored
+    // selection says (often [] for an instance saved before it was shown).
+    const template = {
+      ...makeCapabilityTemplate(["document_access"]),
+      supports_capabilities: false,
+      default_capability_ids: ["document_access"],
+    } as AgentTemplateSummary;
+    const bound = { bind_libraries: true, library_tag_ids: ["lib-a"] };
+    const payload = buildAgentFormSubmitPayload(
+      {
+        templateId: "runtime:agent",
+        displayName: "Mindmap",
+        role: "",
+        description: "",
+        usageStatement: "",
+        reasoningEnabled: false,
+        reasoningDefaultOn: false,
+        tuningValues: {},
+        ...EMPTY_CAPABILITY_STATE,
+        capabilityConfigValues: { document_access: bound },
+      },
+      template,
+    );
+
+    expect(payload.selectedCapabilityIds).toEqual(["document_access"]);
+    expect(payload.capabilityConfigValues).toEqual({ document_access: bound });
+    expect(payload.templateHasCapabilities).toBe(true);
+  });
+
   it("flags templateHasCapabilities false and empties capability selection for capability-less templates", () => {
     const payload = buildAgentFormSubmitPayload(
       {
