@@ -947,6 +947,27 @@ async def test_tree_tool_scopes_by_bound_libraries_and_clamps_budget() -> None:
 
 
 @pytest.mark.asyncio
+async def test_tree_metadata_and_incomplete_notice_reach_both_carriers() -> None:
+    tree = 'Docs/\n  {"uid":"doc","name":"Report.pdf","added_to_kb":"2026-10-12T09:00:00+00:00","created":null,"modified":null,"labels":["Finance"]}'
+    cap = DocumentAccessCapability()
+    ctx = build_capability_context(
+        cap,
+        identity=_identity(),
+        services=_full_services(
+            tree=_FakeTreePort(result=DocumentTreeResult(tree=tree, truncated=True))
+        ),
+        config={},
+    )
+    message = await _invoke_named_tool(cap, ctx, "list_document_tree", {})
+    assert (
+        message.content
+        == "Listing incomplete: omitted documents may be more recent.\n" + tree
+    )
+    assert message.artifact.blocks[0].text == message.content
+    assert not message.artifact.is_error
+
+
+@pytest.mark.asyncio
 async def test_tree_tool_failure_returns_is_error_result() -> None:
     """A Knowledge Flow failure must surface as an `is_error` tool result with
     actionable detail — never a raised exception (Kea #1801)."""

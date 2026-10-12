@@ -1469,6 +1469,18 @@ capability renders `is_error` tool results without importing the HTTP stack.
 the long-running summarize path. First consumer: `document_access`'s
 `list_document_tree` + `summarize_document` tools (RFC §10.1).
 
+**Document tree metadata (2026-10-12).** The existing `{tree, truncated}` response
+and `DocumentTreeResult` remain unchanged. Folder records carry `folder` and optional internal `folder_id`; document leaves are compact JSON records with `uid`, `name`,
+`added_to_kb`, `created`, `modified`, plus available title, format/MIME, language,
+page/row counts, labels and source. `added_to_kb` projects the stored
+`source.date_added_to_kb`; an omitted legacy field remains null instead of using a
+read-time default. Dates retain timezone, time and available precision. Creation
+is file metadata, modification can include Fred metadata edits, and arrival is
+not ingestion completion. Both ReAct text content and Graph text blocks include
+the metadata and an explicit notice when the tree is incomplete. The frontend's
+folder/document view hides internal ids and supports earlier text tree results.
+Observable behavior is specified in `openspec/specs/team-resource-spaces/spec.md`.
+
 ---
 
 ### 8.22 ✅ `AgentCapability.tools()` — Graph agents can use capabilities (2026-07-22)
