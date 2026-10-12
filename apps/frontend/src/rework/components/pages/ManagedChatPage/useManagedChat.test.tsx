@@ -61,6 +61,8 @@ vi.mock("react-i18next", () => ({
 // arbitrary previously-visited sid (e.g. clicking a session in a sidebar) —
 // something `startNewConversation()`/`handleSend()` alone can't simulate,
 // since both only ever mint a brand-new sid, never rebind to an existing one.
+let postponeNavigation = false;
+let commitNavigation: (() => void) | undefined;
 let capturedSetSearchParams:
   | ((updater: URLSearchParams | ((prev: URLSearchParams) => URLSearchParams)) => void)
   | undefined;
@@ -71,7 +73,9 @@ vi.mock("react-router-dom", () => ({
       updater: URLSearchParams | ((prev: URLSearchParams) => URLSearchParams),
       _opts?: unknown,
     ) => {
-      setParams((prev) => (typeof updater === "function" ? updater(prev) : updater));
+      const commit = () => setParams((prev) => (typeof updater === "function" ? updater(prev) : updater));
+      if (postponeNavigation) commitNavigation = commit;
+      else commit();
     };
     capturedSetSearchParams = setSearchParams;
     return [params, setSearchParams] as const;
@@ -303,6 +307,8 @@ describe("useManagedChat — session write reliability", () => {
   };
 
   beforeEach(() => {
+    postponeNavigation = false;
+    commitNavigation = undefined;
     localStorage.clear();
     composerValue.askUser = true;
     clearSessionHistoryCache();
@@ -412,6 +418,108 @@ describe("useManagedChat — session write reliability", () => {
     expect(sendMock).not.toHaveBeenCalled();
     expect(registerSessionCalls).toHaveLength(0);
     expect(latest.input).toBe("  🙂🙂🙂🙂🙂🙂  ");
+  });
+
+  it("starts the first send after an intermediate render before router binding", async () => {
+    sessionQueryUnresolved = true;
+    mount();
+    act(() => latest.setInput("hello"));
+    const create = deferred<unknown>();
+    registerSessionImpl = () => create.promise;
+    postponeNavigation = true;
+    const first = latest.handleSend();
+    await tick();
+    expect(registerSessionCalls).toHaveLength(1);
+    // Mutation updates can render before the router commits its new search params.
+    rerender();
+    act(() => commitNavigation?.());
+    expect(latest.executionDisabled).toBe(false);
+    await act(async () => {
+      create.resolve({});
+      await first;
+    });
+    expect(sendMock).toHaveBeenCalledOnce();
+    expect(capturedIsTurnCurrent?.(latest.sessionId!)).toBe(true);
+  });
+
+  it("keeps the effective first-turn identity when preparation precedes router binding", async () => {
+    sessionQueryUnresolved = true;
+    mount();
+    act(() => latest.setInput("first draft"));
+    postponeNavigation = true;
+    sendMock.mockImplementationOnce(async (_text, sid) => {
+      expect(capturedIsTurnCurrent?.(sid as string)).toBe(true);
+      capturedOnTurnStarted?.();
+      return true;
+    });
+    await act(async () => {
+      await latest.handleSend();
+    });
+    expect(latest.sessionId).toBeNull();
+    expect(latest.input).toBe("");
+    act(() => commitNavigation?.());
+    expect(latest.executionDisabled).toBe(false);
+    expect(sendMock).toHaveBeenCalledOnce();
+  });
+
+  it.each([false, true])(
+    "revokes a pending first send on navigation, including return to its sid (%s)",
+    async (returnToOrigin) => {
+      sessionQueryUnresolved = true;
+      mount();
+      act(() => latest.setInput("first draft"));
+      const create = deferred<unknown>();
+      registerSessionImpl = () => create.promise;
+      const first = latest.handleSend();
+      await tick();
+      const sid = latest.sessionId!;
+      sessionQueryUnresolved = false;
+      act(() => capturedSetSearchParams?.(new URLSearchParams("session=other")));
+      if (returnToOrigin) act(() => capturedSetSearchParams?.(new URLSearchParams(`session=${sid}`)));
+      act(() => capturedOnAwaitingHuman?.(awaitingHumanEvent));
+      const question = latest.pendingHitl;
+      await act(async () => {
+        create.resolve({});
+        await first;
+      });
+      expect(sendMock).not.toHaveBeenCalled();
+      expect(latest.pendingHitl).toBe(question);
+    },
+  );
+
+  it("revokes a deferred draft handoff when starting another new conversation", async () => {
+    sessionQueryUnresolved = true;
+    mount();
+    act(() => latest.setInput("first draft"));
+    postponeNavigation = true;
+    const create = deferred<unknown>();
+    registerSessionImpl = () => create.promise;
+    const first = latest.handleSend();
+    await tick();
+    act(() => latest.startNewConversation());
+    await act(async () => {
+      create.resolve({});
+      await first;
+    });
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(latest.sessionId).toBeNull();
+    expect(latest.input).toBe("");
+  });
+
+  it("does not start a first turn when session creation finishes after unmount", async () => {
+    sessionQueryUnresolved = true;
+    mount();
+    act(() => latest.setInput("first draft"));
+    const create = deferred<unknown>();
+    registerSessionImpl = () => create.promise;
+    const first = latest.handleSend();
+    await tick();
+    act(() => root.unmount());
+    await act(async () => {
+      create.resolve({});
+      await first;
+    });
+    expect(sendMock).not.toHaveBeenCalled();
   });
 
   it("accepts an exact-limit Unicode draft", async () => {
