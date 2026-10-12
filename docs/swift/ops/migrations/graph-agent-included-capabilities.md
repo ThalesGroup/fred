@@ -36,6 +36,13 @@ Use the normal rollback procedure; this change introduces no data migration. A
 configuration saved for an included capability stays stored and is ignored by
 an older form.
 
+## User-visible message
+
+A turn refused because the team has not enabled the agent's model used to read
+"The agent could not initialize its execution. Contact support with reference
+…". It now names the model and tells the user to ask a platform administrator
+to enable it for the team; the support reference stays.
+
 ## Limitations
 
 An instance created before this release keeps an empty stored selection, so its
