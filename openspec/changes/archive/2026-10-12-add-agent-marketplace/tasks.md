@@ -46,4 +46,5 @@
 ## 5. Close-out
 
 - [x] 5.1 Manual check: publish an agent with a library restriction and a ppt-filler template; edit it (Modified state); republish; like and import it into a team without access to the source team (fills a presentation without re-upload, no library restriction); make the team private and see "Removed from the marketplace" with counters kept
-- [ ] 5.2 Author review per `AGENTS.md`, evidence in `verification.md`, reconcile this change; archive `copy-agent-across-teams` and `unique-agent-names-per-team` first (their specs must exist for the MODIFIED deltas), then `openspec archive add-agent-marketplace`, close #3044
+- [x] 5.2 Author review per `AGENTS.md`, evidence in `verification.md`, reconcile this change; archive `copy-agent-across-teams` and `unique-agent-names-per-team` first (their specs must exist for the MODIFIED deltas), then `openspec archive add-agent-marketplace`, close #3044
+  Evidence: author review and two independent reviews (backend, frontend) recorded in `verification.md`, all findings fixed; both prerequisite changes were archived 2026-10-11; shipped as four stacked PRs (shared UI primitives, publication settings, marketplace backend, marketplace frontend), each green on its own; this change archived in the last one.
