@@ -10,6 +10,7 @@
 
 # Always read VERSION from pyproject.toml to avoid duplication and env overrides.
 override VERSION := $(shell $(PYTHON) -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+RELEASE_VALIDATOR ?= $(shell git rev-parse --show-toplevel)/scripts/validate_python_release.py
 
 ##@ Publish
 
@@ -21,11 +22,12 @@ build: dev ## Build sdist and wheel into target/dist/
 	@echo "✅ Artifacts in $(TARGET)/dist/"
 
 .PHONY: publish
-publish: build ## Build and publish to PyPI (requires PYPI_TOKEN env var)
+publish: ## Publish already-built, validated artifacts to PyPI (requires PYPI_TOKEN env var)
 	@if [ -z "$$PYPI_TOKEN" ]; then \
 		echo "❌ PYPI_TOKEN is not set. Export it before running make publish."; \
 		exit 1; \
 	fi
+	@python3 "$(RELEASE_VALIDATOR)" .
 	@echo "🚀 Publishing $(PROJECT_NAME) $(VERSION) to PyPI..."
 	UV_PUBLISH_TOKEN="$$PYPI_TOKEN" $(UV) publish $(TARGET)/dist/*
 	@echo "✅ Published $(PROJECT_NAME) $(VERSION)"
