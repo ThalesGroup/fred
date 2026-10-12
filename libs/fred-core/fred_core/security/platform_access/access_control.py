@@ -17,10 +17,16 @@ from fred_pod.security.structure import (
 )
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
+from fred_core.security.models import Resource
 from fred_core.security.platform_access.models import PlatformAccessSettingsRow
 from fred_core.security.platform_access.rules import allows, evaluate, path_key
 from fred_core.security.platform_access.store import PlatformAccessStore
-from fred_core.security.rebac.rebac_engine import RebacEngine
+from fred_core.security.rebac.rebac_engine import (
+    ORGANIZATION_ID,
+    OrganizationPermission,
+    RebacEngine,
+    RebacReference,
+)
 from fred_core.sql.schema_guard import require_tables
 from fred_core.teams.team_metatada_models import TeamMetadataRow
 from fred_core.users.user_models import UserRow
@@ -103,6 +109,26 @@ class PlatformAccess:
             raise RuntimeError("Incomplete membership authority response")
         return [team for team, member in zip(teams, memberships) if member]
 
+    async def platform_admin_uid(self, uid: str) -> bool:
+        """Resolve the current platform-admin permission for a person's UID."""
+        try:
+            return await self.rebac.has_permission(
+                RebacReference(Resource.USER, uid),
+                OrganizationPermission.CAN_MANAGE_PLATFORM,
+                RebacReference(Resource.ORGANIZATION, ORGANIZATION_ID),
+                consistency_token=self.rebac.HIGHER_CONSISTENCY,
+            )
+        except Exception:
+            raise HTTPException(503, "platform_access_unavailable") from None
+
+    async def platform_admin(self, user: Principal) -> bool:
+        """Ignore a workload's own identity when checking human admission."""
+        if isinstance(user, KeycloakUser) and (
+            user.service_account or is_service_agent(user)
+        ):
+            return False
+        return await self.platform_admin_uid(user.uid)
+
     async def eligible(
         self,
         user: Principal,
@@ -114,6 +140,8 @@ class PlatformAccess:
     ) -> bool:
         if use_current_policy:
             policy = self.policy(await self.state(session))
+        if await self.platform_admin(user):
+            return True
         uid = UUID(user.uid)
         if isinstance(user, KeycloakUser):
             row = (
@@ -208,7 +236,11 @@ async def initialize_platform_access(
             "platform_access_users",
             "users",
             "teammetadata",
-            *(["platform_access_links"] if authority else []),
+            *(
+                ["platform_access_links", "platform_access_link_joiners"]
+                if authority
+                else []
+            ),
         ],
         component="platform-access",
         migrate_command="make db-upgrade (apps/control-plane-backend)",

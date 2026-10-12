@@ -35,7 +35,7 @@ from fred_core.security.platform_access.rules import (
 )
 from fred_core.security.platform_access.store import PlatformAccessStore
 from fred_core.security.rebac.noop_engine import NoopRebacEngine
-from fred_core.security.rebac.rebac_engine import RebacReference
+from fred_core.security.rebac.rebac_engine import OrganizationPermission, RebacReference
 from fred_core.teams.team_metatada_models import TeamMetadataRow
 from fred_core.users.user_models import UserRow
 
@@ -68,11 +68,14 @@ class MembershipEngine(NoopRebacEngine):
     def __init__(self):
         super().__init__()
         self.members: dict[str, set[str]] = {}
+        self.admins: set[str] = set()
         self.unavailable = False
 
     async def _has_permission_raw(self, subject, permission, resource, **kwargs):
         if self.unavailable:
             raise RuntimeError("unavailable")
+        if permission == OrganizationPermission.CAN_MANAGE_PLATFORM:
+            return subject.id in self.admins
         return resource.id in self.members.get(subject.id, set())
 
     async def _lookup_resources_raw(self, subject, permission, resource_type, **kwargs):
@@ -273,6 +276,19 @@ async def test_live_independent_sources_and_revocation_across_instances(access):
         team.platform_access_free = True
     access.rebac.members[user.uid] = set()
     assert not await second.admitted(user)
+
+
+@pytest.mark.asyncio
+async def test_platform_admin_remains_admitted_until_live_role_removal(access):
+    user = person("other")
+    asserted = cast(Principal, SimpleNamespace(uid=user.uid))
+    assert not await access.admitted(user)
+    access.rebac.admins.add(user.uid)
+    assert await access.admitted(user)
+    assert await access.admitted(asserted)
+    access.rebac.admins.remove(user.uid)
+    assert not await access.admitted(user)
+    assert not await access.admitted(asserted)
 
 
 @pytest.mark.asyncio

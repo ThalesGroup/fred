@@ -40,6 +40,7 @@ from control_plane_backend.platform_access.schemas import (
     PlatformAccessUsersPage,
     PlatformEnrollmentLink,
     PlatformEnrollmentLinksPage,
+    PlatformEnrollmentJoinersPage,
     PlatformEnrollmentLinkStatus,
     PlatformT0Preview,
     SetPlatformAccessPolicy,
@@ -260,6 +261,21 @@ async def list_platform_enrollment_links(
     status: PlatformEnrollmentLinkStatus | None = None,
 ) -> PlatformEnrollmentLinksPage:
     return await service.list_links(access, team_id, offset, limit, status)
+
+
+@router.get(
+    "/admin/platform/access/teams/{team_id}/enrollment-links/{link_id}/joiners",
+    response_model=PlatformEnrollmentJoinersPage,
+)
+async def list_platform_enrollment_joiners(
+    team_id: str,
+    link_id: UUID,
+    access: Access,
+    user: Admin,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(25, ge=1, le=100),
+) -> PlatformEnrollmentJoinersPage:
+    return await service.list_link_joiners(access, team_id, link_id, offset, limit)
 
 
 @router.delete(

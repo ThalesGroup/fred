@@ -8,6 +8,7 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     Uuid,
@@ -76,3 +77,25 @@ class PlatformAccessLinkRow(Base):
     last_opened_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+
+
+class PlatformAccessLinkJoinerRow(Base):
+    __tablename__ = "platform_access_link_joiners"
+    __table_args__ = (
+        Index(
+            "ix_platform_access_link_joiners_page",
+            "link_id",
+            "joined_at",
+            "user_id",
+        ),
+    )
+
+    link_id: Mapped[UUID] = mapped_column(
+        Uuid,
+        ForeignKey("platform_access_links.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

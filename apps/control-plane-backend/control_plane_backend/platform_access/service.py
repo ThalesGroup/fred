@@ -15,6 +15,7 @@ from fred_core.security.delegation import require_active_subject
 from fred_core.security.models import AccountStatusError
 from fred_core.security.platform_access.access_control import PlatformAccess
 from fred_core.security.platform_access.models import (
+    PlatformAccessLinkJoinerRow,
     PlatformAccessLinkRow,
     PlatformAccessSettingsRow,
     PlatformAccessUserRow,
@@ -49,6 +50,8 @@ from control_plane_backend.platform_access.schemas import (
     PlatformAccessUser,
     PlatformAccessUsersPage,
     PlatformEnrollmentLinkInfo,
+    PlatformEnrollmentJoiner,
+    PlatformEnrollmentJoinersPage,
     PlatformEnrollmentLinksPage,
     PlatformEnrollmentLinkStatus,
     PlatformT0Preview,
@@ -201,6 +204,8 @@ async def users_page(
         async with slots:
             uid = str(row.id)
             sources: list[AdmissionSource] = []
+            if await access.platform_admin_uid(uid):
+                sources.append(AdmissionSource(kind="admin"))
             if await asyncio.to_thread(access.observed_match, row, policy):
                 sources.append(AdmissionSource(kind="attribute"))
             exception = await access.store.exception(UUID(uid))
@@ -262,6 +267,8 @@ async def activation_preview(access: PlatformAccess) -> PlatformAccessActivation
             except AccountStatusError as error:
                 outcome = "unknown" if error.unavailable else "blocked"
             else:
+                if await access.platform_admin_uid(uid):
+                    sources.append(AdmissionSource(kind="admin"))
                 exception = exceptions.get(UUID(uid))
                 if exception:
                     sources.append(
@@ -545,6 +552,44 @@ async def list_links(
         )
 
 
+async def list_link_joiners(
+    access: PlatformAccess, team_id: str, link_id: UUID, offset: int, limit: int
+) -> PlatformEnrollmentJoinersPage:
+    async with access.store.read() as session:
+        await access.state(session)
+        await owned_link(access, team_id, link_id, session)
+        rows = await session.execute(
+            select(PlatformAccessLinkJoinerRow, UserRow)
+            .join(UserRow, UserRow.id == PlatformAccessLinkJoinerRow.user_id)
+            .where(PlatformAccessLinkJoinerRow.link_id == link_id)
+            .order_by(
+                PlatformAccessLinkJoinerRow.joined_at,
+                PlatformAccessLinkJoinerRow.user_id,
+            )
+            .offset(offset)
+            .limit(limit)
+        )
+        total = await session.scalar(
+            select(func.count())
+            .select_from(PlatformAccessLinkJoinerRow)
+            .join(UserRow, UserRow.id == PlatformAccessLinkJoinerRow.user_id)
+            .where(PlatformAccessLinkJoinerRow.link_id == link_id)
+        )
+        return PlatformEnrollmentJoinersPage(
+            items=[
+                PlatformEnrollmentJoiner(
+                    user_id=str(user.id),
+                    username=user.username,
+                    first_name=user.first_name,
+                    last_name=user.last_name,
+                    joined_at=joiner.joined_at,
+                )
+                for joiner, user in rows
+            ],
+            total=int(total or 0),
+        )
+
+
 def obsolete_links(now: datetime) -> ColumnElement[bool]:
     return or_(
         PlatformAccessLinkRow.revoked_at.is_not(None),
@@ -674,13 +719,26 @@ async def enroll(
     async with access.store.mutation() as session:
         await require_active_subject(user)
         await access.state(session)
-        _, team = await require_link(access, token, session)
+        link, team = await require_link(access, token, session)
         if await cgu_required(access, user.uid, version, session):
             raise HTTPException(403, "user_not_accept_gcu")
         if not (await access.rebac.has_team_memberships(user.uid, [team.id]))[0]:
             await _add_team_member_relation(
                 access.rebac, TeamId(team.id), user.uid, UserTeamRelation.TEAM_MEMBER
             )
+            if (
+                await session.get(
+                    PlatformAccessLinkJoinerRow, (link.id, UUID(user.uid))
+                )
+                is None
+            ):
+                session.add(
+                    PlatformAccessLinkJoinerRow(
+                        link_id=link.id,
+                        user_id=UUID(user.uid),
+                        joined_at=datetime.now(timezone.utc),
+                    )
+                )
     emit_audit_log("platform.access.free.enrolled", actor_uid=user.uid, team_id=team.id)
     return await self_status(access, user, version)
 

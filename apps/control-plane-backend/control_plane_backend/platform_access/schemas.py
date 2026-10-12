@@ -30,7 +30,7 @@ class SetPlatformFiltering(BaseModel):
 
 
 class AdmissionSource(BaseModel):
-    kind: Literal["attribute", "manual", "t0", "team", "free"]
+    kind: Literal["admin", "attribute", "manual", "t0", "team", "free"]
     team_id: str | None = None
     team_name: str | None = None
     granted_by: str | None = None
@@ -115,6 +115,19 @@ class PlatformEnrollmentLinksPage(BaseModel):
     items: list[PlatformEnrollmentLinkInfo]
     total: int
     inactive_count: int
+
+
+class PlatformEnrollmentJoiner(BaseModel):
+    user_id: str
+    username: str | None
+    first_name: str | None
+    last_name: str | None
+    joined_at: datetime
+
+
+class PlatformEnrollmentJoinersPage(BaseModel):
+    items: list[PlatformEnrollmentJoiner]
+    total: int
 
 
 class DeletedPlatformEnrollmentLinks(BaseModel):
