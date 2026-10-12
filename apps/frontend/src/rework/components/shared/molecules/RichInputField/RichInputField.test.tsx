@@ -48,6 +48,32 @@ function render(props: { sendDisabled?: boolean; characterCount?: number; charac
 }
 
 describe("RichInputField send gating", () => {
+  it("keeps a read-only draft visible in a disabled textarea without offering submission", () => {
+    const html = renderToStaticMarkup(
+      <RichInputField
+        value="Preserved draft"
+        onChange={vi.fn()}
+        onSend={vi.fn()}
+        disabled
+        sendDisabled
+        showSendButton
+        enableVoiceInput
+        voiceInputDisabled
+        onTranscribeAudio={async () => ""}
+        placeholder="Read-only conversation"
+        accessibleDescription="Agent deleted - read-only conversation"
+      />,
+    );
+    const textarea = textareaOpeningTag(html);
+    expect(textarea).toContain("disabled");
+    expect(textarea).toContain('placeholder="Read-only conversation"');
+    expect(textarea).toContain("aria-describedby");
+    expect(html).toContain(">Preserved draft</textarea>");
+    expect(html).toContain("Agent deleted - read-only conversation");
+    expect(sendButtonOpeningTag(html)).toBe("");
+    const voiceButton = html.match(/<button[^>]*aria-label="chatbot\.recordAudio"[^>]*>/)?.[0];
+    expect(voiceButton).toContain("disabled");
+  });
   it("renders an enabled send button by default", () => {
     const tag = sendButtonOpeningTag(render({}));
     expect(tag).not.toBe("");

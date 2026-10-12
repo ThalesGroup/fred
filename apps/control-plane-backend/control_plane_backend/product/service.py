@@ -66,7 +66,11 @@ from fred_sdk.contracts.models import TeamScopePolicy
 from fred_sdk.contracts.prompt_utils import find_reserved_prompt_tag
 from pydantic import ValidationError
 
-from control_plane_backend.agent_instances.store import AgentInstanceRecord
+from control_plane_backend.agent_instances.names import normalize_agent_name
+from control_plane_backend.agent_instances.store import (
+    AgentInstanceRecord,
+    AgentNameAlreadyExistsError,
+)
 from control_plane_backend.agent_instances.suspension import (
     SliceInvalid,
     SuspensionReason,
@@ -149,6 +153,7 @@ from control_plane_backend.sessions.erasure_tasks import (
     schedule_erasure_task,
 )
 from control_plane_backend.sessions.store import (
+    SessionMetadataAgentMissingError,
     SessionMetadataAlreadyExistsError,
     SessionMetadataRecord,
 )
@@ -1430,6 +1435,7 @@ async def _apply_capability_selection(
     context_label: str,
     deps: ProductServiceDependencies | None = None,
     asset_uploads: Mapping[str, Sequence[CapabilityAssetFile]] | None = None,
+    supports_capabilities: bool = True,
 ) -> ManagedAgentTuning:
     """
     Resolve one save's capability selection into pod-validated tuning slices
@@ -1460,7 +1466,12 @@ async def _apply_capability_selection(
       capability it is not enabled for (→ 403). The team subject — not the
       acting user — is what keeps a capability enabled for one of the user's
       other teams from being saved here.
+    - a template without free selection (`supports_capabilities=False`)
+      ignores any submitted selection, as the runtime does: its included
+      defaults always take the template-default path, configured like any other
     """
+    if not supports_capabilities:
+        selected_ids = None
     if selected_ids is not None:
         _validate_capability_ids(
             submitted_ids=selected_ids,
@@ -2397,12 +2408,44 @@ class ExecutionPreparationError(Exception):
         self.http_status = http_status
 
 
+# Stable discriminator on the 409 body, so the agent form marks its name field.
+AGENT_NAME_CONFLICT = "agent_name_conflict"
+
+
 class EnrollmentError(Exception):
     """Raised when agent instance enrollment fails."""
 
-    def __init__(self, message: str, *, http_status: int = 400) -> None:
+    def __init__(
+        self, message: str, *, http_status: int = 400, code: str | None = None
+    ) -> None:
         super().__init__(message)
         self.http_status = http_status
+        self.code = code
+
+
+def agent_name_conflict(team_id: TeamId, display_name: str) -> EnrollmentError:
+    return EnrollmentError(
+        f"An agent named {display_name!r} already exists in team {team_id!r}.",
+        http_status=409,
+        code=AGENT_NAME_CONFLICT,
+    )
+
+
+async def ensure_agent_name_free(
+    team_id: TeamId,
+    display_name: str,
+    deps: ProductServiceDependencies,
+    *,
+    exclude_agent_instance_id: str | None = None,
+) -> None:
+    """Refuse a taken name before any side effect; the unique index stays the guarantee."""
+
+    wanted = normalize_agent_name(display_name)
+    for other in await deps.get_agent_instance_store().list_by_team(team_id):
+        if other.agent_instance_id == exclude_agent_instance_id:
+            continue
+        if normalize_agent_name(other.display_name) == wanted:
+            raise agent_name_conflict(team_id, display_name)
 
 
 # Stable discriminator on the 409 body: a name conflict and a command
@@ -2431,6 +2474,10 @@ class SessionAlreadyExistsError(Exception):
     def __init__(self, session_id: str) -> None:
         super().__init__(f"Session {session_id!r} already exists.")
         self.session_id = session_id
+
+
+class SessionAgentUnavailableError(Exception):
+    """Raised when a new conversation's managed agent no longer exists."""
 
 
 class SessionAttachmentRequestError(Exception):
@@ -2646,6 +2693,7 @@ async def enroll_agent_instance(
             "Expected format: '{source_runtime_id}:{source_agent_id}'."
         )
     source_runtime_id, source_agent_id = parts
+    await ensure_agent_name_free(team_id, request.display_name, deps)
 
     source = next(
         (
@@ -2759,6 +2807,7 @@ async def enroll_agent_instance(
         context_label="agent enrollment",
         deps=deps,
         asset_uploads=asset_uploads,
+        supports_capabilities=template.supports_capabilities,
     )
     record = AgentInstanceRecord(
         agent_instance_id=agent_instance_id,
@@ -2774,7 +2823,10 @@ async def enroll_agent_instance(
     )
 
     store = deps.get_agent_instance_store()
-    created = await store.create(record)
+    try:
+        created = await store.create(record)
+    except AgentNameAlreadyExistsError as exc:
+        raise agent_name_conflict(team_id, request.display_name) from exc
     emit_agent_created_kpi(created, user=user, deps=deps)
     return _record_to_summary(created)
 
@@ -2846,6 +2898,13 @@ async def update_agent_instance(
     record = await store.get_for_team(agent_instance_id, team_id)
     if record is None:
         return None
+    if request.display_name is not None:
+        await ensure_agent_name_free(
+            team_id,
+            request.display_name,
+            deps,
+            exclude_agent_instance_id=agent_instance_id,
+        )
 
     # 2026-07-19 fix (GitHub #2004 item 1): re-check the team's `can_use` on
     # this instance's own `kind="agent"` template capability, the same gate
@@ -2963,6 +3022,7 @@ async def update_agent_instance(
                 context_label="agent update",
                 deps=deps,
                 asset_uploads=asset_uploads,
+                supports_capabilities=template.supports_capabilities,
             )
         new_tuning = base
 
@@ -3001,15 +3061,18 @@ async def update_agent_instance(
             update={"reasoning_default_on": request.reasoning_default_on}
         )
 
-    updated = await store.update(
-        agent_instance_id=agent_instance_id,
-        team_id=team_id,
-        display_name=request.display_name,
-        description=request.description,
-        enabled=request.status == "enabled" if request.status is not None else None,
-        tuning=new_tuning,
-        updated_by=user.uid,
-    )
+    try:
+        updated = await store.update(
+            agent_instance_id=agent_instance_id,
+            team_id=team_id,
+            display_name=request.display_name,
+            description=request.description,
+            enabled=request.status == "enabled" if request.status is not None else None,
+            tuning=new_tuning,
+            updated_by=user.uid,
+        )
+    except AgentNameAlreadyExistsError as exc:
+        raise agent_name_conflict(team_id, exc.display_name) from exc
     # A save that re-validated every ACTIVE capability slice through the pod
     # clears any suspension — the single clearing mechanism (#1975, RFC §3.9).
     # Reaching here means `_apply_capability_selection` accepted the selection
@@ -4374,36 +4437,29 @@ async def create_session(
     Example:
     - `item = await create_session(user, team_id, request, deps)`
     """
-    source_runtime_id: str | None = None
-    if request.agent_instance_id is not None:
-        # Capture the instance's source_runtime_id now, while it is certainly
-        # live, so a later agent-instance deletion can never strand erasure's
-        # runtime resolution for this session (issue #2089, RFC §7).
-        instance = await deps.get_agent_instance_store().get_for_team(
-            request.agent_instance_id, team_id
-        )
-        if instance is not None:
-            source_runtime_id = instance.source_runtime_id
-    bind_operation_context(
-        {"agent_instance_id": request.agent_instance_id}
-        if request.agent_instance_id and source_runtime_id is not None
-        else {},
-        user_id=user.uid,
-        team_id=str(team_id),
-    )
+    bind_operation_context(user_id=user.uid, team_id=str(team_id))
     record = SessionMetadataRecord(
         session_id=request.session_id,
         team_id=team_id,
         agent_instance_id=request.agent_instance_id,
-        source_runtime_id=source_runtime_id,
         user_id=user.uid,
         title=request.title,
     )
     try:
-        created = await deps.get_session_metadata_store().create(record)
+        created = await deps.get_session_metadata_store().create(
+            record, capture_agent_snapshot=True
+        )
     except SessionMetadataAlreadyExistsError as exc:
         raise SessionAlreadyExistsError(request.session_id) from exc
-    bind_operation_context(session_id=created.session_id)
+    except SessionMetadataAgentMissingError as exc:
+        raise SessionAgentUnavailableError("Unknown agent instance.") from exc
+    bind_operation_context(
+        {"agent_instance_id": created.agent_instance_id}
+        if created.agent_instance_id is not None
+        and created.source_runtime_id is not None
+        else {},
+        session_id=created.session_id,
+    )
     try:
         deps.get_kpi_writer().count(
             "session.created_total",
@@ -4502,7 +4558,9 @@ async def list_inactive_sessions(
                 team_id=team_id,
                 title=s.title,
                 agent_name=(
-                    name_by_id.get(s.agent_instance_id) if s.agent_instance_id else None
+                    name_by_id.get(s.agent_instance_id, s.agent_display_name)
+                    if s.agent_instance_id
+                    else None
                 ),
                 updated_at=s.updated_at,
             )
@@ -4622,30 +4680,6 @@ async def update_session_activity(
         ):
             return None
 
-    return _record_to_item(record)
-
-
-async def get_session(
-    team_id: TeamId,
-    session_id: str,
-    deps: ProductServiceDependencies,
-) -> SessionListItem | None:
-    """
-    Fetch one control-plane session metadata record by ID, scoped to a team.
-
-    Why this function exists:
-    - the chat header needs the session title without loading the full session list
-
-    How to use it:
-    - call from the GET session-by-id route
-    - returns None when the session does not exist or belongs to a different team
-
-    Example:
-    - `item = await get_session(team_id, session_id, deps)`
-    """
-    record = await deps.get_session_metadata_store().get(session_id)
-    if record is None or str(record.team_id) != str(team_id):
-        return None
     return _record_to_item(record)
 
 
@@ -5052,6 +5086,7 @@ def _record_to_item(record: SessionMetadataRecord) -> SessionListItem:
         session_id=record.session_id,
         team_id=record.team_id,
         agent_instance_id=record.agent_instance_id,
+        agent_display_name=record.agent_display_name,
         title=record.title,
         context_prompt_ids=record.context_prompt_ids,
         created_at=record.created_at,

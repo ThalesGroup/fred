@@ -14,6 +14,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useFrontendProperties } from "../../../../hooks/useFrontendProperties";
 import { useComposerSettings } from "./useComposerSettings";
 import { useSearchParams } from "react-router-dom";
 import { v4 as uuidv4 } from "uuid";
@@ -21,12 +22,13 @@ import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
 import { useChatSse } from "@hooks/useChatSse";
 import type { HitlBatchAnswer, InterruptedRunChoice, RuntimeAwaitingHumanEvent } from "@hooks/useChatSse";
+import { hitlHoldsComposer } from "./hitlHoldsComposer";
 import {
   useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery,
-  useGetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetQuery,
   usePatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchMutation,
   usePostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostMutation,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import { useConversationAvailability } from "./useConversationAvailability";
 import { useSessionHistory } from "./useSessionHistory";
 import { setCachedSessionHistory } from "./sessionHistoryCache";
 import { useChatAttachments } from "./useChatAttachments";
@@ -37,6 +39,7 @@ import { countUnicodeCodePoints } from "@core/utils/chatInput";
 import { hasToolApprovalGrants, rememberToolApprovalGrants } from "@core/utils/toolApprovalGrants";
 import { KeyCloakService } from "../../../../security/KeycloakService";
 import type { AttachmentSource } from "@rework/types/attachments";
+import type { HitlQuestionState } from "@shared/molecules/HitlPrompt/HitlPrompt";
 
 type StagedHitlAnswer = {
   answer: string | boolean | undefined;
@@ -65,16 +68,12 @@ function answerWithOtherPriority(
     : answer;
 }
 
+// Typed text stays a draft until the person validates it (button or shortcut).
 function resolvedHitlAnswer(
   event: RuntimeAwaitingHumanEvent,
   stagedAnswers: ReadonlyMap<string, StagedHitlAnswer>,
-  drafts: ReadonlyMap<string, string>,
 ): StagedHitlAnswer | undefined {
-  const key = hitlKey(event);
-  const staged = stagedAnswers.get(key);
-  if (staged) return staged;
-  const freeText = event.payload.free_text ? drafts.get(key) : undefined;
-  return freeText?.trim() ? { answer: undefined, freeText, skipped: false } : undefined;
+  return stagedAnswers.get(hitlKey(event));
 }
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
@@ -89,9 +88,15 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   const { showError } = useToast();
   const { notifyApiError } = useApiErrorToast();
   const { t } = useTranslation();
+  const { agentsNicknameSingular } = useFrontendProperties();
 
   const sessionId = searchParams.get("session");
   const [input, setInput] = useState("");
+  const executionDisabledRef = useRef(false);
+  const locallyCreatedSessionIdRef = useRef<string | null>(null);
+  const sessionCreateFailedIdRef = useRef<Set<string>>(new Set());
+  const confirmedSessionIdsRef = useRef<Set<string>>(new Set());
+  const failedContextWriteIdsRef = useRef<Set<string>>(new Set());
   // `text`/`command` are what went on the wire, so a Restart re-sends the same turn.
   const submittedDraftRef = useRef<{
     sessionId: string;
@@ -116,12 +121,14 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   }, []);
   const pendingHitl = pendingHitls.find((event) => hitlKey(event) === selectedHitlKey) ?? pendingHitls[0] ?? null;
   const pendingHitlTabs = pendingHitl?.payload.stage === "agent_question" ? pendingHitls : [];
-  const stagedHitlAnswer = pendingHitl
-    ? resolvedHitlAnswer(pendingHitl, stagedHitlAnswers, hitlDraftsRef.current)
-    : undefined;
-  const stagedHitlCount = pendingHitlTabs.filter((event) =>
-    resolvedHitlAnswer(event, stagedHitlAnswers, hitlDraftsRef.current),
-  ).length;
+  const stagedHitlAnswer = pendingHitl ? resolvedHitlAnswer(pendingHitl, stagedHitlAnswers) : undefined;
+  const stagedHitlCount = pendingHitlTabs.filter((event) => resolvedHitlAnswer(event, stagedHitlAnswers)).length;
+  // One state per tab, in tab order, for the tab icons.
+  const hitlTabStates: HitlQuestionState[] = pendingHitlTabs.map((event) => {
+    const answer = resolvedHitlAnswer(event, stagedHitlAnswers);
+    if (!answer) return "waiting";
+    return answer.skipped ? "skipped" : "answered";
+  });
   const [resumingAgentQuestionSessionId, setResumingAgentQuestionSessionId] = useState<string | null>(null);
   const hitlResumeOwnerRef = useRef<RuntimeAwaitingHumanEvent | null>(null);
   const submittedBatchKeysRef = useRef<Set<string>>(new Set());
@@ -132,22 +139,17 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   const hitlDraftOwnerRef = useRef(0);
   const setSelectedHitlFreeText = useCallback(
     (value: string) => {
+      if (executionDisabledRef.current) return;
       const selected =
         pendingHitlsRef.current.find((event) => hitlKey(event) === selectedHitlKey) ?? pendingHitlsRef.current[0];
       if (selected) {
         const key = hitlKey(selected);
         hitlDraftsRef.current.set(key, value);
+        // Editing the text withdraws a validated answer until it is validated again.
         const staged = stagedHitlAnswersRef.current.get(key);
-        if (staged && (!staged.skipped || value.trim())) {
+        if (staged && value !== (staged.freeText ?? "")) {
           const next = new Map(stagedHitlAnswersRef.current);
-          if (staged.answer === undefined && !value.trim()) next.delete(key);
-          else
-            next.set(key, {
-              ...staged,
-              answer: answerWithOtherPriority(selected, staged.answer, value),
-              freeText: value.trim() ? value : undefined,
-              skipped: false,
-            });
+          next.delete(key);
           replaceStagedHitlAnswers(next);
         }
       }
@@ -163,6 +165,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   }, []);
   const stageHitlAnswer = useCallback(
     (answer: string | boolean | undefined, freeText?: string, skipped = false) => {
+      if (executionDisabledRef.current) return;
       const current = pendingHitlsRef.current;
       const selected = current.find((event) => hitlKey(event) === selectedHitlKey) ?? current[0];
       if (!selected || current.length < 2) return;
@@ -175,7 +178,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
       replaceStagedHitlAnswers(nextAnswers);
       const index = current.findIndex((event) => hitlKey(event) === hitlKey(selected));
       const next = [...current.slice(index + 1), ...current.slice(0, index)].find(
-        (event) => !resolvedHitlAnswer(event, nextAnswers, hitlDraftsRef.current),
+        (event) => !resolvedHitlAnswer(event, nextAnswers),
       );
       if (next) {
         setSelectedHitlKey(hitlKey(next));
@@ -247,23 +250,31 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     { skip: !teamId },
   );
   const agentInstance = agentInstances?.find((i) => i.agent_instance_id === agentInstanceId);
-  const agentDisplayName = agentInstance?.display_name ?? "Agent";
   // Capabilities active in this session — drives the capability side-panel slot
   // (#1979, RFC §9 item 3). The host resolves each id against the plugin index.
   const capabilityIds = agentInstance?.selected_capability_ids ?? [];
 
   const attachments = useChatAttachments({ teamId, sessionId });
 
-  // `currentData`, not `data`: RTK Query's `data` deliberately reuses the last
-  // resolved result across an arg change (here, a session switch) while the
-  // new args' request is still in flight — exactly the case navigating from
-  // session A to session B hits. `currentData` is undefined until the result
-  // actually belongs to the CURRENT args, closing the window where A's stale
-  // payload could get attributed to B below (title, context prompt rehydrate).
-  const { currentData: sessionData } = useGetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetQuery(
-    { teamId, sessionId: sessionId ?? "" },
-    { skip: !teamId || !sessionId },
-  );
+  if (locallyCreatedSessionIdRef.current !== sessionId) locallyCreatedSessionIdRef.current = null;
+  const locallyCreatingSession =
+    sessionId !== null &&
+    (locallyCreatedSessionIdRef.current === sessionId || sessionCreateFailedIdRef.current.has(sessionId));
+  const { sessionData, isReadOnly, executionDisabled, sessionUnavailable, refetchSession } =
+    useConversationAvailability(teamId, agentInstanceId, sessionId, locallyCreatingSession);
+  const agentDisplayName =
+    (isReadOnly ? sessionData?.agent_display_name : (agentInstance?.display_name ?? sessionData?.agent_display_name)) ??
+    t("rework.sidebar.chatList.unknownAgent", { agentsNicknameSingular });
+  executionDisabledRef.current = executionDisabled;
+  if (sessionData) {
+    locallyCreatedSessionIdRef.current = null;
+    if (sessionId) {
+      confirmedSessionIdsRef.current.add(sessionId);
+      sessionCreateFailedIdRef.current.delete(sessionId);
+    }
+  }
+  const refetchSessionRef = useRef(refetchSession);
+  refetchSessionRef.current = refetchSession;
 
   const [registerSession] = usePostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostMutation();
   const [refreshSession] = usePatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchMutation();
@@ -295,31 +306,28 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     [setSearchParams],
   );
 
-  // Serialized per-session write queue for critical session writes (row
-  // creation POST, context-prompt PATCH). These must never race: two
-  // concurrent PATCHes for the same session can have their HTTP responses
-  // land out of order, letting an OLDER selection silently overwrite a
-  // NEWER one server-side. Each session's writes are chained onto a per-sid
-  // "tail" promise — write N+1's actual network call does not start until
-  // write N has fully settled (success or failure) — so responses are
-  // always received in send order, and two writes for the same sid are
-  // never in flight together. Writes for DIFFERENT sessions use different
-  // tails and never block or contaminate each other. A tail promise NEVER
-  // rejects (a failure is converted to `{ok:false}` and reported via that
-  // write's own `onError`) so a failure never stops the NEXT write in the
-  // chain from being attempted, and nothing here can become an unhandled
-  // rejection.
-  const writeTailsRef = useRef<Map<string, Promise<{ ok: boolean }>>>(new Map());
+  // Serialize creation and context writes per session so older requests cannot
+  // overwrite newer intent. Failed writes settle normally so retries can run.
+  const writeTailsRef = useRef<Map<string, Promise<{ ok: boolean; sessionCreation?: boolean }>>>(new Map());
 
   const enqueueSessionWrite = useCallback(
-    (sid: string, action: () => Promise<unknown>, onError: (error: unknown) => void): Promise<{ ok: boolean }> => {
+    (
+      sid: string,
+      action: () => Promise<unknown>,
+      onError: (error: unknown) => void,
+      sessionCreation = false,
+    ): Promise<{ ok: boolean; sessionCreation?: boolean }> => {
       const previousTail = writeTailsRef.current.get(sid) ?? Promise.resolve({ ok: true });
-      const nextTail: Promise<{ ok: boolean }> = previousTail
+      const nextTail: Promise<{ ok: boolean; sessionCreation?: boolean }> = previousTail
         .then(() => action())
-        .then(() => ({ ok: true }))
+        .then(() => {
+          if (!sessionCreation) failedContextWriteIdsRef.current.delete(sid);
+          return { ok: true, sessionCreation };
+        })
         .catch((error: unknown) => {
+          if (!sessionCreation) failedContextWriteIdsRef.current.add(sid);
           onError(error);
-          return { ok: false };
+          return { ok: false, sessionCreation };
         });
       writeTailsRef.current.set(sid, nextTail);
       return nextTail;
@@ -327,37 +335,21 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     [],
   );
 
-  // Every sid bound to the URL whose creation POST is known to have failed
-  // (and hasn't since succeeded). `bindSessionId` runs eagerly, before the
-  // POST settles, so on retry `sessionId` already equals this sid — without
-  // this, a retry would see "session already bound" and skip re-creating the
-  // row entirely, then send against a session that was never actually
-  // persisted. Keyed by sid (not a single scalar, matching `writeTailsRef`'s
-  // per-sid keying) — different sessions can each be creating concurrently
-  // (e.g. two "new conversation" starts in quick succession), and a single
-  // shared slot would let one session's failure silently overwrite another's:
-  // the forgotten session's own write tail stays permanently failed, but
-  // `needsCreate` would no longer recognize it, so it can never be retried.
-  const sessionCreateFailedIdRef = useRef<Set<string>>(new Set());
-
-  // Stability loop, not a single snapshot await: `Promise.all` over a
-  // point-in-time collection can miss a write enqueued WHILE the flush is
-  // already awaiting — send() could then reach prepare-execution before
-  // that write commits. This re-reads the session's tail after every await
-  // and keeps waiting as long as a newer tail keeps replacing the one just
-  // observed. Returns the outcome of the LAST write actually enqueued for
-  // this session: an earlier failure superseded by a later success must not
-  // block send (mirrors the generation guard in setContextPrompts below —
-  // the most recent user intent, not write history, decides the outcome).
+  // Re-read after each await so writes queued during a flush also settle before
+  // sending. Creation confirmation cannot clear an unresolved context failure.
   const flushSessionWrites = useCallback(async (sid: string | null): Promise<boolean> => {
     if (!sid) return true;
     let ok = true;
-    let observedTail: Promise<{ ok: boolean }> | undefined;
+    let observedTail: Promise<{ ok: boolean; sessionCreation?: boolean }> | undefined;
     for (;;) {
       const currentTail = writeTailsRef.current.get(sid);
       if (!currentTail || currentTail === observedTail) return ok;
       observedTail = currentTail;
-      ok = (await currentTail).ok;
+      const result = await currentTail;
+      // A confirmed row recovers a lost creation response, not failed context writes.
+      ok =
+        !failedContextWriteIdsRef.current.has(sid) &&
+        (result.ok || Boolean(result.sessionCreation && confirmedSessionIdsRef.current.has(sid)));
     }
   }, []);
 
@@ -392,7 +384,13 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     },
     [replacePendingHitls, replaceStagedHitlAnswers],
   );
-  const handleChatError = useCallback((msg: string) => showError({ summary: "Agent error", detail: msg }), [showError]);
+  const handleChatError = useCallback(
+    (msg: string) => {
+      showError({ summary: "Agent error", detail: msg });
+      refetchSessionRef.current();
+    },
+    [showError],
+  );
   // Fires only once prepare-execution has actually succeeded and the turn is
   // really starting — clearing the composer any earlier would lose the
   // user's text/attachments on a prepare-execution failure (404/503/network).
@@ -406,6 +404,8 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     setInput(submitted.draft);
   }, []);
   const isTurnCurrent = useCallback((turnSessionId: string) => activeSessionIdRef.current === turnSessionId, []);
+
+  const isExecutionAllowed = useCallback(() => !executionDisabledRef.current, []);
 
   const {
     messages,
@@ -429,11 +429,12 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     onTurnStarted: handleTurnStarted,
     onTurnRejected: handleTurnRejected,
     isTurnCurrent,
+    isExecutionAllowed,
   });
   const canSendAllHitl =
     pendingHitlTabs.length > 1 &&
     pendingHitlTabs.every((event) => {
-      const answer = resolvedHitlAnswer(event, stagedHitlAnswers, hitlDraftsRef.current);
+      const answer = resolvedHitlAnswer(event, stagedHitlAnswers);
       if (!answer) return false;
       if (!answer.skipped && answer.answer === undefined && !answer.freeText?.trim()) return false;
       return (
@@ -511,11 +512,12 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     // rehydration governs from here until the first local mutation.
     hasLocalMutationForActiveSessionRef.current = false;
     composer.reset(sessionId, chatControlsRef.current);
-    // Eager prep (RFC §3.7, CAPAB-01 #1976): resolve chat_controls at chat open
-    // — not only inside send() — so the composer control slot isn't empty
-    // until the first message. Safe with no session yet (sessionId null).
-    void prepareChatControls(sessionId).catch(() => {});
-  }, [sessionId, reset, composer.reset, prepareChatControls, replacePendingHitls, replaceStagedHitlAnswers]);
+  }, [sessionId, reset, composer.reset, replacePendingHitls, replaceStagedHitlAnswers]);
+
+  useEffect(() => {
+    if (executionDisabled) return;
+    void prepareChatControls(sessionId).catch(() => refetchSessionRef.current());
+  }, [sessionId, executionDisabled, prepareChatControls]);
 
   useEffect(() => {
     if (sessionData?.title != null) setSessionTitle(sessionData.title);
@@ -568,10 +570,13 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     [replaceAllMessages, replacePendingHitls, replaceStagedHitlAnswers],
   );
 
-  const { isLoading: isLoadingHistory, isSettled: isHistorySettled } = useSessionHistory({
-    sessionId,
-    teamId,
-    agentInstanceId,
+  const {
+    isLoading: isLoadingHistory,
+    isSettled: isHistorySettled,
+    isUnavailable: historyUnavailable,
+  } = useSessionHistory({
+    sessionId: locallyCreatingSession && !sessionData ? null : sessionId,
+    messagesUrl: sessionData ? (sessionData.messages_url ?? null) : sessionUnavailable ? null : undefined,
     onLoaded: handleHistoryLoaded,
     isTurnActive,
   });
@@ -593,6 +598,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   // URL-bound) sid re-attempts creation instead of silently skipping it.
   const createSessionRow = useCallback(
     (sid: string, title: string) => {
+      locallyCreatedSessionIdRef.current = sid;
       void enqueueSessionWrite(
         sid,
         () =>
@@ -601,9 +607,10 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
             createSessionRequest: { session_id: sid, agent_instance_id: agentInstanceId, title },
           }).unwrap(),
         (error) => {
-          sessionCreateFailedIdRef.current.add(sid);
+          if (!confirmedSessionIdsRef.current.has(sid)) sessionCreateFailedIdRef.current.add(sid);
           notifySessionSaveFailed(error);
         },
+        true,
       ).then((result) => {
         if (result.ok) {
           sessionCreateFailedIdRef.current.delete(sid);
@@ -633,6 +640,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
 
   const handleAddAttachments = useCallback(
     (files: File[], source: AttachmentSource) => {
+      if (executionDisabledRef.current) return;
       const sid = ensureSessionForAttachments();
       void attachments.addFiles(files, source, sid);
     },
@@ -711,11 +719,9 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
         `[useManagedChat] sendTurn() — inputChars=${inputCharacterCount} waitResponse=${waitResponse} sessionId=${sessionId ?? "null"}`,
       );
       const awaitingAgentQuestion =
-        (pendingHitl?.session_id === sessionId && pendingHitl.payload.stage === "agent_question") ||
-        (sessionId !== null &&
-          hitlResumeOwnerRef.current?.session_id === sessionId &&
-          hitlResumeOwnerRef.current.payload.stage === "agent_question");
+        hitlHoldsComposer(pendingHitl, sessionId) || hitlHoldsComposer(hitlResumeOwnerRef.current, sessionId);
       if (
+        executionDisabledRef.current ||
         (!text && !attachmentContext) ||
         waitResponse ||
         awaitingAgentQuestion ||
@@ -788,7 +794,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
         // onError above); nothing further to show here, just don't proceed —
         // the message stays in the composer for an explicit retry.
         const writesOk = await flushSessionWrites(sid);
-        if (!writesOk) {
+        if (!writesOk || executionDisabledRef.current) {
           console.debug("[useManagedChat] sendTurn() ABORTED — a pending session write failed");
           return false;
         }
@@ -869,7 +875,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
 
   const handleHitlAnswer = useCallback(
     (answer: string | boolean | undefined, freeText?: string, skipped = false, rememberApproval = false) => {
-      if (!pendingHitl || hitlResumeOwnerRef.current === pendingHitl) return;
+      if (executionDisabledRef.current || !pendingHitl || hitlResumeOwnerRef.current === pendingHitl) return;
       if (pendingHitl.payload.stage === "execution_interrupted") {
         // Not a HITL resume: the answer is a new turn that continues or restarts.
         const prompt = pendingHitl;
@@ -997,6 +1003,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
 
   const submitHitlBatch = useCallback(
     (skipAll: boolean) => {
+      if (executionDisabledRef.current) return;
       const prompts = pendingHitlsRef.current;
       if (prompts.length < 2 || prompts.some((event) => event.payload.stage !== "agent_question")) return;
       if (hitlResumeOwnerRef.current) return;
@@ -1004,7 +1011,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
       for (const event of prompts) {
         const staged = skipAll
           ? { answer: undefined, freeText: undefined, skipped: true }
-          : resolvedHitlAnswer(event, stagedHitlAnswersRef.current, hitlDraftsRef.current);
+          : resolvedHitlAnswer(event, stagedHitlAnswersRef.current);
         if (!staged || !event.payload.interrupt_id || !event.payload.occurrence_id) return;
         if (!staged.skipped && staged.answer === undefined && !staged.freeText?.trim()) return;
         if (
@@ -1067,7 +1074,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   const handleSkipAllHitl = useCallback(() => submitHitlBatch(true), [submitHitlBatch]);
 
   useEffect(() => {
-    if (!pendingHitl || waitResponse || pendingHitl.payload.stage !== "tool_approval") return;
+    if (executionDisabled || !pendingHitl || waitResponse || pendingHitl.payload.stage !== "tool_approval") return;
     if (!pendingHitl.payload.choices?.some((choice) => choice.id === "proceed")) return;
     if (activeSessionIdRef.current !== pendingHitl.session_id) return;
     const toolNames = (pendingHitl.payload.pending_calls ?? []).map((call) => call.tool_name);
@@ -1086,9 +1093,10 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     if (autoApprovalAttemptedRef.current.has(occurrence)) return;
     autoApprovalAttemptedRef.current.add(occurrence);
     handleHitlAnswer("proceed");
-  }, [agentInstanceId, handleHitlAnswer, pendingHitl, waitResponse]);
+  }, [agentInstanceId, executionDisabled, handleHitlAnswer, pendingHitl, waitResponse]);
 
   const startNewConversation = useCallback(() => {
+    if (executionDisabledRef.current) return;
     replacePendingHitls([]);
     lastHitlExchangeRef.current = null;
     submittedBatchKeysRef.current = new Set();
@@ -1135,6 +1143,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   //   way; only the UI-facing side effects are suppressed.
   const setContextPrompts = useCallback(
     (ids: string[]) => {
+      if (executionDisabledRef.current) return;
       const sid = ensureSessionForAttachments();
       const myGeneration = (contextPromptGenerationBySidRef.current.get(sid) ?? 0) + 1;
       contextPromptGenerationBySidRef.current.set(sid, myGeneration);
@@ -1175,15 +1184,57 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     [enqueueSessionWrite, ensureSessionForAttachments, notifyApiError, refreshSession, t, teamId],
   );
 
+  const guardChange = useCallback(
+    <Args extends unknown[]>(action: (...args: Args) => unknown) =>
+      (...args: Args) => {
+        if (!executionDisabledRef.current) return action(...args);
+      },
+    [],
+  );
+  const guardedComposer = useMemo(
+    () => ({
+      setSelectedLibraryIds: guardChange(composer.setSelectedLibraryIds),
+      setSelectedDocumentUids: guardChange(composer.setSelectedDocumentUids),
+      setSearchPolicy: guardChange(composer.setSearchPolicy),
+      setRagScope: guardChange(composer.setRagScope),
+      setReasoning: guardChange(composer.setReasoning),
+      setAskUser: guardChange(composer.setAskUser),
+    }),
+    [
+      guardChange,
+      composer.setSelectedLibraryIds,
+      composer.setSelectedDocumentUids,
+      composer.setSearchPolicy,
+      composer.setRagScope,
+      composer.setReasoning,
+      composer.setAskUser,
+    ],
+  );
+  const setComposerInput = useMemo(() => guardChange(setInput), [guardChange]);
+  const removeAttachment = useMemo(
+    () => guardChange(attachments.removeAttachment),
+    [guardChange, attachments.removeAttachment],
+  );
+  const deletePersistedAttachment = useCallback(
+    async (id: string) => {
+      if (!executionDisabledRef.current) await attachments.deletePersistedAttachment(id);
+    },
+    [attachments.deletePersistedAttachment],
+  );
+
   return {
     sessionId,
     sessionTitle,
     agentDisplayName,
+    isReadOnly,
+    executionDisabled,
+    sessionUnavailable,
+    historyUnavailable,
     agentInstance,
     capabilityIds,
     chatControls,
     input,
-    setInput,
+    setInput: setComposerInput,
     inputCharacterCount,
     inputTooLong,
     maxChatInputChars,
@@ -1191,6 +1242,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     pendingHitlTabs,
     stagedHitlAnswer,
     stagedHitlCount,
+    hitlTabStates,
     canSendAllHitl,
     stageHitlAnswer,
     selectHitlTab,
@@ -1203,19 +1255,19 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     isHydratingAttachments: attachments.isHydratingAttachments,
     attachmentsUploading: attachments.hasUploadingAttachments,
     handleAddAttachments,
-    removeAttachment: attachments.removeAttachment,
-    deletePersistedAttachment: attachments.deletePersistedAttachment,
-    setSelectedLibraryIds: composer.setSelectedLibraryIds,
+    removeAttachment,
+    deletePersistedAttachment,
+    setSelectedLibraryIds: guardedComposer.setSelectedLibraryIds,
     selectedDocumentUids: composer.selectedDocumentUids,
-    setSelectedDocumentUids: composer.setSelectedDocumentUids,
+    setSelectedDocumentUids: guardedComposer.setSelectedDocumentUids,
     searchPolicy: composer.searchPolicy,
-    setSearchPolicy: composer.setSearchPolicy,
+    setSearchPolicy: guardedComposer.setSearchPolicy,
     ragScope: composer.ragScope,
-    setRagScope: composer.setRagScope,
+    setRagScope: guardedComposer.setRagScope,
     reasoning: composer.reasoning,
-    setReasoning: composer.setReasoning,
+    setReasoning: guardedComposer.setReasoning,
     askUser: composer.askUser,
-    setAskUser: composer.setAskUser,
+    setAskUser: guardedComposer.setAskUser,
     contextPromptIds,
     setContextPrompts,
     threadMessages,

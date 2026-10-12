@@ -552,12 +552,11 @@
       "empty": "No markdown preview available."
     },
     "recordAudio": "Record audio",
-    "nextHitlQuestion": "Next",
+    "hitlAnswerValidated": "Answer confirmed",
+    "validateHitlAnswer": "Confirm",
     "sendAllHitlAnswers": "Send all",
     "sendHitlAnswer": "Send",
     "skipHitlQuestion": "Skip",
-    "skipHitlQuestionAria": "Skip this question",
-    "skipAllHitlQuestionsAria": "Skip all questions",
     "approveForConversation": "Approve for this conversation",
     "sendMessage": "Send message",
     "sessionAttachments": {
@@ -603,6 +602,17 @@
       "empty": "No prompts in this space.",
       "emptyFilters": "No prompts match these filters.",
       "categoryLabel": "Category"
+    },
+    "readOnlyComposerPlaceholder": "Read-only conversation",
+    "deletedAgentTooltip": "{{agentsNicknameSingular}} deleted - read-only conversation",
+    "deletedAgentSuffix": "(deleted)",
+    "historyUnavailable": "Conversation history is unavailable. Please try again later.",
+    "skipAllHitlQuestions": "Skip all",
+    "hitlOtherAnswerHint": "write your answer…",
+    "hitlQuestionState": {
+      "waiting": "Waiting for an answer",
+      "answered": "Answered",
+      "skipped": "Skipped"
     }
   },
   "comingSoon": {
@@ -1790,7 +1800,9 @@
       "selected": "Selected",
       "skipped": "Skipped",
       "accepted": "Accepted",
-      "refused": "Refused"
+      "refused": "Refused",
+      "toolRecall_one": "Tool: {{tools}}",
+      "toolRecall_other": "{{count}} tools: {{tools}}"
     },
     "knowledgeHub": {
       "loading": "Loading..."
@@ -2269,11 +2281,11 @@
           "confirm": "Delete",
           "cancel": "Cancel"
         },
-        "emptyManaged": "No conversations yet. Start a new chat with a managed agent.",
-        "groupByAgent": "Group by agent",
+        "emptyManaged": "No conversations yet. Start a new chat with a managed {{agentsNicknameSingular}}.",
+        "groupByAgent": "Group by {{agentsNicknameSingular}}",
         "loading": "Loading...",
         "title": "Chat",
-        "unknownAgent": "Unknown agent"
+        "unknownAgent": "Unknown {{agentsNicknameSingular}}"
       },
       "marketplace": {
         "menu": {
@@ -2762,7 +2774,11 @@
             "documentProduction": "Document production",
             "intelligenceOrchestration": "Intelligence and orchestration"
           },
-          "notSupported": "This agent does not support capability selection.",
+          "builtIn": {
+            "section": "Included with this agent",
+            "badge": "Included",
+            "none": "This agent has no capabilities to configure."
+          },
           "packs": {
             "attachments": {
               "title": "Attachments",
@@ -2803,7 +2819,8 @@
           },
           "name": {
             "label": "Name",
-            "placeholder": "Enter an original name"
+            "placeholder": "Enter an original name",
+            "taken": "Name already used"
           },
           "role": {
             "label": "Role",
