@@ -1332,6 +1332,54 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.setPlatformUiSettingsRequest,
       }),
     }),
+    getMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGet: build.query<
+      GetMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGetApiResponse,
+      GetMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/marketplace-settings` }),
+    }),
+    previewMarketplaceDefaultChangeControlPlaneV1AdminMarketplaceSettingsDefaultImpactGet: build.query<
+      PreviewMarketplaceDefaultChangeControlPlaneV1AdminMarketplaceSettingsDefaultImpactGetApiResponse,
+      PreviewMarketplaceDefaultChangeControlPlaneV1AdminMarketplaceSettingsDefaultImpactGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/marketplace-settings/default/impact`,
+        params: {
+          agents_publishing_enabled: queryArg.agentsPublishingEnabled,
+        },
+      }),
+    }),
+    setMarketplaceDefaultControlPlaneV1AdminMarketplaceSettingsDefaultPut: build.mutation<
+      SetMarketplaceDefaultControlPlaneV1AdminMarketplaceSettingsDefaultPutApiResponse,
+      SetMarketplaceDefaultControlPlaneV1AdminMarketplaceSettingsDefaultPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/marketplace-settings/default`,
+        method: "PUT",
+        body: queryArg.setAgentsMarketplaceDefaultRequest,
+      }),
+    }),
+    previewTeamMarketplaceSettingsChangeControlPlaneV1AdminTeamsTeamIdMarketplaceSettingsImpactGet: build.query<
+      PreviewTeamMarketplaceSettingsChangeControlPlaneV1AdminTeamsTeamIdMarketplaceSettingsImpactGetApiResponse,
+      PreviewTeamMarketplaceSettingsChangeControlPlaneV1AdminTeamsTeamIdMarketplaceSettingsImpactGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/teams/${queryArg.teamId}/marketplace-settings/impact`,
+        params: {
+          agents_publishing_enabled: queryArg.agentsPublishingEnabled,
+        },
+      }),
+    }),
+    setTeamMarketplaceSettingsControlPlaneV1AdminTeamsTeamIdMarketplaceSettingsPut: build.mutation<
+      SetTeamMarketplaceSettingsControlPlaneV1AdminTeamsTeamIdMarketplaceSettingsPutApiResponse,
+      SetTeamMarketplaceSettingsControlPlaneV1AdminTeamsTeamIdMarketplaceSettingsPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/teams/${queryArg.teamId}/marketplace-settings`,
+        method: "PUT",
+        body: queryArg.setTeamMarketplaceSettingsRequest,
+      }),
+    }),
     getActiveAnnouncementsControlPlaneV1AnnouncementsActiveGet: build.query<
       GetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetApiResponse,
       GetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetApiArg
@@ -2759,6 +2807,31 @@ export type PutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutApiResp
 export type PutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutApiArg = {
   setPlatformUiSettingsRequest: SetPlatformUiSettingsRequest;
 };
+export type GetMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGetApiResponse =
+  /** status 200 Successful Response */ MarketplaceSettings;
+export type GetMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGetApiArg = void;
+export type PreviewMarketplaceDefaultChangeControlPlaneV1AdminMarketplaceSettingsDefaultImpactGetApiResponse =
+  /** status 200 Successful Response */ MarketplaceSettingsImpact;
+export type PreviewMarketplaceDefaultChangeControlPlaneV1AdminMarketplaceSettingsDefaultImpactGetApiArg = {
+  agentsPublishingEnabled: boolean;
+};
+export type SetMarketplaceDefaultControlPlaneV1AdminMarketplaceSettingsDefaultPutApiResponse =
+  /** status 200 Successful Response */ MarketplaceSettingsUpdateResult;
+export type SetMarketplaceDefaultControlPlaneV1AdminMarketplaceSettingsDefaultPutApiArg = {
+  setAgentsMarketplaceDefaultRequest: SetAgentsMarketplaceDefaultRequest;
+};
+export type PreviewTeamMarketplaceSettingsChangeControlPlaneV1AdminTeamsTeamIdMarketplaceSettingsImpactGetApiResponse =
+  /** status 200 Successful Response */ MarketplaceSettingsImpact;
+export type PreviewTeamMarketplaceSettingsChangeControlPlaneV1AdminTeamsTeamIdMarketplaceSettingsImpactGetApiArg = {
+  teamId: string;
+  agentsPublishingEnabled?: boolean | null;
+};
+export type SetTeamMarketplaceSettingsControlPlaneV1AdminTeamsTeamIdMarketplaceSettingsPutApiResponse =
+  /** status 200 Successful Response */ MarketplaceSettingsUpdateResult;
+export type SetTeamMarketplaceSettingsControlPlaneV1AdminTeamsTeamIdMarketplaceSettingsPutApiArg = {
+  teamId: string;
+  setTeamMarketplaceSettingsRequest: SetTeamMarketplaceSettingsRequest;
+};
 export type GetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetApiResponse =
   /** status 200 Successful Response */ Announcement[];
 export type GetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetApiArg = void;
@@ -3460,6 +3533,8 @@ export type TeamPermission =
   | "can_administer_editors"
   | "can_administer_analysts"
   | "can_administer_admins"
+  | "can_publish_marketplace_agents"
+  | "can_unpublish_marketplace_agents"
   | "can_read_conversations"
   | "can_use_team_agents"
   | "can_use_team_applications"
@@ -3479,6 +3554,10 @@ export type TeamRetentionView = {
   team_delete_grace: RetentionFieldView;
   max_idle: RetentionFieldView;
 };
+export type TeamMarketplaceView = {
+  agents_publishing_enabled: boolean;
+  agents_publish_quota: number;
+};
 export type TeamWithPermissions = {
   id: string;
   name: string;
@@ -3494,6 +3573,7 @@ export type TeamWithPermissions = {
   current_resources_storage_size?: number | null;
   permissions?: TeamPermission[];
   retention?: TeamRetentionView | null;
+  marketplace?: TeamMarketplaceView | null;
 };
 export type UserDetails = {
   cguValidated: string | null;
@@ -4806,6 +4886,42 @@ export type SetPlatformUiSettingsRequest = {
   default_theme?: string | null;
   hidden_themes?: string[];
 };
+export type AgentsMarketplaceDefault = {
+  agents_publishing_enabled: boolean;
+  agents_publish_quota: number;
+  updated_by?: string | null;
+  /** Null while the built-in defaults apply. */
+  updated_at?: string | null;
+};
+export type TeamMarketplaceSettings = {
+  team_id: string;
+  team_name: string;
+  /** Null when the team follows the default. */
+  agents_publishing_enabled_override?: boolean | null;
+  /** Null when the team follows the default. */
+  agents_publish_quota_override?: number | null;
+  agents_publishing_enabled: boolean;
+  agents_publish_quota: number;
+};
+export type MarketplaceSettings = {
+  default: AgentsMarketplaceDefault;
+  teams: TeamMarketplaceSettings[];
+};
+export type MarketplaceSettingsImpact = {
+  affected_team_ids?: string[];
+};
+export type MarketplaceSettingsUpdateResult = {
+  settings: MarketplaceSettings;
+  impact: MarketplaceSettingsImpact;
+};
+export type SetAgentsMarketplaceDefaultRequest = {
+  agents_publishing_enabled: boolean;
+  agents_publish_quota: number;
+};
+export type SetTeamMarketplaceSettingsRequest = {
+  agents_publishing_enabled: boolean | null;
+  agents_publish_quota: number | null;
+};
 export type Announcement = {
   id: string;
   /** `banner` or `patch_note`. Fixed at creation. */
@@ -5500,6 +5616,14 @@ export const {
   useGetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetQuery,
   useLazyGetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetQuery,
   usePutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutMutation,
+  useGetMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGetQuery,
+  useLazyGetMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGetQuery,
+  usePreviewMarketplaceDefaultChangeControlPlaneV1AdminMarketplaceSettingsDefaultImpactGetQuery,
+  useLazyPreviewMarketplaceDefaultChangeControlPlaneV1AdminMarketplaceSettingsDefaultImpactGetQuery,
+  useSetMarketplaceDefaultControlPlaneV1AdminMarketplaceSettingsDefaultPutMutation,
+  usePreviewTeamMarketplaceSettingsChangeControlPlaneV1AdminTeamsTeamIdMarketplaceSettingsImpactGetQuery,
+  useLazyPreviewTeamMarketplaceSettingsChangeControlPlaneV1AdminTeamsTeamIdMarketplaceSettingsImpactGetQuery,
+  useSetTeamMarketplaceSettingsControlPlaneV1AdminTeamsTeamIdMarketplaceSettingsPutMutation,
   useGetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetQuery,
   useLazyGetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetQuery,
   useGetActivePatchNoteControlPlaneV1AnnouncementsPatchNoteGetQuery,
