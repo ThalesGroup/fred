@@ -38,12 +38,12 @@ le dossier englobant est ignoré.
 {
   "themes": [
     {
-      "id": "paris-aeroport",
-      "label": "Paris Aéroport",
-      "base": "cobalt",
-      "tabTitle": "ADP Agent Portal",
-      "faviconName": "paris-aeroport-favicon-light",
-      "faviconNameDark": "paris-aeroport-favicon-dark"
+      "id": "acme",
+      "label": "Acme",
+      "base": "pebble",
+      "tabTitle": "Acme Portal",
+      "faviconName": "acme-favicon-light",
+      "faviconNameDark": "acme-favicon-dark"
     }
   ]
 }
@@ -68,14 +68,14 @@ revenant à un autre thème, l'onglet reprend aussi les siens.
 Chaque règle cible le thème par son `id` **et** sa base, sans préfixe `html` :
 
 ```css
-[data-ui-theme="paris-aeroport"][data-ui-base-theme="cobalt"][data-theme="light"] {
-  --primary: #031f73;
+[data-ui-theme="acme"][data-ui-base-theme="pebble"][data-theme="light"] {
+  --primary: #0b6e4f;
   --on-primary: #ffffff;
 }
 
-[data-ui-theme="paris-aeroport"][data-ui-base-theme="cobalt"][data-theme="dark"] {
+[data-ui-theme="acme"][data-ui-base-theme="pebble"][data-theme="dark"] {
   --primary: #ffffff;
-  --on-primary: #031f73;
+  --on-primary: #0b6e4f;
 }
 ```
 
@@ -90,7 +90,7 @@ police :
   font-family: "Ma police";
 }
 
-[data-ui-theme="paris-aeroport"][data-ui-base-theme="cobalt"] {
+[data-ui-theme="acme"][data-ui-base-theme="pebble"] {
   --font-family-base: "Ma police", Arial, sans-serif;
 }
 ```

@@ -37,12 +37,12 @@ wrapper folder is skipped.
 {
   "themes": [
     {
-      "id": "paris-aeroport",
-      "label": "Paris Aéroport",
-      "base": "cobalt",
-      "tabTitle": "ADP Agent Portal",
-      "faviconName": "paris-aeroport-favicon-light",
-      "faviconNameDark": "paris-aeroport-favicon-dark"
+      "id": "acme",
+      "label": "Acme",
+      "base": "pebble",
+      "tabTitle": "Acme Portal",
+      "faviconName": "acme-favicon-light",
+      "faviconNameDark": "acme-favicon-dark"
     }
   ]
 }
@@ -67,14 +67,14 @@ another theme also gives the tab its own back.
 targets the theme by its `id` **and** its base, with no `html` prefix:
 
 ```css
-[data-ui-theme="paris-aeroport"][data-ui-base-theme="cobalt"][data-theme="light"] {
-  --primary: #031f73;
+[data-ui-theme="acme"][data-ui-base-theme="pebble"][data-theme="light"] {
+  --primary: #0b6e4f;
   --on-primary: #ffffff;
 }
 
-[data-ui-theme="paris-aeroport"][data-ui-base-theme="cobalt"][data-theme="dark"] {
+[data-ui-theme="acme"][data-ui-base-theme="pebble"][data-theme="dark"] {
   --primary: #ffffff;
-  --on-primary: #031f73;
+  --on-primary: #0b6e4f;
 }
 ```
 
@@ -88,7 +88,7 @@ out `html` lets the administration previews show them. A rule without
   font-family: "My font";
 }
 
-[data-ui-theme="paris-aeroport"][data-ui-base-theme="cobalt"] {
+[data-ui-theme="acme"][data-ui-base-theme="pebble"] {
   --font-family-base: "My font", Arial, sans-serif;
 }
 ```
