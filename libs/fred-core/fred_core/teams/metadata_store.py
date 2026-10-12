@@ -121,6 +121,27 @@ class TeamMetadata(BaseModel):
     team_delete_grace: str | None = None
     max_idle: str | None = None
     retention_updated_by: str | None = None
+    # Agents marketplace overrides set by a platform admin; None = Default.
+    agents_publishing_enabled: bool | None = None
+    agents_publish_quota: int | None = None
+
+
+def _to_metadata(row: TeamMetadataRow) -> TeamMetadata:
+    return TeamMetadata(
+        id=TeamId(row.id),
+        name=row.name,
+        description=row.description,
+        joining_mode=JoiningMode(row.joining_mode),
+        visibility=TeamVisibility(row.visibility),
+        banner_object_storage_key=row.banner_object_storage_key,
+        max_resources_storage_size=row.max_resources_storage_size,
+        current_resources_storage_size=row.current_resources_storage_size,
+        team_delete_grace=row.team_delete_grace,
+        max_idle=row.max_idle,
+        retention_updated_by=row.retention_updated_by,
+        agents_publishing_enabled=row.agents_publishing_enabled,
+        agents_publish_quota=row.agents_publish_quota,
+    )
 
 
 class TeamMetadataStore:
@@ -170,22 +191,7 @@ class TeamMetadataStore:
                 .scalars()
                 .all()
             )
-        return {
-            TeamId(row.id): TeamMetadata(
-                id=TeamId(row.id),
-                name=row.name,
-                description=row.description,
-                joining_mode=JoiningMode(row.joining_mode),
-                visibility=TeamVisibility(row.visibility),
-                banner_object_storage_key=row.banner_object_storage_key,
-                max_resources_storage_size=row.max_resources_storage_size,
-                current_resources_storage_size=row.current_resources_storage_size,
-                team_delete_grace=row.team_delete_grace,
-                max_idle=row.max_idle,
-                retention_updated_by=row.retention_updated_by,
-            )
-            for row in rows
-        }
+        return {TeamId(row.id): _to_metadata(row) for row in rows}
 
     async def get_by_team_id(
         self,
@@ -225,22 +231,7 @@ class TeamMetadataStore:
         source of truth, replacing the Keycloak root-group enumeration)."""
         async with use_session(self._sessions, session) as s:
             rows = (await s.execute(select(TeamMetadataRow))).scalars().all()
-        return [
-            TeamMetadata(
-                id=TeamId(row.id),
-                name=row.name,
-                description=row.description,
-                joining_mode=JoiningMode(row.joining_mode),
-                visibility=TeamVisibility(row.visibility),
-                banner_object_storage_key=row.banner_object_storage_key,
-                max_resources_storage_size=row.max_resources_storage_size,
-                current_resources_storage_size=row.current_resources_storage_size,
-                team_delete_grace=row.team_delete_grace,
-                max_idle=row.max_idle,
-                retention_updated_by=row.retention_updated_by,
-            )
-            for row in rows
-        ]
+        return [_to_metadata(row) for row in rows]
 
     async def get_by_name(
         self,
@@ -255,23 +246,7 @@ class TeamMetadataStore:
                     select(TeamMetadataRow).where(TeamMetadataRow.name == name)
                 )
             ).scalar_one_or_none()
-        return (
-            None
-            if row is None
-            else TeamMetadata(
-                id=TeamId(row.id),
-                name=row.name,
-                description=row.description,
-                joining_mode=JoiningMode(row.joining_mode),
-                visibility=TeamVisibility(row.visibility),
-                banner_object_storage_key=row.banner_object_storage_key,
-                max_resources_storage_size=row.max_resources_storage_size,
-                current_resources_storage_size=row.current_resources_storage_size,
-                team_delete_grace=row.team_delete_grace,
-                max_idle=row.max_idle,
-                retention_updated_by=row.retention_updated_by,
-            )
-        )
+        return None if row is None else _to_metadata(row)
 
     async def delete(
         self,
@@ -314,6 +289,27 @@ class TeamMetadataStore:
             await s.merge(existing_row)
 
         return await self.get_by_team_id(team_id, session=session)
+
+    async def set_marketplace_overrides(
+        self,
+        team_id: TeamId,
+        *,
+        agents_publishing_enabled: bool | None,
+        agents_publish_quota: int | None,
+        session: AsyncSession | None = None,
+    ) -> TeamMetadata | None:
+        """Replace both agents marketplace overrides (None = follow the default).
+
+        Kept off `TeamMetadataPatch` on purpose: that patch backs the team
+        admin's PATCH, and these are platform-admin settings."""
+        async with use_session(self._sessions, session) as s:
+            row = await s.get(TeamMetadataRow, str(team_id))
+            if row is None:
+                return None
+            row.agents_publishing_enabled = agents_publishing_enabled
+            row.agents_publish_quota = agents_publish_quota
+            await s.flush()
+            return _to_metadata(row)
 
     async def increment_current_storage_size(
         self,

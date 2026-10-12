@@ -144,6 +144,11 @@ type team
     define can_administer_analysts: team_admin
     define can_administer_admins: team_admin
 
+    # Agents marketplace: editors publish, editors and the team admin take an
+    # entry down. Switch and quota are checked by the control plane.
+    define can_publish_marketplace_agents: team_editor
+    define can_unpublish_marketplace_agents: team_editor or team_admin
+
     # Can list all team members with their role
     # -> must be member
     define can_read_members: team_member
