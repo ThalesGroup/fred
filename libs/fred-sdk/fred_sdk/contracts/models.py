@@ -360,6 +360,35 @@ class CapabilityConfigCopyRequest(BaseModel):
     source_agent_instance_id: str = Field(min_length=1)
     target_team_id: str = Field(min_length=1)
     target_agent_instance_id: str = Field(min_length=1)
+    asset_files: dict[str, str] | None = Field(
+        default=None,
+        description=(
+            "Configuration files by asset key, base64-encoded. When set, the pod "
+            "reads the files from here instead of the source agent instance, so a "
+            "copy can be prepared from an exported snapshot."
+        ),
+    )
+
+
+class CapabilityConfigExportRequest(BaseModel):
+    """
+    Body of the pod's `export-config` operation: one stored capability config of
+    an existing agent instance, exported so it can be copied later without
+    reading that instance again.
+    """
+
+    config: StoredCapabilityConfig
+    team_id: str = Field(min_length=1)
+    agent_instance_id: str = Field(min_length=1)
+
+
+class CapabilityConfigExportResult(StoredCapabilityConfig):
+    """
+    The pod's answer to `export-config`: the upgraded envelope with scope-private
+    settings reset, and its configuration files by asset key, base64-encoded.
+    """
+
+    files: dict[str, str] = Field(default_factory=dict)
 
 
 class CapabilityConfigCopyResult(StoredCapabilityConfig):

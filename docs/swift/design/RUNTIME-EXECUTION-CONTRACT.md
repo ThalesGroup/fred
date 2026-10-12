@@ -6888,3 +6888,15 @@ provider may bill it). The log line adds the same fields and `reasoning`
 (`used`/`off`/`fallback`).
 Never the description or any drafted text. Acceptance:
 `openspec/changes/add-agent-creation-assistant/`.
+
+### 8.112 Capability config export and inline copy files (2026-10-11)
+
+Additive, extends §8.102. `POST /agents/capabilities/{id}/export-config` (body
+`CapabilityConfigExportRequest`: envelope, team and agent instance) returns
+`CapabilityConfigExportResult`: the upgraded envelope with scope-private settings reset
+and every `AssetKey` file as `files` (asset key → base64), read with the caller's token.
+404 when the capability is not installed, 422 when the config or a file cannot be read.
+`CapabilityConfigCopyRequest` gains optional `asset_files` (same shape): when set, the
+pod takes the files from it instead of reading the source instance (a key missing or
+not valid base64 → 422). Together they let a copy be prepared from a stored snapshot
+without access to the source team. Acceptance: `openspec/changes/add-agent-marketplace/`.

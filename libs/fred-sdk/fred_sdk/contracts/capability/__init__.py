@@ -35,6 +35,8 @@ from __future__ import annotations
 from ..models import (
     CapabilityConfigCopyRequest,
     CapabilityConfigCopyResult,
+    CapabilityConfigExportRequest,
+    CapabilityConfigExportResult,
     StoredCapabilityConfig,
 )
 from .base import AgentCapability, ToolCarrierMiddleware
@@ -80,6 +82,8 @@ __all__ = [
     "CapabilityCatalogEntry",
     "CapabilityConfigCopyRequest",
     "CapabilityConfigCopyResult",
+    "CapabilityConfigExportRequest",
+    "CapabilityConfigExportResult",
     "CapabilityContext",
     "CapabilityIdentity",
     "CapabilityManifest",

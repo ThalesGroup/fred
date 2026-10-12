@@ -35,6 +35,16 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.capabilityConfigCopyRequest,
       }),
     }),
+    exportCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdExportConfigPost: build.mutation<
+      ExportCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdExportConfigPostApiResponse,
+      ExportCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdExportConfigPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/capabilities/${queryArg.capabilityId}/export-config`,
+        method: "POST",
+        body: queryArg.capabilityConfigExportRequest,
+      }),
+    }),
     validateCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdValidateConfigPost: build.mutation<
       ValidateCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdValidateConfigPostApiResponse,
       ValidateCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdValidateConfigPostApiArg
@@ -249,6 +259,12 @@ export type CopyCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdCopyConfigPos
   capabilityId: string;
   capabilityConfigCopyRequest: CapabilityConfigCopyRequest;
 };
+export type ExportCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdExportConfigPostApiResponse =
+  /** status 200 Successful Response */ CapabilityConfigExportResult;
+export type ExportCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdExportConfigPostApiArg = {
+  capabilityId: string;
+  capabilityConfigExportRequest: CapabilityConfigExportRequest;
+};
 export type ValidateCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdValidateConfigPostApiResponse =
   /** status 200 Successful Response */ StoredCapabilityConfig;
 export type ValidateCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdValidateConfigPostApiArg = {
@@ -457,11 +473,29 @@ export type CapabilityConfigCopyResult = {
   schema_version: string;
 };
 export type CapabilityConfigCopyRequest = {
+  /** Configuration files by asset key, base64-encoded. When set, the pod reads the files from here instead of the source agent instance, so a copy can be prepared from an exported snapshot. */
+  asset_files?: {
+    [key: string]: string;
+  } | null;
   config: StoredCapabilityConfig;
   source_agent_instance_id: string;
   source_team_id: string;
   target_agent_instance_id: string;
   target_team_id: string;
+};
+export type CapabilityConfigExportResult = {
+  config?: {
+    [key: string]: any;
+  };
+  files?: {
+    [key: string]: string;
+  };
+  schema_version: string;
+};
+export type CapabilityConfigExportRequest = {
+  agent_instance_id: string;
+  config: StoredCapabilityConfig;
+  team_id: string;
 };
 export type CheckpointThreadSummary = {
   blob_bytes_total: number;
@@ -1345,6 +1379,7 @@ export const {
   useLazyGetAuditEventsPodV1AgentsAuditEventsGetQuery,
   useEvaluateChatControlsPodV1AgentsCapabilitiesChatControlsPostMutation,
   useCopyCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdCopyConfigPostMutation,
+  useExportCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdExportConfigPostMutation,
   useValidateCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdValidateConfigPostMutation,
   useListCheckpointThreadsPodV1AgentsCheckpointsGetQuery,
   useLazyListCheckpointThreadsPodV1AgentsCheckpointsGetQuery,
