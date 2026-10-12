@@ -10,6 +10,11 @@ const hooks = vi.hoisted(() => ({
   revoke: vi.fn(),
   reset: vi.fn(),
   query: vi.fn(),
+  joinerQuery: vi.fn(),
+  joinerRefetch: vi.fn(),
+  joinerFetching: false,
+  joinerError: false,
+  joinerTotal: 1,
   cleanup: vi.fn(),
   fetching: false,
   error: false,
@@ -48,6 +53,26 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
       isError: hooks.error,
     };
   },
+  usePlatformEnrollmentJoinersQuery: (...args: unknown[]) => {
+    hooks.joinerQuery(...args);
+    return {
+      currentData: {
+        items: [
+          {
+            user_id: "joined-user",
+            username: "simon",
+            first_name: "Simon",
+            last_name: "Martin",
+            joined_at: "2026-10-12T12:00:00Z",
+          },
+        ],
+        total: hooks.joinerTotal,
+      },
+      isFetching: hooks.joinerFetching,
+      isError: hooks.joinerError,
+      refetch: hooks.joinerRefetch,
+    };
+  },
   useGeneratePlatformLinkMutation: () => [hooks.generate, { isLoading: false, reset: hooks.reset }],
   useRevealPlatformLinkMutation: () => [hooks.reveal, { isLoading: false, reset: hooks.reset }],
   useRevokePlatformLinkMutation: () => [hooks.revoke, { isLoading: false }],
@@ -69,6 +94,9 @@ beforeEach(() => {
   hooks.inactive = 5;
   hooks.uncachedPage = false;
   hooks.linkStatus = "active";
+  hooks.joinerFetching = false;
+  hooks.joinerError = false;
+  hooks.joinerTotal = 1;
   Object.defineProperty(navigator, "clipboard", {
     configurable: true,
     value: { writeText: vi.fn().mockResolvedValue(undefined) },
@@ -208,6 +236,44 @@ it("keeps history available while Free is suspended and prevents link creation",
   expect([...document.querySelectorAll('[role="option"]')].map((option) => option.textContent)).toEqual(
     ["all", "active", "revoked", "expired"].map((status) => `rework.platformAccess.links.status.${status}`),
   );
+});
+
+it("shows successful joiners on a revoked link with bounded pages", () => {
+  hooks.linkStatus = "revoked";
+  hooks.joinerTotal = 26;
+  render(false);
+  act(() => button("links.joiners").click());
+  expect(hooks.joinerQuery.mock.lastCall?.[0]).toMatchObject({
+    teamId: "demo",
+    linkId: "invitation",
+    offset: 0,
+    limit: 25,
+  });
+  expect(document.body.textContent).toContain("simon");
+  expect(document.body.textContent).toContain("Martin");
+  expect(document.querySelector('[inert] [role="dialog"]')?.textContent).toContain("Workshop");
+  act(() =>
+    [...document.querySelectorAll<HTMLButtonElement>('button[aria-label="dataTable.pagination.next"]')].at(-1)!.click(),
+  );
+  expect(hooks.joinerQuery.mock.lastCall?.[0]).toMatchObject({ offset: 25 });
+});
+
+it("shows joiner loading, empty and retry states without stale rows", () => {
+  render();
+  act(() => button("links.joiners").click());
+  hooks.joinerFetching = true;
+  render();
+  expect(document.body.textContent).not.toContain("simon");
+  hooks.joinerFetching = false;
+  hooks.joinerError = true;
+  render();
+  expect(document.body.textContent).toContain("rework.platformAccess.links.joinersFailed");
+  act(() => button("retry").click());
+  expect(hooks.joinerRefetch).toHaveBeenCalled();
+  hooks.joinerError = false;
+  hooks.joinerTotal = 0;
+  render();
+  expect(document.body.textContent).toContain("rework.platformAccess.links.noJoiners");
 });
 it("creates a noted link without an implicit expiry and clears reusable mutation data", async () => {
   render();

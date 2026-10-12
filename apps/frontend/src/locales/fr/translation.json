@@ -3618,13 +3618,14 @@
       "invalidLink": "Ce lien ne peut pas être utilisé. Il est peut-être expiré, révoqué ou suspendu, ou le service est indisponible.",
       "loading": "Chargement...",
       "source": {
+        "admin": "Administrateur plateforme",
         "attribute": "Attribut d'identité",
         "manual": "Exception manuelle",
         "t0": "Import initial",
         "team": "Équipe autorisée",
         "free": "Accès par lien"
       },
-      "actorLockout": "Accordez-vous d'abord une autre source d'accès avant d'activer le filtrage ou de retirer votre dernière autorisation.",
+      "actorLockout": "Ce changement retirerait votre dernière source d'accès.",
       "rule": {
         "title": "Règle d'accès",
         "hint": "Les exceptions individuelles et les équipes autorisées permettent toujours l'accès.",
@@ -3710,7 +3711,7 @@
       "links": {
         "manage": "Gérer les liens",
         "title": "Invitations pour {{team}}",
-        "hint": "Partagez les liens manuellement. Les accès comptent les ouvertures après connexion.",
+        "hint": "Partagez les liens manuellement. Les accès comptent les ouvertures après connexion; les utilisateurs inscrits sont ceux qui ont rejoint l'équipe.",
         "note": "Note (facultative)",
         "expiry": "Expiration (facultative)",
         "expiryDate": "Date d'expiration",
@@ -3725,6 +3726,11 @@
         "created": "Création",
         "statusLabel": "Statut",
         "openings": "Accès",
+        "joiners": "Utilisateurs inscrits",
+        "joinersTitle": "Inscrits via {{note}}",
+        "joinedAt": "Date d'inscription",
+        "noJoiners": "Personne n'a encore rejoint l'équipe via ce lien.",
+        "joinersFailed": "Impossible de charger les personnes inscrites via ce lien.",
         "actions": "Actions",
         "revoke": "Révoquer",
         "revokeTitle": "Révoquer cette invitation ?",

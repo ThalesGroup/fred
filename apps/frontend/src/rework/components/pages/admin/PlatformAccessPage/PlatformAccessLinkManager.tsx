@@ -16,6 +16,7 @@ import type {
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
   usePlatformEnrollmentLinksQuery,
+  usePlatformEnrollmentJoinersQuery,
   useGeneratePlatformLinkMutation,
   useRevealPlatformLinkMutation,
   useRevokePlatformLinkMutation,
@@ -47,6 +48,12 @@ export default function PlatformAccessLinkManager({
   const [revoke, revoking] = useRevokePlatformLinkMutation();
   const [deleteInactive, deleting] = useDeleteInactivePlatformLinksMutation();
   const [confirmCleanup, setConfirmCleanup] = useState(false);
+  const [joinersLink, setJoinersLink] = useState<PlatformEnrollmentLinkInfo>();
+  const [joinersOffset, setJoinersOffset] = useState(0);
+  const joiners = usePlatformEnrollmentJoinersQuery(
+    { teamId: team.team_id, linkId: joinersLink?.id ?? "", offset: joinersOffset, limit: 25 },
+    { skip: !joinersLink, refetchOnMountOrArgChange: true, pollingInterval: 30000 },
+  );
   const [deletedCount, setDeletedCount] = useState<number>();
   const [view, setView] = useState<"list" | "create" | "output">("list");
   const [copying, setCopying] = useState(false);
@@ -148,7 +155,7 @@ export default function PlatformAccessLinkManager({
     <>
       <Dialog
         open={!confirmRevoke && view === "list"}
-        inactive={confirmCleanup}
+        inactive={confirmCleanup || !!joinersLink}
         title={t("rework.platformAccess.links.title", { team: team.name || team.team_id })}
         maxWidth={1100}
         hideCancel
@@ -276,6 +283,18 @@ export default function PlatformAccessLinkManager({
                   size: "2fr",
                   cellRenderer: (link) => (
                     <div className={styles.row}>
+                      <Button
+                        color="primary"
+                        variant="outlined"
+                        size="small"
+                        disabled={busy || links.isFetching}
+                        onClick={() => {
+                          setJoinersOffset(0);
+                          setJoinersLink(link);
+                        }}
+                      >
+                        {t("rework.platformAccess.links.joiners")}
+                      </Button>
                       {copyAction(
                         () =>
                           void run(async () => {
@@ -307,6 +326,64 @@ export default function PlatformAccessLinkManager({
           </div>
         </div>
       </Dialog>
+      {joinersLink && (
+        <Dialog
+          open
+          title={t("rework.platformAccess.links.joinersTitle", {
+            note: joinersLink.note || t("rework.platformAccess.links.untitled"),
+          })}
+          maxWidth={900}
+          hideCancel
+          confirmLabel={t("common.close")}
+          onCancel={() => setJoinersLink(undefined)}
+          onConfirm={() => setJoinersLink(undefined)}
+        >
+          <div className={styles.dialogBody}>
+            {joiners.isFetching && <p role="status">{t("rework.platformAccess.links.loading")}</p>}
+            {joiners.isError && (
+              <div role="alert">
+                <p>{t("rework.platformAccess.links.joinersFailed")}</p>
+                <Button color="primary" variant="outlined" size="small" onClick={() => void joiners.refetch()}>
+                  {t("rework.platformAccess.retry")}
+                </Button>
+              </div>
+            )}
+            {!joiners.isFetching && !joiners.isError && joiners.currentData?.total === 0 && (
+              <p>{t("rework.platformAccess.links.noJoiners")}</p>
+            )}
+            {!joiners.isFetching && !joiners.isError && !!joiners.currentData?.total && (
+              <DataTable
+                data={joiners.currentData.items}
+                rowKey={(person) => person.user_id}
+                serverPagination={{
+                  offset: joinersOffset,
+                  limit: 25,
+                  totalCount: joiners.currentData.total,
+                  onOffsetChange: setJoinersOffset,
+                }}
+                columns={[
+                  {
+                    label: t("rework.teamSettings.members.table.identifiant"),
+                    cellRenderer: (person) => person.username || "-",
+                  },
+                  {
+                    label: t("rework.teamSettings.members.table.firstName"),
+                    cellRenderer: (person) => person.first_name || "-",
+                  },
+                  {
+                    label: t("rework.teamSettings.members.table.lastName"),
+                    cellRenderer: (person) => person.last_name || "-",
+                  },
+                  {
+                    label: t("rework.platformAccess.links.joinedAt"),
+                    cellRenderer: (person) => date(person.joined_at),
+                  },
+                ]}
+              />
+            )}
+          </div>
+        </Dialog>
+      )}
       {confirmCleanup && (
         <Dialog
           open

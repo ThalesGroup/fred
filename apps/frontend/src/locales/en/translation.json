@@ -3618,13 +3618,14 @@
       "invalidLink": "This link cannot be used. It may be expired, revoked or suspended, or the service is unavailable.",
       "loading": "Loading...",
       "source": {
+        "admin": "Platform administrator",
         "attribute": "Identity attribute",
         "manual": "Manual exception",
         "t0": "Initial import",
         "team": "Authorized team",
         "free": "Link access"
       },
-      "actorLockout": "First grant yourself another admission source before enabling filtering or removing your last authorization.",
+      "actorLockout": "This change would remove your last admission source.",
       "rule": {
         "title": "Admission rule",
         "hint": "Individual exceptions and authorized teams always allow access.",
@@ -3710,7 +3711,7 @@
       "links": {
         "manage": "Manage links",
         "title": "Invitations for {{team}}",
-        "hint": "Share links manually. Accesses count page openings after sign-in.",
+        "hint": "Share links manually. Accesses count page openings after sign-in; Joined users lists successful enrollments.",
         "note": "Note (optional)",
         "expiry": "Expiration (optional)",
         "expiryDate": "Expiration date",
@@ -3725,6 +3726,11 @@
         "created": "Created",
         "statusLabel": "Status",
         "openings": "Accesses",
+        "joiners": "Joined users",
+        "joinersTitle": "Joined through {{note}}",
+        "joinedAt": "Joined at",
+        "noJoiners": "Nobody has joined through this link yet.",
+        "joinersFailed": "Could not load the people who joined through this link.",
         "actions": "Actions",
         "revoke": "Revoke",
         "revokeTitle": "Revoke this invitation?",
