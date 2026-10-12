@@ -1,36 +1,36 @@
 ---
 schema: 1
-title: "Plan bounded document discovery"
+title: "Filter, sort and paginate document discovery"
 impact: none
 configuration: none
-configuration_reason: "This planning-only PR changes no application code or production configuration."
-no_action_reason: "Only OpenSpec planning artifacts and this note are introduced; existing deployments have nothing to apply."
+configuration_reason: "Discovery extends existing authenticated tree APIs; no production configuration or permission-default changes are required."
+no_action_reason: "No data migration, index migration or re-ingestion is needed; stored documents retain their existing arrival timestamps."
 ---
 
 ## Applicability
 
-This PR defines the proposed document discovery follow-up; it ships no application behavior yet.
+Deployments using document_access and the Knowledge Flow document-tree route.
 
 ## Prerequisites
 
-The metadata/UI PR must merge before implementation; the independent branch will then be updated from `swift`.
+Deploy compatible Knowledge Flow and runtime versions together so new tool arguments are accepted by the backend.
 
 ## Configuration
 
-No configuration or permission-default changes are included in this planning-only diff.
+No new configuration keys or permission defaults apply. The existing character budget remains 20,000 by default and at most 60,000.
 
 ## Upgrade
 
-No operator action applies to these planning artifacts. Before implementation is declared ready, update this note with the actual deployment compatibility and any measured index migration requirements.
+Deploy normally. No metadata backfill, re-ingestion or operator migration command is required.
 
 ## Validation
 
-Run `openspec validate add-paged-document-discovery --strict` and review its proposal, design, tasks and acceptance scenarios.
+Ask for a filename/title match and the latest known addition. Confirm the tool uses descending arrival order with a limit of one, and exposes continuation for larger pages. Tool details retain metadata hover and show a discreet continuation footer. An invalid cursor requests a restart; a document exceeding the budget requests a larger budget or narrower folder.
 
 ## Rollback
 
-Reverting this planning-only commit changes no stored documents or application behavior.
+Roll back the applications normally. Requests without a page limit and historical stored traces remain readable; stored documents are unchanged.
 
 ## Limitations
 
-Filtering, sorting and pagination are specified but not implemented. No re-ingestion or metadata backfill is planned.
+Paging traverses a live corpus, not a cross-request snapshot. Unknown arrivals require qualified latest-known results. A page that cannot fit one complete compact document record and its required path returns a budget error. Query filtering/sorting can scan matching SQL rows; metadata hydration and model output are bounded by page size and character budget.

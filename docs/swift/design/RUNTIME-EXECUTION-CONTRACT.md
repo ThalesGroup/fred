@@ -1431,6 +1431,11 @@ class DocumentTreePort(ABC):
         working_directory: str | None = None,
         library_tag_ids: Sequence[str] | None = None,
         max_chars: int = 20_000,
+        name_filter: str | None = None,
+        sort_by: Literal["name", "added_to_kb"] = "name",
+        sort_order: Literal["asc", "desc"] = "asc",
+        limit: int | None = None,
+        cursor: str | None = None,
     ) -> DocumentTreeResult: ...
 
 class DocumentSummarizePort(ABC):
@@ -1473,11 +1478,11 @@ the long-running summarize path. First consumer: `document_access`'s
 capability, SDK port, runtime adapter/client and HTTP request; its supported range
 is 500-60,000. Whole-branch/item pruning remains in place beyond the requested
 budget. The tool retains incomplete-listing information for the model; the UI
-uses a discreet Truncated footer. Request/response shapes are unchanged, and the
-Knowledge Flow OpenAPI/client generation was rerun for the updated constraints.
+uses a discreet Truncated footer. Knowledge Flow OpenAPI/client generation was
+rerun for the constraints and additive discovery fields below.
 
-**Document tree metadata (2026-10-12).** The existing `{tree, truncated}` response
-and `DocumentTreeResult` remain unchanged. Folder records carry `folder` and optional internal `folder_id`; document leaves are compact JSON records with `uid`, `name`,
+**Document tree metadata (2026-10-12).** The existing `tree` and `truncated`
+fields remain available. Folder records carry `folder` and optional internal `folder_id`; document leaves are compact JSON records with `uid`, `name`,
 `added_to_kb`, `created`, `modified`, plus available title, format/MIME, language,
 page/row counts, labels and source. `added_to_kb` projects the stored
 `source.date_added_to_kb`; an omitted legacy field remains null instead of using a
@@ -1487,6 +1492,24 @@ not ingestion completion. Both ReAct text content and Graph text blocks include
 the metadata and an explicit notice when the tree is incomplete. The frontend's
 folder/document view hides internal ids and supports earlier text tree results.
 Observable behavior is specified in `openspec/specs/team-resource-spaces/spec.md`.
+
+**Paged document discovery (2026-10-12).** The same tree route and SDK port accept
+`name_filter`, `sort_by` (`name` or `added_to_kb`), `sort_order`, `limit` (1-100)
+and `cursor`. The agent tool defaults to 25 unique documents; HTTP/SDK callers
+omitting `limit` keep legacy browsing. Literal filename/title filtering and
+read permissions apply before store-side page selection. Content discovery
+continues to use vector search. The response adds optional `next_cursor` and
+`has_unknown_arrivals`; the tool puts these in a trailing `page` JSON record in
+both model carriers. Pagination alone is not character truncation. The trace
+UI shows only a discreet continuation footer and hides cursors.
+
+For a latest-known addition, request descending arrival order and `limit=1`
+without a cursor. Unknown timestamps sort last and their existence across all
+matches requires a qualified chronology claim. Cursor requests recompute access
+and preserve query/scope; they are positions, not credentials or snapshots.
+Budget-limited pages continue after the last emitted unique document, not after
+pruned candidates. Known HTTP 400 cursor/budget errors become typed
+`DocumentTreeRequestError` guidance; arbitrary HTTP detail stays hidden.
 
 ---
 

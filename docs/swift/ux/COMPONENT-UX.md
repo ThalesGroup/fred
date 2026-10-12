@@ -835,7 +835,9 @@ how `ThoughtTrace` trims the rail when a reasoning row opens or closes the seque
   modification and format are omitted from this view. Arrival labels use the configured
   `siteDisplayName`. Internal ids remain hidden. Counts refer to unique displayed
   documents; the latest known displayed arrival is identified inside its tooltip.
-  A truncated result has only a discreet localized Truncated footer. Historical
+  A truncated result has only a discreet localized Truncated footer. Paged results
+  add a discreet More documents available footer; cursors and agent continuation
+  mechanics stay hidden. Displayed counts and latest markers concern this page. Historical
   upload dates keep their original meaning and missing dates remain unknown.
   Timestamp and payload semantics are defined in `openspec/specs/team-resource-spaces/spec.md`.
 

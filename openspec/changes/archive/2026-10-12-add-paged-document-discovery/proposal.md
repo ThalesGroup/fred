@@ -24,4 +24,4 @@ None.
 
 Knowledge Flow corpus-tree and metadata services, `fred-core` document stores, SDK tree contracts, runtime adapter/client, document-access tool, frontend trace parser/detail and generated Knowledge Flow API types. Update the runtime contract, component UX and an operator note; no new endpoint family or capability.
 
-This PR targets `swift` directly. The metadata/UI work in #3053 will merge first, then this branch will be updated from `swift`; no stacked PR or duplicated implementation is included here. This change currently contains planning artifacts only.
+This PR targets `swift` directly. The metadata/UI work in #3053 is merged and this branch includes it through the updated base; no stacked PR or duplicated implementation delta is included here.
