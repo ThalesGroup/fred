@@ -77,6 +77,9 @@ interface RichInputFieldProps {
    * text and the field behaves exactly as it always has.
    */
   commandTrigger?: CommandTriggerBinding;
+  /** Offered each key the command trigger did not consume, before Enter is
+   *  handled. Return true to consume it — e.g. recalling sent messages. */
+  onRecallKeyDown?: (event: KeyboardEvent<HTMLTextAreaElement>) => boolean;
   /** Rendered in the bottom-left area — context pickers, scope selectors, attachment chips. */
   topSlot?: ReactNode;
   /** Rendered next to the textarea controls — one compact command such as attach-file. */
@@ -130,6 +133,7 @@ export function RichInputField({
   aboveTextSlot,
   aboveFieldSlot,
   commandTrigger,
+  onRecallKeyDown,
   topSlot,
   leftSlot,
   rightSlot,
@@ -246,12 +250,13 @@ export function RichInputField({
       // to know about uploads or an over-limit draft.
       const sendBlocked = disabled || sendDisabled;
       if (!(e.key === "Enter" && sendBlocked) && commandTrigger?.onKeyDown(e)) return;
+      if (onRecallKeyDown?.(e)) return;
       if (e.key === "Enter" && !e.shiftKey && !disabled && !sendDisabled && !e.nativeEvent.isComposing) {
         e.preventDefault();
         onSend();
       }
     },
-    [disabled, sendDisabled, onSend, commandTrigger],
+    [disabled, sendDisabled, onSend, commandTrigger, onRecallKeyDown],
   );
 
   const hasText = value.trim().length > 0;

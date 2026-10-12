@@ -32,14 +32,18 @@ import logging
 
 from fred_pod.common import (
     ConfigFiles,
+    PodAppIdentity,
     TemporalSchedulerConfig,
     load_configuration_with_config_files,
     parse_yaml_mapping_file,
 )
+from fred_pod.common.structures import KpiPrometheusSinkConfig
 from fred_pod.security.backend_to_backend_auth import M2MAuthConfig, M2MTokenProvider
 from fred_pod.security.oidc_endpoints import resolve_endpoints
 from fred_pod.security.structure import M2MSecurity
 from pydantic import BaseModel, Field, PrivateAttr, field_validator
+
+from fred_sdk.knowledge_base.logs import LogFormat
 
 logger = logging.getLogger(__name__)
 
@@ -84,9 +88,9 @@ class PodSecurity(BaseModel):
 
     The key path is the one every Fred backend uses, and `M2MSecurity` is the
     same model they parse it with. What is absent is `security.user`: a
-    Knowledge Base pod serves no user, opens no inbound port and validates no
-    user token, so requiring a block it would never read would be configuration
-    theatre.
+    Knowledge Base pod serves no user and validates no user token — the only
+    port it may open is a read-only metrics endpoint — so requiring a block it
+    would never read would be configuration theatre.
     """
 
     m2m: M2MSecurity
@@ -109,16 +113,73 @@ class PodScheduler(BaseModel):
     temporal: TemporalSchedulerConfig = Field(default_factory=TemporalSchedulerConfig)
 
 
+class PodKpi(BaseModel):
+    """The Prometheus half of `observability.kpi`, and only that half.
+
+    Same key path and same model as every Fred backend. The log and OpenSearch
+    sinks beside it there are absent here: a pod writes no KPI event, so it
+    would never read them.
+    """
+
+    prometheus: KpiPrometheusSinkConfig = Field(default_factory=KpiPrometheusSinkConfig)
+
+
+class TemporalMetricsConfig(KpiPrometheusSinkConfig):
+    """The workflow engine's own exporter: polls, task latencies, slots.
+
+    Served by the engine's core on a port of its own — its metrics never pass
+    through `prometheus_client` — so it is scraped beside `kpi.prometheus`.
+    """
+
+    port: int = 9001
+
+
+class PodTemporalObservability(BaseModel):
+    prometheus: TemporalMetricsConfig = Field(default_factory=TemporalMetricsConfig)
+
+
+class PodLogs(BaseModel):
+    """How this pod writes its log records to standard output.
+
+    `json` for a deployed pod, whose log pipeline parses each line into fields;
+    `text` for a person reading a terminal. Both carry `app.runtime_id`.
+    """
+
+    format: LogFormat = "json"
+
+
+class PodObservability(BaseModel):
+    """What this pod exposes to be scraped, and how it writes its logs.
+
+    Both endpoints are enabled by default but bound to loopback, as on every
+    Fred backend: nothing is reachable from outside the pod until a deployment
+    binds it outward explicitly, and what it then opens is read-only.
+    """
+
+    kpi: PodKpi = Field(default_factory=PodKpi)
+    temporal: PodTemporalObservability = Field(default_factory=PodTemporalObservability)
+    logs: PodLogs = Field(default_factory=PodLogs)
+
+
 class PodConfiguration(BaseModel):
     """Everything a Knowledge Base pod needs to reach Fred and Temporal."""
 
     _token_provider: M2MTokenProvider | None = PrivateAttr(default=None)
 
+    # Required, with no default: a pod's identity in metrics and logs is chosen
+    # by whoever deploys it, and one that starts under a guessed name is the
+    # mistake this field exists to prevent.
+    app: PodAppIdentity
     knowledge_base: KnowledgeBaseSettings
     security: PodSecurity
     scheduler: PodScheduler = Field(default_factory=PodScheduler)
+    observability: PodObservability = Field(default_factory=PodObservability)
 
     # ── the values the rest of the SDK reads ──────────────────────────────────
+
+    @property
+    def runtime_id(self) -> str:
+        return self.app.runtime_id
 
     @property
     def prefix(self) -> str:
@@ -190,3 +251,32 @@ class PodConfiguration(BaseModel):
                 f"No Knowledge Base configuration: {error}. Set $CONFIG_FILE, "
                 "or put one at ./config/configuration.yaml."
             ) from error
+
+
+# The configuration this process runs with, once known. A pod's configuration is
+# a ConfigMap mounted at start, so it lives exactly as long as the process.
+_active: PodConfiguration | None = None
+
+
+def bind_active_configuration(configuration: PodConfiguration) -> None:
+    """Record the configuration the entrypoint loaded, for every later run."""
+    global _active
+    _active = configuration
+
+
+def active_configuration() -> PodConfiguration:
+    """The configuration this process runs with, loaded once if nobody bound it.
+
+    Raises `MissingPodConfiguration` when there is none, so a developer tool can
+    still fall back to working without Fred.
+    """
+    global _active
+    if _active is None:
+        _active = PodConfiguration.load()
+    return _active
+
+
+def _reset_active_configuration() -> None:
+    """Forget the bound configuration. For tests only."""
+    global _active
+    _active = None

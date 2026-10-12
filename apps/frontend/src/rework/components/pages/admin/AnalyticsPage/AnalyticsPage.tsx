@@ -54,6 +54,7 @@ import Disclosure from "@shared/atoms/Disclosure/Disclosure.tsx";
 import TokenUsageImpact from "@shared/molecules/TokenUsageImpact/TokenUsageImpact.tsx";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
 import { formatTrendWindow } from "./trendWindow";
+import WebResearchSection from "./WebResearchSection";
 
 function sumRows(rows: { value: number }[] | undefined): number | undefined {
   if (rows === undefined) return undefined;
@@ -605,6 +606,8 @@ export default function AnalyticsPage() {
       {/* Admin-only (§2.4/§2.5) — can_manage_platform, checked server-side by
           storage_by_team itself; hidden here too so a plain observer never
           sees an empty section they can't use. */}
+      {canAdmin && <WebResearchSection timeRange={timeRange} />}
+
       {canAdmin && (
         <Disclosure title={t("rework.analytics.sections.administration")} defaultOpen>
           <div className={styles.sectionStack}>

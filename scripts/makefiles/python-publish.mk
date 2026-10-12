@@ -4,7 +4,9 @@
 # - UV          (from python-vars.mk)
 # - TARGET      (from python-vars.mk)
 # - VERSION     (optional; defaults to pyproject.toml [project].version)
-# - PYPI_TOKEN  (environment variable — never hardcode)
+# - PYPI_TOKEN  (environment variable — never hardcode). Read by the shell and
+#                 handed to uv as UV_PUBLISH_TOKEN, so no command line make
+#                 echoes ever carries it.
 
 # Always read VERSION from pyproject.toml to avoid duplication and env overrides.
 override VERSION := $(shell $(PYTHON) -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
@@ -20,12 +22,12 @@ build: dev ## Build sdist and wheel into target/dist/
 
 .PHONY: publish
 publish: build ## Build and publish to PyPI (requires PYPI_TOKEN env var)
-	@if [ -z "$(PYPI_TOKEN)" ]; then \
+	@if [ -z "$$PYPI_TOKEN" ]; then \
 		echo "❌ PYPI_TOKEN is not set. Export it before running make publish."; \
 		exit 1; \
 	fi
 	@echo "🚀 Publishing $(PROJECT_NAME) $(VERSION) to PyPI..."
-	$(UV) publish --token $(PYPI_TOKEN) $(TARGET)/dist/*
+	UV_PUBLISH_TOKEN="$$PYPI_TOKEN" $(UV) publish $(TARGET)/dist/*
 	@echo "✅ Published $(PROJECT_NAME) $(VERSION)"
 
 .PHONY: publish-dry-run

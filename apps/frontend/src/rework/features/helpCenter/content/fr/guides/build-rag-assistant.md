@@ -32,7 +32,7 @@ Les facteurs déterminants, par ordre d'importance :
 Sur la page [Agents](/help/fr/features/agents), créez un agent à partir d'un
 modèle capable de chercher dans des documents. Rattachez-lui la bibliothèque de
 l'étape 1 — **sans ce rattachement, il ne verra aucun document** — et activez le
-pack d'accès aux ressources de l'équipe.
+pack **Documents de l'équipe**.
 
 ## 3. Écrire les instructions
 

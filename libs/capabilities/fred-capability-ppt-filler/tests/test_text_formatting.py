@@ -28,6 +28,7 @@ from __future__ import annotations
 import io
 from typing import List
 
+import pytest
 from fred_capability_ppt_filler.traversal import (
     list_keys_on_slide,
     replace_keys_on_slide,
@@ -93,8 +94,9 @@ def _paragraph_with(presentation, needle: str):
     raise AssertionError(f"no paragraph containing {needle!r}")
 
 
-def test_bold_value_becomes_a_bold_run_inheriting_base_font():
-    deck = _one_run_deck("Result: {{val}}")
+@pytest.mark.parametrize("marker", ["{val}", "{{val}}"])
+def test_bold_value_becomes_a_bold_run_inheriting_base_font(marker):
+    deck = _one_run_deck(f"Result: {marker}")
     runs = _runs(_fill(deck, {"val": "up **40%** today"}))
 
     bold = _run_named(runs, "40%")
@@ -109,8 +111,9 @@ def test_bold_value_becomes_a_bold_run_inheriting_base_font():
     assert "".join(r.text for r in runs) == "Result: up 40% today"
 
 
-def test_italic_value_becomes_an_italic_run_inheriting_base_font():
-    deck = _one_run_deck("Product: {{name}}")
+@pytest.mark.parametrize("marker", ["{name}", "{{name}}"])
+def test_italic_value_becomes_an_italic_run_inheriting_base_font(marker):
+    deck = _one_run_deck(f"Product: {marker}")
     runs = _runs(_fill(deck, {"name": "the *Acme* widget"}))
 
     italic = _run_named(runs, "Acme")

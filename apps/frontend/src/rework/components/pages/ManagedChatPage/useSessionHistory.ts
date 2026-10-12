@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import { useEffect, useRef, useState } from "react";
+import { handlePlatformAccessResponse } from "../../../../common/platformAccess";
 import { KeyCloakService } from "../../../../security/KeycloakService";
 import type { ChatMessage } from "../../../../slices/runtime/runtimeOpenApi";
 import { getCachedSessionHistory, setCachedSessionHistory } from "./sessionHistoryCache";
@@ -104,6 +105,7 @@ export function useSessionHistory({ sessionId, messagesUrl, onLoaded, isTurnActi
         if (!isCurrent()) return;
         const url = new URL(messagesUrl, window.location.origin);
         const resp = await fetch(url.toString(), { headers: { Authorization: `Bearer ${token}` } });
+        await handlePlatformAccessResponse(resp);
         if (!resp.ok) throw new Error("History unavailable");
         const msgs: ChatMessage[] = await resp.json();
         // Guards, in order:

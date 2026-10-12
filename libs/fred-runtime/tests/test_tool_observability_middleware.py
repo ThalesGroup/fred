@@ -254,6 +254,9 @@ async def test_awrap_tool_call_success_leaves_default_ok_status() -> None:
 async def test_awrap_tool_call_raised_exception_sets_error_status_failed_counter_and_reraises(
     caplog,
 ) -> None:
+    from fred_core.logs.processors import install_context_capture
+
+    install_context_capture()
     store, kpi = _install_recording_kpi_writer()
     middleware = ToolObservabilityMiddleware(kpi=kpi, binding=_binding())
     request = _request(name="identifier-tool-canary", tool_obj=None)
@@ -278,7 +281,12 @@ async def test_awrap_tool_call_raised_exception_sets_error_status_failed_counter
             for record in caplog.records
         ]
     )
-    assert "identifier-tool-canary" not in emitted
+    assert "identifier-tool-canary" not in caplog.text
+    completed = next(r for r in caplog.records if r.msg == "Tool invocation completed")
+    assert (
+        getattr(completed, "_fred_snapshot").values["tool_name"]
+        == "identifier-tool-canary"
+    )
     assert "upstream-error-canary" not in emitted
 
 
@@ -307,7 +315,7 @@ async def test_awrap_tool_call_terminal_stop_logs_only_bounded_reason(caplog) ->
         ]
     )
     assert "reason=authority_lost" in emitted
-    assert "terminal-tool-canary" not in emitted
+    assert "terminal-tool-canary" not in caplog.text
     assert "terminal-upstream-canary" not in emitted
 
 

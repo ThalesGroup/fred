@@ -18,11 +18,11 @@
   display: flex;
   position: relative;
   flex-direction: column;
-  gap: var(--spacing-s);
+  gap: var(--spacing-xs);
   border: 1px solid var(--outline-muted);
-  border-radius: var(--radius-s);
+  border-radius: var(--radius-ms);
   background: var(--surface-container);
-  padding: var(--spacing-m);
+  padding: var(--spacing-s);
 }
 
 /* Same active-state treatment as RichInputField's focused composer field
@@ -37,13 +37,11 @@
 
 .card.skippable {
   align-self: center;
-  gap: var(--spacing-xs);
-  padding: var(--spacing-s);
+  padding: var(--spacing-xs);
   width: min(100%, 38rem);
 }
 
 .questionTabs {
-  margin-right: 2rem;
   max-width: 100%;
   overflow-x: auto;
 }
@@ -58,8 +56,13 @@
   text-overflow: ellipsis;
 }
 
-.skippable .questionTabs :global([role="tab"]) {
-  font-size: 0.8125rem;
+.questionTabs :global([data-hitl-state="waiting"] .material-symbols-outlined),
+.questionTabs :global([data-hitl-state="skipped"] .material-symbols-outlined) {
+  color: var(--on-surface-retreat);
+}
+
+.questionTabs :global([data-hitl-state="answered"] .material-symbols-outlined) {
+  color: var(--success);
 }
 
 .title {
@@ -68,10 +71,36 @@
   font: var(--font-title-medium);
 }
 
+/* The question reads as the card's header: a full-bleed band, under the tabs
+   when there are several questions. */
+.header {
+  display: flex;
+  flex-direction: column;
+  margin: calc(-1 * var(--spacing-s)) calc(-1 * var(--spacing-s)) 0;
+  border-radius: var(--radius-ms) var(--radius-ms) 0 0;
+  background: var(--surface-container-highest);
+  padding: var(--spacing-s) var(--spacing-m);
+}
+
+.skippable .header {
+  margin: calc(-1 * var(--spacing-xs)) calc(-1 * var(--spacing-xs)) var(--spacing-2xs);
+}
+
+.questionTabs + .header {
+  margin-top: 0;
+  border-radius: 0;
+}
+
+/* A read-only card can end with its header: the band then fills the card. */
+.header:last-child {
+  margin-bottom: calc(-1 * var(--spacing-s));
+  border-radius: var(--radius-ms);
+}
+
 .question {
   margin: 0;
   color: var(--on-surface);
-  font: var(--font-body-medium);
+  font: var(--font-body-medium-emphasized);
 }
 
 .question :global([data-copyable-content]) {
@@ -79,44 +108,147 @@
   font: inherit;
 }
 
-.skippable .title,
-.skippable .question {
-  font-size: 0.8125rem;
+.skippable .title {
+  font: var(--font-title-small);
 }
 
 .choices {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-xs);
-  margin-inline: auto;
-  width: min(100%, 32rem);
-}
-
-.skippable .choices {
   gap: var(--spacing-2xs);
-  width: min(100%, 30rem);
+  margin-top: var(--spacing-2xs);
+  width: 100%;
 }
 
-.skippable .choices :global(button > div) {
-  font-size: 0.8125rem;
-}
-
-.choiceWithDescription {
+/* Choice rows: full width, left-aligned, quieter than a standalone button.
+   Prefixed with `.card .choices` to outrank the Button atom's variant rules. */
+.card .choices .choice {
+  border-radius: var(--radius-xs);
+  width: 100%;
   height: auto;
-  min-height: 2.5rem;
 }
 
-.skippable .choiceWithDescription {
-  height: auto;
+.card .choices .choice:not(:disabled) {
+  --btn-border: var(--outline-muted);
+  --btn-text-color: var(--on-surface);
+}
+
+.card .choices .choice:not(:disabled):hover {
+  --btn-border: var(--outline-variant);
+}
+
+/* One padding for every choice size: tight on the badge side, then a clear gap to the label. */
+.card .choices .choice > div {
+  justify-content: flex-start;
+  gap: var(--spacing-s);
+  padding: var(--spacing-xs) var(--spacing-s) var(--spacing-xs) var(--spacing-xs);
+  text-align: left;
+}
+
+/* Tool approval: only the label carries the decision's meaning. */
+.card .choices .acceptChoice:not(:disabled) {
+  --btn-text-color: var(--success);
+}
+
+.card .choices .refuseChoice:not(:disabled) {
+  --btn-text-color: var(--error);
+}
+
+.card .choices .acceptChoice > div,
+.card .choices .refuseChoice > div {
+  font: var(--font-title-small-emphasized);
+}
+
+.card .choices .selectedChoice:not(:disabled) {
+  --btn-border: var(--primary);
+  background-color: var(--state-primary-selected);
+}
+
+.choiceBadge {
+  display: inline-flex;
+  flex: none;
+  justify-content: center;
+  align-items: center;
+  border-radius: var(--radius-xs);
+  background: var(--secondary-container);
+  padding-inline: var(--spacing-3xs);
+  min-width: var(--spacing-l);
+  height: var(--spacing-l);
+  color: var(--on-secondary-container);
+  font: var(--font-label-medium);
+}
+
+/* In the badge slot, so "Skip" lines up with the other choice labels. */
+.skipChoice .keyHint {
+  box-sizing: border-box;
+  min-width: var(--spacing-l);
+  text-align: center;
+}
+
+.card .choices .skipChoice:not(:disabled) {
+  --btn-text-color: var(--on-surface-retreat);
+}
+
+.validateRow {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* One success check for a validated text and a selected choice. */
+.successCheck {
+  display: inline-flex;
+  flex: none;
+  justify-content: center;
+  align-items: center;
+  color: var(--success);
+  font-size: 1.5rem;
+}
+
+.successCheck :global(.material-symbols-outlined) {
+  font-size: inherit;
+}
+
+/* Same footprint as the small icon button it replaces, so nothing shifts. */
+.validated {
+  width: 2rem;
+  height: 2rem;
+}
+
+/* At the end of the choice row. */
+.choiceCheck {
+  margin-inline-start: auto;
+}
+
+/* The button is taller than the typed line: it eats into the row padding instead of growing the field. */
+.otherChoice > button,
+.otherChoice > .validated {
+  margin-block: calc(-1 * var(--spacing-2xs));
+}
+
+.selectedChoice .choiceBadge {
+  background: var(--secondary);
+  color: var(--on-secondary);
+}
+
+.choice:disabled .choiceBadge {
+  background: var(--state-on-surface-disabled);
+  color: var(--state-text-disabled);
+}
+
+.keyHint {
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-xs);
+  padding: var(--spacing-3xs);
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+  line-height: 1;
 }
 
 .choiceContent {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: var(--spacing-2xs);
-  padding-block: var(--spacing-xs);
-  text-align: center;
+  align-items: flex-start;
+  text-align: left;
 }
 
 .choiceDescription {
@@ -124,26 +256,15 @@
   font: var(--font-body-small);
 }
 
-.choiceWithDescription:disabled .choiceDescription {
+.choice:disabled .choiceDescription {
   color: var(--state-text-disabled);
-}
-
-.skippable .title,
-.skippable .question {
-  padding-right: 2rem;
-}
-
-.skipClose {
-  position: absolute;
-  top: var(--spacing-s);
-  right: var(--spacing-s);
 }
 
 .actions {
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  gap: var(--spacing-xs);
+  gap: var(--spacing-2xs);
 }
 
 .actions > button {
@@ -153,20 +274,37 @@
 .freeText {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-xs);
+  gap: var(--spacing-2xs);
 }
 
+.freeText textarea {
+  border-radius: var(--radius-xs);
+}
+
+/* "Other" reads as a field, not as one more choice: the TextArea's input surface. */
 .otherChoice {
   display: flex;
   align-items: center;
-  gap: var(--spacing-xs);
+  gap: var(--spacing-s);
   cursor: text;
-  border: 1px solid var(--outline);
-  border-radius: var(--radius-s);
-  background-color: transparent;
-  padding-inline: var(--spacing-s);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-xs);
+  background-color: var(--surface-container-low);
+  padding: var(--spacing-xs);
   width: 100%;
-  min-height: 2.5rem;
+}
+
+.otherChoice:hover:not(:focus-within) {
+  border-color: var(--outline);
+}
+
+/* A validated Other answer reads like a selected choice. */
+.otherChoice.otherValidated:not(:focus-within) {
+  border-color: var(--primary);
+}
+
+.otherValidated .otherChoiceIcon {
+  color: var(--secondary);
 }
 
 .otherChoice:focus-within {
@@ -174,10 +312,23 @@
   border-color: transparent;
 }
 
+.otherChoiceIcon {
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: center;
+  width: var(--spacing-l);
+  color: var(--on-surface-retreat);
+  font-size: 1.25rem;
+}
+
+.otherChoiceIcon :global(.material-symbols-outlined) {
+  font-size: inherit;
+}
+
 .otherChoiceLabel {
   flex: 0 0 auto;
-  color: var(--on-surface-retreat);
-  font: var(--font-body-medium);
+  color: var(--on-surface);
+  font: var(--font-title-small);
 }
 
 .otherChoice input {
@@ -187,19 +338,9 @@
   background: transparent;
   min-width: 0;
   color: var(--on-surface);
-  font: var(--font-body-medium);
+  font: var(--font-body-large);
 }
 
-.skippable .otherChoice {
-  min-height: 2rem;
-}
-
-.skippable .otherChoiceLabel,
-.skippable .otherChoice input {
-  font-size: 0.8125rem;
-}
-
-.selectedChoice {
-  border-color: var(--primary);
-  background-color: color-mix(in srgb, var(--primary) 12%, transparent);
+.otherChoice input::placeholder {
+  color: var(--on-surface-retreat);
 }

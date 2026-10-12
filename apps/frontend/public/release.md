@@ -1,3 +1,25 @@
+**v3.3.0** — 2026-10-08
+
+- **Summary**
+
+  Choose whether an agent uses conversation attachments, team documents or both. Document-only answers include the enabled sources, and the agent setup form is easier to navigate.
+
+- **Features**
+
+  - Choose attachments, team documents or both for document-based answers (#2999)
+
+- **Improvements**
+
+  - Resources now focuses on document libraries; legacy personal, shared and agent file areas are retired (#2984)
+
+- **Bug Fixes**
+
+  - Reduced pauses while agents run tools or browse cloud folders (#2988)
+
+- **Deployment note**
+
+  Before upgrading, export needed files from retired areas, update custom integrations and remove retired settings. Follow the operator guide for the coordinated deployment. No document re-ingestion is required.
+
 **v3.2.0** - 2026-10-06
 
 - **Summary**

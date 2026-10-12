@@ -24,7 +24,8 @@ Any failure rolls back everything atomically — no partial state is left
 behind.
 
 Scope (current snapshot):
-- Agents   → agent_instance rows, imported verbatim (idempotent skip-if-present)
+- Agents   → agent_instance rows, imported verbatim (idempotent skip-if-present),
+             a name taken in the team renamed `<name>_imported-N`
 - Tags     → tag rows (preserving tag_id, owner_id, doc JSON)
 - Metadata → metadata rows (preserving document_uid and doc JSON;
              content/vectors are not transported by this import — see
@@ -101,8 +102,13 @@ from fred_core.tasks.models import (
 )
 from fred_core.tasks.service import TaskService
 from fred_core.teams.team_metatada_models import TeamMetadataRow
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
+from control_plane_backend.agent_instances.names import (
+    free_imported_name,
+    normalize_agent_name,
+)
 from control_plane_backend.import_export.bundle import KBundle
 from control_plane_backend.import_export.schemas import BundleUserEntry
 from control_plane_backend.models.agent_instance_models import AgentInstanceRow
@@ -1020,12 +1026,36 @@ async def _run_import_body(
     async with session_factory() as session:
         async with session.begin():
             # --- agents ---
+            # Normalised names per team, so an imported agent never collides
+            # with the unique name index: a taken name becomes `_imported-N`.
+            team_agent_names: dict[str, set[str]] = {}
+
+            async def _taken_agent_names(team_id: str, s: AsyncSession) -> set[str]:
+                if team_id not in team_agent_names:
+                    # Rows added in this transaction are tracked in the set.
+                    with s.no_autoflush:
+                        names = await s.scalars(
+                            select(AgentInstanceRow.display_name).where(
+                                AgentInstanceRow.team_id == team_id
+                            )
+                        )
+                    team_agent_names[team_id] = {normalize_agent_name(n) for n in names}
+                return team_agent_names[team_id]
+
+            # Reads skip autoflush: flushing the pending agents mid-phase would
+            # take SQLite's write lock before the task progress update.
             async def _import_agent_native(
                 row: dict[str, Any], s: AsyncSession
             ) -> bool:
                 aid = row["agent_instance_id"]
-                if await s.get(AgentInstanceRow, aid) is not None:
-                    return False
+                with s.no_autoflush:
+                    if await s.get(AgentInstanceRow, aid) is not None:
+                        return False
+                taken = await _taken_agent_names(row["team_id"], s)
+                display_name = free_imported_name(
+                    str(row["display_name"]).strip(), taken
+                )
+                taken.add(normalize_agent_name(display_name))
                 s.add(
                     AgentInstanceRow(
                         agent_instance_id=aid,
@@ -1033,7 +1063,7 @@ async def _run_import_body(
                         template_id=row["template_id"],
                         source_runtime_id=row["source_runtime_id"],
                         source_agent_id=row["source_agent_id"],
-                        display_name=row["display_name"],
+                        display_name=display_name,
                         description=row.get("description"),
                         enabled=bool(row.get("enabled", True)),
                         created_by=row.get("created_by"),

@@ -21,13 +21,26 @@ from fred_core.common import TeamId
 from fred_core.sql import make_session_factory, use_session
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.engine import CursorResult
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
+from control_plane_backend.agent_instances.names import is_agent_name_violation
 from control_plane_backend.config.models import ManagedAgentTuning
 from control_plane_backend.models.agent_instance_models import AgentInstanceRow
 from control_plane_backend.models.session_metadata_models import SessionMetadataRow
 
 logger = logging.getLogger(__name__)
+
+
+class AgentNameAlreadyExistsError(Exception):
+    """Another agent of the team already has this name (case and spaces ignored)."""
+
+    def __init__(self, team_id: TeamId, display_name: str) -> None:
+        super().__init__(
+            f"Agent name {display_name!r} already exists in team {team_id!r}."
+        )
+        self.team_id = team_id
+        self.display_name = display_name
 
 
 def _utcnow() -> datetime:
@@ -157,8 +170,17 @@ class AgentInstanceStore:
             created_at=created_at,
             updated_at=updated_at,
         )
-        async with use_session(self._sessions, session) as s:
-            s.add(row)
+        try:
+            async with use_session(self._sessions, session) as s:
+                s.add(row)
+                # Flushed here so a caller-owned session still gets the typed error.
+                await s.flush()
+        except IntegrityError as exc:
+            if is_agent_name_violation(exc):
+                raise AgentNameAlreadyExistsError(
+                    record.team_id, record.display_name
+                ) from exc
+            raise
         return await self.get(record.agent_instance_id)  # type: ignore[return-value]
 
     async def count_all(self, session: AsyncSession | None = None) -> int:
@@ -251,33 +273,39 @@ class AgentInstanceStore:
         ``updated_by`` stamps the acting user's uid (#1952); None leaves the
         stored value unchanged (seed/startup saves have no acting user).
         """
-        async with use_session(self._sessions, session) as s:
-            rows = (
-                (
-                    await s.execute(
-                        select(AgentInstanceRow).where(
-                            AgentInstanceRow.agent_instance_id == agent_instance_id,
-                            AgentInstanceRow.team_id == str(team_id),
+        try:
+            async with use_session(self._sessions, session) as s:
+                rows = (
+                    (
+                        await s.execute(
+                            select(AgentInstanceRow).where(
+                                AgentInstanceRow.agent_instance_id == agent_instance_id,
+                                AgentInstanceRow.team_id == str(team_id),
+                            )
                         )
                     )
+                    .scalars()
+                    .all()
                 )
-                .scalars()
-                .all()
-            )
-            if not rows:
-                return None
-            row = rows[0]
-            if display_name is not None:
-                row.display_name = display_name
-            if description is not None:
-                row.description = description
-            if enabled is not None:
-                row.enabled = enabled
-            if tuning is not None:
-                row.tuning_json = tuning.model_dump_json()
-            if updated_by is not None:
-                row.updated_by = updated_by
-            row.updated_at = _utcnow()
+                if not rows:
+                    return None
+                row = rows[0]
+                if display_name is not None:
+                    row.display_name = display_name
+                if description is not None:
+                    row.description = description
+                if enabled is not None:
+                    row.enabled = enabled
+                if tuning is not None:
+                    row.tuning_json = tuning.model_dump_json()
+                if updated_by is not None:
+                    row.updated_by = updated_by
+                row.updated_at = _utcnow()
+                await s.flush()
+        except IntegrityError as exc:
+            if display_name is not None and is_agent_name_violation(exc):
+                raise AgentNameAlreadyExistsError(team_id, display_name) from exc
+            raise
         return await self.get(agent_instance_id)
 
     async def set_suspension(

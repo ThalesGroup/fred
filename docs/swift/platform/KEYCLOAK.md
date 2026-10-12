@@ -434,3 +434,7 @@ sequenceDiagram
     AG->>ADM: Admin REST call with Bearer access_token
     ADM-->>AG: Data for user directory sync
 ```
+
+## Optional platform admission
+
+The identity provider may expose the selected attribute through ordinary verified access-token claims. No admission deployment setting is needed. The platform administrator selects observed claim names or manual nested keys and saves composed predicates in the shared SQL authority. This policy is generic; do not encode deployment-specific identity values in this repository. User/team exceptions live in Fred, independently of provider roles. Admission also works with `user_directory: keycloak`; the directory keeps its existing profile/provisioning authority and verified sign-ins supply the Fred admission observations. Migration and UI activation follow [the platform-access migration note](../ops/migrations/2965-platform-access-planning.md).

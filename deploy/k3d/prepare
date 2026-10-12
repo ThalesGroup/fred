@@ -2,7 +2,8 @@
 set -Eeuo pipefail
 
 # Run by fred-deployment-factory's `make k3d-app` before the sync: the model API
-# key, from this checkout's .env into fred-secrets.
+# key, from this checkout's .env, and the optional Brave Search key, from the
+# environment only, into fred-secrets.
 fred_dir="$(cd "$(dirname "$0")/../.." && pwd)"
 : "${KUBE_CONTEXT:?factory must provide the explicit k3d context}"
 ns="${K3D_NAMESPACE:-fred}"
@@ -18,17 +19,29 @@ key="${OPENAI_API_KEY:-}"
 if [[ -z "$key" && -f "$env_file" ]]; then
   key="$(sed -n 's/^OPENAI_API_KEY=//p' "$env_file" | tail -n1 | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//")"
 fi
-current="$(kubectl get secret fred-secrets -n "$ns" -o jsonpath='{.data.OPENAI_API_KEY}')"
-key_changed=false
-if [[ -z "$key" ]]; then
-  [[ -n "$current" ]] || warn "No model API key (OPENAI_API_KEY in $env_file, see 'make setup-env' in fred): Fred starts, every chat fails"
-elif [[ "$(printf '%s' "$key" | base64 -w0)" != "$current" ]]; then
-  patch="$tmp/key-patch.json"
-  printf '{"data":{"OPENAI_API_KEY":"%s"}}' "$(printf '%s' "$key" | base64 -w0)" >"$patch"
+# Writes NAME=VALUE into fred-secrets; fails when the stored value is already VALUE.
+write_key() {
+  local current encoded patch="$tmp/key-patch.json"
+  current="$(kubectl get secret fred-secrets -n "$ns" -o jsonpath="{.data.$1}")"
+  encoded="$(printf '%s' "$2" | base64 -w0)"
+  [[ "$encoded" != "$current" ]] || return 1
+  printf '{"data":{"%s":"%s"}}' "$1" "$encoded" >"$patch"
   kubectl patch secret fred-secrets -n "$ns" --type merge --patch-file "$patch" >/dev/null
   rm -f "$patch"
+}
+
+key_changed=false
+if [[ -z "$key" ]]; then
+  [[ -n "$(kubectl get secret fred-secrets -n "$ns" -o jsonpath='{.data.OPENAI_API_KEY}')" ]] \
+    || warn "No model API key (OPENAI_API_KEY in $env_file, see 'make setup-env' in fred): Fred starts, every chat fails"
+elif write_key OPENAI_API_KEY "$key"; then
   key_changed=true
   ok "Model API key written to fred-secrets"
+fi
+# helmfile.yaml.gotmpl enables web research only when this variable is set.
+if [[ -n "${WEB_RESEARCH_PROVIDER_KEY:-}" ]] && write_key WEB_RESEARCH_PROVIDER_KEY "$WEB_RESEARCH_PROVIDER_KEY"; then
+  key_changed=true
+  ok "Brave Search key written to fred-secrets"
 fi
 
 # Existing consumers need a restart; a fresh installation has none yet.

@@ -299,7 +299,9 @@ The control plane is a **pure proxy** for these values — it does not interpret
 
 - `agent_instance_id` — primary identifier
 - `team_id`, `template_id`
-- `display_name`, `description`, `status`
+- `display_name`, `description`, `status`. `display_name` is unique within the
+  team or personal space, ignoring case and surrounding spaces, and stored
+  trimmed (§60).
 - `role: str` — **added 2026-07-23 (#2076).** Short one-line summary of what
   the agent does, distinct from the longer `description`; shown on the agent
   card. Independently settable via `CreateAgentInstanceRequest.role` /
@@ -2459,7 +2461,7 @@ client removed outright. The dedicated Activity surfaces (`/admin/tasks`,
 for this data; no replacement preset was added.
 
 **`top_agents_by_conversations` series carry their owning team (2026-09-03).**
-Agent instance names are not unique across teams, and the chart's previous
+Agent instance names are unique within a team but not across teams, and the chart's previous
 tie-breaker was a truncated instance id - unreadable in a cross-team ranking.
 Each series label is now `"<agent name> - <team name>"`, resolved through the
 same `TeamMetadataStore` lookup `top_teams_by_sessions` uses (now shared as
@@ -3217,7 +3219,7 @@ exact audience in that backend's `security.user.client_id`. That resource-server
 client is distinct from both the backend's outbound `security.m2m` identity and
 its OpenFGA token.
 
-`await rebac_sdk_factory(security_config, *, kpi_writer)` is the supported
+`await rebac_sdk_factory(security_config, *, kpi_writer, platform_engine)` is the supported
 first-party construction path. It fails startup unless the `c3` profile, user
 and M2M authentication, and OpenFGA ReBAC are enabled, and unless
 `create_store_if_needed` and `sync_schema_on_init` are both `false`, and the
@@ -3225,10 +3227,11 @@ OpenFGA timeout is between 1 ms and 30 seconds. The control plane remains the
 store and authorization-model owner. The async factory also initializes
 fred-core's process-local user JWT verifier from `security.user`, requires the
 backend's process-level KPI writer, creates one private OpenFGA engine, and
-resolves the configured store before startup completes. With a delegation switch
-on, it installs that engine for the account status check of each request
-authenticated through fred-core's user dependency; without it, or while OpenFGA
-cannot answer, those requests return 503 `account_status_unavailable`. A backend reuses that
+resolves the configured store before startup completes. The factory installs the account-status engine in either directory mode,
+including without delegation, and initializes a reader on the shared platform
+PostgreSQL authority. Missing or incompatible admission state fails startup;
+unavailable request authority returns 503. Account-status failures return
+503 `account_status_unavailable`. A backend reuses that
 facade for requests and awaits `close()` during shutdown (or uses its async
 context manager); it never constructs a client per request.
 
@@ -4224,7 +4227,8 @@ the audit event.
   stored under its canonical id (`personal` → `personal-<uid>`). A target where
   the template is not enabled fails; a failed target never stops the others.
   `display_name` is only accepted for a single target equal to the source
-  (Duplicate), otherwise 422.
+  (Duplicate), otherwise 422. A Duplicate under a taken name fails with
+  `error_code: "agent_name_conflict"` on its result (§60).
 
 **What a copy carries.** Name (kept when free in the destination, else the
 first free `<name>_imported-<n>`), description, template, tuning values and
@@ -4265,6 +4269,29 @@ where a picture renders: the bootstrap `current_user` and team admin summaries
 display-name cache, so a change shows on the next call; presigns of one batch
 run concurrently, at most 8 at a time. Never exported or logged. Full behavior:
 OpenSpec `user-profile-picture`.
+
+
+## 60. Contract Notes — agent names unique per team (2026-10-11, #3042)
+
+**Rule.** Two agents of one team or personal space cannot share a name. Names
+are compared after trimming and ignoring case; the same name stays free in
+another team. The request schemas trim `display_name`, and the database holds
+the unique index `uq_agent_instance_team_name` on
+`(team_id, lower(display_name))` (names are stored trimmed).
+
+**Refusals.** Create (`POST …/agent-instances`, JSON or with assets) and rename
+(`PATCH …/agent-instances/{id}`) under a taken name answer **409** with
+`detail = {"code": "agent_name_conflict", "message": …}`; a rename to the
+agent's own name in another case is accepted. A Duplicate reports the same
+code as `AgentCopyResult.error_code`. Create checks before any pod call.
+
+**Resolutions.** A copy to another team keeps `<name>_imported-<n>`, compared
+the same way, and retries once with the next free name if a concurrent copy
+took it. A platform import renames a conflicting agent the same way.
+
+**Upgrade.** Migration `a4d85307ea0e` trims every name and renames later
+duplicates `<name> (2)`, `<name> (3)`… in creation order (the oldest keeps its
+name) before creating the index. Full behavior: OpenSpec `agent-names`.
 
 ## Knowledge Flow ingestion cancellation — 2026-09-23
 
@@ -4411,3 +4438,81 @@ filled the browser's six per HTTP/1.1 origin during an import. A task absent fro
 the answer is shown as untracked, never as an outcome. `GET /tasks/{id}/events`
 remains for its other consumers. Current behaviour:
 `openspec/specs/task-progress-tracking/spec.md`.
+
+### Platform admission control (2026-10-05)
+
+Public `/frontend/config` includes `platform_access_enabled`, indicating admission administration availability in authenticated deployments with enforced ReBAC, independently of the SQL filtering switch. Support destinations reuse static frontend `contactSupportLink` before protected bootstrap; there is no admission-specific support override. Platform admission remains independent of resource permissions and starts with filtering inactive. Administrators save and activate the shared SQL policy in the UI without deployment settings.
+
+`/admin/platform/access` exposes persisted filtering and versioned all/any rules with allow/block mode under `CAN_MANAGE_PLATFORM`. `policy-preview` tests the actor's own verified human token without saving or observing draft-only values; `policy` saves with an expected revision, conflict detection and the active-filter actor safeguard. Its `users`, `teams`, `t0-preview` and `t0-import` subresources manage individual exceptions, team flags and an explicit one-time existing-user snapshot. Independent enrollment links support optional notes/expiration and per-link revocation. Creation and explicit reveal require the acting administrator's own human credential and return uncached plaintext tokens; ordinary paginated history excludes tokens. Tokens are recoverable in SQL for copying the original URL later. Removing Free suspends links; restoring Free resumes unrevoked, unexpired links. An authenticated caller-only opening POST increments the link's aggregate count and last-opening time without persisting visits or visitor identity. Preview and enrollment do not increment counts.
+
+Invitation history supports an optional `status` query (`active`, `revoked`, `expired`, `suspended`) and returns filtered `total` plus team-wide `inactive_count` (2026-10-09). Revoked takes precedence over expired; one server timestamp determines each listing. `DELETE /admin/platform/access/teams/{team_id}/enrollment-links/inactive` requires platform administration and atomically deletes only that team's revoked or expired records under the existing mutation lock. It returns the actual `deleted_count` and audits actor, team and count after commit. Usable suspended links, membership and access settings are preserved; notes and aggregate counters of deleted links are permanently removed. No additional schema migration is required.
+
+`GET /admin/platform/access/own-claims` (2026-10-07) returns a bounded JSON projection and exact selectable paths from the acting administrator's freshly verified own human access token. It rejects workload/delegated credentials and disables HTTP caching. The payload is transient: it is not added to principal serialization, SQL evidence or audit logs. The former observed `claims` route and catalog collection are retired (2026-10-08); the pending admission migration creates no catalog table. Claim selection reads only this own-token projection.
+
+The own-credential `/platform-access/status` endpoint exposes only admission and legal status. `/platform-access/free/{token}` provides a bounded preview, legal acceptance and caller-only member enrollment, without `/user` personal-team provisioning or normal `/gcu` default-team side effects. Normal pre-CGU endpoints stay admission-gated. Current behavioral requirements: `openspec/specs/platform-access-control/spec.md`. Deployment ordering and rollback: [migration note](../ops/migrations/2965-platform-access-planning.md).
+
+Platform admission administration also accepts an atomic manual grant of any positive number of existing Fred user UUIDs through `POST /admin/platform/access/users`.
+Unknown identities reject the whole request; duplicate IDs do not duplicate
+exceptions and existing manual/T0 provenance is preserved. The UI retains its
+selection across searches and pages. Every admission administrator check uses
+higher-consistency OpenFGA authorization so revoking administrator authority
+withdraws these mutations on subsequent requests.
+
+User listing includes `first_name` and `last_name` alongside username/email and searches these same fields (2026-10-08). Manual grants validate and insert in bounded SQL batches within one transaction, without an arbitrary 100-user cap.
+
+`PlatformAccessState.has_admission_sources` identifies a saved rule, individual exception or eligible authorized/Free team. Filtering can activate with independent sources alone. `PATCH /admin/platform/access` accepts `expected_revision`, rejecting stale confirmations with 409 while preserving legacy-gate and actor-lockout safeguards. `GET /admin/platform/access/activation-preview` returns all known local users with identity metadata and allowed/blocked/unknown outcomes, counts, `revision` and `checked_at` (2026-10-08). It evaluates saved policy, fresh selected evidence, suspension, individual exceptions and live higher-consistency team membership without mutating admission or exposing claim values. Missing/stale/conflicting rule evidence produces unknown unless another authoritative source suffices; unavailable account status remains unknown. A membership-authority error fails the preview instead of claiming a complete classification. Bounded concurrent checks and a 120-second total deadline protect this explicit administrative read; unavailable or changed policy snapshots return errors. The preview is an observation, not a frozen authorization decision. The UI requires explicit confirmation, uses the returned revision and never implicitly saves a draft.
+
+Authorizing a team or marking it Free derives admission from current
+higher-consistency membership without copying members into permanent user
+exceptions. Full member removal or leaving the team removes that global source
+on the next direct or delegated request, including with a cached human JWT and
+on another reader. Other valid sources remain independent. Deleting a team
+through registry administration refuses the acting administrator's last-source
+lockout before deleting relationships or metadata.
+
+### 2026-10-07 — Account deletion and web research activity (#2980)
+
+Account deletion does not touch restricted web research activity: it stays a
+security trace until its retention expires, and account deletion never depends on
+a runtime being reachable. Erasure is an explicit runtime administrator call, see
+the [activity contract](../platform/OBSERVABILITY-AND-AUDIT.md#restricted-web-research-activity).
+
+### 2026-10-07 — Web research self-test template (#2980)
+
+`fred.github.self_test_web` joins `fred.github.self_test` on the capability-gate
+exemption allowlist (`_CAPABILITY_GATE_EXEMPT_TEMPLATE_AGENT_IDS`): it is a
+non-public harness template that no admin can grant, provisioned only by the
+platform-admin Self-test page through `include_non_public`.
+
+### 2026-10-07 — Web research analytics preset (#2980)
+
+`GET /kpi/presets/web_research_summary` (platform admin, team-scopable) returns
+web research tool calls split into searches (`web_search`, billed by the
+provider) and page reads (`fetch_url`, not billed), estimated provider cost, blocked/saturated/failed counts,
+reason breakdown, p95 latency and distinct users for a time range. It reads the
+content-free `web_research.request` KPI event emitted by Fred Agents; the cost
+is `cost.usd` = `web_research.cost_per_1000_searches` / 1000 per successful
+search. Queries, URLs and per-user details stay in the restricted runtime
+activity API.
+
+### Structured request and journey diagnostics (2026-10-01)
+
+Conversation creation and execution preparation bind resolved team/session/instance
+references to the request's diagnostic context. Attachment persistence additionally
+binds attachment/document references after ownership validation. Generic completion
+uses a shared ASGI lifecycle event and never treats logging metadata as authority.
+See [observability §6/§7](../platform/OBSERVABILITY-AND-AUDIT.md).
+
+### 2026-10-10 — Included capabilities of agents without free selection
+
+`AgentTemplateSummary.available_capabilities` of a template with
+`supports_capabilities=False` lists the capabilities included with the agent
+(its defaults, filtered by the team's `can_use`). Agent create and update ignore
+a submitted `capability_ids` for such a template and take the template-default
+path of `_apply_capability_selection`: `selected_capability_ids` is the usable
+defaults, and each one's submitted or stored config is validated through the pod
+and persisted in `capability_config`, as for any capability (a 422 when no
+default is usable by the team, as for any template declaring defaults). Chat controls such
+as `document_scope.bound_library_ids` then follow from it. An instance saved
+earlier keeps `selected_capability_ids: []` until it is edited and saved.
+

@@ -77,8 +77,15 @@ from fred_core.kpi import KPIMiddleware
 from fred_core.kpi.kpi_runtime_stage_metric import runtime_stage_timer
 from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_core.logs.audit_log import emit_audit_log
+from fred_core.logs.context import (
+    bind_operation_context,
+    current_context,
+    operation_log_scope,
+)
+from fred_core.logs.http import REFERENCE_HEADERS, RequestLoggingFastAPI
 from fred_core.logs.log_setup import log_setup
 from fred_core.logs.log_store_factory import build_log_store
+from fred_core.logs.propagation import outbound_context_headers
 from fred_core.security.backend_to_backend_auth import M2MBearerAuth
 from fred_core.security.delegation import (
     AssertedUser,
@@ -160,6 +167,7 @@ from starlette.datastructures import UploadFile as StarletteUploadFile
 from starlette.types import Receive, Scope, Send
 
 from fred_runtime.app.execution_diagnostics import report_execution_error
+from fred_runtime.app.web_research_activity import WebResearchActivity
 from fred_runtime.capabilities import (
     AssetSlotViolationError,
     CapabilityAgentBlock,
@@ -169,6 +177,7 @@ from fred_runtime.capabilities import (
     build_capability_contexts,
     enforce_asset_slots,
     evaluate_chat_controls_batch,
+    resolve_bound_library_ids,
     validate_turn_options,
 )
 from fred_runtime.capabilities.copy import (
@@ -920,6 +929,7 @@ def _build_runtime_services(
     capability_registry: CapabilityRegistry | None = None,
     credential_provider: OutboundCredentialProvider | None = None,
     conversation_filesystem: ConversationFilesystemService | None = None,
+    bound_library_ids: Sequence[str] | None = None,
 ) -> RuntimeServices:
     """
     Assemble the full `RuntimeServices` bundle for one pod request.
@@ -953,6 +963,7 @@ def _build_runtime_services(
         binding=binding,
         settings=settings,
         credentials=credential_provider,
+        bound_library_ids=bound_library_ids,
     )
     # Capability-safe scoped vector search (CAPAB-01 #1906). Wraps the same
     # per-turn binding as the builtin invoker but exposes ONLY the parameterized
@@ -1087,6 +1098,11 @@ def _build_runtime_services(
         # checkpointer/kpi_writer, NOT per-turn) — read-only enforcement,
         # row cap and timeout clamp all live server-side in the adapter.
         platform_sql=runtime_config.platform_sql,
+        web_research=(
+            runtime_config.web_research_factory(binding)
+            if runtime_config.web_research_factory
+            else None
+        ),
         # The calling team's wiki (WIKI-03). Per-turn like the document ports —
         # it binds this turn's team and token privately — over the pod-lifetime
         # control-plane client.
@@ -1268,13 +1284,13 @@ class _AgentTemplateSummary(BaseModel):
     kind: ExecutionCategory
     default_tuning: AgentTuning
     available_mcp_servers: list[MCPServerConfiguration] = Field(default_factory=list)
-    # Filtered by supports_capabilities below: [] outright for a template that
-    # opts out, so a coincidentally pod-registered capability is never offered.
+    # Filtered by supports_capabilities below: only the template's included
+    # defaults for one that opts out, so a coincidentally pod-registered
+    # capability is never offered.
     available_capabilities: list[CapabilityCatalogEntry] = Field(default_factory=list)
     # Mirrors AgentDefinition.supports_capabilities verbatim (unfiltered by team
-    # grants) — the only way control-plane can tell "this team has zero usable
-    # capabilities" apart from "this template doesn't support selection at all"
-    # once available_capabilities has been narrowed to the team's can_use set.
+    # grants). False means available_capabilities lists capabilities included
+    # with the agent: always active, configurable, never selectable.
     supports_capabilities: bool = True
     # This template's declared default capability ids (RFC §2), verbatim from
     # `definition.default_mcp_servers` — MCP-derived and native ids alike, no
@@ -1655,6 +1671,31 @@ def _apply_runtime_tuning(
     return definition.model_copy(update=update)
 
 
+def _template_capability_entries(
+    definition: ReActAgentDefinition | GraphAgentDefinition,
+    entries: Sequence[CapabilityCatalogEntry],
+) -> list[CapabilityCatalogEntry]:
+    """
+    The pod's capability entries one template advertises.
+
+    A ReAct-only capability (CAPAB-02 `execution_models`) is never listed on a
+    Graph template: `_build_capability_block` would refuse it at run time. A
+    definition with `supports_capabilities=False` lists only its included
+    defaults, which the form shows and configures but never lets anyone pick.
+    """
+
+    included_ids = {ref.id for ref in definition.default_mcp_servers}
+    return [
+        entry
+        for entry in entries
+        if (
+            not isinstance(definition, GraphAgentDefinition)
+            or "graph" in entry.execution_models
+        )
+        and (definition.supports_capabilities or entry.id in included_ids)
+    ]
+
+
 def _available_mcp_servers_for_definition(
     definition: ReActAgentDefinition | GraphAgentDefinition,
 ) -> list[MCPServerConfiguration]:
@@ -1781,7 +1822,11 @@ async def _resolve_agent_instance(
         # (TURN-01 evidence gap: no way to join a turn to its binding call
         # besides timestamps).
         headers["X-Request-Id"] = request_id
+    if call_credentials.delegated:
+        headers.update(outbound_context_headers())
     request_kwargs: dict[str, Any] = {"headers": headers or None}
+    if call_credentials.delegated:
+        request_kwargs["follow_redirects"] = False
     if call_credentials.parameters:
         request_kwargs["params"] = dict(call_credentials.parameters)
     if isinstance(provider, DelegatedCredentialProvider):
@@ -2387,7 +2432,7 @@ async def _authorize_and_resolve(
         else:
             ctx.pop("is_service_agent", None)
         internal_req.context = ctx
-        binding_request_id = str(uuid4())
+        binding_request_id = str(current_context().get("request_id") or uuid4())
         async with runtime_stage_timer(
             container.get_kpi_writer(), "runtime_binding", trace_id=binding_request_id
         ):
@@ -3697,7 +3742,7 @@ def _build_capability_save_services(
       strings against the agent's space at save time (#1903 image support)
     """
 
-    request_id = str(uuid4())
+    request_id = str(current_context().get("request_id") or uuid4())
     actor = f"capability:{capability_id}"
     binding = BoundRuntimeContext(
         runtime_context=RuntimeContext(
@@ -3708,7 +3753,7 @@ def _build_capability_save_services(
         ),
         portable_context=PortableContext(
             request_id=request_id,
-            correlation_id=request_id,
+            correlation_id=str(current_context().get("correlation_id") or uuid4()),
             actor=user_id,
             tenant="default",
             environment=PortableEnvironment.DEV,
@@ -3719,10 +3764,12 @@ def _build_capability_save_services(
         ),
     )
     settings = _PodAgentSettings(id=actor, name=actor, team_id=team_id, tuning=None)
+    web_factory = get_runtime_context().config.web_research_factory
     return RuntimeServices(
         workspace_fs=FredWorkspaceFs(binding=binding, settings=settings),
         agent_assets=AgentConfigAssetsAdapter(binding=binding, settings=settings),
         document_folders=DocumentFolderAdapter(binding=binding, settings=settings),
+        web_research=(web_factory(binding) if web_factory else None),
     )
 
 
@@ -3786,9 +3833,31 @@ def _effective_capability_ids(
     ]
 
 
+def _instance_bound_library_ids(
+    capability_registry: CapabilityRegistry | None,
+    tuning: AgentTuning | None,
+    definition: ReActAgentDefinition | GraphAgentDefinition,
+) -> list[str] | None:
+    """
+    The libraries this instance's active capabilities bind it to, from its
+    stored config. Enforced on `knowledge.search` whatever context the client
+    sent, so a run without the chat UI cannot widen the binding.
+    """
+
+    if capability_registry is None:
+        return None
+    return resolve_bound_library_ids(
+        capability_registry,
+        capability_ids=_effective_capability_ids(
+            tuning, definition, capability_registry
+        ),
+        capability_config=tuning.capability_config if tuning is not None else {},
+    )
+
+
 def _enforce_turn_options(
     request: RuntimeExecuteRequest,
-    target: "_ResolvedExecutionTarget",
+    target: _ResolvedExecutionTarget,
     capability_registry: CapabilityRegistry | None,
 ) -> None:
     """
@@ -4220,7 +4289,23 @@ async def _iterate_runtime_event_payloads(
         credential_provider=credential_provider,
         owns_run_record=owns_run_record,
     )
-    with RunScope.open() as scope:
+    started = time.perf_counter()
+    outcome = "succeeded"
+    with (
+        operation_log_scope(
+            completion=owns_run_record,
+            clear=(
+                "tool_name",
+                "document_uid",
+                "task_id",
+                "run_id",
+                "agent_instance_id",
+                "template_agent_id",
+                "exchange_id",
+            ),
+        ),
+        RunScope.open() as scope,
+    ):
         if owns_run_record:
             scope.set_delegated_credentials(
                 credential_provider is not None and credential_provider.delegated
@@ -4230,30 +4315,48 @@ async def _iterate_runtime_event_payloads(
             )
         try:
             async for payload in iterator:
+                if payload.get("kind") == "execution_error":
+                    outcome = "failed"
+                elif payload.get("kind") == "awaiting_human" and outcome != "failed":
+                    outcome = "awaiting_human"
                 yield payload
         except asyncio.CancelledError:
+            outcome = "cancelled"
             if owns_run_record:
                 _mark_run_terminal(credential_provider)
             scope.cancel_children()
             raise
         except GeneratorExit:
+            outcome = "disconnected"
             # Closed at a `yield`: the response is gone, so the run ends as on a
             # cancel. A child's stream closing never ends the run it shares.
             if owns_run_record:
                 _mark_run_terminal(credential_provider)
                 scope.cancel_children()
             raise
+        except Exception:
+            outcome = "failed"
+            raise
         finally:
-            if owns_run_record:
-                _mark_run_terminal(credential_provider)
             try:
-                await complete_cleanup(iterator.aclose())
-            finally:
                 if owns_run_record:
-                    try:
-                        await complete_cleanup(scope.cancel_and_wait())
-                    finally:
-                        _discard_run_record(credential_provider)
+                    _mark_run_terminal(credential_provider)
+                try:
+                    await complete_cleanup(iterator.aclose())
+                finally:
+                    if owns_run_record:
+                        try:
+                            await complete_cleanup(scope.cancel_and_wait())
+                        finally:
+                            _discard_run_record(credential_provider)
+            finally:
+                logger.info(
+                    "Agent execution completed",
+                    extra={
+                        "outcome": outcome,
+                        "duration_ms": (time.perf_counter() - started) * 1000,
+                    },
+                )
 
 
 async def _iterate_runtime_event_payloads_inner(
@@ -4300,9 +4403,9 @@ async def _iterate_runtime_event_payloads_inner(
       child; handed to every adapter this turn builds
     """
 
-    request_id = str(uuid4())
+    request_id = str(current_context().get("request_id") or uuid4())
     ctx = request.context or {}
-    correlation_id = ctx.get("correlation_id", request_id)
+    correlation_id = str(current_context().get("correlation_id") or uuid4())
     resolved_team_id = team_id or ctx.get("team_id")
     delegated_turn = credential_provider is not None and credential_provider.delegated
     if delegated_turn:
@@ -4314,6 +4417,25 @@ async def _iterate_runtime_event_payloads_inner(
             for key, value in ctx.items()
             if key not in ("access_token", "refresh_token", "access_token_expires_at")
         }
+    bind_operation_context(
+        **{
+            key: value
+            for key, value in {
+                "request_id": request_id,
+                "correlation_id": correlation_id,
+                "user_id": None
+                if ctx.get("is_service_agent") == "true"
+                else ctx.get("user_id"),
+                "session_id": ctx.get("session_id"),
+                "team_id": resolved_team_id,
+                "exchange_id": exchange_id,
+                "agent_instance_id": request.agent_instance_id,
+                "template_agent_id": definition.agent_id,
+                "run_id": getattr(credential_provider, "run_id", None),
+            }.items()
+            if value is not None
+        }
+    )
     # kind="model" enforcement (OBSERV-02 v3, AGENT-CAPABILITY-RFC.md §8.7):
     # computed ONCE per turn, here — never inside model-routing resolution,
     # which runs multiple times per turn and must never itself make a ReBAC
@@ -4469,6 +4591,9 @@ async def _iterate_runtime_event_payloads_inner(
         capability_registry=capability_registry,
         credential_provider=credential_provider,
         conversation_filesystem=conversation_filesystem,
+        bound_library_ids=_instance_bound_library_ids(
+            capability_registry, tuning, definition
+        ),
     )
     # session_id drives LangGraph checkpointing: the agent resumes its graph
     # state on every turn. Falls back to request_id for one-shot calls so
@@ -4896,6 +5021,60 @@ def _build_agent_router(
         events.reverse()
         return events[: max(1, limit)]
 
+    async def _web_activity_permission(
+        caller: KeycloakUser | None, permission: OrganizationPermission
+    ) -> None:
+        if not security_enabled:
+            return
+        rebac = get_runtime_context().config.rebac_engine
+        if caller is None or rebac is None or not rebac.enabled:
+            raise HTTPException(status_code=403, detail="web_activity_access_denied")
+        await rebac.check_user_permission_or_raise(caller, permission, ORGANIZATION_ID)
+
+    @router.get("/web-research/activity", response_model=list[WebResearchActivity])
+    async def list_web_research_activity(
+        user_id: str | None = Query(default=None, min_length=1, max_length=128),
+        limit: int = Query(default=50, ge=1, le=200),
+        caller: KeycloakUser | None = Depends(_authenticated_user),
+        container: PodApplicationContext = Depends(get_pod_container),
+    ) -> list[WebResearchActivity]:
+        await _web_activity_permission(
+            caller, OrganizationPermission.CAN_MANAGE_PLATFORM
+        )
+        _emit_audit_event(
+            container,
+            "info",
+            "web_research.activity.read",
+            outcome="accepted",
+            reason="authorized",
+            user_id=caller.uid if caller else None,
+        )
+        store = container.web_research_activity
+        return await store.list(user_id=user_id, limit=limit) if store else []
+
+    @router.delete("/web-research/activity/users/{user_id}")
+    async def erase_web_research_activity(
+        user_id: str,
+        caller: KeycloakUser | None = Depends(_authenticated_user),
+        container: PodApplicationContext = Depends(get_pod_container),
+    ) -> dict[str, int]:
+        await _web_activity_permission(
+            caller, OrganizationPermission.CAN_ADMINISTER_USERS
+        )
+        if len(user_id) > 128 or user_id == "*" or "#" in user_id:
+            raise HTTPException(status_code=422, detail="invalid_user_id")
+        store = container.web_research_activity
+        count = await store.erase_user(user_id) if store else 0
+        _emit_audit_event(
+            container,
+            "info",
+            "web_research.activity.erased",
+            outcome="succeeded",
+            reason="user_erasure",
+            user_id=caller.uid if caller else None,
+        )
+        return {"deleted": count}
+
     @router.get("/templates")
     async def list_agent_templates(
         http_request: Request,
@@ -4940,26 +5119,8 @@ def _build_agent_router(
                 kind=definition.execution_category,
                 default_tuning=_definition_to_agent_tuning(definition),
                 available_mcp_servers=_available_mcp_servers_for_definition(definition),
-                # CAPAB-02: a capability declared `execution_models=("react",)`
-                # must not even be offered for selection on a Graph template —
-                # `_build_capability_block` would refuse it loudly at save/run
-                # time regardless, but a picker that lists it first invites the
-                # exact "select it, save it, discover the incompatibility at
-                # first launch" flow the loud refusal exists to prevent.
-                #
-                # A definition opting out via supports_capabilities=False never
-                # offers one, regardless of pod registration — short-circuit
-                # rather than let that leak into the picker.
-                available_capabilities=(
-                    []
-                    if not definition.supports_capabilities
-                    else all_capability_entries
-                    if not isinstance(definition, GraphAgentDefinition)
-                    else [
-                        entry
-                        for entry in all_capability_entries
-                        if "graph" in entry.execution_models
-                    ]
+                available_capabilities=_template_capability_entries(
+                    definition, all_capability_entries
                 ),
                 supports_capabilities=definition.supports_capabilities,
                 default_capability_ids=[
@@ -6271,6 +6432,8 @@ def create_agent_app(
         log_setup(
             service_name=config.app.runtime_id,
             log_level=config.app.log_level,
+            log_format=config.app.log_format,
+            service_role="api",
             store=build_log_store(
                 log_store_config=config.storage.log_store,
                 opensearch_config=config.storage.opensearch,
@@ -6312,6 +6475,24 @@ def create_agent_app(
                 chat_factory = chat_factory.with_provider(model_provider)
             await container.initialize_filesystem()
             await container.initialize_sql()
+            if (
+                security is not None
+                and rebac_engine is not None
+                and rebac_engine.enabled
+            ):
+                from fred_core.security.platform_access.access_control import (
+                    initialize_platform_access,
+                )
+
+                platform_engine = container.get_sql_engine()
+                if platform_engine is None or rebac_engine is None:
+                    raise ValueError(
+                        "Platform access requires shared PostgreSQL and ReBAC"
+                    )
+                await initialize_platform_access(
+                    security, platform_engine, rebac_engine
+                )
+            await container.initialize_web_research()
             container.initialize_platform_sql()
             container.start_metrics_exporter()
             await container.start_kpi_tasks()
@@ -6350,6 +6531,11 @@ def create_agent_app(
                         ),
                         kpi_writer=container.get_kpi_writer(),
                         platform_sql=container.get_platform_sql(),
+                        web_research_factory=(
+                            container.web_research.bind
+                            if container.web_research
+                            else None
+                        ),
                     )
                 )
             )
@@ -6402,7 +6588,7 @@ def create_agent_app(
                             "[fred-runtime] shutdown step failed: %s", label
                         )
 
-    app = FastAPI(
+    app = RequestLoggingFastAPI(
         title=config.app.name,
         version="0.1.0",
         docs_url=f"{base_url}/docs" if base_url else "/docs",
@@ -6416,17 +6602,18 @@ def create_agent_app(
 
     # CORS — only added when security is provided so local-dev pods stay simple.
     if authorized_origins:
-        app.add_middleware(
+        app.add_request_middleware(
             CORSMiddleware,
             allow_origins=authorized_origins,
             allow_methods=["GET", "POST"],
             allow_headers=["Content-Type", "Authorization"],
+            expose_headers=REFERENCE_HEADERS,
         )
         logger.debug("[fred-runtime] CORS allow_origins=%s", authorized_origins)
 
     # KPI middleware — writer is lazily resolved from app.state because the
     # container (and its KPI writer) is only initialised during lifespan startup.
-    app.add_middleware(
+    app.add_request_middleware(
         KPIMiddleware,
         kpi=lambda: get_pod_container_from_app(app).get_kpi_writer(),
     )

@@ -10,3 +10,11 @@ releases:
       {{- with env "K3D_IMAGE_VALUES" }}
       - {{ . | quote }}
       {{- end }}
+      {{- if env "WEB_RESEARCH_PROVIDER_KEY" }}
+      # Brave web research, keyed from fred-secrets (written by deploy/k3d/prepare).
+      - applications:
+          fred-agents:
+            configuration:
+              web_research:
+                enabled: true
+      {{- end }}

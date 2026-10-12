@@ -19,6 +19,7 @@ import tempfile
 
 from fred_core import KeycloakUser
 from fred_core.documents.document_structures import DocumentMetadata, ProcessingStage, ProcessingStatus
+from fred_core.logs.context import bind_operation_context
 from temporalio import activity
 
 from knowledge_flow_backend.common.structures import IngestionProcessingProfile
@@ -32,6 +33,7 @@ from knowledge_flow_backend.features.scheduler.kpi_utils import (
     emit_temporal_activity_queue_wait_kpi,
     emit_temporal_activity_result_kpis,
 )
+from knowledge_flow_backend.features.scheduler.logging_context import ingestion_activity
 from knowledge_flow_backend.features.scheduler.scheduler_structures import FileToProcess
 
 logger = logging.getLogger(__name__)
@@ -58,6 +60,7 @@ async def resolve_pull_input_file_for_worker(
 
 
 @activity.defn
+@ingestion_activity
 async def create_pull_file_metadata(file: FileToProcess) -> DocumentMetadata:
     """
     Why:
@@ -72,7 +75,7 @@ async def create_pull_file_metadata(file: FileToProcess) -> DocumentMetadata:
     assert file.source_tag, "Pull files must have a source tag"
     logger = activity.logger
     started_at = asyncio.get_running_loop().time()
-    logger.info(f"[SCHEDULER][ACTIVITY][CREATE_PULL_FILE_METADATA] Starting file={file}")
+    logger.info("Pull metadata activity started")
     emit_temporal_activity_queue_wait_kpi(phase="metadata")
     from knowledge_flow_backend.application_context import ApplicationContext
     from knowledge_flow_backend.features.ingestion.ingestion_service import get_ingestion_service
@@ -106,8 +109,9 @@ async def create_pull_file_metadata(file: FileToProcess) -> DocumentMetadata:
             source_tag=file.source_tag,
             profile=file.profile,
         )
+        bind_operation_context(document_uid=metadata.document_uid)
         metadata.source.pull_location = file.external_path
-        logger.info(f"[SCHEDULER][ACTIVITY][CREATE_PULL_FILE_METADATA] metadata={metadata}")
+        logger.info("Pull document metadata created")
 
         await ingestion_service.save_metadata(file.processed_by, metadata=metadata)
 
@@ -123,10 +127,13 @@ async def create_pull_file_metadata(file: FileToProcess) -> DocumentMetadata:
 
 
 @activity.defn
+@ingestion_activity
 async def pull_input_process(
     user: KeycloakUser,
     metadata: DocumentMetadata,
     profile: IngestionProcessingProfile | str | None = None,
+    logging_context: str | None = None,
+    task_id: str | None = None,
 ) -> DocumentMetadata:
     """
     Process pull-file input and persist generated output in content storage.

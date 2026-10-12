@@ -16,25 +16,26 @@ ENV PATH="/app/venv/bin:$PATH"
 
 WORKDIR /workspace/apps/fred-agents
 
+# Third-party dependencies only, from the manifests alone, so this layer changes
+# only with the lock. The local packages are installed in the final stage.
 COPY apps/fred-agents/Makefile ./
 COPY apps/fred-agents/pyproject.toml apps/fred-agents/uv.lock* ./
-COPY apps/fred-agents/README.md ./
-COPY apps/fred-agents/fred_agents ./fred_agents
 COPY scripts/makefiles /workspace/scripts/makefiles
-COPY libs/fred-pod /workspace/libs/fred-pod
-COPY libs/fred-core /workspace/libs/fred-core
-COPY libs/fred-runtime /workspace/libs/fred-runtime
-COPY libs/fred-sdk /workspace/libs/fred-sdk
-COPY libs/capabilities/fred-capability-writable-document /workspace/libs/capabilities/fred-capability-writable-document
-COPY libs/capabilities/fred-capability-ppt-filler /workspace/libs/capabilities/fred-capability-ppt-filler
-COPY libs/capabilities/fred-capability-platform-ops /workspace/libs/capabilities/fred-capability-platform-ops
-COPY libs/capabilities/fred-capability-html-artifact /workspace/libs/capabilities/fred-capability-html-artifact
-COPY libs/capabilities/fred-capability-team-wiki /workspace/libs/capabilities/fred-capability-team-wiki
-COPY libs/capabilities/fred-capability-documents /workspace/libs/capabilities/fred-capability-documents
-COPY libs/capabilities/fred-capability-document-access /workspace/libs/capabilities/fred-capability-document-access
-COPY libs/capabilities/fred-capability-mcp /workspace/libs/capabilities/fred-capability-mcp
+COPY libs/fred-pod/pyproject.toml /workspace/libs/fred-pod/
+COPY libs/fred-core/pyproject.toml /workspace/libs/fred-core/
+COPY libs/fred-runtime/pyproject.toml /workspace/libs/fred-runtime/
+COPY libs/fred-sdk/pyproject.toml /workspace/libs/fred-sdk/
+COPY libs/capabilities/fred-capability-writable-document/pyproject.toml /workspace/libs/capabilities/fred-capability-writable-document/
+COPY libs/capabilities/fred-capability-ppt-filler/pyproject.toml /workspace/libs/capabilities/fred-capability-ppt-filler/
+COPY libs/capabilities/fred-capability-platform-ops/pyproject.toml /workspace/libs/capabilities/fred-capability-platform-ops/
+COPY libs/capabilities/fred-capability-html-artifact/pyproject.toml /workspace/libs/capabilities/fred-capability-html-artifact/
+COPY libs/capabilities/fred-capability-team-wiki/pyproject.toml /workspace/libs/capabilities/fred-capability-team-wiki/
+COPY libs/capabilities/fred-capability-documents/pyproject.toml /workspace/libs/capabilities/fred-capability-documents/
+COPY libs/capabilities/fred-capability-document-access/pyproject.toml /workspace/libs/capabilities/fred-capability-document-access/
+COPY libs/capabilities/fred-capability-mcp/pyproject.toml /workspace/libs/capabilities/fred-capability-mcp/
+COPY libs/capabilities/fred-capability-web-research/pyproject.toml /workspace/libs/capabilities/fred-capability-web-research/
 
-RUN make prod VENV=/app/venv TARGET=/app/target
+RUN make prod VENV=/app/venv TARGET=/app/target UV_SYNC_ARGS="--no-install-project --no-install-local"
 
 # -----------------------------------------------------------------------------
 # FINAL STAGE
@@ -63,9 +64,10 @@ ENV PATH="/app/venv/bin:$PATH"
 
 WORKDIR /app
 
-# `make prod` installs local packages in editable mode, so we keep the matching
-# source roots in the final image under the same `/workspace/...` paths.
-COPY --chown=${USER_ID}:${GROUP_ID} apps/fred-agents/pyproject.toml /workspace/apps/fred-agents/pyproject.toml
+# The local packages, installed in editable mode from their source roots under
+# the same `/workspace/...` paths, which the image keeps. A change there only
+# redoes this small install: the venv copied above stays cached.
+COPY --chown=${USER_ID}:${GROUP_ID} apps/fred-agents/pyproject.toml apps/fred-agents/uv.lock /workspace/apps/fred-agents/
 COPY --chown=${USER_ID}:${GROUP_ID} apps/fred-agents/README.md /workspace/apps/fred-agents/README.md
 COPY --chown=${USER_ID}:${GROUP_ID} apps/fred-agents/fred_agents /workspace/apps/fred-agents/fred_agents
 COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-pod /workspace/libs/fred-pod
@@ -80,6 +82,10 @@ COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-team-wiki 
 COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-documents /workspace/libs/capabilities/fred-capability-documents
 COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-document-access /workspace/libs/capabilities/fred-capability-document-access
 COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-mcp /workspace/libs/capabilities/fred-capability-mcp
+COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-web-research /workspace/libs/capabilities/fred-capability-web-research
+RUN cd /workspace/apps/fred-agents && \
+    UV_PROJECT_ENVIRONMENT=/app/venv SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt \
+    /app/venv/bin/uv sync --locked --no-default-groups --no-cache
 
 # alembic.ini is a real file only at the repo root; the per-project ones are dev-only
 # symlinks kept out of the build context (see .dockerignore), because Kaniko would copy

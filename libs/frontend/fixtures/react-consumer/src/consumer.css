@@ -55,3 +55,17 @@ body {
   height: 16rem;
   justify-content: flex-end;
 }
+
+.region-dialog-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 20rem;
+}
+.region-dialog-body > p {
+  flex-shrink: 0;
+}
+.region-dialog-scroll {
+  min-height: 0;
+  overflow: auto;
+}

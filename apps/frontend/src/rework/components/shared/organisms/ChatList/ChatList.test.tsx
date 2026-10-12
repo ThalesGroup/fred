@@ -53,8 +53,14 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
   useDeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteMutation: () => [vi.fn()],
 }));
 vi.mock("./ChatListItem/ChatListItem.tsx", () => ({
-  ChatListItem: (props: { href: string; label: string; agentName?: string; agentDeleted?: boolean }) => (
-    <a href={props.href} data-agent-deleted={props.agentDeleted}>
+  ChatListItem: (props: {
+    href: string;
+    label: string;
+    agentName?: string;
+    agentTooltipName?: string;
+    agentDeleted?: boolean;
+  }) => (
+    <a href={props.href} data-agent-deleted={props.agentDeleted} data-agent-tooltip-name={props.agentTooltipName}>
       {props.label} - {props.agentName}
     </a>
   ),
@@ -121,6 +127,9 @@ it("groups by agent identity while preserving distinct live and deleted names", 
       "Same name",
     ]);
     expect(container.querySelectorAll('[class*="groupHeader"][data-agent-deleted="true"]')).toHaveLength(1);
+    expect(container.querySelector('a[data-agent-deleted="true"]')?.getAttribute("data-agent-tooltip-name")).toBe(
+      "Same name",
+    );
     expect(container.textContent).toContain("Deleted conversation");
     expect(container.textContent).toContain("Live conversation");
   } finally {

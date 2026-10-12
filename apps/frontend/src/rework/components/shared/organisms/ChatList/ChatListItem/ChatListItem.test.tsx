@@ -47,7 +47,7 @@ describe("ChatListItem deleted agent presentation", () => {
     act(() => root.unmount());
     container.remove();
   });
-  function show(deleted: boolean, name: string | null = "Preserved assistant") {
+  function show(deleted: boolean, name: string | null = "Preserved assistant", tooltipName?: string) {
     act(() =>
       root.render(
         <MemoryRouter>
@@ -56,6 +56,7 @@ describe("ChatListItem deleted agent presentation", () => {
             href="/conversation?session=saved"
             label="Conversation title"
             agentName={name ?? undefined}
+            agentTooltipName={tooltipName}
             agentDeleted={deleted}
             dateLabel="07/10/26 - 15:00"
             onDelete={vi.fn()}
@@ -76,16 +77,20 @@ describe("ChatListItem deleted agent presentation", () => {
     expect(document.getElementById(statusId)?.textContent).toBe("Agent deleted - read-only conversation");
   });
   it("shows the deletion explanation on keyboard focus and hover, including grouped entries", () => {
-    show(true, null);
+    show(true, null, "Full preserved assistant name");
     const link = container.querySelector("a")!;
     act(() => {
       document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
       link.focus();
     });
-    expect(document.querySelector('[role="tooltip"]')?.textContent).toBe("Agent deleted - read-only conversation");
+    expect(document.querySelector('[role="tooltip"]')?.textContent).toBe(
+      "Full preserved assistant name - Agent deleted - read-only conversation",
+    );
     act(() => link.blur());
     act(() => link.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
-    expect(document.querySelector('[role="tooltip"]')?.textContent).toBe("Agent deleted - read-only conversation");
+    expect(document.querySelector('[role="tooltip"]')?.textContent).toBe(
+      "Full preserved assistant name - Agent deleted - read-only conversation",
+    );
   });
   it.each([
     ["en", "(deleted)", " deleted - read-only conversation"],

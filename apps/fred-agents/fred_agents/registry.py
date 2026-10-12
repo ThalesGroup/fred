@@ -36,6 +36,7 @@ from fred_agents.platform_ops import PLATFORM_OPS_AGENT
 from fred_agents.rag_expert import RAG_EXPERT_AGENT
 from fred_agents.react_rag_mcp import REACT_RAG_MCP_AGENT
 from fred_agents.self_test import SELF_TEST_AGENT
+from fred_agents.self_test_web import WEB_SELF_TEST_AGENT
 from fred_agents.sentinel import SENTINEL_AGENT
 from fred_agents.sql_expert import SQL_EXPERT_AGENT
 from fred_agents.test_assistant.graph_agent import TEST_ASSISTANT_AGENT
@@ -79,6 +80,9 @@ def build_registry() -> dict[str, ReActAgentDefinition | GraphAgentDefinition]:
     - fred.github.test_assistant  No-LLM graph agent. Exercises every SSE event
                                type without any external service. Used for UI
                                validation and integration scenario testing.
+    - fred.github.self_test_web  No-LLM harness of the admin self-test page: a
+                               fixed battery of web research probes (refused
+                               destinations, SafeSearch policy, search and read).
     """
 
     return {
@@ -94,6 +98,7 @@ def build_registry() -> dict[str, ReActAgentDefinition | GraphAgentDefinition]:
         PLATFORM_OPS_AGENT.agent_id: PLATFORM_OPS_AGENT,
         TEST_ASSISTANT_AGENT.agent_id: TEST_ASSISTANT_AGENT,
         SELF_TEST_AGENT.agent_id: SELF_TEST_AGENT,
+        WEB_SELF_TEST_AGENT.agent_id: WEB_SELF_TEST_AGENT,
     }
 
 

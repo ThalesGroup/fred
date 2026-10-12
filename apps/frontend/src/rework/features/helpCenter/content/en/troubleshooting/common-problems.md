@@ -54,8 +54,8 @@ It is **suspended**. Three causes:
 - A function it depends on was **switched off** for the team, or the team's
   access to it was **withdrawn**: only the platform can restore it (see
   [Administration](/help/en/features/administration)).
-- One of its functions' **configuration** is no longer valid: untick the
-  function on the agent, save, tick it again, save again.
+- One of its functions' **configuration** is no longer valid: turn the
+  function off on the agent, save, turn it on again, save again.
 
 A related case: an agent **copied to another team** loses the choices that
 belonged to its origin team (libraries, folders, documents) and the
@@ -69,8 +69,8 @@ the request is very broad, split it. An interruption that repeats across
 
 ## My attachment is refused
 
-Check the format. Check too that the agent actually has the function that uses
-attachments — without it, the file is ignored. For a document meant to last, use
+Check the format. Check too that the agent actually has the **Attachments**
+pack — without it, the paperclip does not appear. For a document meant to last, use
 the [resources](/help/en/features/resources).
 
 ## A conversation will not load

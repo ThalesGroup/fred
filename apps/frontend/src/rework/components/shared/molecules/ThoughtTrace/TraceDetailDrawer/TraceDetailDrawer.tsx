@@ -39,6 +39,7 @@ import {
   statusForEntry,
   stripDocumentUids,
   thoughtExtras,
+  toolArgs,
   toolCallId,
   toolName,
   toolResultContent,
@@ -46,9 +47,11 @@ import {
   toolResultOk,
 } from "../../../../../utils/traceUtils";
 import { parseTabularTraceResult, tabularToolKind } from "../../../../../utils/tabularTrace";
+import { parseWebResearchResult, webResearchTarget, webResearchToolKind } from "../../../../../utils/webResearchTrace";
 import phaseStyles from "../phaseBadge.module.css";
 import { formatSqlForDisplay } from "./formatSqlForDisplay";
 import { TabularToolDetail } from "./TabularToolDetail";
+import { WebResearchToolDetail } from "./WebResearchToolDetail";
 import styles from "./TraceDetailDrawer.module.css";
 
 interface TraceDetailDrawerProps {
@@ -193,6 +196,18 @@ function ToolDetail({ entry, messages }: { entry: Extract<TraceEntry, { kind: "c
       />
     ) : (
       <GenericToolDetail entry={entry} />
+    );
+  }
+  const webKind = webResearchToolKind(toolName(entry.call));
+  const webResult = webKind && entry.result ? parseWebResearchResult(toolResultContent(entry.result)) : null;
+  // A bare-named MCP `web_search` with another payload shape keeps the generic view.
+  if (webKind && (webResult || !entry.result)) {
+    return (
+      <WebResearchToolDetail
+        kind={webKind}
+        target={webResearchTarget(webKind, toolArgs(entry.call))}
+        result={webResult}
+      />
     );
   }
   const data = entry.result ? parseToolResultContent(entry.result) : null;

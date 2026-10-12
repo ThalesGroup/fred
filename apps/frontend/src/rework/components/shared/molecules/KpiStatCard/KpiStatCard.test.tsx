@@ -15,6 +15,7 @@
 
 import { act } from "react";
 import { createRoot } from "react-dom/client";
+import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it } from "vitest";
 import KpiStatCard from "./KpiStatCard";
 
@@ -58,4 +59,22 @@ it("retains neutral styling by default and accepts outcome tones", () => {
   } finally {
     act(() => root.unmount());
   }
+});
+
+it("shows an optional hint as a focusable info bubble beside the label", () => {
+  const html = renderToStaticMarkup(
+    <KpiStatCard label="Searches" hint="Billed by the provider" value={2} isLoading={false} isError={false} />,
+  );
+  expect(html).toContain('aria-label="Billed by the provider"');
+  expect(html).toContain(">info<");
+  expect(
+    renderToStaticMarkup(<KpiStatCard label="Searches" value={2} isLoading={false} isError={false} />),
+  ).not.toContain("info");
+});
+
+it("shows a fixed number of decimals when asked, without rounding to the locale default", () => {
+  const html = renderToStaticMarkup(
+    <KpiStatCard label="Cost" value={0.005} fractionDigits={4} isLoading={false} isError={false} />,
+  );
+  expect(html).toContain((0.005).toLocaleString(undefined, { minimumFractionDigits: 4 }));
 });

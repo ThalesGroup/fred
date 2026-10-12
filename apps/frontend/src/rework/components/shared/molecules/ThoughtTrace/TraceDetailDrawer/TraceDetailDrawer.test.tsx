@@ -601,3 +601,81 @@ describe("TraceDetailDrawer tabular tools", () => {
     expect(failed).toContain("Failed");
   });
 });
+
+function webEntry(name: string, args: Record<string, unknown>, content: unknown, ok = true) {
+  const entry = tabularEntry(name, content, ok, "web-1");
+  return {
+    ...entry,
+    call: message({ channel: "tool_call", parts: [{ type: "tool_call", call_id: "web-1", name, args }] }),
+  };
+}
+
+describe("TraceDetailDrawer web research", () => {
+  it("shows the query and each page as a safe external link with its extract", () => {
+    const entry = webEntry(
+      "web_search",
+      { query: "python release" },
+      {
+        results: [
+          {
+            url: "https://www.python.org/",
+            title: "Welcome to Python",
+            snippet: "Official site",
+            content: "Python 3.14 released",
+            truncated: true,
+          },
+          { url: "javascript:alert(1)", title: "Bad link" },
+          { url: "https://example.org/x", error_code: "http_error" },
+        ],
+        untrusted_content: true,
+      },
+    );
+    const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
+    expect(html).toContain("rework.chatTrace.toolLabels.webSearch");
+    expect(html).toContain("python release");
+    expect(html).toContain('href="https://www.python.org/"');
+    expect(html).toContain('rel="noopener noreferrer"');
+    expect(html).toContain("Welcome to Python");
+    expect(html).toContain("Python 3.14 released");
+    expect(html).toContain("rework.chatTrace.webResearch.truncated");
+    expect(html).toContain("rework.chatTrace.webResearch.errors.http_error");
+    expect(html).not.toContain("javascript:");
+  });
+
+  it("shows the page URL and a localized failure instead of the raw payload", () => {
+    const entry = webEntry(
+      "fetch_url",
+      { url: "http://169.254.169.254/" },
+      { error_code: "unsafe_destination" },
+      false,
+    );
+    const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
+    expect(html).toContain("rework.chatTrace.webResearch.page");
+    expect(html).toContain("http://169.254.169.254/");
+    expect(html).toContain("rework.chatTrace.webResearch.errors.unsafe_destination");
+    expect(html).not.toContain("error_code");
+  });
+
+  it("says which daily quota is spent", () => {
+    const search = webEntry("web_search", { query: "python" }, { error_code: "quota_exceeded" }, false);
+    const fetch = webEntry("fetch_url", { url: "https://python.org/" }, { error_code: "quota_exceeded" }, false);
+    const searchHtml = renderToStaticMarkup(<TraceDetailDrawer entry={search} onClose={() => undefined} />);
+    const fetchHtml = renderToStaticMarkup(<TraceDetailDrawer entry={fetch} onClose={() => undefined} />);
+    expect(searchHtml).toContain("rework.chatTrace.webResearch.errors.quota_exceeded<");
+    expect(fetchHtml).toContain("rework.chatTrace.webResearch.errors.quota_exceeded_fetch");
+  });
+
+  it("shows the remaining daily quota only when the deployment caps the operation", () => {
+    const capped = webEntry(
+      "web_search",
+      { query: "python" },
+      { results: [], daily_quota: { limit: 10, remaining: 7 }, untrusted_content: true },
+    );
+    const html = renderToStaticMarkup(<TraceDetailDrawer entry={capped} onClose={() => undefined} />);
+    expect(html).toContain("rework.chatTrace.webResearch.quotaSearches");
+    const uncapped = webEntry("web_search", { query: "python" }, { results: [], untrusted_content: true });
+    expect(renderToStaticMarkup(<TraceDetailDrawer entry={uncapped} onClose={() => undefined} />)).not.toContain(
+      "quotaSearches",
+    );
+  });
+});

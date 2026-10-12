@@ -125,6 +125,7 @@ export default function ChatList({ teamId }: ChatListProps) {
         href={href}
         label={label}
         agentName={showAgentName ? agentName(session) : undefined}
+        agentTooltipName={agentName(session)}
         agentDeleted={agentDeleted(session.agent_instance_id)}
         dateLabel={formatSessionDate(session.updated_at)}
         onDelete={handleDelete(session.session_id, session.agent_instance_id, href, label)}

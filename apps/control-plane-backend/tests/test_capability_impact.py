@@ -875,3 +875,11 @@ async def test_revoke_preview_tolerates_a_model_the_catalog_dropped() -> None:
     assert preview.capability_id == "model__openai__gpt-4o"
     assert preview.suspended_instances == 0
     assert preview.instances == []
+
+
+def test_self_test_harness_templates_are_exempt_and_others_are_not() -> None:
+    from control_plane_backend.product.service import capability_gate_exempt
+
+    assert capability_gate_exempt("fred.github.self_test")
+    assert capability_gate_exempt("fred.github.self_test_web")
+    assert not capability_gate_exempt("fred.github.general_assistant")

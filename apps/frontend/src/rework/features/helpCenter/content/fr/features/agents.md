@@ -41,9 +41,9 @@ temps de raisonner par étapes…
 
 Deux façons de choisir, via l'interrupteur **Avancé** en haut de l'onglet :
 
-- **Simple** (par défaut, et recommandé) — vous cochez des **packs** : des
-  ensembles qui vont naturellement ensemble. Une bascule active tout ce qu'il
-  faut.
+- **Simple** (par défaut, et recommandé) — vous activez des **packs** : des
+  ensembles qui vont naturellement ensemble. Un clic sur la carte active tout
+  ce qu'il faut.
 - **Avancé** — vous activez chaque fonction une par une, avec ses options.
 
 Le mode Simple couvre les usages courants. Le mode Avancé reste accessible à
@@ -71,9 +71,9 @@ le document entier : elle est lente et demande une confirmation avant chaque
 usage. Sur un agent qui n'en a pas besoin, elle ne sert qu'à être déclenchée
 par erreur.
 
-**Les fonctions modifient l'interface de conversation.** Les pièces jointes
-ajoutent un bouton, la production de documents ouvre un panneau latéral,
-l'accès aux ressources peut afficher un sélecteur de bibliothèque. Un agent
+**Les fonctions modifient l'interface de conversation.** Le pack **Pièces
+jointes** ajoute un trombone, la production de documents ouvre un panneau
+latéral, **Documents de l'équipe** peut afficher un sélecteur de bibliothèque. Un agent
 sur-équipé présente à ses utilisateurs des commandes qui ne servent pas à son
 usage.
 

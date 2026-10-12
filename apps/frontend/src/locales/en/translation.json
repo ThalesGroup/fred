@@ -116,10 +116,22 @@
     }
   },
   "capability": {
+    "web_research": {
+      "name": "Search the web",
+      "description": "Search public sources and read web pages through controlled external access."
+    },
     "document_access": {
-      "name": "Search team resources",
-      "description": "Ability to search for information in the team's resources.",
+      "name": "Documents",
+      "description": "What the agent can read and search: attachments, team documents, or both.",
       "fields": {
+        "attachments": {
+          "title": "Attachments",
+          "description": "Paperclip in the chat and search in the attached files."
+        },
+        "team_documents": {
+          "title": "Team documents",
+          "description": "Search in the team's documents."
+        },
         "show_library_selection": {
           "title": "Document library picker",
           "description": "Show a document library selector in the chat interface."
@@ -135,14 +147,6 @@
         "show_document_selection": {
           "title": "Document picker",
           "description": "Show a document selector in the chat interface."
-        },
-        "show_attach_files_control": {
-          "title": "File attachments",
-          "description": "Allow users to attach files (PDF, images, text) to their messages in the chat interface."
-        },
-        "search_attachments_only": {
-          "title": "Search in attachments only",
-          "description": "Restrict the agent's document search to the files attached to the conversation — the corpus is never searched."
         },
         "default_top_k": {
           "title": "Default results",
@@ -385,7 +389,8 @@
       "ariaLabel": "Generated files",
       "downloadAria": "Download {{name}}",
       "downloadFailed": "Could not download {{name}}",
-      "fallbackName": "Download"
+      "fallbackName": "Download",
+      "citationAria": "Open source “{{name}}” ({{host}}) in a new tab"
     },
     "commandTurn": {
       "open": "Open the prompt behind the /{{command}} command",
@@ -489,8 +494,8 @@
       "noDocumentsSelected": "No document selected",
       "noLibrariesAvailable": "No libraries available.",
       "scopeGeneral": "General knowledge",
-      "scopeCorpus": "Your documents",
-      "scopeCorpusAndWeb": "General knowledge + your documents",
+      "scopeCorpus": "Documents only",
+      "scopeCorpusAndWeb": "General knowledge + documents",
       "scopeRowLabel": "Scope",
       "scopeTitle": "Search scope",
       "searchPolicyRowLabel": "Search",
@@ -547,12 +552,11 @@
       "empty": "No markdown preview available."
     },
     "recordAudio": "Record audio",
-    "nextHitlQuestion": "Next",
+    "hitlAnswerValidated": "Answer confirmed",
+    "validateHitlAnswer": "Confirm",
     "sendAllHitlAnswers": "Send all",
     "sendHitlAnswer": "Send",
     "skipHitlQuestion": "Skip",
-    "skipHitlQuestionAria": "Skip this question",
-    "skipAllHitlQuestionsAria": "Skip all questions",
     "approveForConversation": "Approve for this conversation",
     "sendMessage": "Send message",
     "sessionAttachments": {
@@ -602,7 +606,14 @@
     "readOnlyComposerPlaceholder": "Read-only conversation",
     "deletedAgentTooltip": "{{agentsNicknameSingular}} deleted - read-only conversation",
     "deletedAgentSuffix": "(deleted)",
-    "historyUnavailable": "Conversation history is unavailable. Please try again later."
+    "historyUnavailable": "Conversation history is unavailable. Please try again later.",
+    "skipAllHitlQuestions": "Skip all",
+    "hitlOtherAnswerHint": "write your answer…",
+    "hitlQuestionState": {
+      "waiting": "Waiting for an answer",
+      "answered": "Answered",
+      "skipped": "Skipped"
+    }
   },
   "comingSoon": {
     "description": "Empowering your daily work through this innovation platform: gain clarity and make smarter decisions. A new service tailored to support your daily tasks and address your operational needs.",
@@ -1438,7 +1449,8 @@
         "overview": "Usage overview",
         "resources": "Resources",
         "tokenUsage": "Token usage",
-        "users": "Users"
+        "users": "Users",
+        "webResearch": "Web research"
       },
       "administration": {
         "modelsGovernanceLink": "Manage models",
@@ -1477,6 +1489,46 @@
         "empty": "No team conversations in this period.",
         "title": "Teams with most conversations",
         "valueLabel": "Conversations"
+      },
+      "webResearch": {
+        "estimatedCost": "Estimated provider cost ($)",
+        "blocked": "Blocked (security)",
+        "saturated": "Rejected (saturation)",
+        "failed": "Other failures",
+        "p95": "p95 latency (ms)",
+        "users": "Distinct users",
+        "reasonsTitle": "Rejected or failed requests by reason",
+        "noRefusal": "No rejected or failed request in this period.",
+        "reasons": {
+          "unsafe_destination": "Non-public address",
+          "too_many_redirects": "Too many redirects",
+          "unsupported_content": "Unsupported content",
+          "response_too_large": "Page too large",
+          "busy": "Saturation",
+          "timed_out": "Timed out",
+          "provider_failed": "Provider failed",
+          "http_error": "Site error",
+          "proxy_refused": "Refused by the proxy",
+          "quota_exceeded": "Daily quota reached",
+          "unavailable": "Unavailable",
+          "rejected": "Rejected",
+          "invalid_response": "Invalid response",
+          "activity_unavailable": "Activity log unavailable"
+        },
+        "toolCalls": "Tool calls",
+        "searches": "Searches",
+        "fetches": "Page reads",
+        "hints": {
+          "toolCalls": "Searches + page reads. Counted since this version was deployed.",
+          "searches": "web_search calls to the search provider: the only ones it bills.",
+          "fetches": "fetch_url calls: read the site directly, not billed by the provider (costs LLM tokens).",
+          "estimatedCost": "Successful searches × cost_per_1000_searches ÷ 1,000. Excludes retries, free tiers and LLM tokens.",
+          "blocked": "Refused for security: non-public address, redirects, content or size. Details: restricted activity API.",
+          "saturated": "Refused for lack of capacity (busy): raise max_concurrency or replicas.",
+          "failed": "Provider, proxy or site failure, or timeout.",
+          "p95": "95% of calls finish faster than this.",
+          "users": "Users who made at least one call."
+        }
       }
     },
     "imports": {
@@ -1699,7 +1751,36 @@
         "markdown": "Reading the workbook catalog",
         "schemas": "Reading tabular schemas",
         "descriptions": "Reading tabular documents",
-        "search": "Searching tabular values"
+        "search": "Searching tabular values",
+        "webSearch": "Searching the web",
+        "fetchUrl": "Reading a web page"
+      },
+      "webResearch": {
+        "query": "Search:",
+        "page": "Page:",
+        "noResults": "No result found.",
+        "extractedText_one": "Extracted text ({{count}} character)",
+        "extractedText_other": "Extracted text ({{count}} characters)",
+        "truncated": "truncated",
+        "quotaSearches": "Searches left today: {{remaining}} / {{limit}}",
+        "quotaFetches": "Page reads left today: {{remaining}} / {{limit}}",
+        "errors": {
+          "unavailable": "The site or the Internet could not be reached (network, DNS or proxy).",
+          "timed_out": "The request timed out.",
+          "rejected": "The request was rejected.",
+          "invalid_response": "The response could not be read.",
+          "activity_unavailable": "Web research is unavailable: its activity log cannot be written.",
+          "unsafe_destination": "Internal or non-public address: blocked for security.",
+          "too_many_redirects": "Too many redirects.",
+          "unsupported_content": "Not a readable text page (binary or compressed file).",
+          "response_too_large": "The page is too large.",
+          "provider_failed": "The search engine did not answer correctly.",
+          "busy": "Web research is busy, try again shortly.",
+          "http_error": "The site returned an HTTP error (missing page or access denied).",
+          "proxy_refused": "The network proxy refused this site (blocked by security policy).",
+          "quota_exceeded": "Daily web search quota reached, try again after midnight UTC.",
+          "quota_exceeded_fetch": "Daily page-read quota reached, try again after midnight UTC."
+        }
       }
     },
     "collapse": "Collapse",
@@ -1719,7 +1800,9 @@
       "selected": "Selected",
       "skipped": "Skipped",
       "accepted": "Accepted",
-      "refused": "Refused"
+      "refused": "Refused",
+      "toolRecall_one": "Tool: {{tools}}",
+      "toolRecall_other": "{{count}} tools: {{tools}}"
     },
     "knowledgeHub": {
       "loading": "Loading..."
@@ -2241,6 +2324,11 @@
         "subtitle": "Create two folders in your personal space, ingest a marker document into one and a plain document into the other, then ask the real self-test agent a question scoped to each — the marker must come back from the first and be absent from the second. Everything is cleaned up at the end.",
         "run": "Run campaign"
       },
+      "web": {
+        "title": "Web research self-test",
+        "subtitle": "Run the deterministic web research agent through the real execution pipeline. It fails first when web research is not enabled on this deployment; otherwise it proves each protection holds — refused schemes, ports and credentials, loopback, private, metadata and encoded addresses, platform service names, redirects to internal destinations, binary content, and a SafeSearch the model cannot weaken — then that search and page reading work. Probes that need an unreachable third-party endpoint are skipped, never passed. The temporary agent is deleted at the end.",
+        "run": "Run web research checks"
+      },
       "authz": {
         "identityTitle": "JWT authentication self-test",
         "identityDescription": "Checks authenticated access to the three APIs, rejection of missing or invalid tokens, public routes and personal-space identity. Checks that do not apply to this provider are skipped with a reason.",
@@ -2666,18 +2754,16 @@
       },
       "formAgent": {
         "advancedSettings": "Advanced settings",
-        "capabilitiesInfo": {
-          "title": "What are these capabilities for?",
-          "body": "Capabilities are the tools your agent can use during a conversation — for example searching your documents, summarizing a file, or generating a presentation. Turn on only the ones your agent needs, then adjust their settings if required. You can always change this selection after the agent is created.\nFor most of them, using them is as simple as asking your agent in plain language (e.g. \"Summarize the document attached to this conversation.\")."
-        },
         "capabilities": {
-          "header": "Select your agent's capabilities",
+          "header": "Turn on capabilities for your agent",
+          "learnMore": "Learn more",
           "viewToggle": {
             "advanced": "Advanced",
             "aria": "Advanced capabilities view"
           },
           "included": {
             "label": "Included capabilities",
+            "expandLabel": "Included capabilities: {{pack}}",
             "missing": "Missing capabilities",
             "activeTooltip": "Active on this agent.",
             "inactiveTooltip": "Available, but not active on this agent.",
@@ -2686,15 +2772,21 @@
           "sections": {
             "dataKnowledge": "Data and knowledge",
             "documentProduction": "Document production",
-            "intelligenceOrchestration": "Intelligence and orchestration",
-            "actionsIntegration": "Actions and integration"
+            "intelligenceOrchestration": "Intelligence and orchestration"
           },
-          "actionsIntegrationEmpty": "No capability in this section yet.",
-          "notSupported": "This agent does not support capability selection.",
+          "builtIn": {
+            "section": "Included with this agent",
+            "badge": "Included",
+            "none": "This agent has no capabilities to configure."
+          },
           "packs": {
-            "teamResources": {
-              "title": "Access to team resources",
-              "description": "Lets the agent use team resources and files attached to conversations."
+            "attachments": {
+              "title": "Attachments",
+              "description": "Lets users attach files to the conversation for the agent to read, summarize and query."
+            },
+            "teamDocuments": {
+              "title": "Team documents",
+              "description": "Lets the agent search the team's documents."
             },
             "teamWiki": {
               "title": "Access to the team wiki",
@@ -2727,7 +2819,8 @@
           },
           "name": {
             "label": "Name",
-            "placeholder": "Enter an original name"
+            "placeholder": "Enter an original name",
+            "taken": "Name already used"
           },
           "role": {
             "label": "Role",
@@ -3240,6 +3333,212 @@
       "noTeams": "No team matches.",
       "originTeam": "Origin team",
       "infoLabel": "What a copy does"
+    },
+    "platformAccess": {
+      "whitelistTabs": {
+        "label": "Whitelist sections",
+        "users": "Users",
+        "teams": "Teams"
+      },
+      "tabs": {
+        "label": "Platform access sections",
+        "rules": "Rules",
+        "users": "Whitelist"
+      },
+      "bulkHint": "Select users across searches and pages to add independent exceptions. Team access follows current membership.",
+      "allowSelected": "Allow selected users ({{count}})",
+      "clearSelection": "Clear selection",
+      "select": "Select",
+      "selectUser": "Select {{user}}",
+      "title": "Platform access",
+      "description": "Control admission using the configured identity attribute, individual exceptions and team membership.",
+      "disabled": "Platform access administration requires authenticated Fred with enforced authorization.",
+      "t0Hint": "Import existing users once before activating filtering. Individual entries can be removed afterward.",
+      "t0Preview": "{{count}} users to import; {{matching}} currently allowed by the rule.",
+      "t0Done": "Initial import completed",
+      "t0Import": "Import existing users",
+      "users": "Whitelist",
+      "search": "Search local users",
+      "user": "User",
+      "sources": "Access via",
+      "exception": "Individual exception",
+      "remove": "Remove exception",
+      "allow": "Allow user",
+      "teams": "Teams",
+      "team": "Team",
+      "allowTeam": "Whitelist this team",
+      "free": "Link access",
+      "teamHint": "Authorizing a team admits its current members. Removing a member withdraws that source of access.",
+      "freeHint": "Link access admits team members to the platform. Disabling it suspends invitation links and withdraws this access source.",
+      "link": "Invitations",
+      "createLink": "Create link",
+      "copyLink": "Invitation URL",
+      "failed": "The operation could not be completed. Check your access and try again.",
+      "deniedTitle": "Access not authorized",
+      "deniedMessage": "You are not authorized to access this platform. Please contact support to request access.",
+      "support": "Contact support",
+      "retry": "Try again",
+      "signOut": "Sign out",
+      "joinTitle": "Join a team",
+      "joinTeam": "You can join the team {{team}}.",
+      "join": "Join this team",
+      "invalidLink": "This link cannot be used. It may be expired, revoked or suspended, or the service is unavailable.",
+      "loading": "Loading...",
+      "source": {
+        "attribute": "Identity attribute",
+        "manual": "Manual exception",
+        "t0": "Initial import",
+        "team": "Authorized team",
+        "free": "Link access"
+      },
+      "actorLockout": "First grant yourself another admission source before enabling filtering or removing your last authorization.",
+      "rule": {
+        "title": "Admission rule",
+        "hint": "Individual exceptions and authorized teams always allow access.",
+        "combination": "Combine conditions",
+        "all": "All conditions (AND)",
+        "any": "At least one condition (OR)",
+        "condition": "Condition {{number}}",
+        "accountField": "Account field",
+        "removeConditionNumber": "Remove condition {{number}}",
+        "operator": "Comparison",
+        "value": "Value",
+        "regex": "Regular expression",
+        "regexHint": "Advanced: matches the whole value. Missing, empty or incompatible claims always fail, including negative comparisons.",
+        "caseSensitive": "Case sensitive",
+        "caseSensitiveCondition": "Case sensitive for condition {{number}}",
+        "addCondition": "Add condition",
+        "test": "Test with my account",
+        "save": "Save rule",
+        "reload": "Discard draft and reload",
+        "saved": "Rule saved. It applies to subsequent requests.",
+        "conflict": "Another administrator saved a newer rule. Your draft is preserved. Discard it and reload before saving again.",
+        "actorLockout": "This rule would remove your last admission source. Keep a rule that allows you or grant yourself an independent exception first.",
+        "invalidOrFailed": "The rule could not be validated or saved. Check the claim keys, values and regular expressions, then try again.",
+        "required": "Save a rule or add an admission exception before activating filtering.",
+        "mode": "Filter mode",
+        "modeLabel": {
+          "allow": "Allow users matching the rule",
+          "block": "Block users matching the rule"
+        },
+        "testAllowed": "Test result: access would be allowed",
+        "testDenied": "Test result: access would be refused",
+        "ruleMatches": "Your token matches the draft rule.",
+        "ruleDoesNotMatch": "Your token does not match the draft rule.",
+        "admitted": "With filtering active, you would be admitted, including independent exceptions and teams.",
+        "denied": "With filtering active, you would be refused.",
+        "operatorLabel": {
+          "contains": "Contains",
+          "not_contains": "Does not contain",
+          "equals": "Equals",
+          "not_equals": "Does not equal",
+          "regex": "Regular expression (advanced)"
+        },
+        "result": {
+          "matched": "Condition matches.",
+          "not_matching": "Condition does not match.",
+          "missing": "This claim is missing from your token.",
+          "incompatible": "This claim is empty, too large or has an incompatible type.",
+          "unavailable": "This field could not be inspected within the token limits.",
+          "timeout": "Regular expression exceeded its time budget."
+        },
+        "invalidRegex": "Invalid regular expression. Check its syntax.",
+        "invalidCondition": "Invalid condition. Check its keys and value.",
+        "delegatedHint": "After a field change, delegated requests may require a new direct user request. Exceptions and teams remain valid.",
+        "empty": "No conditions yet. Add a condition to choose a field from your account.",
+        "saving": "Saving...",
+        "unsaved": "Unsaved changes",
+        "saveHint": "Rule changes apply after saving, when filtering is active."
+      },
+      "picker": {
+        "choose": "Choose an account field",
+        "title": "Which account field do you want to filter?",
+        "own": "My account fields",
+        "search": "Search field names",
+        "unsupported": "This value cannot be filtered as text.",
+        "truncated": "Some values were omitted because the token exceeds display limits. Unavailable fields cannot be selected.",
+        "empty": "No supported claims found. Try the other source.",
+        "failed": "Could not read your verified session claims.",
+        "selected": "Selected field",
+        "noSelection": "No field selected",
+        "tokenValue": "Current token value",
+        "useField": "Use this field",
+        "advancedFields": "Show advanced fields",
+        "simpleFields": "Show simple fields",
+        "simpleEmpty": "No matching root text fields. Change the search or show advanced fields.",
+        "valueTitle": "Use the current value?",
+        "useValue": "Use this value",
+        "keepValue": "Enter my own value",
+        "valueHint": "Use this value from your account, or enter the filter value yourself.",
+        "noValue": "This field has no usable text value in your current account.",
+        "valueTooLong": "This value exceeds the filter limit. Enter a shorter value yourself."
+      },
+      "verificationFailed": "Access verification unavailable",
+      "links": {
+        "manage": "Manage links",
+        "title": "Invitations for {{team}}",
+        "hint": "Share links manually. Accesses count page openings after sign-in.",
+        "note": "Note (optional)",
+        "expiry": "Expiration (optional)",
+        "expiryDate": "Expiration date",
+        "expiryPresets": {
+          "days1": "In 24 hours",
+          "days7": "In 7 days",
+          "days30": "In 30 days"
+        },
+        "futureExpiry": "Choose a future date and time.",
+        "never": "No expiration",
+        "untitled": "No note",
+        "created": "Created",
+        "statusLabel": "Status",
+        "openings": "Accesses",
+        "actions": "Actions",
+        "revoke": "Revoke",
+        "revokeTitle": "Revoke this invitation?",
+        "revokeHint": "This link will permanently stop accepting new enrollments. Other links and existing team members remain unchanged. Remove a member or disable link access to withdraw that source of platform access.",
+        "openingFailed": "The opening could not be recorded. You can still try to join.",
+        "status": {
+          "active": "Active",
+          "suspended": "Suspended",
+          "expired": "Expired",
+          "revoked": "Revoked",
+          "all": "All links"
+        },
+        "copyUrl": "Copy URL",
+        "copied": "URL copied to clipboard.",
+        "copyFailed": "Clipboard access failed. Select the URL above and copy it manually, or retry.",
+        "createdSuccess": "Link created",
+        "cleanup": "Delete expired and revoked links",
+        "cleanupTitle": "Delete obsolete links for {{team}}?",
+        "cleanupConfirm": "Delete links",
+        "cleanupHint": "Permanently delete {{count}} expired or revoked links for {{team}}, including their notes and access counts. Team members and usable links will be kept.",
+        "deleted": "{{count}} obsolete links deleted.",
+        "loading": "Loading links..."
+      },
+      "activation": {
+        "emptyAllowed": "No users are allowed by this review.",
+        "emptyBlocked": "No users are blocked by this review.",
+        "unverified": "Verification unavailable ({{count}})",
+        "update": "Update",
+        "importWarning": "Existing users have not been imported",
+        "importWarningHint": "Users without a matching rule or a whitelist exception may lose access. Do you want to continue without importing them, or go to the whitelist to import them first?",
+        "continueWithoutImport": "Continue without importing",
+        "goToWhitelist": "Go to whitelist",
+        "importStatusFailed": "Unable to check whether existing users have been imported. Retry before enabling filtering.",
+        "enable": "Enable filtering",
+        "disable": "Disable filtering",
+        "enableTitle": "Activate platform filtering?",
+        "disableTitle": "Disable platform filtering?",
+        "savedOnly": "This review uses the saved rule and current exceptions. Unsaved rule changes are not applied.",
+        "disableHint": "Users will no longer be filtered. Authentication and resource permissions remain enforced.",
+        "previewFailed": "The population review is unavailable or outdated. Retry before confirming.",
+        "checkedAt": "Last checked: {{date}}",
+        "unknownHint": "These accounts could not be evaluated with the available verified data. Token information may be missing, expired or conflicting, or account status could not be checked. Their access will be evaluated on their next request; a missing field in a verified token is evaluated normally.",
+        "groups": "Dry run",
+        "allowed": "Allowed",
+        "blocked": "Blocked",
+        "email": "Email"
+      }
     }
   },
   "runtime": {

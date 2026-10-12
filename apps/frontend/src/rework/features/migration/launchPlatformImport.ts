@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { handlePlatformAccessResponse } from "../../../common/platformAccess";
 import { KeyCloakService } from "../../../security/KeycloakService";
 import type { ImportLaunchResponse, TaskTarget } from "../../../slices/controlPlane/controlPlaneOpenApi";
 
@@ -41,6 +42,7 @@ export async function launchPlatformImport(file: File, label?: string): Promise<
     body: form,
   });
 
+  await handlePlatformAccessResponse(response);
   if (!response.ok) {
     throw new Error(`Échec du lancement de la migration (HTTP ${response.status})`);
   }

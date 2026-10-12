@@ -10,26 +10,28 @@ Pour que votre agent puisse remplir votre PowerPoint, vous devez identifier chaq
 
 ### 1. Marquez les zones à remplir
 
-Dans une zone de texte, écrivez une **clé** entre doubles accolades à l'endroit où une valeur doit apparaître :
+Dans une zone de texte, écrivez une **clé** entre accolades simples ou doubles à l'endroit où une valeur doit apparaître :
 
 ```
-{{nom}}
+{contexte}
 ```
+
+Les captures utilisent des accolades simples. `{contexte}` et `{{contexte}}` désignent la même clé : les deux formes peuvent être mélangées, y compris pour les images. Le nom doit être identique dans la diapositive et les notes (sensible à la casse, espaces en bordure ignorés). Les templates en doubles accolades restent compatibles.
 
 Vous pouvez réutiliser la même clé plusieurs fois sur une diapositive pour répéter la même valeur. La même clé sur une autre diapositive est, elle, indépendante.
 
 ### 2. Décrivez chaque clé dans les notes
 
-Dans les **notes** de la diapositive (Affichage → Notes), écrivez pour chaque clé une ligne d'en-tête `{{clé}}:` suivie d'une description. Elle indique à l'agent quoi mettre à cet endroit :
+Dans les **notes** de la diapositive, écrivez pour chaque clé une ligne d'en-tête `{clé}:` ou `{{clé}}:` suivie d'une description. Elle indique à l'agent quoi mettre à cet endroit :
 
 ```
-{{nom}}:
-Nom du collaborateur, à trouver dans le CV.
+{contexte}:
+Contexte du projet. Une à deux phrases.
 ```
 
-Une ligne n'est un en-tête que si elle se compose d'une ou plusieurs clés `{{clé}}` terminées par deux-points. Une clé citée au milieu d'une phrase reste du texte ordinaire — vous pouvez donc écrire naturellement.
+Une ligne n'est un en-tête que si elle se compose d'une ou plusieurs clés `{clé}` ou `{{clé}}`, séparées par des virgules et terminées par deux-points. Une clé citée au milieu d'une phrase reste du texte ordinaire - vous pouvez donc écrire naturellement.
 
-![Une diapositive avec des clés entre doubles accolades dans ses zones de texte, et les notes de la diapositive décrivant chaque clé.](/ppt-filler/template.png)
+![Une diapositive avec des clés entre accolades simples dans ses zones de texte, et les notes de la diapositive décrivant chaque clé.](/ppt-filler/template.png)
 
 ## Utilisation avancée
 
@@ -97,7 +99,7 @@ Choisissez le drapeau correspondant au pays évoqué.
 ```
 
 - `type: image` indique à l'agent de placer une image. La valeur par défaut est `text` : les clés ordinaires n'ont donc rien à déclarer.
-- `folder:` désigne un dossier de vos ressources importées — votre espace personnel ou celui de votre équipe. Les guillemets sont facultatifs, et les mots-clés comme les valeurs sont insensibles à la casse.
+- `folder:` désigne un dossier de vos ressources importées - votre espace personnel ou celui de votre équipe. Les guillemets sont facultatifs. Les mots-clés de métadonnées et la valeur de `type` sont insensibles à la casse ; conservez le chemin du dossier tel qu'il apparaît dans vos ressources.
 
 ### Proposer plusieurs emplacements d'image
 
@@ -117,7 +119,7 @@ Vous pouvez proposer N emplacements d'image et demander à l'agent (dans la desc
 - L'image est mise à l'échelle pour **tenir à l'intérieur** du cadre de la forme, en conservant son rapport hauteur/largeur et centrée — sans déformation ni rognage.
 - Une clé d'image répétée (la même clé dans plusieurs formes d'une diapositive) reçoit la même image partout, comme les clés de texte répétées.
 - Les vraies notes du présentateur situées après le séparateur `---` ne sont pas touchées.
-- Le dossier doit être un dossier réel de votre espace. Il est vérifié au moment où vous choisissez le template, puis de nouveau à l'enregistrement.
+- Le dossier doit être un dossier réel de votre espace. Son existence est vérifiée à l'enregistrement du template importé.
 
 ## Erreurs
 

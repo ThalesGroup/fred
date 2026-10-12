@@ -102,6 +102,7 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
   useTokenUsageByAgentQuery: h.neutralQuery,
   useTokenUsageByModelQuery: h.neutralQuery,
   useStorageByTeamQuery: h.neutralQuery,
+  useWebResearchSummaryQuery: h.neutralQuery,
 }));
 
 import AnalyticsPage from "./AnalyticsPage";
@@ -123,12 +124,16 @@ describe("AnalyticsPage admin-only section (§2.4/§2.5)", () => {
     h.capabilities = { ...h.capabilities, canAdmin: false };
     const html = render();
     expect(html).not.toContain("rework.analytics.sections.administration");
+    expect(html).not.toContain("rework.analytics.sections.webResearch");
   });
 
   it("shows the administration section for a platform_admin", () => {
     h.capabilities = { ...h.capabilities, canAdmin: true };
     const html = render();
     expect(html).toContain("rework.analytics.sections.administration");
+    expect(html).toContain("rework.analytics.sections.webResearch");
+    expect(html).toContain("rework.analytics.webResearch.searches");
+    expect(html).toContain("rework.analytics.webResearch.fetches");
     expect(html).toContain("/admin/features?kind=model");
   });
 

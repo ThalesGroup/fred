@@ -18,10 +18,12 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterator
-from typing import Literal
+from typing import Literal, cast
+from unittest.mock import AsyncMock
 
 import pytest
 from pydantic import AnyHttpUrl, AnyUrl
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
@@ -32,6 +34,7 @@ from fred_core.security.delegation import (
     require_active_subject,
 )
 from fred_core.security.models import AccountStatusError, AuthorizationError, Resource
+from fred_core.security.platform_access import access_control
 from fred_core.security.rebac import rebac_sdk as rebac_sdk_module
 from fred_core.security.rebac.noop_engine import NoopRebacEngine
 from fred_core.security.rebac.rebac_engine import (
@@ -115,7 +118,9 @@ class _AccountStatusFakeRebacEngine(_ClosingFakeRebacEngine):
 
 
 @pytest.fixture(autouse=True)
-def _restore_security_profile_globals() -> Iterator[None]:
+def _restore_security_profile_globals(monkeypatch) -> Iterator[None]:
+    monkeypatch.setattr(access_control, "_available", access_control._available)
+    monkeypatch.setattr(access_control, "_installed", access_control._installed)
     oidc_before = (
         oidc.STRICT_ISSUER,
         oidc.STRICT_AUDIENCE,
@@ -337,8 +342,12 @@ async def test_factory_passes_the_process_kpi_writer_to_rebac_factory(
 
     monkeypatch.setattr(rebac_sdk_module, "_rebac_factory", _factory)
     security = _security()
+    admission = AsyncMock()
+    monkeypatch.setattr(access_control, "initialize_platform_access", admission)
+    platform = cast(AsyncEngine, object())
 
-    sdk = await rebac_sdk_factory(security, kpi_writer=writer)
+    sdk = await rebac_sdk_factory(security, kpi_writer=writer, platform_engine=platform)
+    admission.assert_awaited_once_with(security, platform, engine)
 
     assert received == [(security, writer)]
     assert isinstance(sdk, rebac_sdk_module._RebacSdk)
@@ -384,7 +393,12 @@ async def test_factory_initializes_the_process_jwt_verifier(
     monkeypatch.setattr(oidc, "KEYCLOAK_CLIENT_ID", "")
     monkeypatch.setattr(oidc, "_JWKS_CLIENT", object())
 
-    await rebac_sdk_factory(_security(), kpi_writer=NoOpKPIWriter())
+    monkeypatch.setattr(access_control, "initialize_platform_access", AsyncMock())
+    await rebac_sdk_factory(
+        _security(),
+        kpi_writer=NoOpKPIWriter(),
+        platform_engine=cast(AsyncEngine, object()),
+    )
 
     assert oidc.KEYCLOAK_ENABLED is True
     assert oidc.KEYCLOAK_URL == str(_REALM)
@@ -464,8 +478,11 @@ async def test_factory_under_delegation_validates_the_model_and_writes_nothing(
     engine = _AccountStatusFakeRebacEngine()
     _install_engine(monkeypatch, engine)
 
+    monkeypatch.setattr(access_control, "initialize_platform_access", AsyncMock())
     sdk = await rebac_sdk_factory(
-        _security(delegation=delegation), kpi_writer=NoOpKPIWriter()
+        _security(delegation=delegation),
+        kpi_writer=NoOpKPIWriter(),
+        platform_engine=cast(AsyncEngine, object()),
     )
 
     assert sdk is not None
@@ -477,25 +494,15 @@ async def test_factory_under_delegation_validates_the_model_and_writes_nothing(
 
 
 @pytest.mark.asyncio
-async def test_factory_skips_the_account_status_preflight_without_delegation(
-    monkeypatch: pytest.MonkeyPatch,
+async def test_factory_requires_shared_admission_authority_without_delegation(
+    monkeypatch,
 ) -> None:
-    """An application that enforces no account status has nothing to preflight, and
-    must not be blocked by a model that cannot suspend accounts."""
-    engine = _AccountStatusFakeRebacEngine(
-        model_ok=False, requires_active_accounts=False
-    )
+    engine = _AccountStatusFakeRebacEngine()
     _install_engine(monkeypatch, engine)
-
-    await rebac_sdk_factory(_security(), kpi_writer=NoOpKPIWriter())
-
-    assert engine.model_checks == 0
+    with pytest.raises(ValueError, match="platform_engine"):
+        await rebac_sdk_factory(_security(), kpi_writer=NoOpKPIWriter())
+    assert engine.model_checks == 1
     assert engine.writes == []
-
-
-def test_private_implementation_rejects_noop_engine() -> None:
-    with pytest.raises(ValueError, match="requires an enabled OpenFGA engine"):
-        _sdk(NoopRebacEngine())
 
 
 @pytest.mark.asyncio

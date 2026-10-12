@@ -31,8 +31,19 @@ duration of that conversation**, and cannot reach it from another one. For a
 lasting, shared document, use the team's
 [resources](/help/en/features/resources).
 
-Attaching a file assumes the agent has the matching function; without it the
-attachment is ignored.
+Attaching a file assumes the agent has the **Attachments** pack; without it the
+paperclip does not appear.
+
+## Choosing the answer sources
+
+**Documents only** asks the agent to answer from documents, without filling gaps
+from general knowledge. It includes conversation attachments and team documents
+when both sources are enabled. If the agent allows only one source, only that
+source is searched. When the documents do not contain the answer, the agent is
+instructed to say so.
+
+**General knowledge + documents** combines the enabled document sources with
+general knowledge. **General knowledge** skips document search.
 
 ## Inserting a prompt
 
@@ -42,6 +53,13 @@ lasting setting of the conversation.
 
 A prompt carrying a command runs shorter still: type `/` in an empty field —
 see [Commands](/help/en/features/commands).
+
+## Reusing a sent message
+
+In an empty field, the up arrow brings back your last message of the
+conversation; press it again to go further back, and the down arrow to come
+forward. Edit the text, then send it. A message run through a command comes
+back as its `/command` line.
 
 ## Collecting a produced document
 

@@ -14,14 +14,14 @@
 """Preserve conversation agent names after deletion.
 
 Revision ID: c82f6a91d043
-Revises: aac66348e27b
+Revises: a4d85307ea0e
 """
 
 import sqlalchemy as sa
 from alembic import op
 
 revision: str = "c82f6a91d043"  # pragma: allowlist secret
-down_revision: str = "aac66348e27b"  # pragma: allowlist secret
+down_revision: str = "a4d85307ea0e"  # pragma: allowlist secret
 branch_labels = None
 depends_on = None
 

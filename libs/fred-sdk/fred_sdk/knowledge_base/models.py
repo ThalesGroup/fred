@@ -20,8 +20,9 @@ returns. Everything here is JSON-safe: `model_dump(mode="json")` round-trips.
 from __future__ import annotations
 
 import json
+from collections import Counter
 from enum import StrEnum
-from typing import Any
+from typing import Annotated, Any, Literal
 
 from pydantic import (
     BaseModel,
@@ -43,6 +44,14 @@ MAX_ISSUE_MESSAGE_CHARS = 500
 MAX_ISSUE_SUBJECT_CHARS = 200
 MAX_ISSUES = 50
 
+_IssueCounts = dict[
+    Literal["warning", "error"],
+    dict[
+        Annotated[str, Field(min_length=1, max_length=100)],
+        Annotated[int, Field(strict=True, gt=0)],
+    ],
+]
+
 
 def _clip(value: str, bound: int) -> tuple[str, bool]:
     """Return the value cut to `bound`, and whether cutting removed anything."""
@@ -52,13 +61,35 @@ def _clip(value: str, bound: int) -> tuple[str, bool]:
 class KnowledgeBaseRunOutcome(StrEnum):
     """Terminal outcome of one synchronization run.
 
-    Orthogonal to `KnowledgeBaseSyncResult.reconciliation_complete`: a run can
+    Orthogonal to `KnowledgeBaseSyncResult.reconciliation`: a run can
     succeed having deliberately covered only part of its source.
     """
 
     succeeded = "succeeded"
     failed = "failed"
     cancelled = "cancelled"
+
+
+class KnowledgeBaseReconciliation(StrEnum):
+    """How much of its source one run reconciled with the library.
+
+    What a run may conclude from an absence depends on it, and operators read
+    it on every run (the `reconciliation` metric label).
+    """
+
+    complete = "complete"
+    """The source was observed exhaustively and authoritatively: an item absent
+    from it was really removed."""
+
+    partial = "partial"
+    """A valid but bounded pass — paging cut short, a filter, a budget, an
+    incremental pass. An absence proves nothing; only explicit deletions (a
+    tombstone, a diff) may be acted on."""
+
+    up_to_date = "up_to_date"
+    """Established without enumerating the source that the library already
+    matches a previously complete state — an unchanged revision or version.
+    Nothing was written or removed."""
 
 
 class KnowledgeBaseIssue(BaseModel):
@@ -115,17 +146,17 @@ class KnowledgeBaseSyncResult(BaseModel):
     through the document boundary. It is a report, never an instruction: Fred
     does not delete anything by reading this number. An absence in a source
     proves a deletion only after a complete, authoritative inventory — which is
-    exactly what `reconciliation_complete` states — whereas an explicit
+    exactly what `reconciliation` set to `complete` states — whereas an explicit
     tombstone stays actionable even during a partial pass.
     """
 
     outcome: KnowledgeBaseRunOutcome
-    reconciliation_complete: bool = Field(
+    reconciliation: KnowledgeBaseReconciliation = Field(
         description=(
-            "True only when this run observed the source exhaustively and "
-            "authoritatively. False marks a valid but bounded pass — paging cut "
-            "short, a filter applied, a budget reached — after which an absence "
-            "proves nothing about deletion."
+            "How much of the source this run reconciled: `complete` (observed "
+            "exhaustively — an absence proves a deletion), `partial` (a bounded "
+            "or incremental pass — an absence proves nothing) or `up_to_date` "
+            "(the library already matched the source; nothing written)."
         ),
     )
     summary: str = ""
@@ -145,17 +176,59 @@ class KnowledgeBaseSyncResult(BaseModel):
     truncated_upstream: bool = Field(
         default=False, alias="content_truncated", exclude=True
     )
+    issue_counts_upstream: _IssueCounts = Field(
+        default_factory=dict, alias="issue_counts", exclude=True, repr=False
+    )
 
     _truncated: bool = PrivateAttr(default=False)
+    _omitted_issue_counts: _IssueCounts = PrivateAttr(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _count_issues(self) -> "KnowledgeBaseSyncResult":
+        for severity in ("warning", "error"):
+            if severity in self._omitted_issue_counts:
+                continue
+            issues = self.warnings if severity == "warning" else self.errors
+            observed = Counter(issue.code for issue in issues)
+            totals = self.issue_counts_upstream.get(severity, observed)
+            if any(totals.get(code, 0) < count for code, count in observed.items()):
+                raise ValueError(
+                    f"{severity} issue_counts must cover the supplied details"
+                )
+            self._omitted_issue_counts[severity] = dict(Counter(totals) - observed)
+        return self
+
+    @model_validator(mode="after")
+    def _up_to_date_wrote_nothing(self) -> "KnowledgeBaseSyncResult":
+        # "Nothing to do" next to a write would tell operators the library was
+        # untouched when it was not; refused rather than silently reclassified.
+        if self.reconciliation is KnowledgeBaseReconciliation.up_to_date and (
+            self.outcome is not KnowledgeBaseRunOutcome.succeeded
+            or self.created
+            or self.updated
+            or self.removed
+            or self.errors
+            or self.issue_counts["error"]
+        ):
+            raise ValueError(
+                "reconciliation 'up_to_date' means the run succeeded and wrote, "
+                "removed and failed nothing; report 'complete' or 'partial'"
+            )
+        return self
 
     @model_validator(mode="after")
     def _bound_free_form_content(self) -> "KnowledgeBaseSyncResult":
         # Clip and record in one pass: re-measuring an already-clipped value
         # cannot tell "exactly at the bound" from "cut down to it".
-        clipped = self.truncated_upstream
+        clipped = self.truncated_upstream or self._truncated
         self.summary, summary_clipped = _clip(self.summary, MAX_SUMMARY_CHARS)
         clipped = clipped or summary_clipped
         dropped = len(self.warnings) > MAX_ISSUES or len(self.errors) > MAX_ISSUES
+        for severity in ("warning", "error"):
+            issues = self.warnings if severity == "warning" else self.errors
+            omitted = Counter(self._omitted_issue_counts[severity])
+            omitted.update(issue.code for issue in issues[MAX_ISSUES:])
+            self._omitted_issue_counts[severity] = dict(omitted)
         self.warnings = self.warnings[:MAX_ISSUES]
         self.errors = self.errors[:MAX_ISSUES]
 
@@ -183,6 +256,18 @@ class KnowledgeBaseSyncResult(BaseModel):
         except (TypeError, ValueError) as exc:
             raise ValueError(f"metrics must be JSON-safe: {exc}") from exc
         return value
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def issue_counts(self) -> _IssueCounts:
+        """All occurrences, including clipped details and later list edits."""
+        totals: _IssueCounts = {}
+        for severity in ("warning", "error"):
+            issues = self.warnings if severity == "warning" else self.errors
+            counts = Counter(issue.code for issue in issues)
+            counts.update(self._omitted_issue_counts.get(severity, {}))
+            totals[severity] = dict(counts)
+        return totals
 
     @computed_field  # type: ignore[prop-decorator]
     @property

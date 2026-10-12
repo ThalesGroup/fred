@@ -16,12 +16,11 @@
 .card {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-l);
   margin: 1rem auto;
   border-radius: var(--radius-l);
   background: var(--surface-main);
-  padding: var(--spacing-l);
-  width: min(52rem, calc(100vw - 2rem));
+  padding-bottom: var(--settings-modal-body-padding-bottom, var(--spacing-l));
+  width: min(var(--settings-modal-max-width, 52rem), calc(100vw - 2rem));
 }
 
 /* Focused programmatically only, to put a keyboard user inside the dialog —
@@ -30,15 +29,22 @@
   outline: none;
 }
 
+/* A form tunes width and paddings via --settings-modal-max-width and
+   --settings-modal-{header-padding,body-padding-inline,body-padding-bottom}. */
 .header {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: flex-start;
   gap: var(--spacing-m);
+  padding: var(--settings-modal-header-padding, var(--spacing-l));
 }
 
+/* The actions wrap under the title only when both no longer fit side by side
+   (the card, not the viewport, decides). */
 .titleBlock {
   display: flex;
+  flex: 1 1 14rem;
   flex-direction: column;
   gap: var(--spacing-2xs);
 }
@@ -55,31 +61,24 @@
 
 .actions {
   display: flex;
+  flex-shrink: 1;
   flex-wrap: wrap;
   justify-content: flex-end;
   align-items: center;
   gap: var(--spacing-xs);
+  min-width: 0;
 }
 
 .content {
   display: flex;
   flex-direction: column;
+  padding-inline: var(--settings-modal-body-padding-inline, var(--spacing-l));
 }
 
 .footer {
   display: flex;
   justify-content: flex-start;
+  margin: var(--spacing-l) var(--settings-modal-body-padding-inline, var(--spacing-l)) 0;
   border-top: 1px solid var(--outline-muted);
   padding-top: var(--spacing-s);
-}
-
-@media (max-width: 720px) {
-  .header {
-    flex-direction: column;
-  }
-
-  .actions {
-    justify-content: flex-start;
-    width: 100%;
-  }
 }

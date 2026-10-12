@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import asyncio
+import json
 
 import pytest
 
@@ -22,7 +23,7 @@ from knowledge_flow_backend.common.structures import IngestionWorkerRole
 
 
 @pytest.mark.asyncio
-async def test_main_worker_enables_observability_from_configuration(app_context, monkeypatch) -> None:
+async def test_main_worker_enables_observability_from_configuration(app_context, monkeypatch, capsys) -> None:
     """
     Verify worker startup honors metrics and KPI settings from configuration.
 
@@ -41,7 +42,7 @@ async def test_main_worker_enables_observability_from_configuration(app_context,
         }
     )
     config.observability.kpi.prometheus = config.observability.kpi.prometheus.model_copy(update={"enabled": True})
-    config.app = config.app.model_copy(update={"pdf_render_ttl_days": 45})
+    config.app = config.app.model_copy(update={"pdf_render_ttl_days": 45, "log_format": "json"})
     config.scheduler = config.scheduler.model_copy(
         update={
             "enabled": True,
@@ -96,8 +97,6 @@ async def test_main_worker_enables_observability_from_configuration(app_context,
 
     monkeypatch.setattr(main_worker_module, "require_tables", fake_require_tables)
     monkeypatch.setattr(main_worker_module, "load_configuration", lambda: config)
-    monkeypatch.setattr(main_worker_module, "get_loaded_env_file_path", lambda: "/tmp/test.env")
-    monkeypatch.setattr(main_worker_module, "get_loaded_config_file_path", lambda: "/tmp/test.yaml")
     monkeypatch.setattr(
         main_worker_module,
         "start_http_server",
@@ -111,10 +110,17 @@ async def test_main_worker_enables_observability_from_configuration(app_context,
     monkeypatch.setattr(ApplicationContext, "shutdown", fake_shutdown)
 
     ApplicationContext.reset_instance()
+    capsys.readouterr()
     try:
         await main_worker_module.main()
     finally:
         ApplicationContext.reset_instance()
+
+    events = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert events
+    assert all(event.get("service") == "knowledge-flow" for event in events)
+    assert all(event.get("service_role") == "worker" for event in events)
+    assert all("timestamp" in event and "severity" in event for event in events)
 
     prom_cfg = config.observability.kpi.prometheus
     # #2314: the worker must run the startup schema guard (on its engine, with

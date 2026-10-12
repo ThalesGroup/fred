@@ -126,6 +126,7 @@ class FrontendConfig(BaseModel):
     (that stays on `FrontendBootstrap`).
     """
 
+    platform_access_enabled: bool = False
     user_auth: FrontendUserAuthConfig
     gcu_version: str | None = None
     """Active Terms-of-Use / CGU version the deployment requires, or `None` when
@@ -208,7 +209,9 @@ class AgentTemplateSummary(BaseModel):
             "advertisement. MCP servers surface here as ordinary capabilities "
             "keyed by their plain catalog server id (#1988). Drives the one "
             "Tools tab in agent creation; config_fields render through the "
-            "metadata-driven form."
+            "metadata-driven form. For a template with "
+            "`supports_capabilities=False` it lists only the capabilities "
+            "included with the agent."
         ),
     )
     supports_capabilities: bool = Field(
@@ -217,7 +220,9 @@ class AgentTemplateSummary(BaseModel):
             "Whether this template genuinely participates in capability "
             "selection, unfiltered by the team's can_use grants — unlike "
             "available_capabilities, which an empty team grant also empties. "
-            "False means the frontend should say so, not imply zero grants."
+            "False means the agent offers no free selection: every entry of "
+            "available_capabilities is included with it, always active and "
+            "configurable, and a submitted selection is ignored."
         ),
     )
     default_capability_ids: list[str] = Field(
@@ -733,6 +738,12 @@ class AgentCopyRequest(BaseModel):
     target_team_ids: list[str] = Field(..., min_length=1)
     display_name: str | None = Field(default=None, min_length=1)
 
+    # Stored without surrounding spaces: names are unique per team, compared trimmed.
+    @field_validator("display_name", mode="before")
+    @classmethod
+    def _strip_display_name(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+
 
 class AgentCopyNotice(BaseModel):
     """A capability copied with something left for an editor to redo."""
@@ -755,6 +766,10 @@ class AgentCopyResult(BaseModel):
         description="What an editor must redo in the destination, per capability.",
     )
     error: str | None = None
+    error_code: str | None = Field(
+        default=None,
+        description="Stable code of the failure, e.g. `agent_name_conflict` for a duplicate under a taken name.",
+    )
 
 
 class AgentCopyResponse(BaseModel):
@@ -948,6 +963,13 @@ class CreateAgentInstanceRequest(BaseModel):
         ),
     )
     display_name: str = Field(..., min_length=1, max_length=255)
+
+    # Stored without surrounding spaces: names are unique per team, compared trimmed.
+    @field_validator("display_name", mode="before")
+    @classmethod
+    def _strip_display_name(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+
     description: str | None = Field(default=None, max_length=500)
     role: str | None = Field(
         default=None,
@@ -1025,6 +1047,13 @@ class UpdateAgentInstanceRequest(BaseModel):
     """Request body for patching a managed agent instance's metadata and field values."""
 
     display_name: str | None = Field(default=None, min_length=1, max_length=255)
+
+    # Stored without surrounding spaces: names are unique per team, compared trimmed.
+    @field_validator("display_name", mode="before")
+    @classmethod
+    def _strip_display_name(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+
     description: str | None = Field(default=None, max_length=500)
     role: str | None = Field(
         default=None,

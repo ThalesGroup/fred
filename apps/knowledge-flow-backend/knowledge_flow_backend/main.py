@@ -32,6 +32,8 @@ from fred_core import enforce_account_status, get_config, initialize_user_securi
 from fred_core.common import read_env_bool, register_exception_handlers
 from fred_core.diagnostics import install_gc_diagnostics
 from fred_core.kpi import KPIMiddleware, emit_process_kpis, emit_sql_pool_kpis
+from fred_core.logs.http import REFERENCE_HEADERS, RequestLoggingFastAPI
+from fred_core.logs.null_log_store import NullLogStore
 from fred_core.scheduler import SchedulerBackend, TemporalClientProvider
 from fred_core.security.mcp_delegation import (
     declare_delegation_parameters,
@@ -45,11 +47,8 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from knowledge_flow_backend.application_context import ApplicationContext, get_configuration
 from knowledge_flow_backend.common.config_loader import (
-    get_loaded_config_file_path,
-    get_loaded_env_file_path,
     load_configuration,
 )
-from knowledge_flow_backend.common.http_logging import RequestResponseLogger
 from knowledge_flow_backend.common.structures import Configuration
 from knowledge_flow_backend.compat import fastapi_mcp_patch  # noqa: F401
 from knowledge_flow_backend.core.monitoring.monitoring_controller import (
@@ -139,9 +138,14 @@ def _without_response_docs(mcp: FastApiMCP) -> FastApiMCP:
 
 def create_app() -> FastAPI:
     configuration: Configuration = load_configuration()
-    env_file = get_loaded_env_file_path() or "<unset>"
-    config_file = get_loaded_config_file_path() or "<unset>"
-    logger.info("%s Environment file: %s | Configuration file: %s", LOG_PREFIX, env_file, config_file)
+    log_setup(
+        service_name="knowledge-flow",
+        log_level=configuration.app.log_level,
+        log_format=configuration.app.log_format,
+        service_role="api",
+        store=NullLogStore(),
+    )
+    logger.info("Application configuration ready")
     logger.info("%s Embedding model: [%s] %s", LOG_PREFIX, configuration.embedding_model.provider, configuration.embedding_model.name)
     logger.info("%s Chat model: [%s] %s", LOG_PREFIX, configuration.chat_model.provider, configuration.chat_model.name)
     if configuration.ocr_model:
@@ -161,6 +165,8 @@ def create_app() -> FastAPI:
     log_setup(
         service_name="knowledge-flow",
         log_level=configuration.app.log_level,
+        log_format=configuration.app.log_format,
+        service_role="api",
         store=application_context.get_log_store(),
     )
     logger.info("%s create_app() called with base_url=%s", LOG_PREFIX, base_url)
@@ -170,9 +176,11 @@ def create_app() -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
-        # Build the engine where delegation or the local directory needs account status.
-        if configuration.security.delegation.in_use or configuration.security.user_directory == "local":
-            await enforce_account_status(application_context.get_rebac_engine())
+        await enforce_account_status(application_context.get_rebac_engine())
+        from fred_core.security.platform_access.access_control import initialize_platform_access, platform_access_available
+
+        if platform_access_available(configuration.security):
+            await initialize_platform_access(configuration.security, application_context.get_pg_async_engine(), application_context.get_rebac_engine())
         # #2314 (closes the #2313 defect): startup creates NO tables — DDL is
         # owned by the Alembic trees alone (see models/table_ownership.py and
         # DATABASE_MIGRATIONS.md §"Table ownership across trees"). A
@@ -247,7 +255,7 @@ def create_app() -> FastAPI:
             await gc_diagnostics.stop()
             await application_context.shutdown()
 
-    app = FastAPI(
+    app = RequestLoggingFastAPI(
         docs_url=f"{configuration.app.base_url}/docs" if docs_enabled else None,
         redoc_url=f"{configuration.app.base_url}/redoc" if docs_enabled else None,
         openapi_url=f"{configuration.app.base_url}/openapi.json" if docs_enabled else None,
@@ -272,11 +280,12 @@ def create_app() -> FastAPI:
 
     allowed_origins = list({_norm_origin(o) for o in configuration.security.authorized_origins})
     logger.info("%s[CORS] allow_origins=%s", LOG_PREFIX, allowed_origins)
-    app.add_middleware(
+    app.add_request_middleware(
         CORSMiddleware,
         allow_origins=allowed_origins,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Content-Type", "Authorization"],
+        expose_headers=REFERENCE_HEADERS,
     )
     initialize_user_security(configuration.security.user)
     # Enforce the hardened security profile (C3) at startup — fails closed (RUNTIME-07
@@ -286,8 +295,7 @@ def create_app() -> FastAPI:
 
     apply_security_profile(configuration.security)
 
-    app.add_middleware(RequestResponseLogger)
-    app.add_middleware(KPIMiddleware, kpi=application_context.get_kpi_writer)
+    app.add_request_middleware(KPIMiddleware, kpi=application_context.get_kpi_writer)
     monitoring_router = APIRouter(prefix=configuration.app.base_url)
     router = APIRouter(
         prefix=configuration.app.base_url,

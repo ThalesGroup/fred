@@ -28,6 +28,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { platformAccessDenied } from "../../../../common/platformAccess";
 import type { ChatMessage } from "../../../../slices/runtime/runtimeOpenApi";
 import {
   clearSessionHistoryCache,
@@ -41,6 +42,8 @@ declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean;
 }
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
+vi.mock("../../../../common/config", () => ({ getConfig: () => ({ frontend_basename: "/" }) }));
 
 vi.mock("../../../../security/KeycloakService", () => ({
   KeyCloakService: {
@@ -312,6 +315,30 @@ describe("useSessionHistory serve-then-revalidate cache", () => {
     expect(latest.isUnavailable).toBe(true);
     expect(latest.isSettled).toBe(true);
     expect(onLoaded).not.toHaveBeenCalled();
+  });
+
+  it("preserves platform admission denial handling when a history read is refused", async () => {
+    const denied = vi.fn();
+    const redirect = vi.spyOn(window.location, "replace").mockImplementation(() => {});
+    window.addEventListener(platformAccessDenied, denied);
+    fetchImpl = async () =>
+      new Response(JSON.stringify({ detail: "platform_access_denied" }), {
+        status: 403,
+        headers: { "Content-Type": "application/json" },
+      });
+    try {
+      mount("restricted");
+      await act(async () => {
+        await vi.waitFor(() => expect(redirect).toHaveBeenCalledWith("/platform-access-denied"));
+      });
+      expect(denied).toHaveBeenCalledTimes(1);
+      expect(latest.isUnavailable).toBe(true);
+      expect(latest.isSettled).toBe(true);
+      expect(onLoaded).not.toHaveBeenCalled();
+    } finally {
+      window.removeEventListener(platformAccessDenied, denied);
+      redirect.mockRestore();
+    }
   });
 
   it("discards a history request when its route becomes unavailable", async () => {

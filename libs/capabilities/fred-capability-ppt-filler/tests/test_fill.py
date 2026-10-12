@@ -247,11 +247,14 @@ def test_list_tool_present_when_schema_has_image_fields():
 # --- B/C/D. Fill via shared traversal, upload, return artifact --------------------
 
 
+@pytest.mark.parametrize(
+    "body", ["Title {name} ... footer {{name}}", "Title {{name}} ... footer {{name}}"]
+)
 @pytest.mark.asyncio
-async def test_fill_repeated_keys_on_slide_uses_one_value(no_pdf):
+async def test_fill_repeated_keys_on_slide_uses_one_value(no_pdf, body):
     """A key appearing twice on one slide fills with the same value, and the deck is
     written session-scoped with a download LinkPart returned (preview disabled)."""
-    deck = build_deck([("Title {{name}} ... footer {{name}}", "{{name}}:\nThe name")])
+    deck = build_deck([(body, "{{name}}:\nThe name")])
     workspace = FakeWorkspace()
     ctx = _ctx(
         schema_slides(deck),
@@ -315,14 +318,17 @@ async def test_default_template_key_is_used(no_pdf):
     assert artifact.is_error is False
 
 
+@pytest.mark.parametrize(
+    "runs", [("Hello {na", "me} world"), ("Hello {{na", "me}} world")]
+)
 @pytest.mark.asyncio
-async def test_key_split_across_runs_is_filled(no_pdf):
+async def test_key_split_across_runs_is_filled(no_pdf, runs):
     """A key straddling a run boundary is still filled (shared run-merging traversal)."""
     presentation = Presentation()
     slide = presentation.slides.add_slide(presentation.slide_layouts[6])
     textbox = slide.shapes.add_textbox(Inches(1), Inches(1), Inches(8), Inches(2))
     para = textbox.text_frame.paragraphs[0]
-    for run_text in ("Hello {{na", "me}} world"):
+    for run_text in runs:
         para.add_run().text = run_text
     slide.notes_slide.notes_text_frame.text = "{{name}}:\nThe name"
     buffer = io.BytesIO()
@@ -612,13 +618,14 @@ async def test_filled_deck_strips_authoring_notes(no_pdf):
     assert notes == ""
 
 
+@pytest.mark.parametrize("marker", ["{name}", "{{name}}"])
 @pytest.mark.asyncio
-async def test_filled_deck_keeps_notes_after_separator(no_pdf):
+async def test_filled_deck_keeps_notes_after_separator(no_pdf, marker):
     deck = build_deck(
         [
             (
-                "Hello {{name}}",
-                "{{name}}:\nThe person's name\n---\nSpeaker note: pause here.",
+                f"Hello {marker}",
+                "{{name}}:\nThe person's name\n---\nSpeaker note: keep {literal} and {{other}} here.",
             )
         ]
     )
@@ -628,15 +635,18 @@ async def test_filled_deck_keeps_notes_after_separator(no_pdf):
     await _fill_tool(ctx).coroutine(slide_1={"name": "Ada"})
 
     filled = Presentation(io.BytesIO(workspace.writes[0]["content"]))
-    assert _slide_notes(filled, 0) == "Speaker note: pause here."
+    assert _slide_notes(filled, 0) == "Speaker note: keep {literal} and {{other}} here."
 
 
 # --- I. Image keys: placement / removal / hard-fail refusals -----------------------
 
 
+@pytest.mark.parametrize("marker", ["{logo}", "{{logo}}"])
 @pytest.mark.asyncio
-async def test_image_key_with_doc_id_places_picture_and_removes_placeholder(no_pdf):
-    deck = build_image_deck([(IMAGE_NOTES, ["{{logo}}"])])
+async def test_image_key_with_doc_id_places_picture_and_removes_placeholder(
+    no_pdf, marker
+):
+    deck = build_image_deck([(IMAGE_NOTES, [marker])])
     docs = FakeDocs({"doc-logo": (png_bytes(10, 10, "red"), "image/png")})
     workspace = FakeWorkspace()
     ctx = _ctx(
@@ -766,10 +776,11 @@ async def test_webp_image_is_transcoded_and_embedded(no_pdf):
     assert list_keys_on_slide(slide) == []
 
 
+@pytest.mark.parametrize("marker", ["{logo}", "{{logo}}"])
 @pytest.mark.asyncio
-async def test_image_key_in_table_cell_is_refused(no_pdf):
+async def test_image_key_in_table_cell_is_refused(no_pdf, marker):
     """An image key in a table cell (invalid picture location) hard-fails the fill."""
-    deck = build_table_deck(IMAGE_NOTES, ["{{logo}}", "plain"])
+    deck = build_table_deck(IMAGE_NOTES, [marker, "plain"])
     docs = FakeDocs({"doc-logo": (png_bytes(10, 10, "red"), "image/png")})
     workspace = FakeWorkspace()
     ctx = _ctx(

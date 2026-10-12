@@ -41,11 +41,13 @@ from fred_core.common import TeamId, personal_team_id
 from fred_core.common.team_id import is_personal_team_id
 from fred_core.kpi.kpi_writer import to_kpi_actor
 from fred_core.kpi.kpi_writer_structures import KPIActor
+from fred_core.logs.context import bind_operation_context
 from fred_core.security.backend_to_backend_auth import (
     M2MBearerAuth,
     RefreshableTokenProvider,
 )
 from fred_core.security.models import Resource
+from fred_core.security.platform_access.access_control import platform_access_available
 from fred_core.security.rebac.application_authz import (
     APPLICATION_CATALOG_NAMESPACE_PREFIX,
 )
@@ -64,7 +66,11 @@ from fred_sdk.contracts.models import TeamScopePolicy
 from fred_sdk.contracts.prompt_utils import find_reserved_prompt_tag
 from pydantic import ValidationError
 
-from control_plane_backend.agent_instances.store import AgentInstanceRecord
+from control_plane_backend.agent_instances.names import normalize_agent_name
+from control_plane_backend.agent_instances.store import (
+    AgentInstanceRecord,
+    AgentNameAlreadyExistsError,
+)
 from control_plane_backend.agent_instances.suspension import (
     SliceInvalid,
     SuspensionReason,
@@ -490,6 +496,7 @@ async def build_frontend_config(deps: ProductServiceDependencies) -> FrontendCon
         else None
     )
     return FrontendConfig(
+        platform_access_enabled=platform_access_available(deps.configuration.security),
         user_auth=user_auth,
         gcu_version=gcu_version,
         root_bootstrap_completed=root_bootstrap_completed,
@@ -776,7 +783,9 @@ def template_capability_id(runtime_id: str, agent_id: str) -> str:
 # (AGENT-VISIBILITY-RFC §8, "public=True does NOT mean platform-approved" — the
 # converse holds too) and other non-public templates (e.g. a future internal/
 # review-pending agent) must still go through ordinary CAPAB-01 admission.
-_CAPABILITY_GATE_EXEMPT_TEMPLATE_AGENT_IDS = frozenset({"fred.github.self_test"})
+_CAPABILITY_GATE_EXEMPT_TEMPLATE_AGENT_IDS = frozenset(
+    {"fred.github.self_test", "fred.github.self_test_web"}
+)
 
 
 def capability_gate_exempt(source_agent_id: str) -> bool:
@@ -1426,6 +1435,7 @@ async def _apply_capability_selection(
     context_label: str,
     deps: ProductServiceDependencies | None = None,
     asset_uploads: Mapping[str, Sequence[CapabilityAssetFile]] | None = None,
+    supports_capabilities: bool = True,
 ) -> ManagedAgentTuning:
     """
     Resolve one save's capability selection into pod-validated tuning slices
@@ -1456,7 +1466,12 @@ async def _apply_capability_selection(
       capability it is not enabled for (→ 403). The team subject — not the
       acting user — is what keeps a capability enabled for one of the user's
       other teams from being saved here.
+    - a template without free selection (`supports_capabilities=False`)
+      ignores any submitted selection, as the runtime does: its included
+      defaults always take the template-default path, configured like any other
     """
+    if not supports_capabilities:
+        selected_ids = None
     if selected_ids is not None:
         _validate_capability_ids(
             submitted_ids=selected_ids,
@@ -2393,12 +2408,44 @@ class ExecutionPreparationError(Exception):
         self.http_status = http_status
 
 
+# Stable discriminator on the 409 body, so the agent form marks its name field.
+AGENT_NAME_CONFLICT = "agent_name_conflict"
+
+
 class EnrollmentError(Exception):
     """Raised when agent instance enrollment fails."""
 
-    def __init__(self, message: str, *, http_status: int = 400) -> None:
+    def __init__(
+        self, message: str, *, http_status: int = 400, code: str | None = None
+    ) -> None:
         super().__init__(message)
         self.http_status = http_status
+        self.code = code
+
+
+def agent_name_conflict(team_id: TeamId, display_name: str) -> EnrollmentError:
+    return EnrollmentError(
+        f"An agent named {display_name!r} already exists in team {team_id!r}.",
+        http_status=409,
+        code=AGENT_NAME_CONFLICT,
+    )
+
+
+async def ensure_agent_name_free(
+    team_id: TeamId,
+    display_name: str,
+    deps: ProductServiceDependencies,
+    *,
+    exclude_agent_instance_id: str | None = None,
+) -> None:
+    """Refuse a taken name before any side effect; the unique index stays the guarantee."""
+
+    wanted = normalize_agent_name(display_name)
+    for other in await deps.get_agent_instance_store().list_by_team(team_id):
+        if other.agent_instance_id == exclude_agent_instance_id:
+            continue
+        if normalize_agent_name(other.display_name) == wanted:
+            raise agent_name_conflict(team_id, display_name)
 
 
 # Stable discriminator on the 409 body: a name conflict and a command
@@ -2646,6 +2693,7 @@ async def enroll_agent_instance(
             "Expected format: '{source_runtime_id}:{source_agent_id}'."
         )
     source_runtime_id, source_agent_id = parts
+    await ensure_agent_name_free(team_id, request.display_name, deps)
 
     source = next(
         (
@@ -2759,6 +2807,7 @@ async def enroll_agent_instance(
         context_label="agent enrollment",
         deps=deps,
         asset_uploads=asset_uploads,
+        supports_capabilities=template.supports_capabilities,
     )
     record = AgentInstanceRecord(
         agent_instance_id=agent_instance_id,
@@ -2774,7 +2823,10 @@ async def enroll_agent_instance(
     )
 
     store = deps.get_agent_instance_store()
-    created = await store.create(record)
+    try:
+        created = await store.create(record)
+    except AgentNameAlreadyExistsError as exc:
+        raise agent_name_conflict(team_id, request.display_name) from exc
     emit_agent_created_kpi(created, user=user, deps=deps)
     return _record_to_summary(created)
 
@@ -2846,6 +2898,13 @@ async def update_agent_instance(
     record = await store.get_for_team(agent_instance_id, team_id)
     if record is None:
         return None
+    if request.display_name is not None:
+        await ensure_agent_name_free(
+            team_id,
+            request.display_name,
+            deps,
+            exclude_agent_instance_id=agent_instance_id,
+        )
 
     # 2026-07-19 fix (GitHub #2004 item 1): re-check the team's `can_use` on
     # this instance's own `kind="agent"` template capability, the same gate
@@ -2963,6 +3022,7 @@ async def update_agent_instance(
                 context_label="agent update",
                 deps=deps,
                 asset_uploads=asset_uploads,
+                supports_capabilities=template.supports_capabilities,
             )
         new_tuning = base
 
@@ -3001,15 +3061,18 @@ async def update_agent_instance(
             update={"reasoning_default_on": request.reasoning_default_on}
         )
 
-    updated = await store.update(
-        agent_instance_id=agent_instance_id,
-        team_id=team_id,
-        display_name=request.display_name,
-        description=request.description,
-        enabled=request.status == "enabled" if request.status is not None else None,
-        tuning=new_tuning,
-        updated_by=user.uid,
-    )
+    try:
+        updated = await store.update(
+            agent_instance_id=agent_instance_id,
+            team_id=team_id,
+            display_name=request.display_name,
+            description=request.description,
+            enabled=request.status == "enabled" if request.status is not None else None,
+            tuning=new_tuning,
+            updated_by=user.uid,
+        )
+    except AgentNameAlreadyExistsError as exc:
+        raise agent_name_conflict(team_id, exc.display_name) from exc
     # A save that re-validated every ACTIVE capability slice through the pod
     # clears any suspension — the single clearing mechanism (#1975, RFC §3.9).
     # Reaching here means `_apply_capability_selection` accepted the selection
@@ -3260,6 +3323,11 @@ async def prepare_execution(
         raise ExecutionPreparationError(
             f"Unknown agent instance {agent_instance_id!r} for team {team_id!r}."
         )
+    bind_operation_context(
+        user_id=user.uid,
+        team_id=str(team_id),
+        agent_instance_id=agent_instance_id,
+    )
     if not instance.enabled:
         raise ExecutionPreparationError(
             f"Agent instance {agent_instance_id!r} is disabled.",
@@ -3328,6 +3396,7 @@ async def prepare_execution(
                 f"Session {session_id!r} is not usable for this execution."
             )
         assert session_record is not None
+        bind_operation_context(session_id=session_record.session_id)
         if session_record.context_prompt_ids:
             # Resolve library prompts only within the caller's authorized scope:
             # the active team plus the caller's personal team (the same union the
@@ -4368,6 +4437,7 @@ async def create_session(
     Example:
     - `item = await create_session(user, team_id, request, deps)`
     """
+    bind_operation_context(user_id=user.uid, team_id=str(team_id))
     record = SessionMetadataRecord(
         session_id=request.session_id,
         team_id=team_id,
@@ -4383,6 +4453,13 @@ async def create_session(
         raise SessionAlreadyExistsError(request.session_id) from exc
     except SessionMetadataAgentMissingError as exc:
         raise SessionAgentUnavailableError("Unknown agent instance.") from exc
+    bind_operation_context(
+        {"agent_instance_id": created.agent_instance_id}
+        if created.agent_instance_id is not None
+        and created.source_runtime_id is not None
+        else {},
+        session_id=created.session_id,
+    )
     try:
         deps.get_kpi_writer().count(
             "session.created_total",
@@ -4395,6 +4472,7 @@ async def create_session(
         )
     except Exception:
         logger.exception("[control-plane][kpi] Failed to emit session.created_total")
+    logger.info("Conversation created", extra={"outcome": "succeeded"})
     return _record_to_item(created)
 
 
@@ -4661,6 +4739,13 @@ async def create_session_attachment(
         session_id=session_id,
         user_id=user_id,
     )
+    bind_operation_context(
+        user_id=user_id,
+        team_id=str(team_id),
+        session_id=session_id,
+        attachment_id=request.attachment_id,
+        document_uid=request.document_uid,
+    )
     store = deps.get_session_attachment_store()
     await store.save(
         SessionAttachmentRecord(
@@ -4683,6 +4768,7 @@ async def create_session_attachment(
             f"Failed to persist attachment {request.attachment_id!r} for session {session_id!r}.",
             http_status=500,
         )
+    logger.info("Conversation attachment persisted", extra={"outcome": "succeeded"})
     return _to_session_attachment_summary(created)
 
 

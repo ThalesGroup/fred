@@ -16,7 +16,8 @@
 
 `test_capability.py` hand-builds an `EntryPoint`; this reads the one the
 INSTALLED distribution declares, so a typo in `pyproject.toml` fails here
-rather than only at pod boot. fred-runtime is a dev-group (test-only)
+rather than only at pod boot, and checks the stored config against the
+runtime helpers that read it. fred-runtime is a dev-group (test-only)
 dependency: discovery and `.validate()` are its concern.
 """
 
@@ -24,7 +25,11 @@ from __future__ import annotations
 
 from importlib.metadata import distribution
 
-from fred_runtime.capabilities import CapabilityRegistry
+from fred_runtime.capabilities import (
+    CapabilityRegistry,
+    evaluate_capability_chat_controls,
+    resolve_bound_library_ids,
+)
 from fred_runtime.capabilities.registry import FRED_CAPABILITIES_ENTRY_POINT_GROUP
 from fred_sdk.contracts.capability import AgentCapability
 from fred_sdk.contracts.models import TeamScopePolicy
@@ -64,3 +69,54 @@ def test_capability_stays_default_on() -> None:
     (entry,) = _declared_entry_points()
 
     assert entry.load().manifest.team_scope == TeamScopePolicy.DEFAULT_ON
+
+
+def _registry() -> CapabilityRegistry:
+    registry = CapabilityRegistry()
+    registry.discover(entry_points=_declared_entry_points())
+    return registry
+
+
+def _envelope(config: dict[str, object]) -> dict[str, object]:
+    version = _declared_entry_points()[0].load().manifest.version
+    return {"schema_version": version, "config": config}
+
+
+def test_stored_library_binding_reaches_the_server_side_ceiling() -> None:
+    # The same stored slice drives the composer's pinned picker and the bound
+    # scope fred-runtime enforces on `knowledge.search`.
+    registry = _registry()
+    stored = {
+        _CAPABILITY_ID: _envelope({"bind_libraries": True, "library_tag_ids": ["A"]})
+    }
+
+    scope = next(
+        control
+        for control in evaluate_capability_chat_controls(
+            registry,
+            capability_id=_CAPABILITY_ID,
+            config_envelope=stored[_CAPABILITY_ID],
+        ).controls
+        if control.widget == "document_scope"
+    )
+    assert scope.params is not None
+    assert scope.params["bound_library_ids"] == ["A"]
+    assert resolve_bound_library_ids(
+        registry, capability_ids=[_CAPABILITY_ID], capability_config=stored
+    ) == ["A"]
+
+
+def test_inert_library_binding_sets_no_ceiling() -> None:
+    registry = _registry()
+    for config in (
+        {"bind_libraries": False, "library_tag_ids": ["A"]},
+        {"bind_libraries": True, "library_tag_ids": ["A"], "team_documents": False},
+    ):
+        assert (
+            resolve_bound_library_ids(
+                registry,
+                capability_ids=[_CAPABILITY_ID],
+                capability_config={_CAPABILITY_ID: _envelope(config)},
+            )
+            is None
+        )

@@ -52,6 +52,7 @@ from .assembly import (
     build_capability_contexts,
     evaluate_capability_chat_controls,
     evaluate_chat_controls_batch,
+    resolve_bound_library_ids,
     resolve_stored_config,
     validate_turn_options,
 )
@@ -102,6 +103,7 @@ __all__ = [
     "boot_capability_registry",
     "build_capability_agent_block",
     "build_capability_context",
+    "resolve_bound_library_ids",
     "build_capability_contexts",
     "evaluate_capability_chat_controls",
     "evaluate_chat_controls_batch",

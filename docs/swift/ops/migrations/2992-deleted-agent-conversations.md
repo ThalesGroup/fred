@@ -23,7 +23,7 @@ No local or production configuration changes.
 ## Upgrade
 
 Run the normal Control Plane Alembic upgrade before deploying the updated backend
-and frontend together. Revision `c82f6a91d043`, following `aac66348e27b`, adds nullable
+and frontend together. Revision `c82f6a91d043`, following `a4d85307ea0e`, adds nullable
 `session_metadata.agent_display_name` and backfills names for agents still present
 in the same team. The migration updates conversation metadata in place and leaves
 activity timestamps unchanged. Its backfill runs once over existing sessions;
@@ -45,7 +45,7 @@ agent conversation still accepts messages.
 
 Roll back the application images together; the nullable column may remain in place.
 If a schema downgrade is required, stop updated application readers/writers first
-and downgrade the Control Plane to `aac66348e27b`. Only the display-name snapshots
+and downgrade the Control Plane to `a4d85307ea0e`. Only the display-name snapshots
 are dropped; sessions and runtime history remain. The previous deleted-agent
 history limitation would return with older application images.
 

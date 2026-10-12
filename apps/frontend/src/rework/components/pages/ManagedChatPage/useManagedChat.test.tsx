@@ -1548,7 +1548,8 @@ describe("useManagedChat — session write reliability", () => {
     act(() => latest.stageHitlAnswer("paris"));
     act(() => latest.selectHitlTab(first));
     act(() => latest.setHitlFreeText("Lyon"));
-    expect(latest.stagedHitlAnswer).toEqual({ answer: undefined, freeText: "Lyon", skipped: false });
+    // Typing withdraws the staged choice; the text counts once validated.
+    expect(latest.stagedHitlAnswer).toBeUndefined();
     act(() => latest.stageHitlAnswer(undefined, "Lyon"));
     act(() => latest.stageHitlAnswer("low"));
 
@@ -1601,6 +1602,46 @@ describe("useManagedChat — session write reliability", () => {
     expect(latest.pendingHitl).toEqual(questions[2]);
   });
 
+  it("replaces a validated Other text with a later choice", () => {
+    const first = {
+      ...awaitingHumanEvent,
+      payload: {
+        stage: "agent_question",
+        question: "Destination?",
+        interrupt_id: "interrupt-a",
+        occurrence_id: "call-a",
+        choices: [{ id: "paris", label: "Paris" }],
+        free_text: true,
+      },
+    };
+    const second = {
+      ...awaitingHumanEvent,
+      payload: {
+        stage: "agent_question",
+        question: "Budget?",
+        interrupt_id: "interrupt-b",
+        occurrence_id: "call-b",
+        free_text: true,
+      },
+    };
+    mount();
+    bindSession("session-1");
+    act(() => {
+      capturedOnAwaitingHuman?.(first);
+      capturedOnAwaitingHuman?.(second);
+    });
+    rerender();
+    act(() => latest.setHitlFreeText("Lyon"));
+    act(() => latest.stageHitlAnswer(undefined, "Lyon"));
+    act(() => latest.selectHitlTab(first));
+    // What the card does on a choice click: clear the Other field, then stage the choice.
+    act(() => latest.setHitlFreeText(""));
+    act(() => latest.stageHitlAnswer("paris"));
+    act(() => latest.selectHitlTab(first));
+    expect(latest.stagedHitlAnswer).toEqual({ answer: "paris", freeText: undefined, skipped: false });
+    expect(latest.hitlFreeText).toBe("");
+  });
+
   it("stages simultaneous answers, permits revision, then resumes once", async () => {
     const first = {
       ...awaitingHumanEvent,
@@ -1641,12 +1682,17 @@ describe("useManagedChat — session write reliability", () => {
 
     act(() => latest.setHitlFreeText("No limit"));
     expect(latest.pendingHitl).toEqual(second);
+    // Typed text is only a draft until validated.
+    expect(latest.stagedHitlCount).toBe(1);
+    expect(latest.canSendAllHitl).toBe(false);
+    act(() => latest.stageHitlAnswer(undefined, "No limit"));
     expect(latest.stagedHitlCount).toBe(2);
     expect(latest.canSendAllHitl).toBe(true);
     expect(sendHitlResumeMock).not.toHaveBeenCalled();
     act(() => latest.setHitlFreeText("  "));
     expect(latest.canSendAllHitl).toBe(false);
     act(() => latest.setHitlFreeText("No limit"));
+    act(() => latest.stageHitlAnswer(undefined, "No limit"));
     expect(latest.canSendAllHitl).toBe(true);
     act(() => latest.selectHitlTab(first));
     act(() => latest.stageHitlAnswer("rome"));
@@ -1774,8 +1820,9 @@ describe("useManagedChat — session write reliability", () => {
     });
     rerender();
     act(() => latest.setHitlFreeText("Paris"));
-    act(() => latest.selectHitlTab(second));
+    act(() => latest.stageHitlAnswer(undefined, "Paris"));
     act(() => latest.setHitlFreeText("No limit"));
+    act(() => latest.stageHitlAnswer(undefined, "No limit"));
     act(() => latest.handleSendAllHitl());
     expect(latest.pendingHitlTabs).toEqual([first, second]);
 
@@ -1830,6 +1877,9 @@ describe("useManagedChat — session write reliability", () => {
     expect(latest.canSendAllHitl).toBe(true);
     expect(sendHitlResumeMock).toHaveBeenCalledTimes(1);
     act(() => latest.setHitlFreeText("A different answer"));
+    // Editing withdraws the staged skip until the new text is validated.
+    expect(latest.stagedHitlAnswer).toBeUndefined();
+    act(() => latest.stageHitlAnswer(undefined, "A different answer"));
     expect(latest.stagedHitlAnswer).toEqual({
       answer: undefined,
       freeText: "A different answer",

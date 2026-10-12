@@ -52,12 +52,13 @@ ACCEPTED = {
 }
 
 
-def _configuration() -> PodConfiguration:
+def _configuration(knowledge_flow_url: str = BASE) -> PodConfiguration:
     payload: dict[str, Any] = {
+        "app": {"runtime_id": "acme-kb"},
         "knowledge_base": {
             "prefix": "acme.kb",
             "control_plane_url": "http://example.invalid/control-plane/v1/",
-            "knowledge_flow_url": BASE,
+            "knowledge_flow_url": knowledge_flow_url,
         },
         "security": {
             "m2m": {
@@ -497,3 +498,147 @@ def test_every_call_carries_the_pod_identity(monkeypatch):
 
     assert len(fred.calls) == 4
     assert isinstance(fred.auth, M2MBearerAuth)
+
+
+def _waits(kb: str, state: str) -> float:
+    from prometheus_client import REGISTRY
+
+    return (
+        REGISTRY.get_sample_value(
+            "fred_kb_ingestion_wait_seconds_count",
+            {"service": "acme-kb", "knowledge_base": kb, "state": state},
+        )
+        or 0.0
+    )
+
+
+def test_a_wait_is_measured_by_how_the_ingestion_ended(monkeypatch):
+    from fred_sdk.knowledge_base import telemetry
+
+    kb = f"acme.kb.w{secrets.token_hex(4)}"
+    monkeypatch.setattr(telemetry, "_service", "acme-kb")
+    monkeypatch.setattr(telemetry, "_knowledge_base", kb)
+    fred = _Fred().answers(
+        "GET",
+        (200, _summary("running")),
+        (200, _summary("failed", error="conversion failed")),
+    )
+    publisher = _publisher(fred, monkeypatch)
+
+    asyncio.run(publisher.wait(TASK, poll_interval=0.001))
+
+    assert (_waits(kb, "failed"), _waits(kb, "succeeded")) == (1, 0)
+
+
+def test_a_wait_that_runs_out_is_measured_as_a_timeout(monkeypatch):
+    from fred_sdk.knowledge_base import telemetry
+
+    kb = f"acme.kb.w{secrets.token_hex(4)}"
+    monkeypatch.setattr(telemetry, "_service", "acme-kb")
+    monkeypatch.setattr(telemetry, "_knowledge_base", kb)
+    fred = _Fred().answers("GET", (200, _summary("running")))
+    publisher = _publisher(fred, monkeypatch)
+
+    with pytest.raises(DocumentWaitTimeout):
+        asyncio.run(publisher.wait(TASK, timeout=0.01, poll_interval=0.001))
+
+    assert _waits(kb, "timeout") == 1
+
+
+# ── A run's library from the run alone ─────────────────────────────────────────
+
+
+@pytest.fixture
+def no_active_configuration():
+    from fred_sdk.knowledge_base import configuration as configuration_module
+
+    configuration_module._reset_active_configuration()
+    yield configuration_module
+    configuration_module._reset_active_configuration()
+
+
+def _context(library_id: str = LIBRARY):
+    from fred_sdk.knowledge_base import KnowledgeBaseRunContext
+
+    return KnowledgeBaseRunContext(
+        definition_id="acme.kb.docs",
+        instance_id="instance-1",
+        team_id="team-1",
+        run_id="run-1",
+        library_id=library_id,
+    )
+
+
+def test_a_run_writes_into_its_own_library_with_the_bound_configuration(
+    monkeypatch, no_active_configuration
+):
+    no_active_configuration.bind_active_configuration(_configuration())
+
+    def _never(*_: Any) -> PodConfiguration:
+        raise AssertionError("a bound configuration is never read again")
+
+    monkeypatch.setattr(PodConfiguration, "load", classmethod(_never))
+    fred = _Fred().answers("POST", (202, ACCEPTED))
+    fred.install(monkeypatch)
+
+    publisher = DocumentPublisher.for_run(_context("lib-of-this-run"))
+    asyncio.run(publisher.publish(relative_path="docs/a.md", content=b"# A"))
+
+    _, url, kwargs = fred.calls[0]
+    assert url == f"{BASE}/libraries/lib-of-this-run/documents"
+    assert "source_tag" not in kwargs["data"]  # Knowledge Flow's own default applies
+
+
+def test_outside_a_worker_the_configuration_is_read_once(
+    monkeypatch, no_active_configuration
+):
+    loads: list[int] = []
+
+    def _load(_cls: type) -> PodConfiguration:
+        loads.append(1)
+        return _configuration()
+
+    monkeypatch.setattr(PodConfiguration, "load", classmethod(_load))
+    _Fred().install(monkeypatch)
+
+    DocumentPublisher.for_run(_context())
+    DocumentPublisher.for_run(_context())
+
+    assert len(loads) == 1
+
+
+def test_a_pod_keeping_its_own_store_is_told_before_any_request(
+    monkeypatch, no_active_configuration
+):
+    from fred_sdk.knowledge_base import KnowledgeFlowNotConfigured
+
+    no_active_configuration.bind_active_configuration(_configuration(""))
+    fred = _Fred()
+    fred.install(monkeypatch)
+
+    with pytest.raises(KnowledgeFlowNotConfigured, match="knowledge_flow_url"):
+        DocumentPublisher.for_run(_context())
+    assert fred.calls == []
+
+
+def test_an_explicit_source_tag_is_still_sent(monkeypatch):
+    fred = _Fred().answers("POST", (202, ACCEPTED))
+    fred.install(monkeypatch)
+    publisher = DocumentPublisher(
+        _configuration(), library_id=LIBRARY, source_tag="archive"
+    )
+
+    asyncio.run(publisher.publish(relative_path="docs/a.md", content=b"# A"))
+
+    assert fred.calls[0][2]["data"]["source_tag"] == "archive"
+
+
+def test_an_explicit_empty_source_tag_is_sent_not_replaced(monkeypatch):
+    """Only an absent tag is left to Knowledge Flow; an empty one is its to refuse."""
+    fred = _Fred().answers("POST", (202, ACCEPTED))
+    fred.install(monkeypatch)
+    publisher = DocumentPublisher(_configuration(), library_id=LIBRARY, source_tag="")
+
+    asyncio.run(publisher.publish(relative_path="docs/a.md", content=b"# A"))
+
+    assert fred.calls[0][2]["data"]["source_tag"] == ""

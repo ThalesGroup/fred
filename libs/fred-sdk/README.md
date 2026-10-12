@@ -341,12 +341,11 @@ workload identity and a cadence; the handler owns discovery, replay-safe writes 
 explicit retractions — Fred never infers a deletion from absence.
 
 ```python
-from fred_sdk.contracts.models import FieldSpec
 from fred_sdk.knowledge_base import (
-    DocumentPublisher, KnowledgeBase, KnowledgeBaseRunContext,
-    KnowledgeBaseRunOutcome, KnowledgeBaseSyncResult, knowledge_base_main,
+    DocumentPublisher, FieldSpec, KnowledgeBase, KnowledgeBaseReconciliation,
+    KnowledgeBaseRunContext, KnowledgeBaseRunOutcome, KnowledgeBaseSyncResult,
+    knowledge_base_main,
 )
-from fred_sdk.knowledge_base.configuration import PodConfiguration
 
 kb = KnowledgeBase(
     id="acme.notes.hello",
@@ -362,9 +361,7 @@ kb = KnowledgeBase(
 @kb.synchronize
 async def synchronize(context: KnowledgeBaseRunContext) -> KnowledgeBaseSyncResult:
     text = str(context.configuration.get("greeting") or "Hello")
-    async with DocumentPublisher(
-        PodConfiguration.load(), library_id=context.library_id, source_tag="fred"
-    ) as publisher:
+    async with DocumentPublisher.for_run(context) as publisher:  # this run's library
         handle = await publisher.publish(
             relative_path="hello.md", content=f"# {text}".encode(), version=text
         )
@@ -372,7 +369,7 @@ async def synchronize(context: KnowledgeBaseRunContext) -> KnowledgeBaseSyncResu
     return KnowledgeBaseSyncResult(
         outcome=KnowledgeBaseRunOutcome.succeeded if outcome.succeeded
         else KnowledgeBaseRunOutcome.failed,
-        reconciliation_complete=True,
+        reconciliation=KnowledgeBaseReconciliation.complete,
         discovered=1,
         created=int(handle.created),
         updated=int(not handle.created),
@@ -382,7 +379,14 @@ if __name__ == "__main__":
     raise SystemExit(knowledge_base_main(kb))  # the `publish` and `run` commands
 ```
 
-`DocumentPublisher` is the shortcut for writing: a write is accepted at once and
+`reconciliation` says what the run may conclude from an absence: `complete`
+(it listed the whole source, so what is gone was removed), `partial` (a bounded
+or incremental pass — act only on explicit deletions) or `up_to_date` (it proved
+nothing changed and wrote nothing; refused next to any write).
+
+`DocumentPublisher.for_run(context)` opens the run's library as the pod, with
+the configuration the pod started with; a pod that keeps its own store gets
+`KnowledgeFlowNotConfigured` instead. It is the shortcut for writing: a write is accepted at once and
 ingested by Fred afterwards, `wait` follows it to its end, and `documents()`
 reads back what the library holds so a run can reconcile against it. A source
 that can say what changed since a version (a Git revision) keeps that version in
@@ -395,14 +399,28 @@ and a confidential client of its own. A pod started without its client secret an
 realm fails immediately, naming what it lacks. A stack running with authentication
 off cannot host one — including for local development.
 
+**Metrics and logs come with the SDK; you write no code for them.** Name the pod
+with `app.runtime_id` in its `configuration.yaml` (a lowercase slug, chosen by
+whoever deploys it — the pod refuses to start without one). Every run, every call
+a run makes to Fred and every ingestion wait is then measured as `fred_kb_*` series labelled
+`service=<runtime_id>`, served read-only on `observability.kpi.prometheus` (port
+9000, loopback until bound outward), and every log line is JSON on standard
+output carrying the same `service` (`observability.logs.format: text` for a
+terminal). To count something of your own, use `prometheus_client` as usual: the
+same endpoint serves it. Never label a series with a team, an instance or a
+document. Issue totals are computed automatically before warning/error details
+are limited to 50 per severity; `issue_counts` preserves these totals when a
+result is serialized and reconstructed. The contract, and the questions it answers, are in
+[KNOWLEDGE-BASE.md §8](https://github.com/ThalesGroup/fred/blob/swift/docs/swift/design/KNOWLEDGE-BASE.md#8-operational-metrics).
+
 **This surface is beta: pin your `fred-sdk` version, as it may change between beta
 releases.** Known limits today:
 
 - Configuration fields are fixed once instances exist — there is no schema
   migration. Deleting a synchronized folder deletes its documents.
-- A run's fate is visible in the workflow engine only. Counters, summaries and
-  issues a handler returns are not stored or displayed, and Fred offers no run
-  history, manual trigger or worker-health check yet.
+- Fred's UI shows nothing of a run yet: counters, summaries and issues a handler
+  returns are exported as metrics only, not stored or displayed, and Fred offers
+  no run history or manual trigger yet.
 - A relative path is the document key, so a rename reads as a delete plus an add.
 - Cadences are hourly, daily or weekly, with no immediate first run.
 

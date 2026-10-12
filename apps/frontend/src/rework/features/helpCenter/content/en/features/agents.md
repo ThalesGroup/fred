@@ -38,8 +38,8 @@ deck, produce a web page, take the time to reason step by step…
 
 Two ways to choose, via the **Advanced** switch at the top of the tab:
 
-- **Simple** (the default, and the recommended one) — you tick **packs**: sets
-  that naturally belong together. One toggle turns on what is needed.
+- **Simple** (the default, and the recommended one) — you turn on **packs**: sets
+  that naturally belong together. One click on the card turns on what is needed.
 - **Advanced** — you enable each function one by one, with its options.
 
 Simple mode covers ordinary needs. Advanced mode remains available at any
@@ -65,9 +65,9 @@ functions its mission needs is more predictable than one holding twelve.
 the whole document: it is slow and asks for confirmation before every use. On
 an agent that does not need it, it only ever gets triggered by mistake.
 
-**Functions change the conversation interface.** Attachments add a button,
-document production opens a side panel, resource access may show a library
-selector. An over-equipped agent presents its users with controls its purpose
+**Functions change the conversation interface.** The **Attachments** pack adds
+a paperclip, document production opens a side panel, **Team documents** may
+show a library selector. An over-equipped agent presents its users with controls its purpose
 does not call for.
 
 There is also a robustness point: an agent is **suspended** as soon as one of

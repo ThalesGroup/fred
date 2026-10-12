@@ -25,11 +25,7 @@ from control_plane_backend.app.container import (
     build_application_container,
     initialize_shared_stores,
 )
-from control_plane_backend.config.loader import (
-    get_loaded_config_file_path,
-    get_loaded_env_file_path,
-    load_configuration,
-)
+from control_plane_backend.config.loader import load_configuration
 from control_plane_backend.scheduler.dependencies import (
     build_lifecycle_action_dependencies,
 )
@@ -55,18 +51,16 @@ async def main() -> None:
     """
     configuration = load_configuration()
     log_setup(
-        service_name="control-plane-worker",
+        service_name="control-plane",
+        service_role="worker",
         log_level=configuration.app.log_level,
+        log_format=configuration.app.log_format,
         store=build_log_store(
             log_store_config=configuration.storage.log_store,
             opensearch_config=configuration.storage.opensearch,
         ),
         use_rich=False,  # Temporal workflow sandbox disallows Rich imports.
     )
-
-    env_file = get_loaded_env_file_path() or "<unset>"
-    config_file = get_loaded_config_file_path() or "<unset>"
-    logger.info("Environment file: %s | Configuration file: %s", env_file, config_file)
 
     container = build_application_container(configuration)
     initialize_shared_stores(container)

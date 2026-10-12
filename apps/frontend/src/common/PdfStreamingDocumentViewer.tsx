@@ -12,12 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { handlePlatformAccessDenial, handlePlatformAccessResponse } from "./platformAccess";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 import { useTranslation } from "react-i18next";
+import { useLazyPlatformAccessStatusQuery } from "../slices/controlPlane/controlPlaneApiEnhancements";
+import { getConfig } from "./config";
 import { useAuthToken } from "../security/AuthContext";
 import styles from "./PdfStreamingDocumentViewer.module.css";
 
@@ -148,6 +151,21 @@ export function reduceMountedPages(
 export const PdfStreamingDocumentViewer: React.FC<Props> = ({ documentUid, sourceUrl }) => {
   const { t } = useTranslation();
   const token = useAuthToken();
+  const [checkAdmission] = useLazyPlatformAccessStatusQuery();
+  const admissionCheckPending = useRef(false);
+  const recheckAdmission = useCallback(async () => {
+    if (!getConfig()?.platform_access_enabled || admissionCheckPending.current) return;
+    admissionCheckPending.current = true;
+    try {
+      const status = await checkAdmission(undefined, false).unwrap();
+      if (!status.admitted) handlePlatformAccessDenial(403, { detail: "platform_access_denied" });
+    } catch {
+      // An unavailable authority cannot establish a definitive admission denial.
+    } finally {
+      admissionCheckPending.current = false;
+    }
+  }, [checkAdmission]);
+
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [numPages, setNumPages] = useState<number | null>(null);
@@ -282,7 +300,8 @@ export const PdfStreamingDocumentViewer: React.FC<Props> = ({ documentUid, sourc
       headers: { Range: "bytes=0-0", ...(authHeader ? { Authorization: authHeader } : {}) },
       credentials: authHeader ? "same-origin" : "include",
     })
-      .then((res) => {
+      .then(async (res) => {
+        await handlePlatformAccessResponse(res);
         // "bytes 0-0/52428800" → 52428800. A proxy that rewrites or drops the
         // header lands on NaN, which reads as "unknown" below.
         const total = Number(res.headers.get("Content-Range")?.split("/")[1]);
@@ -322,10 +341,12 @@ export const PdfStreamingDocumentViewer: React.FC<Props> = ({ documentUid, sourc
         }
       })
       .catch(() => {
-        // Geometry is an optimisation, not a requirement — keep the fallback.
+        // Keep the geometry fallback, but recheck a possible network denial.
+        void recheckAdmission();
       });
   };
   const onDocumentLoadError = (err: any) => {
+    void recheckAdmission();
     setLoadError(err?.message || "Failed to load PDF.");
     setIsLoading(false);
   };
@@ -396,6 +417,8 @@ export const PdfStreamingDocumentViewer: React.FC<Props> = ({ documentUid, sourc
         >
           {mountedPages.has(pageNumber) && (
             <Page
+              onLoadError={() => void recheckAdmission()}
+              onRenderError={() => void recheckAdmission()}
               pageNumber={pageNumber}
               width={pageWidth}
               renderAnnotationLayer
@@ -405,7 +428,7 @@ export const PdfStreamingDocumentViewer: React.FC<Props> = ({ documentUid, sourc
         </div>
       );
     });
-  }, [numPages, pageWidth, pageAspectRatio, mountedPages, showPages]);
+  }, [numPages, pageWidth, pageAspectRatio, mountedPages, showPages, recheckAdmission]);
 
   const guardPanel = (body: string) => (
     <div className={styles.guard} role="status">

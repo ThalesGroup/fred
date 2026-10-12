@@ -957,3 +957,27 @@ def test_compose_system_prompt_puts_the_platform_instructions_first(
     assert prompt.index("HOUSE-RULES") < prompt.index("<platform_prompt>\nADMIN-BLOCK")
     assert prompt.index("ADMIN-BLOCK") < prompt.index("<tools>")
     assert prompt.index("TOOL-SUFFIX") < prompt.index("<agent_instructions>")
+
+
+@pytest.mark.parametrize("scope", ["corpus_only", "hybrid", "general_only", None])
+def test_document_only_scope_reaches_the_shared_system_prompt(
+    scope: str | None,
+) -> None:
+    binding = _binding()
+    binding = binding.model_copy(
+        update={
+            "runtime_context": binding.runtime_context.model_copy(
+                update={"search_rag_scope": scope}
+            )
+        }
+    )
+    prompt = compose_system_prompt(
+        "Answer helpfully.",
+        binding=binding,
+        agent_id="test",
+        tabular_tools_available=False,
+    )
+    instruction = "Do not supplement with general knowledge."
+    assert (instruction in prompt) is (scope == "corpus_only")
+    if scope == "corpus_only":
+        assert "say that the information is missing" in prompt

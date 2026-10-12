@@ -228,10 +228,11 @@ async def test_base_errors_are_preserved_alongside_new_errors():
 # --- invalid location (table cell) ------------------------------------------------------
 
 
+@pytest.mark.parametrize("marker", ["{flag}", "{{flag}}"])
 @pytest.mark.asyncio
-async def test_image_key_in_table_cell_is_invalid_location():
+async def test_image_key_in_table_cell_is_invalid_location(marker):
     notes = "{{flag}}:\n- type: image\n- folder: images/flags\nPick a flag."
-    deck = _build_table_deck(notes, ["{{flag}}"])
+    deck = _build_table_deck(notes, [marker])
     resolver = _FakeResolver({"images/flags": "tag-123"})
 
     result = await resolve_and_validate_images(deck, parse(deck), resolver)

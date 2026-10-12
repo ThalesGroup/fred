@@ -20,12 +20,13 @@
 apps/*/alembic.ini
 libs/*/alembic.ini
 
-# Ignore build artifacts
-build/
-dist/
-*.egg-info/
-.eggs/
-pip-wheel-metadata/
+# Ignore build artifacts. A pattern without `**/` matches at the context root
+# only: local runs must not change what an image layer copies.
+**/build/
+**/dist/
+**/*.egg-info/
+**/.eggs/
+**/pip-wheel-metadata/
 
 # Ignore environment files
 **/.env
@@ -56,9 +57,9 @@ pip-wheel-metadata/
 **/configuration_*.yaml
 
 # Byte-compiled files
-__pycache__/
-*.py[cod]
-*$py.class
+**/__pycache__/
+**/*.py[cod]
+**/*$py.class
 
 # Virtual environments
 **/venv/
@@ -71,7 +72,10 @@ __pycache__/
 **/*.cover
 **/.coverage.*
 **/.cache/
-**/pytest_cache/
+**/.pytest_cache/
+**/.ruff_cache/
+**/.mypy_cache/
+**/htmlcov/
 **/.tox/
 **/.nox/
 **/tests

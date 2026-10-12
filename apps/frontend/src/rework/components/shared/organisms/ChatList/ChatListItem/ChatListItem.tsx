@@ -25,6 +25,7 @@ interface ChatListItemProps {
   href: string;
   label: string;
   agentName?: string;
+  agentTooltipName?: string;
   agentDeleted?: boolean;
   dateLabel?: string;
   onDelete: (e: React.MouseEvent) => void;
@@ -35,6 +36,7 @@ export function ChatListItem({
   href,
   label,
   agentName,
+  agentTooltipName,
   agentDeleted,
   dateLabel,
   onDelete,
@@ -43,6 +45,7 @@ export function ChatListItem({
   const { agentsNicknameSingular } = useFrontendProperties();
   const statusId = useId();
   const deletedStatus = t("chatbot.deletedAgentTooltip", { agentsNicknameSingular });
+  const fullAgentName = agentTooltipName ?? agentName;
   const location = useLocation();
   const isSelected = location.search.includes(`session=${sessionId}`);
 
@@ -84,7 +87,7 @@ export function ChatListItem({
     </Link>
   );
   return agentDeleted ? (
-    <Tooltip text={agentName ? `${agentName} - ${deletedStatus}` : deletedStatus}>{item}</Tooltip>
+    <Tooltip text={fullAgentName ? `${fullAgentName} - ${deletedStatus}` : deletedStatus}>{item}</Tooltip>
   ) : (
     item
   );

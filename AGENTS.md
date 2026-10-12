@@ -28,7 +28,7 @@ Conflict resolution order:
 
 If a conflict cannot be resolved using this order, ask before changing files.
 
-## OpenSpec — team choice, under evaluation
+## OpenSpec - team choice, under evaluation
 
 OpenSpec is the team's chosen default for substantial development, and remains
 under evaluation. Use it where explicit requirements and acceptance criteria
@@ -134,3 +134,17 @@ issue or PR. Explicit user instructions take precedence over this workflow.
 PR titles must use `<type>(#<issue-number>): <short title>`, where `type` is
 `fix`, `feat`, `chore`, `docs`, `impr`, `ci`, `perf` or other. Use the primary tracking issue number
 and write the title in English.
+
+## Writing and keyboard characters
+
+Use ordinary keyboard punctuation and symbols in authored text, translations,
+comments, documentation, commit messages and GitHub content:
+
+- Use straight apostrophes and double quotes.
+- Write an ellipsis as three periods (`...`) and use the ordinary hyphen (`-`).
+- Use normal spaces and ASCII equivalents for decorative symbols.
+- Avoid typographic quotes, single-character ellipses, long dashes, nonbreaking
+  spaces and decorative Unicode punctuation.
+- Keep normal accented letters for the language being written.
+
+Write GitHub content and commit messages in English.
