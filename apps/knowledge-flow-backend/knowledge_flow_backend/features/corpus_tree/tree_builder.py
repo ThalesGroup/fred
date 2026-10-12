@@ -12,33 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Builds an indented text tree from a flat list of hierarchical document tags
-(folders) plus their resolved document leaves.
-
-Fred rationale:
-- A document's tags are a list, so a document can sit under several folders at
-  once (a DAG, not a strict tree). We render it as a leaf under each folder it
-  belongs to -- the same way `tree`/`find` show a file reachable via more than
-  one symlinked directory. No dedup needed.
-- Returning a big flat JSON list of ids is hard for a caller (an LLM) to mentally
-  reassemble into a filesystem shape, so we render readable indented text instead.
-- When the rendering is too large for the caller's budget, we prune the deepest
-  branches first rather than truncating the string mid-line, and tell the caller
-  to use search or narrow `working_directory` instead of browsing everything.
-- The bracketed ids in the rendering (tag ids on folders, document uids on
-  leaves) are internal working identifiers for the agent's own tool calls
-  (e.g. summarize by uid). They are agent-facing only — agents are instructed
-  never to repeat them to the end user. Folder ids carry a ``folder:`` prefix
-  so a model cannot mistake them for document uids (issue #2244); leaf uids
-  stay bare because they are the value passed verbatim to summarize/search
-  tools.
-"""
+"""Render authorized folders and document metadata as a budgeted indented tree."""
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 
 _FALLBACK_HINT = "use search_documents_using_vectorization or narrow working_directory"
@@ -48,7 +28,17 @@ _FALLBACK_HINT = "use search_documents_using_vectorization or narrow working_dir
 class DocLeaf:
     document_uid: str
     document_name: str
-    created: Optional[datetime]
+    created: Optional[datetime] = None
+    added_to_kb: Optional[datetime] = None
+    modified: Optional[datetime] = None
+    title: Optional[str] = None
+    file_type: Optional[str] = None
+    mime_type: Optional[str] = None
+    language: Optional[str] = None
+    page_count: Optional[int] = None
+    row_count: Optional[int] = None
+    labels: List[str] = field(default_factory=list)
+    source: Optional[str] = None
 
 
 @dataclass
@@ -86,13 +76,13 @@ class TreeNode:
 def build_tree(
     *,
     folders: List[Tuple],
-    leaves_by_uid: Dict[str, Tuple[str, Optional[datetime]]],
+    leaves_by_uid: Dict[str, DocLeaf],
 ) -> TreeNode:
     """
     `folders`: list of (full_path, item_ids) or (full_path, item_ids, tag_id)
     tuples, one per matched tag. The tag_id is optional; when present it is
     attached to the matched folder node and rendered so callers can filter on it.
-    `leaves_by_uid`: document_uid -> (document_name, created), resolved separately.
+    `leaves_by_uid`: authorized document leaves, resolved separately.
 
     Intermediate path segments that aren't themselves a real tag (e.g. "Sales" was
     never created but "Sales/HR" was) become synthetic grouping nodes with no docs
@@ -115,8 +105,7 @@ def build_tree(
             resolved = leaves_by_uid.get(uid)
             if resolved is None:
                 continue
-            name, created = resolved
-            node.docs.append(DocLeaf(document_uid=uid, document_name=name, created=created))
+            node.docs.append(resolved)
     return root
 
 
@@ -134,23 +123,35 @@ def prune_empty_folders(node: TreeNode) -> bool:
     return bool(node.docs or node.children)
 
 
+def _timestamp(value: Optional[datetime]) -> Optional[str]:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc).isoformat()
+
+
 def _format_leaf(doc: DocLeaf) -> str:
-    when = doc.created.date().isoformat() if doc.created else "unknown date"
-    return f"{doc.document_name} [{doc.document_uid}] (uploaded {when})"
+    record = {
+        "uid": doc.document_uid,
+        "name": doc.document_name,
+        "added_to_kb": _timestamp(doc.added_to_kb),
+        "created": _timestamp(doc.created),
+        "modified": _timestamp(doc.modified),
+    }
+    for name in ("title", "file_type", "mime_type", "language", "page_count", "row_count", "labels", "source"):
+        value = getattr(doc, name)
+        if value is not None and value != "" and value != []:
+            record[name] = value
+    return json.dumps(record, ensure_ascii=False, separators=(",", ":"))
 
 
 def _format_folder(node: TreeNode) -> str:
-    """Folder line: ``name/`` for synthetic grouping nodes, ``name [folder:tag_id]/``
-    for real tags -- the id is what a caller passes back as a tag filter.
-
-    The ``folder:`` prefix is load-bearing: without it, folder lines look
-    exactly like document leaves (``name [uid] (uploaded ...)``) and models
-    pass the folder's tag id to ``summarize_document`` as a ``document_uid``,
-    which 403s (observed live, issue #2244). The prefix keeps the id available
-    for tag filters while making it unmistakably not-a-document-uid."""
+    # JSON keeps allowed newlines and punctuation in folder names on one tree line.
+    record = {"folder": node.name}
     if node.tag_id:
-        return f"{node.name} [folder:{node.tag_id}]/"
-    return f"{node.name}/"
+        record["folder_id"] = node.tag_id
+    return json.dumps(record, ensure_ascii=False, separators=(",", ":"))
 
 
 def render_tree(root: TreeNode, *, max_chars: int) -> Tuple[str, bool]:

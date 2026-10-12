@@ -216,7 +216,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   // user has since navigated away from must never touch `contextPromptIds`
   // (a single, not-per-session piece of UI state) or show a toast for it.
   const activeSessionIdRef = useRef(sessionId);
-  activeSessionIdRef.current = sessionId;
+  activeSessionIdRef.current = sessionId ?? locallyCreatedSessionIdRef.current;
   // Live mirror of the rendered thread. `handleHitlAnswer`'s continuation
   // settles after arbitrary delay and must read the CURRENT thread, not the one
   // captured when the user answered.
@@ -231,19 +231,15 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   const hasLocalMutationForActiveSessionRef = useRef(false);
   // Suppresses the sessionId-change reset when handleSend itself binds a new session.
   const skipResetOnSessionBindRef = useRef(false);
-  // Synchronous reentrancy guard for handleSend()'s OWN preflight — session
-  // id selection, bindSessionId, and createSessionRow all happen BEFORE
-  // useChatSse's send() (and its own lock) is ever called: send() is not
-  // reached until after `await flushSessionWrites(sid)` resolves. The
-  // `waitResponse` check below does not cover this window — it only flips
-  // true once send() itself runs, well after two rapid handleSend() calls
-  // (e.g. a double Enter) could each have already generated their own
-  // session id, bound it, and created a session row. Checked and set
-  // synchronously, before any await, independent of `waitResponse` or a
-  // React rerender — a second handleSend() arriving while the first is
-  // still inside this window (including while suspended in
-  // flushSessionWrites) is dropped outright, not queued or merged.
-  const handleSendOwnerRef = useRef(false);
+  // The attempt owns preflight before SSE starts. Navigation revokes it even
+  // if the user later returns to the same session while creation is pending.
+  const sendAttemptRef = useRef<{ sessionId: string; originSessionId: string | null; cancelled: boolean } | null>(null);
+  useEffect(
+    () => () => {
+      if (sendAttemptRef.current) sendAttemptRef.current.cancelled = true;
+    },
+    [],
+  );
 
   const { data: agentInstances } = useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery(
     { teamId },
@@ -256,7 +252,12 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
 
   const attachments = useChatAttachments({ teamId, sessionId });
 
-  if (locallyCreatedSessionIdRef.current !== sessionId) locallyCreatedSessionIdRef.current = null;
+  useEffect(() => {
+    const attempt = sendAttemptRef.current;
+    if (attempt && sessionId !== attempt.sessionId && sessionId !== attempt.originSessionId) attempt.cancelled = true;
+    // A mutation can render the draft route before its new session binding commits.
+    if (locallyCreatedSessionIdRef.current !== sessionId) locallyCreatedSessionIdRef.current = null;
+  }, [sessionId]);
   const locallyCreatingSession =
     sessionId !== null &&
     (locallyCreatedSessionIdRef.current === sessionId || sessionCreateFailedIdRef.current.has(sessionId));
@@ -294,6 +295,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
 
   const bindSessionId = useCallback(
     (sid: string) => {
+      activeSessionIdRef.current = sid;
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev);
@@ -403,7 +405,10 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     if (activeSessionIdRef.current !== rejectedSessionId || submitted?.sessionId !== rejectedSessionId) return;
     setInput(submitted.draft);
   }, []);
-  const isTurnCurrent = useCallback((turnSessionId: string) => activeSessionIdRef.current === turnSessionId, []);
+  const isTurnCurrent = useCallback((turnSessionId: string) => {
+    const attempt = sendAttemptRef.current;
+    return activeSessionIdRef.current === turnSessionId && !(attempt?.sessionId === turnSessionId && attempt.cancelled);
+  }, []);
 
   const isExecutionAllowed = useCallback(() => !executionDisabledRef.current, []);
 
@@ -733,7 +738,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
         );
         return false;
       }
-      if (handleSendOwnerRef.current) {
+      if (sendAttemptRef.current && !sendAttemptRef.current.cancelled) {
         console.debug("[useManagedChat] sendTurn() IGNORED — a send is already in flight");
         return false;
       }
@@ -752,7 +757,8 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
         });
         return false;
       }
-      handleSendOwnerRef.current = true;
+      const attempt = { sessionId: sessionId ?? uuidv4(), originSessionId: sessionId, cancelled: false };
+      sendAttemptRef.current = attempt;
       try {
         // Composer input is left untouched until the session write barrier below
         // confirms success — clearing it eagerly would lose the user's message if
@@ -760,7 +766,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
         let sid = sessionId;
         const needsCreate = !sid || sessionCreateFailedIdRef.current.has(sid);
         if (!sid) {
-          sid = uuidv4();
+          sid = attempt.sessionId;
           console.debug(`[useManagedChat] sendTurn() — no session, creating new sid=${sid}, calling bindSessionId`);
           skipResetOnSessionBindRef.current = true;
           // See ensureSessionForAttachments: makes this turn's composer settings
@@ -794,7 +800,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
         // onError above); nothing further to show here, just don't proceed —
         // the message stays in the composer for an explicit retry.
         const writesOk = await flushSessionWrites(sid);
-        if (!writesOk || executionDisabledRef.current) {
+        if (!writesOk || executionDisabledRef.current || attempt.cancelled || activeSessionIdRef.current !== sid) {
           console.debug("[useManagedChat] sendTurn() ABORTED — a pending session write failed");
           return false;
         }
@@ -824,7 +830,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
           interrupted,
         );
       } finally {
-        handleSendOwnerRef.current = false;
+        if (sendAttemptRef.current === attempt) sendAttemptRef.current = null;
       }
     },
     [
@@ -1097,6 +1103,15 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
 
   const startNewConversation = useCallback(() => {
     if (executionDisabledRef.current) return;
+    const attempt = sendAttemptRef.current;
+    if (attempt) attempt.cancelled = true;
+    locallyCreatedSessionIdRef.current = null;
+    activeSessionIdRef.current = null;
+    if (attempt && !sessionId) {
+      reset();
+      setInput("");
+      skipResetOnSessionBindRef.current = false;
+    }
     replacePendingHitls([]);
     lastHitlExchangeRef.current = null;
     submittedBatchKeysRef.current = new Set();
@@ -1113,7 +1128,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
       },
       { replace: true },
     );
-  }, [setSearchParams, replacePendingHitls, replaceStagedHitlAnswers]);
+  }, [setSearchParams, replacePendingHitls, replaceStagedHitlAnswers, reset, sessionId]);
 
   const commitTitle = useCallback(
     (title: string) => {
