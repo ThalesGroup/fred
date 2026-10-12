@@ -163,26 +163,57 @@ or expected.
 
 ## Publishing the Python libraries
 
-Release tags build the images and the chart only. The four shared libraries
-reach PyPI **by hand**, from each `libs/<lib>` directory:
+Release tags build the images and the chart only. The shared libraries and
+first-party capability packages reach PyPI **by hand**. Give every package the
+same version and update all internal floors and lockfiles from the repository
+root. The root targets require `uv` on `PATH` and pass that stable executable to
+each package build:
 
 ```bash
+make libs-version VERSION=X.Y.Z
+make publish-libs-dry-run
+# Inspect target/dist artifacts here. The publish command validates and uploads
+# these exact files; it does not rebuild them.
+
 export PYPI_TOKEN=...
-make publish-dry-run
-unzip -p target/dist/*.whl '*/METADATA' | grep Requires-Dist   # check the floors
-make publish
+make publish-libs
 ```
 
-The order is **mandatory**: `fred-pod` → `fred-core` → `fred-sdk` →
-`fred-runtime`. Each one floors the ones below it at the same version, so a
-step published out of order resolves against a release that does not exist yet.
-Wait for `https://pypi.org/pypi/<name>/json` to show the new version before
-starting the next step — the index is not immediate.
+The order is **mandatory** and is defined by `PYPI_PACKAGES` in the root
+`Makefile`:
 
-The five `fred-capability-*` libraries are not published. `fred-samples` builds
-its Knowledge Base images with `uv sync --no-sources`, i.e. straight from PyPI,
-so a version referenced there installs nothing until the whole sequence
-completes.
+1. `fred-pod`
+2. `fred-core`
+3. `fred-sdk`
+4. `fred-runtime`
+5. `fred-capability-document-access`
+6. `fred-capability-documents`
+7. `fred-capability-html-artifact`
+8. `fred-capability-mcp`
+9. `fred-capability-platform-ops`
+10. `fred-capability-ppt-filler`
+11. `fred-capability-team-wiki`
+12. `fred-capability-web-research`
+13. `fred-capability-writable-document`
+
+Each package floors the FRED packages below it at the same version. Publishing
+out of order can therefore resolve against a release that does not exist yet.
+The root target skips coordinates already present on PyPI, but any other PyPI
+response stops the release. Before running it, confirm that the release
+credential can create every package name that does not yet exist on PyPI; do
+not discover missing project-creation authority after existing packages have
+been updated. The target validates the coordinated version, internal floors and
+prebuilt artifact metadata before the first upload. It then uploads each pending
+package in the order above without rebuilding it;
+after it completes, wait for every
+`https://pypi.org/pypi/<name>/<version>/json` endpoint to return 200 before any
+consumer resolves the coordinated release because the index is not immediate.
+Before publication, inspect each wheel's `METADATA` and contents under
+`target/dist/`.
+
+External consumers such as `fred-samples`, DT Agents and Aegis may install with
+local sources disabled, so every referenced FRED coordinate must exist on PyPI
+before their lockfiles can resolve the coordinated release.
 
 ---
 
