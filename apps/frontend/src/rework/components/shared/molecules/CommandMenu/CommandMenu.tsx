@@ -25,7 +25,6 @@ export type CommandMenuEntry = {
   command: string;
   name: string;
   description?: string | null;
-  argumentHint?: string | null;
   emoji?: string | null;
 } & ({ kind: "skill" } | { kind: "prompt"; promptTeamId: string });
 
@@ -145,12 +144,7 @@ export const CommandMenu = memo(function CommandMenu({
                 )}
               </span>
               <span className={styles.rowText}>
-                <span className={styles.rowHeading}>
-                  <span className={styles.rowLabel}>{entry.kind === "skill" ? entry.name : `/${entry.command}`}</span>
-                  {entry.kind === "skill" && entry.argumentHint && (
-                    <span className={styles.argumentHint}>{` ${entry.argumentHint}`}</span>
-                  )}
-                </span>
+                <span className={styles.rowLabel}>{entry.kind === "skill" ? entry.name : `/${entry.command}`}</span>
                 <em className={styles.rowDescription}>{entry.description?.trim() || entry.name}</em>
               </span>
             </div>

@@ -5188,11 +5188,12 @@ focus and hover share that one highlight, so a pointer never leaves two rows
 looking active.
 
 Prompt and skill rows share the same two-line layout: command or skill name
-above, full description in italics below. Prompts use a distinct prompt icon
-in a blue information tile; skills keep the platform pictogram. Skill names
-(without `/skill`) and their optional argument hints share the first line.
-Text wraps at narrow widths; the hint displays its value
-without the frontmatter field label. The list scrolls within its existing limit.
+(without `/skill`) above, description in italics directly below, with no gap
+between the two. The description stays on one line and is cut with an ellipsis.
+Prompts use a distinct prompt icon in a blue information tile; skills keep the
+platform pictogram. A skill's argument hint is not shown in the menu: it only
+appears in the composer once the skill is selected. The list scrolls within
+its existing limit.
 Platform skills use a dedicated hexagon/book pictogram and localized platform-origin
 hover hint. Composer and sent-message badges reuse that pictogram; their native
 tooltip includes the current runtime catalog description when available. Missing

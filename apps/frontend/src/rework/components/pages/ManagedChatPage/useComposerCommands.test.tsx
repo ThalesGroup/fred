@@ -195,7 +195,7 @@ function options(): HTMLElement[] {
 }
 
 function labels(): string[] {
-  return options().map((option) => option.querySelector("[class*=rowHeading]")?.textContent ?? "");
+  return options().map((option) => option.querySelector("[class*=rowLabel]")?.textContent ?? "");
 }
 
 /** Each displayed section as its heading and the labels of its rows. */
@@ -203,7 +203,7 @@ function sections(): [string, string[]][] {
   return Array.from(container.querySelectorAll<HTMLElement>('[role="group"]')).map((group) => [
     document.getElementById(group.getAttribute("aria-labelledby") ?? "")?.textContent ?? "",
     Array.from(group.querySelectorAll('[role="option"]')).map(
-      (option) => option.querySelector("[class*=rowHeading]")?.textContent ?? "",
+      (option) => option.querySelector("[class*=rowLabel]")?.textContent ?? "",
     ),
   ]);
 }
@@ -211,7 +211,7 @@ function sections(): [string, string[]][] {
 function focusedLabel(): string | null {
   const active = textarea().getAttribute("aria-activedescendant");
   const option = options().find((candidate) => candidate.id === active);
-  return option?.querySelector("[class*=rowHeading]")?.textContent ?? null;
+  return option?.querySelector("[class*=rowLabel]")?.textContent ?? null;
 }
 
 describe("the command menu", () => {
@@ -737,10 +737,10 @@ describe("platform skills", () => {
     await pressAsync("Enter");
     expect(onRunCommand).toHaveBeenCalledWith(expect.objectContaining({ text: "Résume le document en :\n\nnotes" }));
   });
-  it("lists all runtime skills with descriptions, hints and platform identity", () => {
+  it("lists all runtime skills with descriptions and platform identity, without their argument hint", () => {
     activateSkills();
     type("/");
-    expect(labels()).toEqual(["/search", "/summary", "meeting-minutes [meeting notes]", "review"]);
+    expect(labels()).toEqual(["/search", "/summary", "meeting-minutes", "review"]);
     expect(options()[2].title).toBe("chatbot.skills.platformProvided");
     expect(options()[2].querySelector("[class*=customIcon]")).not.toBeNull();
     expect(options()[2].querySelector("em")?.textContent).toContain("Meeting minutes");
@@ -901,7 +901,7 @@ describe("platform skills", () => {
   it("keeps named legacy completion available without a dispatcher row", () => {
     activateSkills();
     type("/skill");
-    expect(labels()).toEqual(["meeting-minutes [meeting notes]", "review"]);
+    expect(labels()).toEqual(["meeting-minutes", "review"]);
     press("Tab");
     expect(textarea().value).toBe("/meeting-minutes ");
     expect(selected()).toEqual({ name: "meeting-minutes" });

@@ -260,7 +260,6 @@ export function useComposerCommands(params: {
         command: skill.name,
         name: skill.name,
         description: skill.description,
-        argumentHint: skill.argument_hint,
         kind: "skill",
         source: "platform",
       })),
