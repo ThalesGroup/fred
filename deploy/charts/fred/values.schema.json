@@ -91,6 +91,179 @@
             "replicaCount": {
               "type": "integer"
             },
+            "autoscaling": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "minReplicas": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "maxReplicas": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "metrics": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "const": "Resource"
+                      },
+                      "resource": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "enum": [
+                              "cpu",
+                              "memory"
+                            ]
+                          },
+                          "target": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "const": "Utilization"
+                              },
+                              "averageUtilization": {
+                                "type": "integer",
+                                "minimum": 1
+                              }
+                            },
+                            "additionalProperties": false,
+                            "required": [
+                              "type",
+                              "averageUtilization"
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "required": [
+                          "name",
+                          "target"
+                        ]
+                      }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                      "type",
+                      "resource"
+                    ]
+                  },
+                  "minItems": 1
+                },
+                "behavior": {
+                  "type": "object",
+                  "properties": {
+                    "scaleUp": {
+                      "type": "object",
+                      "properties": {
+                        "stabilizationWindowSeconds": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 3600
+                        },
+                        "selectPolicy": {
+                          "enum": [
+                            "Max",
+                            "Min",
+                            "Disabled"
+                          ]
+                        },
+                        "policies": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "enum": [
+                                  "Pods",
+                                  "Percent"
+                                ]
+                              },
+                              "value": {
+                                "type": "integer",
+                                "minimum": 1
+                              },
+                              "periodSeconds": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 1800
+                              }
+                            },
+                            "additionalProperties": false,
+                            "required": [
+                              "type",
+                              "value",
+                              "periodSeconds"
+                            ]
+                          }
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "scaleDown": {
+                      "type": "object",
+                      "properties": {
+                        "stabilizationWindowSeconds": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 3600
+                        },
+                        "selectPolicy": {
+                          "enum": [
+                            "Max",
+                            "Min",
+                            "Disabled"
+                          ]
+                        },
+                        "policies": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "enum": [
+                                  "Pods",
+                                  "Percent"
+                                ]
+                              },
+                              "value": {
+                                "type": "integer",
+                                "minimum": 1
+                              },
+                              "periodSeconds": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 1800
+                              }
+                            },
+                            "additionalProperties": false,
+                            "required": [
+                              "type",
+                              "value",
+                              "periodSeconds"
+                            ]
+                          }
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "enabled",
+                "minReplicas",
+                "maxReplicas",
+                "metrics"
+              ]
+            },
             "inheritFrom": {
               "type": "string"
             },
@@ -2515,6 +2688,179 @@
             "replicaCount": {
               "type": "integer"
             },
+            "autoscaling": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "minReplicas": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "maxReplicas": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "metrics": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "const": "Resource"
+                      },
+                      "resource": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "enum": [
+                              "cpu",
+                              "memory"
+                            ]
+                          },
+                          "target": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "const": "Utilization"
+                              },
+                              "averageUtilization": {
+                                "type": "integer",
+                                "minimum": 1
+                              }
+                            },
+                            "additionalProperties": false,
+                            "required": [
+                              "type",
+                              "averageUtilization"
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "required": [
+                          "name",
+                          "target"
+                        ]
+                      }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                      "type",
+                      "resource"
+                    ]
+                  },
+                  "minItems": 1
+                },
+                "behavior": {
+                  "type": "object",
+                  "properties": {
+                    "scaleUp": {
+                      "type": "object",
+                      "properties": {
+                        "stabilizationWindowSeconds": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 3600
+                        },
+                        "selectPolicy": {
+                          "enum": [
+                            "Max",
+                            "Min",
+                            "Disabled"
+                          ]
+                        },
+                        "policies": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "enum": [
+                                  "Pods",
+                                  "Percent"
+                                ]
+                              },
+                              "value": {
+                                "type": "integer",
+                                "minimum": 1
+                              },
+                              "periodSeconds": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 1800
+                              }
+                            },
+                            "additionalProperties": false,
+                            "required": [
+                              "type",
+                              "value",
+                              "periodSeconds"
+                            ]
+                          }
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "scaleDown": {
+                      "type": "object",
+                      "properties": {
+                        "stabilizationWindowSeconds": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 3600
+                        },
+                        "selectPolicy": {
+                          "enum": [
+                            "Max",
+                            "Min",
+                            "Disabled"
+                          ]
+                        },
+                        "policies": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "enum": [
+                                  "Pods",
+                                  "Percent"
+                                ]
+                              },
+                              "value": {
+                                "type": "integer",
+                                "minimum": 1
+                              },
+                              "periodSeconds": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 1800
+                              }
+                            },
+                            "additionalProperties": false,
+                            "required": [
+                              "type",
+                              "value",
+                              "periodSeconds"
+                            ]
+                          }
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "enabled",
+                "minReplicas",
+                "maxReplicas",
+                "metrics"
+              ]
+            },
             "inheritFrom": {
               "type": "string"
             },
@@ -3320,6 +3666,179 @@
             },
             "replicaCount": {
               "type": "integer"
+            },
+            "autoscaling": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "minReplicas": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "maxReplicas": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "metrics": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "const": "Resource"
+                      },
+                      "resource": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "enum": [
+                              "cpu",
+                              "memory"
+                            ]
+                          },
+                          "target": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "const": "Utilization"
+                              },
+                              "averageUtilization": {
+                                "type": "integer",
+                                "minimum": 1
+                              }
+                            },
+                            "additionalProperties": false,
+                            "required": [
+                              "type",
+                              "averageUtilization"
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "required": [
+                          "name",
+                          "target"
+                        ]
+                      }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                      "type",
+                      "resource"
+                    ]
+                  },
+                  "minItems": 1
+                },
+                "behavior": {
+                  "type": "object",
+                  "properties": {
+                    "scaleUp": {
+                      "type": "object",
+                      "properties": {
+                        "stabilizationWindowSeconds": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 3600
+                        },
+                        "selectPolicy": {
+                          "enum": [
+                            "Max",
+                            "Min",
+                            "Disabled"
+                          ]
+                        },
+                        "policies": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "enum": [
+                                  "Pods",
+                                  "Percent"
+                                ]
+                              },
+                              "value": {
+                                "type": "integer",
+                                "minimum": 1
+                              },
+                              "periodSeconds": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 1800
+                              }
+                            },
+                            "additionalProperties": false,
+                            "required": [
+                              "type",
+                              "value",
+                              "periodSeconds"
+                            ]
+                          }
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "scaleDown": {
+                      "type": "object",
+                      "properties": {
+                        "stabilizationWindowSeconds": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 3600
+                        },
+                        "selectPolicy": {
+                          "enum": [
+                            "Max",
+                            "Min",
+                            "Disabled"
+                          ]
+                        },
+                        "policies": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "enum": [
+                                  "Pods",
+                                  "Percent"
+                                ]
+                              },
+                              "value": {
+                                "type": "integer",
+                                "minimum": 1
+                              },
+                              "periodSeconds": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 1800
+                              }
+                            },
+                            "additionalProperties": false,
+                            "required": [
+                              "type",
+                              "value",
+                              "periodSeconds"
+                            ]
+                          }
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "enabled",
+                "minReplicas",
+                "maxReplicas",
+                "metrics"
+              ]
             },
             "inheritFrom": {
               "type": "string"
@@ -8208,6 +8727,179 @@
             "replicaCount": {
               "type": "integer"
             },
+            "autoscaling": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "minReplicas": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "maxReplicas": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "metrics": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "const": "Resource"
+                      },
+                      "resource": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "enum": [
+                              "cpu",
+                              "memory"
+                            ]
+                          },
+                          "target": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "const": "Utilization"
+                              },
+                              "averageUtilization": {
+                                "type": "integer",
+                                "minimum": 1
+                              }
+                            },
+                            "additionalProperties": false,
+                            "required": [
+                              "type",
+                              "averageUtilization"
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "required": [
+                          "name",
+                          "target"
+                        ]
+                      }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                      "type",
+                      "resource"
+                    ]
+                  },
+                  "minItems": 1
+                },
+                "behavior": {
+                  "type": "object",
+                  "properties": {
+                    "scaleUp": {
+                      "type": "object",
+                      "properties": {
+                        "stabilizationWindowSeconds": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 3600
+                        },
+                        "selectPolicy": {
+                          "enum": [
+                            "Max",
+                            "Min",
+                            "Disabled"
+                          ]
+                        },
+                        "policies": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "enum": [
+                                  "Pods",
+                                  "Percent"
+                                ]
+                              },
+                              "value": {
+                                "type": "integer",
+                                "minimum": 1
+                              },
+                              "periodSeconds": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 1800
+                              }
+                            },
+                            "additionalProperties": false,
+                            "required": [
+                              "type",
+                              "value",
+                              "periodSeconds"
+                            ]
+                          }
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "scaleDown": {
+                      "type": "object",
+                      "properties": {
+                        "stabilizationWindowSeconds": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 3600
+                        },
+                        "selectPolicy": {
+                          "enum": [
+                            "Max",
+                            "Min",
+                            "Disabled"
+                          ]
+                        },
+                        "policies": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "enum": [
+                                  "Pods",
+                                  "Percent"
+                                ]
+                              },
+                              "value": {
+                                "type": "integer",
+                                "minimum": 1
+                              },
+                              "periodSeconds": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 1800
+                              }
+                            },
+                            "additionalProperties": false,
+                            "required": [
+                              "type",
+                              "value",
+                              "periodSeconds"
+                            ]
+                          }
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "enabled",
+                "minReplicas",
+                "maxReplicas",
+                "metrics"
+              ]
+            },
             "inheritFrom": {
               "type": "string"
             },
@@ -13095,6 +13787,179 @@
             "replicaCount": {
               "type": "integer"
             },
+            "autoscaling": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "minReplicas": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "maxReplicas": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "metrics": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "const": "Resource"
+                      },
+                      "resource": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "enum": [
+                              "cpu",
+                              "memory"
+                            ]
+                          },
+                          "target": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "const": "Utilization"
+                              },
+                              "averageUtilization": {
+                                "type": "integer",
+                                "minimum": 1
+                              }
+                            },
+                            "additionalProperties": false,
+                            "required": [
+                              "type",
+                              "averageUtilization"
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "required": [
+                          "name",
+                          "target"
+                        ]
+                      }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                      "type",
+                      "resource"
+                    ]
+                  },
+                  "minItems": 1
+                },
+                "behavior": {
+                  "type": "object",
+                  "properties": {
+                    "scaleUp": {
+                      "type": "object",
+                      "properties": {
+                        "stabilizationWindowSeconds": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 3600
+                        },
+                        "selectPolicy": {
+                          "enum": [
+                            "Max",
+                            "Min",
+                            "Disabled"
+                          ]
+                        },
+                        "policies": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "enum": [
+                                  "Pods",
+                                  "Percent"
+                                ]
+                              },
+                              "value": {
+                                "type": "integer",
+                                "minimum": 1
+                              },
+                              "periodSeconds": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 1800
+                              }
+                            },
+                            "additionalProperties": false,
+                            "required": [
+                              "type",
+                              "value",
+                              "periodSeconds"
+                            ]
+                          }
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "scaleDown": {
+                      "type": "object",
+                      "properties": {
+                        "stabilizationWindowSeconds": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 3600
+                        },
+                        "selectPolicy": {
+                          "enum": [
+                            "Max",
+                            "Min",
+                            "Disabled"
+                          ]
+                        },
+                        "policies": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "enum": [
+                                  "Pods",
+                                  "Percent"
+                                ]
+                              },
+                              "value": {
+                                "type": "integer",
+                                "minimum": 1
+                              },
+                              "periodSeconds": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 1800
+                              }
+                            },
+                            "additionalProperties": false,
+                            "required": [
+                              "type",
+                              "value",
+                              "periodSeconds"
+                            ]
+                          }
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "enabled",
+                "minReplicas",
+                "maxReplicas",
+                "metrics"
+              ]
+            },
             "inheritFrom": {
               "type": "string"
             },
@@ -17771,6 +18636,179 @@
             },
             "replicaCount": {
               "type": "integer"
+            },
+            "autoscaling": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "minReplicas": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "maxReplicas": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "metrics": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "const": "Resource"
+                      },
+                      "resource": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "enum": [
+                              "cpu",
+                              "memory"
+                            ]
+                          },
+                          "target": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "const": "Utilization"
+                              },
+                              "averageUtilization": {
+                                "type": "integer",
+                                "minimum": 1
+                              }
+                            },
+                            "additionalProperties": false,
+                            "required": [
+                              "type",
+                              "averageUtilization"
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "required": [
+                          "name",
+                          "target"
+                        ]
+                      }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                      "type",
+                      "resource"
+                    ]
+                  },
+                  "minItems": 1
+                },
+                "behavior": {
+                  "type": "object",
+                  "properties": {
+                    "scaleUp": {
+                      "type": "object",
+                      "properties": {
+                        "stabilizationWindowSeconds": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 3600
+                        },
+                        "selectPolicy": {
+                          "enum": [
+                            "Max",
+                            "Min",
+                            "Disabled"
+                          ]
+                        },
+                        "policies": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "enum": [
+                                  "Pods",
+                                  "Percent"
+                                ]
+                              },
+                              "value": {
+                                "type": "integer",
+                                "minimum": 1
+                              },
+                              "periodSeconds": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 1800
+                              }
+                            },
+                            "additionalProperties": false,
+                            "required": [
+                              "type",
+                              "value",
+                              "periodSeconds"
+                            ]
+                          }
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "scaleDown": {
+                      "type": "object",
+                      "properties": {
+                        "stabilizationWindowSeconds": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 3600
+                        },
+                        "selectPolicy": {
+                          "enum": [
+                            "Max",
+                            "Min",
+                            "Disabled"
+                          ]
+                        },
+                        "policies": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "enum": [
+                                  "Pods",
+                                  "Percent"
+                                ]
+                              },
+                              "value": {
+                                "type": "integer",
+                                "minimum": 1
+                              },
+                              "periodSeconds": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 1800
+                              }
+                            },
+                            "additionalProperties": false,
+                            "required": [
+                              "type",
+                              "value",
+                              "periodSeconds"
+                            ]
+                          }
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "enabled",
+                "minReplicas",
+                "maxReplicas",
+                "metrics"
+              ]
             },
             "inheritFrom": {
               "type": "string"
@@ -22449,6 +23487,179 @@
             "replicaCount": {
               "type": "integer"
             },
+            "autoscaling": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "minReplicas": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "maxReplicas": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "metrics": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "const": "Resource"
+                      },
+                      "resource": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "enum": [
+                              "cpu",
+                              "memory"
+                            ]
+                          },
+                          "target": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "const": "Utilization"
+                              },
+                              "averageUtilization": {
+                                "type": "integer",
+                                "minimum": 1
+                              }
+                            },
+                            "additionalProperties": false,
+                            "required": [
+                              "type",
+                              "averageUtilization"
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "required": [
+                          "name",
+                          "target"
+                        ]
+                      }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                      "type",
+                      "resource"
+                    ]
+                  },
+                  "minItems": 1
+                },
+                "behavior": {
+                  "type": "object",
+                  "properties": {
+                    "scaleUp": {
+                      "type": "object",
+                      "properties": {
+                        "stabilizationWindowSeconds": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 3600
+                        },
+                        "selectPolicy": {
+                          "enum": [
+                            "Max",
+                            "Min",
+                            "Disabled"
+                          ]
+                        },
+                        "policies": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "enum": [
+                                  "Pods",
+                                  "Percent"
+                                ]
+                              },
+                              "value": {
+                                "type": "integer",
+                                "minimum": 1
+                              },
+                              "periodSeconds": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 1800
+                              }
+                            },
+                            "additionalProperties": false,
+                            "required": [
+                              "type",
+                              "value",
+                              "periodSeconds"
+                            ]
+                          }
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "scaleDown": {
+                      "type": "object",
+                      "properties": {
+                        "stabilizationWindowSeconds": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 3600
+                        },
+                        "selectPolicy": {
+                          "enum": [
+                            "Max",
+                            "Min",
+                            "Disabled"
+                          ]
+                        },
+                        "policies": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "enum": [
+                                  "Pods",
+                                  "Percent"
+                                ]
+                              },
+                              "value": {
+                                "type": "integer",
+                                "minimum": 1
+                              },
+                              "periodSeconds": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 1800
+                              }
+                            },
+                            "additionalProperties": false,
+                            "required": [
+                              "type",
+                              "value",
+                              "periodSeconds"
+                            ]
+                          }
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "enabled",
+                "minReplicas",
+                "maxReplicas",
+                "metrics"
+              ]
+            },
             "inheritFrom": {
               "type": "string"
             },
@@ -27126,6 +28337,179 @@
             "replicaCount": {
               "type": "integer"
             },
+            "autoscaling": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "minReplicas": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "maxReplicas": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "metrics": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "const": "Resource"
+                      },
+                      "resource": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "enum": [
+                              "cpu",
+                              "memory"
+                            ]
+                          },
+                          "target": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "const": "Utilization"
+                              },
+                              "averageUtilization": {
+                                "type": "integer",
+                                "minimum": 1
+                              }
+                            },
+                            "additionalProperties": false,
+                            "required": [
+                              "type",
+                              "averageUtilization"
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "required": [
+                          "name",
+                          "target"
+                        ]
+                      }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                      "type",
+                      "resource"
+                    ]
+                  },
+                  "minItems": 1
+                },
+                "behavior": {
+                  "type": "object",
+                  "properties": {
+                    "scaleUp": {
+                      "type": "object",
+                      "properties": {
+                        "stabilizationWindowSeconds": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 3600
+                        },
+                        "selectPolicy": {
+                          "enum": [
+                            "Max",
+                            "Min",
+                            "Disabled"
+                          ]
+                        },
+                        "policies": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "enum": [
+                                  "Pods",
+                                  "Percent"
+                                ]
+                              },
+                              "value": {
+                                "type": "integer",
+                                "minimum": 1
+                              },
+                              "periodSeconds": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 1800
+                              }
+                            },
+                            "additionalProperties": false,
+                            "required": [
+                              "type",
+                              "value",
+                              "periodSeconds"
+                            ]
+                          }
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "scaleDown": {
+                      "type": "object",
+                      "properties": {
+                        "stabilizationWindowSeconds": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 3600
+                        },
+                        "selectPolicy": {
+                          "enum": [
+                            "Max",
+                            "Min",
+                            "Disabled"
+                          ]
+                        },
+                        "policies": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "enum": [
+                                  "Pods",
+                                  "Percent"
+                                ]
+                              },
+                              "value": {
+                                "type": "integer",
+                                "minimum": 1
+                              },
+                              "periodSeconds": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 1800
+                              }
+                            },
+                            "additionalProperties": false,
+                            "required": [
+                              "type",
+                              "value",
+                              "periodSeconds"
+                            ]
+                          }
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "enabled",
+                "minReplicas",
+                "maxReplicas",
+                "metrics"
+              ]
+            },
             "inheritFrom": {
               "type": "string"
             },
@@ -29422,6 +30806,179 @@
             },
             "replicaCount": {
               "type": "integer"
+            },
+            "autoscaling": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "minReplicas": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "maxReplicas": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "metrics": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "const": "Resource"
+                      },
+                      "resource": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "enum": [
+                              "cpu",
+                              "memory"
+                            ]
+                          },
+                          "target": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "const": "Utilization"
+                              },
+                              "averageUtilization": {
+                                "type": "integer",
+                                "minimum": 1
+                              }
+                            },
+                            "additionalProperties": false,
+                            "required": [
+                              "type",
+                              "averageUtilization"
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "required": [
+                          "name",
+                          "target"
+                        ]
+                      }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                      "type",
+                      "resource"
+                    ]
+                  },
+                  "minItems": 1
+                },
+                "behavior": {
+                  "type": "object",
+                  "properties": {
+                    "scaleUp": {
+                      "type": "object",
+                      "properties": {
+                        "stabilizationWindowSeconds": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 3600
+                        },
+                        "selectPolicy": {
+                          "enum": [
+                            "Max",
+                            "Min",
+                            "Disabled"
+                          ]
+                        },
+                        "policies": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "enum": [
+                                  "Pods",
+                                  "Percent"
+                                ]
+                              },
+                              "value": {
+                                "type": "integer",
+                                "minimum": 1
+                              },
+                              "periodSeconds": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 1800
+                              }
+                            },
+                            "additionalProperties": false,
+                            "required": [
+                              "type",
+                              "value",
+                              "periodSeconds"
+                            ]
+                          }
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "scaleDown": {
+                      "type": "object",
+                      "properties": {
+                        "stabilizationWindowSeconds": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 3600
+                        },
+                        "selectPolicy": {
+                          "enum": [
+                            "Max",
+                            "Min",
+                            "Disabled"
+                          ]
+                        },
+                        "policies": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "enum": [
+                                  "Pods",
+                                  "Percent"
+                                ]
+                              },
+                              "value": {
+                                "type": "integer",
+                                "minimum": 1
+                              },
+                              "periodSeconds": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 1800
+                              }
+                            },
+                            "additionalProperties": false,
+                            "required": [
+                              "type",
+                              "value",
+                              "periodSeconds"
+                            ]
+                          }
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "enabled",
+                "minReplicas",
+                "maxReplicas",
+                "metrics"
+              ]
             },
             "inheritFrom": {
               "type": "string"
