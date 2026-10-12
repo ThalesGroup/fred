@@ -16,7 +16,14 @@ No additional prerequisites beyond the normal deployment procedure.
 
 ## Configuration
 
-No configuration changes are required. Each draft calls one chat model once:
+No configuration changes are required. The assistant's explicit model choices
+now include only models enabled by the platform `default_on` switch and served
+by every enabled pod. Team-only grants do not qualify. An existing saved choice
+is kept when its model is disabled; it remains displayed but cannot be selected
+again. The built-in meta-prompt now uses American English; admins with overrides
+can inspect the revised default before deciding whether to adopt it.
+
+Each draft calls one chat model once:
 the profile a platform admin picks in **Platform prompts > Creation
 assistant**, else the pod's default chat profile. Its reasoning follows
 the admin **Reasoning** setting (Off by default): for a profile declaring

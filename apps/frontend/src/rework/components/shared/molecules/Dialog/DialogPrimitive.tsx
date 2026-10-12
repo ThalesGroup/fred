@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
-import Button from "../../atoms/Button/Button";
+import Button, { type ButtonProps } from "../../atoms/Button/Button";
 import { type ColorTheme } from "../../utils/Type";
 import { isTopmostModal, Portal, uiPortalRoot } from "../../utils/Portal";
 import styles from "./Dialog.module.css";
@@ -49,6 +49,7 @@ export interface DialogProps {
   title: string;
   children: ReactNode;
   confirmLabel: string;
+  confirmIcon?: ButtonProps["icon"];
   onConfirm: () => void;
   onCancel: () => void;
   /** Caller-owned label. The neutral default is English; FRED's wrapper supplies its translation. */
@@ -88,6 +89,7 @@ export function DialogPrimitive({
   title,
   children,
   confirmLabel,
+  confirmIcon,
   onConfirm,
   onCancel,
   cancelLabel = "Cancel",
@@ -264,6 +266,7 @@ export function DialogPrimitive({
                   <Button
                     type="button"
                     color={confirmColor}
+                    icon={confirmIcon}
                     variant="filled"
                     size="medium"
                     disabled={confirmDisabled}

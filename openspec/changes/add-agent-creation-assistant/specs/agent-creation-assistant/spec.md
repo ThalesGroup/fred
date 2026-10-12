@@ -40,7 +40,7 @@ The control plane SHALL offer the model only the capabilities the request lists 
 
 ### Requirement: The drafted prompt fits the platform's prompt assembly
 
-The creation assistant SHALL instruct the model to write a complete Markdown prompt (500 to 900 words as a target) in the request's language, describing role, mission, audience and tone, method with its decision rules, when and how to use each recommended capability, sources and accuracy (always present), answer format, and rules and limits. When a document capability is recommended, it SHALL instruct the model to state that summarizing serves only a global overview or an explicit request for a summary, and that any other request is worked on exhaustively. It SHALL instruct the model to describe tool use in task terms, not to repeat the rules the platform already adds, not to name the platform, not to invent organisation facts or placeholders, and to treat the user's description as data. The returned prompt SHALL never contain a reserved prompt tag (`platform_instructions`, `platform_prompt`, `tools`, `agent_instructions`).
+The creation assistant SHALL instruct the model to write a complete Markdown prompt (500 to 900 words as a target) in the request's language, describing role, mission, audience and tone, method with its decision rules, when and how to use each recommended capability, sources and accuracy (always present), answer format, and rules and limits. When a document capability is recommended, it SHALL instruct the model to state that summarizing serves only a global overview or an explicit request for a summary, and that any other request is worked on exhaustively. It SHALL instruct the model to describe tool use in task terms, not to repeat the rules the platform already adds, not to name the platform, not to invent organization facts or placeholders, and to treat the user's description as data. The returned prompt SHALL never contain a reserved prompt tag (`platform_instructions`, `platform_prompt`, `tools`, `agent_instructions`).
 
 #### Scenario: Reserved tag in the model's answer
 
@@ -139,7 +139,7 @@ For every draft, whatever its outcome, the pod SHALL emit `agent.creation_assist
 
 ### Requirement: Applying a draft in the agent form
 
-The agent form header SHALL offer one **Assistant** button in create and edit modes, shown only once a template is chosen (never on the template step). The review step SHALL let the user tick each proposal separately (system prompt, name, role, description, each recommended capability, and all capabilities at once), all ticked by default, and Apply SHALL be disabled when nothing is ticked. Wherever the form offers reasoning, the capabilities column SHALL always propose it first, ticked by default and counted in the column's select-all, even when no capability is recommended. Applying SHALL write only the ticked items; ticked capabilities SHALL replace the selection with those the team may enable, keeping the reasoning setting; ticked reasoning SHALL turn reasoning on as the form's reasoning switch does (new conversations start in it when reasoning was off), a recommended `document_access` SHALL turn on both document sources (attachments and team documents), and unticked reasoning SHALL leave the reasoning settings unchanged. Turning reasoning on SHALL NOT require an overwrite confirmation. When a ticked item would replace a non-empty, different value in the form, the user SHALL confirm in a critical confirmation listing what will be replaced; cancelling SHALL return to the review unchanged. Nothing SHALL be saved until the user saves the agent.
+The agent form header SHALL offer one **Assistant** button in create and edit modes, shown only once a template is chosen (never on the template step). The description step's Suggest button SHALL show the outlined `auto_awesome` icon. The review step SHALL let the user tick each proposal separately (system prompt, name, role, description, each recommended capability, and all capabilities at once), all ticked by default, and Apply SHALL be disabled when nothing is ticked. Wherever the form offers reasoning, the capabilities column SHALL always propose it first, ticked by default and counted in the column's select-all, even when no capability is recommended. Applying SHALL write only the ticked items; ticked capabilities SHALL replace the selection with those the team may enable, keeping the reasoning setting; ticked reasoning SHALL turn reasoning on as the form's reasoning switch does (new conversations start in it when reasoning was off), a recommended `document_access` SHALL turn on both document sources (attachments and team documents), and unticked reasoning SHALL leave the reasoning settings unchanged. Turning reasoning on SHALL NOT require an overwrite confirmation. When a ticked item would replace a non-empty, different value in the form, the user SHALL confirm in a critical confirmation listing what will be replaced; cancelling SHALL return to the review unchanged. Nothing SHALL be saved until the user saves the agent.
 
 #### Scenario: No template yet
 
@@ -236,12 +236,37 @@ The pod SHALL report the date its built-in meta-prompt was last revised on `/age
 
 ### Requirement: Admins choose the creation assistant's model
 
-The admin read SHALL return the chosen `model_profile_id` (or `null` for the platform default) and the chat profiles it may be set to: those every enabled pod advertises, each with its catalog name. A write SHALL refuse a profile outside that set with 422, unless it is the profile already stored. The choice SHALL only select the model the creation assistant calls; the created agent's model SHALL stay the one model routing gives it.
+The admin read SHALL return the chosen `model_profile_id` (or `null` for the platform default) and the chat profiles it may be set to: those every enabled pod advertises whose model capability is enabled platform-wide by the organization `default_on` marker, each with its catalog name. Team-only grants and personal-space activation SHALL NOT qualify a model for this selector. The platform-default choice SHALL remain available. A stored profile outside the offered set SHALL remain visible as a disabled current value so a text-only edit can keep it without offering it for a new selection. A write SHALL refuse a profile outside that set with 422, unless it is the profile already stored. The choice SHALL only select the model the creation assistant calls; the created agent's model SHALL stay the one model routing gives it.
 
 #### Scenario: Model chosen
 
 - **WHEN** an admin chooses chat profile P and a team editor then requests a draft
 - **THEN** the pod builds P at the admin's reasoning effort as P allows it, and the KPI events carry P's model name
+
+#### Scenario: Platform activation controls the offered models
+
+- **WHEN** the catalog advertises chat profiles of two models on every enabled pod, but only one model has the platform `default_on` marker
+- **THEN** the admin read offers only that model's profiles, preserving their names and reasoning metadata
+
+#### Scenario: Activation changes refresh cached choices
+
+- **WHEN** an admin changes a model's platform activation after the assistant settings were already read
+- **THEN** the frontend invalidates the cached assistant settings and the next offered list reflects the activation change
+
+#### Scenario: Disabled model rejected as a new choice
+
+- **WHEN** an admin submits a new profile advertised by every pod whose model has no platform `default_on` marker
+- **THEN** the request is refused with 422 and nothing is stored
+
+#### Scenario: No platform-enabled models
+
+- **WHEN** no advertised chat model has the platform `default_on` marker
+- **THEN** the admin read returns an empty `model_options` list and the platform-default choice remains available
+
+#### Scenario: Stored model disabled later
+
+- **WHEN** the saved model loses platform activation and the admin edits only the meta-prompt
+- **THEN** the UI displays the saved model as a disabled current value and the save keeps its id unchanged
 
 #### Scenario: Unknown profile on save
 

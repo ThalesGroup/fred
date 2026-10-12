@@ -13,7 +13,7 @@ Tracking: [#3009](https://github.com/ThalesGroup/fred/issues/3009)
   - the capabilities to turn on, chosen among those the team may use on that template, the smallest set that covers the mission.
 - **The prompt fits how agents are assembled.** It never repeats what the platform already adds (tool list, tool usage rules, house style), never names the platform, and never contains the reserved prompt tags.
 - **The user picks what to keep.** Every proposal (prompt, name, role, description, each capability) has a checkbox, all ticked by default; applying writes only the ticked ones and asks for confirmation before replacing a value already in the form. Nothing is saved until the agent is.
-- **Admins tune it.** The admin **Platform prompts** page has a **Creation assistant** tab to override its instructions (the meta-prompt), restore the default, and choose which chat model it uses (default: the platform's default model). The created agent's own model is never chosen by the assistant.
+- **Admins tune it.** The admin **Platform prompts** page has a **Creation assistant** tab to override its instructions (the meta-prompt), restore the default, and choose which platform-enabled chat model it uses (the model's platform `default_on` switch, not a team grant; default: the platform's default model). The created agent's own model is never chosen by the assistant.
 - **Endpoints.**
   - Control plane: `POST /control-plane/v1/teams/{team_id}/agent-templates/{template_id}/draft-agent`, gated like creating an agent.
   - Pod: `POST /agents/creation-assistant/draft`, called by the control plane with the user's token.

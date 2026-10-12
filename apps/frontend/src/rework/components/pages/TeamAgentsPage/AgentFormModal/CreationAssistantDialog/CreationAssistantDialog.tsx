@@ -196,6 +196,7 @@ export function CreationAssistantDialog({
         open={open}
         title={t(`${KEY}.title`)}
         confirmLabel={reviewing ? t(`${KEY}.apply`) : t(`${KEY}.generate`)}
+        confirmIcon={reviewing ? undefined : { category: "outlined", type: "auto_awesome" }}
         confirmDisabled={loading || (reviewing ? nothingTicked : !description.trim())}
         onConfirm={() => {
           if (reviewing) apply();

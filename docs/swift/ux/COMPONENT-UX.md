@@ -275,10 +275,12 @@ shown under the editor rather than only as a toast.
 2026-10-08: the page is now **Platform prompts**, with `ButtonGroup variant="tabs"` in the
 `PageHeader` (`?tab=creation-assistant` keeps the choice). Tab 1 is the content above, unchanged
 (`PlatformSystemPromptPane`); tab 2 (`CreationAssistantPane`) holds the creation assistant's
-settings: a small, label-less model `Select` (named by `ariaLabel`; "Platform default model"
-first, then the pods' chat profiles; a saved profile no pod serves stays listed as unavailable)
-at the top right of the card, facing the title and description and wrapping under them when
-narrow, followed by a "Reasoning" control that follows the selected model: a `2xs` radio `ButtonGroup`
+settings: a small, label-less model `Select` (named by `ariaLabel`) at the top right of the
+card, facing the title and description and wrapping under them when narrow. It offers
+"Platform default model" first, then the universally served chat profiles of models with
+platform `default_on` activation. An unavailable saved profile stays displayed as a disabled
+current value. Capability enablement changes invalidate these settings so the list refreshes.
+The following "Reasoning" control follows the selected model: a `2xs` radio `ButtonGroup`
 (Off/Low/Medium/High, only the declared levels, named "Reasoning") when the option has two or more
 `reasoning_efforts`, else a small `Switch` (on stores `medium`; disabled, with a tooltip and the
 reason in its accessible name, when the option reports `supports_reasoning: false`). "Platform
@@ -330,6 +332,9 @@ would replace a value the user wrote (on create, template seeds count as empty; 
 what Apply would write, selection and document sources), a critical `ConfirmationDialog` lists
 those fields first; it takes focus on Cancel and keeps Tab inside, Cancel returns to the review.
 Escape closes only the topmost layer: the confirmation, else the dialog, never the form.
+The description step's **Suggest** button shows the outlined `auto_awesome` icon
+through Dialog's optional `confirmIcon`; the review **Apply** action keeps its text.
+
 Its token use shows on the admin `AnalyticsPage` as a **Creation assistant** `KpiStatCard`
 (token-usage section) with the number of uses in the card's optional `caption`
 (`--font-body-small`, retreat).

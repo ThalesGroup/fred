@@ -3180,7 +3180,7 @@
         "model": {
           "label": "Model",
           "default": "Platform default model",
-          "missing": "{{id}} (no longer available, the default model is used)"
+          "missing": "{{id}} (no longer selectable)"
         },
         "reasoning": {
           "label": "Reasoning",

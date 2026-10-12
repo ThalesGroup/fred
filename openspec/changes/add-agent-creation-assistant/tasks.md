@@ -53,6 +53,11 @@
 
 - [x] 5.18 Address all five GitHub quality comments: initialize the test factory normally, move route actions and state mutation out of assertions, explain malformed-output handling, and retain the required ORM import and task await as verified false positives (verification.md)
 
+- [x] 5.19 Limit creation-assistant model choices to platform `default_on` models advertised by every enabled pod, share the filter with new-choice validation, invalidate cached settings on activation changes, retain an unavailable saved profile as a disabled current value, and verify enabled/disabled/empty sets plus text-only saves
+- [x] 5.20 Correct the built-in meta-prompt to American English without changing its instructions, bump its revision date and pinned hash, reconcile product/UX/migration docs, and verify targeted tests, root quality and independent review
+
+- [x] 5.21 Add the outlined auto_awesome icon to the description step's Suggest button through an optional Dialog confirmIcon, verify existing dialog/assistant tests and the packed UI contract
+
 ## 6. Close-out
 
 - [x] 6.1 Manual check against a real model in fr and en, with and without capabilities (browser in fr; en through the smoke script; no-capability answer only unit-tested, see verification.md)

@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections import Counter
 from dataclasses import dataclass
@@ -22,12 +23,14 @@ from datetime import date
 import httpx
 from fastapi import HTTPException
 from fred_core import KeycloakUser
+from fred_core.security.rebac.rebac_engine import RelationType
 from fred_sdk.contracts.agent_draft import CreationAssistantReasoningEffort
 
 from control_plane_backend.capabilities.catalog import (
     aggregate_capability_catalog,
     universally_available_chat_model_profile_ids,
 )
+from control_plane_backend.capabilities.enablement import has_org_relation
 from control_plane_backend.organization_authz import require_edit_platform_prompt
 from control_plane_backend.platform_prompt.schemas import (
     CREATION_ASSISTANT_LANGUAGE_PLACEHOLDER,
@@ -301,8 +304,7 @@ async def reset_creation_assistant_prompt(
 async def creation_assistant_model_options(
     deps: ProductServiceDependencies,
 ) -> list[CreationAssistantModelOption]:
-    """Chat profiles every enabled pod advertises, the same set team routing
-    may pick from, named after their catalog model."""
+    """Platform-enabled chat profiles every enabled pod advertises."""
     return (await _creation_assistant_models(deps))[0]
 
 
@@ -326,23 +328,37 @@ async def _creation_assistant_models(
                 pod = await _model_capabilities_for_source(source.base_url)
                 if pod is not None and pod.entries:
                     defaults.add(pod.default_chat_profile_id)
-    named = {
-        profile_id: entry.model_display_name or entry.name
+    model_entries = [
+        entry
         for entry in catalog.values()
         if entry.kind == "model"
+        and any(profile_id in universal for profile_id in entry.model_chat_profile_ids)
+    ]
+    enabled = await asyncio.gather(
+        *(
+            has_org_relation(
+                deps.team_dependencies.rebac, entry.id, RelationType.DEFAULT_ON
+            )
+            for entry in model_entries
+        )
+    )
+    active_entries = [
+        entry for entry, is_enabled in zip(model_entries, enabled) if is_enabled
+    ]
+    named = {
+        profile_id: entry.model_display_name or entry.name
+        for entry in active_entries
         for profile_id in entry.model_chat_profile_ids
         if profile_id in universal
     }
     thinking = {
         profile_id
-        for entry in catalog.values()
-        if entry.kind == "model"
+        for entry in active_entries
         for profile_id in entry.model_thinking_profile_ids
     }
     levels = {
         profile_id: list(profile_levels)
-        for entry in catalog.values()
-        if entry.kind == "model"
+        for entry in active_entries
         for profile_id, profile_levels in entry.model_reasoning_efforts.items()
     }
     names = Counter(named.values())

@@ -724,7 +724,10 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     },
     // Creation assistant settings (meta-prompt override, model): one row too.
     getCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantGet: {
-      providesTags: [{ type: "ControlPlaneCreationAssistantSettings" as const, id: "LIST" }],
+      providesTags: [
+        { type: "ControlPlaneCreationAssistantSettings" as const, id: "LIST" },
+        { type: "ControlPlaneCapability" as const, id: "LIST" },
+      ],
     },
     putCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantPut: {
       invalidatesTags: [{ type: "ControlPlaneCreationAssistantSettings", id: "LIST" }],

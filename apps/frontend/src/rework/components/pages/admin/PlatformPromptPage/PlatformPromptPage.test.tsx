@@ -97,13 +97,13 @@ vi.mock("@shared/molecules/Select/Select.tsx", () => ({
     value,
     onChange,
   }: {
-    options: { key: string; value: string; label: string }[];
+    options: { key: string; value: string; label: string; disabled?: boolean }[];
     value: string;
     onChange: (next: string) => void;
   }) => (
     <select data-testid="model-select" value={value} onChange={(e) => onChange(e.target.value)}>
       {options.map((option) => (
-        <option key={option.key} value={option.value}>
+        <option key={option.key} value={option.value} disabled={option.disabled}>
           {option.label}
         </option>
       ))}
@@ -283,11 +283,12 @@ describe("CreationAssistantPane", () => {
     });
   });
 
-  it("keeps a saved model the pods no longer offer visible", () => {
+  it("keeps an unavailable saved model visible without offering it for selection", () => {
     h.assistant.data = { ...h.assistant.data, model_profile_id: "chat.gone" };
     render("/admin/platform-prompt?tab=creation-assistant");
     const select = container.querySelector('[data-testid="model-select"]') as HTMLSelectElement;
     expect(select.value).toBe("chat.gone");
+    expect(select.options[select.options.length - 1].disabled).toBe(true);
     expect(select.options[select.options.length - 1].textContent).toBe(
       "rework.platformPrompt.creationAssistant.model.missing",
     );

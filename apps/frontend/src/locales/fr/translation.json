@@ -3180,7 +3180,7 @@
         "model": {
           "label": "Modèle",
           "default": "Modèle par défaut de la plateforme",
-          "missing": "{{id}} (plus disponible, le modèle par défaut est utilisé)"
+          "missing": "{{id}} (ne peut plus être sélectionné)"
         },
         "reasoning": {
           "label": "Raisonnement",

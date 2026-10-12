@@ -4392,7 +4392,9 @@ the meta-prompt, so a model-only or reasoning-only save leaves them unchanged),
 `model_profile_id`, `reasoning_effort`, `default_model_profile_id` (the pods'
 default chat profile when every reachable pod names the same one, else
 `null`), `model_options` (`{profile_id, name, supports_reasoning,
-reasoning_efforts}`: the chat profiles every enabled pod advertises,
+reasoning_efforts}`: the chat profiles every enabled pod advertises whose
+model is activated platform-wide (`default_on`); team-only and personal-space
+grants do not qualify,
 `supports_reasoning` when the profile is among the catalog's
 `model_thinking_profile_ids` and `model_reasoning_efforts` does not map it to
 `[]` (nothing the pod can send), `reasoning_efforts` its selectable levels from

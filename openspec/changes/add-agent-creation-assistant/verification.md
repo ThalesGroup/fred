@@ -435,3 +435,61 @@ its baseline: 0 errors and 0 warnings.
 Root `make code-quality UV=/tmp/fred-3013-quality-uv.py`: all 17 modules
 passed, with the local provisioning exclusion described above. The temporary
 configuration and wrapper are not committed; no baseline was rewritten.
+
+
+## Platform-enabled assistant models and American English (2026-10-12)
+
+User-requested follow-up on the existing PR, implemented in the main checkout
+against `1e4da7044c051669f9962b701b017eb4598425b8`; target `swift` remains
+`a7e40a6ff654d86ab783ffe304ecaeb5162e4aeb`. The model selector now offers only
+universally served chat profiles whose model has platform `default_on`
+activation. It reuses the org-marker helper, with independent reads concurrent
+and restricted to the organization subject. Listing and new-choice validation
+share the same computation. Team and personal grants do not qualify. The
+platform-default option remains; an unavailable stored profile is displayed
+as a disabled current value and a text-only save keeps its id. Runtime routing
+for existing choices is unchanged.
+
+The settings query now depends on the capability-list cache tag so activation
+changes refresh its model choices. An independent read-only review identified
+that missing dependency; a real-store RTK Query test reproduced the stale
+model list and passed after the correction. Product, UX and migration docs
+now describe the filtered choices and the stored-value behavior.
+
+The built-in meta-prompt uses `organization`, `behavior`, `analyzes` and
+`analyze`, with two idiomatic wording corrections. Its instructions are
+unchanged. Its revision date and pinned hash were updated so an admin with an
+older override can inspect the new default before adopting it.
+
+Targeted verification: before the patch, three backend activation cases and
+the UI's disabled-value case failed; the cache regression also failed before
+the dependency tag was added. After the corrections: control-plane
+`test_platform_prompt.py` 51 passed; runtime `test_creation_assistant.py`
+70 passed; frontend PlatformPromptPage and API enhancement suites 34 passed.
+No wire shape or migration changed, so generated clients need no regeneration.
+
+The user additionally requested the outlined `auto_awesome` icon on Suggest.
+Dialog now accepts optional `confirmIcon`, typed from the existing Button
+props; only the assistant's description/loading action supplies the icon.
+Independent review found the existing consumers and neutral packed UI type
+rewrite compatible, with callbacks, focus and keyboard handling unchanged.
+The combined frontend suites pass 75 tests and UI archive validation passes
+58 tests (139 glyphs unchanged). Together with backend 51 and runtime 70,
+254 targeted tests pass.
+
+The independent review covered model filtering/validation, real activation
+and Select/cache consumers, the I/O path, prompt semantics/revision and the
+optional Dialog icon. The cache finding was corrected and re-reviewed with no
+remaining findings in this scope. Excluded: the rest of the existing feature
+PR, browser/load validation, and concurrent user changes to TeamSettingsRouting
+and their shared locale/UX hunks. The overall change remains active while its
+previously open design questions await developer review.
+
+Raw control-plane types: 0 errors/warnings with only the previously documented
+local provisioning directory excluded. Raw runtime types: 0 errors and 7
+existing unreachable-code warnings outside the modified files.
+Root quality passed on all 17 modules after fixing the new local import
+block's ordering. Command: `make code-quality
+UV=/tmp/fred-assistant-models-quality-uv.py`; it preserves the standard
+checker exclusions and baseline, excluding the previously documented local
+provisioning directory only. Temporary configuration is not committed.

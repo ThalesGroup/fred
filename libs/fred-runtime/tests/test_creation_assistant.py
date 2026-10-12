@@ -255,8 +255,8 @@ def test_reserved_tags_are_stripped_from_the_prompt(kpi) -> None:
 
 # Pinned together: editing the default without bumping the date would hide the
 # change from admins who overrode it.
-_DEFAULT_PROMPT_SHA256 = "b735bc6478db362f07f7d845c382d5b817c2021dd712cf4598721447e025fbaf"  # pragma: allowlist secret
-_DEFAULT_PROMPT_REVISED_AT = "2026-10-08"
+_DEFAULT_PROMPT_SHA256 = "e0567bbfb1a749a56d1bd47146dc55200111d572abbefa3b28eff907d3f2b93d"  # pragma: allowlist secret
+_DEFAULT_PROMPT_REVISED_AT = "2026-10-12"
 
 
 def test_default_prompt_edit_bumps_its_revision_date() -> None:

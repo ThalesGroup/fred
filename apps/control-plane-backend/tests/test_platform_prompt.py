@@ -806,8 +806,10 @@ async def test_put_route_forwards_the_reasoning_effort(
 
 
 @pytest.mark.asyncio
-async def test_model_options_are_chat_profiles_every_pod_serves(
+@pytest.mark.parametrize("enabled_models", [{"m1", "m2"}, {"m1"}, {"m2"}, set()])
+async def test_model_options_are_platform_enabled_chat_profiles_every_pod_serves(
     monkeypatch: pytest.MonkeyPatch,
+    enabled_models: set[str],
 ) -> None:
     from control_plane_backend.platform_prompt import service
     from fred_sdk.contracts.capability import CapabilityCatalogEntry
@@ -860,6 +862,29 @@ async def test_model_options_are_chat_profiles_every_pod_serves(
     )
 
     from control_plane_backend.product import service as product_service
+    from fred_core.security.rebac.rebac_engine import (
+        ORGANIZATION_ID,
+        RebacReference,
+        Relation,
+        RelationType,
+    )
+
+    class _ModelRebac(_RoleRebac):
+        async def list_direct_relations(
+            self, resource: RebacReference, *, subject: RebacReference
+        ) -> list[Relation]:
+            assert subject == RebacReference(Resource.ORGANIZATION, ORGANIZATION_ID)
+            relations = [
+                Relation(subject, RelationType.PERSONAL_ON, resource),
+                Relation(
+                    RebacReference(Resource.TEAM, "team-a"),
+                    RelationType.ENABLED,
+                    resource,
+                ),
+            ]
+            if resource.id in enabled_models:
+                relations.append(Relation(subject, RelationType.DEFAULT_ON, resource))
+            return relations
 
     defaults = {"http://pod-1": "chat.a", "http://pod-2": "chat.a"}
 
@@ -874,7 +899,8 @@ async def test_model_options_are_chat_profiles_every_pod_serves(
     deps: Any = SimpleNamespace(
         configuration=SimpleNamespace(
             platform=SimpleNamespace(runtime_catalog_sources=sources)
-        )
+        ),
+        team_dependencies=SimpleNamespace(rebac=_ModelRebac()),
     )
     options, default = await service._creation_assistant_models(deps)
 
@@ -882,14 +908,50 @@ async def test_model_options_are_chat_profiles_every_pod_serves(
         (o.profile_id, o.name, o.supports_reasoning, o.reasoning_efforts)
         for o in options
     ] == [
-        ("chat.c", "GPT", True, ["low", "high"]),
-        ("chat.a", "Mistral (chat.a)", True, []),
-        ("chat.b", "Mistral (chat.b)", False, []),
-        ("chat.d", "Mistral (chat.d)", False, []),
+        option
+        for option in [
+            ("chat.c", "GPT", True, ["low", "high"]),
+            ("chat.a", "Mistral (chat.a)", True, []),
+            ("chat.b", "Mistral (chat.b)", False, []),
+            ("chat.d", "Mistral (chat.d)", False, []),
+        ]
+        if ("m2" if option[0] == "chat.c" else "m1") in enabled_models
     ]
     assert default == "chat.a"
     defaults["http://pod-2"] = "chat.b"  # pods disagree: unknown
     assert (await service._creation_assistant_models(deps))[1] is None
+
+    deps.get_creation_assistant_settings_store = lambda: _AssistantStore()
+
+    async def _fetch(_deps: object) -> PodPlatformPromptFile:
+        return PodPlatformPromptFile(platform_prompt="", platform_instructions="")
+
+    monkeypatch.setattr(service, "fetch_pod_platform_prompt_file", _fetch)
+    deps.team_dependencies.rebac._allowed.add(
+        OrganizationPermission.CAN_EDIT_PLATFORM_PROMPT
+    )
+    for model, profile in (("m1", "chat.a"), ("m2", "chat.c")):
+        if model not in enabled_models:
+            with pytest.raises(HTTPException) as exc:
+                await service.set_creation_assistant_settings(
+                    user=_user(), text=None, model_profile_id=profile, deps=deps
+                )
+            assert exc.value.status_code == 422
+
+    stored = _AssistantStore(
+        StoredCreationAssistantSettings(
+            text="OLD",
+            model_profile_id="chat.a",
+            reasoning_effort="off",
+            updated_by="a",
+            updated_at=None,
+        )
+    )
+    deps.get_creation_assistant_settings_store = lambda: stored
+    saved = await service.set_creation_assistant_settings(
+        user=_user(), text="NEW {language}", model_profile_id="chat.a", deps=deps
+    )
+    assert saved.model_profile_id == "chat.a"
 
 
 _OVERRIDE_DAY = datetime(2026, 10, 8, 23, 30, tzinfo=timezone.utc)

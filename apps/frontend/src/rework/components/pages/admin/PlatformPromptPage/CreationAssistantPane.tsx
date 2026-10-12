@@ -89,12 +89,13 @@ export default function CreationAssistantPane() {
       label: option.name,
     })),
   ];
-  // A saved profile no pod advertises any more: still shown, drafts fall back to the default.
+  // Keep an unavailable saved value visible without offering it as a new choice.
   if (savedModel && !modelOptions.some((option) => option.value === savedModel)) {
     modelOptions.push({
       key: savedModel,
       value: savedModel,
       label: t("rework.platformPrompt.creationAssistant.model.missing", { id: savedModel }),
+      disabled: true,
     });
   }
 
