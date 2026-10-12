@@ -33,18 +33,21 @@ interface CopyAgentDialogProps {
 /** "Copy to…": copies an agent into the caller's other spaces, showing before
  * the copy which teams lack the agent template or some of its capabilities. */
 export default function CopyAgentDialog({ instance, onClose }: CopyAgentDialogProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { showSuccess, showWarn, showError } = useToast();
   const { activeTeam, availableTeams } = useFrontendBootstrap();
   const sourceTeamId = instance?.team_id ?? "";
   const agentInstanceId = instance?.agent_instance_id ?? "";
 
-  const { data: targets, isError } =
-    useGetAgentInstanceCopyTargetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyTargetsGetQuery(
-      { teamId: sourceTeamId, agentInstanceId },
-      // Enablement changes elsewhere; always read the current state.
-      { skip: !instance, refetchOnMountOrArgChange: true },
-    );
+  const {
+    data: targets,
+    isError,
+    isFetching,
+  } = useGetAgentInstanceCopyTargetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyTargetsGetQuery(
+    { teamId: sourceTeamId, agentInstanceId },
+    // Enablement changes elsewhere; always read the current state.
+    { skip: !instance, refetchOnMountOrArgChange: true },
+  );
   const [copyAgent, { isLoading }] =
     usePostAgentInstanceCopyControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyPostMutation();
 
@@ -103,7 +106,7 @@ export default function CopyAgentDialog({ instance, onClose }: CopyAgentDialogPr
       const { results } = await copyAgent({
         teamId: sourceTeamId,
         agentInstanceId,
-        agentCopyRequest: { target_team_ids: teamIds },
+        agentCopyRequest: { target_team_ids: teamIds, locale: i18n.language?.startsWith("fr") ? "fr" : "en" },
       }).unwrap();
       const copied = results.filter((r) => r.agent);
       const failed = results.filter((r) => r.error);
@@ -165,6 +168,7 @@ export default function CopyAgentDialog({ instance, onClose }: CopyAgentDialogPr
       noEditableTeamsLabel={t("rework.agentCard.copyDialog.noEditableTeams")}
       originTeamId={sourceTeamId}
       statusByTeamId={statusByTeamId}
+      confirmBlocked={!targets || isFetching || isError}
       isSubmitting={isLoading}
       onConfirm={(teamIds) => void handleConfirm(teamIds)}
       onClose={onClose}
