@@ -245,7 +245,7 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
           error={descriptionError ?? undefined}
           maxLength={TEAM_DESCRIPTION_MAX_LENGTH}
           value={descriptionValue}
-          rows={5}
+          rows={8}
           required
           {...register("description", { onBlur: handleSaveDescription })}
         />

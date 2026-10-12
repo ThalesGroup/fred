@@ -445,10 +445,10 @@ describe("TeamSettingsParameters description", () => {
     expect(container.textContent).toContain("rework.teamSettings.parameters.description.saveError");
   });
 
-  it("gives the description field five rows", () => {
+  it("gives the description field eight rows", () => {
     render(<TeamSettingsParameters team={describedTeam()} />);
 
-    expect(field().getAttribute("rows")).toBe("5");
+    expect(field().getAttribute("rows")).toBe("8");
   });
 
   it("sends nothing when the description is left unchanged", () => {
