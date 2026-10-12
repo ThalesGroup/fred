@@ -921,7 +921,7 @@ async def test_model_options_are_platform_enabled_chat_profiles_every_pod_serves
     defaults["http://pod-2"] = "chat.b"  # pods disagree: unknown
     assert (await service._creation_assistant_models(deps))[1] is None
 
-    deps.get_creation_assistant_settings_store = lambda: _AssistantStore()
+    deps.get_creation_assistant_settings_store = _AssistantStore
 
     async def _fetch(_deps: object) -> PodPlatformPromptFile:
         return PodPlatformPromptFile(platform_prompt="", platform_instructions="")

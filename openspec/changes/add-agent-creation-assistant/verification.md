@@ -523,3 +523,19 @@ is now section 8.111, with its product-contract reference updated.
 
 Scope: focused integration review, not a full audit of the original PR or upstream
 skills implementation. Browser, live LLM, Kubernetes and load validation excluded.
+
+
+## Code quality bot follow-up (2026-10-12)
+
+Review comment `4249581169` identified an unnecessary constructor lambda in
+`test_model_options_are_platform_enabled_chat_profiles_every_pod_serves`.
+The fixture now uses `_AssistantStore` directly, still creating a fresh instance
+on each call. The other five bot threads were already resolved; their fixes and
+intentional side effects remain intact. This is a mechanical test-only correction.
+
+Focused review: parent `bfed0161ca89bf3f158ae38af7e3d5252f6ab2f8`, one-line test delta;
+no full PR re-audit or independent review required for this mechanical change.
+`pytest tests/test_platform_prompt.py -q`: 51 passed. Ruff lint/format and raw
+control-plane types passed (0 errors, 0 warnings). Root quality passed in all
+17 modules, with the same temporary exclusion of ignored local provisioning
+scripts as the preceding verification; the temporary config was removed.
