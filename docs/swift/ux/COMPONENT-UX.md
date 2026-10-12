@@ -5147,11 +5147,19 @@ announced nor durable past the first keystroke.
 
 ### `CommandMenu`
 
-The menu offers prompt commands from the active team and skills from the
-selected agent's runtime catalog. For a resolved ReAct template, it additionally
-offers the caller's personal prompt commands, with visible and accessible labels
-for platform skills, personal prompts and team prompts. Personal chats offer one
-prompt source. Entries preserve their owning team and id; choosing either
+The menu lists its entries in up to three sections, always in this order, each
+under its own heading: the conversation's team (`Team "<name>"`), the caller's
+personal space (`Personal space`), then the platform skills of the selected
+agent's runtime catalog (`Platform skills`). Personal prompt commands are
+offered whatever the agent's kind. A section with no entry, or no match for the
+typed text, is hidden with its heading; a personal chat shows one commands
+section, the personal one. Headings are sentence case, on one line, truncated
+with an ellipsis (the full label is in the tooltip); until the team's name is
+known the team heading reads `Team`. Rows carry no source label: the heading,
+which also labels the section for assistive technology, says where they come
+from. Arrow keys walk every displayed row as one list, across sections.
+
+Entries preserve their owning team and id; choosing either
 homonymous prompt runs that exact prompt after completion. A typed prompt
 command without an explicit row prefers the chat team's match, then the personal
 one, once the team's command catalog has resolved. An invalidated completed
@@ -5164,8 +5172,7 @@ prompt title, personal/team source and description. The document retains
 `/command` for editing, copying and undo; the visual follows the exact prompt
 selected for submission, including homonyms. Incomplete, removed or invalidated
 prompt selections receive no prompt visual.
-Deep and other execution families retain their current sources. Its heading follows the kinds of entries
-currently displayed. `/` lists the available skills directly alongside prompt
+`/` lists the available skills directly alongside prompt
 commands without a standalone `/skill` dispatcher; `/comp` filters `compare-options`
 and `/meet` filters `meeting-minutes`. Choosing a skill completes the existing
 canonical invocation and preserves the request, without sending a turn.
@@ -5174,7 +5181,7 @@ names from the current runtime catalog enable these inline suggestions.
 Homonymous prompt and skill entries remain separate, with prompt commands first.
 
 Dressed in the shared menu grammar (`MenuPopover`): `--shadow-m`, `1px solid
---outline-muted`, `--radius-s`, `--surface-container-high` fill,
+--outline-muted`, `--radius-s`, `--surface-floating` fill,
 `--on-surface-muted` heading, `--state-on-surface-hover` on the focused row.
 It is anchored above the composer field rather than floating free. Keyboard
 focus and hover share that one highlight, so a pointer never leaves two rows

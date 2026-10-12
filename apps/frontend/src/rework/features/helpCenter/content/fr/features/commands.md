@@ -35,16 +35,24 @@ restent joignables.
 ## Lancer une commande
 
 Dans le champ de saisie d'une conversation, **vide**, tapez `/` : la liste des
-commandes de l'équipe s'ouvre au-dessus. Continuez à taper pour la filtrer.
+commandes s'ouvre au-dessus. Continuez à taper pour la filtrer.
 
-Avec un **agent ReAct**, le menu propose aussi vos commandes de prompts
-personnels, à côté des commandes de l'équipe et des skills plateforme. Un libellé
-indique chaque origine. Si deux prompts ont la même commande, sélectionnez la
-ligne voulue : la complétion conserve ce prompt précis. Une commande de prompt
-saisie sans sélection utilise d'abord le prompt de l'équipe, puis votre prompt
-personnel si l'équipe n'a pas de correspondance. Dans votre espace personnel,
-vos commandes ne sont proposées qu'une fois. Les agents Deep conservent leur
-fonctionnement actuel.
+La liste est rangée en trois parties, chacune sous son titre :
+
+1. **Équipe « nom de l'équipe »** : les commandes de l'équipe de la
+   conversation ;
+2. **Espace personnel** : vos propres commandes, proposées quel que soit
+   l'agent ;
+3. **Skills plateforme** : les skills que l'agent sait utiliser.
+
+Une partie qui n'a rien à proposer n'apparaît pas. Dans votre espace
+personnel, vos commandes ne sont listées qu'une fois, sous **Espace
+personnel**.
+
+Si l'équipe et vous avez une commande du même nom, elle apparaît dans les deux
+parties : choisissez la ligne voulue, c'est ce prompt précis qui sera lancé. Si
+vous tapez le nom sans choisir de ligne, la commande de l'équipe passe en
+premier, puis la vôtre si l'équipe n'en a pas.
 
 - **↓** et **↑** parcourent la liste ;
 - **Tab** complète la commande sans l'envoyer ;
@@ -54,8 +62,8 @@ fonctionnement actuel.
 Vous pouvez placer un prompt disponible et plusieurs skills plateforme
 n’importe où dans un message de chat, dans les deux ordres. La complétion conserve le texte avant
 et après chaque invocation. À l’envoi, le prompt est développé à sa place et tous
-les skills sélectionnés sont demandés ensemble. ReAct propose aussi vos prompts
-personnels dans les chats d’équipe et précharge chaque skill distinct une fois.
+les skills sélectionnés sont demandés ensemble. ReAct précharge chaque skill
+distinct une fois.
 Deep utilise les lectures natives décidées par le modèle ; demander un skill ne
 garantit pas à lui seul son chargement.
 

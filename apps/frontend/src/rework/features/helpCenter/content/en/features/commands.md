@@ -32,16 +32,22 @@ a suffix is added (`/summary-2`) so both stay reachable.
 
 ## Run a command
 
-In an **empty** conversation input field, type `/`: the team's commands open
-above it. Keep typing to filter them.
+In an **empty** conversation input field, type `/`: the list of commands opens
+above it. Keep typing to filter it.
 
-For a **ReAct agent**, the menu also offers your personal prompt commands
-alongside the team's commands and platform skills. Labels identify each source.
-If two prompts share a command, select the desired row: completion remembers
-that exact prompt. Typing a prompt command without selecting a row uses the
-team's prompt first, then your personal prompt if the team has no match. In your
-personal space, the menu lists your personal commands once. Deep agents retain
-their current behavior.
+The list comes in three parts, each under its own title:
+
+1. **Team "name of the team"**: the commands of the conversation's team;
+2. **Personal space**: your own commands, offered whatever the agent;
+3. **Platform skills**: the skills the agent can use.
+
+A part with nothing to offer does not appear. In your personal space, your
+commands are listed once, under **Personal space**.
+
+If the team and you have a command with the same name, it appears in both
+parts: pick the row you want, and that exact prompt is the one that runs. If
+you type the name without picking a row, the team's command comes first, then
+yours if the team has none.
 
 - **↓** and **↑** walk the list;
 - **Tab** completes the command without sending it;
@@ -51,8 +57,7 @@ their current behavior.
 You can place one available prompt command and several platform skills
 anywhere in a managed-chat message, in either order. Completion keeps your text before and after
 each token. On send, the prompt expands in place and all selected skills are
-requested together. ReAct additionally offers your personal prompt commands
-in team chats and preloads each distinct requested skill once. Deep uses native
+requested together. ReAct preloads each distinct requested skill once. Deep uses native
 model-driven reads; requesting a skill alone does not guarantee its loading.
 
 For example, `Before /summary after /verify-answer` keeps “Before” ahead of the

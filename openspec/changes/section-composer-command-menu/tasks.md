@@ -23,14 +23,14 @@
 
 ## 5. Docs
 
-- [ ] 5.1 Rewrite the behaviour paragraphs of `### CommandMenu` in `docs/swift/ux/COMPONENT-UX.md`: three sections and their headers, no row label, personal commands for every agent kind, sentence-case truncated header; correct the fill token it names to the one the stylesheet uses; verify the section no longer mentions ReAct-only sources or a heading that follows entry kinds
-- [ ] 5.2 Update the Help Center pages `rework/features/helpCenter/content/fr/features/commands.md` and `en/features/commands.md` ("Lancer une commande" / "Run a command" and the paragraph on mixing prompts and skills): sections instead of labels, personal commands with every agent, no "Deep agents retain their current behavior"; verify fr and en say the same thing in non-technical wording
-- [ ] 5.3 Add `docs/swift/ops/migrations/3073-composer-command-menu-sections.md` from the template (impact none, configuration none); verify its front matter matches `MIGRATION-NOTE-TEMPLATE.md`
+- [x] 5.1 Rewrite the behaviour paragraphs of `### CommandMenu` in `docs/swift/ux/COMPONENT-UX.md`: three sections and their headers, no row label, personal commands for every agent kind, sentence-case truncated header; correct the fill token it names to the one the stylesheet uses; verify the section no longer mentions ReAct-only sources or a heading that follows entry kinds
+- [x] 5.2 Update the Help Center pages `rework/features/helpCenter/content/fr/features/commands.md` and `en/features/commands.md` ("Lancer une commande" / "Run a command" and the paragraph on mixing prompts and skills): sections instead of labels, personal commands with every agent, no "Deep agents retain their current behavior"; verify fr and en say the same thing in non-technical wording
+- [x] 5.3 Add `docs/swift/ops/migrations/3073-composer-command-menu-sections.md` from the template (impact none, configuration none); verify its front matter matches `MIGRATION-NOTE-TEMPLATE.md`
 
 ## 6. Verification
 
-- [ ] 6.1 From `apps/frontend`, run `npx tsc --noEmit -p .`; verify it exits 0
-- [ ] 6.2 From `apps/frontend`, run `npx eslint` and `npx prettier --check` on the touched files; verify both exit 0
-- [ ] 6.3 From `apps/frontend`, run `npx vitest run` on `useComposerCommands.test.tsx`, `CommandMenu.test.tsx`, `ManagedChatPage.test.tsx` and `InlineSkillInput.test.tsx`; verify all pass, then clean the vitest cache directories left in `/tmp`
+- [x] 6.1 From `apps/frontend`, run `npx tsc --noEmit -p .`; verify it exits 0
+- [x] 6.2 From `apps/frontend`, run `npx eslint` and `npx prettier --check` on the touched files; verify both exit 0
+- [x] 6.3 From `apps/frontend`, run `npx vitest run` on `useComposerCommands.test.tsx`, `CommandMenu.test.tsx`, `ManagedChatPage.test.tsx` and `InlineSkillInput.test.tsx`; verify all pass, then clean the vitest cache directories left in `/tmp`
 - [ ] 6.4 Owner check in the app: team chat with a ReAct agent and with a Deep agent (three sections, team name in the header, long name truncated, filtering hides a section, arrows cross sections, both `/summary` rows, typed `/summary` runs the team's), personal-space chat (single personal section), fr and en, light and dark theme, and the inline token hover hint
 - [ ] 6.5 Record the verification evidence in this change, then archive it once merged; verify `openspec validate --specs --strict` passes after the archive
