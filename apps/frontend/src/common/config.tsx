@@ -161,11 +161,8 @@ export const loadConfig = async () => {
 
   const base = (await res.json()) as RawAppConfig;
 
-  const [{ user_auth, gcu_version, root_bootstrap_required, ui_themes, platform_access_enabled }, themeProperties] = await Promise.all([
-    loadPublicConfig(),
-    loadThemeProperties(),
-    loadThemeCatalog(),
-  ]);
+  const [{ user_auth, gcu_version, root_bootstrap_required, ui_themes, platform_access_enabled }, themeProperties] =
+    await Promise.all([loadPublicConfig(), loadThemeProperties(), loadThemeCatalog()]);
 
   config = {
     frontend_basename: base.frontend_basename ?? "/",
