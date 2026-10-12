@@ -35,4 +35,5 @@ Use the normal rollback procedure; this change introduces no data migration.
 
 ## Limitations
 
-None.
+Unselected options are now transparent in every button group, so they take the
+color of the track behind them; no screen keeps the former filled look.
