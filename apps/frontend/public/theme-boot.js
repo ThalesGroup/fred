@@ -32,8 +32,13 @@
   if (custom instanceof Array) {
     for (var c = 0; c < custom.length; c++) {
       var entry = custom[c];
-      if (entry && typeof entry.id === "string" && /^[a-z][a-z0-9-]{0,31}$/.test(entry.id) &&
-          THEMES.indexOf(entry.id) < 0 && THEMES.indexOf(entry.base) >= 0) {
+      if (
+        entry &&
+        typeof entry.id === "string" &&
+        /^[a-z][a-z0-9-]{0,31}$/.test(entry.id) &&
+        THEMES.indexOf(entry.id) < 0 &&
+        THEMES.indexOf(entry.base) >= 0
+      ) {
         THEMES.push(entry.id);
         bases[entry.id] = entry.base;
       }
