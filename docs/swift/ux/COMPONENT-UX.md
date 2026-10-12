@@ -2255,8 +2255,9 @@ bounds and the display helper live in `src/rework/core/utils/teamFields.ts`
   field saves on blur: an unchanged value does nothing, an invalid one shows the
   error on the field and sends nothing, a valid one is sent trimmed and confirmed
   by a success toast (a failed save shows an error on the field instead).
-- **`TeamDescriptionReminder`.** A `ServiceNotice` shown to team admins
-  (`canUpdateInfo`) while `description_is_placeholder` is true: at the top of
+- **`TeamDescriptionReminder`.** A `ServiceNotice` in its `color="info"`
+  variant (`info-container` / `on-info-container`; the default stays the
+  neutral surface) shown to team admins (`canUpdateInfo`) while `description_is_placeholder` is true: at the top of
   `TeamAgentsPage` (the team's home) with an outlined button to the team
   settings, and above the field in `TeamSettingsParameters` without it. It
   renders nothing for other members, described teams and personal spaces.

@@ -24,6 +24,9 @@ export interface ServiceNoticeProps {
    *  the only content in the available area (e.g. service not running, nothing
    *  to show). Omit for inline banners rendered alongside other content. */
   centered?: boolean;
+  /** `info` paints the notice in info-container / on-info-container, for a
+   *  reminder that asks the reader to act. Defaults to the neutral surface. */
+  color?: "neutral" | "info";
 }
 
 /**
@@ -43,9 +46,15 @@ export interface ServiceNoticeProps {
  * Example:
  * - `<ServiceNotice icon="cloud_off" title={t("...")} description={t("...")} centered />`
  */
-export default function ServiceNotice({ icon = "info", title, description, centered }: ServiceNoticeProps) {
+export default function ServiceNotice({
+  icon = "info",
+  title,
+  description,
+  centered,
+  color = "neutral",
+}: ServiceNoticeProps) {
   const notice = (
-    <div className={styles.serviceNotice}>
+    <div className={styles.serviceNotice} data-color={color}>
       <span className={styles.icon}>
         <Icon type={icon} />
       </span>

@@ -39,6 +39,7 @@ describe("TeamDescriptionReminder", () => {
     const markup = html(team({ description_is_placeholder: true, permissions: ["can_read", "can_update_info"] }));
     expect(markup).toContain("rework.teamDescription.reminder.title");
     expect(markup).toContain('href="/team/team-1/settings/parameters"');
+    expect(markup).toContain('data-color="info"');
   });
 
   it("drops the link on the settings page", () => {

@@ -56,3 +56,13 @@
   color: var(--on-surface-muted);
   font: var(--font-body-medium);
 }
+
+.serviceNotice[data-color="info"] {
+  background: var(--info-container);
+
+  .icon,
+  .title,
+  .description {
+    color: var(--on-info-container);
+  }
+}

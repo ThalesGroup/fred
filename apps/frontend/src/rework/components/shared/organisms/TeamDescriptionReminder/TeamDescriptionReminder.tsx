@@ -37,6 +37,7 @@ export default function TeamDescriptionReminder({ team, withSettingsLink }: Team
     <div className={styles.reminder} role="status">
       <div className={styles.notice}>
         <ServiceNotice
+          color="info"
           title={t("rework.teamDescription.reminder.title")}
           description={t("rework.teamDescription.reminder.description")}
         />
