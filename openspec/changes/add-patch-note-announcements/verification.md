@@ -287,3 +287,22 @@ the operator guide uses this parent for upgrade ordering and rollback.
   scripts under `apps/control-plane-backend/target/company-jwt-provisioning`
   caused unrelated type errors on the first run; the directory was temporarily
   moved outside the repository for the successful rerun and restored unchanged.
+
+
+### Empty Markdown editor caret (2026-10-12)
+
+`PromptEditor` now uses CodeMirror's `drawSelection()` and the themed
+`--on-surface` cursor border, placing the caret at the placeholder's text
+coordinates instead of relying on the browser's native caret.
+
+- Existing `PromptEditor` and `PatchNoteEditorDialog` suites: 33 tests passed.
+- Isolated real-component browser checks in Chromium and Firefox, light and
+  dark: caret top/bottom matched the placeholder text, native caret was hidden,
+  and cursor color matched the editing text. Typing, multiple lines, selection,
+  deletion and placeholder restoration passed.
+- Focused author review covered the four `PromptEditor` consumers, selection
+  styling and disabled states. No API or product-contract change; no new
+  OpenSpec change or unit test was needed for this visual correction.
+- The complete signed-in application dialog and Safari were not checked.
+- Root `make code-quality`: all modules passed, with the unrelated ignored
+  provisioning artifacts temporarily moved out and restored as above.

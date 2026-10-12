@@ -228,6 +228,9 @@ the former alone, so `editable` by itself still let a drop edit a locked field. 
 turned back on (CodeMirror defaults it off); `autocorrect`/`autocapitalize` stay off, since they
 rewrite what is typed and a prompt's tags must survive verbatim.
 
+CodeMirror draws the caret and selection so the caret follows the empty
+placeholder's text position. The caret uses `--on-surface` in both themes.
+
 A transparent (`variant="icon"`) copy button fades in over the top-right corner on hover, and on
 keyboard focus so it is reachable without a pointer. The reveal keys on `:focus-visible`, not
 `:focus-within`: a click leaves the button focused, which kept it on screen after the pointer had
