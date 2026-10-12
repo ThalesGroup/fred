@@ -38,11 +38,13 @@ import type { CapabilitySelectionState } from "./toolPackLogic.ts";
 import {
   CAP_DOCUMENT_ACCESS,
   CAP_PPT_FILLER,
+  CAP_PPTX_GENERATOR,
   CAP_TEAM_WIKI,
   DOC_ACCESS_TEAM_DOCUMENTS,
   type ToolPack,
 } from "./toolPacks.ts";
 import { PptFillerPackOptions } from "../../../../features/capabilities/ppt_filler/PptFillerPackOptions.tsx";
+import { PptxGeneratorPackOptions } from "../../../../features/capabilities/pptx_generator/PptxGeneratorPackOptions.tsx";
 import { DocumentAccessPackOptions } from "./DocumentAccessPackOptions/DocumentAccessPackOptions.tsx";
 import { SwitchRow } from "../AgentCreateEditModal/SwitchRow/SwitchRow.tsx";
 import { helpPagePath } from "@rework/features/helpCenter/content";
@@ -370,6 +372,18 @@ export function AgentFormBody({
           assetFiles={capabilityAssetFiles[CAP_PPT_FILLER] ?? {}}
           onAssetFileChange={(slotKey, file) => onCapabilityAssetFileChange(CAP_PPT_FILLER, slotKey, file)}
           onBlockingErrorChange={(message) => onCapabilityBlockingErrorChange(CAP_PPT_FILLER, message)}
+        />
+      );
+    }
+    // PowerPoint generation → optional brand-template upload (same state as the
+    // Advanced card); the slot is optional, so no blocking error to wire.
+    if (pack.enablesCapabilityIds.includes(CAP_PPTX_GENERATOR) && availableCapabilityIds.has(CAP_PPTX_GENERATOR)) {
+      return (
+        <PptxGeneratorPackOptions
+          disabled={isSubmitting}
+          configValues={capabilityConfigValues[CAP_PPTX_GENERATOR] ?? {}}
+          assetFiles={capabilityAssetFiles[CAP_PPTX_GENERATOR] ?? {}}
+          onAssetFileChange={(slotKey, file) => onCapabilityAssetFileChange(CAP_PPTX_GENERATOR, slotKey, file)}
         />
       );
     }

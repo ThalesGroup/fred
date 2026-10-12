@@ -69,7 +69,10 @@ export function ComposerControlSlot({
   // (reasoning_toggle) are promoted to always-visible composer chips instead
   // (ReasoningChip, right edge), so they're excluded here to avoid the same
   // setting appearing twice.
-  const attachControls = resolved.filter((entry) => entry.widget === "attach_files");
+  // Several capabilities on one agent may each request "attach_files"; the
+  // control reads no per-entry params, so render one row, not one per contributor.
+  const attachEntry = resolved.find((entry) => entry.widget === "attach_files");
+  const attachControls = attachEntry ? [attachEntry] : [];
   const otherControls = resolved.filter(
     (entry) => entry.widget !== "attach_files" && !COMPOSER_CHIP_WIDGETS.has(entry.widget),
   );

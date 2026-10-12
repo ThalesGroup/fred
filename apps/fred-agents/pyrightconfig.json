@@ -14,6 +14,7 @@
     "../../libs/capabilities/fred-capability-ppt-filler",
     "../../libs/capabilities/fred-capability-platform-ops",
     "../../libs/capabilities/fred-capability-html-artifact",
+    "../../libs/capabilities/fred-capability-pptx-generator",
     "../../libs/capabilities/fred-capability-team-wiki",
     "../../libs/capabilities/fred-capability-documents",
     "../../libs/capabilities/fred-capability-document-access",

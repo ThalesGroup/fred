@@ -1,0 +1,96 @@
+// Copyright Thales 2026
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// `pptx_generated` chat-part card; same auto-open-once-live heuristic as
+// ppt_filler's PptPreviewCardRenderer (see that file for the rationale).
+
+import { useEffect } from "react";
+import { useDispatch } from "react-redux";
+import { useTranslation } from "react-i18next";
+import Icon from "@shared/atoms/Icon/Icon";
+import Button from "@shared/atoms/Button/Button";
+import { requestSidePanelOpen } from "../sidePanelOpenRequestSlice";
+import { useMountSessionId } from "../useOpenSessionId";
+import type { UiPartRendererProps } from "../types";
+import type { PptxGeneratedPartData } from "./types";
+import { openPreview, registerPreview } from "./pptxPreviewSlice";
+import PptxDownloadButton from "./PptxDownloadButton";
+import styles from "./PptxGeneratedCardRenderer.module.css";
+
+// Module-level so the heuristic survives card remounts within one page load.
+const seenKeys = new Set<string>();
+const pageLoadedAt = Date.now();
+const AUTO_OPEN_MIN_AGE_MS = 5000;
+
+export function PptxGeneratedCardRenderer({ part }: UiPartRendererProps) {
+  const { t } = useTranslation();
+  const dispatch = useDispatch();
+  const sessionId = useMountSessionId();
+  const preview = part as unknown as PptxGeneratedPartData;
+
+  const key = `${preview.preview_id}:${preview.version}`;
+
+  // Opening = register the deck AND signal the page to open the pptx_generator
+  // side-panel column (the page owns the single-push-drawer state).
+  const openPane = (data: PptxGeneratedPartData) => {
+    dispatch(openPreview({ sessionId, preview: data }));
+    dispatch(requestSidePanelOpen({ capabilityId: "pptx_generator", widget: "pptx_preview_pane" }));
+  };
+
+  useEffect(() => {
+    if (!sessionId) return;
+    const firstSighting = !seenKeys.has(key);
+    // Mark seen regardless, so a history-replay mount never auto-opens later and a
+    // live generation only pops the panel the first time its part arrives.
+    seenKeys.add(key);
+    dispatch(registerPreview({ sessionId, preview }));
+    if (firstSighting && Date.now() - pageLoadedAt > AUTO_OPEN_MIN_AGE_MS) openPane(preview);
+    // Intentionally keyed on the deck identity and conversation; `preview`/`dispatch`
+    // are stable per that identity for this heuristic.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, sessionId]);
+
+  const title = preview.title || t("capability.pptx_generator.preview.untitled", { defaultValue: "Presentation" });
+
+  return (
+    <div
+      className={styles.card}
+      role="note"
+      aria-label={t("capability.pptx_generator.preview.cardAria", { defaultValue: "Presentation preview" })}
+    >
+      <div className={styles.header}>
+        <span className={styles.icon} aria-hidden>
+          <Icon category="outlined" type="co_present" />
+        </span>
+        <span className={styles.title} title={title}>
+          {title}
+        </span>
+        {preview.pptx_download_url && (
+          <PptxDownloadButton href={preview.pptx_download_url} fileName={preview.file_name} />
+        )}
+      </div>
+      <div className={styles.actions}>
+        <Button
+          color="primary"
+          variant="text"
+          size="small"
+          icon={{ category: "outlined", type: "co_present" }}
+          onClick={() => openPane(preview)}
+        >
+          {t("capability.pptx_generator.preview.open", { defaultValue: "Open preview" })}
+        </Button>
+      </div>
+    </div>
+  );
+}

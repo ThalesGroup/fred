@@ -68,6 +68,7 @@ export const CAP_DOCUMENT_SIMILARITY = "document_similarity";
 export const CAP_TABULAR = "mcp-knowledge-flow-mcp-tabular";
 export const CAP_WRITABLE_DOCUMENT = "writable_document";
 export const CAP_PPT_FILLER = "ppt_filler";
+export const CAP_PPTX_GENERATOR = "pptx_generator";
 export const CAP_HTML_ARTIFACT = "html_artifact";
 // Both document packs grant the reading tools; Advanced keeps separate toggles.
 export const CAP_DOCUMENT_VERBATIM = "document_verbatim";
@@ -171,6 +172,17 @@ export const TOOL_PACK_SECTIONS: ToolPackSection[] = [
         descriptionKey: "rework.teams.formAgent.capabilities.packs.powerpointDocument.description",
         includes: [{ capabilityId: CAP_PPT_FILLER, labelKey: "capability.ppt_filler.name" }],
         enablesCapabilityIds: [CAP_PPT_FILLER],
+      },
+      {
+        // Separate pack from `powerpoint_document`: pptx_generator's brand
+        // template is optional, uploaded via PptxGeneratorPackOptions.
+        id: "powerpoint_generation",
+        kind: "capabilities",
+        icon: "co_present",
+        titleKey: "rework.teams.formAgent.capabilities.packs.powerpointGeneration.title",
+        descriptionKey: "rework.teams.formAgent.capabilities.packs.powerpointGeneration.description",
+        includes: [{ capabilityId: CAP_PPTX_GENERATOR, labelKey: "capability.pptx_generator.name" }],
+        enablesCapabilityIds: [CAP_PPTX_GENERATOR],
       },
       {
         id: "web_page",
