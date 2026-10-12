@@ -40,6 +40,6 @@
 
 ## 6. Verification and close-out
 
-- [ ] 6.1 Quality gates: `make code-quality` from the repo root (warn first: it breaks a running Vite); `make test` in `libs/fred-core`, `apps/control-plane-backend`, `apps/knowledge-flow-backend`; frontend `npx tsc --noEmit`, `npx prettier --check src`, `npx vitest run`. Verify: all green, counts recorded here. **Partly done, counts in verification.md: all green except the root `make code-quality` (not run: it breaks a running Vite; ruff, tsc, eslint and prettier were run directly) ; the Knowledge Flow suite has since been run, 1445 passed).**
+- [ ] 6.1 Quality gates: `make code-quality` from the repo root (warn first: it breaks a running Vite); `make test` in `libs/fred-core`, `apps/control-plane-backend`, `apps/knowledge-flow-backend`; frontend `npx tsc --noEmit`, `npx prettier --check src`, `npx vitest run`. Verify: all green, counts recorded here. **Partly done, counts in verification.md: all green except the root `make code-quality` (not run: it breaks a running Vite; ruff, tsc, eslint and prettier were run directly). The Knowledge Flow suite has since been run: 1445 passed.**
 - [ ] 6.2 Owner check in the app: create a team (description required), edit and try to clear it, see the reminder on a placeholder team, see descriptions on every marketplace card. Verify: owner confirmation.
 - [ ] 6.3 Record verification evidence here and archive after merge. Verify: `openspec validate require-team-description --strict`, then `openspec archive require-team-description`.
