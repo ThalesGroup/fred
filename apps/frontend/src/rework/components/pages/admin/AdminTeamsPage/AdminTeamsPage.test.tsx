@@ -41,6 +41,7 @@ const h = vi.hoisted(() => ({
   ],
   defaultTeams: undefined as { team_id: string; name: string }[] | undefined,
   setDefaultTeams: vi.fn(),
+  createTeam: vi.fn(),
 }));
 
 vi.mock("react-i18next", () => ({
@@ -85,8 +86,10 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
   useDefaultTeamsForNewUsersQuery: (_arg: unknown, options?: { skip?: boolean }) => ({
     data: options?.skip ? undefined : h.defaultTeams,
   }),
-  useSearchCandidateTeamAdminsQuery: () => ({ data: undefined }),
-  useCreateTeamMutation: () => [vi.fn(), { isLoading: false }],
+  useSearchCandidateTeamAdminsQuery: () => ({
+    data: [{ id: "u-ada", first_name: "Ada", last_name: "Admin", username: "ada" }],
+  }),
+  useCreateTeamMutation: () => [h.createTeam, { isLoading: false }],
   useSetDefaultTeamsForNewUsersMutation: () => [h.setDefaultTeams, { isLoading: false }],
   usePlatformAccessStateQuery: (arg: unknown, options: { skip: boolean }) => {
     h.admissionQuery(arg, options);
@@ -141,6 +144,8 @@ beforeEach(() => {
   h.defaultTeams = [{ team_id: "uid-beta", name: "Beta" }] satisfies DefaultTeam[];
   h.setDefaultTeams.mockReset();
   h.setDefaultTeams.mockReturnValue({ unwrap: () => Promise.resolve() });
+  h.createTeam.mockReset();
+  h.createTeam.mockReturnValue({ unwrap: () => Promise.resolve() });
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -290,6 +295,64 @@ describe("AdminTeamsPage default teams for new users", () => {
 
     expect(h.setDefaultTeams).toHaveBeenCalledWith({
       setDefaultTeamsForNewUsersRequest: { team_ids: ["uid-gamma"] },
+    });
+  });
+});
+
+describe("AdminTeamsPage team creation", () => {
+  const createSection = () =>
+    Array.from(container.querySelectorAll("section")).find(
+      (section) => section.querySelector("h2")?.textContent === "rework.adminTeams.createTeam.title",
+    )!;
+  const submit = () =>
+    Array.from(createSection().querySelectorAll("button")).find(
+      (button) => button.textContent === "rework.adminTeams.createTeam.submit",
+    )!;
+  // React tracks the value through the native setter, not the property.
+  const type = (field: HTMLInputElement | HTMLTextAreaElement, value: string) => {
+    const proto = field instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    act(() => {
+      Object.getOwnPropertyDescriptor(proto, "value")!.set!.call(field, value);
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  };
+  const fillNameAndAdmin = async () => {
+    const [nameInput, adminInput] = Array.from(createSection().querySelectorAll("input"));
+    type(nameInput, "  Ops  ");
+    act(() => adminInput.focus());
+    await act(async () => {
+      adminInput.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    });
+  };
+
+  it("keeps the create action unavailable and explains the minimum for a short description", async () => {
+    render();
+    await fillNameAndAdmin();
+    const description = createSection().querySelector("textarea")!;
+    type(description, "Too short");
+    act(() => {
+      description.focus();
+      description.blur();
+    });
+
+    expect(submit().disabled).toBe(true);
+    expect(createSection().textContent).toContain("rework.teamDescription.tooShort");
+    expect(createSection().textContent).toContain("9 / 500");
+  });
+
+  it("sends the trimmed description once it is valid", async () => {
+    render();
+    await fillNameAndAdmin();
+    type(createSection().querySelector("textarea")!, "  Automate the drafting of our monthly reports.  ");
+
+    expect(submit().disabled).toBe(false);
+    await act(async () => submit().click());
+    expect(h.createTeam).toHaveBeenCalledWith({
+      createTeamRequest: {
+        name: "Ops",
+        description: "Automate the drafting of our monthly reports.",
+        initial_team_admin_ids: ["u-ada"],
+      },
     });
   });
 });

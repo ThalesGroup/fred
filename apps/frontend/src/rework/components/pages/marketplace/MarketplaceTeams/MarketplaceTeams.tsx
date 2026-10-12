@@ -99,7 +99,7 @@ export default function MarketplaceTeams() {
     return <Navigate to={`/team/${personalTeamId}/agents`} replace />;
   }
 
-  const renderCard = (team: Team, withDescription: boolean) => {
+  const renderCard = (team: Team) => {
     // TEAM-09: a successful self-service join changes team.is_member, which
     // moves the card between the yourTeams/otherTeams buckets via the
     // ControlPlaneTeam:LIST tag invalidation baked into useJoinTeamMutation —
@@ -110,10 +110,10 @@ export default function MarketplaceTeams() {
     if (team.is_member)
       return (
         <Link key={team.id} className={styles.marketplaceTeamsCardLink} to={`/team/${team.id}/agents`}>
-          <TeamCard team={team} withDescription={withDescription} onJoined={refetch} />
+          <TeamCard team={team} onJoined={refetch} />
         </Link>
       );
-    return <TeamCard key={team.id} team={team} withDescription={withDescription} onJoined={refetch} />;
+    return <TeamCard key={team.id} team={team} onJoined={refetch} />;
   };
 
   return (
@@ -133,9 +133,9 @@ export default function MarketplaceTeams() {
       </div>
       <div className={styles.marketplaceTeamsContent}>
         <div className={styles.marketplaceTeamsListSubtitle}>{t("rework.marketplace.teams.yourTeams")}</div>
-        <div className={styles.marketplaceTeamsList}>{filteredYourTeams.map((team) => renderCard(team, false))}</div>
+        <div className={styles.marketplaceTeamsList}>{filteredYourTeams.map((team) => renderCard(team))}</div>
         <div className={styles.marketplaceTeamsListSubtitle}>{t("rework.marketplace.teams.otherTeams")}</div>
-        <div className={styles.marketplaceTeamsList}>{filteredOtherTeams.map((team) => renderCard(team, true))}</div>
+        <div className={styles.marketplaceTeamsList}>{filteredOtherTeams.map((team) => renderCard(team))}</div>
       </div>
     </div>
   );

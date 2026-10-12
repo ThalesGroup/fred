@@ -23,6 +23,12 @@ import Chip from "@shared/atoms/Chip/Chip.tsx";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
 import Separator from "@shared/atoms/Separator/Separator.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
+import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
+import {
+  TEAM_DESCRIPTION_MAX_LENGTH,
+  TEAM_DESCRIPTION_MIN_LENGTH,
+  isValidTeamDescription,
+} from "@core/utils/teamFields.ts";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
 import { useMutationAction } from "@core/hooks/useMutationAction.ts";
@@ -54,6 +60,9 @@ export default function AdminTeamsPage() {
   const { runMutationAction } = useMutationAction();
 
   const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  // The minimum is only reported once the field has been left.
+  const [descriptionTouched, setDescriptionTouched] = useState(false);
   const [selectedAdmins, setSelectedAdmins] = useState<UserSummary[]>([]);
   const [adminQuery, setAdminQuery] = useState("");
 
@@ -206,7 +215,8 @@ export default function AdminTeamsPage() {
     setSelectedAdmins((prev) => prev.filter((u) => u.id !== userId));
   };
 
-  const canSubmit = name.trim().length > 0 && selectedAdmins.length > 0 && !isCreating;
+  const descriptionValid = isValidTeamDescription(description);
+  const canSubmit = name.trim().length > 0 && descriptionValid && selectedAdmins.length > 0 && !isCreating;
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
@@ -215,12 +225,15 @@ export default function AdminTeamsPage() {
         createTeam({
           createTeamRequest: {
             name: name.trim(),
+            description: description.trim(),
             initial_team_admin_ids: selectedAdmins.map((u) => u.id),
           },
         }).unwrap(),
       onSuccess: () => {
         showSuccess({ summary: t("rework.adminTeams.createTeam.successSummary") });
         setName("");
+        setDescription("");
+        setDescriptionTouched(false);
         setSelectedAdmins([]);
       },
       onError: (error) =>
@@ -286,6 +299,20 @@ export default function AdminTeamsPage() {
           placeholder={t("rework.adminTeams.createTeam.namePlaceholder")}
           value={name}
           onChange={(e) => setName(e.target.value)}
+          required
+        />
+        <TextArea
+          label={t("rework.teamDescription.label")}
+          explanation={t("rework.teamDescription.helper")}
+          error={
+            descriptionTouched && !descriptionValid
+              ? t("rework.teamDescription.tooShort", { min: TEAM_DESCRIPTION_MIN_LENGTH })
+              : undefined
+          }
+          maxLength={TEAM_DESCRIPTION_MAX_LENGTH}
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          onBlur={() => setDescriptionTouched(true)}
           required
         />
         <div className={styles.adminsField}>

@@ -2791,6 +2791,17 @@
       "inviteOnly": "Invite only",
       "memberCount": "{{count}} members"
     },
+    "teamDescription": {
+      "label": "Team description",
+      "helper": "State your team's objectives regarding its use of AI. Everyone browsing the marketplace sees it.",
+      "tooShort": "Write at least {{min}} characters.",
+      "placeholderDisplay": "Description to be completed by the team administrator.",
+      "reminder": {
+        "title": "Describe your team",
+        "description": "Your team still has a default description. State its objectives regarding its use of AI so everyone knows what it uses the platform for.",
+        "action": "Open team settings"
+      }
+    },
     "teamRoles": {
       "team_admin": "Admin",
       "pending_team_admin": "Admin (pending)",

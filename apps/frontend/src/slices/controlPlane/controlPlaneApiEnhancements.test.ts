@@ -399,7 +399,11 @@ describe("team creation admission invalidation", () => {
       await store
         .dispatch(
           api.endpoints.createTeamControlPlaneV1TeamsPost.initiate({
-            createTeamRequest: { name: "New team", initial_team_admin_ids: ["admin"] },
+            createTeamRequest: {
+              name: "New team",
+              description: "Automate the drafting of our reports.",
+              initial_team_admin_ids: ["admin"],
+            },
           }),
         )
         .unwrap();

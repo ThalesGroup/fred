@@ -2791,6 +2791,17 @@
       "inviteOnly": "Sur invitation",
       "memberCount": "{{count}} membres"
     },
+    "teamDescription": {
+      "label": "Description de l'équipe",
+      "helper": "Indiquez les objectifs de votre équipe dans son usage de l'IA. Tous les utilisateurs de la marketplace la voient.",
+      "tooShort": "Saisissez au moins {{min}} caractères.",
+      "placeholderDisplay": "Description à compléter par l'administrateur de l'équipe.",
+      "reminder": {
+        "title": "Décrivez votre équipe",
+        "description": "Votre équipe a encore une description par défaut. Indiquez ses objectifs dans son usage de l'IA pour que chacun sache à quoi elle utilise la plateforme.",
+        "action": "Ouvrir les paramètres de l'équipe"
+      }
+    },
     "teamRoles": {
       "team_admin": "Admin",
       "pending_team_admin": "Admin (en attente)",
