@@ -27,22 +27,7 @@ _EXPECTED_FALLBACK_RULE = (
 
 
 def test_base_agents_do_not_bake_global_base_prompt_contract() -> None:
-    """
-    Verify no shipped fred-agents template bakes the global Mermaid rules.
-
-    Why this test exists:
-    - the Mermaid output contract moved from authoring-time baking to runtime
-      injection (fred-runtime `compose_system_prompt`)
-    - the stored, operator-editable `system_prompt_template` must stay free of the
-      contract so it does not clutter the agent editor and cannot be deleted by an
-      operator; baking it back in is the regression this test guards against
-
-    How to use it:
-    - run via the default fred-agents test suite
-
-    Example:
-    - `pytest tests/test_prompting.py -q`
-    """
+    """Platform Mermaid instructions are loaded as a skill, not baked into templates."""
 
     prompts = (
         GENERAL_ASSISTANT_AGENT.system_prompt_template,
@@ -59,20 +44,7 @@ def test_base_agents_do_not_bake_global_base_prompt_contract() -> None:
 
 
 def test_general_assistant_prompt_field_default_excludes_global_base_prompt() -> None:
-    """
-    Verify the general ReAct assistant's prompt field default is the bare prompt.
-
-    Why this test exists:
-    - the agent creation form pre-fills prompt fields from `FieldSpec.default`
-    - that default must mirror `system_prompt_template` and must NOT carry the
-      global Mermaid contract, which is now injected at runtime instead
-
-    How to use it:
-    - run via the default fred-agents test suite
-
-    Example:
-    - `pytest tests/test_prompting.py -q`
-    """
+    """The editor default mirrors the raw template without platform skill bodies."""
 
     prompt_field = next(
         field

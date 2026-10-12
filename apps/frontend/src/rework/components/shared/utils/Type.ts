@@ -49,7 +49,7 @@ export type ButtonSize = Extract<ComponentSize, "2xs" | "small" | "medium">;
 export type IconButtonVariant = "filled" | "tonal" | "outlined" | "icon";
 export type IconCategory = "outlined" | "rounded" | "sharp";
 
-const customIcons = ["customAgent"] as const;
+const customIcons = ["customAgent", "customPlatformSkill"] as const;
 
 /**
  * Material Symbols names the app supports (ligature names, snake_case).

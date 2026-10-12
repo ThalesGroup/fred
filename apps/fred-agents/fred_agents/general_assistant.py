@@ -68,10 +68,6 @@ et indique-le clairement — ne prétends pas avoir accès à un corpus document
 à des données en temps réel que tu ne peux pas atteindre.
 """
 
-# The shared global base prompt (e.g. the Mermaid output contract) is no longer
-# baked into the editable prompt here. It is injected at execution time by the
-# runtime (compose_system_prompt) so it stays out of the operator-facing
-# agent editor and applies even when the operator overrides this prompt.
 _SYSTEM_PROMPT_EN = _BASE_SYSTEM_PROMPT_EN
 _SYSTEM_PROMPT_FR = _BASE_SYSTEM_PROMPT_FR
 _SYSTEM_PROMPT = _SYSTEM_PROMPT_EN

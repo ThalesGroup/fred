@@ -83,6 +83,12 @@ afterEach(() => {
   window.history.replaceState({}, "", "/");
 });
 
+it("keeps legacy Keycloak configuration usable without an offline-access grant", async () => {
+  const { createKeycloakInstance } = await import("./KeycloakService");
+  createKeycloakInstance("https://identity.example/realms/app", "app");
+  expect(state.settings).toMatchObject({ scope: "openid profile", disablePKCE: false });
+});
+
 describe.each(["keycloak", "oidc"] as const)("%s browser authentication", (provider) => {
   const options = { ...genericOptions, provider };
   it("constructs a PKCE OIDC client with the API scope and no Keycloak realm parser", async () => {
@@ -93,7 +99,10 @@ describe.each(["keycloak", "oidc"] as const)("%s browser authentication", (provi
       client_id: "ui",
       response_type: "code",
       disablePKCE: false,
-      scope: "openid profile offline_access api://fred-api/access_as_user",
+      scope:
+        provider === "keycloak"
+          ? "openid profile api://fred-api/access_as_user"
+          : "openid profile offline_access api://fred-api/access_as_user",
     });
     if (provider === "oidc") expect(KeyCloakService.GetKeycloakRealmConfig()).toBeNull();
   });

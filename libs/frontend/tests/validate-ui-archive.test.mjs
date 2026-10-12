@@ -192,6 +192,7 @@ test("accepts an executable runtime relative reference", async (context) => {
 
 for (const forbidden of [
   "customAgent",
+  "customPlatformSkill",
   "react-i18next",
   "OptionModel",
   "Aucune option disponible",

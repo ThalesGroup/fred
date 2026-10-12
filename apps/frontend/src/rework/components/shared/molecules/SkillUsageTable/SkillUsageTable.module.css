@@ -1,0 +1,15 @@
+.section {
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-m);
+  background: var(--surface-container);
+  padding: var(--spacing-m);
+  overflow-x: auto;
+  color: var(--on-surface);
+}
+.title {
+  margin: 0;
+  font: var(--font-title-medium);
+}
+.description {
+  color: var(--on-surface-retreat);
+}

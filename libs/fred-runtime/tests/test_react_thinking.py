@@ -49,6 +49,7 @@ from fred_runtime.support.thinking import (
     strip_reasoning_from_history,
     thread_reasoning_within_open_turn,
 )
+from fred_sdk.contracts.context import RuntimeContext
 from fred_sdk.contracts.react_contract import (
     ReActInput,
     ReActMessage,
@@ -160,6 +161,22 @@ def test_stringify_skips_thinking_blocks() -> None:
 def test_stringify_plain_text_unchanged() -> None:
     assert stringify_langchain_content("just text") == "just text"
     assert stringify_langchain_content([{"type": "text", "text": "a"}]) == "a"
+
+
+@pytest.mark.parametrize("split", [3, 10, 35])
+def test_text_fragments_preserve_mermaid_fence_in_history_and_replay(
+    split: int,
+) -> None:
+    diagram = '```mermaid\nflowchart TD\n    A["Reception"] --> B["Validation"]\n```'
+    message = AIMessage(
+        content=[
+            {"type": "thinking", "thinking": "private reasoning"},
+            {"type": "text", "text": diagram[:split]},
+            {"type": "text", "text": diagram[split:]},
+        ]
+    )
+    assert stringify_langchain_content(message.content) == diagram
+    assert strip_reasoning_from_history([message])[0].content == diagram
 
 
 # ---------------------------------------------------------------------------
@@ -339,16 +356,13 @@ class _FakePortable:
     baggage: dict[str, object] = {}
 
 
-class _FakeRuntimeContext:
-    pass
-
-
 class _FakeBinding:
     portable_context = _FakePortable()
-    runtime_context = _FakeRuntimeContext()
+    runtime_context = RuntimeContext()
 
 
 class _FakeServices:
+    skills = None
     tracer = None
     metrics = None
 

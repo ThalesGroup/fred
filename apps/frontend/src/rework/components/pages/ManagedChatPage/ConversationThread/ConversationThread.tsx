@@ -56,6 +56,8 @@ interface ConversationThreadProps {
   onHitlFreeTextChange: (value: string) => void;
   /** Opens the prompt a command turn sent. Omit to render those turns inert.
    *  Must keep a stable identity: it is handed to every memoized row. */
+  onOpenSkill?: (name: string) => void;
+  skillDescriptions?: ReadonlyMap<string, string>;
   onOpenCommandPrompt?: (turn: { text: string; command: CommandDescriptor }) => void;
 }
 
@@ -82,6 +84,8 @@ export const ConversationThread = memo(function ConversationThread({
   scrollContainerRef,
   onHitlAnswer,
   onOpenCommandPrompt,
+  onOpenSkill,
+  skillDescriptions,
   maxChatInputChars,
   hitlFreeText,
   onHitlFreeTextChange,
@@ -121,6 +125,11 @@ export const ConversationThread = memo(function ConversationThread({
               turnId={msg.role === "user" ? msg.id : undefined}
               text={key ? t(key) : msg.text}
               command={msg.command}
+              skillNames={msg.skillNames}
+              skillDescriptions={skillDescriptions}
+              skillName={msg.skillName}
+              skillDescription={msg.skillName ? skillDescriptions?.get(msg.skillName) : undefined}
+              onOpenSkill={onOpenSkill}
               onOpenCommand={onOpenCommandPrompt}
             />
           );

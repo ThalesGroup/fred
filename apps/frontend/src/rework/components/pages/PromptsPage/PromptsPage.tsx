@@ -255,6 +255,10 @@ export default function PromptsPage() {
       const detail = err?.data?.detail;
       // A name conflict and a command conflict are both 409 on this route, so
       // the code — not the prose — decides which input to mark.
+      if (asErrorBody(detail)?.code === "prompt_command_reserved") {
+        setCommandError(t("rework.teams.prompts.form.commandReserved"));
+        return;
+      }
       if (isCommandConflict(detail)) {
         setCommandError(t("rework.teams.prompts.form.commandConflict"));
         return;

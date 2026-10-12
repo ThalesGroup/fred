@@ -31,6 +31,13 @@ const h = vi.hoisted(() => ({
     canDeleteSessions: true,
     isLoading: false,
   },
+  skillQuery: vi.fn(() => ({
+    data: undefined,
+    currentData: undefined,
+    isLoading: false,
+    isFetching: false,
+    isError: false,
+  })),
   neutralQuery: () => ({ data: undefined, isLoading: false, isFetching: false, isError: false }),
 }));
 
@@ -95,6 +102,7 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
   useAgentsPerUserTrendQuery: h.neutralQuery,
   useTopTeamsBySessionsQuery: h.neutralQuery,
   useAgentsTotalQuery: h.neutralQuery,
+  useSkillUsageQuery: h.skillQuery,
   useDocumentsTotalQuery: h.neutralQuery,
   useTopAgentsByConversationsQuery: h.neutralQuery,
   useAgentPromptLengthDistributionQuery: h.neutralQuery,
@@ -174,4 +182,35 @@ describe("AnalyticsPage admin-only section (§2.4/§2.5)", () => {
       expect(fr).toHaveProperty(key);
     }
   });
+});
+
+it("queries platform skill usage with the dashboard range and five-minute cache", () => {
+  renderToStaticMarkup(<AnalyticsPage />);
+  expect(h.skillQuery).toHaveBeenLastCalledWith(
+    { since: expect.any(String), until: expect.any(String) },
+    { refetchOnMountOrArgChange: 300 },
+  );
+});
+
+it("hides previous scope/range skill results while the current request is fetching", () => {
+  const previous = h.skillQuery.getMockImplementation();
+  h.skillQuery.mockReturnValue({
+    data: {
+      rows: [{ skill_name: "stale-skill", user_count: 9, model_count: 1, total: 10 }],
+      since: "old",
+      until: "old",
+    },
+    currentData: undefined,
+    isLoading: false,
+    isFetching: true,
+    isError: false,
+  });
+  try {
+    const html = renderToStaticMarkup(<AnalyticsPage />);
+    expect(html).not.toContain("stale-skill");
+    expect(html).toContain("common.loading");
+    expect(html).not.toContain("rework.analytics.skillUsage.empty");
+  } finally {
+    h.skillQuery.mockImplementation(previous!);
+  }
 });
