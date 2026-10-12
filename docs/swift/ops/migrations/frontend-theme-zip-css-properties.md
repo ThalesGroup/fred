@@ -18,7 +18,7 @@ The ZIP remains reachable by the frontend container. No database migration is re
 
 The existing SeaweedFS object may now include `theme-custom.css`, `theme-properties.json` and `theme-translations/en.json` or `fr.json`. Only branding labels and asset names are accepted in the properties JSON; see `apps/frontend/README.md`. No new environment variable is required.
 
-The ZIP may also include `theme-catalog.json` to declare several additional selectable themes. Each entry has a unique `id`, display `label`, and `base` (`pebble`, `cobalt`, or `cloud`). For light and dark overrides, use `[data-ui-theme="<id>"][data-ui-base-theme="<base>"][data-theme="light"]` and its dark counterpart. The base attribute gives ZIP CSS priority over shipped CSS while letting admin previews match. The new choices appear after frontend pods restart and browsers reload; existing platform defaults and hidden-theme settings can select them.
+The ZIP may also include `theme-catalog.json` to declare several additional selectable themes. Each entry has a unique `id`, display `label`, and `base` (`pebble`, `cobalt`, or `cloud`). For light and dark overrides, use `[data-ui-theme="<id>"][data-ui-base-theme="<base>"][data-theme="light"]` and its dark counterpart. The base attribute gives ZIP CSS priority over shipped CSS while letting admin previews match. An entry may also set `tabTitle`, `faviconName` and `faviconNameDark` (SVG basenames under `images/`) so the browser tab follows the active theme; omitted values keep the global branding. The new choices appear after frontend pods restart and browsers reload; existing platform defaults and hidden-theme settings can select them. Admin changes to the default or hidden themes now reach connected browsers after the save, on window focus or within a minute.
 
 ## Upgrade
 
@@ -27,6 +27,8 @@ Deploy the new frontend image. To activate overrides, upload a ZIP with the opti
 ## Validation
 
 Open the frontend in a fresh browser session and verify the browser tab name, selected image names, translated UI labels and light/dark theme CSS. Check that the theme CSS, properties and translation URLs serve the ZIP content. The frontend container logs `Theme installed from ...` when the ZIP is accepted.
+
+Frontends older than this version reject catalog entries carrying the tab keys: upgrade the frontend before uploading such a ZIP.
 
 ## Rollback
 
