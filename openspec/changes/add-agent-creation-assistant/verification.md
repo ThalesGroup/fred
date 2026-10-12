@@ -493,3 +493,33 @@ block's ordering. Command: `make code-quality
 UV=/tmp/fred-assistant-models-quality-uv.py`; it preserves the standard
 checker exclusions and baseline, excluding the previously documented local
 provisioning directory only. Temporary configuration is not committed.
+
+
+## Remote-base merge verification (2026-10-12)
+
+PR #3013 merges GitHub feature head `72edf05a2ebb61c6d62ec992e5518f3aeb8cc573`
+with GitHub swift head `949cb6a5cf0995af338ce1f80203875fbfa74f82`.
+The previous local manual merge was excluded as a correctness reference.
+Both textual conflicts retain the creation assistant and platform skills additions:
+SDK imports in `product/api.py` and runtime contract sections. The assistant entry
+is now section 8.111, with its product-contract reference updated.
+
+- Independent read-only merge review covered all 20 files changed on both sides,
+  endpoints, authorization, runtime services, KPI/UI, generated contracts,
+  locales and chart configuration. No actionable integration findings.
+- Independent performance review found no additional I/O, ordering dependency,
+  client/cache or KPI regression introduced by integration.
+- Targeted tests: control plane 117, runtime 211, frontend 68, packed UI 59;
+  455 passed. No extra tests needed for additive conflict resolutions.
+- Control-plane and runtime clients regenerated using
+  `make -C apps/frontend update-control-plane-api update-runtime-api`;
+  output identical to the merged clients.
+- One Alembic head (`93427a5fe874`); upgrade from base passed on temporary SQLite.
+- Root `make code-quality` passed across all modules. As in the preceding check,
+  ignored local `target/company-jwt-provisioning` scripts were excluded from
+  control-plane type checking using a temporary config, removed after verification.
+  Raw control-plane types: 0 errors/warnings; runtime: 0 errors, 7 existing warnings.
+- `git diff --check` passed. No unresolved merge entries remain.
+
+Scope: focused integration review, not a full audit of the original PR or upstream
+skills implementation. Browser, live LLM, Kubernetes and load validation excluded.

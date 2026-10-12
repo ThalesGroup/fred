@@ -13,11 +13,13 @@
 // limitations under the License.
 
 import { useTranslation } from "react-i18next";
+import Icon from "@shared/atoms/Icon/Icon";
 import type { CommandDescriptor } from "../../../../../slices/runtime/runtimeOpenApi";
 import styles from "./CommandTurn.module.css";
 
 interface CommandTurnProps {
   command: CommandDescriptor;
+  inline?: boolean;
   /** Opens the prompt this turn actually sent. Omit to render it inert. */
   onOpen?: () => void;
 }
@@ -25,9 +27,9 @@ interface CommandTurnProps {
 /** A user turn launched by a prompt command, shown as the command rather than
  *  the prompt behind it. A button, not a decorated span: opening the prompt
  *  must not be a click-only path. */
-export function CommandTurn({ command, onOpen }: CommandTurnProps) {
+export function CommandTurn({ command, onOpen, inline = false }: CommandTurnProps) {
   const { t } = useTranslation();
-  const appended = command.appended_text?.trim();
+  const appended = inline ? undefined : command.appended_text?.trim();
 
   return (
     <button
@@ -41,7 +43,10 @@ export function CommandTurn({ command, onOpen }: CommandTurnProps) {
           : t("chatbot.commandTurn.open", { command: command.command })
       }
     >
-      <span className={styles.slug}>/{command.command}</span>
+      <span className={styles.slug}>
+        <Icon category="outlined" type="edit_note" />
+        <span>/{command.command}</span>
+      </span>
       {appended && <span className={styles.appended}> {appended}</span>}
     </button>
   );

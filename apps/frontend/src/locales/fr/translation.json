@@ -398,6 +398,11 @@
       "panelTitle": "Prompt de la commande"
     },
     "commandMenu": {
+      "sources": {
+        "platform": "Skill plateforme",
+        "personal": "Prompt personnel",
+        "team": "Prompt d’équipe"
+      },
       "ariaLabel": "Commandes disponibles",
       "promptsSection": "Prompts de la bibliothèque",
       "noneInTeam": "Aucune commande dans cette équipe. Un éditeur peut en attribuer une à un prompt depuis la page Prompts.",
@@ -613,6 +618,27 @@
       "waiting": "En attente de réponse",
       "answered": "Répondue",
       "skipped": "Passée"
+    },
+    "skills": {
+      "badge": "Skill : {{name}}",
+      "platformProvided": "Skill fourni par la plateforme",
+      "requestPlaceholder": "Votre demande (facultative)",
+      "menuTitle": "Skills",
+      "usage": "Utilisez /<nom-du-skill> [demande]. Sélectionnez un skill ; la demande est facultative.",
+      "errorTitle": "Le skill ne peut pas être utilisé",
+      "unavailable": "Le contenu de ce skill est indisponible.",
+      "loaded": "Skill chargé",
+      "originUser": "Demandé par vous",
+      "originAgent": "Choisi par l’agent",
+      "originChild": "Choisi par un sous-agent",
+      "open": "Voir le skill {{name}}",
+      "panelTitle": "Skill : {{name}}",
+      "fileTitle": "Fichier : {{path}}",
+      "fileExcerptTitle": "Extrait : {{path}}",
+      "loading": "Chargement du skill…",
+      "retry": "Réessayer",
+      "description": "Description :",
+      "arguments": "Arguments :"
     }
   },
   "comingSoon": {
@@ -1344,6 +1370,16 @@
       "missingTeamId": "Identifiant d'équipe manquant dans la route."
     },
     "analytics": {
+      "skillUsage": {
+        "title": "Utilisation des skills",
+        "skill": "Skill",
+        "user_count": "Utilisateur",
+        "model_count": "Modèle",
+        "total": "Total",
+        "description": "Chargements réussis sur la période sélectionnée, demandés par les utilisateurs ou choisis par le modèle. La collecte commence à l’activation de cette fonctionnalité.",
+        "empty": "Aucun chargement de skill enregistré sur cette période.",
+        "truncated": "Les 100 skills les plus chargés sont affichés. Le tri porte sur ces résultats."
+      },
       "activeUsers": {
         "title": "Utilisateurs actifs",
         "uniqueTotal": "Utilisateurs uniques",
@@ -1616,7 +1652,8 @@
       "summary": "≈ {{co2e}} g CO₂e · {{kwh}} kWh (estimé)"
     },
     "teamUsage": {
-      "title": "Ma consommation de tokens",
+      "personalSkillsSectionTitle": "Mon utilisation des skills",
+      "title": "Mon utilisation",
       "personalSectionTitle": "Ma consommation",
       "tokensOverTime": {
         "title": "Consommation de tokens dans le temps",
@@ -1633,6 +1670,7 @@
         "valueLabel": "Tokens"
       },
       "team": {
+        "skillsSectionTitle": "Utilisation des skills de l’équipe",
         "pageTitle": "Consommation de l'équipe",
         "sectionTitle": "Consommation de l'équipe",
         "membersLabel": "Membres",
@@ -1781,6 +1819,7 @@
         "success": "Succès"
       },
       "toolLabels": {
+        "readSkillFile": "Lecture d’un fichier du skill",
         "readQuery": "Lecture de la requête",
         "documents": "Liste des documents tabulaires",
         "markdown": "Lecture du catalogue du classeur",
@@ -2978,7 +3017,8 @@
           "commandHelp": "Raccourcis de lancement dans le chat",
           "description": "Description",
           "name": "Nom",
-          "text": "Texte du prompt"
+          "text": "Texte du prompt",
+          "commandReserved": "/skill est réservé aux skills de la plateforme. Choisissez une autre commande."
         },
         "loading": "Chargement des prompts...",
         "modalCreate": "Nouveau prompt",

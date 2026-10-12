@@ -17,11 +17,14 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from typing import Any
+from dataclasses import replace
+from typing import Any, cast
 
 from fred_core.kpi import BaseKPIWriter
 from fred_sdk.contracts.context import BoundRuntimeContext
+from fred_sdk.contracts.prompt_utils import escape_reserved_prompt_tags
 from fred_sdk.contracts.runtime import TracerPort
+from fred_sdk.contracts.skills import SkillsPort
 from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages.tool import ToolMessage
 from langgraph.prebuilt.tool_node import ToolCallRequest
@@ -43,11 +46,14 @@ class ToolObservabilityMiddleware(AgentMiddleware):
         kpi: BaseKPIWriter | None,
         binding: BoundRuntimeContext,
         tracer: TracerPort | None = None,
+        skills: SkillsPort | None = None,
     ) -> None:
         super().__init__()
         self._execution = ToolExecution(kpi=kpi, binding=binding)
         self._binding = binding
         self._tracer = tracer
+        self._skills = skills
+        self._kpi = kpi
 
     @staticmethod
     def _tool_name(request: ToolCallRequest) -> str:
@@ -89,6 +95,57 @@ class ToolObservabilityMiddleware(AgentMiddleware):
                 else "capability",
                 span=span,
             )
+            skills = self._skills
+            native_tool = self._tool_name(request)
+            if skills is not None and native_tool in {
+                "read_file",
+                "ls",
+                "glob",
+                "grep",
+            }:
+                from fred_runtime.skills.native_reads import observe_skill_read
+
+                def observe(message: object) -> object:
+                    if not isinstance(
+                        message, ToolMessage
+                    ) or message.tool_call_id != tool_call.get("id"):
+                        return message
+                    if native_tool != "read_file":
+                        return (
+                            message.model_copy(
+                                update={
+                                    "content": escape_reserved_prompt_tags(
+                                        message.content
+                                    )
+                                }
+                            )
+                            if message.status != "error"
+                            and isinstance(message.content, str)
+                            else message
+                        )
+                    return observe_skill_read(
+                        message,
+                        tool_call.get("args", {}),
+                        skills=skills,
+                        binding=self._binding,
+                        kpi=self._kpi,
+                    )
+
+                if isinstance(result, ToolMessage):
+                    result = cast(ToolMessage, observe(result))
+                elif isinstance(result.update, dict) and isinstance(
+                    result.update.get("messages"), (list, tuple)
+                ):
+                    result = replace(
+                        result,
+                        update={
+                            **result.update,
+                            "messages": [
+                                observe(message)
+                                for message in result.update["messages"]
+                            ],
+                        },
+                    )
             if span is not None and tracer is not None and tracer.captures_content:
                 output = getattr(result, "content", None)
                 if isinstance(result, Command) and isinstance(result.update, dict):

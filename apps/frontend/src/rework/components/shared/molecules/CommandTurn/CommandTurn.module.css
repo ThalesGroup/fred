@@ -14,16 +14,8 @@
  * limitations under the License.
  */
 
-/* Sits inside the user bubble, which is --secondary-container over
-   --on-secondary-container. No fill and no border of its own so the bubble
-   shows through: this reads as part of the bubble, not as a card dropped onto
-   it. The hover state layer is what marks it actionable. The radius is well
-   inside the bubble's own --radius-m, so it reads as nested rather than as a
-   second bubble.
-
-   Inline formatting, not flex: the command and the text typed after it are one
-   sentence, so they must reflow as one when the bubble narrows. Flex items
-   would each wrap on their own and read as two separate texts. */
+/* Keep legacy appended text in the bubble's colour and inline flow.
+   Only the prompt token shares the composer's blue treatment. */
 .command {
   display: inline-block;
   cursor: pointer;
@@ -31,16 +23,19 @@
   border: none;
   border-radius: var(--radius-xs);
   background: transparent;
-  padding: var(--spacing-2xs) var(--spacing-xs);
+  padding: 0;
   color: inherit;
   font: var(--font-body-large);
   text-align: left;
 }
 
-/* Mixed from the bubble's own content colour — a state layer belongs to the
-   majority content colour of the surface it sits on, not to a generic tone. */
-.command:hover:not(:disabled) {
-  background: var(--state-on-secondary-container-hover);
+.command:hover:not(:disabled) .slug {
+  text-decoration: underline;
+}
+
+.command:focus-visible {
+  outline: 2px solid var(--info);
+  outline-offset: 2px;
 }
 
 .command:disabled {
@@ -48,7 +43,22 @@
 }
 
 .slug {
-  font-weight: 500;
+  display: inline-flex;
+  align-items: baseline;
+  vertical-align: baseline;
+  gap: var(--spacing-2xs);
+  max-width: 100%;
+  color: var(--info);
+}
+
+.slug > :first-child {
+  align-self: center;
+  user-select: none;
+}
+
+.slug > :last-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .appended {

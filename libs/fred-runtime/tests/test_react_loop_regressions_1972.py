@@ -1332,7 +1332,12 @@ async def test_mistral_call_like_content_terminates_without_tool_invocation(
     assert len(finals) == 1
     assert finals[0].content == incident.reconstructed_content
 
-    assert content_to_text(response.content) == incident.observed_history_projection
+    assert content_to_text(
+        response.content
+    ) == incident.observed_trace_after_thinking.replace(
+        "[reference]", str(_RECONSTRUCTED_REFERENCE_BLOCK)
+    )
+    assert content_to_text(response.content) != incident.observed_history_projection
     assert serialize_model_output([response]) == (
         "[thinking]" * incident.observed_trace_thinking_blocks
         + incident.observed_trace_after_thinking

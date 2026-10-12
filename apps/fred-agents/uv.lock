@@ -694,7 +694,7 @@ dev = [
 
 [[package]]
 name = "fred-capability-document-access"
-version = "4.4.3"
+version = "4.5.0"
 source = { editable = "../../libs/capabilities/fred-capability-document-access" }
 dependencies = [
     { name = "fred-core" },
@@ -735,7 +735,7 @@ dev = [
 
 [[package]]
 name = "fred-capability-documents"
-version = "4.4.3"
+version = "4.5.0"
 source = { editable = "../../libs/capabilities/fred-capability-documents" }
 dependencies = [
     { name = "fred-core" },
@@ -776,7 +776,7 @@ dev = [
 
 [[package]]
 name = "fred-capability-html-artifact"
-version = "4.4.3"
+version = "4.5.0"
 source = { editable = "../../libs/capabilities/fred-capability-html-artifact" }
 dependencies = [
     { name = "fred-core" },
@@ -820,7 +820,7 @@ dev = [
 
 [[package]]
 name = "fred-capability-mcp"
-version = "4.4.3"
+version = "4.5.0"
 source = { editable = "../../libs/capabilities/fred-capability-mcp" }
 dependencies = [
     { name = "fred-sdk", extra = ["agents"] },
@@ -832,7 +832,7 @@ provides-extras = ["dev"]
 
 [[package]]
 name = "fred-capability-platform-ops"
-version = "4.4.3"
+version = "4.5.0"
 source = { editable = "../../libs/capabilities/fred-capability-platform-ops" }
 dependencies = [
     { name = "fred-core" },
@@ -875,7 +875,7 @@ dev = [
 
 [[package]]
 name = "fred-capability-ppt-filler"
-version = "4.4.3"
+version = "4.5.0"
 source = { editable = "../../libs/capabilities/fred-capability-ppt-filler" }
 dependencies = [
     { name = "fastapi" },
@@ -925,7 +925,7 @@ dev = [
 
 [[package]]
 name = "fred-capability-team-wiki"
-version = "4.4.3"
+version = "4.5.0"
 source = { editable = "../../libs/capabilities/fred-capability-team-wiki" }
 dependencies = [
     { name = "fred-core" },
@@ -968,7 +968,7 @@ dev = [
 
 [[package]]
 name = "fred-capability-web-research"
-version = "4.4.3"
+version = "4.5.0"
 source = { editable = "../../libs/capabilities/fred-capability-web-research" }
 dependencies = [
     { name = "fred-sdk", extra = ["agents"] },
@@ -995,7 +995,7 @@ provides-extras = ["dev"]
 
 [[package]]
 name = "fred-capability-writable-document"
-version = "4.4.3"
+version = "4.5.0"
 source = { editable = "../../libs/capabilities/fred-capability-writable-document" }
 dependencies = [
     { name = "fastapi" },
@@ -1044,7 +1044,7 @@ dev = [
 
 [[package]]
 name = "fred-core"
-version = "4.4.3"
+version = "4.5.0"
 source = { editable = "../../libs/fred-core" }
 dependencies = [
     { name = "aiosqlite" },
@@ -1148,7 +1148,7 @@ dev = [
 
 [[package]]
 name = "fred-pod"
-version = "4.4.3"
+version = "4.5.0"
 source = { editable = "../../libs/fred-pod" }
 dependencies = [
     { name = "httpx" },
@@ -1188,7 +1188,7 @@ dev = [
 
 [[package]]
 name = "fred-runtime"
-version = "4.4.3"
+version = "4.5.0"
 source = { editable = "../../libs/fred-runtime" }
 dependencies = [
     { name = "alembic" },
@@ -1263,7 +1263,7 @@ dev = [
 
 [[package]]
 name = "fred-sdk"
-version = "4.4.3"
+version = "4.5.0"
 source = { editable = "../../libs/fred-sdk" }
 dependencies = [
     { name = "fred-pod" },

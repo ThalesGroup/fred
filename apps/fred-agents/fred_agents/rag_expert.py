@@ -39,8 +39,6 @@ from fred_sdk.contracts.models import ReActAgentDefinition, ReActPolicy
 
 from fred_agents.tool_pacing import REASONING_SAFE_TOOL_SELECTION
 
-# The shared global base prompt (Mermaid output contract) is injected at
-# execution time by the runtime, not baked into this editable template.
 _RAG_EXPERT_SYSTEM_PROMPT: str = load_agent_prompt_markdown(
     package="fred_agents.rag_expert",
     file_name="basic_react_rag_expert_system_prompt.md",

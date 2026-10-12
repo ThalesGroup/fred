@@ -67,6 +67,7 @@ class CompiledReActAgent(Protocol):
         *,
         config: Mapping[str, object] | None = None,
         stream_mode: str | list[str],
+        subgraphs: bool = False,
     ) -> AsyncIterator[object]: ...
 
 
