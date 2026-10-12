@@ -21,7 +21,7 @@ import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import Button from "@shared/atoms/Button/Button.tsx";
 import AvatarUploadCard from "@shared/molecules/AvatarUploadCard/AvatarUploadCard.tsx";
 import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialog.tsx";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import {
   JoiningMode,
@@ -70,6 +70,7 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
   // Set by a failed rename only; the field's own value is form state.
   const [renameError, setRenameError] = useState<string | null>(null);
   const [descriptionError, setDescriptionError] = useState<string | null>(null);
+  const savingDescription = useRef(false);
   // The stored placeholder is French; the field shows its translation instead.
   const storedDescription = teamDescriptionText(team, t);
   const [isRenaming, setIsRenaming] = useState(false);
@@ -105,6 +106,9 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
       setDescriptionError(t("rework.teamDescription.tooShort", { min: TEAM_DESCRIPTION_MIN_LENGTH }));
       return;
     }
+    // A second blur while the save is in flight would send it twice.
+    if (savingDescription.current) return;
+    savingDescription.current = true;
     setDescriptionError(null);
     updateTeam({
       teamId: team.id,
@@ -112,7 +116,10 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
     })
       .unwrap()
       .then(() => showSuccess({ summary: t("rework.teamSettings.parameters.description.saved") }))
-      .catch(() => setDescriptionError(t("rework.teamSettings.parameters.description.saveError")));
+      .catch(() => setDescriptionError(t("rework.teamSettings.parameters.description.saveError")))
+      .finally(() => {
+        savingDescription.current = false;
+      });
   };
   const descriptionValue = watch("description");
 

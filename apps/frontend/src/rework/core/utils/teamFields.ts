@@ -21,8 +21,10 @@ export const MAX_TEAM_NAME_LENGTH = 180;
 export const TEAM_DESCRIPTION_MIN_LENGTH = 20;
 export const TEAM_DESCRIPTION_MAX_LENGTH = 500;
 
+// Counted in code points, as the API and the database do: an emoji is one
+// character, not the two UTF-16 units `String.length` reports.
 export function isValidTeamDescription(value: string): boolean {
-  const length = value.trim().length;
+  const length = [...value.trim()].length;
   return length >= TEAM_DESCRIPTION_MIN_LENGTH && length <= TEAM_DESCRIPTION_MAX_LENGTH;
 }
 

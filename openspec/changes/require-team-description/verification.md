@@ -54,7 +54,7 @@ Scenario coverage:
 
 1. **Import warning in English only.** Report warnings are server-side strings
    shown as they are; none is translated. The warning reads "N teams received a
-   default description." ("1 team received…" for one). The French wording has
+   default description." ("1 team received a default description." for one). The French wording has
    no place to live without translating import warnings.
 2. **Downgrade order.** The CHECK is dropped and the column made nullable
    before placeholders are cleared and long values cut, then the column is

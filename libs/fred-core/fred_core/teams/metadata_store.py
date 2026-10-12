@@ -85,10 +85,13 @@ TeamDescription = Annotated[
 def team_description_or_placeholder(value: str | None) -> str:
     """Normalise a description from an untrusted source (import, backfill):
     missing or too short gives the placeholder, too long is cut."""
-    cleaned = (value or "").strip()
+    if not isinstance(value, str):
+        return TEAM_DESCRIPTION_PLACEHOLDER
+    # Cut first: the cut can leave trailing whitespace, hence a short value.
+    cleaned = value.strip()[:TEAM_DESCRIPTION_MAX_LENGTH].strip()
     if len(cleaned) < TEAM_DESCRIPTION_MIN_LENGTH:
         return TEAM_DESCRIPTION_PLACEHOLDER
-    return cleaned[:TEAM_DESCRIPTION_MAX_LENGTH].strip()
+    return cleaned
 
 
 def reject_null_description(value: str | None) -> str | None:

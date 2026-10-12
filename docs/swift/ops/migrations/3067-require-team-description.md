@@ -65,9 +65,15 @@ teams page: every card shows a description.
 
 ## Rollback
 
-Redeploy the previous Fred release and downgrade the control-plane database to
-revision `93427a5fe874`. The downgrade restores an optional `VARCHAR(180)`
-column and is lossy:
+Downgrade the control-plane database to revision `93427a5fe874` **with this
+release**, then redeploy the previous one: the previous release does not know
+the revision and cannot downgrade it. A previous control-plane running against
+the upgraded database cannot create a team (it sends no description, the
+database refuses the row and the API answers a misleading 409), so do not leave
+both in place. The same holds during a rolling update: team creation can fail
+on the old pods until they are replaced.
+
+The downgrade restores an optional `VARCHAR(180)` column and is lossy:
 
 - descriptions equal to the default text are cleared (`NULL`);
 - descriptions longer than 180 characters are **cut to their first 180

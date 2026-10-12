@@ -29,10 +29,6 @@ from typing import Sequence, Union
 
 import sqlalchemy as sa
 from alembic import op
-from fred_core.teams.metadata_store import (
-    TEAM_DESCRIPTION_PLACEHOLDER,
-    team_description_or_placeholder,
-)
 
 # revision identifiers, used by Alembic.
 revision: str = "c9acb7dd3ad0"  # pragma: allowlist secret
@@ -53,12 +49,21 @@ __all__ = [
 
 _CHECK = "ck_teammetadata_description_min_length"
 _OLD_MAX = 180
+# Frozen copies: a revision must keep doing the same thing whatever the
+# application later decides about the bounds or the default text.
+_MIN = 20
+_PLACEHOLDER = "Description à compléter par l'administrateur de l'équipe."
 
 _teams = sa.table(
     "teammetadata",
     sa.column("id", sa.String),
     sa.column("description", sa.String),
 )
+
+
+def _normalise(description: str | None) -> str:
+    cleaned = (description or "").strip()
+    return cleaned if len(cleaned) >= _MIN else _PLACEHOLDER
 
 
 def _rewrite(changes: list[dict[str, str | None]]) -> None:
@@ -76,7 +81,7 @@ def upgrade() -> None:
     rows = op.get_bind().execute(sa.select(_teams.c.id, _teams.c.description)).all()
     changes: list[dict[str, str | None]] = []
     for team_id, description in rows:
-        value = team_description_or_placeholder(description)
+        value = _normalise(description)
         if value != description:
             changes.append({"team_id": team_id, "value": value})
     _rewrite(changes)
@@ -96,7 +101,7 @@ def downgrade() -> None:
     rows = op.get_bind().execute(sa.select(_teams.c.id, _teams.c.description)).all()
     changes: list[dict[str, str | None]] = []
     for team_id, description in rows:
-        if description == TEAM_DESCRIPTION_PLACEHOLDER:
+        if description == _PLACEHOLDER:
             changes.append({"team_id": team_id, "value": None})
         elif description is not None and len(description) > _OLD_MAX:
             changes.append({"team_id": team_id, "value": description[:_OLD_MAX]})

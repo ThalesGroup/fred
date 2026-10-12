@@ -52,6 +52,15 @@ def test_long_description_is_cut_to_the_maximum() -> None:
     assert team_description_or_placeholder("x" * 499 + " y") == "x" * 499
 
 
+def test_a_cut_that_leaves_too_little_gives_the_placeholder() -> None:
+    value = "abcde" + " " * 600 + "x" * 30
+    assert team_description_or_placeholder(value) == TEAM_DESCRIPTION_PLACEHOLDER
+
+
+def test_a_description_that_is_not_text_gives_the_placeholder() -> None:
+    assert team_description_or_placeholder(42) == TEAM_DESCRIPTION_PLACEHOLDER  # type: ignore[arg-type]
+
+
 def test_placeholder_satisfies_its_own_bounds() -> None:
     assert team_description_or_placeholder(TEAM_DESCRIPTION_PLACEHOLDER) == (
         TEAM_DESCRIPTION_PLACEHOLDER

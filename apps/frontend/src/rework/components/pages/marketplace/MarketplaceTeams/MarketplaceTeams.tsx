@@ -14,6 +14,8 @@
 
 import styles from "./MarketplaceTeams.module.scss";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
+import { teamDescriptionText } from "@core/utils/teamFields.ts";
 import TeamCard from "@shared/organisms/TeamCard/TeamCard.tsx";
 import SearchInput from "@shared/molecules/SearchInput/SearchInput.tsx";
 import { useListTeamsQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
@@ -29,19 +31,20 @@ import { useMemo, useState } from "react";
 // client-side: both team lists are already fetched in full by useListTeamsQuery.
 const MIN_SEARCH_LENGTH = 2;
 
-function matchesSearch(team: Team, tokens: string[]): boolean {
-  const haystacks = [team.name, team.description]
+function matchesSearch(team: Team, tokens: string[], t: TFunction): boolean {
+  // The description as the card shows it, so a search finds what is on screen.
+  const haystacks = [team.name, teamDescriptionText(team, t)]
     .filter((value): value is string => Boolean(value))
     .map((value) => value.toLowerCase());
   return tokens.every((token) => haystacks.some((haystack) => haystack.includes(token)));
 }
 
-function filterTeams(teams: Team[] | undefined, search: string): Team[] {
+function filterTeams(teams: Team[] | undefined, search: string, t: TFunction): Team[] {
   if (!teams) return [];
   const trimmed = search.trim().toLowerCase();
   if (trimmed.length < MIN_SEARCH_LENGTH) return teams;
   const tokens = trimmed.split(/\s+/).filter(Boolean);
-  return teams.filter((team) => matchesSearch(team, tokens));
+  return teams.filter((team) => matchesSearch(team, tokens, t));
 }
 
 /**
@@ -86,8 +89,8 @@ export default function MarketplaceTeams() {
   const yourTeams = teams && teams.filter((t) => t.is_member && !isPersonalTeamId(t.id));
   const otherTeams = teams && teams.filter((t) => !t.is_member && !isPersonalTeamId(t.id) && t.visibility === "public");
 
-  const filteredYourTeams = useMemo(() => filterTeams(yourTeams, search), [yourTeams, search]);
-  const filteredOtherTeams = useMemo(() => filterTeams(otherTeams, search), [otherTeams, search]);
+  const filteredYourTeams = useMemo(() => filterTeams(yourTeams, search, t), [yourTeams, search, t]);
+  const filteredOtherTeams = useMemo(() => filterTeams(otherTeams, search, t), [otherTeams, search, t]);
 
   // Wait for bootstrap before redirecting away: redirecting on the first,
   // pre-bootstrap render sends the user to the bare "personal" alias, then a
