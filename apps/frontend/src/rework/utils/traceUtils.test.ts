@@ -1412,3 +1412,9 @@ describe("native web research trace rows", () => {
     expect(toolDiscriminator(fetch)).toBeNull();
   });
 });
+
+it("redacts historical tag ids and document ids without losing bracketed names", () => {
+  expect(stripDocumentUids("Sales [draft] [old-tag]/\n  Report [draft].pdf [old-document] (uploaded 2026-01-01)")).toBe(
+    "Sales [draft]/\n  Report [draft].pdf (uploaded 2026-01-01)",
+  );
+});

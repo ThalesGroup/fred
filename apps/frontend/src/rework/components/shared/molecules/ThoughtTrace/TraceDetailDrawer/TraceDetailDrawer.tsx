@@ -37,7 +37,6 @@ import {
   phaseKeyForEntry,
   sourceForEntry,
   statusForEntry,
-  stripDocumentUids,
   thoughtExtras,
   toolArgs,
   toolCallId,
@@ -50,6 +49,8 @@ import { parseTabularTraceResult, tabularToolKind } from "../../../../../utils/t
 import { parseWebResearchResult, webResearchTarget, webResearchToolKind } from "../../../../../utils/webResearchTrace";
 import phaseStyles from "../phaseBadge.module.css";
 import { formatSqlForDisplay } from "./formatSqlForDisplay";
+import { historicalDocumentTreeText, parseDocumentTreeTrace } from "../../../../../utils/documentTreeTrace";
+import { DocumentTreeDetail } from "./DocumentTreeDetail";
 import { TabularToolDetail } from "./TabularToolDetail";
 import { WebResearchToolDetail } from "./WebResearchToolDetail";
 import styles from "./TraceDetailDrawer.module.css";
@@ -153,16 +154,6 @@ function SummarizeDocumentDetail({ text }: { text: string }) {
   );
 }
 
-/** Curated view for the document tree listing: indented tree text, with the
- *  bracketed internal document uids stripped (never shown to the end user). */
-function DocumentTreeDetail({ text }: { text: string }) {
-  return (
-    <div className={styles.detail}>
-      <CodeBlock code={stripDocumentUids(text)} />
-    </div>
-  );
-}
-
 /** Fallback: redacted {action, status, latency} view for unrecognized tools. */
 function GenericToolDetail({ entry }: { entry: Extract<TraceEntry, { kind: "combo" }> }) {
   const payload = genericToolPayload(entry);
@@ -221,8 +212,16 @@ function ToolDetail({ entry, messages }: { entry: Extract<TraceEntry, { kind: "c
   if (entry.result && isSummarizeDocumentTool(name)) {
     return <SummarizeDocumentDetail text={toolResultContent(entry.result)} />;
   }
-  if (entry.result && isDocumentTreeTool(name)) {
-    return <DocumentTreeDetail text={toolResultContent(entry.result)} />;
+  if (entry.result && isDocumentTreeTool(name) && toolResultOk(entry.result)) {
+    const tree = parseDocumentTreeTrace(toolResultContent(entry.result));
+    if (tree) return <DocumentTreeDetail key={toolCallId(entry.call)} data={tree} />;
+    const historical = historicalDocumentTreeText(toolResultContent(entry.result));
+    if (historical)
+      return (
+        <div className={styles.detail}>
+          <CodeBlock code={historical} />
+        </div>
+      );
   }
   return <GenericToolDetail entry={entry} />;
 }

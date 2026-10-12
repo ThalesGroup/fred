@@ -1109,7 +1109,7 @@ class DocumentTreePort(ABC):
         working_directory: str | None = None,
         library_tag_ids: Sequence[str] | None = None,
         document_uids: Sequence[str] | None = None,
-        max_chars: int = 6000,
+        max_chars: int = 20_000,
     ) -> DocumentTreeResult:
         """
         Return the caller's authorized folder/document tree as rendered text.
