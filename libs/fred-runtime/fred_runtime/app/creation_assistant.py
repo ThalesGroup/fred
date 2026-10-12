@@ -621,6 +621,7 @@ def _parsed_draft(response: dict[str, Any]) -> _GeneratedDraft:
             if strip_reserved_prompt_tags(draft.system_prompt).strip():
                 return draft
     except ValidationError:
+        # Malformed output follows the same 502 path as a missing or empty prompt.
         pass
     raise HTTPException(
         status_code=status.HTTP_502_BAD_GATEWAY,

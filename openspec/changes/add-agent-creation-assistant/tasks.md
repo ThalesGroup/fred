@@ -51,6 +51,8 @@
 
 - [x] 5.17 Integrate current swift without dropping either parent: preserve unique agent names and both Dialog prop families, keep included Graph capability configuration intact, reparent the assistant migration, regenerate both API clients and verify targeted tests, root quality and an independent merge review (evidence in verification.md)
 
+- [x] 5.18 Address all five GitHub quality comments: initialize the test factory normally, move route actions and state mutation out of assertions, explain malformed-output handling, and retain the required ORM import and task await as verified false positives (verification.md)
+
 ## 6. Close-out
 
 - [x] 6.1 Manual check against a real model in fr and en, with and without capabilities (browser in fr; en through the smoke script; no-capability answer only unit-tested, see verification.md)

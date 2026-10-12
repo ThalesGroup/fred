@@ -382,3 +382,56 @@ Targeted verification:
 - `make migration-check MIGRATION_BASE=origin/swift`: valid; existing
   `openspec validate add-agent-creation-assistant --strict`: valid. The feature
   change stays active while its previously open design decisions await review.
+
+
+## GitHub quality review disposition (2026-10-12)
+
+Reviewed all five `github-code-quality` comments against
+`2916613c69cd2fb6befe49cb8244db2f84aed040`, targeting `swift` at
+`a7e40a6ff654d86ab783ffe304ecaeb5162e4aeb`. This follow-up is limited to
+those findings and their neighboring test actions; it is not a full PR audit
+or a decision on the feature's open design questions.
+
+- [Missing superclass initialization](https://github.com/ThalesGroup/fred/pull/3013#discussion_r4224531750):
+  removed the empty initializer from the test factory. Its inherited
+  initializer now receives a valid empty routing policy; the provider-failure
+  test still verifies all three error cases become 503.
+- [Side effect in an assert](https://github.com/ThalesGroup/fred/pull/3013#discussion_r4224531772):
+  extracted `seen.pop("deadline")` before its assertion, along with every
+  neighboring `client.post` action previously inside an assertion.
+- [Empty except](https://github.com/ThalesGroup/fred/pull/3013#discussion_r4224531790):
+  documented why a malformed structured result joins the existing 502 path.
+  Error handling and runtime behavior are unchanged.
+- [Unused ORM import](https://github.com/ThalesGroup/fred/pull/3013#discussion_r4224531777):
+  false positive. Importing `platform_prompt_models` registers both
+  `platform_prompt` and `creation_assistant_settings` on `Base.metadata`
+  before `OWNED_TABLES` is computed. Removing it risks omitting these tables
+  from Alembic ownership. The existing ownership regression now explicitly
+  asserts that both are included. This is the side-effect import class
+  documented in `docs/CONVENTIONS.md`, not an unused dependency.
+- [Await has no effect](https://github.com/ThalesGroup/fred/pull/3013#discussion_r4229560511):
+  false positive. `await expirer` waits for the clock-advancing task, propagates
+  its exception if it fails, and precedes the assertion that no tasks leaked.
+  Retained the synchronization instead of adding a throwaway result assignment.
+
+Verification: runtime `test_creation_assistant.py`: 70 passed; control-plane
+`test_table_ownership.py`: 2 passed (SQLite expression-index reflection
+warnings). No tests added: the existing coverage exercises the failure
+factory, malformed output, deadline cleanup, route actions and table ownership.
+Ruff check/format passes on the three touched Python files. No product behavior,
+public contract, migration or operator action changed.
+Raw runtime `basedpyright` without its baseline: 0 errors, 7 existing
+unreachable-code warnings outside the changed files. The comment-only parser
+change and test-only corrections add no I/O, work, scheduling or KPI changes
+to the runtime path.
+
+The first root quality run stopped at two type errors in ignored local
+`apps/control-plane-backend/target/company-jwt-provisioning` scripts. These
+files are absent from the PR. The root recheck uses a temporary checker
+configuration preserving its standard exclusions and baseline while excluding
+that additional directory only; its files remain untouched.
+Raw control-plane `basedpyright` under that temporary configuration without
+its baseline: 0 errors and 0 warnings.
+Root `make code-quality UV=/tmp/fred-3013-quality-uv.py`: all 17 modules
+passed, with the local provisioning exclusion described above. The temporary
+configuration and wrapper are not committed; no baseline was rewritten.

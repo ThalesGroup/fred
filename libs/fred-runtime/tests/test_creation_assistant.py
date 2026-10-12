@@ -708,12 +708,13 @@ def test_runtime_settings_default_to_reasoning_off() -> None:
     "error", [RuntimeError("no provider"), ImportError("langchain_x"), KeyError("k")]
 )
 def test_any_model_build_failure_is_503(kpi, error) -> None:
-    from fred_runtime.model_routing import RoutedChatModelFactory
+    from fred_runtime.model_routing import (
+        ModelRoutingPolicy,
+        ModelRoutingResolver,
+        RoutedChatModelFactory,
+    )
 
     class _Factory(RoutedChatModelFactory):
-        def __init__(self) -> None:
-            pass
-
         def build_chat_for_profile(
             self, profile_id: str | None = None, **_kw: Any
         ) -> Any:
@@ -722,7 +723,14 @@ def test_any_model_build_failure_is_503(kpi, error) -> None:
     set_runtime_context(
         RuntimeContext(
             RuntimeConfig(
-                knowledge_flow_url="http://kf.invalid", chat_model_factory=_Factory()
+                knowledge_flow_url="http://kf.invalid",
+                chat_model_factory=_Factory(
+                    resolver=ModelRoutingResolver(
+                        ModelRoutingPolicy(
+                            default_profile_by_capability={}, profiles=()
+                        )
+                    )
+                ),
             )
         )
     )
@@ -851,7 +859,8 @@ def test_route_ignores_settings_injected_in_the_body(tmp_path, monkeypatch) -> N
             creation_assistant_prompt="INJECTED {language}",
             model_profile_id="chat.injected",
         )
-        assert client.post(_GENERATE, json=body).status_code == 200
+        response = client.post(_GENERATE, json=body)
+        assert response.status_code == 200
         assert built == [None]
         system, _human = model.seen[0]
         assert "INJECTED" not in str(system.content)
@@ -923,9 +932,11 @@ def test_route_attributes_usage_to_the_request_team(tmp_path, monkeypatch) -> No
         lambda _profile_id=None, **_kw: (_model(), "gpt-test", None),
     )
     try:
-        assert client.post(_GENERATE, json=_body()).status_code == 200
+        response = client.post(_GENERATE, json=_body())
+        assert response.status_code == 200
         # Security is off in this app: no caller, so no user to attribute.
-        assert seen.pop("deadline") > 0
+        deadline = seen.pop("deadline")
+        assert deadline > 0
         assert seen == {"team_id": "team-a", "actor": None, "fallback_model": None}
     finally:
         client.__exit__(None, None, None)
@@ -948,7 +959,8 @@ def test_settings_read_and_draft_share_one_deadline(tmp_path, monkeypatch) -> No
     monkeypatch.setattr(creation_assistant, "fetch_runtime_settings", _slow_settings)
     try:
         # Each step fits the budget alone; together they exceed it.
-        assert client.post(_GENERATE, json=_body()).status_code == 504
+        response = client.post(_GENERATE, json=_body())
+        assert response.status_code == 504
     finally:
         client.__exit__(None, None, None)
 
@@ -968,7 +980,8 @@ def test_settings_read_that_hangs_is_504(tmp_path, monkeypatch) -> None:
         lambda p=None, **_kw: built.append(p),
     )
     try:
-        assert client.post(_GENERATE, json=_body()).status_code == 504
+        response = client.post(_GENERATE, json=_body())
+        assert response.status_code == 504
         assert built == []
     finally:
         client.__exit__(None, None, None)
@@ -981,7 +994,8 @@ def test_settings_read_that_hangs_is_504(tmp_path, monkeypatch) -> None:
 def test_route_rejects_invalid_requests(tmp_path, monkeypatch, body) -> None:
     client = _app_with_capabilities(tmp_path, monkeypatch)
     try:
-        assert client.post(_GENERATE, json=body).status_code == 422
+        response = client.post(_GENERATE, json=body)
+        assert response.status_code == 422
     finally:
         client.__exit__(None, None, None)
 
@@ -990,7 +1004,8 @@ def test_route_without_a_routed_model_is_503(tmp_path, monkeypatch) -> None:
     # The offline test pod wires a static factory, not the catalog-routed one.
     client = _app_with_capabilities(tmp_path, monkeypatch)
     try:
-        assert client.post(_GENERATE, json=_body()).status_code == 503
+        response = client.post(_GENERATE, json=_body())
+        assert response.status_code == 503
     finally:
         client.__exit__(None, None, None)
 
