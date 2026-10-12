@@ -37,3 +37,7 @@
   PR target was also confirmed as Swift by the author using GitHub.
 - Full frontend suite and authenticated browser UI were not rerun for this
   extension; HTTP integration and focused regressions establish the loader contract.
+
+- OpenSpec change validates strictly. Synced main spec validates normally; strict
+  validation reports a pre-existing >500-character requirement (requirement 2),
+  whose text was preserved rather than changed outside this scope.
