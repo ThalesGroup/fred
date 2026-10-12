@@ -459,7 +459,7 @@ describe("TeamSettingsParameters description", () => {
     expect(h.updateTeam).not.toHaveBeenCalled();
   });
 
-  it("reminds a team admin while the default description is in place, in their language", () => {
+  it("reminds a team admin while the default description is in place, with an empty field", () => {
     const placeholderTeam = describedTeam({
       description: "Description à compléter par l'administrateur de l'équipe.",
       description_is_placeholder: true,
@@ -468,7 +468,7 @@ describe("TeamSettingsParameters description", () => {
     render(<TeamSettingsParameters team={placeholderTeam} />);
 
     expect(container.textContent).toContain("rework.teamDescription.reminder.title");
-    expect(field().value).toBe("rework.teamDescription.placeholderDisplay");
+    expect(field().value).toBe("");
   });
 
   it("shows no reminder for a described team or a member without the admin role", () => {

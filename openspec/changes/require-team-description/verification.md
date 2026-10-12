@@ -65,10 +65,11 @@ Scenario coverage:
 4. **`TeamDescriptionReminder` organism.** The reminder used on the team home
    and in team settings is one small component wrapping `ServiceNotice`, so
    both places share the condition and it can be tested alone. On the team home
-   it adds an outlined button to the team settings.
-5. **Settings field shows the translated placeholder as its value** for a
-   placeholder team (decision "Display of the placeholder"); leaving it
-   unchanged sends nothing.
+   it carries a filled `info` button to the team settings inside the notice.
+5. **Settings field starts empty for a placeholder team** (owner decision,
+   2026-10-12, after the independent review): the default text is not shown as
+   a value, so a leftover of it can never be saved as a real description.
+   Leaving the field empty sends nothing and the team keeps its default text.
 6. **TeamCard renders no description block for a personal space**, which has
    none.
 7. **Imported rows already carrying the placeholder count in the warning**: the

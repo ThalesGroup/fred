@@ -38,7 +38,7 @@ See proposal.md for the why and specs/team-description/spec.md for the behaviour
 6. **Migration, one revision on `93427a5fe874`.**
    - Upgrade: read `id, description` from `teammetadata`, normalise each in Python with `team_description_or_placeholder` (same rule as the app, no dialect differences in whitespace handling; teams are few), update the rows that change, then in `op.batch_alter_table("teammetadata")`: `alter_column("description", type_=String(500), existing_type=String(180), nullable=False)` and `create_check_constraint(...)`.
    - Downgrade: set placeholder rows back to `NULL`, cut descriptions over 180 characters to 180, then in batch mode drop the CHECK and restore `String(180)`, nullable. PostgreSQL refuses to narrow a `VARCHAR` holding longer values, so the cut must come first; it is lossy and the migration note says so.
-   - The migration imports the placeholder from fred-core, as the owner asked for a single constant. Consequence: the constant is frozen. Changing its text later needs a data migration, otherwise rows backfilled with the old text stop being detected as placeholders.
+   - The migration holds its own frozen copy of the placeholder and of the minimum length, so the revision keeps the same effect whatever the application later decides. Consequence: the fred-core constant is frozen too. Changing its text later needs a data migration, otherwise rows backfilled with the old text stop being detected as placeholders.
 7. **Import and backfill.**
    - Raw `teammetadata` phase: `description=team_description_or_placeholder(row.get("description"))`.
    - `users.json` provisioning: `CreateTeamRequest(..., description=TEAM_DESCRIPTION_PLACEHOLDER)`.
@@ -66,7 +66,7 @@ Deploy normally: the control-plane database migration of the deployment applies 
 
 ## Display of the placeholder
 
-6. When `description_is_placeholder` is true, the frontend shows a translated text (fr: « Description à compléter par l'administrateur de l'équipe. », en: "Description to be completed by the team administrator.") instead of the stored value, on team cards, team settings and anywhere the description is shown. Owner decision, 2026-10-12; frontend-only, no contract change beyond the flag.
+6. When `description_is_placeholder` is true, the frontend shows a translated text (fr: « Description à compléter par l'administrateur de l'équipe. », en: "Description to be completed by the team administrator.") instead of the stored value, on team cards and anywhere the description is read. The team settings field is the exception: it starts empty for such a team, so the default text can never be edited into a real description by accident. Owner decisions, 2026-10-12; frontend-only, no contract change beyond the flag.
 
 ## Open Questions
 

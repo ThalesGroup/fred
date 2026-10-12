@@ -41,7 +41,6 @@ import {
   TEAM_DESCRIPTION_MAX_LENGTH,
   TEAM_DESCRIPTION_MIN_LENGTH,
   isValidTeamDescription,
-  teamDescriptionText,
 } from "@core/utils/teamFields.ts";
 
 interface TeamSettingsParametersProps {
@@ -71,8 +70,9 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
   const [renameError, setRenameError] = useState<string | null>(null);
   const [descriptionError, setDescriptionError] = useState<string | null>(null);
   const savingDescription = useRef(false);
-  // The stored placeholder is French; the field shows its translation instead.
-  const storedDescription = teamDescriptionText(team, t);
+  // The default description is not something the admin wrote: the field
+  // starts empty, so a leftover of that text can never be saved as theirs.
+  const storedDescription = team.description_is_placeholder ? "" : (team.description ?? "");
   const [isRenaming, setIsRenaming] = useState(false);
 
   const { register, getValues, watch, setValue } = useForm<TeamSettingsParametersForm>({
