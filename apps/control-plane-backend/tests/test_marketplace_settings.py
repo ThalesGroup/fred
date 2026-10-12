@@ -14,7 +14,7 @@
 
 """Agents marketplace settings: built-in defaults, team overrides and back to
 Default, quota validation, the platform-admin gate, and which teams a change
-turns off."""
+turns off (their published agents are removed)."""
 
 from __future__ import annotations
 
@@ -133,6 +133,7 @@ async def test_defaults_apply_when_nothing_was_ever_set(
         assert team.agents_publishing_enabled_override is None
         assert team.agents_publish_quota_override is None
         assert (team.agents_publishing_enabled, team.agents_publish_quota) == (False, 5)
+        assert team.published_count == 0
 
 
 @pytest.mark.parametrize(
@@ -250,6 +251,7 @@ async def test_default_switch_off_affects_teams_on_default_only(
         user=_admin(), agents_publishing_enabled=False, deps=deps
     )
     assert sorted(preview.affected_team_ids) == ["alpha", "beta"]
+    assert preview.removed_published_agents == 0
 
     result = await set_marketplace_default(
         user=_admin(),

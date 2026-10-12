@@ -268,7 +268,9 @@ class _FakeAgentInstanceStore:
         record.suspension_reason = reason
         return record
 
-    async def delete(self, agent_instance_id: str, team_id: TeamId) -> bool:
+    async def delete(
+        self, agent_instance_id: str, team_id: TeamId, actor_uid: str | None = None
+    ) -> bool:
         before = len(self._records)
         self._records = [
             r
@@ -3338,6 +3340,7 @@ def _build_erasure_deps(
         configuration=configuration,  # type: ignore[arg-type]
         team_dependencies=None,  # type: ignore[arg-type]
         get_agent_instance_store=lambda: agent_instance_store,  # type: ignore[arg-type,return-value]
+        get_agent_marketplace_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_team_capability_settings_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_knowledge_base_definition_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_knowledge_base_instance_store=lambda: None,  # type: ignore[arg-type,return-value]

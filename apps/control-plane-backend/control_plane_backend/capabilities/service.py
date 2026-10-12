@@ -806,10 +806,18 @@ async def preview_capability_revoke(
     impact = await preview_revoke_impact(
         deps, capability_id=capability_id, team_id=team_id
     )
+    published = (
+        await deps.get_agent_marketplace_store().published_agent_ids(
+            [item.agent_instance_id for item in impact.instances]
+        )
+        if impact.instances
+        else set()
+    )
     return CapabilityImpactPreview(
         capability_id=capability_id,
         suspended_instances=impact.suspended_instances,
         health_unknown_instances=impact.skipped_unreachable,
+        published_instances=len(published),
         instances=[
             ImpactedInstanceSummary(
                 agent_instance_id=item.agent_instance_id,

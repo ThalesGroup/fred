@@ -33,7 +33,7 @@ class AgentsMarketplaceDefault(BaseModel):
 
 
 class TeamMarketplaceSettings(BaseModel):
-    """One team's overrides and the values that apply."""
+    """One team's overrides, the values that apply, and its marketplace counts."""
 
     team_id: TeamId
     team_name: str
@@ -45,6 +45,7 @@ class TeamMarketplaceSettings(BaseModel):
     )
     agents_publishing_enabled: bool
     agents_publish_quota: int
+    published_count: int
 
 
 class MarketplaceSettings(BaseModel):
@@ -53,9 +54,10 @@ class MarketplaceSettings(BaseModel):
 
 
 class MarketplaceSettingsImpact(BaseModel):
-    """The teams whose effective switch a change turns off."""
+    """What a change turning effective switches off removes, summed over teams."""
 
     affected_team_ids: list[TeamId] = Field(default_factory=list)
+    removed_published_agents: int = 0
 
 
 class MarketplaceSettingsUpdateResult(BaseModel):
@@ -80,10 +82,11 @@ class SetTeamMarketplaceSettingsRequest(BaseModel):
 
 
 class TeamMarketplaceView(BaseModel):
-    """The team's effective agents marketplace settings, on `TeamWithPermissions`."""
+    """The team's effective agents marketplace settings and counts, on `TeamWithPermissions`."""
 
     agents_publishing_enabled: bool
     agents_publish_quota: int
+    published_count: int
 
 
 @dataclass(frozen=True)

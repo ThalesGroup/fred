@@ -211,7 +211,7 @@ class TeamWithPermissions(Team):
     # value). None for system/personal teams, which have no team-editable
     # retention (personal deletes use the platform `personal_delete_grace`).
     retention: TeamRetentionView | None = None
-    # Effective agents marketplace settings; None for personal spaces.
+    # Effective agents marketplace settings and counts; None for personal spaces.
     marketplace: TeamMarketplaceView | None = None
 
 

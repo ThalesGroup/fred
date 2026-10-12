@@ -16,10 +16,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 
+from fred_core.common import TeamId
 from fred_core.teams.metadata_store import TeamMetadata
 
+from control_plane_backend.agent_marketplace.store import AgentMarketplaceStore
 from control_plane_backend.marketplace_settings.schemas import (
     AgentsMarketplaceDefault,
     EffectiveMarketplaceSettings,
@@ -76,3 +78,14 @@ def effective_marketplace_settings(
             else default.agents_publish_quota
         ),
     )
+
+
+async def count_published_agents(
+    team_ids: Iterable[TeamId],
+    get_store: Callable[[], AgentMarketplaceStore] | None,
+) -> dict[TeamId, int]:
+    """Published agents per team, one grouped query; zero without a store."""
+    ids = list(team_ids)
+    if get_store is None:
+        return {team_id: 0 for team_id in ids}
+    return await get_store().count_published(ids)

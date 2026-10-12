@@ -1380,6 +1380,82 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.setTeamMarketplaceSettingsRequest,
       }),
     }),
+    postAgentPublishControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPublishPost: build.mutation<
+      PostAgentPublishControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPublishPostApiResponse,
+      PostAgentPublishControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPublishPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances/${queryArg.agentInstanceId}/publish`,
+        method: "POST",
+        body: queryArg.publishAgentRequest,
+      }),
+    }),
+    postAgentUnpublishControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdUnpublishPost: build.mutation<
+      PostAgentUnpublishControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdUnpublishPostApiResponse,
+      PostAgentUnpublishControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdUnpublishPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances/${queryArg.agentInstanceId}/unpublish`,
+        method: "POST",
+        body: queryArg.unpublishAgentRequest,
+      }),
+    }),
+    postAgentMarketplaceDismissControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdMarketplaceDismissPost:
+      build.mutation<
+        PostAgentMarketplaceDismissControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdMarketplaceDismissPostApiResponse,
+        PostAgentMarketplaceDismissControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdMarketplaceDismissPostApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances/${queryArg.agentInstanceId}/marketplace-dismiss`,
+          method: "POST",
+        }),
+      }),
+    getMarketplaceAgentsControlPlaneV1MarketplaceAgentsGet: build.query<
+      GetMarketplaceAgentsControlPlaneV1MarketplaceAgentsGetApiResponse,
+      GetMarketplaceAgentsControlPlaneV1MarketplaceAgentsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/marketplace/agents`,
+        params: {
+          q: queryArg.q,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    getMarketplaceAgentControlPlaneV1MarketplaceAgentsEntryIdGet: build.query<
+      GetMarketplaceAgentControlPlaneV1MarketplaceAgentsEntryIdGetApiResponse,
+      GetMarketplaceAgentControlPlaneV1MarketplaceAgentsEntryIdGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/marketplace/agents/${queryArg.entryId}` }),
+    }),
+    putMarketplaceAgentLikeControlPlaneV1MarketplaceAgentsEntryIdLikePut: build.mutation<
+      PutMarketplaceAgentLikeControlPlaneV1MarketplaceAgentsEntryIdLikePutApiResponse,
+      PutMarketplaceAgentLikeControlPlaneV1MarketplaceAgentsEntryIdLikePutApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/marketplace/agents/${queryArg.entryId}/like`, method: "PUT" }),
+    }),
+    deleteMarketplaceAgentLikeControlPlaneV1MarketplaceAgentsEntryIdLikeDelete: build.mutation<
+      DeleteMarketplaceAgentLikeControlPlaneV1MarketplaceAgentsEntryIdLikeDeleteApiResponse,
+      DeleteMarketplaceAgentLikeControlPlaneV1MarketplaceAgentsEntryIdLikeDeleteApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/marketplace/agents/${queryArg.entryId}/like`, method: "DELETE" }),
+    }),
+    getMarketplaceAgentImportTargetsControlPlaneV1MarketplaceAgentsEntryIdImportTargetsGet: build.query<
+      GetMarketplaceAgentImportTargetsControlPlaneV1MarketplaceAgentsEntryIdImportTargetsGetApiResponse,
+      GetMarketplaceAgentImportTargetsControlPlaneV1MarketplaceAgentsEntryIdImportTargetsGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/marketplace/agents/${queryArg.entryId}/import-targets` }),
+    }),
+    postMarketplaceAgentImportControlPlaneV1MarketplaceAgentsEntryIdImportPost: build.mutation<
+      PostMarketplaceAgentImportControlPlaneV1MarketplaceAgentsEntryIdImportPostApiResponse,
+      PostMarketplaceAgentImportControlPlaneV1MarketplaceAgentsEntryIdImportPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/marketplace/agents/${queryArg.entryId}/import`,
+        method: "POST",
+        body: queryArg.marketplaceAgentImportRequest,
+      }),
+    }),
     getActiveAnnouncementsControlPlaneV1AnnouncementsActiveGet: build.query<
       GetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetApiResponse,
       GetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetApiArg
@@ -2832,6 +2908,58 @@ export type SetTeamMarketplaceSettingsControlPlaneV1AdminTeamsTeamIdMarketplaceS
   teamId: string;
   setTeamMarketplaceSettingsRequest: SetTeamMarketplaceSettingsRequest;
 };
+export type PostAgentPublishControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPublishPostApiResponse =
+  /** status 200 Successful Response */ AgentMarketplaceState;
+export type PostAgentPublishControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPublishPostApiArg = {
+  teamId: string;
+  agentInstanceId: string;
+  publishAgentRequest: PublishAgentRequest;
+};
+export type PostAgentUnpublishControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdUnpublishPostApiResponse = unknown;
+export type PostAgentUnpublishControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdUnpublishPostApiArg = {
+  teamId: string;
+  agentInstanceId: string;
+  unpublishAgentRequest: UnpublishAgentRequest;
+};
+export type PostAgentMarketplaceDismissControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdMarketplaceDismissPostApiResponse =
+  unknown;
+export type PostAgentMarketplaceDismissControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdMarketplaceDismissPostApiArg =
+  {
+    teamId: string;
+    agentInstanceId: string;
+  };
+export type GetMarketplaceAgentsControlPlaneV1MarketplaceAgentsGetApiResponse =
+  /** status 200 Successful Response */ MarketplaceAgentSummary[];
+export type GetMarketplaceAgentsControlPlaneV1MarketplaceAgentsGetApiArg = {
+  q?: string | null;
+  teamId?: string | null;
+};
+export type GetMarketplaceAgentControlPlaneV1MarketplaceAgentsEntryIdGetApiResponse =
+  /** status 200 Successful Response */ MarketplaceAgentDetail;
+export type GetMarketplaceAgentControlPlaneV1MarketplaceAgentsEntryIdGetApiArg = {
+  entryId: string;
+};
+export type PutMarketplaceAgentLikeControlPlaneV1MarketplaceAgentsEntryIdLikePutApiResponse =
+  /** status 200 Successful Response */ MarketplaceAgentSummary;
+export type PutMarketplaceAgentLikeControlPlaneV1MarketplaceAgentsEntryIdLikePutApiArg = {
+  entryId: string;
+};
+export type DeleteMarketplaceAgentLikeControlPlaneV1MarketplaceAgentsEntryIdLikeDeleteApiResponse =
+  /** status 200 Successful Response */ MarketplaceAgentSummary;
+export type DeleteMarketplaceAgentLikeControlPlaneV1MarketplaceAgentsEntryIdLikeDeleteApiArg = {
+  entryId: string;
+};
+export type GetMarketplaceAgentImportTargetsControlPlaneV1MarketplaceAgentsEntryIdImportTargetsGetApiResponse =
+  /** status 200 Successful Response */ MarketplaceAgentImportTargetsResponse;
+export type GetMarketplaceAgentImportTargetsControlPlaneV1MarketplaceAgentsEntryIdImportTargetsGetApiArg = {
+  entryId: string;
+};
+export type PostMarketplaceAgentImportControlPlaneV1MarketplaceAgentsEntryIdImportPostApiResponse =
+  /** status 200 Successful Response */ MarketplaceAgentImportResponse;
+export type PostMarketplaceAgentImportControlPlaneV1MarketplaceAgentsEntryIdImportPostApiArg = {
+  entryId: string;
+  marketplaceAgentImportRequest: MarketplaceAgentImportRequest;
+};
 export type GetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetApiResponse =
   /** status 200 Successful Response */ Announcement[];
 export type GetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetApiArg = void;
@@ -3557,6 +3685,7 @@ export type TeamRetentionView = {
 export type TeamMarketplaceView = {
   agents_publishing_enabled: boolean;
   agents_publish_quota: number;
+  published_count: number;
 };
 export type TeamWithPermissions = {
   id: string;
@@ -3888,6 +4017,22 @@ export type AgentTemplateSummary = {
   reasoning_default_on?: boolean;
 };
 export type SuspensionReason = "capability_unavailable" | "capability_access_revoked" | "capability_config_invalid";
+export type AgentMarketplaceState = {
+  /** `removed` after an automatic or platform admin removal (shown until hidden); `dismissed` after a removal by the team or Hide. */
+  state: "published" | "removed" | "dismissed";
+  /** Entry version, sent back as `expected_version` by publish and unpublish. */
+  version: number;
+  /** Date of the current publication. */
+  published_at: string;
+  /** The agent changed since the published snapshot was taken. */
+  modified?: boolean;
+  removed_reason?: string | null;
+  /** Optional reason given by a platform admin. */
+  removed_message?: string | null;
+  removed_at?: string | null;
+  like_count?: number;
+  import_count?: number;
+};
 export type ManagedAgentInstanceSummary = {
   agent_instance_id: string;
   team_id: string;
@@ -3934,6 +4079,8 @@ export type ManagedAgentInstanceSummary = {
   runtime_status?: "ok" | "unavailable";
   /** Non-empty when stored MCP server IDs are absent from the live pod catalog. Admin must delete and recreate the instance to resolve. */
   catalog_warnings?: string[];
+  /** Null when the agent was never published. Members who are not editors or team admin only get a `published` state, never `modified` nor a removal. */
+  marketplace?: AgentMarketplaceState | null;
 };
 export type CreateAgentInstanceRequest = {
   /** Composite template identity: '{source_runtime_id}:{source_agent_id}'. Obtained from GET /teams/{team_id}/agent-templates. */
@@ -4082,6 +4229,8 @@ export type AgentCopyResponse = {
 export type AgentCopyRequest = {
   target_team_ids: string[];
   display_name?: string | null;
+  /** Caller's UI language, picking the word of a renamed copy (`copie`/`copy`); English when absent. */
+  locale?: ("fr" | "en") | null;
 };
 export type PromptSummary = {
   id: string;
@@ -4537,6 +4686,8 @@ export type CapabilityImpactPreview = {
   suspended_instances?: number;
   /** Selecting instances whose pod is unreachable (impact unknown). */
   health_unknown_instances?: number;
+  /** Of the agents that would be suspended, those published to the marketplace: suspension removes them from it. */
+  published_instances?: number;
   /** The affected agents, for the admin drill-down. */
   instances?: ImpactedInstanceSummary[];
 };
@@ -4902,6 +5053,7 @@ export type TeamMarketplaceSettings = {
   agents_publish_quota_override?: number | null;
   agents_publishing_enabled: boolean;
   agents_publish_quota: number;
+  published_count: number;
 };
 export type MarketplaceSettings = {
   default: AgentsMarketplaceDefault;
@@ -4909,6 +5061,7 @@ export type MarketplaceSettings = {
 };
 export type MarketplaceSettingsImpact = {
   affected_team_ids?: string[];
+  removed_published_agents?: number;
 };
 export type MarketplaceSettingsUpdateResult = {
   settings: MarketplaceSettings;
@@ -4921,6 +5074,88 @@ export type SetAgentsMarketplaceDefaultRequest = {
 export type SetTeamMarketplaceSettingsRequest = {
   agents_publishing_enabled: boolean | null;
   agents_publish_quota: number | null;
+};
+export type PublishAgentRequest = {
+  /** The entry version the card shows (`marketplace.version`); absent for a first publication. A mismatch answers 409. */
+  expected_version?: number | null;
+};
+export type UnpublishAgentRequest = {
+  expected_version: number;
+  /** Free text shown to the team; accepted from a platform admin only. */
+  reason?: string | null;
+};
+export type MarketplaceAgentSummary = {
+  entry_id: string;
+  team_id: string;
+  /** The publishing team's current name. */
+  team_name?: string | null;
+  template_id: string;
+  display_name: string;
+  description?: string | null;
+  role: string;
+  version: number;
+  first_published_at: string;
+  /** Date of the current version. */
+  published_at: string;
+  like_count?: number;
+  import_count?: number;
+  liked_by_me?: boolean;
+};
+export type MarketplaceAgentCapability = {
+  id: string;
+  name: string;
+  description?: string | null;
+};
+export type MarketplaceAgentFile = {
+  capability_id: string;
+  filename: string;
+  size: number;
+};
+export type MarketplaceAgentDetail = {
+  entry_id: string;
+  team_id: string;
+  /** The publishing team's current name. */
+  team_name?: string | null;
+  template_id: string;
+  display_name: string;
+  description?: string | null;
+  role: string;
+  version: number;
+  first_published_at: string;
+  /** Date of the current version. */
+  published_at: string;
+  like_count?: number;
+  import_count?: number;
+  liked_by_me?: boolean;
+  /** The published agent, addressed by a platform admin's removal. */
+  agent_instance_id: string;
+  /** Likes given on the current version. */
+  likes_since_update?: number;
+  usage_statement?: string;
+  tuning_field_values?: {
+    [key: string]:
+      | string
+      | number
+      | number
+      | boolean
+      | (string | number | number | boolean)[]
+      | {
+          [key: string]: string | number | number | boolean;
+        };
+  };
+  capabilities?: MarketplaceAgentCapability[];
+  files?: MarketplaceAgentFile[];
+};
+export type MarketplaceAgentImportTargetsResponse = {
+  targets: AgentCopyTarget[];
+};
+export type MarketplaceAgentImportResponse = {
+  results: AgentCopyResult[];
+};
+export type MarketplaceAgentImportRequest = {
+  target_team_ids: string[];
+  /** Caller's UI language, picking the word of a renamed copy (`copie`/`copy`); English when absent. */
+  locale?: ("fr" | "en") | null;
 };
 export type Announcement = {
   id: string;
@@ -5624,6 +5859,18 @@ export const {
   usePreviewTeamMarketplaceSettingsChangeControlPlaneV1AdminTeamsTeamIdMarketplaceSettingsImpactGetQuery,
   useLazyPreviewTeamMarketplaceSettingsChangeControlPlaneV1AdminTeamsTeamIdMarketplaceSettingsImpactGetQuery,
   useSetTeamMarketplaceSettingsControlPlaneV1AdminTeamsTeamIdMarketplaceSettingsPutMutation,
+  usePostAgentPublishControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPublishPostMutation,
+  usePostAgentUnpublishControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdUnpublishPostMutation,
+  usePostAgentMarketplaceDismissControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdMarketplaceDismissPostMutation,
+  useGetMarketplaceAgentsControlPlaneV1MarketplaceAgentsGetQuery,
+  useLazyGetMarketplaceAgentsControlPlaneV1MarketplaceAgentsGetQuery,
+  useGetMarketplaceAgentControlPlaneV1MarketplaceAgentsEntryIdGetQuery,
+  useLazyGetMarketplaceAgentControlPlaneV1MarketplaceAgentsEntryIdGetQuery,
+  usePutMarketplaceAgentLikeControlPlaneV1MarketplaceAgentsEntryIdLikePutMutation,
+  useDeleteMarketplaceAgentLikeControlPlaneV1MarketplaceAgentsEntryIdLikeDeleteMutation,
+  useGetMarketplaceAgentImportTargetsControlPlaneV1MarketplaceAgentsEntryIdImportTargetsGetQuery,
+  useLazyGetMarketplaceAgentImportTargetsControlPlaneV1MarketplaceAgentsEntryIdImportTargetsGetQuery,
+  usePostMarketplaceAgentImportControlPlaneV1MarketplaceAgentsEntryIdImportPostMutation,
   useGetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetQuery,
   useLazyGetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetQuery,
   useGetActivePatchNoteControlPlaneV1AnnouncementsPatchNoteGetQuery,

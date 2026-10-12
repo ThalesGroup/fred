@@ -638,6 +638,21 @@ operations:
     required_permission: team.can_update_agents
   - service: control-plane
     method: POST
+    path: /control-plane/v1/teams/{team_id}/agent-instances/{agent_instance_id}/publish
+    review_status: pending_review
+    required_permission: team.can_publish_marketplace_agents # agent_marketplace/service.publish_agent. Also needs an enabled, unsuspended agent, a public team, publication enabled for the team, a public agent type, not a personal space, and for a new publication published count < quota (409 with a code otherwise). expected_version mismatch 409. Pod export with the caller's token; any failure keeps the previous snapshot (422 capability cause, 503 pod). Emits audit event agent.published.
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/agent-instances/{agent_instance_id}/unpublish
+    review_status: pending_review
+    required_permission: team.can_unpublish_marketplace_agents OR organization.can_manage_platform # agent_marketplace/service.can_remove_from_marketplace. `reason` from a platform admin only (403 otherwise). A team removal sets dismissed, a platform admin's sets removed. expected_version mismatch 409. Emits audit event agent.unpublished.
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/agent-instances/{agent_instance_id}/marketplace-dismiss
+    review_status: pending_review
+    required_permission: team.can_unpublish_marketplace_agents # agent_marketplace/service.dismiss_marketplace_removal. Editors and team admin; hides a Removed state for the whole team.
+  - service: control-plane
+    method: POST
     path: /control-plane/v1/teams/{team_id}/agent-instances/{agent_instance_id}/prepare-execution
     review_status: pending_review
     required_permission: pending_review
@@ -796,6 +811,36 @@ operations:
     path: /control-plane/v1/marketplace/prompts/{prompt_id}/import
     review_status: pending_review
     required_permission: can_update_resources (checked per target team)
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/marketplace/agents
+    review_status: external_or_public
+    required_permission: authenticated (any user; lists only published agent snapshots)
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/marketplace/agents/{entry_id}
+    review_status: external_or_public
+    required_permission: authenticated (any user; published snapshots only; file metadata, never content)
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/marketplace/agents/{entry_id}/like
+    review_status: external_or_public
+    required_permission: authenticated (any user, own team included; published snapshots only)
+  - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/marketplace/agents/{entry_id}/like
+    review_status: external_or_public
+    required_permission: authenticated (any user; published snapshots only)
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/marketplace/agents/{entry_id}/import-targets
+    review_status: pending_review
+    required_permission: authenticated; lists the caller's personal space and teams where it holds can_update_agents, publishing team excluded
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/marketplace/agents/{entry_id}/import
+    review_status: pending_review
+    required_permission: team.can_update_agents (checked per target team; publishing team refused) # Reuses the agent copy on the stored snapshot; never reads the publishing team.
   - service: control-plane
     method: GET
     path: /control-plane/v1/teams/{team_id}/prompt-categories
@@ -1053,17 +1098,17 @@ operations:
     method: GET
     path: /control-plane/v1/admin/marketplace-settings
     review_status: pending_review
-    required_permission: can_manage_platform # marketplace_settings/service._require_manage_platform. Agents marketplace default (built-in switch off, quota 5 when never saved) and, per collaborative team, its overrides and effective values. Team admins have no access: these settings are platform-level.
+    required_permission: can_manage_platform # marketplace_settings/service._require_manage_platform. Agents marketplace default (built-in switch off, quota 5 when never saved) and, per collaborative team, its overrides, effective values and published count. Team admins have no access: these settings are platform-level.
   - service: control-plane
     method: GET
     path: /control-plane/v1/admin/marketplace-settings/default/impact
     review_status: pending_review
-    required_permission: can_manage_platform # marketplace_settings/service.preview_default_change. Read-only preview: teams following Default whose effective switch would turn off.
+    required_permission: can_manage_platform # marketplace_settings/service.preview_default_change. Read-only preview: teams following Default whose effective switch would turn off, with their published agents.
   - service: control-plane
     method: PUT
     path: /control-plane/v1/admin/marketplace-settings/default
     review_status: pending_review
-    required_permission: can_manage_platform # marketplace_settings/service.set_marketplace_default. Quota >= 1 enforced at parsing (422). Emits audit event marketplace.settings.default_updated.
+    required_permission: can_manage_platform # marketplace_settings/service.set_marketplace_default. Quota >= 1 enforced at parsing (422). Every team whose effective switch turns off loses its published agents in the same request. Emits audit event marketplace.settings.default_updated.
   - service: control-plane
     method: GET
     path: /control-plane/v1/admin/teams/{team_id}/marketplace-settings/impact
@@ -1073,7 +1118,7 @@ operations:
     method: PUT
     path: /control-plane/v1/admin/teams/{team_id}/marketplace-settings
     review_status: pending_review
-    required_permission: can_manage_platform # marketplace_settings/service.set_team_marketplace_settings. Replaces both overrides, null = back to Default; quota >= 1 (422). Deliberately NOT can_update_info: a team admin cannot change its own team's marketplace settings. Emits audit event marketplace.settings.team_updated.
+    required_permission: can_manage_platform # marketplace_settings/service.set_team_marketplace_settings. Replaces both overrides, null = back to Default; quota >= 1 (422). Deliberately NOT can_update_info: a team admin cannot change its own team's marketplace settings. An effective switch turning off removes the team's published agents. Emits audit event marketplace.settings.team_updated.
   - service: control-plane
     method: GET
     path: /control-plane/v1/admin/platform/instructions

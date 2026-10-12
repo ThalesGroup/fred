@@ -46,6 +46,7 @@ from fred_core import (
     team_organization_relation,
 )
 from fred_core.common import TeamId, ThreadSafeLRUCache, is_personal_team_id
+from fred_core.kpi.kpi_writer import to_kpi_actor
 from fred_core.logs.audit_log import emit_audit_log
 from fred_core.scheduler import SchedulerBackend
 from fred_core.store import ContentStore
@@ -53,8 +54,14 @@ from fred_core.teams.metadata_store import TeamMetadata, TeamMetadataPatch
 from fred_core.users.store.postgres_user_store import get_user_store
 from sqlalchemy.exc import IntegrityError
 
+from control_plane_backend.agent_instances.store import TeamAgentsDeletion
+from control_plane_backend.agent_marketplace.store import (
+    RemovalReason,
+    emit_unpublished,
+)
 from control_plane_backend.common.avatar_image import read_avatar_upload
 from control_plane_backend.marketplace_settings.effective import (
+    count_published_agents,
     effective_marketplace_settings,
     load_marketplace_default,
 )
@@ -322,9 +329,39 @@ async def delete_team(
         await rebac.delete_all_relations_of_reference(
             RebacReference(Resource.TEAM, team_id)
         )
+        # The team's agents go with it, and their marketplace entries cascade.
+        deleted = (
+            await deps.get_agent_instance_store().delete_by_team(team_id)
+            if deps.get_agent_instance_store is not None
+            else None
+        )
         await store.delete(team_id)
 
+    if deleted is not None:
+        _emit_team_agents_deleted(user, team_id, deleted, deps)
     logger.info("Deleted one team via platform-admin registry action")
+
+
+def _emit_team_agents_deleted(
+    user: KeycloakUser,
+    team_id: TeamId,
+    deleted: TeamAgentsDeletion,
+    deps: TeamServiceDependencies,
+) -> None:
+    """Report each agent as a single deletion would: KPI per agent, audit per entry."""
+    emit_unpublished(deleted.unpublished, actor_uid=user.uid)
+    if deps.get_kpi_writer is None:
+        return
+    writer = deps.get_kpi_writer()
+    for agent_instance_id in deleted.agent_instance_ids:
+        try:
+            writer.count(
+                "agent.deleted_total",
+                dims={"team_id": str(team_id), "agent_instance_id": agent_instance_id},
+                actor=to_kpi_actor(user),
+            )
+        except Exception:
+            logger.exception("[control-plane][kpi] Failed to emit agent.deleted_total")
 
 
 async def rescue_team_admin(
@@ -1140,6 +1177,8 @@ async def update_team(
                     [team_id], consistency_token=RebacEngine.HIGHER_CONSISTENCY
                 )
             else:
+                # Before the ReBAC call: if it fails, the team is still private.
+                await _remove_published_agents_of_private_team(team_id, user, deps)
                 public_token = await rebac.revoke_team_public_relations(
                     [team_id], consistency_token=RebacEngine.HIGHER_CONSISTENCY
                 )
@@ -1147,6 +1186,18 @@ async def update_team(
                 consistency_token = public_token
 
     return await _build_team_with_permissions(user, metadata, deps, consistency_token)
+
+
+async def _remove_published_agents_of_private_team(
+    team_id: TeamId, user: KeycloakUser, deps: TeamServiceDependencies
+) -> None:
+    """A private team cannot publish: its marketplace entries are removed."""
+    if deps.get_agent_marketplace_store is None:
+        return
+    removed = await deps.get_agent_marketplace_store().remove_team_entries(
+        [team_id], RemovalReason.TEAM_PRIVATE
+    )
+    emit_unpublished(removed, actor_uid=user.uid)
 
 
 async def upload_team_avatar(
@@ -2088,6 +2139,7 @@ async def _build_team_with_permissions(
         permissions,
         retention,
         marketplace_default,
+        published_counts,
     ) = await asyncio.gather(
         rebac.list_direct_relations(
             RebacReference(Resource.TEAM, team_id),
@@ -2096,6 +2148,7 @@ async def _build_team_with_permissions(
         _get_team_permissions_for_user(rebac, user, team_id, consistency_token),
         _resolve_team_retention_view(team_id, deps),
         load_marketplace_default(deps.get_marketplace_settings_store),
+        count_published_agents([team_id], deps.get_agent_marketplace_store),
     )
     roles_by_user = _fold_team_role_relations(direct_relations)
     admin_ids = {
@@ -2128,6 +2181,7 @@ async def _build_team_with_permissions(
         marketplace=TeamMarketplaceView(
             agents_publishing_enabled=effective.agents_publishing_enabled,
             agents_publish_quota=effective.agents_publish_quota,
+            published_count=published_counts.get(team_id, 0),
         ),
     )
 

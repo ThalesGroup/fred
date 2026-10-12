@@ -24,6 +24,7 @@ from fred_sdk.contracts.execution import SESSION_ID_RESERVED_CHAR, check_session
 from fred_sdk.contracts.models import TuningValue
 from pydantic import BaseModel, Field, field_validator
 
+from control_plane_backend.agent_instances.names import CopyLocale
 from control_plane_backend.agent_instances.suspension import SuspensionReason
 from control_plane_backend.config.models import (
     FrontendFeatureFlags,
@@ -269,6 +270,32 @@ class AgentTemplateSummary(BaseModel):
     )
 
 
+class AgentMarketplaceState(BaseModel):
+    """The agent's marketplace entry as its team card shows it."""
+
+    state: Literal["published", "removed", "dismissed"] = Field(
+        description=(
+            "`removed` after an automatic or platform admin removal (shown "
+            "until hidden); `dismissed` after a removal by the team or Hide."
+        )
+    )
+    version: int = Field(
+        description="Entry version, sent back as `expected_version` by publish and unpublish."
+    )
+    published_at: datetime = Field(description="Date of the current publication.")
+    modified: bool = Field(
+        default=False,
+        description="The agent changed since the published snapshot was taken.",
+    )
+    removed_reason: str | None = None
+    removed_message: str | None = Field(
+        default=None, description="Optional reason given by a platform admin."
+    )
+    removed_at: datetime | None = None
+    like_count: int = 0
+    import_count: int = 0
+
+
 class ManagedAgentInstanceSummary(BaseModel):
     """Primary team-visible managed agent identity exposed to the frontend."""
 
@@ -379,6 +406,14 @@ class ManagedAgentInstanceSummary(BaseModel):
         description=(
             "Non-empty when stored MCP server IDs are absent from the live pod catalog. "
             "Admin must delete and recreate the instance to resolve."
+        ),
+    )
+    marketplace: AgentMarketplaceState | None = Field(
+        default=None,
+        description=(
+            "Null when the agent was never published. Members who are not "
+            "editors or team admin only get a `published` state, "
+            "never `modified` nor a removal."
         ),
     )
 
@@ -732,11 +767,16 @@ class AgentCopyRequest(BaseModel):
 
     `display_name` is the "Duplicate" case: allowed only for a single target
     equal to the source team, and kept as is. Otherwise the source name is
-    kept when free in the destination, else suffixed ``_imported-N``.
+    kept when free in the destination, else named ``<name> (copy N)`` from 1,
+    the word following `locale`.
     """
 
     target_team_ids: list[str] = Field(..., min_length=1)
     display_name: str | None = Field(default=None, min_length=1)
+    locale: CopyLocale | None = Field(
+        default=None,
+        description="Caller's UI language, picking the word of a renamed copy (`copie`/`copy`); English when absent.",
+    )
 
     # Stored without surrounding spaces: names are unique per team, compared trimmed.
     @field_validator("display_name", mode="before")

@@ -25,7 +25,7 @@ behind.
 
 Scope (current snapshot):
 - Agents   → agent_instance rows, imported verbatim (idempotent skip-if-present),
-             a name taken in the team renamed `<name>_imported-N`
+             a name taken in the team renamed `<name> (N)`
 - Tags     → tag rows (preserving tag_id, owner_id, doc JSON)
 - Metadata → metadata rows (preserving document_uid and doc JSON;
              content/vectors are not transported by this import — see
@@ -106,7 +106,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from control_plane_backend.agent_instances.names import (
-    free_imported_name,
+    free_numbered_name,
     normalize_agent_name,
 )
 from control_plane_backend.import_export.bundle import KBundle
@@ -1027,7 +1027,7 @@ async def _run_import_body(
         async with session.begin():
             # --- agents ---
             # Normalised names per team, so an imported agent never collides
-            # with the unique name index: a taken name becomes `_imported-N`.
+            # with the unique name index: a taken name becomes `<name> (N)`.
             team_agent_names: dict[str, set[str]] = {}
 
             async def _taken_agent_names(team_id: str, s: AsyncSession) -> set[str]:
@@ -1052,7 +1052,7 @@ async def _run_import_body(
                     if await s.get(AgentInstanceRow, aid) is not None:
                         return False
                 taken = await _taken_agent_names(row["team_id"], s)
-                display_name = free_imported_name(
+                display_name = free_numbered_name(
                     str(row["display_name"]).strip(), taken
                 )
                 taken.add(normalize_agent_name(display_name))

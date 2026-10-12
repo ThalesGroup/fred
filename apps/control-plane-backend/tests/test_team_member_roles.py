@@ -1287,3 +1287,4 @@ async def test_team_exposes_effective_marketplace_settings() -> None:
     assert team.marketplace is not None
     assert team.marketplace.agents_publishing_enabled is True
     assert team.marketplace.agents_publish_quota == 5
+    assert team.marketplace.published_count == 0
