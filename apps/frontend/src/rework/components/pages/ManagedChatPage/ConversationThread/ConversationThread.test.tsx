@@ -24,12 +24,16 @@ vi.mock("@shared/organisms/UserTurn/UserTurn", () => ({ UserTurn: () => null }))
 vi.mock("@shared/organisms/AssistantTurn/AssistantTurn", () => ({ AssistantTurn: () => null }));
 vi.mock("@shared/molecules/HitlPrompt/HitlPrompt.tsx", () => ({
   HitlPrompt: (props: {
+    readonly?: boolean;
+    event: { payload: { question?: string } };
     maxChatInputChars?: number;
     freeTextValue?: string;
     onAnswer: unknown;
     onFreeTextChange?: unknown;
   }) => (
     <div
+      data-readonly={props.readonly}
+      data-question={props.event.payload.question}
       data-limit={props.maxChatInputChars}
       data-free-text={props.freeTextValue}
       data-has-answer-handler={typeof props.onAnswer === "function"}
@@ -65,5 +69,31 @@ describe("ConversationThread HITL input policy wiring", () => {
     expect(html).toContain('data-free-text="full draft"');
     expect(html).toContain('data-has-answer-handler="true"');
     expect(html).toContain('data-has-change-handler="true"');
+  });
+  it("renders every unanswered question as a frozen card after agent deletion", () => {
+    const events = ["First question", "Second question"].map((question, index) => ({
+      type: "awaiting_human" as const,
+      session_id: "saved",
+      exchange_id: "exchange",
+      payload: { stage: "agent_question" as const, question, occurrence_id: `question-${index}`, free_text: true },
+    }));
+    const html = renderToStaticMarkup(
+      <ConversationThread
+        readOnly
+        messages={[]}
+        pendingHitl={events[0]}
+        pendingHitlTabs={events}
+        isLoading={false}
+        isStreaming={false}
+        scrollContainerRef={createRef<HTMLDivElement>()}
+        onHitlAnswer={() => {}}
+        hitlFreeText=""
+        onHitlFreeTextChange={() => {}}
+      />,
+    );
+    expect(html.match(/data-readonly="true"/g)).toHaveLength(2);
+    expect(html).toContain("First question");
+    expect(html).toContain("Second question");
+    expect(html).not.toContain('data-has-change-handler="true"');
   });
 });

@@ -52,6 +52,8 @@ vi.mock("./useManagedChat", () => ({ useManagedChat: () => chatValue }));
 vi.mock("@shared/molecules/RichInputField/RichInputField", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@shared/molecules/RichInputField/RichInputField")>()),
   RichInputField: (props: {
+    placeholder?: string;
+    accessibleDescription?: string;
     sendDisabled?: boolean;
     disabled?: boolean;
     characterCount?: number;
@@ -63,6 +65,8 @@ vi.mock("@shared/molecules/RichInputField/RichInputField", async (importOriginal
     return (
       <div
         data-testid="composer"
+        data-placeholder={props.placeholder}
+        data-description={props.accessibleDescription}
         data-send-disabled={props.sendDisabled}
         data-composer-disabled={props.disabled}
         data-character-count={props.characterCount}
@@ -78,12 +82,14 @@ vi.mock("./ConversationThread/ConversationThread", () => ({
     hitlFreeText: string;
     onHitlFreeTextChange: unknown;
     isLoading?: boolean;
+    readOnly?: boolean;
   }) => (
     <div
       data-testid="thread"
       data-character-limit={props.maxChatInputChars}
       data-hitl-draft={props.hitlFreeText}
       data-has-hitl-change-handler={typeof props.onHitlFreeTextChange === "function"}
+      data-readonly={props.readOnly}
       data-loading={props.isLoading}
     />
   ),
@@ -93,7 +99,7 @@ vi.mock("@shared/molecules/ThoughtTrace/traceDrawerContext", () => ({
   TraceDrawerProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 vi.mock("../../../../hooks/useFrontendProperties", () => ({
-  useFrontendProperties: () => ({ agentIconName: "person" }),
+  useFrontendProperties: () => ({ agentIconName: "person", agentsNicknameSingular: "" }),
 }));
 vi.mock("../../../../hooks/useFrontendBootstrap", () => ({
   useFrontendBootstrap: () => ({ activeTeam: { id: bootstrap.activeTeamId } }),
@@ -374,6 +380,37 @@ describe("ManagedChatPage agent todo panel", () => {
     const html = renderToStaticMarkup(<ManagedChatPage />);
     expect(html).not.toContain('data-testid="agent-todo-panel"');
     expect(html).toContain("rework.agentTodoPanel.announcementComplete");
+  });
+});
+
+describe("ManagedChatPage deleted agent", () => {
+  it("labels the preserved name, freezes the thread and disables the composer without a redundant banner", () => {
+    chatValue = {
+      ...baseChatValue([]),
+      executionDisabled: true,
+      isReadOnly: true,
+      agentDisplayName: "Preserved assistant",
+      isHistorySettled: true,
+    };
+    const html = renderToStaticMarkup(<ManagedChatPage />);
+    expect(html).toContain("Preserved assistant");
+    expect(html).toContain("chatbot.deletedAgentSuffix");
+    expect(html).toContain('data-agent-deleted="true"');
+    expect(html).toContain('data-placeholder="chatbot.readOnlyComposerPlaceholder"');
+    expect(html).toContain('data-description="chatbot.deletedAgentTooltip"');
+    const rendered = document.createElement("div");
+    rendered.innerHTML = html;
+    expect(rendered.textContent).not.toContain("chatbot.deletedAgentTooltip");
+    expect(html).toContain('data-composer-disabled="true"');
+    expect(html).toContain('data-send-disabled="true"');
+    expect(html).toContain('data-readonly="true"');
+    expect(html).not.toContain('aria-label="chatbot.newConversation"');
+  });
+  it("shows history failure without labeling a live agent as deleted", () => {
+    chatValue = { ...baseChatValue([]), historyUnavailable: true, isReadOnly: false, isHistorySettled: true };
+    const html = renderToStaticMarkup(<ManagedChatPage />);
+    expect(html).toContain("chatbot.historyUnavailable");
+    expect(html).not.toContain("chatbot.deletedAgentTooltip");
   });
 });
 

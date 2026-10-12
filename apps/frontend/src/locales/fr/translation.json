@@ -603,6 +603,10 @@
       "emptyFilters": "Aucun prompt ne correspond aux filtres.",
       "categoryLabel": "Catégorie"
     },
+    "readOnlyComposerPlaceholder": "Conversation en lecture seule",
+    "deletedAgentTooltip": "{{agentsNicknameSingular}} supprimé - conversation en lecture seule",
+    "deletedAgentSuffix": "(supprimé)",
+    "historyUnavailable": "L'historique de la conversation est indisponible. Réessayez plus tard.",
     "skipAllHitlQuestions": "Tout passer",
     "hitlOtherAnswerHint": "écrire votre réponse…",
     "hitlQuestionState": {
@@ -2277,11 +2281,11 @@
           "confirm": "Supprimer",
           "cancel": "Annuler"
         },
-        "emptyManaged": "Aucune conversation pour l'instant. Démarrez un chat avec un agent géré.",
-        "groupByAgent": "Grouper par agent",
+        "emptyManaged": "Aucune conversation pour l'instant. Démarrez un chat avec un {{agentsNicknameSingular}} géré.",
+        "groupByAgent": "Grouper par {{agentsNicknameSingular}}",
         "loading": "Chargement...",
         "title": "Conversations",
-        "unknownAgent": "Agent inconnu"
+        "unknownAgent": "{{agentsNicknameSingular}} inconnu"
       },
       "marketplace": {
         "menu": {

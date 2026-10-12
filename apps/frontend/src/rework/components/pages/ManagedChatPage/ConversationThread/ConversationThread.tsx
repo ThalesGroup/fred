@@ -29,6 +29,7 @@ import { ChatMessagesArea } from "@shared/organisms/ChatMessagesArea/ChatMessage
 import { hitlResponseKey } from "../toThreadMessages";
 
 interface ConversationThreadProps {
+  readOnly?: boolean;
   messages: ThreadMessage[];
   pendingHitl: RuntimeAwaitingHumanEvent | null;
   pendingHitlTabs?: RuntimeAwaitingHumanEvent[];
@@ -63,6 +64,7 @@ interface ConversationThreadProps {
 // message — including its full markdown re-parse — re-rendered on every
 // character typed, with cost scaling with conversation length (#2221).
 export const ConversationThread = memo(function ConversationThread({
+  readOnly = false,
   messages,
   pendingHitl,
   pendingHitlTabs = [],
@@ -146,7 +148,17 @@ export const ConversationThread = memo(function ConversationThread({
           />
         );
       })}
-      {pendingHitl && (
+      {pendingHitl &&
+        readOnly &&
+        (pendingHitlTabs.length ? pendingHitlTabs : [pendingHitl]).map((event) => (
+          <HitlPrompt
+            key={event.payload.occurrence_id ?? event.payload.interrupt_id ?? event.payload.question}
+            event={event}
+            readonly
+            onAnswer={() => {}}
+          />
+        ))}
+      {pendingHitl && !readOnly && (
         <HitlPrompt
           event={pendingHitl}
           siblingQuestions={pendingHitlTabs}

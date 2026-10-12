@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 
 from fred_core.common import TeamId
 from fred_core.sql import make_session_factory, use_session
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from control_plane_backend.agent_instances.names import is_agent_name_violation
 from control_plane_backend.config.models import ManagedAgentTuning
 from control_plane_backend.models.agent_instance_models import AgentInstanceRow
+from control_plane_backend.models.session_metadata_models import SessionMetadataRow
 
 logger = logging.getLogger(__name__)
 
@@ -356,6 +357,28 @@ class AgentInstanceStore:
     ) -> bool:
         """Delete one instance scoped to team_id. Returns True if a row was removed."""
         async with use_session(self._sessions, session) as s:
+            instance = await s.scalar(
+                select(AgentInstanceRow)
+                .where(
+                    AgentInstanceRow.agent_instance_id == agent_instance_id,
+                    AgentInstanceRow.team_id == str(team_id),
+                )
+                .with_for_update()
+            )
+            if instance is None:
+                return False
+            # Keep the last name without making deletion look like chat activity.
+            await s.execute(
+                update(SessionMetadataRow)
+                .where(
+                    SessionMetadataRow.agent_instance_id == agent_instance_id,
+                    SessionMetadataRow.team_id == str(team_id),
+                )
+                .values(
+                    agent_display_name=instance.display_name,
+                    updated_at=SessionMetadataRow.updated_at,
+                )
+            )
             result: CursorResult = await s.execute(  # type: ignore[assignment]
                 delete(AgentInstanceRow).where(
                     AgentInstanceRow.agent_instance_id == agent_instance_id,

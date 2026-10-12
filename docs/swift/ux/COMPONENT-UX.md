@@ -2037,7 +2037,7 @@ Composition and states:
   catch a regression here.
 
 Wording is deployment-configurable: the placeholder interpolates
-`agentsNicknamePlural`, since a deployment renames agents (e.g. "Lumis").
+`agentsNicknamePlural`, using the deployment's chosen label.
 
 **Sort.** A `Select` (`size="small"`, `compact`, no label, `min-width: 200px`
 so the control does not resize as the picked option changes length) sits after
@@ -5228,6 +5228,39 @@ Fred's control-plane and knowledge-flow services. Evaluation progress belongs
 to the external application's UI. Shared SDK components and backend evaluation
 permissions remain available; no evaluation data is removed.
 
+### Conversations after agent deletion (2026-10-07)
+
+A saved conversation remains navigable after its managed agent is deleted. Its
+preserved agent name carries a localized suffix, "(deleted)" in English and
+"(supprimé)" in French, in the header and sidebar, including grouped headers.
+The sidebar title and metadata use 70% opacity, as does the grouped agent label.
+The suffix stays visible when a long name is truncated. The name is not struck
+through, and the conversation title stays readable. Hovering or focusing the
+entry reveals the full agent name and explains the deleted/read-only state in
+the selected language; a durable
+accessible description carries the same state. Status text, generic name fallback,
+grouping and empty-list labels interpolate the configured `agentsNicknameSingular`.
+The suffix and disabled composer show read-only mode without a separate
+deletion banner. `chatbot.deletedAgentTooltip` is shared by tooltips and the
+disabled composer's hidden accessible description. Names are snapshotted in
+session metadata before deletion, including renamed agents.
+Legacy names already lost use the existing localized generic agent fallback.
+The composer stays visible and natively disabled with a read-only placeholder,
+matching disabled surface/text tokens and no active elevation. Existing drafts
+remain visible but cannot be submitted. In dark mode, selected sidebar rows use
+a softer 8% secondary tint, including the matching delete-action hover overlay.
+Grouped rows retain the full list width even when a tooltip wraps a short title.
+History loads independently of execution preparation. Missing routing or a failed
+history request shows an unavailable notice while retaining already cached text.
+
+Send, commands, retries, new-conversation, voice, attachment edits and context
+controls are disabled, including their retained callbacks. Pending human questions
+and interrupted-execution cards remain readable without resume, skip, continue or
+restart actions. Title editing, conversation deletion and attachment previews stay
+available. Current owned session details drive the execution state; agent-list
+errors never imply deletion. Existing query invalidation, bounded refresh and window
+focus revalidation catch a deletion from the same client or another session.
+See the [managed-conversation lifecycle spec](../../../openspec/specs/managed-conversations/spec.md).
 ## Platform access screens (2026-10-05)
 
 The page groups administration into Rules and Whitelist using the shared home-page ButtonGroup with tab semantics. Panels retain local drafts, selections and pagination. Ordinary text uses 16 px, secondary guidance 14 px and section headings 22 px through existing tokens. The filtering action remains available at the top right of the shared page header across all tabs. Enabling requires at least one saved rule, individual exception or eligible authorized/Free team, then opens a confirmation with counted Allowed and Blocked tabs under the saved configuration. The activation body uses standard padding and consistent gaps between the warning, result heading, timestamp and table. Blocked users appear first when present, otherwise Allowed; empty groups show a short message instead of an empty table. Populated dry-run tables have a bounded height; the shared DataTable scrolls only its rows while its column header and pagination remain fixed. The initial page size is 20, matching the shared selector's supported 20/50/100 options. Accounts that cannot be evaluated appear only in a separate expandable Verification unavailable section. This indicates missing or unusable review evidence, not a third admission state; a missing field in a verified token is evaluated normally. A circular refresh icon beside the last-check timestamp refreshes the read-only population snapshot, reference policy and import status; stale rows disappear and confirmation stays disabled during loading, errors or revision conflicts. There is no separate Activation tab; the header action opens the reviewed confirmation. Unsaved rule edits are never applied by activation. If the initial import has not completed, this modal explicitly offers Continue without importing or Go to whitelist; the second choice opens Whitelist > Users without activating. Import-status loading or failure prevents activation confirmation and offers retry, while disabling does not require that status.

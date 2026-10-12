@@ -70,7 +70,10 @@
 }
 
 .field:has(.textarea:disabled) {
+  cursor: not-allowed;
+  box-shadow: none;
   background: var(--state-surface-main-disabled);
+  color: var(--state-text-disabled);
 }
 
 /* Off-screen but announced: the durable form of the placeholder's hint. */
@@ -118,7 +121,12 @@
 }
 
 .textarea:disabled {
-  color: var(--state-on-surface-disabled);
+  cursor: not-allowed;
+  color: var(--state-text-disabled);
+}
+
+.textarea:disabled::placeholder {
+  color: var(--state-text-disabled);
 }
 
 /* Aligns the over-limit notice with the textarea's own inline padding; the
