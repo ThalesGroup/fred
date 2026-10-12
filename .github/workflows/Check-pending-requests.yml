@@ -165,6 +165,8 @@ jobs:
               - 'libs/capabilities/fred-capability-platform-ops/**'
             html-artifact:
               - 'libs/capabilities/fred-capability-html-artifact/**'
+            pptx-generator:
+              - 'libs/capabilities/fred-capability-pptx-generator/**'
             documents:
               - 'libs/capabilities/fred-capability-documents/**'
             document-access:
@@ -224,11 +226,13 @@ jobs:
             {"name": "fred-runtime", "directory": "libs/fred-runtime", "needs-pandoc": false, "integration-target": "",
              "triggers": ["fred-runtime", "fred-sdk", "fred-core", "fred-pod"]},
             {"name": "fred-agents", "directory": "apps/fred-agents", "needs-pandoc": false, "integration-target": "",
-             "triggers": ["fred-agents", "platform-ops", "html-artifact", "documents", "document-access", "ppt-filler", "team-wiki", "writable-document", "fred-runtime", "fred-sdk", "fred-core", "fred-pod"]},
+             "triggers": ["fred-agents", "platform-ops", "html-artifact", "pptx-generator", "documents", "document-access", "ppt-filler", "team-wiki", "writable-document", "fred-runtime", "fred-sdk", "fred-core", "fred-pod"]},
             {"name": "fred-capability-platform-ops", "directory": "libs/capabilities/fred-capability-platform-ops", "needs-pandoc": false, "integration-target": "",
              "triggers": ["platform-ops", "fred-runtime", "fred-sdk", "fred-core", "fred-pod"]},
             {"name": "fred-capability-html-artifact", "directory": "libs/capabilities/fred-capability-html-artifact", "needs-pandoc": false, "integration-target": "",
              "triggers": ["html-artifact", "fred-runtime", "fred-sdk", "fred-core", "fred-pod"]},
+            {"name": "fred-capability-pptx-generator", "directory": "libs/capabilities/fred-capability-pptx-generator", "needs-pandoc": false, "integration-target": "",
+             "triggers": ["pptx-generator", "fred-runtime", "fred-sdk", "fred-core", "fred-pod"]},
             {"name": "fred-capability-documents", "directory": "libs/capabilities/fred-capability-documents", "needs-pandoc": false, "integration-target": "",
              "triggers": ["documents", "fred-runtime", "fred-sdk", "fred-core", "fred-pod"]},
             {"name": "fred-capability-document-access", "directory": "libs/capabilities/fred-capability-document-access", "needs-pandoc": false, "integration-target": "",
