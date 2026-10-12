@@ -31,6 +31,7 @@ import pytest
 from fred_core.common.team_id import TeamId
 from fred_core.models.base import Base
 from fred_core.teams.metadata_store import (
+    TEAM_DESCRIPTION_PLACEHOLDER,
     JoiningMode,
     TeamMetadataStore,
     TeamVisibility,
@@ -52,7 +53,9 @@ async def test_new_team_defaults_to_private_invite_only(tmp_path: Path) -> None:
     try:
         store = TeamMetadataStore(engine)
 
-        created = await store.create(TeamId("team-2433"), "Swiftpost")
+        created = await store.create(
+            TeamId("team-2433"), "Swiftpost", TEAM_DESCRIPTION_PLACEHOLDER
+        )
 
         assert created.visibility == TeamVisibility.PRIVATE
         assert created.joining_mode == JoiningMode.INVITE_ONLY

@@ -45,6 +45,7 @@ from fred_core.sql.accent_folding import (
     fold_text,
     search_spellings,
 )
+from fred_core.teams.metadata_store import TEAM_DESCRIPTION_PLACEHOLDER
 from fred_core.teams.team_metatada_models import TeamMetadataRow
 from fred_core.users.user_models import UserRow
 
@@ -268,7 +269,14 @@ async def test_live_independent_sources_and_revocation_across_instances(access):
     assert not await access.admitted(user)
     async with access.store.mutation() as session:
         await access.store.add_exception(UUID(user.uid), "admin", "manual", session)
-        session.add(TeamMetadataRow(id="demo", name="Demo", platform_access_free=True))
+        session.add(
+            TeamMetadataRow(
+                id="demo",
+                name="Demo",
+                description=TEAM_DESCRIPTION_PLACEHOLDER,
+                platform_access_free=True,
+            )
+        )
     second = PlatformAccess(PlatformAccessStore(access.store.engine), access.rebac)
     assert await second.admitted(user)
     access.rebac.members[user.uid] = {"demo"}
@@ -331,7 +339,12 @@ async def test_authority_failure_is_unavailable_not_denial(access):
     user = person("other")
     async with access.store.mutation() as session:
         session.add(
-            TeamMetadataRow(id="demo", name="Demo", platform_access_allowed=True)
+            TeamMetadataRow(
+                id="demo",
+                name="Demo",
+                description=TEAM_DESCRIPTION_PLACEHOLDER,
+                platform_access_allowed=True,
+            )
         )
     access.rebac.unavailable = True
     with pytest.raises(HTTPException) as error:
