@@ -17,7 +17,7 @@ See proposal.md for the why and specs/team-description/spec.md for the behaviour
 
 **Non-Goals:**
 - Descriptions for personal spaces.
-- Translating the placeholder, or showing a different text when it is in place (see Open Questions).
+- Translating the stored placeholder: the database keeps the French constant; only its display is translated (decision 6).
 - Any change to team names, avatars or other team settings.
 
 ## Decisions
@@ -42,7 +42,7 @@ See proposal.md for the why and specs/team-description/spec.md for the behaviour
 7. **Import and backfill.**
    - Raw `teammetadata` phase: `description=team_description_or_placeholder(row.get("description"))`.
    - `users.json` provisioning: `CreateTeamRequest(..., description=TEAM_DESCRIPTION_PLACEHOLDER)`.
-   - When at least one imported team gets the placeholder, the report carries one warning with their count, so the operator knows team admins have descriptions to write.
+   - When at least one imported team gets the placeholder, the report carries one warning with their count, worded « N équipes ont reçu une description par défaut. » / "N teams received a default description." (owner wording), so the operator knows team admins have descriptions to write.
    - Knowledge Flow backfill: `TeamMetadataRow(..., description=TEAM_DESCRIPTION_PLACEHOLDER)`.
 8. **Frontend.**
    - Bounds as two shared constants (`TEAM_DESCRIPTION_MIN_LENGTH`, `TEAM_DESCRIPTION_MAX_LENGTH`) in one module both forms import, beside where `MAX_TEAM_NAME_LENGTH` is moved to from `TeamSettingsParameters`.
@@ -64,6 +64,10 @@ See proposal.md for the why and specs/team-description/spec.md for the behaviour
 
 Deploy normally: the control-plane database migration of the deployment applies the revision, backfilling before adding the constraints. The migration note (impact `minor`) gives a read-only query listing teams that will receive the placeholder. Rollback: `alembic downgrade` on the control plane restores the nullable `String(180)` column with the losses described in decision 6, together with the previous application version, which does not know the field.
 
+## Display of the placeholder
+
+6. When `description_is_placeholder` is true, the frontend shows a translated text (fr: « Description à compléter par l'administrateur de l'équipe. », en: "Description to be completed by the team administrator.") instead of the stored value, on team cards, team settings and anywhere the description is shown. Owner decision, 2026-10-12; frontend-only, no contract change beyond the flag.
+
 ## Open Questions
 
-- Should English users see a translated "description to be completed" text in place of the French placeholder when `description_is_placeholder` is true? The flag makes it a frontend-only change; the owner chose the French constant for now.
+- None.

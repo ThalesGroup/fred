@@ -18,7 +18,7 @@
 
 ## 3. Import and backfill
 
-- [ ] 3.1 Importer raw `teammetadata` phase uses `team_description_or_placeholder(row.get("description"))`; `users.json` provisioning passes `TEAM_DESCRIPTION_PLACEHOLDER` to `CreateTeamRequest`; one report warning with the count of teams given the placeholder. Verify: importer tests: a row without description, with "Ops", with a valid one, and a `users.json` team created on the fly; the import succeeds and the warning appears only when a placeholder was used.
+- [ ] 3.1 Importer raw `teammetadata` phase uses `team_description_or_placeholder(row.get("description"))`; `users.json` provisioning passes `TEAM_DESCRIPTION_PLACEHOLDER` to `CreateTeamRequest`; one report warning with the count of teams given the placeholder, worded « N équipes ont reçu une description par défaut. » / "N teams received a default description.". Verify: importer tests: a row without description, with "Ops", with a valid one, and a `users.json` team created on the fly; the import succeeds and the warning appears only when a placeholder was used.
 - [ ] 3.2 Knowledge Flow `alembic/backfill/backfill_storage_usage.py` inserts `description=TEAM_DESCRIPTION_PLACEHOLDER`. Verify: `make code-quality` and `make test` in `apps/knowledge-flow-backend`.
 
 ## 4. Frontend
@@ -28,6 +28,7 @@
 - [ ] 4.3 `TeamSettingsParameters`: `maxLength` 500; on blur an invalid trimmed value shows the field error and sends nothing, a valid one is sent trimmed; placeholder `ServiceNotice` for `canUpdateInfo`. Verify: vitest in `TeamSettingsParameters.test.tsx`: emptied field shows the error and calls no mutation; valid value calls it trimmed; notice shown for a team admin on a placeholder team, hidden otherwise.
 - [ ] 4.4 `TeamAgentsPage`: the same reminder for `canUpdateInfo` when `description_is_placeholder`, pointing to team settings. Verify: vitest: shown to a team admin, hidden for a member and for a personal space.
 - [ ] 4.5 `TeamCard`: delete the `withDescription` prop and always render the description; `MarketplaceTeams.renderCard` drops its boolean. Verify: `TeamCard.test.tsx` updated (description always rendered); marketplace vitest shows descriptions on "Your teams" cards.
+- [ ] 4.5b Show a translated "to be completed" text when `description_is_placeholder` is true (TeamCard, team settings, any description display). Verify: vitest renders the en text for a placeholder team.
 - [ ] 4.6 fr/en translation keys for the field label, helper, errors and reminder. Verify: the i18n key check used by the frontend tests passes; no missing key warning in vitest.
 
 ## 5. Docs

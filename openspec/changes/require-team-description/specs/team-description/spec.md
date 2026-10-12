@@ -140,6 +140,10 @@ The team returned by the API SHALL state whether its description is the placehol
 - **WHEN** the team admin saves a real description
 - **THEN** the team no longer reports a placeholder and the reminder disappears
 
+#### Scenario: Placeholder shown in the user's language
+- **WHEN** a user whose interface is in English sees a team whose description is the placeholder
+- **THEN** the description reads "Description to be completed by the team administrator." while the stored value stays the French placeholder
+
 ### Requirement: Personal spaces have no description
 
 A user's personal space SHALL keep no description and SHALL NOT be subject to the description rules or the placeholder reminder.
