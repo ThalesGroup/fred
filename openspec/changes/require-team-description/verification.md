@@ -11,10 +11,12 @@ Run on 2026-10-12, branch `feat/team-description-required`, Alembic revision
 | fred-core lint | `ruff check .` and `ruff format --check .` | clean |
 | Control-plane tests | `apps/control-plane-backend`: same pytest command | 1801 passed, 9 skipped |
 | Control-plane lint | `ruff check .` and `ruff format --check .` | clean |
+| Knowledge Flow tests | `apps/knowledge-flow-backend`: same pytest command | 1445 passed, 45 deselected |
 | Knowledge Flow lint | `apps/knowledge-flow-backend`: `ruff check .` and `ruff format --check .` | clean |
 | Single Alembic head | `alembic heads` | `c9acb7dd3ad0 (head)` only |
 | Migration on SQLite | throwaway file: upgrade to `93427a5fe874`, seed NULL / blank / "Ops" / padded / long rows, `upgrade head`, `alembic check`, `downgrade -1`, `upgrade head`, `downgrade base` | backfill, trim, CHECK, 180-character cut and NULL restore as specified; `alembic check`: no new operations |
 | Migration on PostgreSQL | dev database: `alembic upgrade head` | applied; column `VARCHAR(500) NOT NULL`, constraint present, 4 of 5 teams carry the placeholder |
+| Migration round trip on PostgreSQL | throwaway database (`DATABASE_URL`), dropped afterwards: upgrade to `93427a5fe874`, seed NULL / blank / "Ops" / padded / 180-character rows, `upgrade head`, three invalid inserts, add a 300-character row, `downgrade -1`, `upgrade head` | NULL, blank and "Ops" become the placeholder, the padded row is trimmed; NULL, "Short" and 501 characters are refused (NOT NULL, `ck_teammetadata_description_min_length`, `VARCHAR(500)`); downgrade restores nullable `VARCHAR(180)`, placeholders become NULL, 300 characters cut to 180; second upgrade ends on `c9acb7dd3ad0 (head)` |
 | Frontend types | `apps/frontend`: `npx tsc --noEmit -p .` | clean |
 | Frontend lint | `npx eslint` and `npx prettier --check` on the changed files | clean |
 | Frontend tests | `npx vitest run` | 329 files passed, 3976 tests passed, 7 skipped |
@@ -28,18 +30,17 @@ Scenario coverage:
 - Helper, patch rule and database refusal: `libs/fred-core/fred_core/tests/teams/test_team_description.py`.
 - Teams created from the user list and the import warning: `tests/test_import_export_users.py`.
 - Personal space without description or placeholder: `tests/test_main.py`.
+- Storage backfill creating a team record:
+  `apps/knowledge-flow-backend/tests/features/test_storage_backfill_untagged.py`.
 - Create form, settings field, reminder, cards: `AdminTeamsPage.test.tsx`,
   `TeamSettingsParameters.test.tsx`, `TeamDescriptionReminder.test.tsx`,
   `TeamCard.test.tsx`, `MarketplaceTeams.test.tsx`.
 
 ## Not proven
 
-- **Knowledge Flow test suite.** Its local virtual environment lacks `structlog`
-  (a fred-core dependency), so no test collects. The one-line backfill change
-  is covered by lint and compilation only. CI runs the suite.
 - **`make db-check-postgres-full`.** It starts a Docker Compose PostgreSQL; the
-  PostgreSQL evidence is the dev database upgrade above. The PostgreSQL
-  downgrade was not exercised (SQLite only).
+  PostgreSQL evidence is the dev database upgrade and the throwaway-database
+  round trip above.
 - **`alembic check` on the dev PostgreSQL** reports one difference, a column
   comment on `prompt.command`; it predates this change and does not concern
   `teammetadata`.
