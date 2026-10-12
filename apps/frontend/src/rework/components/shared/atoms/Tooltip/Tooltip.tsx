@@ -64,6 +64,8 @@ export interface TooltipProps {
    *  for a panel that reads as its own card rather than a hint attached to the
    *  trigger. */
   gapPx?: number;
+  /** Stretch the trigger wrapper to its parent's width (e.g. a whole menu row). */
+  fill?: boolean;
   children: ReactNode;
 }
 
@@ -109,6 +111,7 @@ export const Tooltip = ({
   interactive = false,
   placement = "top",
   gapPx = TOOLTIP_GAP_PX,
+  fill = false,
 }: TooltipProps) => {
   const tooltipId = useId();
   const wrapperRef = useRef<HTMLSpanElement>(null);
@@ -326,6 +329,7 @@ export const Tooltip = ({
     <span
       ref={wrapperRef}
       className={styles["tooltip-wrapper"]}
+      data-fill={fill || undefined}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       onFocus={handleFocus}
