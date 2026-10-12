@@ -129,7 +129,7 @@ _KF_SERVICE = "Knowledge Flow"
 
 logger = logging.getLogger(__name__)
 
-_TREE_MAX_CHARS_BOUNDS = (500, 20_000)
+_TREE_MAX_CHARS_BOUNDS = (500, 60_000)
 
 
 def _clamp(value: int, bounds: tuple[int, int]) -> int:
@@ -704,7 +704,7 @@ class DocumentAccessCapability(
         @tool("list_document_tree", response_format="content_and_artifact")
         async def list_document_tree(
             working_directory: str | None = None,
-            max_chars: int = 6000,
+            max_chars: int = 20_000,
         ) -> tuple[str, ToolInvocationResult]:
             """List the folders and documents in the user's document scope as a tree.
 

@@ -58,9 +58,15 @@ function leaf(uid: string, name: string, added: string | null, extra: Record<str
   return JSON.stringify({ uid, name, added_to_kb: added, created: null, modified: null, ...extra });
 }
 
-it("shows compact rows and expands only one document without exposing ids", () => {
+function showMetadata(index = 0) {
+  const button = container.querySelectorAll("button")[index];
+  act(() => button.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
+  return document.querySelector('[role="tooltip"]')!;
+}
+
+it("shows nested filesystem rows without dates and reveals metadata on the info action", () => {
   render(
-    "Docs [folder:hidden-folder]/\n  " +
+    "Docs/\n  Architecture/\n    " +
       leaf("hidden-a", "Report.pdf", "2026-10-12T09:00:00Z", {
         title: "Platform design",
         file_type: "pdf",
@@ -69,45 +75,72 @@ it("shows compact rows and expands only one document without exposing ids", () =
         labels: ["Architecture"],
         source: "webdav",
       }) +
-      "\n  " +
+      "\n    " +
       leaf("hidden-b", "Older.pdf", "2026-10-12T08:00:00Z"),
   );
   expect(container.textContent).toContain("2 documents displayed");
-  expect(container.textContent).toContain("Report.pdf");
-  expect(container.textContent).toContain("Most recent displayed");
+  expect(container.textContent).not.toContain("2026-");
+  expect(container.textContent).not.toContain("Added to");
   expect(container.textContent).not.toContain("Platform design");
+  expect(container.textContent).not.toContain("Most recent displayed");
   expect(container.textContent).not.toContain("hidden-");
-  const summaries = container.querySelectorAll("details details > summary");
-  act(() => (summaries[0] as HTMLElement).click());
-  expect(container.textContent).toContain("Platform design");
-  expect(container.textContent).toContain("2026-10-12 09:00:00Z");
-  expect(container.textContent).toContain("24 pages");
-  expect(container.textContent).toContain("Architecture");
-  act(() => (summaries[1] as HTMLElement).click());
-  expect(container.querySelectorAll("dl")).toHaveLength(1);
-  expect(container.textContent).not.toContain("Platform design");
-  expect(container.textContent).not.toContain("hidden-");
+  expect(container.querySelector("details details summary")?.textContent).toContain("Architecture");
+  expect(container.querySelectorAll("button")).toHaveLength(2);
+  const panel = showMetadata();
+  expect(panel.textContent).toContain("Platform design");
+  expect(panel.textContent).toContain("2026-10-12 09:00:00 UTC");
+  expect(panel.textContent).toContain("24 pages");
+  expect(panel.textContent).toContain("Most recent displayed");
+  expect(panel.textContent).not.toContain("hidden-");
+  expect(panel.textContent).not.toContain("File creation");
+  expect(panel.textContent).not.toContain("Modification");
+  expect(Array.from(panel.querySelectorAll("dt"), (n) => n.textContent)).not.toContain("Format");
+  expect(container.querySelector("dl")).toBeNull();
 });
 
-it("shows incompleteness and unknown dates, omits absent optional metadata, and renders labels as text", () => {
+it("places a discreet truncation marker at the end and keeps missing optional fields out of metadata", () => {
   render(
     "Listing incomplete: omitted documents may be more recent.\nDocs/\n  " +
       leaf("private", "Report.pdf", null, { labels: ["<script>alert(1)</script>"], page_count: 0 }),
   );
-  expect(container.textContent).toContain("Partial listing");
-  expect(container.textContent).toContain("Added to Atlas: Unknown");
-  expect(container.textContent).not.toContain("Most recent displayed");
-  act(() => (container.querySelector("details details > summary") as HTMLElement).click());
-  expect(container.querySelector("dt")?.textContent).toBe("Added to Atlas");
-  expect(container.textContent).toContain("0 pages");
-  expect(container.textContent).toContain("<script>alert(1)</script>");
-  expect(container.querySelector("script")).toBeNull();
-  expect(container.textContent).not.toContain("MIME type");
+  expect(container.firstElementChild?.lastElementChild?.textContent).toBe("Truncated");
+  expect(container.textContent).not.toContain("Partial listing");
+  expect(container.textContent).not.toContain("Unknown");
+  const panel = showMetadata();
+  expect(panel.querySelector("dt")?.textContent).toBe("Added to Atlas");
+  expect(panel.textContent).toContain("Unknown");
+  expect(panel.textContent).toContain("0 pages");
+  expect(panel.textContent).toContain("<script>alert(1)</script>");
+  expect(panel.querySelector("script")).toBeNull();
+  expect(panel.textContent).not.toContain("MIME type");
 });
 
 it("keeps historical dates distinct from arrival in the knowledge base", () => {
   render("Docs/\n  Old.pdf [private-id] (uploaded 2026-01-01)");
-  expect(container.textContent).toContain("Historical upload date: 2026-01-01");
-  expect(container.textContent).not.toContain("Most recent displayed");
-  expect(container.textContent).not.toContain("private-id");
+  expect(container.textContent).not.toContain("2026-01-01");
+  const panel = showMetadata();
+  expect(panel.textContent).toContain("Historical upload date");
+  expect(panel.textContent).toContain("2026-01-01");
+  expect(panel.textContent).not.toContain("Most recent displayed");
+  expect(panel.textContent).not.toContain("private-id");
+});
+
+it("opens metadata through keyboard focus and dismisses it with Escape", () => {
+  render("Docs/\n  " + leaf("private", "Report.pdf", null));
+  const button = container.querySelector("button")!;
+  act(() => {
+    button.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+    button.focus();
+  });
+  expect(document.querySelector('[role="tooltip"]')).not.toBeNull();
+  act(() => button.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+  expect(document.querySelector('[role="tooltip"]')).toBeNull();
+});
+
+it("retains empty leaf folders without inventing file rows", () => {
+  render("Docs/\n  Empty/");
+  expect(container.querySelectorAll("details")).toHaveLength(2);
+  expect(container.textContent).toContain("Empty");
+  expect(container.querySelectorAll("button")).toHaveLength(0);
+  expect(container.textContent).not.toContain("Truncated");
 });

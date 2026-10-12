@@ -192,7 +192,7 @@ class _FakeTreePort(DocumentTreePort):
         working_directory: str | None = None,
         library_tag_ids=None,
         document_uids=None,
-        max_chars: int = 6000,
+        max_chars: int = 20_000,
     ) -> DocumentTreeResult:
         self.calls.append(
             {
@@ -965,6 +965,19 @@ async def test_tree_metadata_and_incomplete_notice_reach_both_carriers() -> None
     )
     assert message.artifact.blocks[0].text == message.content
     assert not message.artifact.is_error
+
+
+@pytest.mark.asyncio
+async def test_tree_tool_uses_raised_default_and_clamps_explicit_upper_budget() -> None:
+    port = _FakeTreePort()
+    cap = DocumentAccessCapability()
+    ctx = build_capability_context(
+        cap, identity=_identity(), services=_full_services(tree=port), config={}
+    )
+    await _invoke_named_tool(cap, ctx, "list_document_tree", {})
+    assert port.calls[0]["max_chars"] == 20_000
+    await _invoke_named_tool(cap, ctx, "list_document_tree", {"max_chars": 999_999})
+    assert port.calls[1]["max_chars"] == 60_000
 
 
 @pytest.mark.asyncio

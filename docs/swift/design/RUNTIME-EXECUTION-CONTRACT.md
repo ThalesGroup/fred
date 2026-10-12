@@ -1430,7 +1430,7 @@ class DocumentTreePort(ABC):
         *,
         working_directory: str | None = None,
         library_tag_ids: Sequence[str] | None = None,
-        max_chars: int = 6000,
+        max_chars: int = 20_000,
     ) -> DocumentTreeResult: ...
 
 class DocumentSummarizePort(ABC):
@@ -1468,6 +1468,13 @@ capability renders `is_error` tool results without importing the HTTP stack.
 `read_timeout` override (`RuntimeTimeouts.summarize_read`, default 300s) for
 the long-running summarize path. First consumer: `document_access`'s
 `list_document_tree` + `summarize_document` tools (RFC §10.1).
+
+**Document tree budget (2026-10-12).** The default `max_chars` is 20,000 in the
+capability, SDK port, runtime adapter/client and HTTP request; its supported range
+is 500-60,000. Whole-branch/item pruning remains in place beyond the requested
+budget. The tool retains incomplete-listing information for the model; the UI
+uses a discreet Truncated footer. Request/response shapes are unchanged, and the
+Knowledge Flow OpenAPI/client generation was rerun for the updated constraints.
 
 **Document tree metadata (2026-10-12).** The existing `{tree, truncated}` response
 and `DocumentTreeResult` remain unchanged. Folder records carry `folder` and optional internal `folder_id`; document leaves are compact JSON records with `uid`, `name`,

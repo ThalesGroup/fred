@@ -1679,6 +1679,8 @@
     "cancel": "Annuler",
     "chatTrace": {
       "documentTree": {
+        "metadataFor": "Métadonnées de {{name}}",
+        "truncated": "Tronqué",
         "unknown": "Non renseignée",
         "displayed_one": "{{count}} document affiché",
         "displayed_other": "{{count}} documents affichés",

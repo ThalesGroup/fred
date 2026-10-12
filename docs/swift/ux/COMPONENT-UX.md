@@ -826,19 +826,24 @@ how `ThoughtTrace` trims the rail when a reasoning row opens or closes the seque
   `RUNTIME-EXECUTION-CONTRACT.md` §8.21.
 
 - **Curated document tool views (updated 2026-10-12)** - `summarize_document`
-  renders its summary through `MarkdownRenderer`. `list_document_tree` shows folder
-  groups and compact document rows with name, format and localized arrival time.
-  Arrival labels use the configured `siteDisplayName` branding in both compact rows
-  and expanded metadata.
-  Expanding a document reveals title, creation/modification dates, format/MIME,
-  language, page/row counts, labels and source where available; only one document
-  expands at a time. Internal document and folder ids are never displayed.
-  The count refers to unique displayed documents, and the most recent known arrival
-  is labeled as the most recent displayed document. Partial trees retain an explicit
-  warning. Older plain text results remain readable with their historical upload-date
-  label, which is not reinterpreted as a Fred arrival date. Unsupported or malformed
-  results use the redacted generic tool status view. Timestamp and payload semantics
-  are defined in `openspec/specs/team-resource-spaces/spec.md`.
+  renders its summary through `MarkdownRenderer`. `list_document_tree` shows nested,
+  collapsible folders and compact file rows, using the shared monospace font for
+  folder and document names. Hovering or keyboard-focusing a file
+  reveals its metadata through the shared Tooltip, without an information icon,
+  inline dates or expanded document blocks. The panel shows title, stored arrival,
+  MIME type, language, page/row counts, labels and source where available; creation,
+  modification and format are omitted from this view. Arrival labels use the configured
+  `siteDisplayName`. Internal ids remain hidden. Counts refer to unique displayed
+  documents; the latest known displayed arrival is identified inside its tooltip.
+  A truncated result has only a discreet localized Truncated footer. Historical
+  upload dates keep their original meaning and missing dates remain unknown.
+  Timestamp and payload semantics are defined in `openspec/specs/team-resource-spaces/spec.md`.
+
+- **First-turn session handoff (2026-10-12)** - first submission owns its newly
+  created session while asynchronous router binding commits. Navigation, a new
+  conversation or unmount revokes pending submission ownership before it can affect
+  another conversation. Saved-session availability and deletion guards remain defined
+  in `openspec/specs/managed-conversations/spec.md`.
 
 - **Monaco replaced by `CodeBlock`, single header copy action (2026-07-22)** — manual UI
   testing found the Monaco JSON pane (forced `vs-dark`, editor chrome, imposed fixed

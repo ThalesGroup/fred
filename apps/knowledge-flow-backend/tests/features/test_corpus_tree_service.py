@@ -257,3 +257,16 @@ async def test_rendering_does_not_block_the_request_event_loop(monkeypatch):
     finally:
         release.set()
         await request
+
+
+@pytest.mark.asyncio
+async def test_metadata_rich_tree_fits_the_raised_default_budget():
+    docs = [_document(uid=f"doc-{i}", name=f"Document-{i:03d}.pdf") for i in range(50)]
+    service = _tree_service(tags=[_tag(tag_id="tag", full_path="Docs", item_ids=[doc.document_uid for doc in docs])], docs=docs)
+    response = await service.get_tree(_user(), DocumentTreeRequest())
+    assert 6000 < len(response.tree) <= 20_000
+    assert not response.truncated
+    assert all(f'"uid":"doc-{i}"' in response.tree for i in range(50))
+    limited = await service.get_tree(_user(), DocumentTreeRequest(max_chars=6000))
+    assert limited.truncated
+    assert len(limited.tree) <= 6000

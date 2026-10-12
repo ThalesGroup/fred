@@ -1679,6 +1679,8 @@
     "cancel": "Cancel",
     "chatTrace": {
       "documentTree": {
+        "metadataFor": "Metadata for {{name}}",
+        "truncated": "Truncated",
         "unknown": "Unknown",
         "displayed_one": "{{count}} document displayed",
         "displayed_other": "{{count}} documents displayed",
