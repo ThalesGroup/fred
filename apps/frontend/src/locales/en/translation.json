@@ -2701,6 +2701,7 @@
         "profileUnavailable": "No longer enabled for this team",
         "emptyState": "This team has no enabled models yet. Ask a platform admin to enable at least one model capability before configuring routing rules.",
         "save": "Save",
+        "saveSuccess": "Model routing saved.",
         "saveError": "Could not save the routing policy."
       },
       "parameters": {

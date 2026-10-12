@@ -41,10 +41,16 @@ const h = vi.hoisted(() => ({
   availableModels: undefined as AvailableModelProfileList | undefined,
   agentTemplates: undefined as AgentTemplateSummary[] | undefined,
   updateRoutingPolicy: vi.fn(() => ({ unwrap: () => Promise.resolve() })),
+  showSuccess: vi.fn(),
+  showError: vi.fn(),
 }));
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
+}));
+
+vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
+  useToast: () => ({ showSuccess: h.showSuccess, showError: h.showError }),
 }));
 
 vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
@@ -77,6 +83,8 @@ afterEach(() => {
   });
   container.remove();
   h.updateRoutingPolicy.mockClear();
+  h.showSuccess.mockClear();
+  h.showError.mockClear();
   h.policy = undefined;
   h.availableModels = undefined;
   h.agentTemplates = undefined;
@@ -196,6 +204,11 @@ describe("TeamSettingsRouting", () => {
   it("save PATCHes the picked default profile id and current overrides", async () => {
     h.policy = { team_id: "team-1", version: 0, chat_default_profile_id: null, agent_profile_overrides: {} };
     h.availableModels = ONE_MODEL;
+    let resolveSave!: () => void;
+    const saved = new Promise<void>((resolve) => {
+      resolveSave = resolve;
+    });
+    h.updateRoutingPolicy.mockReturnValueOnce({ unwrap: () => saved });
     render(<TeamSettingsRouting team={TEAM} canWrite={true} />);
 
     const defaultTrigger = selectTriggers()[0];
@@ -215,6 +228,13 @@ describe("TeamSettingsRouting", () => {
       teamId: "team-1",
       updateTeamRoutingPolicyRequest: { chat_default_profile_id: "chat.openai.gpt5", agent_profile_overrides: {} },
     });
+    expect(h.showSuccess).not.toHaveBeenCalled();
+    await act(async () => {
+      resolveSave();
+      await saved;
+    });
+    expect(h.showSuccess).toHaveBeenCalledExactlyOnceWith({ summary: "rework.teamSettings.routing.saveSuccess" });
+    expect(h.showError).not.toHaveBeenCalled();
   });
 
   it("shows the server's 400 detail inline when the save is rejected", async () => {
@@ -236,6 +256,8 @@ describe("TeamSettingsRouting", () => {
     });
 
     expect(container.textContent).toContain("may not use profile id(s) ['ghost']");
+    expect(h.showError).toHaveBeenCalledExactlyOnceWith({ summary: "rework.teamSettings.routing.saveError" });
+    expect(h.showSuccess).not.toHaveBeenCalled();
   });
 
   it("round-trips an agent-scoped override and saves it keyed by agent_id", async () => {
@@ -328,6 +350,7 @@ describe("TeamSettingsRouting", () => {
 
     expect(h.updateRoutingPolicy).not.toHaveBeenCalled();
     expect(container.textContent).toContain("rework.teamSettings.routing.agentOverrides.incompleteRow");
+    expect(h.showSuccess).not.toHaveBeenCalled();
   });
 
   it("does not block save on a fully untouched blank row (just silently excluded)", async () => {

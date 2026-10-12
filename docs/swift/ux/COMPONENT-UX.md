@@ -2876,6 +2876,9 @@ high-information-density, zero decoration, color used only as a semantic signal 
 
 Error toasts additionally expose a copy-to-clipboard icon button (`content_copy`) for developer convenience.
 
+Team model routing shows a success toast after the save succeeds, or an error
+toast when it fails, keeping the server's error detail inline in the form.
+
 #### Open UX issues
 
 _(none — design approved at implementation)_

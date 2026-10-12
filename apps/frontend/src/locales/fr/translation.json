@@ -2701,6 +2701,7 @@
         "profileUnavailable": "Plus activé pour cette équipe",
         "emptyState": "Cette équipe n'a encore aucun modèle activé. Demandez à un administrateur de la plateforme d'activer au moins une capability de modèle avant de configurer des règles de routage.",
         "save": "Enregistrer",
+        "saveSuccess": "Routage des modèles enregistré.",
         "saveError": "Impossible d'enregistrer la politique de routage."
       },
       "parameters": {
