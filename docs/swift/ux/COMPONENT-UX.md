@@ -130,9 +130,11 @@ inside Dialog, and option selection does not confirm the Dialog. Escape, Tab and
 Enter belong to the topmost modal only (`isTopmostModal` in `utils/Portal.tsx`,
 any `dialog` or `alertdialog` with `aria-modal`): a `ConfirmationDialog` opened
 over a Dialog gets the keyboard, and an Escape already handled is ignored.
-Opt-in props:
+Width comes from `maxWidth` (px, capped at 90vw). Opt-in props:
 `actionsAddon` (e.g. a checkbox) renders in the action bar before the buttons;
-`dividers` rules off the header and action bar with `outline-variant`;
+`footerStart` puts content (a hint, a loading row, a secondary action such as
+a removal) at the far left of the action bar, opposite cancel/confirm, first in
+Tab order but never the opening focus; `dividers` rules off the header and action bar with `outline-variant`;
 `initialFocus="dialog"` focuses the dialog itself rather than its first
 control, so a long body opens at its top; `hideConfirm` leaves a text Cancel as
 the only action.
@@ -1157,6 +1159,9 @@ The name `small` is scoped to this component. On the shared scale, 24px is
   caller classes alongside generated classes and now has a visible two-pixel
   `:focus-visible` outline. Its neutral tonal colors use defined on-surface and
   on-surface-retreat state layers for hover and press.
+  An optional `iconSize` keeps a smaller glyph tier in a larger button, e.g. the
+  `AgentCard` more menu: a 40px target around the 20px glyph, offset so the glyph
+  stays where the 32px button had it.
 - Material and custom icons are decorative by default. A standalone informative icon
   receives only an explicit caller-owned accessible name; glyph identifiers no longer
   become user-facing labels. The unsupported legacy `infos` name was corrected to
@@ -2146,6 +2151,7 @@ Displays one managed agent instance. Current layout (#2096, superseding the #207
 - The `Tooltip` atom gained an optional `content: ReactNode` prop (alongside the existing `text: string`) for this rich variant — sizes to content instead of forcing a single nowrap line, same hover/`:focus-within`/above-anchor positioning as every other tooltip in the app.
 - Disabled cards render with muted colours, driven by the existing `data-enabled` CSS custom-property cascade (unchanged by #2096).
 - The Chat button's hover treatment (rotating conic-gradient border) is unchanged from #2076.
+- **Menu item tooltips (2026-10-12).** `OptionModel.tooltip` renders the shared `Tooltip` over the whole row (`placement="left"`, new `fill` prop) instead of a native `title`, so a greyed item's reason always shows on hover — e.g. Publish blocked by a private team, the quota or an administrator-only agent type. Keyboard and screen-reader users get the same text through `aria-describedby` on the `<li>`, pointing at an always-rendered `hidden` span: the menu keeps DOM focus on the list (`aria-activedescendant`), so the Tooltip itself never receives focus.
 
 #### Open UX issues
 
@@ -2169,7 +2175,7 @@ so enabling the charter keeps nominated contacts visible before acceptance.
 These avatars do not indicate administrator authority; the charter gate uses
 the accepted administrator roster from the per-team detail response.
 
-Displays one team in the marketplace (`MarketplaceTeams`). The footer's join
+Displays one team in the marketplace (`MarketplaceTeams`). Corner radius `radius-ms`, like `AgentCard` and `PromptCard`. The footer's join
 affordance (TEAM-09, narrowed to 2 states 2026-07-26) is driven entirely by
 the team's `joining_mode`, gated on `!team.is_member`:
 
@@ -2321,6 +2327,13 @@ hardcoded class — same escape-hatch pattern as `DataTable`'s own
 `var(--surface-container-lowest)`, since they already sit inside a
 `surface-container` `form-section` and the default pill color would
 otherwise blend into it.
+
+**`ButtonGroupItem` — `selectedColor` (2026-10-12).** Optional per-item
+`selectedColor: "success" | "error"` fills the item with `--success` /
+`--on-success` or `--error` / `--on-error` while it is selected
+(`data-selected-color`); items without it keep `secondary-container`. Used by
+the admin Marketplaces page: Enabled/On reads success, Disabled/Off error,
+Default stays neutral.
 
 ### `TeamSettingsParameters` — team banner upload
 
@@ -2667,7 +2680,9 @@ closure of the same logic. Sizing: height `2rem` (`32px`), `label-medium`
 text, default (inactive) border `1px solid outline` — was `0.5px
 outline-variant`, a size/color pair that didn't match any other chip-style
 control in the app. Chip padding-left/right `spacing-s` (`12px`, was
-`spacing-xs`/`8px`). That geometry now lives in one `%pill` placeholder
+`spacing-xs`/`8px`). Optional `size="small"` (2026-10-12) is used by the members
+table: height `1.5rem`, `label-small`, padding `spacing-xs`, gap `spacing-2xs`; the
+dialog keeps the default. That geometry now lives in one `%pill` placeholder
 `@extend`ed by both the toggles and the baseline badge below, so the two
 cannot drift apart in the same row.
 
