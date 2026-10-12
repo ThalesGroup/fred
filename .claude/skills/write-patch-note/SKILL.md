@@ -5,7 +5,7 @@ description: Draft a short bilingual, user-facing Fred patch note from merged ch
 
 # Write a patch note
 
-Draft the content for the patch-note announcement editor. It takes a separate plain-text title and Markdown body for each locale (`en` and `fr`). Return a proposal for review; do not create, enable, or publish an announcement.
+Generate text to paste into patch-note announcements on Fred platforms. Each locale (`fr` and `en`) needs a separate plain-text title and Markdown body. Do not create, enable, or publish an announcement.
 
 ## Select the changes
 
@@ -23,6 +23,6 @@ Draft the content for the patch-note announcement editor. It takes a separate pl
 - Keep a natural editorial voice that makes the benefit clear and invites reading without hype. Emojis are optional; use no more than one or two in the whole note, only where they help. Avoid an emoji on every bullet and repetitive sentence openings.
 - Use the same verified claims in both languages, written naturally rather than word for word. Give each language a specific, concise, inviting title. Do not invent a destination version; include one only if the user supplied or confirmed it.
 
-## Deliver for the editor
+## Deliver the notes
 
-Return four clearly labeled, copyable fields: English title, English Markdown body, French title, French Markdown body. Titles are plain text, at most 200 characters. Bodies are Markdown, at most 20,000 characters each, as required by the [announcement contract](../../../docs/swift/design/CONTROL-PLANE-PRODUCT-CONTRACT.md). Do not repeat the title as a body heading. Use simple headings and bullets if they aid scanning. Keep source links or uncertainty notes outside the four fields; mention the selected tag and end point separately so the user can verify coverage.
+Return exactly two locale blocks, French then English. In each block, label the plain-text title and place the Markdown body in its own fenced block, so both fields can be copied directly. Titles are at most 200 characters and bodies at most 20,000 characters, as required by the [announcement contract](../../../docs/swift/design/CONTROL-PLANE-PRODUCT-CONTRACT.md). Do not repeat the title as a body heading. Use simple headings and bullets if they aid scanning. Do not add a preface, conclusion, source links, version-range report, or drafting commentary to the output.
