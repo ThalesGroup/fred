@@ -2,6 +2,7 @@
 schema: 1
 title: "Optional Helm-managed Horizontal Pod Autoscalers"
 impact: minor
+after: [000-v3-4-0-release-preparation]
 configuration: production
 configuration_reason: "The Fred chart adds applications.<name>.autoscaling settings and their generated schema; optional activation requires cluster metrics and container resource requests."
 ---

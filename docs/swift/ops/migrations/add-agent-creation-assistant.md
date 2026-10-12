@@ -2,6 +2,7 @@
 schema: 1
 title: "Creation assistant: draft an agent from a plain-language description"
 impact: minor
+after: [add-patch-note-announcements]
 configuration: local
 configuration_reason: "Comments only: apps/fred-agents/config/models_catalog.yaml and deploy/charts/fred/values.yaml document the new optional reasoning_efforts profile field with a commented GPT-5.1 example; no key, value or default changes, so production values are unaffected. The assistant's model and reasoning effort are chosen in the admin UI, and without a choice each pod's default chat profile applies."
 ---
