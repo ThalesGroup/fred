@@ -38,6 +38,7 @@ from fred_core.common.fastapi_handlers import (
 )
 from fred_core.diagnostics import install_gc_diagnostics
 from fred_core.kpi import KPIMiddleware
+from fred_core.logs.http import REFERENCE_HEADERS, RequestLoggingFastAPI
 from fred_core.scheduler import SchedulerBackend
 from pydantic import BaseModel
 
@@ -261,17 +262,17 @@ async def _reconcile_team_admin_charter_roles(container) -> None:
 
 def create_app() -> FastAPI:
     configuration = load_configuration()
-    env_file = get_loaded_env_file_path() or "<unset>"
-    config_file = get_loaded_config_file_path() or "<unset>"
     log_setup(
         service_name="control-plane",
         log_level=configuration.app.log_level,
+        log_format=configuration.app.log_format,
+        service_role="api",
         store=build_log_store(
             log_store_config=configuration.storage.log_store,
             opensearch_config=configuration.storage.opensearch,
         ),
     )
-    logger.info("Environment file: %s | Configuration file: %s", env_file, config_file)
+    logger.info("Application configuration ready")
 
     docs_enabled = read_env_bool("PRODUCTION_FASTAPI_DOCS_ENABLED", default=True)
     container = build_application_container(configuration)
@@ -286,6 +287,18 @@ def create_app() -> FastAPI:
         gc_diagnostics = install_gc_diagnostics()
         container.start_kpi_tasks()
         await enforce_account_status(container.get_rebac_engine())
+        from fred_core.security.platform_access.access_control import (
+            initialize_platform_access,
+            platform_access_available,
+        )
+
+        if platform_access_available(configuration.security):
+            await initialize_platform_access(
+                configuration.security,
+                container.get_pg_async_engine(),
+                container.get_rebac_engine(),
+                authority=True,
+            )
         await _reconcile_team_organization_relations(container)
         await _reconcile_team_admin_charter_roles(container)
         await _seed_capability_registration_defaults(container)
@@ -296,7 +309,7 @@ def create_app() -> FastAPI:
             await container.shutdown()
             logger.info("[MAIN] Lifespan exit: orderly shutdown.")
 
-    app = FastAPI(
+    app = RequestLoggingFastAPI(
         docs_url=f"{configuration.app.base_url}/docs" if docs_enabled else None,
         redoc_url=f"{configuration.app.base_url}/redoc" if docs_enabled else None,
         openapi_url=f"{configuration.app.base_url}/openapi.json"
@@ -317,13 +330,14 @@ def create_app() -> FastAPI:
 
     app.dependency_overrides[get_config] = get_application_configuration
 
-    app.add_middleware(
+    app.add_request_middleware(
         CORSMiddleware,
         allow_origins=allowed_origins,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Content-Type", "Authorization"],
+        expose_headers=REFERENCE_HEADERS,
     )
-    app.add_middleware(KPIMiddleware, kpi=container.get_kpi_writer)
+    app.add_request_middleware(KPIMiddleware, kpi=container.get_kpi_writer)
 
     router = APIRouter(prefix=configuration.app.base_url)
 
@@ -423,6 +437,11 @@ def create_app() -> FastAPI:
             run_id=handle.run_id,
         )
 
+    from control_plane_backend.platform_access.api import (
+        router as platform_access_router,
+    )
+
+    router.include_router(platform_access_router)
     router.include_router(users_router)
     router.include_router(teams_router)
     router.include_router(applications_router)

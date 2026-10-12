@@ -173,33 +173,34 @@ class GcsFilesystem(BaseFilesystem):
         list_prefix = f"{full_prefix.rstrip('/')}/" if full_prefix else ""
         logger.info("[GCS_LIST] bucket=%s", self.bucket_name)
 
-        all_blobs = await asyncio.to_thread(
-            lambda: list(self.client.list_blobs(self.bucket_name, prefix=list_prefix))
-        )
-        results: List[FilesystemResourceInfoResult] = []
-
-        for blob in all_blobs:
-            # Skip the zero-byte directory markers themselves; their presence is
-            # reflected through the inferred-directory pass below.
-            if blob.name.endswith("/"):
-                continue
-            results.append(
-                FilesystemResourceInfoResult(
-                    path=blob.name,
-                    size=blob.size,
-                    type=FilesystemResourceInfo.FILE,
-                    modified=blob.updated,
-                )
+        def _list() -> List[FilesystemResourceInfoResult]:
+            # Keep SDK I/O and metadata conversion off the request event loop.
+            all_blobs = list(
+                self.client.list_blobs(self.bucket_name, prefix=list_prefix)
             )
+            results: List[FilesystemResourceInfoResult] = []
 
-        dirs: Set[str] = set()
-        for blob in all_blobs:
-            parts = blob.name.rstrip("/").split("/")
-            for i in range(1, len(parts)):
-                dirs.add("/".join(parts[:i]))
+            for blob in all_blobs:
+                # Skip the zero-byte directory markers themselves; their presence is
+                # reflected through the inferred-directory pass below.
+                if blob.name.endswith("/"):
+                    continue
+                results.append(
+                    FilesystemResourceInfoResult(
+                        path=blob.name,
+                        size=blob.size,
+                        type=FilesystemResourceInfo.FILE,
+                        modified=blob.updated,
+                    )
+                )
 
-        for d in dirs:
-            if not any(r.path == d and r.is_dir() for r in results):
+            dirs: Set[str] = set()
+            for blob in all_blobs:
+                parts = blob.name.rstrip("/").split("/")
+                for i in range(1, len(parts)):
+                    dirs.add("/".join(parts[:i]))
+
+            for d in dirs:
                 results.append(
                     FilesystemResourceInfoResult(
                         path=d,
@@ -209,8 +210,10 @@ class GcsFilesystem(BaseFilesystem):
                     )
                 )
 
-        results.sort(key=lambda x: x.path)
-        return results
+            results.sort(key=lambda x: x.path)
+            return results
+
+        return await asyncio.to_thread(_list)
 
     async def delete(self, path: str) -> None:
         """

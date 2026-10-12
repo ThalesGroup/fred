@@ -27,6 +27,10 @@ from typing import Any, Dict, Optional, Tuple
 
 import httpx
 from fred_core.common import ModelConfiguration
+from fred_core.model.diagnostics import (
+    observe_async_model_response,
+    observe_model_response,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -257,10 +261,12 @@ def get_shared_stack(
             _SYNC_CLIENT = httpx.Client(
                 limits=_SHARED_TUNING.limits,
                 timeout=_SHARED_TUNING.timeout,
+                event_hooks={"response": [observe_model_response]},
             )
             _ASYNC_CLIENT = httpx.AsyncClient(
                 limits=_SHARED_TUNING.limits,
                 timeout=_SHARED_TUNING.timeout,
+                event_hooks={"response": [observe_async_model_response]},
             )
 
             atexit.register(shutdown_shared_clients)
@@ -280,8 +286,7 @@ def get_shared_stack(
             )
             logger.debug(
                 "[NET][TUNING] provider=%s applied_limits={max=%s keepalive=%s exp=%ss} "
-                "applied_timeout={connect=%ss read=%ss write=%ss pool=%ss} "
-                "from_settings=%s",
+                "applied_timeout={connect=%ss read=%ss write=%ss pool=%ss}",
                 cfg.provider,
                 _SHARED_TUNING.limits.max_connections,
                 _SHARED_TUNING.limits.max_keepalive_connections,
@@ -290,7 +295,6 @@ def get_shared_stack(
                 _SHARED_TUNING.timeout.read,
                 _SHARED_TUNING.timeout.write,
                 _SHARED_TUNING.timeout.pool,
-                effective_settings,
             )
         else:
             if requested != _SHARED_TUNING:

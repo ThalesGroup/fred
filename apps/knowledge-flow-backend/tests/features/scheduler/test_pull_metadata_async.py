@@ -18,6 +18,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+from fred_core import KeycloakUser
 from temporalio.testing import ActivityEnvironment
 
 from knowledge_flow_backend import application_context
@@ -34,7 +35,7 @@ def _prepare(monkeypatch, fetch):
     monkeypatch.setattr(ingestion_service, "get_ingestion_service", lambda: service)
     monkeypatch.setattr(pull_files_activities, "emit_temporal_activity_queue_wait_kpi", Mock())
     monkeypatch.setattr(pull_files_activities, "emit_temporal_activity_result_kpis", Mock())
-    file = SimpleNamespace(external_path="document.pdf", source_tag="source", processed_by=Mock(), tags=[], profile="medium")
+    file = SimpleNamespace(external_path="document.pdf", source_tag="source", processed_by=KeycloakUser(uid="pull-user", username="pull-user", roles=[]), tags=[], profile="medium")
     return file, service, metadata
 
 

@@ -80,6 +80,9 @@ from fred_core.common import (
 from fred_core.logs.log_structures import LogStorageConfig
 from fred_core.scheduler.backend import SchedulerBackend
 from fred_core.security.structure import SecurityConfiguration
+from fred_pod.common import RUNTIME_ID_PATTERN, PodAppIdentity
+from fred_pod.common.structures import LogOutputFormat
+from fred_sdk.contracts.web_research import WebResearchDeploymentConfig
 from pydantic import BaseModel, Field, PrivateAttr, model_validator
 
 from ..runtime_context import RuntimeTimeouts
@@ -89,7 +92,7 @@ from ..runtime_context import RuntimeTimeouts
 # ---------------------------------------------------------------------------
 
 
-class PodAppConfig(BaseModel):
+class PodAppConfig(PodAppIdentity):
     """
     Identity and HTTP server settings for an agent pod.
 
@@ -108,9 +111,11 @@ class PodAppConfig(BaseModel):
     - `PodAppConfig(runtime_id="my-agents", base_url="/pod/v1", port=8000)`
     """
 
+    # The identity every pod shares (fred-pod), restated only to keep the
+    # agent-specific obligation in this pod's published schema.
     runtime_id: str = Field(
         ...,
-        pattern=r"^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+        pattern=RUNTIME_ID_PATTERN,
         description=(
             "Slug identifying this pod across every telemetry stream: the KPI "
             "`service` dimension, the `runtime_id` KPI dimension, and the "
@@ -126,6 +131,7 @@ class PodAppConfig(BaseModel):
     host: str = "127.0.0.1"
     port: int = 8000
     log_level: str = "info"
+    log_format: LogOutputFormat = "text"
     limit_concurrency: int | None = Field(
         default=None,
         ge=1,
@@ -458,6 +464,9 @@ class AgentPodConfig(BaseModel):
     storage: PodStorageConfig = Field(default_factory=PodStorageConfig)
     scheduler: PodSchedulerConfig = Field(default_factory=PodSchedulerConfig)
     platform: PodPlatformConfig = Field(default_factory=PodPlatformConfig)
+    web_research: WebResearchDeploymentConfig = Field(
+        default_factory=WebResearchDeploymentConfig
+    )
 
     def set_platform_prompt_file(self, file: Any) -> None:
         """

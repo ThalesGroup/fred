@@ -1,3 +1,4 @@
+import { getConfig } from "../../../../../../common/config";
 // Copyright Thales 2026
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -109,6 +110,14 @@ export default function AdminNavbar() {
       requires: "admin",
     },
   ];
+  if (getConfig()?.platform_access_enabled)
+    allItems.push({
+      type: "link",
+      label: t("rework.platformAccess.title"),
+      icon: { category: "outlined", type: "lock", filled: false },
+      linkProps: { to: "/admin/platform-access" },
+      requires: "admin",
+    });
   const navigationItems: NavigationMenuItemProps[] = allItems.filter((item) =>
     isProtectedAllowed(item.requires, capabilities),
   );

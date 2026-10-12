@@ -31,8 +31,21 @@ temps de la conversation**, et n'y accède pas depuis une autre. Pour un documen
 durable et partagé, passez par les [ressources](/help/fr/features/resources) de
 l'équipe.
 
-Joindre un fichier suppose que l'agent dispose de la fonction correspondante ;
-sinon la pièce jointe est ignorée.
+Joindre un fichier suppose que l'agent dispose du pack **Pièces jointes** ;
+sinon le trombone n'apparaît pas.
+
+## Choisir les sources de la réponse
+
+**Documents uniquement** demande à l'agent de répondre à partir des documents,
+sans compléter les informations manquantes par ses connaissances générales.
+Ce mode inclut les pièces jointes de la conversation et les documents de l'équipe
+lorsque les deux sources sont activées. Si l'agent n'autorise qu'une source, seule
+celle-ci est recherchée. Si les documents ne contiennent pas la réponse, l'agent
+reçoit la consigne de le signaler.
+
+**Connaissances générales + documents** combine les sources documentaires
+activées et les connaissances générales. **Connaissances générales** ne lance
+pas de recherche documentaire.
 
 ## Insérer un prompt
 
@@ -42,6 +55,13 @@ raccourci pour ce message, pas un réglage durable de la conversation.
 
 Un prompt porteur d'une commande se lance plus court encore : tapez `/` dans un
 champ vide — voir [Les commandes](/help/fr/features/commands).
+
+## Reprendre un message envoyé
+
+Dans un champ vide, la flèche du haut remet votre dernier message de la
+conversation ; appuyez encore pour remonter, la flèche du bas pour revenir.
+Modifiez le texte puis envoyez-le. Un message lancé par une commande revient
+sous sa forme `/commande`.
 
 ## Récupérer un document produit
 

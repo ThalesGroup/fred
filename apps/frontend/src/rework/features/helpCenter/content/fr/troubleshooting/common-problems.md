@@ -56,8 +56,8 @@ Il est **suspendu**. Trois causes :
 - Une fonction dont il dépend a été **désactivée** pour l'équipe, ou l'accès de
   l'équipe y a été **retiré** : seule la plateforme peut le rétablir
   (voir [Administration](/help/fr/features/administration)).
-- La **configuration** d'une de ses fonctions n'est plus valide : décochez la
-  fonction sur l'agent, enregistrez, recochez-la, enregistrez à nouveau.
+- La **configuration** d'une de ses fonctions n'est plus valide : désactivez la
+  fonction sur l'agent, enregistrez, réactivez-la, enregistrez à nouveau.
 
 Cas voisin : un agent **copié dans une autre équipe** perd ses choix propres à
 l'équipe d'origine (bibliothèques, dossiers, documents) et les capacités que
@@ -72,8 +72,8 @@ plus tard.
 
 ## Ma pièce jointe est refusée
 
-Vérifiez le format. Vérifiez aussi que l'agent dispose bien de la fonction qui
-exploite les pièces jointes — sans elle, le fichier est ignoré. Pour un document
+Vérifiez le format. Vérifiez aussi que l'agent dispose bien du pack **Pièces
+jointes** — sans lui, le trombone n'apparaît pas. Pour un document
 destiné à durer, passez par les [ressources](/help/fr/features/resources).
 
 ## Une conversation ne se charge pas

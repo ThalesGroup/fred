@@ -18,7 +18,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..user_models import GcuVersionsType, UserRow
+from ..user_models import UserRow
 
 
 class AmbiguousUsernameError(ValueError):
@@ -37,10 +37,10 @@ class BaseUserStore(ABC):
     async def update_gcu_version(
         self,
         user_id: UUID,
-        gcu_version: str | GcuVersionsType,
+        gcu_version: str,
         session: AsyncSession | None = None,
     ) -> None:
-        pass
+        """Record terms acceptance using the configured version string."""
 
     @abstractmethod
     async def find_user_by_id(

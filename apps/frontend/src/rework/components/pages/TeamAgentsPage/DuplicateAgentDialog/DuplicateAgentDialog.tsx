@@ -17,6 +17,7 @@ import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import { Portal } from "@shared/utils/Portal.tsx";
+import { isAgentNameTaken } from "../agentNames.ts";
 import styles from "./DuplicateAgentDialog.module.css";
 
 interface DuplicateAgentDialogProps {
@@ -24,24 +25,34 @@ interface DuplicateAgentDialogProps {
   /** The source agent's current display name, prefilled as the starting point. */
   initialName: string;
   isSubmitting?: boolean;
+  /** Normalised names already used in the team (see agentNames.ts). */
+  takenNames?: ReadonlySet<string>;
   onCancel: () => void;
   onConfirm: (newName: string) => void;
 }
+
+const NO_NAMES: ReadonlySet<string> = new Set();
 
 export default function DuplicateAgentDialog({
   open,
   initialName,
   isSubmitting = false,
+  takenNames = NO_NAMES,
   onCancel,
   onConfirm,
 }: DuplicateAgentDialogProps) {
   const { t } = useTranslation();
   const [name, setName] = useState(initialName);
+  // Checked when the field is left or Enter is pressed, never while typing.
+  const [nameChecked, setNameChecked] = useState(true);
 
   // Reset to the source name each time the dialog reopens (e.g. for a
   // different agent, or reopened after a cancel).
   useEffect(() => {
-    if (open) setName(initialName);
+    if (open) {
+      setName(initialName);
+      setNameChecked(true);
+    }
   }, [open, initialName]);
 
   useEffect(() => {
@@ -56,7 +67,8 @@ export default function DuplicateAgentDialog({
   if (!open) return null;
 
   const trimmedName = name.trim();
-  const canConfirm = trimmedName.length > 0 && !isSubmitting;
+  const nameTaken = isAgentNameTaken(name, takenNames);
+  const canConfirm = trimmedName.length > 0 && !isSubmitting && !(nameChecked && nameTaken);
 
   return (
     <Portal id="modal-portal">
@@ -75,10 +87,17 @@ export default function DuplicateAgentDialog({
             <TextInput
               label={t("rework.agentCard.duplicateDialog.nameLabel")}
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => {
+                setName(e.target.value);
+                setNameChecked(false);
+              }}
+              onBlur={() => setNameChecked(true)}
+              error={nameChecked && nameTaken ? t("rework.teams.formAgent.fields.name.taken") : undefined}
               autoFocus
               onKeyDown={(e) => {
-                if (e.key === "Enter" && canConfirm) onConfirm(trimmedName);
+                if (e.key !== "Enter") return;
+                setNameChecked(true);
+                if (canConfirm && !nameTaken) onConfirm(trimmedName);
               }}
             />
           </div>

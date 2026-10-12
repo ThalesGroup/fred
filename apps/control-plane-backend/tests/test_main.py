@@ -26,6 +26,8 @@ Ref: docs/backlog/BACKLOG.md §3d — managed agent CRUD, enrollment, update, tu
 
 from __future__ import annotations
 
+import logging
+from collections.abc import Iterator
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -62,7 +64,10 @@ from control_plane_backend.product.service import (
 from control_plane_backend.prompts.category_store import PromptCategoryRecord
 from control_plane_backend.prompts.store import PromptCommandRecord, PromptRecord
 from control_plane_backend.sessions.attachment_store import SessionAttachmentRecord
-from control_plane_backend.sessions.store import SessionMetadataRecord
+from control_plane_backend.sessions.store import (
+    SessionMetadataRecord,
+    SessionMetadataStore,
+)
 from control_plane_backend.teams.schemas import Team
 from control_plane_backend.users.schemas import PlatformRoleRelation, UserSummary
 from fred_core import (
@@ -76,6 +81,7 @@ from fred_core import (
     get_current_user,
 )
 from fred_core.common import TeamId, personal_team_id
+from fred_core.logs.processors import ContextSnapshot
 from fred_core.security import oidc
 from fred_core.security.rebac.noop_engine import NoopRebacEngine
 from fred_core.teams.metadata_store import TeamMetadata
@@ -95,6 +101,25 @@ from sqlalchemy.ext.asyncio import create_async_engine
 @pytest.fixture(autouse=True)
 def _use_test_configuration(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("CONFIG_FILE", "./config/configuration_test.yaml")
+
+
+@pytest.fixture
+def request_completions() -> Iterator[list[ContextSnapshot]]:
+    records: list[ContextSnapshot] = []
+
+    class CompletionHandler(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            snapshot = getattr(record, "_fred_snapshot", None)
+            assert isinstance(snapshot, ContextSnapshot)
+            records.append(snapshot)
+
+    handler = CompletionHandler()
+    logger = logging.getLogger("http")
+    logger.addHandler(handler)
+    try:
+        yield records
+    finally:
+        logger.removeHandler(handler)
 
 
 _PERSONAL_TEAM_ID = personal_team_id("admin")
@@ -269,7 +294,9 @@ class _FakeSessionMetadataStore:
     def __init__(self, records: list[SessionMetadataRecord] | None = None) -> None:
         self._records: list[SessionMetadataRecord] = list(records or [])
 
-    async def create(self, record: SessionMetadataRecord) -> SessionMetadataRecord:
+    async def create(
+        self, record: SessionMetadataRecord, *, capture_agent_snapshot: bool = False
+    ) -> SessionMetadataRecord:
         from control_plane_backend.sessions.store import (
             SessionMetadataAlreadyExistsError,
         )
@@ -373,7 +400,9 @@ class _FakeSessionMetadataStore:
 class _DuplicateSessionMetadataStore:
     """Offline stand-in that always reproduces one duplicate session conflict."""
 
-    async def create(self, _record: SessionMetadataRecord) -> SessionMetadataRecord:
+    async def create(
+        self, _record: SessionMetadataRecord, *, capture_agent_snapshot: bool = False
+    ) -> SessionMetadataRecord:
         """Raise the duplicate-session store error expected by the API layer."""
         from control_plane_backend.sessions.store import (
             SessionMetadataAlreadyExistsError,
@@ -2157,6 +2186,7 @@ async def test_prepare_execution_resolves_context_prompts_within_caller_scope(
 @pytest.mark.asyncio
 async def test_prepare_execution_rejects_session_owned_by_another_user(
     monkeypatch: pytest.MonkeyPatch,
+    request_completions: list[ContextSnapshot],
 ) -> None:
     """A session created by a different user must never lend its context
     prompts to this caller's execution — even within the same team and for
@@ -2217,6 +2247,9 @@ async def test_prepare_execution_rejects_session_owned_by_another_user(
     # Never leak the prompt text or the owning identity in the error.
     assert "Secret." not in resp.text
     assert "someone-else" not in resp.text
+    assert len(request_completions) == 1
+    assert "session_id" not in request_completions[0].values
+    assert request_completions[0].values["agent_instance_id"] == "inst-42"
 
 
 @pytest.mark.asyncio
@@ -2939,6 +2972,7 @@ async def test_patch_team_session_updates_title_and_activity(
 @pytest.mark.asyncio
 async def test_post_team_session_returns_conflict_for_duplicate_session(
     monkeypatch: pytest.MonkeyPatch,
+    request_completions: list[ContextSnapshot],
 ) -> None:
     """
     Verify duplicate control-plane session creation returns HTTP 409.
@@ -2978,6 +3012,9 @@ async def test_post_team_session_returns_conflict_for_duplicate_session(
 
     assert resp.status_code == 409
     assert resp.json()["detail"] == "Session 'session-duplicate' already exists."
+    assert len(request_completions) == 1
+    assert "session_id" not in request_completions[0].values
+    assert "agent_instance_id" not in request_completions[0].values
 
 
 @pytest.mark.asyncio
@@ -3017,23 +3054,18 @@ async def test_delete_team_session_returns_404_for_other_user_session(
 
 
 @pytest.mark.asyncio
-async def test_create_session_persists_source_runtime_id_from_live_instance() -> None:
-    """`create_session` must capture `source_runtime_id` from the (currently
-    live) agent instance, so erasure can later resolve the runtime even if the
-    instance is deleted before the session is (issue #2089, RFC §7)."""
-    session_store = _FakeSessionMetadataStore([])
-    deps = _build_erasure_deps(
-        session_store,
-        _FakeSessionAttachmentStore([]),
-        agent_instance_store=_FakeAgentInstanceStore(
-            [
-                _make_record(
-                    agent_instance_id="instance-1", source_runtime_id="runtime-a"
-                )
-            ]
-        ),
+async def test_create_session_persists_source_runtime_id_from_live_instance(
+    control_plane_sql_engine,
+) -> None:
+    """Capture routing and name through the same transaction as session creation."""
+    session_store = SessionMetadataStore(control_plane_sql_engine)
+    agent_store = AgentInstanceStore(control_plane_sql_engine)
+    await agent_store.create(
+        _make_record(agent_instance_id="instance-1", source_runtime_id="runtime-a")
     )
-
+    deps = _build_erasure_deps(
+        session_store, _FakeSessionAttachmentStore([]), agent_instance_store=agent_store
+    )
     await product_service.create_session(
         KeycloakUser(uid="admin", username="admin", roles=[]),
         TeamId("personal"),
@@ -3042,9 +3074,9 @@ async def test_create_session_persists_source_runtime_id_from_live_instance() ->
         ),
         deps,
     )
-
-    assert len(session_store._records) == 1
-    assert session_store._records[0].source_runtime_id == "runtime-a"
+    stored = await session_store.get("session-1")
+    assert stored is not None and stored.source_runtime_id == "runtime-a"
+    assert stored.agent_display_name == "Echo Team Agent"
 
 
 @pytest.mark.asyncio
@@ -3273,10 +3305,10 @@ async def _no_temporal() -> Any:
 
 
 def _build_erasure_deps(
-    session_store: _FakeSessionMetadataStore,
+    session_store: _FakeSessionMetadataStore | SessionMetadataStore,
     attachment_store: _FakeSessionAttachmentStore,
     *,
-    agent_instance_store: _FakeAgentInstanceStore | None = None,
+    agent_instance_store: _FakeAgentInstanceStore | AgentInstanceStore | None = None,
     configuration: Any = None,
     kpi_store: _FakeKPIStore | None = None,
     policy_catalog: Any = None,

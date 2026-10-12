@@ -798,6 +798,16 @@ how `ThoughtTrace` trims the rail when a reasoning row opens or closes the seque
 
 - **Close affordance** — `InlineDrawer` already uses the `Icon`-atom close button.
 
+- **Native web research view (2026-10-06)** — `web_search` and `fetch_url`
+  get their own label, show the query or public URL on the row with
+  an `N sources` chip, and open `WebResearchToolDetail`: each page as an external
+  http(s)-only link with host, snippet, collapsible extracted text and localized per-page
+  or tool error codes. Query and URL are the step's user-facing subject, so they are the
+  one argument exception to the redacted row. Each successful call also emits
+  `LinkPart(kind="citation")` parts; `CitationLinkChip` renders them under the answer as
+  plain http(s) anchors (no Fred token), while every other link kind stays an
+  authenticated `ArtifactLinkChip` download.
+
 - **Curated tool-result views for SQL and RAG (2026-07-22)** — tool call/result entries no
   longer always render the blanket-redacted `{action, status, latency}` JSON (from
   #1774/CHAT-13). Two common, specifically useful content shapes are now recognized and
@@ -848,7 +858,7 @@ how `ThoughtTrace` trims the rail when a reasoning row opens or closes the seque
 
 #### Resolved
 
-_(none yet)_
+- **Soft elevation (2026-10-10)** — the user bubble takes the new `--shadow-xs` token (`0 1px 2px`, black 8% light / 32% dark), shared with the HITL answer bubble so both read as the person's own turns.
 
 ---
 
@@ -1089,7 +1099,9 @@ The name `small` is scoped to this component. On the shared scale, 24px is
   counters follow the current value, including an uncontrolled input's actual value
   after an uncancelled native form reset. A canceled reset leaves both value and count
   unchanged. Compact presentation keeps any visually omitted help/error text associated
-  through `aria-describedby`.
+  through `aria-describedby`. An error message is shown in `--error`, like the label
+  and the border (2026-10-11: the non-compact hint rule had been overriding it with
+  `--on-surface-retreat`).
 - `Spinner` keeps `Loading` as its default status name, accepts caller-supplied status
   text, and remains label-free when decorative.
 
@@ -1854,12 +1866,24 @@ _(none yet)_
 **Location:** `src/rework/components/shared/molecules/HitlPrompt/HitlPrompt.tsx`
 **Status:** `Functional`
 
-#### Open UX issues
-
-- **Focus management** — when `HitlPrompt` appears, focus should move to the first
-  actionable element (first choice button or the free-text input). Not yet implemented.
-
 #### Resolved
+
+- **Focus management (2026-10-10)** — closed without autofocus (owner decision): the card never takes focus, and number keys, Enter and Escape answer it instead (see the visual refresh below).
+
+- **Visual refresh, design tokens only (2026-10-10)** — OpenSpec `refresh-hitl-card-visuals`.
+  - **Tokens:** no hard-coded font size, spacing or colour mix remains. Only layout widths stay literal, and the glow shared with `RichInputField`.
+  - **Radii:** cards use `--radius-ms`. Inner controls (choices, "Other", free text, recap rows) use `--radius-xs`.
+  - **Choices:** full-width rows with left-aligned text, label in `--on-surface`, `--spacing-xs` vertical padding. Border `--outline-muted` at rest, `--outline-variant` on hover; a staged choice uses `--state-primary-selected`.
+  - **"Other" row:** it reads as a field, with the input surface (`--surface-container-low`, `--outline-variant`), an `edit` icon, the "Other" label styled like the choices, a placeholder, and typed text in `--font-body-large`.
+  - **Close cross removed:** a single question has "Skip" left of "Send".
+  - **Grouped questions:** no "Next". Skipping one question is its last choice (neutral ESC key hint); the action row keeps "Skip all" and "Send all". Typed text counts once validated with a small primary check icon button or its shortcut, which advances; the button becomes a `--success` check while that text stays validated, and editing brings it back.
+  - **Question header:** title and question share a full-bleed `--surface-container-highest` band, question in `--font-body-medium-emphasized`. Grouped tabs (`ButtonGroup` `2xs`) sit above it.
+  - **Number badges and keys:** square `--secondary-container` badge before each choice. Keys 1 to 9 pick it, Enter sends grouped answers, Escape skips (Skip shows an ESC key hint); never from a field, Escape never with a drawer or dialog open, no autofocus.
+  - **Composer held:** every pending card holds the composer (draft kept), not only agent questions; the interrupted-run card leaves it free.
+  - **Tab states:** `radio_button_unchecked`, then `check_circle` in `--success`, then `do_not_disturb_on`.
+  - **Tool approval:** only the labels carry meaning. Accept is in `--success`, refuse in `--error`, both `--font-title-small-emphasized`; "Approve for this conversation" stays neutral.
+  - **Answers in the conversation:** `HitlAnswerSummary` is a light card in the user bubble's family: `--surface-container-highest` fill, 1px `--secondary-container` border, `--radius-s`, `--shadow-xs`, text `--on-surface`, `reply` icon `--secondary`. A translucent secondary fill was tried and dropped: it read grey in every light theme. The same bubble shows below the `ask_user` line in the trace, left-aligned, which is where a ReAct question's answer appears. A tool-approval reply now recalls the gated tools.
+  - **Superseded:** this replaces the centered choice rows and the gray "Other" label.
 
 - **Choice row hidden once answered; active-state border/shadow (2026-08-05)** — the
   choices row (and its right-alignment fix below) now renders only when `!readonly`:
@@ -2013,7 +2037,7 @@ Composition and states:
   catch a regression here.
 
 Wording is deployment-configurable: the placeholder interpolates
-`agentsNicknamePlural`, since a deployment renames agents (e.g. "Lumis").
+`agentsNicknamePlural`, using the deployment's chosen label.
 
 **Sort.** A `Select` (`size="small"`, `compact`, no label, `min-width: 200px`
 so the control does not resize as the picked option changes length) sits after
@@ -2807,7 +2831,8 @@ Step 1: template browser. Step 2: a full-width `ButtonGroup` tab strip (`variant
 
 - **Général** — Nom, Rôle, Description, plus every tuning field whose `ui.group` is not `"Prompts"` (the pre-#2105 catch-all "Settings" tab content — `Settings`, `Credentials`, `Document reading`, `Mindmap`, `Grounding`, `Comparison`, `Fallback`, ... — verified against real `fred-agents` templates). No template-side (`ui.group`) changes; purely a frontend regrouping.
 - **Prompts** — every `ui.group == "Prompts"` field, unchanged content.
-- **Outils** - the Simple Team resources pack enables corpus access and conversation attachments together. A switch below library scoping narrows it to attachments-only search, withdrawing similarity access while retaining tabular analysis for attached CSV and Excel files and keeping the pack on. Advanced keeps each capability and document-access option separate. A complete legacy attachments-only selection reads on in the scoped profile; an incomplete selection leaves the pack off while its selected members remain visible in the pack's list. Existing agent selections are not rewritten on form load or unrelated save.
+- **Outils** - the Simple view offers two document packs, Attachments and Team documents, each turning on one `document_access` source (`attachments` / `team_documents`). Shared members (document access, tabular, summarize, verbatim, extract) stay while either pack is on; similarity belongs to Team documents only; turning off the last pack deselects document access. Library binding lives under Team documents. A pack reads on when document access is selected and its source is on; legacy configs are read through the source mapping on load, without rewriting the stored selection. In Advanced, the Documents card shows the two source switches first, hides the scope fields while Team documents is off (a hidden `visible_when` gate also hides its dependants), and turning off the last source deselects the card (both sources reset to on). Pack cards are compact for small screens: `radius-s`, 12px padding, a 32px icon, `title-small` / `body-small` text and 32px section headers. They have no switch: the card body is the pack's switch (`role="switch"`, pointer cursor, its own hover), and a separate full-height end segment with its own hover expands the included capabilities. The on state shows through the primary title and icon colors, and a missing admin-enabled capability shows as an error icon next to the title. Inactive pack and Advanced cards use `surface-container-low`, active ones `surface-container` with a 0.5px primary border at 70% (pack cards). Reasoning comes first; turning it on also ticks "on by default". The tab header reads "Activer des capacités pour votre agent" with a "En savoir plus" link to the Help Center Capabilities page; the info banner and the empty "Actions and integration" section are gone; Advanced switches are `small`. An agent without free selection (`supports_capabilities=false`, the Graph default) gets no capability packs: Simple lists its included capabilities under "Inclus avec cet agent" as `CapabilityCard`s with a neutral `StatusBadge` "Incluse" in place of the switch, each with its configuration (Documents keeps the Team documents library-binding control, others the `CapabilityConfigForm`); Advanced shows the same cards with the full config form; an agent that includes nothing shows one neutral empty-state line.
+- **Agent form layout** - 720px max width; small section tabs (equal widths, 36rem) centered over a full-width 50% `outline-muted` divider at mid-height; Name (40%) and Role (60%) share one row. `SettingsModal` exposes `--settings-modal-max-width`, `--settings-modal-header-padding`, `--settings-modal-body-padding-inline` and `--settings-modal-body-padding-bottom`, and its header actions wrap under the title only when they no longer fit in the card.
 - **Engagement** — required "Cas d'usage" field (large `TextArea`, label + placeholder, no field-level hint text), persisted as `ManagedAgentInstanceSummary.usage_statement` (screens agent purpose for platform/org risk). A compliance-framing paragraph sits above the textarea ("Afin de garantir la conformité de votre agent aux normes et règlementations en vigueur...", i18n'd) explaining why the field is mandatory.
 
 Edit mode: same 4 tabs → metadata footer (created_by · relative date) → delete button.
@@ -3805,12 +3830,17 @@ The Document access capability now offers the exact configuration surface and
 composer controls of "Document search (legacy)": Document library picker and
 Document picker toggles (split), Bind to specific libraries gating the
 bound-libraries tree (`ui.visible_when`; bound ids are inert while unbound,
-like the legacy tool), File attachments, Search policy picker (configured
+like the legacy tool), the Attachments / Team documents sources (2026-10-07,
+replacing File attachments and Search in attachments only; Team documents off
+hides the scope pickers), Search policy picker (configured
 policy becomes the picker default; enforced only when the picker is hidden),
 RAG scope picker + default. All emitted as the same stock widgets — the
 choices travel on `RuntimeContext`, which the v2 document-search adapter
-already honors. The manifest version stays 0.1.0 pre-GA; stored older slices
-revalidate unchanged (the single scope toggle maps onto the split ones, and a
+already honors. "Documents only" / "Documents uniquement" includes attachments
+and team documents according to the enabled sources, without general-knowledge
+supplementation. It remains available for attachments-only agents. The manifest
+version is 0.2.0 to refresh cached controls; stored older slices
+revalidate through the compatibility mapping (the single scope toggle maps onto the split ones, and a
 pre-`bind_libraries` library scope stays binding). The legacy tool's "Bound
 document libraries" raw tag-id input now renders as the library tree, gated
 on its binding toggle, via `ui.widget` / `ui.visible_when` hints in the pod's
@@ -4262,7 +4292,11 @@ Standalone wiki-style documentation page (own tab, no app chrome) at
 page items, `Separator` dividers) and the article column
 (`Breadcrumb` + copy-page-link `IconButton`, `MarkdownRenderer` with
 `headingAnchors`). fr/en switch as an xs `ButtonGroup` in the header, synced
-with the URL. Entry: profile menu item below "Profil" (icon `help`).
+with the URL. Entry: the Help Center icon in the global navigation rail.
+When `contactSupportLink` is configured, the shared header displays a localized
+"Contact support" link on every section and article page. It opens the configured
+destination in a new tab with `noopener noreferrer`; the action is absent when
+the URL is empty. Header actions wrap on narrower screens.
 
 ### `MarkdownRenderer` `headingAnchors` + `HeadingWithAnchor`
 
@@ -4436,7 +4470,7 @@ _Priority order for the next UX session. Update before each session._
 21. **AgentFormModal — tuning field groups** — accordion vs. flat scroll for agents with many fields (UX decision — still open)
 22. **AgentFormModal — template browser on mobile** — single-column grid vs. list layout on narrow viewports (UX decision)
 23. **AgentFormModal — single-template auto-collapse** — when one template available, hide browser or show non-interactive card?
-24. **HitlPrompt — focus management** — focus should move to the first actionable element when the prompt appears (interaction design; may require Figma update). Elevation/containment resolved 2026-08-05 (see component section).
+24. **HitlPrompt — focus management** — closed 2026-10-10 without autofocus; keyboard answers replace it (see component section).
 
 ## Composer model label (#2387, 2026-08-17)
 
@@ -5055,6 +5089,22 @@ prompt's name, plus any text typed after the command, falling back to
 query `Enter` matched, and not the prompt's body, which would name every run of
 one command identically. Nothing retitles a session afterwards.
 
+### Recalling sent messages — 2026-10-10
+
+ArrowUp in an empty composer puts back the last message sent in the current
+conversation; further presses go back, ArrowDown goes forward, and ArrowDown
+past the newest empties the composer. Browsing lasts only while the recalled
+line is untouched: any edit hands the arrows back to the caret, so a draft is
+never replaced. The list is the thread itself, never browser storage, and a
+command turn comes back as the typed `/command` line, not the prompt it ran.
+
+The command menu answers typing, not a recall: a recalled `/command` keeps it
+shut (its query starts out dismissed, as after `Esc`), and the first edit
+opens it as usual. A dismissal lasts only while the query is unchanged, so
+deleting then retyping a character after `Esc` reopens the menu too. The
+field only exposes `onRecallKeyDown`, offered each key the menu did not
+consume; the history itself lives in `useComposerRecall`.
+
 ### `TextInput` — `prefix`
 
 Fixed, non-editable text before the input's own text, mirroring the existing
@@ -5087,9 +5137,9 @@ descriptions and actions stay readable. Simultaneous questions share one card
 with short subject tabs that scroll horizontally when needed. The mouse wheel
 and trackpad scroll overflowing titles without dragging the scrollbar; page
 scrolling continues at the ends. A choice or Skip records a local draft and advances
-to the next unanswered tab. Nonblank free text counts as an answer while typing,
-without requiring Next or switching tabs; clearing it removes that answer unless
-a choice remains selected. The person can revisit any tab and revise the choice
+to the next unanswered tab. Typed text counts as an answer once validated with
+the small Confirm action or its shortcut, which also advances; editing it withdraws
+the answer until it is validated again. The person can revisit any tab and revise the choice
 or text. Send all becomes available only when every tab has an answer or skip;
 it sends one request for the complete set. Closing the grouped card skips all
 pending questions in one request, replacing any local drafts. The card stays
@@ -5177,3 +5227,53 @@ Fred's Activity page, task rehydration and task event subscriptions query only
 Fred's control-plane and knowledge-flow services. Evaluation progress belongs
 to the external application's UI. Shared SDK components and backend evaluation
 permissions remain available; no evaluation data is removed.
+
+### Conversations after agent deletion (2026-10-07)
+
+A saved conversation remains navigable after its managed agent is deleted. Its
+preserved agent name carries a localized suffix, "(deleted)" in English and
+"(supprimé)" in French, in the header and sidebar, including grouped headers.
+The sidebar title and metadata use 70% opacity, as does the grouped agent label.
+The suffix stays visible when a long name is truncated. The name is not struck
+through, and the conversation title stays readable. Hovering or focusing the
+entry reveals the full agent name and explains the deleted/read-only state in
+the selected language; a durable
+accessible description carries the same state. Status text, generic name fallback,
+grouping and empty-list labels interpolate the configured `agentsNicknameSingular`.
+The suffix and disabled composer show read-only mode without a separate
+deletion banner. `chatbot.deletedAgentTooltip` is shared by tooltips and the
+disabled composer's hidden accessible description. Names are snapshotted in
+session metadata before deletion, including renamed agents.
+Legacy names already lost use the existing localized generic agent fallback.
+The composer stays visible and natively disabled with a read-only placeholder,
+matching disabled surface/text tokens and no active elevation. Existing drafts
+remain visible but cannot be submitted. In dark mode, selected sidebar rows use
+a softer 8% secondary tint, including the matching delete-action hover overlay.
+Grouped rows retain the full list width even when a tooltip wraps a short title.
+History loads independently of execution preparation. Missing routing or a failed
+history request shows an unavailable notice while retaining already cached text.
+
+Send, commands, retries, new-conversation, voice, attachment edits and context
+controls are disabled, including their retained callbacks. Pending human questions
+and interrupted-execution cards remain readable without resume, skip, continue or
+restart actions. Title editing, conversation deletion and attachment previews stay
+available. Current owned session details drive the execution state; agent-list
+errors never imply deletion. Existing query invalidation, bounded refresh and window
+focus revalidation catch a deletion from the same client or another session.
+See the [managed-conversation lifecycle spec](../../../openspec/specs/managed-conversations/spec.md).
+## Platform access screens (2026-10-05)
+
+The page groups administration into Rules and Whitelist using the shared home-page ButtonGroup with tab semantics. Panels retain local drafts, selections and pagination. Ordinary text uses 16 px, secondary guidance 14 px and section headings 22 px through existing tokens. The filtering action remains available at the top right of the shared page header across all tabs. Enabling requires at least one saved rule, individual exception or eligible authorized/Free team, then opens a confirmation with counted Allowed and Blocked tabs under the saved configuration. The activation body uses standard padding and consistent gaps between the warning, result heading, timestamp and table. Blocked users appear first when present, otherwise Allowed; empty groups show a short message instead of an empty table. Populated dry-run tables have a bounded height; the shared DataTable scrolls only its rows while its column header and pagination remain fixed. The initial page size is 20, matching the shared selector's supported 20/50/100 options. Accounts that cannot be evaluated appear only in a separate expandable Verification unavailable section. This indicates missing or unusable review evidence, not a third admission state; a missing field in a verified token is evaluated normally. A circular refresh icon beside the last-check timestamp refreshes the read-only population snapshot, reference policy and import status; stale rows disappear and confirmation stays disabled during loading, errors or revision conflicts. There is no separate Activation tab; the header action opens the reviewed confirmation. Unsaved rule edits are never applied by activation. If the initial import has not completed, this modal explicitly offers Continue without importing or Go to whitelist; the second choice opens Whitelist > Users without activating. Import-status loading or failure prevents activation confirmation and offers retry, while disabling does not require that status.
+
+`PlatformAccessPage` adds the platform-admin navigation entry when admission administration is available. The editor starts empty without a saved policy. Add condition and the selected field both open the connected administrator's own verified JSON directly. The exact field name appears in a lightly tinted monospace chip with a decorative edit glyph, aligned with the other condition inputs; clicking either opens the same picker, without a field dropdown or other users' observed fields. The picker defaults to flat root text attributes and blue selectable keys, hiding protocol metadata. Advanced fields exposes bounded nested paths and text arrays from the same account. Only the JSON region scrolls; search, selection and actions remain stationary and keyboard reachable. The selection row always reserves the same height and presents the current path as a code chip, so selecting a key does not resize the dialog. Field confirmation precedes a separate optional current-value reuse popup with labeled field and token-value details. Its alternate action returns to enter the filter value manually, preserving any existing draft value. Case sensitivity stays visible, and the global AND/OR and allow/block controls preserve independent exceptions. The last draft condition can be removed without deleting the stored policy. Test/Save require a nonempty valid draft. Save is prominent and explicit, with distinct unsaved, saving and saved feedback; conflicts preserve edits. The own-token preview uses a green/red panel and separates rule matching from admission through independent sources.
+
+Users use the team-members table presentation with identifier, first name, last name and independent provenance. The Access via column uses shared Chip labels with source type and team name, without team UIDs or a second email line beneath the identifier. The existing search bar and table remain: no user query or result table appears with an empty or whitespace-only search; typing the first character requests bounded server results. Only the current search response supplies rows, which disappear during loading, failure or search clearing. Manual selection has no 100-user ceiling and persists across searches/pages. Unknown identities reject an entire grant, without duplicating or overwriting existing exceptions. The explicit one-time **Import existing users** action remains under Whitelist > Users as a compact row with a small outlined button and the import counts, wrapping on narrow screens rather than using a dedicated card. Its guidance is available on the button's tooltip; completed imports become a single subdued status line and cannot restore removed exceptions. Whitelist retains its heading with Users and Teams sub-tabs. Users contains import and individual exceptions; Teams contains independent team authorization, which uses live membership rather than permanent copies, so membership removal withdraws that global source on the next request.
+
+The platform administration Teams registry owns the Free toggle, labeled Link access (Accès par lien in French), and Manage links action for each team, visible only to platform administrators when admission administration is available. The Link access column reserves at least 9rem so its full label remains visible in both languages. Ordinary team managers do not request admission state or see these controls. Platform access retains individual and team whitelist controls together in Whitelist, without a separate Teams tab. Free updates preserve that independent flag, and shared query invalidation refreshes both pages. Manage links opens paginated history with Accesses (Accès), creation/expiry dates, status and Copy URL actions; last-access timestamps stay out of the table. Create link sits at the right of a wrapping toolbar with spacing before the table. It opens a separate form with note followed by optional expiration, using the KPI selector's popover presentation and shared date/time input. The expiration panel provides one future timestamp, Apply, future duration shortcuts and No expiration; it stays inside the dialog, and Escape dismisses only the selector. Creation success shows the original URL with Copy URL. History recovery writes the original URL to the clipboard; success is announced only after writing through the same shared ActionBar and useCopyConfirmation hook as chat turns: a two-second check on the clicked copy icon and a screen-reader status. The icon button keeps its fixed dimensions and adds no success paragraph or local animation. Rejection retains a selectable URL with a manual-copy fallback. URLs and reusable mutation payloads are transient and cleared on dismissal. Revocation requires confirmation and stops future enrollment while preserving existing membership. Free suspension disables creation but retains history, copying and revocation.
+
+`PlatformAccessDeniedPage` and `FreeEnrollmentPage` render outside the protected shell and its bootstrap/CGU guards. Admission refusal shows shared `contactSupportLink`, retry and sign-out; enrollment uses the same support property and omits sign-out in both the invitation and its error state. Enrollment presents a responsive surface card with the configured site name, shared TeamInitials avatar, named team and required terms. Typography, surfaces, radii and spacing use Fred tokens. The shared Checkbox accepts terms in a bounded scroll region; a compact footer contains support and a single filled Join action with the shared person-add icon. The page scrolls within the application shell on small screens. Enrollment preserves the path through OIDC and reloads protected state after successful membership. Only the specific admission refusal triggers the denial route; service outages and unrelated authorization errors retain their own handling. Behavioral requirements: `openspec/specs/platform-access-control/spec.md`.
+
+
+Admission denial, invalid enrollment and transient admission failures reuse PageError's icon, layout and typography with support/retry actions; sign-out is reserved for admission denial. Caller-supplied actions work before RouterProvider exists; ordinary error pages retain their home action. Picker values disappear on dismissal, unsupported numeric/boolean fields stay unselectable, and selecting a key only changes the draft.
+
+Invitation history filtering and cleanup (2026-10-09): the shared Select filters All, Active, Revoked or Expired across server-paginated history. Suspended links appear in All with grayscale rows at reduced opacity, retaining copying and revocation actions; the status is available to screen readers without a visible Suspended label or explanatory paragraph. Suspension has no separate filter. A fixed-height shared DataTable keeps headers and pagination outside its scrolling body. Loading hides previous rows while retaining pagination totals until the requested page arrives. Cleanup uses the shared destructive confirmation Dialog with the selected team in its title and the team-wide eligible count; the history dialog remains visible behind it, inert and hidden from assistive navigation while confirmation alone handles focus and keyboard dismissal; it preserves the filter and refreshes history after success. Copy keeps the chat ActionBar feedback without changing modal geometry.

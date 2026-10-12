@@ -81,12 +81,7 @@ export function SourceDetailModal({ source, index, onClose }: SourceDetailModalP
           )}
 
           {source.uid && source.uid !== "Unknown" && (
-            <a
-              className={styles.openDocLink}
-              href={buildDocumentViewerPath(source)}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
+            <a className={styles.openDocLink} href={buildDocumentViewerPath(source)} target="_blank" rel="opener">
               Open document ↗
             </a>
           )}

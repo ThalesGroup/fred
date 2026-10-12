@@ -23,6 +23,8 @@ const state = vi.hoisted(() => ({ version: "v1" as string | null, accepted: "v1"
 vi.mock("react-redux", () => ({ useDispatch: () => vi.fn() }));
 vi.mock("src/hooks/useFrontendProperties.ts", () => ({ useFrontendProperties: () => ({ gcuVersion: state.version }) }));
 vi.mock("@components/pages/GcuPage/GcuPage.tsx", () => ({ default: () => <div>Accept terms</div> }));
+vi.mock("../../../common/config", () => ({ getConfig: () => ({ platform_access_enabled: false }) }));
+vi.mock("./PlatformAdmissionGuard", () => ({ default: vi.fn() }));
 vi.mock("../../../slices/controlPlane/controlPlaneApi.ts", () => ({
   controlPlaneApi: {
     endpoints: {

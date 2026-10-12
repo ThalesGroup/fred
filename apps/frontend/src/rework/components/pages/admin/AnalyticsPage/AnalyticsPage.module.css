@@ -41,6 +41,7 @@
    Engagement's trend row touching its histograms. Space them on the chart
    grid's own rhythm rather than the tighter tile gap. */
 .kpiRow + .chartGrid,
+.kpiRow + .sectionStack,
 .chartGrid + .chartGrid {
   margin-top: var(--spacing-m);
 }

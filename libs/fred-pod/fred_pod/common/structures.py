@@ -18,6 +18,8 @@ from typing import Annotated, Any, Dict, Literal, Optional, Union
 
 from pydantic import BaseModel, Field, model_validator
 
+from fred_pod.common.naming import RUNTIME_ID_PATTERN
+
 
 class OwnerFilter(str, Enum):
     """Filter resources by ownership type.
@@ -222,6 +224,27 @@ class KpiLogSinkConfig(BaseModel):
     summary_top_n: int = 0
 
 
+class PodAppIdentity(BaseModel):
+    """How a deployed pod names itself to the people operating it.
+
+    The `app` section every pod reads, whatever it contributes. `runtime_id` is
+    set at deployment — chart values or `configuration.yaml` — never in an
+    image's code, so two deployments of one image can still be told apart.
+    """
+
+    runtime_id: str = Field(
+        ...,
+        pattern=RUNTIME_ID_PATTERN,
+        description=(
+            "Slug identifying this pod across every telemetry stream: the "
+            "`service` label of its metrics and the `service` field of every "
+            "log record it writes — that equality is what lets a log line be "
+            "joined to its own metric. Lowercase slug only, so no display "
+            "prose can reach a Prometheus label."
+        ),
+    )
+
+
 class KpiPrometheusSinkConfig(BaseModel):
     enabled: bool = True
     port: int = 9000
@@ -257,3 +280,6 @@ class KpiObservabilityConfig(BaseModel):
         default=10,
         description="Emit process/SQL-pool KPIs every N seconds. 0 to disable.",
     )
+
+
+LogOutputFormat = Literal["json", "text"]

@@ -57,6 +57,11 @@ x-env-model-key: &env-model-key
   name: OPENAI_API_KEY
   valueFrom:
     secretKeyRef: { name: fred-secrets, key: OPENAI_API_KEY, optional: false }
+# Set by deploy/k3d/prepare from the environment; absent unless web research is on.
+x-env-web-research-key: &env-web-research-key
+  name: WEB_RESEARCH_PROVIDER_KEY
+  valueFrom:
+    secretKeyRef: { name: fred-secrets, key: WEB_RESEARCH_PROVIDER_KEY, optional: true }
 
 # ── observability ────────────────────────────────────────────────────────────
 # The console handler (Rich) wraps at 80 columns when there is no terminal, so
@@ -241,6 +246,7 @@ applications:
       - *env-openfga
       - *env-s3
       - *env-model-key
+      - *env-web-research-key
       - name: KEYCLOAK_AGENTIC_CLIENT_SECRET
         valueFrom:
           secretKeyRef: { name: fred-secrets, key: KEYCLOAK_AGENTIC_CLIENT_SECRET, optional: false }

@@ -211,40 +211,36 @@ class MinioFilesystem(BaseFilesystem):
         list_prefix = f"{full_prefix.rstrip('/')}/" if full_prefix else ""
         logger.info("[MINIO_LIST] bucket=%s", self.bucket_name)
 
-        all_objects = await asyncio.to_thread(
-            lambda: list(
+        def _list() -> List[FilesystemResourceInfoResult]:
+            # Keep SDK I/O and metadata conversion off the request event loop.
+            all_objects = list(
                 self.client.list_objects(
                     self.bucket_name, prefix=list_prefix, recursive=True
                 )
             )
-        )
-        results: List[FilesystemResourceInfoResult] = []
+            results: List[FilesystemResourceInfoResult] = []
 
-        # Files
-        for obj in all_objects:
-            if obj.object_name is not None and not obj.object_name.endswith("/"):
-                results.append(
-                    FilesystemResourceInfoResult(
-                        path=obj.object_name,
-                        size=obj.size,
-                        type=FilesystemResourceInfo.FILE,
-                        modified=obj.last_modified,
+            # Files
+            for obj in all_objects:
+                if obj.object_name is not None and not obj.object_name.endswith("/"):
+                    results.append(
+                        FilesystemResourceInfoResult(
+                            path=obj.object_name,
+                            size=obj.size,
+                            type=FilesystemResourceInfo.FILE,
+                            modified=obj.last_modified,
+                        )
                     )
-                )
 
-        # Infer directories from prefixes
-        dirs: Set[str] = set()
-        for obj in all_objects:
-            if obj.object_name is not None:
-                parts = obj.object_name.split("/")
-                for i in range(1, len(parts)):
-                    dirs.add("/".join(parts[:i]))
+            # Infer directories from prefixes
+            dirs: Set[str] = set()
+            for obj in all_objects:
+                if obj.object_name is not None:
+                    parts = obj.object_name.split("/")
+                    for i in range(1, len(parts)):
+                        dirs.add("/".join(parts[:i]))
 
-        for d in dirs:
-            if not any(
-                r.path == d and r.type == FilesystemResourceInfo.DIRECTORY
-                for r in results
-            ):
+            for d in dirs:
                 results.append(
                     FilesystemResourceInfoResult(
                         path=d,
@@ -254,9 +250,11 @@ class MinioFilesystem(BaseFilesystem):
                     )
                 )
 
-        # Sort by path to emulate 'ls -alh'
-        results.sort(key=lambda x: x.path)
-        return results
+            # Sort by path to emulate 'ls -alh'
+            results.sort(key=lambda x: x.path)
+            return results
+
+        return await asyncio.to_thread(_list)
 
     async def delete(self, path: str) -> None:
         """

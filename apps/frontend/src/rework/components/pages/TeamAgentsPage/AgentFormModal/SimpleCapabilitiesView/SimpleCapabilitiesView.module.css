@@ -26,13 +26,13 @@
   gap: var(--spacing-2xs);
 }
 
-/* Simple 40px section header, per spec. */
+/* Compact 32px section header, to fit more packs on a small screen. */
 .sectionHeader {
   display: flex;
   align-items: center;
   margin: 0;
-  padding: 0 var(--spacing-m);
-  height: 40px;
+  padding: 0 var(--spacing-s);
+  height: 32px;
   color: var(--on-surface-retreat);
   font: var(--font-title-small);
 }

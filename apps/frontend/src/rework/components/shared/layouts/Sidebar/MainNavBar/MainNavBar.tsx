@@ -73,7 +73,8 @@ export default function MainNavBar() {
       icon: "help",
       label: t("rework.mainNav.helpCenter"),
       active: false,
-      onClick: () => window.open(helpCenterHref, "_blank", "noopener,noreferrer"),
+      // Same-origin page: no noopener, so the browser copies this tab's OIDC session.
+      onClick: () => window.open(helpCenterHref, "_blank"),
     },
   ];
 

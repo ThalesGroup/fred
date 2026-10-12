@@ -60,6 +60,7 @@ export function scheduleFiles(
    *  Separate from `onBackgroundError`, whose job is to raise a toast: one is
    *  about a file, the other about telling the user. */
   uploadOutcome?: { onFailed: (filename: string, message: string) => void; onFinished: (filename: string) => void },
+  beforeSend?: (files: File[]) => File[],
 ): Promise<void> {
   return new Promise<void>((resolve) => {
     let settled = false;
@@ -103,6 +104,14 @@ export function scheduleFiles(
       (filename) => {
         onConflicted?.(filename);
         markDone(filename);
+      },
+      (currentFiles) => {
+        const toSend = beforeSend?.(currentFiles) ?? currentFiles;
+        const names = new Set(toSend.map(leafFileName));
+        for (const filename of [...pendingLeafNames]) {
+          if (!names.has(filename)) markDone(filename);
+        }
+        return toSend;
       },
     )
       .then(() => {
@@ -356,7 +365,6 @@ function sendBatch(
   // that way is not sent at all.
   const toSend = files.filter((file) => !cancelled.has(entryIdOf(leafFileName(file))));
   if (toSend.length === 0) return Promise.resolve();
-  for (const file of toSend) committed.add(entryIdOf(leafFileName(file)));
   return scheduleFiles(
     toSend,
     uploadMode,
@@ -393,6 +401,12 @@ function sendBatch(
         noteImportSettled(entryIdOf(filename));
         dispatch(uploadFinished({ localId: entryIdOf(filename) }));
       },
+    },
+    (currentFiles) => {
+      // Renewal can take seconds. Recheck cancellations before the request leaves.
+      const selected = currentFiles.filter((file) => !cancelled.has(entryIdOf(leafFileName(file))));
+      for (const file of selected) committed.add(entryIdOf(leafFileName(file)));
+      return selected;
     },
   );
 }

@@ -1,15 +1,28 @@
 {
-  "include": ["fred_runtime", "tests"],
+  "include": [
+    "fred_runtime",
+    "tests"
+  ],
   "typeCheckingMode": "standard",
   "reportMissingTypeStubs": false,
   "reportUnreachable": "warning",
   "venvPath": ".",
   "venv": ".venv",
-  "extraPaths": ["../fred-pod", "../fred-core", "../fred-sdk"],
+  "extraPaths": [
+    "../fred-pod",
+    "../fred-core",
+    "../fred-sdk",
+    "../capabilities/fred-capability-web-research"
+  ],
   "executionEnvironments": [
     {
       "root": ".",
-      "extraPaths": ["../fred-pod", "../fred-core", "../fred-sdk"]
+      "extraPaths": [
+        "../fred-pod",
+        "../fred-core",
+        "../fred-sdk",
+        "../capabilities/fred-capability-web-research"
+      ]
     }
   ]
 }

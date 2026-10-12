@@ -298,18 +298,26 @@ async def delete_team(
     """
     rebac = deps.rebac
     await rebac.check_user_permission_or_raise(
-        user, OrganizationPermission.CAN_DELETE_TEAM, ORGANIZATION_ID
+        user,
+        OrganizationPermission.CAN_DELETE_TEAM,
+        ORGANIZATION_ID,
+        consistency_token=RebacEngine.HIGHER_CONSISTENCY,
     )
 
-    store = deps.get_team_metadata_store()
-    metadata = await store.get_by_team_id(team_id)
-    if metadata is None:
-        raise TeamNotFoundError(team_id)
-
-    await rebac.delete_all_relations_of_reference(
-        RebacReference(Resource.TEAM, team_id)
+    from fred_core.security.platform_access.access_control import (
+        platform_access_team_mutation,
     )
-    await store.delete(team_id)
+
+    async with platform_access_team_mutation(user, team_id):
+        store = deps.get_team_metadata_store()
+        metadata = await store.get_by_team_id(team_id)
+        if metadata is None:
+            raise TeamNotFoundError(team_id)
+
+        await rebac.delete_all_relations_of_reference(
+            RebacReference(Resource.TEAM, team_id)
+        )
+        await store.delete(team_id)
 
     logger.info("Deleted one team via platform-admin registry action")
 

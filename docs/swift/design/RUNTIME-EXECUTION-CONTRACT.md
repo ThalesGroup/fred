@@ -1110,6 +1110,8 @@ class DocumentSearchPort(ABC):
         library_tag_ids: Sequence[str] | None = None,
         document_uids: Sequence[str] | None = None,
         search_policy: str | None = None,
+        include_attachments: bool = True,
+        include_team_documents: bool = True,
     ) -> DocumentSearchResult: ...
 
 @dataclass(frozen=True, slots=True)
@@ -1142,6 +1144,33 @@ conversation's attached files, never the corpus. First consumer:
 `document_access.search_attachments_only` (the capability also drops its
 scope-picker chat control when the flag is on). `general_only` RAG scope keeps
 precedence (no search at all).
+
+**Amendment (2026-10-07, split-attachments-and-team-documents).** `search()`
+takes two source ceilings, `include_attachments: bool = True` and
+`include_team_documents: bool = True`. The adapter ANDs them with the per-turn
+RAG scope (`session = turn_session and include_attachments`,
+`corpus = turn_corpus and include_team_documents`), so the turn can only narrow
+the agent's sources, and returns no hits without calling Knowledge Flow when
+neither scope remains. `document_access` now passes its
+`attachments` / `team_documents` config, which replaces
+`show_attach_files_control` / `search_attachments_only` (legacy keys are read
+through a before-validator). `RagScopeControlParams` gains an additive
+`options: list[RagScopeName] | None` (None = every choice).
+
+**Amendment (2026-10-08, reviewer decisions).** `attachments_only` is removed
+immediately, including its resolver and warning state; old callers must migrate
+to the two source keywords. The developer explicitly accepts this SDK break
+with library patch versions. `fred-sdk` and `fred-runtime` advance to `4.4.2`,
+and document access requires that SDK floor. Publish the libraries after merge
+before updating external consumers.
+
+`corpus_only` retains its wire name but means "Documents only": session
+attachments and team documents, intersected with the agent's ceilings and any
+explicit turn scope flags. It remains available when either source is enabled.
+The shared ReAct/Deep system prompt instructs this mode to use document evidence
+only and report missing information rather than supplement from general
+knowledge. Graph implementations remain responsible for their own prompts.
+There is no OpenAPI/wire-schema change.
 
 ---
 
@@ -6530,3 +6559,60 @@ already applied before this combined cleanup must be reapplied as described in
 the operator migration note.
 See the migration note at `docs/swift/ops/migrations/extract-mcp-agent-instructions.md`
 and `openspec/specs/mcp-capabilities/spec.md` for the current contract.
+
+### 8.105 Shared platform admission (2026-10-05)
+
+In authenticated deployments with enforced ReBAC, HTTP principal resolution checks suspension then live platform admission before legal/resource gates. This also covers runtime query-token resolution and cached verified JWTs. Pure service operations retain their existing checks; delegated people use their own live sources or compatible unexpired verified human evidence. Runtime startup requires the control-plane-owned migrated PostgreSQL authority. Each request reads the saved live policy, without a deployment flag or seed. Bounded internal verified human facts survive decoding-cache reuse; delegated callers use only current selected, unexpired, noncontradictory observations. Missing or incompatible authority fails closed with 503. See `openspec/specs/platform-access-control/spec.md` and the platform-access migration note for current contracts and rollout.
+
+### 2026-10-06 — Native web research (#2980)
+
+The optional `RuntimeServices.web_research` SDK port is bound by the existing
+agent runtime to the authenticated subject for each invocation. Native tools
+share the standard authorization and tool audit paths across ReAct, Deep and
+Graph. A pod-owned internal engine shares its outbound HTTP pool for direct
+public access or an explicitly configured forward proxy. No additional Fred
+service runs in the DMZ; the operator owns proxy/network enforcement. The runtime
+owns the restricted SQL activity sink, the engine and the search providers
+(`fred_runtime/app/web_research_*.py`, deps in the `app` extra); the capability
+package holds only the tools, and the runtime imports no capability package.
+The deployment is default-off. See the [activity contract](../platform/OBSERVABILITY-AND-AUDIT.md#restricted-web-research-activity)
+and [migration guide](../ops/migrations/2980-native-web-research.md).
+
+### Structured request and journey diagnostics (2026-10-01)
+
+Runtime logging binds ingress request/correlation references into PortableContext
+and RuntimeContext, with fresh references for standalone execution. Resolved session,
+exchange, team, instance/template and admitted run references scope generic execution
+and tool diagnostics; tool/run outcomes remain distinct from successful SSE transport.
+HITL resumes keep the existing exchange identity. Scope teardown retires retained-task
+metadata. See [observability §6/§7](../platform/OBSERVABILITY-AND-AUDIT.md) for field,
+sensitive-data and audit boundaries.
+
+### 2026-10-10 — Included capabilities of agents without free selection
+
+`GET /agents/templates`: for a definition with `supports_capabilities=False`,
+`available_capabilities` now lists the catalog entries of its
+`default_mcp_servers` (still filtered by execution model) instead of `[]`.
+`supports_capabilities=False` marks them as included: always active,
+configurable, never selectable. Execution is unchanged: the defaults run and
+`tuning.capability_config` configures them, a saved selection is ignored.
+
+The builtin `knowledge.search` now enforces the instance's library binding
+server-side. `resolve_bound_library_ids` (`capabilities/assembly.py`) reads the
+`document_scope` chat control's `bound_library_ids` that each active capability
+computes from its stored config, the descriptor the composer already locks its
+picker from. `FredKnowledgeSearchToolInvoker` narrows the turn's library
+selection by it with `_narrow_scope_ids`: no selection searches the bound
+libraries, and a selection with no bound library searches no library instead of
+running unfiltered. Document picks are not narrowed, as in `document_access`:
+Knowledge Flow unions libraries and documents, so picked documents are still
+searched, and the search returns no hits only when no document is picked either.
+`DocumentSearchAdapter.search` and `DocumentTreeAdapter.tree` apply the same rule:
+a library or document scope left empty, passed by the capability or by the
+session-binding intersection, selects nothing on that side (`DocumentSearchPort` /
+`DocumentTreePort`: `[]` = nothing in scope, `None` = no narrowing), and the call
+finds nothing when neither side selects anything. They used to send it on as no
+filter.
+This is a ceiling for one port; the
+general agent scope descriptor stays open in `CAPABILITY-SCOPE-CEILING-RFC.md`.
+

@@ -25,6 +25,7 @@ from fred_core.common.fastapi_handlers import (
     ACCOUNT_STATUS_UNAVAILABLE_CAUSE,
     DENIAL_CAUSE_HEADER,
 )
+from fred_core.logs.propagation import outbound_context_headers
 from fred_sdk.contracts.runtime import unwrap_run_stop_error
 from langchain_mcp_adapters.interceptors import MCPToolCallRequest
 from mcp.types import CallToolResult
@@ -70,8 +71,10 @@ class DelegatedAuthorityInterceptor:
             return await handler(request)
 
         await self._provider.credentials()
+        headers = dict(request.headers or {})
+        headers.update(outbound_context_headers())
         try:
-            result = await handler(request)
+            result = await handler(request.override(headers=headers))
             if (
                 isinstance(result, CallToolResult)
                 and result.isError

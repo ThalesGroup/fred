@@ -33,6 +33,7 @@
   padding: var(--spacing-2xs) var(--spacing-xs);
   max-width: 18rem;
   color: var(--on-surface);
+  text-decoration: none;
 }
 
 .chip:hover {

@@ -18,6 +18,7 @@ import type {
   ManagedAgentInstanceSummary,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
+  withReasoning,
   buildAgentFormSubmitPayload,
   defaultCapabilitySelection,
   defaultReasoningSelection,
@@ -145,6 +146,36 @@ describe("buildAgentFormSubmitPayload", () => {
     });
   });
 
+  it("submits every included capability and its config for a template without free selection", () => {
+    // A Graph agent's included capability stays active whatever the stored
+    // selection says (often [] for an instance saved before it was shown).
+    const template = {
+      ...makeCapabilityTemplate(["document_access"]),
+      supports_capabilities: false,
+      default_capability_ids: ["document_access"],
+    } as AgentTemplateSummary;
+    const bound = { bind_libraries: true, library_tag_ids: ["lib-a"] };
+    const payload = buildAgentFormSubmitPayload(
+      {
+        templateId: "runtime:agent",
+        displayName: "Mindmap",
+        role: "",
+        description: "",
+        usageStatement: "",
+        reasoningEnabled: false,
+        reasoningDefaultOn: false,
+        tuningValues: {},
+        ...EMPTY_CAPABILITY_STATE,
+        capabilityConfigValues: { document_access: bound },
+      },
+      template,
+    );
+
+    expect(payload.selectedCapabilityIds).toEqual(["document_access"]);
+    expect(payload.capabilityConfigValues).toEqual({ document_access: bound });
+    expect(payload.templateHasCapabilities).toBe(true);
+  });
+
   it("flags templateHasCapabilities false and empties capability selection for capability-less templates", () => {
     const payload = buildAgentFormSubmitPayload(
       {
@@ -206,11 +237,11 @@ describe("buildAgentFormSubmitPayload", () => {
     const cases = [
       {
         ids: ["document_access", "document_summarize"],
-        config: { search_attachments_only: true, show_attach_files_control: true },
+        config: { attachments: true, team_documents: false },
       },
       {
         ids: ["document_access", "document_similarity", "mcp-knowledge-flow-mcp-tabular"],
-        config: { search_attachments_only: false, show_attach_files_control: false },
+        config: { attachments: false, team_documents: true },
       },
     ];
 
@@ -303,5 +334,37 @@ describe("extractCapabilityConfigValues", () => {
 
   it("returns an empty object when no capability config is stored", () => {
     expect(extractCapabilityConfigValues(undefined)).toEqual({});
+  });
+
+  it("reads legacy document access keys as the two sources", () => {
+    const stored: ManagedAgentInstanceSummary["capability_config"] = {
+      document_access: {
+        schema_version: "0.1.0",
+        config: { show_attach_files_control: true, search_attachments_only: true, bind_libraries: false },
+      },
+      other: { schema_version: "1", config: { search_attachments_only: true } },
+    };
+
+    expect(extractCapabilityConfigValues(stored)).toEqual({
+      document_access: { attachments: true, team_documents: false, bind_libraries: false },
+      other: { search_attachments_only: true },
+    });
+  });
+});
+
+describe("withReasoning", () => {
+  it("turns reasoning on by default when reasoning is turned on", () => {
+    expect(withReasoning({ reasoningEnabled: false, reasoningDefaultOn: false }, true)).toEqual({
+      reasoningEnabled: true,
+      reasoningDefaultOn: true,
+    });
+  });
+
+  it("keeps the member's default choice otherwise", () => {
+    expect(withReasoning({ reasoningEnabled: true, reasoningDefaultOn: false }, true).reasoningDefaultOn).toBe(false);
+    expect(withReasoning({ reasoningEnabled: true, reasoningDefaultOn: true }, false)).toEqual({
+      reasoningEnabled: false,
+      reasoningDefaultOn: true,
+    });
   });
 });

@@ -443,8 +443,12 @@ class PgVectorStoreAdapter(BaseVectorStore):
                     include_values, _ = _split_metadata_values(values)
                     if not include_values or key == "retrievable":
                         continue
-                    # PGVector filter is equality-based; pick the first positive value
-                    filt[key] = include_values[0]
+                    # PGVector's $in compares metadata as text, so only string lists are pushed down;
+                    # other multi-value terms are left to the Python post-filter below.
+                    if len(include_values) == 1:
+                        filt[key] = include_values[0]
+                    elif all(isinstance(v, str) for v in include_values):
+                        filt[key] = {"$in": include_values}
             if search_filter.tag_ids:
                 # Equality filter; best-effort match on the list
                 filt["tag_ids"] = list(search_filter.tag_ids)

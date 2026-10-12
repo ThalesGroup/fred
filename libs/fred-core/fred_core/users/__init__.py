@@ -13,12 +13,11 @@
 # limitations under the License.
 
 from .store import BaseUserStore, PostgresUserStore, get_user_store
-from .user_models import GcuVersionsType, UserRow
+from .user_models import UserRow
 
 __all__ = [
     "BaseUserStore",
     "PostgresUserStore",
     "UserRow",
-    "GcuVersionsType",
     "get_user_store",
 ]

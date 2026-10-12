@@ -2,6 +2,7 @@
 schema: 1
 title: "Retire the corpus manager API and unused corpus and filesystem MCP servers"
 impact: minor
+after: [retire-mon-espace, split-attachments-and-team-documents]
 configuration: production
 configuration_reason: "Knowledge Flow no longer accepts mcp.filesystem_enabled; operators must remove the key from private overlays before the coordinated upgrade. No stored corpus data is migrated or deleted."
 ---
@@ -21,7 +22,7 @@ Remove `mcp.filesystem_enabled` from custom Knowledge Flow configuration and Hel
 
 ## Upgrade
 
-Deploy the updated agent pod catalog, Knowledge Flow API and Temporal workers, and frontend together. The retired MCP endpoints and SDK constants and all `/corpus/*` maintenance routes are unavailable after upgrade. The retained virtual-corpus reads and technical PPT binary upload/download/delete routes under `/fs`, `/documents/tree`, and ordinary ingestion routes remain available. See the [file-area migration](retire-mon-espace.md) for the other retired `/fs` operations.
+Complete the prerequisites and configuration cleanup in this note, the [file-area retirement](retire-mon-espace.md), and the [document-source SDK migration](split-attachments-and-team-documents.md) before one coordinated rollout. These procedures are not independent deployments. Deploy the updated agent pod catalog, Knowledge Flow API and Temporal workers, frontend and paired chart together. The retired MCP endpoints and SDK constants and all `/corpus/*` maintenance routes are unavailable after upgrade. The retained virtual-corpus reads and technical PPT binary upload/download/delete routes under `/fs`, `/documents/tree`, and ordinary ingestion routes remain available. See the [file-area migration](retire-mon-espace.md) for the other retired `/fs` operations.
 
 Historical vector-metadata repair tasks remain in task storage. Their dedicated result counters remain in the stored task record, but the current task API omits them and Task Activity no longer displays the repair report. Export those task records before upgrade if the counters are needed operationally.
 

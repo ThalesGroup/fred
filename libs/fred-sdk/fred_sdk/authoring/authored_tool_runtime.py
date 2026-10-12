@@ -39,10 +39,12 @@ from __future__ import annotations
 
 import inspect
 import logging
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Coroutine, Mapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
+from langchain_core.runnables.config import run_in_executor
+from langchain_core.runnables.utils import is_async_callable
 from pydantic import BaseModel
 
 from ..contracts.context import (
@@ -256,7 +258,7 @@ def ensure_toolset_registered(
 def _bind_tool_handler(
     authored_tool: _AuthorTool,
     runtime: _AuthorRuntime,
-) -> AuthoredToolHandler:
+) -> Callable[[ToolInvocationRequest], Coroutine[Any, Any, ToolInvocationResult]]:
     """
     Bind one authored tool definition to its runtime handler.
 
@@ -282,7 +284,15 @@ def _bind_tool_handler(
         payload = payload_model.model_dump()
         context = ToolContext(runtime)
         try:
-            value = authored_tool.handler(context, **payload)
+            # Reuse LangChain's context-preserving executor for blocking tools.
+            # Async callables retain their owner loop; sync factories may return
+            # an awaitable, which still has to be awaited below.
+            if is_async_callable(authored_tool.handler):
+                value = authored_tool.handler(context, **payload)
+            else:
+                value = await run_in_executor(
+                    None, authored_tool.handler, context, **payload
+                )
             if inspect.isawaitable(value):
                 value = await cast(Awaitable[object], value)
             return _coerce_tool_return(

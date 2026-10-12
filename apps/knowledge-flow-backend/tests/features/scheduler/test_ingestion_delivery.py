@@ -5,6 +5,8 @@ from unittest.mock import AsyncMock
 import pytest
 import pytest_asyncio
 from fred_core import KeycloakUser
+from fred_core.logs.context import current_context, log_context
+from fred_core.logs.propagation import decode_log_context
 from fred_core.tasks.models import IngestionTaskEvent, TaskState
 from fred_core.tasks.store import TaskStore
 from sqlalchemy import func, select
@@ -56,18 +58,59 @@ async def test_batch_collision_rolls_back_all_new_tasks(delivery):
 @pytest.mark.asyncio
 async def test_restart_before_delivery_preserves_profile_task_and_execution(delivery):
     definition = batch("doc")
-    await delivery.admit(USER, definition, {"doc": "team"})
+    with log_context(correlation_id="upload-journey", request_id="upload-request", user_id="spoof", document_uid="previous-document", custom="retained"):
+        await delivery.admit(USER, definition, {"doc": "team"})
     run = await delivery.tasks.store.get_run(definition.files[0].task_id)
     assert run.execution_id == definition.workflow_id
     assert run.team_id == "team"
-    await delivery.retry_pending()
+    observed = []
+
+    def start(**kw):
+        observed.append(dict(current_context()))
+        return WorkflowHandle(workflow_id=kw["definition"].workflow_id)
+
+    delivery.scheduler.start_document_processing.side_effect = start
+    with log_context(correlation_id="unrelated-delivery"):
+        await delivery.retry_pending()
+        assert current_context() == {"correlation_id": "unrelated-delivery"}
     sent = delivery.scheduler.start_document_processing.call_args.kwargs["definition"]
     assert sent.files[0].profile == "rich"
     assert sent.files[0].task_id == run.task_id
     assert sent.max_parallelism == 2
     assert sent.workflow_id == run.execution_id
+    values, reason = decode_log_context(sent.logging_context)
+    assert reason is None
+    assert values == {"correlation_id": "upload-journey", "user_id": USER.uid, "team_id": "team", "custom": "retained", "workflow_id": sent.workflow_id}
+    assert observed == [values]
+    assert sent.files[0].logging_context == sent.logging_context
     async with delivery.sessions() as session:
         assert await session.scalar(select(func.count()).select_from(IngestionSubmissionRow)) == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("pull", [False, True])
+async def test_mixed_owner_batch_retains_each_document_team_after_restart(delivery, pull):
+    definition = batch("team-a-document", "team-b-document", "personal-document")
+    if pull:
+        for file in definition.files:
+            file.external_path = f"/{file.document_uid}.pdf"
+            file.hash = file.document_uid
+            file.document_uid = None
+    teams = {(file.to_virtual_metadata().document_uid if pull else file.document_uid): team for file, team in zip(definition.files, ("team-a", "team-b", None))}
+    with log_context(correlation_id="batch-journey", team_id="unrelated-request-team"):
+        await delivery.admit(USER, definition, teams)
+    await delivery.retry_pending()
+    sent = delivery.scheduler.start_document_processing.call_args.kwargs["definition"]
+    batch_values, reason = decode_log_context(sent.logging_context)
+    assert reason is None and "team_id" not in batch_values
+    for file in sent.files:
+        values, reason = decode_log_context(file.logging_context)
+        assert reason is None
+        assert values["correlation_id"] == "batch-journey"
+        uid = file.to_virtual_metadata().document_uid if pull else file.document_uid
+        assert values.get("team_id") == teams[uid]
+        run = await delivery.tasks.store.get_run(file.task_id)
+        assert values.get("team_id") == run.team_id
 
 
 @pytest.mark.asyncio
@@ -82,6 +125,9 @@ async def test_ambiguous_start_keeps_reservation_and_retries_same_execution(deli
     delivery.scheduler.start_document_processing.side_effect = lambda **kw: WorkflowHandle(workflow_id=kw["definition"].workflow_id)
     await delivery.retry_pending()
     assert {call.kwargs["definition"].workflow_id for call in delivery.scheduler.start_document_processing.call_args_list} == {definition.workflow_id}
+    contexts = [call.kwargs["definition"].logging_context for call in delivery.scheduler.start_document_processing.call_args_list]
+    assert contexts == [definition.logging_context, definition.logging_context]
+    assert decode_log_context(contexts[0])[0]["correlation_id"]
 
 
 @pytest.mark.asyncio
@@ -167,3 +213,19 @@ async def test_memory_background_delivery_keeps_payload_until_work_is_complete(d
     scheduler.start_document_processing.assert_awaited_once()
     async with delivery.sessions() as session:
         assert await session.get(IngestionSubmissionRow, definition.workflow_id) is None
+
+
+@pytest.mark.asyncio
+async def test_legacy_pending_payload_delivers_without_logging_envelope(delivery):
+    definition = batch("legacy-document")
+    await delivery.admit(USER, definition, {})
+    async with delivery.sessions.begin() as session:
+        row = await session.get(IngestionSubmissionRow, definition.workflow_id)
+        legacy = dict(row.definition)
+        legacy.pop("logging_context")
+        legacy["files"] = [{key: value for key, value in file.items() if key != "logging_context"} for file in legacy["files"]]
+        row.definition = legacy
+    await delivery.retry_pending()
+    sent = delivery.scheduler.start_document_processing.call_args.kwargs["definition"]
+    assert sent.logging_context is None and sent.files[0].logging_context is None
+    assert sent.files[0].document_uid == "legacy-document"

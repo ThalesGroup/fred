@@ -25,7 +25,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from fred_core.sql import make_session_factory, use_session
-from fred_core.users.user_models import GcuVersionsType, UserRow
+from fred_core.users.user_models import UserRow
 
 from .base_user_store import AmbiguousUsernameError, BaseUserStore
 
@@ -211,14 +211,10 @@ class PostgresUserStore(BaseUserStore):
     async def update_gcu_version(
         self,
         user_id: UUID,
-        gcu_version: str | GcuVersionsType,
+        gcu_version: str,
         session: AsyncSession | None = None,
     ) -> None:
-        version = (
-            gcu_version.value
-            if isinstance(gcu_version, GcuVersionsType)
-            else gcu_version
-        )
+        """Record the configured string version, preserving other user state."""
         accepted_at = datetime.now(timezone.utc)
         async with use_session(self._sessions, session) as s:
             insert = (
@@ -230,13 +226,13 @@ class PostgresUserStore(BaseUserStore):
                 insert(UserRow)
                 .values(
                     id=user_id,
-                    gcuVersionAccepted=version,
+                    gcuVersionAccepted=gcu_version,
                     gcuAcceptedAt=accepted_at,
                 )
                 .on_conflict_do_update(
                     index_elements=["id"],
                     set_={
-                        "gcuVersionAccepted": version,
+                        "gcuVersionAccepted": gcu_version,
                         "gcuAcceptedAt": accepted_at,
                     },
                 )

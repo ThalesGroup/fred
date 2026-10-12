@@ -37,6 +37,16 @@ function findDefault<T>(chatControls: readonly ChatControlDescriptor[], widget: 
   return params?.default;
 }
 
+/** A remembered scope the `rag_scope` control no longer offers (e.g. "Your
+ *  documents" on an attachments-only agent) falls back to the control default. */
+function offeredRagScope(scope: RagScope, chatControls: readonly ChatControlDescriptor[]): RagScope {
+  const params = chatControls.find((c) => c.widget === "rag_scope")?.params as
+    | { default?: RagScope; options?: RagScope[] | null }
+    | undefined;
+  if (!params?.options || params.options.includes(scope)) return scope;
+  return params.default ?? "hybrid";
+}
+
 function storageKey(sessionId: string): string {
   return `chat.composer.${sessionId}`;
 }
@@ -176,7 +186,7 @@ export function useComposerSettings(sessionId: string | null, chatControls: read
 
   return {
     searchPolicy: state.searchPolicy,
-    ragScope: state.ragScope,
+    ragScope: offeredRagScope(state.ragScope, chatControls),
     selectedLibraryIds: state.selectedLibraryIds,
     selectedDocumentUids: state.selectedDocumentUids,
     reasoning: state.reasoning,

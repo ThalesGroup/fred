@@ -110,6 +110,34 @@ describe("TextInput native and accessible behavior", () => {
     expect(container.textContent).toContain("4 / 10");
   });
 
+  it("can hide a counter without relaxing maxlength or hiding associated errors", () => {
+    render(
+      <TextInput
+        value="fred"
+        onChange={() => undefined}
+        maxLength={10}
+        showCharacterCount={false}
+        error="Invalid value"
+      />,
+    );
+    expect(container.textContent).not.toContain("4 / 10");
+    expect(input().maxLength).toBe(10);
+    expect(input().getAttribute("aria-invalid")).toBe("true");
+    expect(document.getElementById(input().getAttribute("aria-describedby")!)?.textContent).toBe("Invalid value");
+    expect(input().hasAttribute("showCharacterCount")).toBe(false);
+  });
+
+  it("reveals the current uncontrolled count when visibility changes", () => {
+    render(<TextInput defaultValue="fred" maxLength={10} showCharacterCount={false} />);
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input(), "frontend");
+      input().dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    act(() => root.render(<TextInput defaultValue="fred" maxLength={10} showCharacterCount />));
+    expect(container.textContent).toContain("8 / 10");
+    expect(input().value).toBe("frontend");
+  });
+
   it("counts an uncontrolled default and subsequent edits", () => {
     render(<TextInput defaultValue="fred" maxLength={10} />);
     expect(container.textContent).toContain("4 / 10");

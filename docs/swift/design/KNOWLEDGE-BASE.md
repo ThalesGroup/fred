@@ -91,9 +91,10 @@ ask the source what changed since) rather than keeping a ledger of its own.
 **Silence is not a removal.** Fred never deletes a document because a caller
 stopped mentioning it. Removal is addressed explicitly, through the document
 boundary. An absence in a source proves a deletion only after a complete,
-authoritative inventory — which is exactly what a run's
-`reconciliation_complete` flag states — whereas an explicit tombstone stays
-actionable during a partial pass.
+authoritative inventory — which is exactly what a run's `reconciliation` set
+to `complete` states — whereas an explicit tombstone stays actionable during a
+`partial` pass. A run that proves nothing changed (an unchanged revision)
+reports `up_to_date` and writes nothing.
 
 **A write is accepted, then ingested like any upload.** The reply is an
 acceptance and a task, never an outcome; the pod follows the task and reads
@@ -231,7 +232,7 @@ operational record is currently wrong about Knowledge Bases.
 
 **Fred imposes a result vocabulary on every author.** `KnowledgeBaseSyncResult`
 requires `discovered / created / updated / removed / unchanged` and a
-reconciliation flag. This forces every author to translate their business into
+reconciliation kind. This forces every author to translate their business into
 terms that are not theirs, to produce numbers Fred cannot verify and does not
 act on. It is the clearest violation of §3 still standing in the SDK.
 
@@ -297,11 +298,48 @@ owns, the same keys under `security.m2m` and `scheduler.temporal`, environment
 variables carrying secrets only. A Knowledge Base pod installs
 `fred-sdk[knowledge-base]`: fred-pod plus the workflow engine, none of the
 agents platform. There is no `security.user` block — a
-Knowledge Base pod serves no user, opens no inbound port and validates no user
-token.
+Knowledge Base pod serves no user and validates no user token. The only ports
+it may open are the two read-only metrics endpoints of §8.
 
 `fred-samples/knowledge-bases/local-folder` is the shortest complete example;
 its `knowledge_base.py` is the whole authoring surface.
+
+## 8. Operational metrics
+
+A Knowledge Base is opaque to Fred, so it is operated through what it exposes,
+exactly like a native component (Stream 1 of
+[OBSERVABILITY-AND-AUDIT.md](../platform/OBSERVABILITY-AND-AUDIT.md)). The
+contract — endpoints, every `fred_kb_*` series, its labels, what no label may
+carry — is the `knowledge-base-pod-metrics` spec under `openspec/specs/`. It is
+written for any SDK implementation, not only the Python one, and the SDK
+fulfils it with no code from the author.
+
+**Identity.** Every pod declares `app.runtime_id` in its configuration — the
+key agent pods use, chosen at deployment, never in the image. It is the
+`service` label of every series and the `service` field of every JSON log line
+the pod writes to standard output, so a graph and the logs explaining it are
+filtered by one value. `knowledge_base` beside it names the definition.
+
+**Endpoints.** `observability.kpi.prometheus` serves the `fred_kb_*` series
+(port 9000); `observability.temporal.prometheus` serves the workflow engine's
+own (port 9001). Both are on loopback until the deployment binds them outward.
+
+**Questions an operator asks**, by `service`:
+
+| Question | PromQL |
+|---|---|
+| Is a pod failing runs? | `sum by (service, outcome) (rate(fred_kb_runs_total{outcome=~"failed\|error"}[15m]))` |
+| Is it raising, and where? | `sum by (service, stage, exception_type) (rate(fred_kb_run_errors_total[15m]))` |
+| Is Fred refusing it? | `sum by (service, target, operation) (rate(fred_kb_requests_total{status=~"5xx\|transport_error"}[5m]))` |
+| Documents handed to Fred per second | `sum by (service) (rate(fred_kb_requests_total{target="knowledge_flow",operation="publish",status="2xx"}[5m]))` |
+| Documents ingested, by how they ended | `sum by (service, state) (rate(fred_kb_ingestion_wait_seconds_count[5m]))` |
+| Ingestion latency (p95) | `histogram_quantile(0.95, sum by (le, service) (rate(fred_kb_ingestion_wait_seconds_bucket{state="succeeded"}[15m])))` |
+| Has it stopped synchronizing? | `time() - max by (service) (fred_kb_last_run_timestamp_seconds{outcome="succeeded"})` |
+
+The log lines behind a graph: `jsonPayload.service="<runtime_id>"` in Cloud
+Logging, `{service="<runtime_id>"}` in Loki. An author adds domain series with
+the language's ordinary metrics library; they are served on the same endpoint
+and must never carry a team, instance or document label.
 
 ---
 

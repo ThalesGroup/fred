@@ -469,6 +469,7 @@ def _build_deepagent_runtime_middleware(
             tracer=tracer,
             kpi=kpi,
             binding=binding,
+            role="child" if child else "root",
         ),
         ToolObservabilityMiddleware(kpi=kpi, binding=binding, tracer=tracer),
         (DeepChildHitlMiddleware if child else FredHitlMiddleware)(

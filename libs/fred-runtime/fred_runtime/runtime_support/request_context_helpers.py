@@ -138,12 +138,10 @@ def get_vector_search_scopes(context: RuntimeContext | None) -> tuple[bool, bool
     How: pass a RuntimeContext (or None) to compute the include flags.
     Example:
         >>> get_vector_search_scopes(RuntimeContext(search_rag_scope="corpus_only"))
-        (False, True)
+        (True, True)
     """
     scope = get_rag_knowledge_scope(context)
-    if scope == "corpus_only":
-        default_session, default_corpus = False, True
-    elif scope == "general_only":
+    if scope == "general_only":
         default_session, default_corpus = False, False
     else:
         default_session, default_corpus = True, True

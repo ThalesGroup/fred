@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// The Simple resource pack reuses Advanced document-access settings for library
-// scoping and attachments-only search.
+// The Simple Team documents pack reuses the Advanced document-access setting
+// for library scoping.
 
 import { DocumentLibraryScopePicker } from "@shared/molecules/DocumentLibraryScopePicker/DocumentLibraryScopePicker.tsx";
 import { useTranslation } from "react-i18next";
@@ -60,14 +60,6 @@ export function DocumentAccessPackOptions({
           />
         </div>
       )}
-      <SwitchRow
-        size="small"
-        label={t("capability.document_access.fields.search_attachments_only.title")}
-        description={t("capability.document_access.fields.search_attachments_only.description")}
-        checked={configValues.search_attachments_only === true}
-        disabled={disabled}
-        onChange={(checked) => onConfigChange("search_attachments_only", checked)}
-      />
     </div>
   );
 }

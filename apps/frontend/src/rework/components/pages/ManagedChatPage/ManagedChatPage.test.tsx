@@ -35,6 +35,8 @@ type CapturedLauncher = { key: string; icon?: string; iconFilled?: boolean; onOp
 const rail = vi.hoisted(() => ({ launchers: [] as CapturedLauncher[], footerLaunchers: [] as CapturedLauncher[] }));
 // The personal team's id: a chat in it counts as administered by its owner.
 const bootstrap = vi.hoisted(() => ({ activeTeamId: "team-1" }));
+// The composer's recall handler, captured so a test can press an arrow on it.
+const composerKeys = vi.hoisted(() => ({ recall: undefined as undefined | ((event: unknown) => boolean) }));
 
 vi.mock("react-router-dom", () => ({ useParams: () => ({ teamId: "team-1", agentInstanceId: "agent-1" }) }));
 // A fresh object per read, like a real selector over changing store state: the
@@ -47,23 +49,32 @@ vi.mock("react-i18next", () => ({
 
 let chatValue: Record<string, unknown>;
 vi.mock("./useManagedChat", () => ({ useManagedChat: () => chatValue }));
-vi.mock("@shared/molecules/RichInputField/RichInputField", () => ({
+vi.mock("@shared/molecules/RichInputField/RichInputField", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@shared/molecules/RichInputField/RichInputField")>()),
   RichInputField: (props: {
+    placeholder?: string;
+    accessibleDescription?: string;
     sendDisabled?: boolean;
     disabled?: boolean;
     characterCount?: number;
     characterLimit?: number;
     focusEndRequestId?: number;
-  }) => (
-    <div
-      data-testid="composer"
-      data-send-disabled={props.sendDisabled}
-      data-composer-disabled={props.disabled}
-      data-character-count={props.characterCount}
-      data-character-limit={props.characterLimit}
-      data-focus-request={props.focusEndRequestId}
-    />
-  ),
+    onRecallKeyDown?: (event: unknown) => boolean;
+  }) => {
+    composerKeys.recall = props.onRecallKeyDown;
+    return (
+      <div
+        data-testid="composer"
+        data-placeholder={props.placeholder}
+        data-description={props.accessibleDescription}
+        data-send-disabled={props.sendDisabled}
+        data-composer-disabled={props.disabled}
+        data-character-count={props.characterCount}
+        data-character-limit={props.characterLimit}
+        data-focus-request={props.focusEndRequestId}
+      />
+    );
+  },
 }));
 vi.mock("./ConversationThread/ConversationThread", () => ({
   ConversationThread: (props: {
@@ -71,12 +82,14 @@ vi.mock("./ConversationThread/ConversationThread", () => ({
     hitlFreeText: string;
     onHitlFreeTextChange: unknown;
     isLoading?: boolean;
+    readOnly?: boolean;
   }) => (
     <div
       data-testid="thread"
       data-character-limit={props.maxChatInputChars}
       data-hitl-draft={props.hitlFreeText}
       data-has-hitl-change-handler={typeof props.onHitlFreeTextChange === "function"}
+      data-readonly={props.readOnly}
       data-loading={props.isLoading}
     />
   ),
@@ -86,7 +99,7 @@ vi.mock("@shared/molecules/ThoughtTrace/traceDrawerContext", () => ({
   TraceDrawerProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 vi.mock("../../../../hooks/useFrontendProperties", () => ({
-  useFrontendProperties: () => ({ agentIconName: "person" }),
+  useFrontendProperties: () => ({ agentIconName: "person", agentsNicknameSingular: "" }),
 }));
 vi.mock("../../../../hooks/useFrontendBootstrap", () => ({
   useFrontendBootstrap: () => ({ activeTeam: { id: bootstrap.activeTeamId } }),
@@ -367,6 +380,37 @@ describe("ManagedChatPage agent todo panel", () => {
     const html = renderToStaticMarkup(<ManagedChatPage />);
     expect(html).not.toContain('data-testid="agent-todo-panel"');
     expect(html).toContain("rework.agentTodoPanel.announcementComplete");
+  });
+});
+
+describe("ManagedChatPage deleted agent", () => {
+  it("labels the preserved name, freezes the thread and disables the composer without a redundant banner", () => {
+    chatValue = {
+      ...baseChatValue([]),
+      executionDisabled: true,
+      isReadOnly: true,
+      agentDisplayName: "Preserved assistant",
+      isHistorySettled: true,
+    };
+    const html = renderToStaticMarkup(<ManagedChatPage />);
+    expect(html).toContain("Preserved assistant");
+    expect(html).toContain("chatbot.deletedAgentSuffix");
+    expect(html).toContain('data-agent-deleted="true"');
+    expect(html).toContain('data-placeholder="chatbot.readOnlyComposerPlaceholder"');
+    expect(html).toContain('data-description="chatbot.deletedAgentTooltip"');
+    const rendered = document.createElement("div");
+    rendered.innerHTML = html;
+    expect(rendered.textContent).not.toContain("chatbot.deletedAgentTooltip");
+    expect(html).toContain('data-composer-disabled="true"');
+    expect(html).toContain('data-send-disabled="true"');
+    expect(html).toContain('data-readonly="true"');
+    expect(html).not.toContain('aria-label="chatbot.newConversation"');
+  });
+  it("shows history failure without labeling a live agent as deleted", () => {
+    chatValue = { ...baseChatValue([]), historyUnavailable: true, isReadOnly: false, isHistorySettled: true };
+    const html = renderToStaticMarkup(<ManagedChatPage />);
+    expect(html).toContain("chatbot.historyUnavailable");
+    expect(html).not.toContain("chatbot.deletedAgentTooltip");
   });
 });
 
@@ -812,5 +856,61 @@ describe("ManagedChatPage — entering a conversation puts the cursor in the com
     show();
 
     expect(focusRequest()).toBe(after);
+  });
+});
+
+describe("ManagedChatPage — arrow keys recall sent messages", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  afterEach(() => {
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+    vi.unstubAllGlobals();
+  });
+
+  it("puts the last sent line back in the composer, a command turn as typed", () => {
+    vi.stubGlobal("localStorage", memoryStorage());
+    const setInput = vi.fn();
+    chatValue = {
+      ...chatValue,
+      capabilityIds: [],
+      sessionId: "session-1",
+      isHistorySettled: true,
+      input: "",
+      setInput,
+      waitResponse: false,
+      isLoadingHistory: false,
+      pendingHitl: null,
+      threadMessages: [
+        { id: "u1", role: "user", text: "Hello", isStreaming: false, traceMessages: [] },
+        {
+          id: "u2",
+          role: "user",
+          text: "Résume le document en :\n\nfocus on risks",
+          isStreaming: false,
+          traceMessages: [],
+          command: { command: "summary", appended_text: "focus on risks", prompt_id: "p", prompt_name: "Résumé" },
+        },
+      ],
+    };
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() => {
+      root.render(<ManagedChatPage />);
+    });
+
+    const preventDefault = vi.fn();
+    let consumed = false;
+    act(() => {
+      consumed =
+        composerKeys.recall?.({ key: "ArrowUp", preventDefault, nativeEvent: { isComposing: false } }) ?? false;
+    });
+
+    expect(consumed).toBe(true);
+    expect(setInput).toHaveBeenCalledWith("/summary focus on risks");
   });
 });
