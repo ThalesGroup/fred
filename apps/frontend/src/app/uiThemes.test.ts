@@ -15,6 +15,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { runInNewContext } from "node:vm";
+import { ModuleKind, ScriptTarget, transpileModule } from "typescript";
 import { describe, expect, it } from "vitest";
 import { localStorageKey } from "../hooks/useLocalStorageState";
 import {
@@ -166,6 +167,38 @@ it("offers multiple ZIP themes and applies each inherited base before paint", ()
   } finally {
     setCustomUiThemes([]);
   }
+});
+
+it("retains the validated catalog and selected theme across Vite hot-module replacement", () => {
+  const source = readFileSync(path.resolve(__dirname, "uiThemes.ts"), "utf8");
+  const runtime = transpileModule(source, {
+    compilerOptions: { module: ModuleKind.ESNext, target: ScriptTarget.ES2022 },
+  })
+    .outputText.replace(/^import .*;$/gm, "")
+    .replaceAll("import.meta.hot", "hot")
+    .replaceAll("export ", "");
+  const data: Record<string, unknown> = {};
+  let dispose: (data: Record<string, unknown>) => void = () => {};
+  const load = () => {
+    const context = {
+      localStorageKey,
+      hot: {
+        data,
+        dispose: (callback: typeof dispose) => {
+          dispose = callback;
+        },
+      },
+    };
+    return runInNewContext(`${runtime}\n({setCustomUiThemes, resolveUiTheme, offeredUiThemes, uiThemeBase});`, context);
+  };
+  const original = load();
+  original.setCustomUiThemes([{ id: "paris-aeroport", label: "Paris Aeroport", base: "cobalt" }]);
+  dispose(data);
+  const refreshed = load();
+  const platform = { default_theme: "paris-aeroport", hidden_themes: [...UI_THEMES] };
+  expect(Array.from(refreshed.offeredUiThemes(platform))).toEqual(["paris-aeroport"]);
+  expect(refreshed.resolveUiTheme("paris-aeroport", platform)).toBe("paris-aeroport");
+  expect(refreshed.uiThemeBase("paris-aeroport")).toBe("cobalt");
 });
 
 describe("resolveUiTheme with platform settings", () => {
