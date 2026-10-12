@@ -24,8 +24,8 @@ Design: `docs/swift/rfc/HTML-ARTIFACT-CAPABILITY-RFC.md` (issue #2478).
 `execution_models=("react",)`: the prompt overlay is a `wrap_model_call` hook, so
 the tool is carried by the capability's middleware (mirrors `writable_document`).
 
-The live trace shows content generation between the two tools, then preview
-rendering. Direct publication remains supported; revisions reuse `artifact_id`.
+The two calls appear as ordinary tool rows. Preparation returns before the
+model composes the markup. Direct publication remains supported; revisions reuse `artifact_id`.
 See the [deliverable generation spec](../../../openspec/specs/deliverable-generation/spec.md).
 
 ## Registration

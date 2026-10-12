@@ -11,8 +11,8 @@ export it to Word (`.docx`) or Markdown. Documents are scoped to one chat
 session and co-authored over time by the agent and the user; only the last
 author is tracked.
 
-Preparation publishes no document and performs no store write. The trace shows
-content generation while the model composes the payload, then document writing.
+Preparation publishes no document and performs no store write. Both calls appear
+as ordinary tool rows; preparation returns before the model composes the payload.
 Direct `write_document` calls remain supported, and revisions reuse the existing
 `document_id`. Importing existing workspace Markdown with `open_writable_document`
 does not need a preparation call. See the

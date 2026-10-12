@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Make long document, presentation, and HTML composition visible before publication, while preserving the existing deliverable tools and their output contracts.
+Expose the start of document, presentation, and HTML creation through ordinary preparation tool calls while preserving publication contracts.
 
 ## Requirements
 
@@ -37,28 +37,28 @@ Each preparation tool SHALL be exposed only through its selected capability and 
 
 ### Requirement: Composition activity has an honest lifecycle
 
-During a live turn, the chat SHALL show a localized deliverable-specific composition indication after successful preparation and before the corresponding publication call. The indication MUST remain visible without model reasoning text. It SHALL yield to publication activity, errors, human-input pauses, cancellation, or turn completion. The preparation tool's row MUST report completion when its result arrives, rather than pretending that the tool remains running. Composition activity MUST be scoped to the current turn and execution and MUST NOT reactivate in completed history.
+Preparation and publication SHALL appear as ordinary tool calls with their actual call/result status. Preparation MUST complete when its short acknowledgement returns; the chat MUST NOT imply that this tool is still running while the model composes the publication arguments in a later round. Publication SHALL use the existing tool behavior. No special composition timer, pulse, or persisted activity is required.
 
-#### Scenario: Waiting for publication arguments
+#### Scenario: Preparation completes before composition
 
-- **WHEN** document, presentation, or HTML preparation has succeeded and the live model is composing publication arguments
-- **THEN** the chat continues displaying the corresponding composition label in French or English
-- **AND** the preparation tool row remains completed
+- **WHEN** a document, presentation, or HTML preparation call returns successfully
+- **THEN** its tool row reports completion
+- **AND** the model can compose the full publication arguments in the next round without the preparation row pretending to run
 
 #### Scenario: Publication starts
 
 - **WHEN** the corresponding publication call appears
-- **THEN** composition activity ends and the chat identifies the writing or rendering step
+- **THEN** it has its ordinary in-progress status until its result arrives
 
 #### Scenario: Interrupted composition
 
-- **WHEN** an error, cancellation, human-input pause, or turn completion occurs after preparation without a publication call
-- **THEN** no composition indication remains active and no successful deliverable is implied
+- **WHEN** an error, cancellation, or human-input pause occurs after preparation without publication
+- **THEN** the completed preparation does not imply a successfully published deliverable
 
 #### Scenario: History and execution isolation
 
 - **WHEN** a completed exchange is reloaded, a new turn starts, or another execution produces a deliverable
-- **THEN** an earlier preparation does not create composition activity in that completed exchange, new turn, or other execution
+- **THEN** the earlier preparation retains only its own recorded call/result state
 
 ### Requirement: Publication remains compatible
 

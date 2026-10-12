@@ -410,7 +410,6 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   const {
     messages,
     waitResponse,
-    activeExchangeId,
     chatControls,
     maxChatInputChars,
     prepareChatControls,
@@ -543,10 +542,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     lastConfirmedContextPromptIdsBySidRef.current.set(sessionId, sessionData.context_prompt_ids);
   }, [sessionData, sessionId]);
 
-  const threadMessages = useMemo(
-    () => toThreadMessages(messages, waitResponse, activeExchangeId),
-    [messages, waitResponse, activeExchangeId],
-  );
+  const threadMessages = useMemo(() => toThreadMessages(messages, waitResponse), [messages, waitResponse]);
   const inputCharacterCount = useMemo(() => countUnicodeCodePoints(input.trim()), [input]);
   const inputTooLong = maxChatInputChars !== undefined && inputCharacterCount > maxChatInputChars;
 

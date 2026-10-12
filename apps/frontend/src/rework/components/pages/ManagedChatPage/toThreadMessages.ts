@@ -250,11 +250,7 @@ export function conversationTokenTotals(messages: ThreadMessage[]): TokenUsage {
   return total;
 }
 
-export function toThreadMessages(
-  messages: ChatMessage[],
-  isStreaming: boolean,
-  activeExchangeId?: string | null,
-): ThreadMessage[] {
+export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean): ThreadMessage[] {
   const { order, groups } = groupByExchange(messages);
 
   const result: ThreadMessage[] = [];
@@ -410,8 +406,7 @@ export function toThreadMessages(
         id: `${eid}:assistant`,
         role: "assistant",
         text: finalMessages.map((m) => textOf(m)).join(""),
-        // Preflight can be busy before a new exchange exists in the message list.
-        isStreaming: isStreaming && isLast && (activeExchangeId === undefined || activeExchangeId === eid),
+        isStreaming: isStreaming && isLast,
         traceMessages,
         hitlAnswerSummariesByCallId,
         sources,

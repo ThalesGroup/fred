@@ -14,8 +14,8 @@ After grounding the requested content, the agent calls
 then composes placeholder values and calls `fill_ppt_template` in a later model
 round. Preparation reads no assets and writes no workspace file. Both tools are
 available only when the configured template enables filling; direct fill calls
-and optional image tools remain supported. The live trace shows content
-generation between the two calls, followed by PowerPoint rendering. See the
+and optional image tools remain supported. The two calls appear as ordinary
+tool rows; preparation returns before the model composes the slide values. See the
 [deliverable generation spec](../../../openspec/specs/deliverable-generation/spec.md).
 
 This package holds the pure, offline core: the template parser/validator, the
