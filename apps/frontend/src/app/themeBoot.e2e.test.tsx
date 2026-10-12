@@ -20,7 +20,11 @@ import path from "node:path";
 import { runInNewContext } from "node:vm";
 import { act, useContext, useEffect } from "react";
 import { createRoot } from "react-dom/client";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+vi.mock("../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  useFrontendConfigQuery: () => ({ data: undefined, refetch: () => {} }),
+}));
+
 import { ApplicationContext, ApplicationContextProvider } from "./ApplicationContextProvider";
 
 const BOOT_SCRIPT = readFileSync(path.resolve(__dirname, "../../public/theme-boot.js"), "utf8");

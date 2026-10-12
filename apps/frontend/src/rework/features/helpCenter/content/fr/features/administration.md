@@ -76,8 +76,9 @@ Chaque changement est enregistré aussitôt.
 Un utilisateur dont le thème n'est plus proposé passe au thème par défaut. Son choix est conservé : il le retrouve si le thème est de nouveau proposé. Choisir
 un thème dans son profil, même celui déjà affiché, le garde ensuite si le thème
 par défaut change. Si un seul thème est proposé, le
-profil n'affiche plus que le mode. Les changements s'appliquent au prochain
-chargement de l'application par chaque utilisateur.
+profil n'affiche plus que le mode. Les changements s'appliquent aussitôt pour
+l'administrateur, et pour les autres utilisateurs à leur retour sur
+l'application ou dans la minute.
 
 ## Qui ouvre les fonctions à votre équipe
 

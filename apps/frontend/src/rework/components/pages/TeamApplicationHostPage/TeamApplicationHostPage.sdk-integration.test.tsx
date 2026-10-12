@@ -97,7 +97,8 @@ vi.mock("../../../../hooks/useSelectedTeam.ts", () => ({
 vi.mock("@rework/features/applications/useTeamApplications.ts", () => ({
   useTeamApplications: () => h.result,
 }));
-vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi.ts", () => ({
+vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi.ts", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
   useLazyGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery: () => [
     () => ({ unwrap: () => Promise.resolve([]) }),
   ],
