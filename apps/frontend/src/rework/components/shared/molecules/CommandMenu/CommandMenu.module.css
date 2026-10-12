@@ -39,7 +39,7 @@
 
 .groupTitle {
   margin-bottom: var(--spacing-2xs);
-  border-radius: var(--radius-s);
+  border-radius: var(--radius-xs);
   background: var(--surface-container-high);
   padding: var(--spacing-2xs) var(--spacing-s);
   overflow: hidden;
