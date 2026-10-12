@@ -38,9 +38,12 @@
 }
 
 .groupTitle {
+  margin-bottom: var(--spacing-2xs);
+  border-radius: var(--radius-s);
+  background: var(--surface-container-high);
   padding: var(--spacing-2xs) var(--spacing-s);
   overflow: hidden;
-  color: var(--on-surface-muted);
+  color: var(--on-surface-retreat);
   font: var(--font-label-small);
   text-overflow: ellipsis;
   white-space: nowrap;

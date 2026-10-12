@@ -5182,7 +5182,7 @@ Homonymous prompt and skill entries remain separate, with prompt commands first.
 
 Dressed in the shared menu grammar (`MenuPopover`): `--shadow-m`, `1px solid
 --outline-muted`, `--radius-s`, `--surface-floating` fill,
-`--on-surface-muted` heading, `--state-on-surface-hover` on the focused row.
+`--on-surface-retreat` heading on a `--surface-container-high` band (`--radius-s`), `--state-on-surface-hover` on the focused row.
 It is anchored above the composer field rather than floating free. Keyboard
 focus and hover share that one highlight, so a pointer never leaves two rows
 looking active.
