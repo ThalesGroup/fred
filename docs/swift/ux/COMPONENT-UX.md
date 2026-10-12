@@ -2170,6 +2170,13 @@ so enabling the charter keeps nominated contacts visible before acceptance.
 These avatars do not indicate administrator authority; the charter gate uses
 the accepted administrator roster from the per-team detail response.
 
+**Description.** The card always shows the team's description under the
+header, clamped to three lines, in "Your teams" as in the discover section
+(the `withDescription` prop is gone). A team still carrying the default
+description shows its translation (`rework.teamDescription.placeholderDisplay`)
+rather than the stored French text; a personal space has none and renders
+nothing there.
+
 Displays one team in the marketplace (`MarketplaceTeams`). Corner radius `radius-ms`, like `AgentCard` and `PromptCard`. The footer's join
 affordance (TEAM-09, narrowed to 2 states 2026-07-26) is driven entirely by
 the team's `joining_mode`, gated on `!team.is_member`:
@@ -2224,6 +2231,31 @@ prop (default 4, so its other consumer is unchanged) and the card drops to
 `.teamCardAdmins` clips as a last resort for an unusually long translation; the
 avatars run right-to-left, so the overflow falls off the left and the badge
 stays visible.
+
+---
+
+### Team description — create form, settings field, reminder
+
+**Location:** `AdminTeamsPage.tsx`, `TeamSettingsParameters.tsx`,
+`src/rework/components/shared/organisms/TeamDescriptionReminder/TeamDescriptionReminder.tsx`
+**Status:** `Functional`
+
+A team's description is required, 20 to 500 characters once trimmed. The
+bounds and the display helper live in `src/rework/core/utils/teamFields.ts`
+(with `MAX_TEAM_NAME_LENGTH`), shared by both forms.
+
+- **`AdminTeamsPage` create form.** A required `TextArea` under the team name:
+  `x / 500` counter, helper text on the team's objectives regarding AI, and the
+  minimum-length error once the field has been left. The create button stays
+  disabled until the trimmed description is valid; the request sends it trimmed.
+- **`TeamSettingsParameters`.** Same counter and helper. The field saves on
+  blur: an unchanged value does nothing, an invalid one shows the error on the
+  field and sends nothing, a valid one is sent trimmed.
+- **`TeamDescriptionReminder`.** A `ServiceNotice` shown to team admins
+  (`canUpdateInfo`) while `description_is_placeholder` is true: at the top of
+  `TeamAgentsPage` (the team's home) with an outlined button to the team
+  settings, and above the field in `TeamSettingsParameters` without it. It
+  renders nothing for other members, described teams and personal spaces.
 
 ---
 

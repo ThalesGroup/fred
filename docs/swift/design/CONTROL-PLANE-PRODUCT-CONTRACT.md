@@ -4813,6 +4813,37 @@ server map of the optional `locale` field of the copy and import bodies
 (`fr` → `copie`, `en` → `copy`; absent → `copy`). A platform import keeps `<name> (2)`, n from 2.
 The frontend sends its UI language (OpenSpec `agent-names`, `agent-copy`).
 
+## 66. Contract Notes — required team description (2026-10-12, #3067)
+
+**Rule.** A team's description states its objectives regarding its use of AI
+and is required: 20 to 500 characters once trimmed, stored trimmed. Personal
+spaces keep no description. The bounds, the placeholder and the pydantic type
+`TeamDescription` live in `fred_core.teams.metadata_store`.
+
+| Schema              | Field                        | Type                               | Notes                                                                                           |
+| ------------------- | ---------------------------- | ---------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `CreateTeamRequest` | `description`                | `string`, 20-500, **required**     | `POST /teams` answers 422 when missing or out of bounds; no team is created                      |
+| `UpdateTeamRequest` | `description`                | `string`, 20-500, optional         | Unset keeps the stored value; explicit `null`, blank or out of bounds is 422 (never cleared)     |
+| `Team`              | `description`                | `string \| null`                   | Unchanged; `null` only for personal spaces                                                      |
+| `Team`              | `description_is_placeholder` | `boolean`, default `false`         | `true` while the stored description is the placeholder; inherited by `TeamWithPermissions`      |
+
+**Breaking.** `CreateTeamRequest.description` is required and
+`UpdateTeamRequest.description` no longer clears the value. Only the Fred
+frontend and the platform importer call these routes.
+
+**Database.** `teammetadata.description` is `VARCHAR(500) NOT NULL` with the
+check `ck_teammetadata_description_min_length` (`length(trim(description)) >=
+20`). Migration `c9acb7dd3ad0` first gives every missing, blank or too-short
+description the placeholder « Description à compléter par l'administrateur de
+l'équipe. ».
+
+**Placeholder.** One frozen constant (`TEAM_DESCRIPTION_PLACEHOLDER`): changing
+its text needs a data migration. A platform import and the Knowledge Flow
+storage backfill use it instead of failing; the import report carries one
+warning, "N teams received a default description.". The frontend shows the
+placeholder translated and reminds team admins (`can_update_info`) on the
+team home and in team settings. Full behavior: OpenSpec `team-description`.
+
 ## Knowledge Flow ingestion cancellation — 2026-09-23
 
 `POST /knowledge-flow/v1/tasks/{task_id}/cancel` retains its existing task-mutation
