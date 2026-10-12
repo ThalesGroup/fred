@@ -819,7 +819,9 @@ how `ThoughtTrace` trims the rail when a reasoning row opens or closes the seque
 
 - **Curated document tool views (updated 2026-10-12)** - `summarize_document`
   renders its summary through `MarkdownRenderer`. `list_document_tree` shows folder
-  groups and compact document rows with name, format and localized Fred arrival time.
+  groups and compact document rows with name, format and localized arrival time.
+  Arrival labels use the configured `siteDisplayName` branding in both compact rows
+  and expanded metadata.
   Expanding a document reveals title, creation/modification dates, format/MIME,
   language, page/row counts, labels and source where available; only one document
   expands at a time. Internal document and folder ids are never displayed.

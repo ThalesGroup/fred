@@ -20,6 +20,10 @@ import { parseDocumentTreeTrace } from "../../../../../utils/documentTreeTrace";
 import { DocumentTreeDetail } from "./DocumentTreeDetail";
 import en from "../../../../../../locales/en/translation.json";
 
+vi.mock("../../../../../../hooks/useFrontendProperties", () => ({
+  useFrontendProperties: () => ({ siteDisplayName: "Atlas" }),
+}));
+
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     i18n: { language: "en" },
@@ -91,16 +95,17 @@ it("shows incompleteness and unknown dates, omits absent optional metadata, and 
       leaf("private", "Report.pdf", null, { labels: ["<script>alert(1)</script>"], page_count: 0 }),
   );
   expect(container.textContent).toContain("Partial listing");
-  expect(container.textContent).toContain("Added to Fred: Unknown");
+  expect(container.textContent).toContain("Added to Atlas: Unknown");
   expect(container.textContent).not.toContain("Most recent displayed");
   act(() => (container.querySelector("details details > summary") as HTMLElement).click());
+  expect(container.querySelector("dt")?.textContent).toBe("Added to Atlas");
   expect(container.textContent).toContain("0 pages");
   expect(container.textContent).toContain("<script>alert(1)</script>");
   expect(container.querySelector("script")).toBeNull();
   expect(container.textContent).not.toContain("MIME type");
 });
 
-it("keeps historical dates distinct from Fred arrival", () => {
+it("keeps historical dates distinct from arrival in the knowledge base", () => {
   render("Docs/\n  Old.pdf [private-id] (uploaded 2026-01-01)");
   expect(container.textContent).toContain("Historical upload date: 2026-01-01");
   expect(container.textContent).not.toContain("Most recent displayed");

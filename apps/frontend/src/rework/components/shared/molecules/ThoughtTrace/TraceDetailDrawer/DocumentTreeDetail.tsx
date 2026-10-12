@@ -14,12 +14,14 @@
 
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useFrontendProperties } from "../../../../../../hooks/useFrontendProperties";
 import { MaterialIcon } from "../../../atoms/Icon/Icon";
 import type { DocumentTreeTrace, TreeDocument } from "../../../../../utils/documentTreeTrace";
 import styles from "./DocumentTreeDetail.module.css";
 
 export function DocumentTreeDetail({ data }: { data: DocumentTreeTrace }) {
   const { t, i18n } = useTranslation();
+  const { siteDisplayName } = useFrontendProperties();
   const [expanded, setExpanded] = useState<string | null>(null);
   const id = useId();
   const locale = i18n.language;
@@ -30,7 +32,7 @@ export function DocumentTreeDetail({ data }: { data: DocumentTreeTrace }) {
 
   function metadata(document: TreeDocument) {
     const fields: [string, string][] = [
-      [label("addedToKb"), fullDate(document.addedToKb)],
+      [t("rework.chatTrace.documentTree.addedToKb", { siteDisplayName }), fullDate(document.addedToKb)],
       [label("created"), fullDate(document.created)],
       [label("modified"), fullDate(document.modified)],
     ];
@@ -98,7 +100,7 @@ export function DocumentTreeDetail({ data }: { data: DocumentTreeTrace }) {
                           ? t("rework.chatTrace.documentTree.legacyDate", {
                               date: document.legacyUploaded === "unknown date" ? unknown : document.legacyUploaded,
                             })
-                          : t("rework.chatTrace.documentTree.arrival", { date: arrival })}
+                          : t("rework.chatTrace.documentTree.arrival", { date: arrival, siteDisplayName })}
                       </span>
                     </span>
                   </summary>
