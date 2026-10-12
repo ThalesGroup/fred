@@ -22,6 +22,7 @@ from fred_core import JoiningMode, RelationType, TeamPermission, TeamVisibility
 from fred_core.common import TeamId
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from control_plane_backend.marketplace_settings.schemas import TeamMarketplaceView
 from control_plane_backend.scheduler.policies.policy_models import (
     _validate_optional_duration,
 )
@@ -210,6 +211,8 @@ class TeamWithPermissions(Team):
     # value). None for system/personal teams, which have no team-editable
     # retention (personal deletes use the platform `personal_delete_grace`).
     retention: TeamRetentionView | None = None
+    # Effective agents marketplace settings; None for personal spaces.
+    marketplace: TeamMarketplaceView | None = None
 
 
 class UserTeamRelation(str, Enum):

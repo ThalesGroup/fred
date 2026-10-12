@@ -1051,6 +1051,31 @@ operations:
     required_permission: can_manage_platform # platform_ui_settings/service._require_manage_platform. Replaces both settings; SetPlatformUiSettingsRequest bounds ids to [a-z][a-z0-9-]{0,31}, at most 32 distinct hidden ids, default not hidden (422 at parsing, before authz). Emits audit event platform.ui_settings.updated.
   - service: control-plane
     method: GET
+    path: /control-plane/v1/admin/marketplace-settings
+    review_status: pending_review
+    required_permission: can_manage_platform # marketplace_settings/service._require_manage_platform. Agents marketplace default (built-in switch off, quota 5 when never saved) and, per collaborative team, its overrides and effective values. Team admins have no access: these settings are platform-level.
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/marketplace-settings/default/impact
+    review_status: pending_review
+    required_permission: can_manage_platform # marketplace_settings/service.preview_default_change. Read-only preview: teams following Default whose effective switch would turn off.
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/admin/marketplace-settings/default
+    review_status: pending_review
+    required_permission: can_manage_platform # marketplace_settings/service.set_marketplace_default. Quota >= 1 enforced at parsing (422). Emits audit event marketplace.settings.default_updated.
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/teams/{team_id}/marketplace-settings/impact
+    review_status: pending_review
+    required_permission: can_manage_platform # marketplace_settings/service.preview_team_change. Read-only preview of one team's switch override (omitted = back to Default). 404 for an unknown team.
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/admin/teams/{team_id}/marketplace-settings
+    review_status: pending_review
+    required_permission: can_manage_platform # marketplace_settings/service.set_team_marketplace_settings. Replaces both overrides, null = back to Default; quota >= 1 (422). Deliberately NOT can_update_info: a team admin cannot change its own team's marketplace settings. Emits audit event marketplace.settings.team_updated.
+  - service: control-plane
+    method: GET
     path: /control-plane/v1/admin/platform/instructions
     review_status: approved
     required_permission: can_edit_platform_prompt # organization_authz.require_edit_platform_prompt, same gate as its editable sibling above — this pane is the reference an editor needs to know what agents are already told. Read-only: returns the `platform_instructions` field of the pod's `config/platform_prompt.json`, the text shipped with the platform and composed into every agent prompt. No row, no PUT, no DELETE — it exists so an admin can see what agents are told, not change it.

@@ -54,6 +54,11 @@ from fred_core.users.store.postgres_user_store import get_user_store
 from sqlalchemy.exc import IntegrityError
 
 from control_plane_backend.common.avatar_image import read_avatar_upload
+from control_plane_backend.marketplace_settings.effective import (
+    effective_marketplace_settings,
+    load_marketplace_default,
+)
+from control_plane_backend.marketplace_settings.schemas import TeamMarketplaceView
 from control_plane_backend.product.prompt_starter_kit import (
     STARTER_CATEGORY_NAMES,
     STARTER_PROMPTS,
@@ -2078,13 +2083,19 @@ async def _build_team_with_permissions(
     rebac = deps.rebac
     team_id = metadata.id
 
-    direct_relations, permissions, retention = await asyncio.gather(
+    (
+        direct_relations,
+        permissions,
+        retention,
+        marketplace_default,
+    ) = await asyncio.gather(
         rebac.list_direct_relations(
             RebacReference(Resource.TEAM, team_id),
             consistency_token=consistency_token,
         ),
         _get_team_permissions_for_user(rebac, user, team_id, consistency_token),
         _resolve_team_retention_view(team_id, deps),
+        load_marketplace_default(deps.get_marketplace_settings_store),
     )
     roles_by_user = _fold_team_role_relations(direct_relations)
     admin_ids = {
@@ -2109,10 +2120,15 @@ async def _build_team_with_permissions(
     )
     # `my_relations` now rides along on the base `Team` (via `team.model_dump()`),
     # so it must not be passed again here — a duplicate keyword would raise.
+    effective = effective_marketplace_settings(marketplace_default, metadata)
     return TeamWithPermissions(
         **team.model_dump(),
         permissions=permissions,
         retention=retention,
+        marketplace=TeamMarketplaceView(
+            agents_publishing_enabled=effective.agents_publishing_enabled,
+            agents_publish_quota=effective.agents_publish_quota,
+        ),
     )
 
 

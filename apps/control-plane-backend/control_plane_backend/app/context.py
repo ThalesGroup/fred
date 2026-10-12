@@ -68,6 +68,9 @@ from control_plane_backend.knowledge_bases.instance_store import (
     KnowledgeBaseInstanceStore,
 )
 from control_plane_backend.knowledge_bases.store import KnowledgeBaseDefinitionStore
+from control_plane_backend.marketplace_settings.store import (
+    PlatformMarketplaceSettingsStore,
+)
 from control_plane_backend.models.task_models import TASK_TABLES
 from control_plane_backend.platform_prompt.store import (
     CreationAssistantSettingsStore,
@@ -121,6 +124,7 @@ class ApplicationContext:
             CreationAssistantSettingsStore | None
         ) = None
         self._platform_ui_settings_store: PlatformUiSettingsStore | None = None
+        self._marketplace_settings_store: PlatformMarketplaceSettingsStore | None = None
         self._announcement_store: AnnouncementStore | None = None
         self._knowledge_base_instance_store: KnowledgeBaseInstanceStore | None = None
         self._knowledge_base_definition_store: KnowledgeBaseDefinitionStore | None = (
@@ -437,6 +441,13 @@ class ApplicationContext:
                 engine=self.get_pg_async_engine()
             )
         return self._platform_ui_settings_store
+
+    def get_marketplace_settings_store(self) -> PlatformMarketplaceSettingsStore:
+        if self._marketplace_settings_store is None:
+            self._marketplace_settings_store = PlatformMarketplaceSettingsStore(
+                engine=self.get_pg_async_engine()
+            )
+        return self._marketplace_settings_store
 
     def get_announcement_store(self) -> AnnouncementStore:
         if self._announcement_store is None:

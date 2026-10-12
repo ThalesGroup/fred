@@ -234,8 +234,18 @@ class _FakeRebac:
 
 
 class _FakeMetadataStore:
-    def __init__(self, team_id: str, name: str = "Fredlab") -> None:
-        self._metadata = TeamMetadata(id=TeamId(team_id), name=name)
+    def __init__(
+        self,
+        team_id: str,
+        name: str = "Fredlab",
+        *,
+        publishing_enabled: bool | None = None,
+    ) -> None:
+        self._metadata = TeamMetadata(
+            id=TeamId(team_id),
+            name=name,
+            agents_publishing_enabled=publishing_enabled,
+        )
         self._locks: dict[str, asyncio.Lock] = {}
         self._lock_owners: set[asyncio.Task[Any]] = set()
 
@@ -277,6 +287,7 @@ def _deps(
     get_purge_queue_store: Any = cast(Any, object),
     search_users: Any = cast(Any, _no_search_users),
     get_policy_catalog: Any = cast(Any, object),
+    publishing_enabled: bool | None = None,
 ):
     from control_plane_backend.teams.dependencies import TeamServiceDependencies
 
@@ -284,7 +295,7 @@ def _deps(
 
     config.app.team_admin_charter_version = None
     config.app.personal_max_resources_storage_size = 5368709120
-    store = _FakeMetadataStore(team_id)
+    store = _FakeMetadataStore(team_id, publishing_enabled=publishing_enabled)
     return TeamServiceDependencies(
         configuration=config,
         rebac=cast(Any, rebac),
@@ -1256,3 +1267,23 @@ async def test_search_candidate_team_members_strips_surrounding_whitespace() -> 
     await search_candidate_team_members(_user(), TeamId("fredlab"), "  cohen  ", deps)
 
     assert search_calls == ["cohen"]
+
+
+@pytest.mark.asyncio
+async def test_team_exposes_effective_marketplace_settings() -> None:
+    rebac = _FakeRebac(roles={"caller": {UserTeamRelation.TEAM_ADMIN}})
+
+    team = await get_team_by_id(
+        _user(),
+        TeamId("fredlab"),
+        _deps(
+            rebac,
+            "fredlab",
+            get_policy_catalog=ConversationPolicyCatalog,
+            publishing_enabled=True,
+        ),
+    )
+
+    assert team.marketplace is not None
+    assert team.marketplace.agents_publishing_enabled is True
+    assert team.marketplace.agents_publish_quota == 5
