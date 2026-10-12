@@ -45,18 +45,17 @@
   display: flex;
   position: relative;
   flex-direction: column;
-  justify-content: space-between;
   gap: var(--spacing-2xs);
   border-radius: var(--radius-ms);
   background-color: var(--surface-container);
   width: 100%;
-  height: 100%;
 }
 
 /* ── Inner layout ──────────────────────────────────────────────────────────── */
 
 .agentInfo {
   display: flex;
+  flex-grow: 1;
   flex-direction: column;
   gap: var(--spacing-xs);
   padding: var(--spacing-m) var(--spacing-m) var(--spacing-2xs);
@@ -76,8 +75,9 @@
 .moreMenu {
   flex-shrink: 0;
   align-self: flex-start;
-  margin-top: calc(var(--spacing-s) - var(--spacing-m));
-  margin-right: calc(var(--spacing-s) - var(--spacing-m));
+  /* A 40px target whose glyph stays centred where the 32px button had it. */
+  margin-top: calc(var(--spacing-s) - var(--spacing-m) - var(--spacing-2xs));
+  margin-right: calc(var(--spacing-s) - var(--spacing-m) - var(--spacing-2xs));
   margin-left: auto;
 }
 
@@ -136,9 +136,9 @@
   margin: 0 var(--spacing-m);
 }
 
-// Floats over the card's bottom edge instead of joining the column flow, so a
-// suspension leaves the card's geometry identical to every other card. Click
-// through, so the more menu and the footer buttons underneath stay reachable.
+// Floats over the footer row instead of joining the column flow, so a suspension
+// leaves the card's geometry identical to every other card. Click through, so
+// the footer buttons underneath stay reachable.
 .suspensionWarning {
   position: absolute;
   right: var(--spacing-s);
@@ -151,6 +151,7 @@
 
 .agentDescription {
   display: -webkit-box;
+  flex-shrink: 0;
   min-width: 0;
   -webkit-line-clamp: 3;
   color: var(--agent-description-color);
@@ -159,7 +160,13 @@
   font: var(--font-body-medium);
 }
 
-/* ── Actions row — info icon flush left, Chat flush right (#2096) ──────────── */
+/* ── Actions row — info icon flush left, Chat flush right ──────────────────── */
+
+/* Anchors the suspension banner to the actions row, above the marketplace bar. */
+.footer {
+  position: relative;
+  flex-shrink: 0;
+}
 
 .actions {
   display: flex;
@@ -167,6 +174,20 @@
   align-items: center;
   gap: var(--spacing-xs);
   padding: 0 var(--spacing-s) var(--spacing-s);
+}
+
+/* A plain hint, not a button: aligned with the card content, focusable for its tooltip. */
+.infoIcon {
+  display: flex;
+  margin-left: var(--spacing-2xs);
+  border-radius: var(--radius-full);
+  color: var(--on-surface-muted);
+  font-size: 1.25rem;
+
+  &:focus-visible {
+    outline: 2px solid var(--on-surface);
+    outline-offset: 2px;
+  }
 }
 
 /* ── Info tooltip content (#2096) — Origin/Template/Created/Updated ─────────
@@ -268,4 +289,173 @@
   --btn-text-color: var(--on-surface);
   /* Matches the card's former hover treatment. */
   @include spectrum-border-fill;
+}
+
+/* ── Marketplace state (shared bottom bar) ─────────────────────────────────── */
+
+/* Same chip as a published prompt card, so "published" reads at a glance in a list. */
+.marketplacePublishedChip {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  border-radius: var(--radius-full);
+  background: var(--success-container);
+  padding: var(--spacing-3xs) var(--spacing-s) var(--spacing-3xs) var(--spacing-xs);
+  color: var(--on-success-container);
+  font: var(--font-label-large-emphasized);
+
+  svg {
+    width: 18px;
+    height: 18px;
+  }
+}
+
+.marketplaceStateLabel,
+.marketplaceStateButton {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-3xs);
+  font: var(--font-label-large-emphasized);
+}
+
+.marketplaceNotPublished {
+  color: var(--on-surface-muted);
+  font: var(--font-label-small);
+}
+
+.marketplaceTrailing {
+  margin-left: auto;
+}
+
+.marketplaceCounters {
+  display: inline-flex;
+  gap: var(--spacing-s);
+}
+
+.marketplaceRemoved {
+  position: relative;
+}
+
+.marketplaceStateButton {
+  cursor: pointer;
+  border: none;
+  border-radius: var(--radius-full);
+  background: none;
+  padding: var(--spacing-3xs) var(--spacing-2xs);
+  color: var(--on-surface-retreat);
+
+  &:hover {
+    background: var(--state-on-surface-hover);
+  }
+}
+
+/* Opens upward: the bar sits at the card's bottom edge. */
+.marketplacePopover {
+  display: flex;
+  position: absolute;
+  bottom: calc(100% + var(--spacing-3xs));
+  left: 0;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  z-index: 2;
+  box-shadow: var(--shadow-m);
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-s);
+  background: var(--surface-floating);
+  padding: var(--spacing-s);
+  width: max-content;
+  max-width: 18rem;
+  color: var(--on-surface);
+  font: var(--font-body-small);
+
+  p {
+    margin: 0;
+  }
+}
+
+.marketplacePopoverReason {
+  font: var(--font-body-medium);
+}
+
+.marketplacePopoverMeta {
+  color: var(--on-surface-muted);
+}
+
+.marketplacePopoverMessage {
+  color: var(--on-surface-retreat);
+}
+
+.marketplacePopoverActions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* ── Marketplace card ──────────────────────────────────────────────────────── */
+
+/* Marketplace card: the publishing team in a slim band flush with the card's top
+   edge, the same surface as the bottom bar. */
+.agentTeam {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  border-top-right-radius: inherit;
+  border-top-left-radius: inherit;
+  background: var(--surface-container-high);
+  padding: var(--spacing-xs) var(--spacing-m);
+  min-width: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+
+  span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+// The team name reads as text in the band and acts as a filter link.
+.agentTeamLink {
+  cursor: pointer;
+  border: none;
+  background: none;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+
+  &:hover,
+  &:focus-visible {
+    text-decoration: underline;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 1px;
+    border-radius: var(--radius-xs);
+  }
+}
+
+/* Marketplace card: Like and Import side by side, the date flush right by flex. */
+.marketplaceCardBar {
+  justify-content: space-between;
+  padding-left: var(--spacing-xs);
+}
+
+.marketplaceCardCounters {
+  display: inline-flex;
+  gap: 0;
+}
+
+.marketplaceUpdated {
+  color: var(--on-surface-muted);
+  font: var(--font-label-small);
+  white-space: nowrap;
+}
+
+.marketplaceActions {
+  justify-content: flex-end;
+}
+
+.detailsButton {
+  white-space: nowrap;
 }

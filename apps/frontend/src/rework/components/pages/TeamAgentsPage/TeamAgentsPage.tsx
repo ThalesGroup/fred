@@ -14,7 +14,7 @@
 
 import Button from "@shared/atoms/Button/Button.tsx";
 import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
-import AgentCard from "@shared/organisms/AgentCard/AgentCard.tsx";
+import AgentCard, { type AgentCardMarketplace } from "@shared/organisms/AgentCard/AgentCard.tsx";
 import SearchInput from "@shared/molecules/SearchInput/SearchInput.tsx";
 import Select from "@shared/molecules/Select/Select.tsx";
 import type { OptionModel } from "@models/Option.model.ts";
@@ -26,13 +26,30 @@ import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap.ts";
 import { useFrontendProperties } from "../../../../hooks/useFrontendProperties.ts";
-import { useGetTeamQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import {
+  useDismissAgentMarketplaceRemovalMutation,
+  useGetTeamQuery,
+  usePublishAgentMutation,
+  useUnpublishAgentMutation,
+} from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import { type AgentFormPayload, default as AgentFormModal } from "./AgentFormModal/AgentFormModal.tsx";
 import CopyAgentDialog from "./CopyAgentDialog/CopyAgentDialog.tsx";
 import { duplicateCopyArgs, duplicateWarning } from "./duplicateAgent.ts";
 import DuplicateAgentDialog from "./DuplicateAgentDialog/DuplicateAgentDialog.tsx";
 import TeamAgentEmptyState from "./TeamAgentEmptyState/TeamAgentEmptyState.tsx";
+import PublishAgentDialog from "./PublishAgentDialog/PublishAgentDialog.tsx";
+import RepublishProposalDialog, {
+  type RepublishProposalCause,
+} from "./RepublishProposalDialog/RepublishProposalDialog.tsx";
+import {
+  agentFileCapabilities,
+  isPublished,
+  marketplaceErrorView,
+  publishAvailability,
+  publishBlockedText,
+  teamCanPublish,
+} from "./agentMarketplace.ts";
 import { filterAgents } from "./agentFilter.ts";
 import {
   AGENT_NAME_CONFLICT,
@@ -136,6 +153,11 @@ export default function TeamAgentsPage() {
   // (taken in the meantime); kept so the form marks its name field.
   const [refusedNames, setRefusedNames] = useState<ReadonlySet<string>>(new Set());
   const [copyingInstance, setCopyingInstance] = useState<ManagedAgentInstanceSummary | null>(null);
+  const [publishingInstance, setPublishingInstance] = useState<ManagedAgentInstanceSummary | null>(null);
+  const [proposal, setProposal] = useState<{
+    instance: ManagedAgentInstanceSummary;
+    cause: RepublishProposalCause;
+  } | null>(null);
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<AgentSortValue>(getStoredAgentSort);
   const changeSort = (next: AgentSortValue) => {
@@ -145,7 +167,11 @@ export default function TeamAgentsPage() {
 
   const { data: fetchedTeam } = useGetTeamQuery({ teamId: teamId || "" }, { skip: !teamId || isPersonalTeam });
   const team = isPersonalTeam ? activeTeam : fetchedTeam;
-  const { canUpdateAgents: canManageAgents } = useTeamCapabilities(team);
+  const {
+    canUpdateAgents: canManageAgents,
+    canPublishMarketplaceAgents: canPublish,
+    canUnpublishMarketplaceAgents: canUnpublish,
+  } = useTeamCapabilities(team);
 
   const {
     data: managedInstances = [],
@@ -207,6 +233,88 @@ export default function TeamAgentsPage() {
     usePatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatchMutation();
   const [deleteManagedInstance] =
     useDeleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDeleteMutation();
+  const [publishAgent, { isLoading: isPublishing }] = usePublishAgentMutation();
+  const [unpublishAgent] = useUnpublishAgentMutation();
+  const [dismissRemoval] = useDismissAgentMarketplaceRemovalMutation();
+
+  const availabilityOf = (instance: ManagedAgentInstanceSummary) =>
+    publishAvailability({
+      instance,
+      team,
+      canPublish,
+      isPersonalTeam,
+      templates: isTemplatesError ? undefined : availableTemplates,
+    });
+  const capabilityName = (capabilityId: string) => {
+    const capability = availableTemplates
+      .flatMap((tpl) => tpl.available_capabilities ?? [])
+      .find((entry) => entry.id === capabilityId);
+    return capability ? t(capability.name, { defaultValue: capabilityId }) : capabilityId;
+  };
+  const showMarketplaceError = (summaryKey: string, error: unknown) => {
+    const view = marketplaceErrorView(error, t, capabilityName);
+    if (view.stale) void refetchInstances();
+    showError({ summary: t(summaryKey), detail: view.message });
+  };
+
+  // After an editor's own save or reactivation, offer to republish; the
+  // refreshed row says whether the save actually changed the agent.
+  const proposeRepublish = (instance: ManagedAgentInstanceSummary | undefined, cause: RepublishProposalCause) => {
+    if (!instance || !availabilityOf(instance)) return;
+    const shouldPropose =
+      cause === "saved"
+        ? isPublished(instance) && !!instance.marketplace?.modified
+        : instance.marketplace?.state === "removed" && instance.marketplace.removed_reason === "deactivated";
+    if (shouldPropose) setProposal({ instance, cause });
+  };
+
+  const handlePublish = async (instance: ManagedAgentInstanceSummary) => {
+    if (!teamId) return;
+    try {
+      await publishAgent({
+        teamId,
+        agentInstanceId: instance.agent_instance_id,
+        publishAgentRequest: { expected_version: instance.marketplace?.version ?? null },
+      }).unwrap();
+      showSuccess({ summary: t("rework.agentMarketplace.publishSuccess", { name: instance.display_name }) });
+      setPublishingInstance(null);
+    } catch (error: unknown) {
+      setPublishingInstance(null);
+      showMarketplaceError("rework.agentMarketplace.publishError", error);
+    }
+  };
+
+  const handleRemove = (instance: ManagedAgentInstanceSummary) => {
+    if (!teamId || !instance.marketplace) return;
+    const expectedVersion = instance.marketplace.version;
+    showConfirmationDialog({
+      title: t("rework.agentMarketplace.removeDialog.title"),
+      message: t("rework.agentMarketplace.removeDialog.message", { name: instance.display_name }),
+      confirmButtonLabel: t("rework.agentMarketplace.removeDialog.confirm"),
+      cancelButtonLabel: t("rework.agentCard.deleteDialog.cancel"),
+      onConfirm: async () => {
+        try {
+          await unpublishAgent({
+            teamId,
+            agentInstanceId: instance.agent_instance_id,
+            unpublishAgentRequest: { expected_version: expectedVersion },
+          }).unwrap();
+          showSuccess({ summary: t("rework.agentMarketplace.removeSuccess", { name: instance.display_name }) });
+        } catch (error: unknown) {
+          showMarketplaceError("rework.agentMarketplace.removeError", error);
+        }
+      },
+    });
+  };
+
+  const handleHideRemoval = async (instance: ManagedAgentInstanceSummary) => {
+    if (!teamId) return;
+    try {
+      await dismissRemoval({ teamId, agentInstanceId: instance.agent_instance_id }).unwrap();
+    } catch (error: unknown) {
+      showMarketplaceError("rework.agentMarketplace.hideError", error);
+    }
+  };
 
   const takenNames = useMemo(
     () => new Set([...takenAgentNames(managedInstances, editingInstance?.agent_instance_id), ...refusedNames]),
@@ -272,6 +380,7 @@ export default function TeamAgentsPage() {
 
   const handleEdit = async (payload: AgentFormPayload) => {
     if (!teamId || !editingInstance) return;
+    const edited = editingInstance;
     const request: UpdateAgentInstanceRequest = {
       display_name: payload.displayName,
       role: payload.role || undefined,
@@ -308,7 +417,13 @@ export default function TeamAgentsPage() {
       }
       showSuccess({ summary: t("rework.agentCard.updateSuccess", { agent: agentsNicknameSingular }) });
       setEditingInstance(null);
-      await refetchInstances();
+      const { data: refreshed } = await refetchInstances();
+      if (isPublished(edited)) {
+        proposeRepublish(
+          refreshed?.find((item) => item.agent_instance_id === edited.agent_instance_id),
+          "saved",
+        );
+      }
     } catch (error: unknown) {
       if (isAgentNameConflict(error) && request.display_name) {
         refuseName(request.display_name);
@@ -321,7 +436,22 @@ export default function TeamAgentsPage() {
     }
   };
 
-  const handleToggleEnabled = async (instance: ManagedAgentInstanceSummary) => {
+  const handleToggleEnabled = (instance: ManagedAgentInstanceSummary) => {
+    if (instance.status === "enabled" && isPublished(instance)) {
+      showConfirmationDialog({
+        criticalAction: true,
+        title: t("rework.agentMarketplace.deactivateDialog.title"),
+        message: t("rework.agentMarketplace.deactivateDialog.message", { name: instance.display_name }),
+        confirmButtonLabel: t("rework.agentMarketplace.deactivateDialog.confirm"),
+        cancelButtonLabel: t("rework.agentCard.deleteDialog.cancel"),
+        onConfirm: () => void applyToggleEnabled(instance),
+      });
+      return;
+    }
+    void applyToggleEnabled(instance);
+  };
+
+  const applyToggleEnabled = async (instance: ManagedAgentInstanceSummary) => {
     if (!teamId) return;
     const newStatus = instance.status === "enabled" ? "disabled" : "enabled";
     try {
@@ -337,6 +467,7 @@ export default function TeamAgentsPage() {
         summary: t("rework.agentCard.toggleSuccess", { agent: agentsNicknameSingular, status: statusLabel }),
       });
       await refetchInstances();
+      if (newStatus === "enabled") proposeRepublish(instance, "reactivated");
     } catch (error: unknown) {
       const err = error as { data?: { detail?: string }; message?: string };
       showError({
@@ -375,7 +506,11 @@ export default function TeamAgentsPage() {
     showConfirmationDialog({
       criticalAction: true,
       title: t("rework.agentCard.deleteDialog.title"),
-      message: t("rework.agentCard.deleteDialog.message", { name: instance.display_name }),
+      message: isPublished(instance)
+        ? `${t("rework.agentCard.deleteDialog.message", { name: instance.display_name })} ${t(
+            "rework.agentMarketplace.deleteRemoves",
+          )}`
+        : t("rework.agentCard.deleteDialog.message", { name: instance.display_name }),
       confirmButtonLabel: t("rework.agentCard.deleteDialog.confirm"),
       cancelButtonLabel: t("rework.agentCard.deleteDialog.cancel"),
       onConfirm: async () => {
@@ -396,6 +531,27 @@ export default function TeamAgentsPage() {
         }
       },
     });
+  };
+
+  const showMarketplaceBar = teamCanPublish(team, isPersonalTeam);
+  const cardMarketplace = (instance: ManagedAgentInstanceSummary): AgentCardMarketplace | undefined => {
+    if (isPersonalTeam) return undefined;
+    const availability = availabilityOf(instance);
+    return {
+      showBar: showMarketplaceBar,
+      publishAction: availability
+        ? {
+            kind: availability.kind,
+            disabledReason: availability.blockedReason ? publishBlockedText(availability.blockedReason, t) : undefined,
+          }
+        : undefined,
+      canRemove: canUnpublish && isPublished(instance),
+      showDetailedState: canManageAgents || canUnpublish,
+      canHide: canUnpublish,
+      onPublish: () => setPublishingInstance(instance),
+      onRemove: () => handleRemove(instance),
+      onHide: () => void handleHideRemoval(instance),
+    };
   };
 
   if (!teamId) {
@@ -428,6 +584,8 @@ export default function TeamAgentsPage() {
   // Only a non-empty query earns the no-match message: an empty list under an
   // empty query means something else entirely, and is left as it was.
   const showNoSearchMatch = Boolean(search.trim()) && searchedInstances.length === 0;
+  const teamMarketplace = isPersonalTeam ? null : team?.marketplace;
+  const proposalAvailability = proposal ? availabilityOf(proposal.instance) : null;
 
   return (
     <div className={styles.teamAgentContainer}>
@@ -496,30 +654,39 @@ export default function TeamAgentsPage() {
       ) : showNoSearchMatch ? (
         <div className={styles.emptySearch}>{t("rework.teams.agents.emptySearch")}</div>
       ) : (
-        <div className={styles.agentList}>
-          {searchedInstances.map((instance) => {
-            const template = availableTemplates.find((tpl) => tpl.template_id === instance.template_id);
-            return (
-              <AgentCard
-                key={instance.agent_instance_id}
-                instance={instance}
-                templateDisplayName={template?.display_name || instance.template_id}
-                runtimeId={template?.source_runtime_id}
-                teamId={teamId}
-                canManageAgents={canManageAgents}
-                offline={templatesUnavailable}
-                auditUserById={auditUserById}
-                onEdit={() => setEditingInstance(instance)}
-                onToggleEnabled={() => handleToggleEnabled(instance)}
-                onDuplicate={() => {
-                  setDuplicateName(freeAgentName(instance.display_name, duplicateTakenNames));
-                  setDuplicatingInstance(instance);
-                }}
-                onCopyTo={() => setCopyingInstance(instance)}
-                onDelete={() => handleDelete(instance)}
-              />
-            );
-          })}
+        <div className={styles.agentListScroll}>
+          <div className={styles.agentList}>
+            {searchedInstances.map((instance) => {
+              const template = availableTemplates.find((tpl) => tpl.template_id === instance.template_id);
+              return (
+                <AgentCard
+                  key={instance.agent_instance_id}
+                  instance={instance}
+                  templateDisplayName={template?.display_name || instance.template_id}
+                  runtimeId={template?.source_runtime_id}
+                  teamId={teamId}
+                  canManageAgents={canManageAgents}
+                  offline={templatesUnavailable}
+                  auditUserById={auditUserById}
+                  onEdit={() => setEditingInstance(instance)}
+                  onToggleEnabled={() => handleToggleEnabled(instance)}
+                  onDuplicate={() => {
+                    setDuplicateName(
+                      freeAgentName(
+                        instance.display_name,
+                        duplicateTakenNames,
+                        t("rework.agentCard.duplicateDialog.copyWord"),
+                      ),
+                    );
+                    setDuplicatingInstance(instance);
+                  }}
+                  onCopyTo={() => setCopyingInstance(instance)}
+                  onDelete={() => handleDelete(instance)}
+                  marketplace={cardMarketplace(instance)}
+                />
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -557,6 +724,34 @@ export default function TeamAgentsPage() {
       />
 
       <CopyAgentDialog instance={copyingInstance} onClose={() => setCopyingInstance(null)} />
+
+      <PublishAgentDialog
+        open={publishingInstance !== null}
+        agentName={publishingInstance?.display_name ?? ""}
+        republish={publishingInstance ? isPublished(publishingInstance) : false}
+        fileNames={publishingInstance ? agentFileCapabilities(publishingInstance, availableTemplates, t) : []}
+        publishedCount={teamMarketplace?.published_count}
+        quota={teamMarketplace?.agents_publish_quota}
+        isSubmitting={isPublishing}
+        onCancel={() => setPublishingInstance(null)}
+        onConfirm={() => {
+          if (publishingInstance) void handlePublish(publishingInstance);
+        }}
+      />
+
+      <RepublishProposalDialog
+        open={proposal !== null}
+        agentName={proposal?.instance.display_name ?? ""}
+        cause={proposal?.cause ?? "saved"}
+        blockedReason={
+          proposalAvailability?.blockedReason ? publishBlockedText(proposalAvailability.blockedReason, t) : undefined
+        }
+        onPublish={() => {
+          if (proposal) setPublishingInstance(proposal.instance);
+          setProposal(null);
+        }}
+        onIgnore={() => setProposal(null)}
+      />
     </div>
   );
 }
