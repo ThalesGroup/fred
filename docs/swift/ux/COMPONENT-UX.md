@@ -2248,9 +2248,10 @@ bounds and the display helper live in `src/rework/core/utils/teamFields.ts`
   `x / 500` counter, helper text on the team's objectives regarding AI, and the
   minimum-length error once the field has been left. The create button stays
   disabled until the trimmed description is valid; the request sends it trimmed.
-- **`TeamSettingsParameters`.** Same counter and helper. The field saves on
-  blur: an unchanged value does nothing, an invalid one shows the error on the
-  field and sends nothing, a valid one is sent trimmed.
+- **`TeamSettingsParameters`.** Same counter and helper, five rows tall. The
+  field saves on blur: an unchanged value does nothing, an invalid one shows the
+  error on the field and sends nothing, a valid one is sent trimmed and confirmed
+  by a success toast (a failed save shows an error on the field instead).
 - **`TeamDescriptionReminder`.** A `ServiceNotice` shown to team admins
   (`canUpdateInfo`) while `description_is_placeholder` is true: at the top of
   `TeamAgentsPage` (the team's home) with an outlined button to the team

@@ -2930,7 +2930,9 @@
         },
         "description": {
           "label": "Description de l'équipe",
-          "placeholder": "Aidez les autres utilisateurs à comprendre le rôle de votre équipe."
+          "placeholder": "Aidez les autres utilisateurs à comprendre le rôle de votre équipe.",
+          "saved": "Description de l'équipe mise à jour",
+          "saveError": "La description n'a pas pu être enregistrée. Réessayez."
         },
         "joiningMode": {
           "label": "Mode d'adhésion",

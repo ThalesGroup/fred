@@ -35,6 +35,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const h = vi.hoisted(() => ({
   // The rename path awaits `.unwrap()`; every other PATCH here fires and forgets.
   updateTeam: vi.fn(() => ({ unwrap: () => Promise.resolve() })),
+  showSuccess: vi.fn(),
 }));
 
 vi.mock("react-i18next", () => ({
@@ -50,7 +51,9 @@ vi.mock("react-router-dom", () => ({
   Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
 }));
 
-vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({ showError: vi.fn() }) }));
+vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
+  useToast: () => ({ showError: vi.fn(), showSuccess: h.showSuccess }),
+}));
 
 vi.mock("../../../../../../hooks/useFrontendProperties.ts", () => ({
   useFrontendProperties: () => ({ defaultTeamAvatarFile: undefined }),
@@ -80,6 +83,7 @@ afterEach(() => {
   });
   container.remove();
   h.updateTeam.mockClear();
+  h.showSuccess.mockClear();
 });
 
 function baseTeam(
@@ -424,6 +428,27 @@ describe("TeamSettingsParameters description", () => {
       updateTeamRequest: { description: "Draft and review procurement contracts." },
     });
     expect(container.textContent).not.toContain("rework.teamDescription.tooShort");
+  });
+
+  it("confirms a saved description with a toast, and stays silent when the save fails", async () => {
+    render(<TeamSettingsParameters team={describedTeam()} />);
+
+    typeAndLeave("Draft and review procurement contracts.");
+    await act(async () => {});
+    expect(h.showSuccess).toHaveBeenCalledWith({ summary: "rework.teamSettings.parameters.description.saved" });
+
+    h.showSuccess.mockClear();
+    h.updateTeam.mockReturnValueOnce({ unwrap: () => Promise.reject(new Error("offline")) });
+    typeAndLeave("Negotiate and archive supplier agreements.");
+    await act(async () => {});
+    expect(h.showSuccess).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("rework.teamSettings.parameters.description.saveError");
+  });
+
+  it("gives the description field five rows", () => {
+    render(<TeamSettingsParameters team={describedTeam()} />);
+
+    expect(field().getAttribute("rows")).toBe("5");
   });
 
   it("sends nothing when the description is left unchanged", () => {

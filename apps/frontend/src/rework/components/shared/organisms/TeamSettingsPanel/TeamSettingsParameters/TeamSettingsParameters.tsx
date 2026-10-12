@@ -35,6 +35,7 @@ import {
 import { useFrontendProperties } from "../../../../../../hooks/useFrontendProperties.ts";
 import TeamSettingsRetention from "@shared/organisms/TeamSettingsPanel/TeamSettingsRetention/TeamSettingsRetention.tsx";
 import TeamDescriptionReminder from "@shared/organisms/TeamDescriptionReminder/TeamDescriptionReminder.tsx";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import {
   MAX_TEAM_NAME_LENGTH,
   TEAM_DESCRIPTION_MAX_LENGTH,
@@ -63,6 +64,7 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
   const { defaultTeamAvatarFile } = useFrontendProperties();
   const { t } = useTranslation();
   const [updateTeam] = useUpdateTeamMutation();
+  const { showSuccess } = useToast();
   const [uploadAvatar, { isLoading: isUploadingAvatar }] = useUploadTeamAvatarMutation();
 
   // Set by a failed rename only; the field's own value is form state.
@@ -107,7 +109,10 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
     updateTeam({
       teamId: team.id,
       updateTeamRequest: { description: newDescription },
-    });
+    })
+      .unwrap()
+      .then(() => showSuccess({ summary: t("rework.teamSettings.parameters.description.saved") }))
+      .catch(() => setDescriptionError(t("rework.teamSettings.parameters.description.saveError")));
   };
   const descriptionValue = watch("description");
 
@@ -240,6 +245,7 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
           error={descriptionError ?? undefined}
           maxLength={TEAM_DESCRIPTION_MAX_LENGTH}
           value={descriptionValue}
+          rows={5}
           required
           {...register("description", { onBlur: handleSaveDescription })}
         />
