@@ -18,7 +18,7 @@
 
 - [x] 4.1 Update the existing runtime contract document-access section and component UX doc, and add an English migration note with no operator action expected. Verify terminology matches the Resources arrival-date contract and request/response models remain unchanged; regenerate generated clients if schema changes become necessary.
 - [x] 4.2 Run the focused Knowledge Flow and capability tests, then the root quality check once before commit/push. Apply the branch audit and performance review procedures and obtain an independent read-only review of the implemented contract. Record reviewed base/head, findings, dispositions, and verification in these tasks or the PR.
-- [ ] 4.3 Reconcile approved scope with the final implementation, sync and archive the completed OpenSpec change, and push/open a draft PR after publication authorization. Verify only this work is committed and the PR links its tracking issue.
+- [x] 4.3 Reconcile approved scope with the final implementation, sync and archive the completed OpenSpec change, and push/open a draft PR after publication authorization. Verify only this work is committed and the PR links its tracking issue.
 
 ## Review dispositions
 
@@ -35,3 +35,5 @@
 - Chromium: actual renderer output inside the Graph envelope, keyboard Enter/Space, one expanded row, ids hidden, no runtime errors and no horizontal overflow at 320/720 px in light/dark themes. Temporary preview files/server were removed after verification.
 - `make migration-check MIGRATION_BASE=origin/swift` and `openspec validate expose-document-tree-metadata --strict` passed. API/SDK response shapes are unchanged; no generated client regeneration required.
 - Author and independent review covered all task source, tests, translations, specs and docs against `7dafb6f6c6f39eb457bbccad157ec6bcd8201b97`, including ReAct, both Graph tool consumers, HTTP adapter, metadata authorization/store and UI. Three P2 findings were corrected and independently rechecked; no new actionable finding in the final delta. Review excluded preview/dependency artifacts. No live LLM turn, full-repository test suite or concurrency/load campaign was run; threadpool/GIL behavior under high load is unmeasured.
+
+- Specs synced and change archived after successful verification and review. Implementation commits pushed on `feat/document-tree-tool-details`; draft PR creation completed. Archive close-out committed separately without changing implementation code.
