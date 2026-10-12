@@ -471,6 +471,20 @@ describe("TeamSettingsParameters description", () => {
     expect(field().value).toBe("");
   });
 
+  it("flags the field left empty on a team with the default description, and sends nothing", () => {
+    const placeholderTeam = describedTeam({
+      description: "Description à compléter par l'administrateur de l'équipe.",
+      description_is_placeholder: true,
+      permissions: ["can_update_info"],
+    });
+    render(<TeamSettingsParameters team={placeholderTeam} />);
+
+    typeAndLeave("");
+
+    expect(container.textContent).toContain("rework.teamDescription.tooShort");
+    expect(h.updateTeam).not.toHaveBeenCalled();
+  });
+
   it("shows no reminder for a described team or a member without the admin role", () => {
     render(<TeamSettingsParameters team={describedTeam({ permissions: ["can_update_info"] })} />);
     expect(container.textContent).not.toContain("rework.teamDescription.reminder.title");

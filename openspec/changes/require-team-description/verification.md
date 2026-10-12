@@ -69,7 +69,8 @@ Scenario coverage:
 5. **Settings field starts empty for a placeholder team** (owner decision,
    2026-10-12, after the independent review): the default text is not shown as
    a value, so a leftover of it can never be saved as a real description.
-   Leaving the field empty sends nothing and the team keeps its default text.
+   Leaving the field empty sends nothing, shows the minimum-length error on
+   the field, and the team keeps its default text.
 6. **TeamCard renders no description block for a personal space**, which has
    none.
 7. **Imported rows already carrying the placeholder count in the warning**: the

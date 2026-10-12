@@ -98,7 +98,13 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
   const handleSaveDescription = () => {
     const newDescription = getValues().description.trim();
     if (newDescription === storedDescription.trim()) {
-      setDescriptionError(null);
+      // Left empty on a team that still has the default description: nothing
+      // to send, but the field says it is still to be filled.
+      setDescriptionError(
+        team.description_is_placeholder
+          ? t("rework.teamDescription.tooShort", { min: TEAM_DESCRIPTION_MIN_LENGTH })
+          : null,
+      );
       return;
     }
     // An invalid value stays in the field with its error; nothing is sent.

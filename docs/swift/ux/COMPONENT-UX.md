@@ -2253,7 +2253,8 @@ bounds and the display helper live in `src/rework/core/utils/teamFields.ts`
   disabled until the trimmed description is valid; the request sends it trimmed.
 - **`TeamSettingsParameters`.** Same counter and description, seven rows tall.
   For a team that still has the default description the field starts empty
-  (the default text is not a value the admin wrote). The field saves on blur: an unchanged value does nothing, an invalid one shows the
+  (the default text is not a value the admin wrote), and leaving it empty
+  shows the minimum-length error without sending anything. The field saves on blur: an unchanged value does nothing, an invalid one shows the
   error on the field and sends nothing, a valid one is sent trimmed and confirmed
   by a success toast (a failed save shows an error on the field instead).
 - **`TeamDescriptionReminder`.** A `ServiceNotice` in its `color="info"`
