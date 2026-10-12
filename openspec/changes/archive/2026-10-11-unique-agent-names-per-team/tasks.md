@@ -24,4 +24,4 @@
 - [x] 4.2 Migration note, impact `minor` (required for a new Alembic revision), with a read-only query listing colliding names. Verify: migration note check valid. Done: `3042-unique-agent-names-per-team.md`, migration note check valid.
 - [x] 4.3 Quality gates: control-plane `make code-quality` and `make test`; frontend `npx tsc --noEmit`, `npx prettier --check src`, `npx vitest run`. Verify: all green, counts recorded here. Done 2026-10-11: control-plane `make code-quality` clean, `make test` 1620 passed, 9 skipped; frontend tsc and prettier clean, vitest 305 files, 3516 passed, 7 skipped.
 - [x] 4.4 Owner check in the app. Verify: owner confirmation. Done: owner tested create, rename, duplicate and copy in the app on 2026-10-11, all passed.
-- [ ] 4.5 Archive after merge. Verify: `openspec validate unique-agent-names-per-team --strict`.
+- [x] 4.5 Archive after merge. Verify: `openspec validate unique-agent-names-per-team --strict`.

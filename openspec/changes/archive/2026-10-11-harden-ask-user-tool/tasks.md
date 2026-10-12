@@ -1,7 +1,7 @@
 ## 0. Preconditions
 
 - [x] 0.1 GitHub issue #3035 created (folds #3014) and linked in proposal.md.
-- [ ] 0.2 Before archiving, re-apply this delta onto the current requirement text if `refine-agent-question-answers`, `add-agent-initiated-human-questions` or `refresh-hitl-card-visuals` was archived first. Verify: `openspec validate harden-ask-user-tool --strict` and a diff of the archived requirement keeps both changes' edits.
+- [x] 0.2 Before archiving, re-apply this delta onto the current requirement text if `refine-agent-question-answers`, `add-agent-initiated-human-questions` or `refresh-hitl-card-visuals` was archived first. Verify: `openspec validate harden-ask-user-tool --strict` and a diff of the archived requirement keeps both changes' edits.
 
 ## 1. Runtime
 
@@ -20,4 +20,4 @@
     - Residual: after a garbled answer, the agent asked a follow-up in plain text.
   - The first wording ("whenever you need a decision…") was not enough. In a conversation where the agent had already asked in text, it judged that "ask me a question" did not require the tool. The description now says the tool is the only way to ask the user anything, including when the user asks to be asked a question.
 - [x] 2.5 Several questions: the description says each call asks one question and several questions are separate calls in the same response, shown together as tabs, never merged. Found 2026-10-10 in local session a05371ce: asked for three questions, mistral-small merged them into one question with four combined choices, reasoning that the tool takes one question with at most four choices. Verify: ask_user tests (102 passed); manual check after merge.
-- [ ] 2.4 Archive after merge, then close #3035 and #3014. Verify: `openspec validate harden-ask-user-tool --strict`.
+- [x] 2.4 Archive after merge, then close #3035 and #3014. Verify: `openspec validate harden-ask-user-tool --strict`.

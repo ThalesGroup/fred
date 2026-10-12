@@ -15,4 +15,4 @@
 - [x] 2.2 Migration note, impact `none`. Verify: migration note check valid.
 - [x] 2.3 Quality gates with npx (not the make targets): `tsc --noEmit`, `prettier --check src`, `vitest run`. Verify: all green, counts recorded here. Done 2026-10-10: tsc and prettier clean; vitest 303 files, 3523 passed, 7 skipped (after the menu-flash fix); migration note check valid.
 - [x] 2.4 Owner check in the app. Verify: owner confirmation. Done: owner ran the 19-step manual checklist on 2026-10-10, all passed.
-- [ ] 2.5 Archive after merge. Verify: `openspec validate recall-sent-messages-in-composer --strict`.
+- [x] 2.5 Archive after merge. Verify: `openspec validate recall-sent-messages-in-composer --strict`.
