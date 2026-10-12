@@ -256,7 +256,7 @@ async def test_rendering_does_not_block_the_request_event_loop(monkeypatch):
         assert (await request).tree == "(empty)"
     finally:
         release.set()
-        await request
+        await asyncio.gather(request)
 
 
 @pytest.mark.asyncio
