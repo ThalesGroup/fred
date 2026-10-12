@@ -1212,7 +1212,7 @@ async def test_user_deletion_removes_patch_note_dismissals(
     app = FastAPI()
     app.include_router(users_api.router)
     attach_application_container(app, container)  # type: ignore[arg-type]
-    app.dependency_overrides[get_current_user] = lambda: _user()
+    app.dependency_overrides[get_current_user] = _user
     app.dependency_overrides[get_user_service_dependencies] = lambda: SimpleNamespace(
         configuration=SimpleNamespace(
             security=SimpleNamespace(user_directory="keycloak")

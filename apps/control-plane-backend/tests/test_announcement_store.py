@@ -345,7 +345,8 @@ async def test_delete_removes_dismissals(store: AnnouncementStore) -> None:
     await _make_patch_note(store, "p1")
     await store.add_dismissal(announcement_id="p1", user_id="alice")
 
-    assert await store.delete("p1") is True
+    deleted = await store.delete("p1")
+    assert deleted is True
     assert not await store.is_dismissed(announcement_id="p1", user_id="alice")
 
 
