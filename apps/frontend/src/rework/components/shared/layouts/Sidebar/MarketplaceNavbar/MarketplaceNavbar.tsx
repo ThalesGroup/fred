@@ -17,9 +17,12 @@ import { useTranslation } from "react-i18next";
 import NavigationMenu from "@shared/molecules/NavigationMenu/NavigationMenu.tsx";
 import type { NavigationMenuItemProps } from "@shared/molecules/NavigationMenu/NavigationMenuItem/NavigationMenuItem.tsx";
 import NavPanelHeader from "@shared/molecules/NavPanelHeader/NavPanelHeader.tsx";
+import type { IconType } from "@shared/utils/Type.ts";
+import { useFrontendProperties } from "../../../../../../hooks/useFrontendProperties.ts";
 
 export default function MarketplaceNavbar() {
   const { t } = useTranslation();
+  const { agentIconName, agentsNicknamePlural } = useFrontendProperties();
 
   const navigationItems: NavigationMenuItemProps[] = [
     {
@@ -27,6 +30,13 @@ export default function MarketplaceNavbar() {
       label: t("rework.sidebar.marketplace.menu.teams"),
       icon: { category: "outlined", type: "groups", filled: true },
       linkProps: { to: "/marketplace/teams" },
+    },
+    {
+      type: "link",
+      // Same deployment-specific name and icon as the team's Agents entry.
+      label: (agentsNicknamePlural ?? "").toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase()),
+      icon: { category: "outlined", type: agentIconName as IconType, filled: true },
+      linkProps: { to: "/marketplace/agents" },
     },
     {
       type: "link",

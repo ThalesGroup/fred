@@ -196,6 +196,7 @@ export const materialIcons = [
   "mic",
   "stop",
   "book_2",
+  "favorite",
 ] as const;
 
 export type MaterialIconType = (typeof materialIcons)[number];
