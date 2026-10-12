@@ -2245,10 +2245,13 @@ bounds and the display helper live in `src/rework/core/utils/teamFields.ts`
 (with `MAX_TEAM_NAME_LENGTH`), shared by both forms.
 
 - **`AdminTeamsPage` create form.** A required `TextArea` under the team name:
-  `x / 500` counter, helper text on the team's objectives regarding AI, and the
-  minimum-length error once the field has been left. The create button stays
+  `x / 500` counter, a sentence on the team's objectives regarding AI between
+  the label and the field (`TextArea` `description`, tied to the field with
+  `aria-describedby` — a full sentence never goes in the one-line `explanation`
+  under the field, which cuts it off), and the minimum-length error once the
+  field has been left. The create button stays
   disabled until the trimmed description is valid; the request sends it trimmed.
-- **`TeamSettingsParameters`.** Same counter and helper, seven rows tall. The
+- **`TeamSettingsParameters`.** Same counter and description, seven rows tall. The
   field saves on blur: an unchanged value does nothing, an invalid one shows the
   error on the field and sends nothing, a valid one is sent trimmed and confirmed
   by a success toast (a failed save shows an error on the field instead).

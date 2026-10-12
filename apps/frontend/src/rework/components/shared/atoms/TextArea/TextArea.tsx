@@ -17,12 +17,25 @@ import styles from "./TextArea.module.scss";
 
 export interface TextAreaProps extends ComponentPropsWithRef<"textarea"> {
   label: string;
+  /** What the field is for, shown between the label and the field. Use it for a
+   *  sentence or more: `explanation` is a one-line hint and gets cut off. */
+  description?: string;
   explanation?: string;
   error?: string;
 }
 
-export default function TextArea({ label, explanation, error, maxLength, value, required, ...props }: TextAreaProps) {
+export default function TextArea({
+  label,
+  description,
+  explanation,
+  error,
+  maxLength,
+  value,
+  required,
+  ...props
+}: TextAreaProps) {
   const id = useId();
+  const descriptionId = useId();
   const characterCounter = String(value).length;
   // No hint/error/counter to show — drop the container entirely rather than
   // leaving an empty row under the field.
@@ -36,7 +49,20 @@ export default function TextArea({ label, explanation, error, maxLength, value, 
         {required ? `${label} *` : label}
       </label>
 
-      <textarea id={id} value={value} maxLength={maxLength} required={required} {...props} />
+      {description && (
+        <span id={descriptionId} className={styles.description}>
+          {description}
+        </span>
+      )}
+
+      <textarea
+        id={id}
+        value={value}
+        maxLength={maxLength}
+        required={required}
+        aria-describedby={description ? descriptionId : undefined}
+        {...props}
+      />
 
       {hasInformation && (
         <span className={styles.information}>

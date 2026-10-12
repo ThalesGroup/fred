@@ -241,7 +241,7 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
         <TextArea
           label={t("rework.teamSettings.parameters.description.label")}
           placeholder={t("rework.teamSettings.parameters.description.placeholder")}
-          explanation={t("rework.teamDescription.helper")}
+          description={t("rework.teamDescription.helper")}
           error={descriptionError ?? undefined}
           maxLength={TEAM_DESCRIPTION_MAX_LENGTH}
           value={descriptionValue}

@@ -303,7 +303,7 @@ export default function AdminTeamsPage() {
         />
         <TextArea
           label={t("rework.teamDescription.label")}
-          explanation={t("rework.teamDescription.helper")}
+          description={t("rework.teamDescription.helper")}
           error={
             descriptionTouched && !descriptionValid
               ? t("rework.teamDescription.tooShort", { min: TEAM_DESCRIPTION_MIN_LENGTH })
