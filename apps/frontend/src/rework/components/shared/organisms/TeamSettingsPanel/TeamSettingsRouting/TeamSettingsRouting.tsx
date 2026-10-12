@@ -15,6 +15,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { normalizeApiError } from "@core/errors/normalizeApiError.ts";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import styles from "./TeamSettingsRouting.module.scss";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
 import Button from "@shared/atoms/Button/Button.tsx";
@@ -84,6 +85,7 @@ function withUnavailableFallback(
  */
 export default function TeamSettingsRouting({ team, canWrite }: TeamSettingsRoutingProps) {
   const { t } = useTranslation();
+  const { showSuccess, showError } = useToast();
   const { data: policy, isLoading } = useTeamRoutingPolicyQuery({ teamId: team.id });
   const { data: availableModels, isLoading: isLoadingModels } = useAvailableModelProfilesQuery({
     teamId: team.id,
@@ -171,8 +173,10 @@ export default function TeamSettingsRouting({ team, canWrite }: TeamSettingsRout
           agent_profile_overrides: agentProfileOverrides,
         },
       }).unwrap();
+      showSuccess({ summary: t("rework.teamSettings.routing.saveSuccess") });
     } catch (err) {
       setError(normalizeApiError(err).detail ?? t("rework.teamSettings.routing.saveError"));
+      showError({ summary: t("rework.teamSettings.routing.saveError") });
     }
   };
 

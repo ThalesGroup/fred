@@ -28,6 +28,8 @@ export interface KpiStatCardProps {
   errorLabel?: string;
   noDataLabel?: string;
   value?: number | null;
+  /** Secondary line under the value, shown only when the value is. */
+  caption?: string;
   delta?: number | null;
   unavailable?: boolean;
   isLoading: boolean;
@@ -40,6 +42,7 @@ export default function KpiStatCard({
   fractionDigits,
   tone = "neutral",
   value,
+  caption,
   delta,
   unavailable,
   isLoading,
@@ -88,6 +91,7 @@ export default function KpiStatCard({
           {deltaLabel !== undefined && <span className={deltaClass}>{deltaLabel}</span>}
         </div>
       )}
+      {hasValue && caption && <span className={styles.caption}>{caption}</span>}
     </section>
   );
 }

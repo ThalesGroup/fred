@@ -40,10 +40,12 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from .contracts import (
     ModelCapability,
     ModelNotUsableError,
+    ModelProfile,
     ModelSelection,
     ModelSelectionRequest,
     ModelSelectionSource,
     TeamRoutingProfileDriftError,
+    clamp_reasoning_effort,
     without_reasoning_settings,
 )
 from .resolver import ModelRoutingResolver
@@ -101,6 +103,18 @@ class FredCoreModelProvider(ModelProvider):
         return get_model(model_config)
 
 
+def _effective_reasoning_effort(
+    profile: ModelProfile | None, choice: str
+) -> str | None:
+    """ "off" or a non-thinking profile: None. A profile with selectable levels:
+    the nearest one. Otherwise (on/off): `ModelProfile.reasoning_on_effort`."""
+    if choice == "off" or profile is None or not profile.supports_thinking:
+        return None
+    if profile.reasoning_levels:
+        return clamp_reasoning_effort(choice, profile.reasoning_levels)
+    return profile.reasoning_on_effort
+
+
 class RoutedChatModelFactory(ChatModelFactoryPort):
     """
     Runtime adapter that delegates model choice to a centralized resolver.
@@ -120,6 +134,54 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
     def with_provider(self, provider: ModelProvider) -> RoutedChatModelFactory:
         """Same routing, models built by `provider` (a pod serving extra providers)."""
         return RoutedChatModelFactory(resolver=self._resolver, provider=provider)
+
+    def _chat_profile(
+        self, profile_id: str | None
+    ) -> tuple[ModelConfiguration, ModelProfile | None]:
+        """(config, profile) for `profile_id` if it is a chat profile here, else
+        the default, with one warning saying why."""
+        if profile_id:
+            profile = self._resolver.profile_or_none(profile_id)
+            if profile is not None and profile.capability == ModelCapability.CHAT:
+                return profile.model, profile
+            logger.warning(
+                "[MODEL_ROUTING] profile %r is %s; using the default chat profile",
+                profile_id,
+                "not in this pod's catalog"
+                if profile is None
+                else f"not a chat profile ({profile.capability.value})",
+            )
+        selection = self._resolver.resolve(
+            ModelSelectionRequest(capability=ModelCapability.CHAT)
+        )
+        return selection.model, self._resolver.profile_or_none(selection.profile_id)
+
+    def build_chat_for_profile(
+        self, profile_id: str | None, *, reasoning_effort: str = "off"
+    ) -> tuple[BaseChatModel, str | None, BaseChatModel | None]:
+        """
+        For platform helpers outside any agent turn (the creation assistant):
+        the chat model of `profile_id` (else the pod default; no team routing)
+        at `reasoning_effort` clamped to the profile (`_effective_reasoning_effort`),
+        its name, and the same model without reasoning when it reasons, else
+        None. Applied on copies: the shared catalog config is untouched.
+        """
+        config, profile = self._chat_profile(profile_id)
+        plain = self._build_chat(without_reasoning_settings(config))
+        effort = _effective_reasoning_effort(profile, reasoning_effort)
+        if effort is None:
+            return plain, config.name, None
+        settings = {**(config.settings or {}), "reasoning_effort": effort}
+        reasoning = self._build_chat(config.model_copy(update={"settings": settings}))
+        return reasoning, config.name, plain
+
+    def _build_chat(self, config: ModelConfiguration) -> BaseChatModel:
+        model = self._provider.build_model(config, capability=ModelCapability.CHAT)
+        if not isinstance(model, BaseChatModel):
+            raise TypeError(
+                "RoutedChatModelFactory expected a BaseChatModel for capability='chat'."
+            )
+        return model
 
     def build(  # type: ignore[override]
         self, definition: AgentDefinition, binding: BoundRuntimeContext

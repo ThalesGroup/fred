@@ -32,6 +32,30 @@ agent de votre équipe que vous parlez.
   consulter. Sans rattachement, il ne voit aucun document.
 - **Les fonctions** — ce qu'il sait faire au-delà de répondre.
 
+## Se faire aider par l'assistant de création
+
+Écrire de bonnes instructions (le « prompt système ») demande de l'habitude.
+Une fois le modèle d'agent choisi, le bouton **Assistant**, en haut
+du formulaire de l'agent, vous aide à démarrer, pour un nouvel agent comme pour
+un agent existant :
+
+1. Décrivez avec vos mots ce que l'agent doit faire : son rôle, sa mission, à
+   qui il s'adresse, son ton, ce qu'il ne doit pas faire. Quelques phrases
+   suffisent.
+2. Cliquez sur **Proposer**. Après quelques secondes, l'assistant propose un
+   nom, un rôle, une courte description, des instructions et les capacités qui
+   semblent utiles à cet agent. Quand l'agent peut le proposer, le
+   **Raisonnement** figure toujours en tête des capacités.
+3. Relisez les propositions. Tout est coché : décochez ce que vous ne voulez
+   pas. Si rien ne convient, modifiez votre description et redemandez.
+4. Cliquez sur **Appliquer** : seuls les éléments cochés sont remplis. Les
+   capacités cochées remplacent la sélection actuelle. Le **Raisonnement**
+   coché est proposé dans le chat et activé au début de chaque conversation.
+
+Si un élément coché doit remplacer quelque chose que vous aviez déjà écrit,
+l'assistant vous demande d'abord de confirmer. Rien n'est enregistré tant que
+vous n'enregistrez pas l'agent : vous pouvez encore tout modifier.
+
 ## Ce qu'un agent sait faire en plus de répondre
 
 L'onglet **Capacités** décide de ce que l'agent a le droit de faire : chercher

@@ -36,7 +36,11 @@ from fred_core.kpi import estimate_green_cost
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 
 from control_plane_backend.kpi.presets.base import PresetDef
-from control_plane_backend.kpi.presets.common import TimeSeriesPoint, TimeSeriesResponse
+from control_plane_backend.kpi.presets.common import (
+    TOKEN_USAGE_FILTER,
+    TimeSeriesPoint,
+    TimeSeriesResponse,
+)
 from control_plane_backend.kpi.utils import resolve_interval
 
 _UNMODELED = "__unmodeled__"  # sentinel for turns with no recorded model_name
@@ -67,7 +71,7 @@ async def query_token_usage_over_time(
                 }
             }
         },
-        {"term": {"metric.name": "agent.turn_completed"}},
+        TOKEN_USAGE_FILTER,
     ]
     if team_id is not None:
         filters.append({"term": {"dims.team_id": str(team_id)}})

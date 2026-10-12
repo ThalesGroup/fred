@@ -164,6 +164,52 @@ describe("capability enablement invalidation", () => {
   });
 });
 
+describe("creation assistant model activation invalidation", () => {
+  it("refreshes offered models after a platform activation change", async () => {
+    const settingsPath = "/control-plane/v1/admin/platform/creation-assistant";
+    let enabled = true;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: Request | string) => {
+        const request = typeof input === "string" ? new Request(input) : input;
+        requested.push(request.url);
+        if (request.method === "PUT") {
+          enabled = false;
+          return json({});
+        }
+        return json({
+          text: "Write in {language}.",
+          model_profile_id: null,
+          model_options: enabled
+            ? [{ profile_id: "chat.model", name: "Model", supports_reasoning: false, reasoning_efforts: [] }]
+            : [],
+        });
+      }),
+    );
+    const store = makeStore();
+    const settings = store.dispatch(
+      api.endpoints.getCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantGet.initiate(),
+    );
+    await settings;
+    const selectSettings = () =>
+      api.endpoints.getCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantGet.select()(
+        store.getState(),
+      ).data;
+    expect(selectSettings()?.model_options.map((option) => option.profile_id)).toEqual(["chat.model"]);
+    await store.dispatch(
+      api.endpoints.putCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPut.initiate({
+        capabilityId: "model.openai.test",
+        setCapabilityDefaultOnRequest: { default_on: false },
+      }),
+    );
+    await vi.waitFor(() => {
+      expect(callsTo(settingsPath)).toBe(2);
+      expect(selectSettings()?.model_options).toEqual([]);
+    });
+    settings.unsubscribe();
+  });
+});
+
 describe("conversation availability invalidation", () => {
   it("refreshes owned session details after deleting their stored agent", async () => {
     let deleted = false;

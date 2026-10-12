@@ -26,6 +26,7 @@ import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Dialog } from "./Dialog.tsx";
+import styles from "./Dialog.module.css";
 import Select from "@shared/molecules/Select/Select.tsx";
 import type { OptionModel } from "@models/Option.model.ts";
 
@@ -205,6 +206,33 @@ describe("Dialog focus and consumer-root portal", () => {
     expect(onConfirm).not.toHaveBeenCalled();
   });
 
+  it("combines assistant slots and surface classes with announcement options", () => {
+    render(
+      <Dialog
+        open
+        title="Review"
+        confirmLabel="Apply"
+        onConfirm={() => {}}
+        onCancel={() => {}}
+        className="assistant-surface"
+        titlePrefix={<button>Back</button>}
+        footerStart={<span>Choose proposals</span>}
+        actionsAddon={<input type="checkbox" aria-label="Hide at startup" />}
+        dividers
+        initialFocus="dialog"
+      >
+        Draft
+      </Dialog>,
+    );
+    const dialog = portal().querySelector('[role="dialog"]')!;
+    expect(dialog.className).toContain("assistant-surface");
+    expect(dialog.className).toContain(styles.dividers);
+    expect(document.activeElement).toBe(dialog);
+    expect(dialog.textContent).toContain("Back");
+    expect(dialog.textContent).toContain("Choose proposals");
+    expect(dialog.querySelector('[aria-label="Hide at startup"]')).not.toBeNull();
+  });
+
   it("adds dividers only when asked", () => {
     const dialog = (dividers?: boolean) => (
       <Dialog open title="Notice" confirmLabel="Done" onConfirm={() => {}} onCancel={() => {}} dividers={dividers}>
@@ -312,6 +340,24 @@ describe("Dialog focus and consumer-root portal", () => {
       ),
     );
     expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("drops the space under the title only when compactTitle is set", () => {
+    const titleContainer = () => portal().querySelector('[role="dialog"] p')!.parentElement!;
+    render(
+      <Dialog open title="Notice" confirmLabel="Done" onConfirm={() => {}} onCancel={() => {}}>
+        Message
+      </Dialog>,
+    );
+    expect(titleContainer().classList.contains(styles.compactTitle)).toBe(false);
+    act(() => {
+      root.render(
+        <Dialog open compactTitle title="Notice" confirmLabel="Done" onConfirm={() => {}} onCancel={() => {}}>
+          Message
+        </Dialog>,
+      );
+    });
+    expect(titleContainer().classList.contains(styles.compactTitle)).toBe(true);
   });
 });
 
