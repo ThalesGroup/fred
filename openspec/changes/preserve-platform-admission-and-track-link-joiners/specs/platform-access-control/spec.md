@@ -71,3 +71,98 @@ Each Free-team link SHALL retain a bounded, paginated history of distinct people
 
 - **WHEN** an administrator deletes a revoked or expired link's history through the existing cleanup action
 - **THEN** its joiner entries SHALL be deleted with the link, without changing team membership
+
+## MODIFIED Requirements
+
+### Requirement: Admission sources are independent of resource permissions
+
+When filtering is active, the system SHALL admit a non-suspended person if their verified claim evaluation permits admission under the current allow/block mode, they have a current individual exception, they are a current member of an authorized team (including a Free team), or they hold the current platform-management permission. Ordinary public-team visibility SHALL not count as membership. Admission SHALL neither grant a platform role nor extend team or resource permissions. Account suspension and required CGU acceptance SHALL still apply.
+
+#### Scenario: New non-matching person is refused
+
+- **WHEN** a new person is not admitted by the current rule mode and has no individual exception, eligible membership or platform-management permission
+- **THEN** normal platform access SHALL return HTTP 403 with `detail="platform_access_denied"`
+
+#### Scenario: One source is removed while another remains
+
+- **WHEN** a person's individual exception is removed but another valid admission source remains
+- **THEN** admission SHALL remain available through that other source
+
+#### Scenario: Visibility and admission are different
+
+- **WHEN** a person can view a public authorized team but is not its member
+- **THEN** that visibility SHALL not grant platform admission
+
+#### Scenario: Admitted person is suspended or lacks resource permission
+
+- **WHEN** an otherwise eligible person is suspended or requests a resource they cannot access
+- **THEN** the existing suspension or resource refusal SHALL remain effective
+
+### Requirement: Activation and migration are explicit
+
+An absent admission authority SHALL initialize with filtering inactive until explicit administrator activation. Activation SHALL require a saved valid rule or at least one independent individual/team source and SHALL be refused if the acting administrator would lose their last admission source. Saving a policy or changing access exceptions while filtering is active SHALL apply the same actor safeguard atomically. Existing root bootstrap safeguards SHALL remain intact. The retired file-based whitelist SHALL NOT affect direct or delegated admission or activation. The administrator-managed SQL filter SHALL be the only platform admission filter. Policy, imported entries and membership SHALL survive restarts and temporary filtering disablement.
+
+#### Scenario: Upgrade does not silently activate filtering
+
+- **WHEN** operators deploy the required migration with empty admission state
+- **THEN** filtering SHALL remain inactive until an admission source is prepared and an administrator explicitly activates it
+
+#### Scenario: Administrator would lock themselves out
+
+- **WHEN** activation, a policy save or an exception mutation would withdraw the actor's last admission source
+- **THEN** the operation SHALL be refused with an actionable explanation and leave prior state intact
+
+#### Scenario: Rule is not configured
+
+- **WHEN** an administrator attempts activation without any saved rule or independent admission source
+- **THEN** activation SHALL be refused without changing the filtering state
+
+#### Scenario: Conflicting whitelist modes
+
+- **WHEN** an obsolete `users.txt` file remains on disk after upgrading
+- **THEN** it SHALL NOT restrict a direct or delegated person or block activation of the administrator-managed filter
+
+The page SHALL offer a top-right filtering action in the page header across every tab with explicit confirmation. Before activation, a read-only population review SHALL show identifiable users in counted Allowed and Blocked lists under the saved rule and current independent sources, with observation time. Stale/missing/conflicted evidence SHALL appear in a separate expandable Verification unavailable section rather than be declared allowed or blocked. A missing field in an available verified token SHALL be evaluated normally. The initial view SHALL show Blocked when that group is nonempty, otherwise Allowed; empty groups SHALL show a short message without table pagination. An Update action SHALL reread the database snapshot, reference policy and import status without changing admission state; stale rows SHALL be hidden and confirmation disabled during loading, failure or revision conflict. A preview SHALL NOT grant access or save drafts. Activation confirmation SHALL reject a changed policy revision and retain the actor safeguard.
+
+#### Scenario: Review before activating
+
+- **WHEN** an administrator requests activation with prepared saved admission sources
+- **THEN** a confirmation dialog SHALL display the population dry run before any activation mutation
+- **WHEN** they cancel
+- **THEN** filtering SHALL remain unchanged
+
+#### Scenario: Whitelist-only activation
+
+- **WHEN** no rule is saved but the actor has an independent current exception
+- **THEN** activation SHALL be allowed and other people without independent sources SHALL be refused
+
+#### Scenario: Evidence cannot establish an outcome
+
+- **WHEN** selected claim evidence is missing, expired or conflicted and no independent source applies
+- **THEN** the preview SHALL include that person under Verification unavailable without inventing token values or granting access
+
+Before enabling through the UI, the initial-import status SHALL be known. If existing-user import has not completed, the activation confirmation SHALL explicitly warn that existing users have not been imported and offer Continue without importing or Go to whitelist. Continuing SHALL remain subject to the saved-policy population review and existing activation safeguards. Choosing Go to whitelist SHALL send no activation mutation and open Whitelist > Users. A completed import SHALL use normal activation confirmation. Loading or failed import status SHALL prevent enabling confirmation until retried successfully; disabling SHALL NOT depend on import completion.
+
+#### Scenario: Continue without initial import
+
+- **WHEN** an administrator reviews activation with an incomplete initial import
+- **THEN** the modal SHALL explicitly present the missing-import warning and both choices
+- **WHEN** they choose Continue without importing with valid fresh preview and admission sources
+- **THEN** the UI SHALL request activation using the reviewed revision without importing users
+
+#### Scenario: Navigate to import instead of activating
+
+- **WHEN** an administrator chooses Go to whitelist in the missing-import confirmation
+- **THEN** filtering SHALL remain unchanged, no activation mutation SHALL be sent and Whitelist > Users SHALL open
+
+#### Scenario: Import already completed
+
+- **WHEN** the initial import has completed and an administrator requests activation
+- **THEN** normal population-review confirmation SHALL appear without the missing-import warning
+- **AND** Whitelist > Users SHALL present completed import as a discreet status without a repeat-import action
+
+#### Scenario: Import status unavailable
+
+- **WHEN** initial-import status is loading or fails while enabling is being reviewed
+- **THEN** activation confirmation SHALL remain unavailable with loading or retry feedback
+- **AND** unavailable import status SHALL NOT prevent disabling filtering

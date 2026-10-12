@@ -157,7 +157,6 @@ def test_administration_availability_and_bounded_authority(monkeypatch, director
     from fred_pod.security.structure import SecurityConfiguration
 
     from fred_core.security.platform_access import access_control
-    from fred_core.security.whitelist_access_control import access_control as legacy
 
     security = SecurityConfiguration.model_validate(
         {
@@ -182,7 +181,6 @@ def test_administration_availability_and_bounded_authority(monkeypatch, director
     )
     monkeypatch.setattr(access_control, "_available", access_control._available)
     monkeypatch.setattr(access_control, "_installed", access_control._installed)
-    monkeypatch.setattr(legacy, "is_whitelist_active", lambda: False)
     access_control.configure_platform_access(security)
     security.m2m.enabled = False
     access_control.configure_platform_access(security)
@@ -193,7 +191,6 @@ def test_administration_availability_and_bounded_authority(monkeypatch, director
     with pytest.raises(ValueError, match="timeout_millisec"):
         access_control.configure_platform_access(security)
     security.rebac.timeout_millisec = 1000
-    monkeypatch.setattr(legacy, "is_whitelist_active", lambda: True)
     access_control.configure_platform_access(security)
     assert access_control.platform_access_available()
 
@@ -329,10 +326,8 @@ async def test_normal_cached_and_query_only_principal_resolution_cannot_skip_gat
     monkeypatch.setattr(oidc, "decode_jwt", lambda token: user)
     active = AsyncMock()
     monkeypatch.setattr(oidc, "require_active_subject", active)
-    monkeypatch.setattr(
-        oidc, "resolve_delegated_principal", AsyncMock(return_value=None)
-    )
-    monkeypatch.setattr(oidc, "is_whitelist_active", lambda: False)
+    resolve = AsyncMock(return_value=None)
+    monkeypatch.setattr(oidc, "resolve_delegated_principal", resolve)
     request = Request(
         {
             "type": "http",
@@ -354,6 +349,16 @@ async def test_normal_cached_and_query_only_principal_resolution_cannot_skip_gat
     with pytest.raises(HTTPException):
         await oidc.get_current_user_without_gcu(request, "cached-token")
     assert active.await_count == 4
+    async with access.store.mutation() as session:
+        (await access.store.settings(session)).filtering_enabled = False
+    assert await oidc.resolve_request_principal(request, user) is user
+    from fred_core.security.delegation import AssertedUser
+
+    delegated = AssertedUser(
+        uid=str(uuid4()), client_id="backend", run_id="run", agent_id="agent"
+    )
+    resolve.return_value = delegated
+    assert await oidc.resolve_request_principal(request, user) is delegated
 
 
 @pytest.mark.asyncio
@@ -570,7 +575,6 @@ async def test_pure_workload_mount_defers_account_status_but_tool_request_does_n
     monkeypatch.setattr(
         oidc, "resolve_delegated_principal", AsyncMock(return_value=None)
     )
-    monkeypatch.setattr(oidc, "is_whitelist_active", lambda: False)
     active = AsyncMock(side_effect=HTTPException(503, "account_status_unavailable"))
     monkeypatch.setattr(oidc, "require_active_subject", active)
     request = Request(

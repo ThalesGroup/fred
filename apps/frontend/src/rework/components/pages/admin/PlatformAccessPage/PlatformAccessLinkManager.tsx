@@ -363,7 +363,7 @@ export default function PlatformAccessLinkManager({
                 }}
                 columns={[
                   {
-                    label: t("rework.teamSettings.members.table.identifiant"),
+                    label: t("rework.platformAccess.links.username"),
                     cellRenderer: (person) => person.username || "-",
                   },
                   {

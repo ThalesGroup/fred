@@ -641,10 +641,6 @@
       "arguments": "Arguments :"
     }
   },
-  "comingSoon": {
-    "description": "La plateforme \n d'innovation au service de votre quotidien : gagnez en clarté et en pertinence décisionnelle. Un nouveau service conçu pour vous épauler chaque jour et répondre à vos enjeux métiers et opérationnels.",
-    "title": "{{siteDisplayName}} arrive très bientôt."
-  },
   "common": {
     "cancel": "Annuler",
     "close": "Fermer",
@@ -3729,7 +3725,8 @@
         "joiners": "Utilisateurs inscrits",
         "joinersTitle": "Inscrits via {{note}}",
         "joinedAt": "Date d'inscription",
-        "noJoiners": "Personne n'a encore rejoint l'équipe via ce lien.",
+        "noJoiners": "Aucune inscription enregistrée depuis le début du suivi.",
+        "username": "Identifiant",
         "joinersFailed": "Impossible de charger les personnes inscrites via ce lien.",
         "actions": "Actions",
         "revoke": "Révoquer",

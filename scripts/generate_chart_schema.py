@@ -534,14 +534,6 @@ _GLOBAL = _obj({
         "storageClass": _STRING,
         "hostPath": _STRING,
     }),
-    "whitelist": _obj({
-        "enabled": _BOOL,
-        "configMapName": _STRING,
-        "filePath": _STRING,
-        "user_list_inline": _STRING,
-        "mountPath": _STRING,
-        "subPath": _STRING,
-    }),
 })
 
 

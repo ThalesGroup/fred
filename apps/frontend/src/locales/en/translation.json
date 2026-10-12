@@ -641,10 +641,6 @@
       "arguments": "Arguments:"
     }
   },
-  "comingSoon": {
-    "description": "Empowering your daily work through this innovation platform: gain clarity and make smarter decisions. A new service tailored to support your daily tasks and address your operational needs.",
-    "title": "{{siteDisplayName}} is coming soon."
-  },
   "common": {
     "cancel": "Cancel",
     "close": "Close",
@@ -3729,7 +3725,8 @@
         "joiners": "Joined users",
         "joinersTitle": "Joined through {{note}}",
         "joinedAt": "Joined at",
-        "noJoiners": "Nobody has joined through this link yet.",
+        "noJoiners": "No joins recorded since tracking began.",
+        "username": "Username",
         "joinersFailed": "Could not load the people who joined through this link.",
         "actions": "Actions",
         "revoke": "Revoke",

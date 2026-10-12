@@ -68,8 +68,7 @@ function FredUiContent() {
     : `${import.meta.env.BASE_URL ?? "/"}/`;
 
   useEffect(() => {
-    // Browser tab name = the app display name (config-driven via siteDisplayName,
-    // same string as "<app> is coming soon" / the loading-screen alt).
+    // Browser tab name follows the configured app display name.
     document.title = siteDisplayName;
     const faviconElement = document.getElementById("favicon") as HTMLLinkElement;
     faviconElement.href = `${baseUrl}images/${darkMode ? faviconDark : favicon}.svg`;

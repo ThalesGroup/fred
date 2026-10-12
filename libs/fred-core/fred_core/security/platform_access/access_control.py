@@ -82,12 +82,6 @@ class PlatformAccess:
             raise HTTPException(503, "platform_access_unavailable")
         try:
             self.policy(state)
-            from fred_core.security.whitelist_access_control.access_control import (
-                is_whitelist_active,
-            )
-
-            if state.filtering_enabled and is_whitelist_active():
-                raise ValueError("Conflicting legacy admission gate")
         except ValueError:
             raise HTTPException(503, "platform_access_unavailable") from None
         return state

@@ -26,12 +26,13 @@ from fred_core.security.platform_access.rules import (
     extract_claims,
     path_key,
 )
+from fred_core.security.platform_access.store import PlatformAccessStore
 from fred_core.teams.team_metatada_models import TeamMetadataRow
 from fred_core.users.user_models import UserRow
 from fred_pod.security.platform_access import PlatformAccessPolicy
 from fred_pod.security.structure import KeycloakUser, is_service_agent
 from pydantic import JsonValue
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import delete, func, inspect, or_, select
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
@@ -49,9 +50,9 @@ from control_plane_backend.platform_access.schemas import (
     PlatformAccessTeam,
     PlatformAccessUser,
     PlatformAccessUsersPage,
-    PlatformEnrollmentLinkInfo,
     PlatformEnrollmentJoiner,
     PlatformEnrollmentJoinersPage,
+    PlatformEnrollmentLinkInfo,
     PlatformEnrollmentLinksPage,
     PlatformEnrollmentLinkStatus,
     PlatformT0Preview,
@@ -125,12 +126,6 @@ async def set_filtering(
 ) -> PlatformAccessState:
     async with access.store.mutation() as session:
         state = await access.state(session)
-        from fred_core.security.whitelist_access_control.access_control import (
-            is_whitelist_active,
-        )
-
-        if enabled and is_whitelist_active():
-            raise HTTPException(409, "platform_access_legacy_gate_conflict")
         if expected_revision is not None and expected_revision != state.revision:
             raise HTTPException(409, "platform_access_policy_conflict")
         if enabled and not await has_admission_sources(access, state, session):
@@ -587,6 +582,27 @@ async def list_link_joiners(
                 for joiner, user in rows
             ],
             total=int(total or 0),
+        )
+
+
+async def delete_user_join_history(
+    store: PlatformAccessStore, user_id: str, *, table_may_be_missing: bool = False
+) -> None:
+    try:
+        uid = UUID(user_id)
+    except ValueError:
+        return
+    async with store.mutation() as session:
+        if table_may_be_missing and not await session.run_sync(
+            lambda sync: inspect(sync.connection()).has_table(
+                PlatformAccessLinkJoinerRow.__tablename__
+            )
+        ):
+            return
+        await session.execute(
+            delete(PlatformAccessLinkJoinerRow).where(
+                PlatformAccessLinkJoinerRow.user_id == uid
+            )
         )
 
 

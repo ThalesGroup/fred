@@ -830,25 +830,6 @@ async def test_pg_live_policy_and_free_journey_with_cached_human_facts(pg_access
 
 
 @pytest.mark.asyncio
-async def test_legacy_gate_blocks_activation_and_active_readers(access, monkeypatch):
-    from fred_core.security.whitelist_access_control import access_control as legacy
-
-    monkeypatch.setattr(legacy, "is_whitelist_active", lambda: True)
-    actor = user("accepted")
-    assert await access.admitted(actor)
-    with pytest.raises(HTTPException) as conflict:
-        await service.set_filtering(access, actor, True)
-    assert conflict.value.detail == "platform_access_legacy_gate_conflict"
-    assert not (await access.state()).filtering_enabled
-    async with access.store.mutation() as session:
-        state = await access.store.settings(session)
-        state.filtering_enabled = True
-    with pytest.raises(HTTPException) as unavailable:
-        await access.admitted(actor)
-    assert unavailable.value.status_code == 503
-
-
-@pytest.mark.asyncio
 async def test_bulk_grants_are_atomic_preserve_provenance_and_revoke_independently(
     access,
 ):
@@ -1261,6 +1242,20 @@ async def test_free_link_joiners_follow_successful_enrollment_and_cleanup(access
     assert (
         await service.list_link_joiners(access, "demo", second_id, 0, 25)
     ).total == 1
+    await service.delete_user_join_history(access.store, first.uid)
+    assert (
+        await service.list_link_joiners(access, "demo", second_id, 0, 25)
+    ).total == 0
+    await service.delete_user_join_history(
+        access.store, second.uid, table_may_be_missing=True
+    )
+    async with access.store.engine.begin() as connection:
+        await connection.run_sync(
+            cast(Table, PlatformAccessLinkJoinerRow.__table__).drop
+        )
+    await service.delete_user_join_history(
+        access.store, first.uid, table_may_be_missing=True
+    )
 
 
 def test_link_creation_rejects_past_naive_expiry_and_oversized_note():
