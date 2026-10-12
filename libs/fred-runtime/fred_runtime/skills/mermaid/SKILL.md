@@ -1,4 +1,19 @@
-# How do I use Mermaid diagram design?
+---
+name: mermaid
+description: Create or repair Mermaid flowcharts for workflows, architectures and relationships using parse-safe diagram syntax.
+argument-hint: "[diagram goal or source] [constraints]"
+---
+
+# Parse-safe Mermaid diagrams
+
+Identify the diagram goal and its source from the request or conversation. For a
+repair, preserve the intended relationships while correcting the syntax. Ask for
+missing information essential to the diagram rather than inventing it.
+
+Return the diagram in the chat as a fenced `mermaid` block: the chat renders it.
+Do not send Mermaid source to `render_html_artifact` or wrap it in an HTML element
+such as `<div class="mermaid">`. That viewer displays static HTML and CSS only;
+it does not run Mermaid, so this would show raw source instead of a diagram.
 
 When you include Mermaid diagrams, follow these rules strictly so the diagram always parses:
 

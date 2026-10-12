@@ -45,7 +45,9 @@ export function usePastedFiles({ enabled, onFiles }: UsePastedFilesParams) {
       event.preventDefault();
       onFilesRef.current(files);
     };
-    document.addEventListener("paste", handlePaste);
-    return () => document.removeEventListener("paste", handlePaste);
+    // Capture owns file-preferring payloads before an editor can interpret an
+    // image-only clipboard as empty text and erase its current selection.
+    document.addEventListener("paste", handlePaste, true);
+    return () => document.removeEventListener("paste", handlePaste, true);
   }, [enabled]);
 }

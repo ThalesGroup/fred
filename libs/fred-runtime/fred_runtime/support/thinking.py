@@ -177,7 +177,8 @@ def content_to_text(content: object, *, out_fragments: list[str] | None = None) 
             rendered_parts.append(str(item["text"]))
         else:
             rendered_parts.append(str(item))
-    return "\n".join(part for part in rendered_parts if part)
+    # Text blocks may split a token or Markdown fence; preserve their exact bytes.
+    return "".join(rendered_parts)
 
 
 def strip_reasoning_from_history(

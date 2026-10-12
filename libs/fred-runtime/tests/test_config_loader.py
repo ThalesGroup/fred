@@ -515,3 +515,33 @@ def test_load_agent_pod_config_rejects_non_slug_runtime_id(
     with pytest.raises(SystemExit) as exc_info:
         load_agent_pod_config()
     assert exc_info.value.code == 1
+
+
+@pytest.mark.parametrize("directory", [None, "package", "../project-skills"])
+def test_skill_directory_configuration_is_optional_and_relative_to_config(
+    tmp_path: Path, directory: str | None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fred_runtime.app.config_loader import _parse_agent_pod_config
+
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    _write_configuration_yaml(config_dir)
+    _write_models_catalog(config_dir / "models_catalog.yaml")
+    _write_mcp_catalog(config_dir / "mcp_catalog.yaml", server_id="test")
+    configuration = config_dir / "configuration.yaml"
+    if directory is not None:
+        configuration.write_text(
+            configuration.read_text() + f"\nskills:\n  directory: {directory}\n"
+        )
+    monkeypatch.setenv(
+        "FRED_MODELS_CATALOG_FILE", str(config_dir / "models_catalog.yaml")
+    )
+    monkeypatch.setenv("FRED_MCP_CATALOG_FILE", str(config_dir / "mcp_catalog.yaml"))
+    config = _parse_agent_pod_config(str(configuration))
+    if directory is None:
+        assert config.skills is None
+    else:
+        assert config.skills is not None
+        assert config.skills.directory == (
+            directory if directory == "package" else str(config_dir / directory)
+        )

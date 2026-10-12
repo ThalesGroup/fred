@@ -74,7 +74,15 @@ build-backend = "setuptools.build_meta"
 include = ["fred_runtime*"]
 
 [tool.setuptools.package-data]
-fred_runtime = ["migrations/*.mako"]
+fred_runtime = [
+  "migrations/*.mako",
+  "skills/*/**/*.md",
+  "skills/*/**/*.txt",
+  "skills/*/**/*.json",
+  "skills/*/**/*.yaml",
+  "skills/*/**/*.yml",
+  "skills/*/**/*.csv",
+]
 
 [tool.pytest.ini_options]
 minversion = "8.0"

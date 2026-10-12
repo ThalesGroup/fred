@@ -24,6 +24,7 @@ export interface ChatSidePanelProps {
   open: boolean;
   onClose: () => void;
   title: string;
+  titleSize?: "small" | "large";
   /** Storage key for the drag-to-resize width. Must be unique per panel. */
   persistKey: string;
   /** Seeds the first-ever width only; the user's drag wins afterwards. */
@@ -42,6 +43,7 @@ export default function ChatSidePanel({
   open,
   onClose,
   title,
+  titleSize = "small",
   persistKey,
   width,
   headerActions,
@@ -53,6 +55,7 @@ export default function ChatSidePanel({
       open={open}
       onClose={onClose}
       title={title}
+      titleSize={titleSize}
       width={width}
       headerActions={headerActions}
       layout="push"

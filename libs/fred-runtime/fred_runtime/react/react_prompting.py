@@ -40,7 +40,6 @@ from fred_sdk.contracts.prompt_utils import (
     RESERVED_PROMPT_TAGS,
     escape_reserved_prompt_tags,
 )
-from fred_sdk.resources.prompts import GLOBAL_BASE_PROMPT_MARKDOWN
 
 from ..runtime_context import get_runtime_context_or_none
 
@@ -429,6 +428,7 @@ def compose_system_prompt(
     binding: BoundRuntimeContext,
     agent_id: str,
     tool_suffix: str = "",
+    skills_prompt: str = "",
     tabular_tools_available: bool,
 ) -> str:
     """
@@ -440,8 +440,9 @@ def compose_system_prompt(
     PROMPTS.md "System Prompt Assembly".
 
     ``tool_suffix`` is everything the model must know about its tools this
-    turn (list, MCP instructions, runtime notices); the shared output contract
-    is appended to it here. ``tabular_tools_available`` must come from
+    turn (list, MCP instructions, runtime notices). The optional skills catalog
+    advertises metadata; skill bodies enter conversation context only on load.
+    ``tabular_tools_available`` must come from
     `react_tool_binding.tabular_tools_bound(bound_tools)` for this call's
     resolved tools.
     """
@@ -456,11 +457,7 @@ def compose_system_prompt(
     )
     tools_content = "\n\n".join(
         part
-        for part in (
-            tool_suffix.strip(),
-            GLOBAL_BASE_PROMPT_MARKDOWN,
-            document_only_instruction,
-        )
+        for part in (tool_suffix.strip(), skills_prompt, document_only_instruction)
         if part
     )
     contents = (
@@ -473,11 +470,25 @@ def compose_system_prompt(
         render_prompt_block(tag, content)
         for tag, content in zip(_BLOCK_TAGS, contents, strict=True)
     ]
+    selected_skill_names = ", ".join(
+        f"`{selection.name}`" for selection in binding.runtime_context.selected_skills
+    )
+    skill_selection = (
+        "\n\nFor this request, the user explicitly requested these platform skills: "
+        f"{selected_skill_names}. Apply the matching catalog procedures before "
+        "drafting or using task tools. Read their instructions and required "
+        "references with the catalog's declared loading tools unless already "
+        "loaded. These names are skills, not tool or subagent names. If a selected "
+        "name is absent from the catalog, report it as unavailable."
+        if selected_skill_names
+        else ""
+    )
     per_turn = (
         build_context_prompt_suffix(binding, agent_id=agent_id),
         build_document_scope_suffix(binding),
         build_attachment_context_suffix(
             binding, tabular_tools_available=tabular_tools_available
         ),
+        skill_selection,
     )
     return "\n\n".join(block for block in rendered if block) + "".join(per_turn)

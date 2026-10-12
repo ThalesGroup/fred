@@ -392,3 +392,34 @@ async def test_runtime_binding_omits_trace_without_the_header(
     )
 
     assert writer.emitted[0]["trace"] is None
+
+
+@pytest.mark.asyncio
+async def test_marketplace_reserved_command_keeps_per_target_error_code(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from control_plane_backend.product.schemas import MarketplaceImportRequest
+    from control_plane_backend.product.service import (
+        PROMPT_COMMAND_RESERVED,
+        PromptRequestError,
+    )
+
+    monkeypatch.setattr(
+        product_api, "require_team_access", AsyncMock(return_value=TeamId("team"))
+    )
+    monkeypatch.setattr(
+        product_api,
+        "import_published_prompt_into_team",
+        AsyncMock(
+            side_effect=PromptRequestError(
+                "Reserved", http_status=409, code=PROMPT_COMMAND_RESERVED
+            )
+        ),
+    )
+    result = await product_api.post_marketplace_prompt_import(
+        "prompt",
+        MarketplaceImportRequest(target_team_ids=["team"]),
+        cast(Any, SimpleNamespace(team_dependencies=object())),
+        _user(),
+    )
+    assert result.results[0].error_code == "prompt_command_reserved"

@@ -17,6 +17,8 @@ import { useTranslation } from "react-i18next";
 import styles from "./TeamUsagePage.module.css";
 import {
   useAgentsTotalQuery,
+  useSkillUsageQuery,
+  useUserSkillUsageQuery,
   useDocumentsTotalQuery,
   useSessionsOverTimeQuery,
   useStorageByTeamQuery,
@@ -28,6 +30,7 @@ import {
   useUserTokenUsageByAgentQuery,
   useUserTokenUsageByModelQuery,
 } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import SkillUsageTable from "@shared/molecules/SkillUsageTable/SkillUsageTable";
 import TimeRangeSelector from "@shared/molecules/TimeRangeSelector/TimeRangeSelector";
 import type { TimeRange } from "@shared/molecules/TimeRangeSelector/timeRange.types";
 import { refreshTimeRange, resolvePreset } from "@shared/molecules/TimeRangeSelector/timeRange.types";
@@ -45,11 +48,12 @@ import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import { hasElevatedTeamRole } from "@hooks/teamCapabilities.ts";
 
 /**
- * Personal token-usage dashboard — OBSERV-02 / BACKLOG.md §7b — extended in
+ * Personal usage dashboard — OBSERV-02 / BACKLOG.md §7b — extended in
  * place (v3, §2.5 Page 2) with capability-conditional team sections prepended
  * above it. In-page gating only, no route guard (`FRONTEND-AUTHZ-PATTERN.md`):
  * a plain `team_member` (or anyone on a personal team, which has no elevated
- * roles at all) sees only the personal section below, unchanged.
+ * roles at all) sees their personal token sections below. Skill usage always
+ * follows the selected space: personal in personal space, team in team space.
  */
 export default function TeamUsagePage() {
   const { t } = useTranslation();
@@ -65,11 +69,11 @@ export default function TeamUsagePage() {
   // those flags would read exactly as they do for a real team_editor/admin.
   const elevated = hasElevatedTeamRole(capabilities) && !isPersonalTeam;
   // This page is majority team-scoped content for an elevated viewer (KPIs,
-  // charts, storage quota below) with only a "My usage" subsection at the
+  // charts, storage quota below) with personal consumption at the
   // bottom — calling it "My token usage" for that viewer was misleading (a
   // team_admin reported it read as a personal-usage page while looking at
   // team-wide data). Plain members/personal-team viewers only ever see the
-  // personal section, so the original title stays correct for them.
+  // personal sections, so the personal usage title stays correct for them.
   const pageTitle = elevated ? t("rework.teamUsage.team.pageTitle") : t("rework.teamUsage.title");
 
   // #2148: `refetchOnMountOrArgChange: 300` implements the "5 minute
@@ -104,12 +108,29 @@ export default function TeamUsagePage() {
     { refetchOnMountOrArgChange: 300 },
   );
 
+  const {
+    currentData: personalSkillUsageData,
+    isFetching: personalSkillUsageIsFetching,
+    isLoading: personalSkillUsageIsLoading,
+    isError: personalSkillUsageIsError,
+  } = useUserSkillUsageQuery(
+    { since: timeRange.since, until: timeRange.until },
+    { skip: !isPersonalTeam, refetchOnMountOrArgChange: 300 },
+  );
+
   // Team-scoped shared section (§2.5 Page 2) — skipped entirely for anyone
   // without an elevated role, both to avoid the wasted/rejected call and
   // because `hasElevatedTeamRole` is this frontend's single source of truth
   // for the distinction.
   const teamArgs = { since: timeRange.since, until: timeRange.until, teamId };
   const teamQueryOpts = { skip: !elevated || !teamId, refetchOnMountOrArgChange: 300 };
+
+  const {
+    currentData: skillUsageData,
+    isFetching: skillUsageIsFetching,
+    isLoading: skillUsageIsLoading,
+    isError: skillUsageIsError,
+  } = useSkillUsageQuery(teamArgs, teamQueryOpts);
 
   const { data: teamAgentsTotalData, isLoading: teamAgentsTotalIsLoading } = useAgentsTotalQuery(
     teamArgs,
@@ -168,7 +189,12 @@ export default function TeamUsagePage() {
     setTimeRange(refreshTimeRange(timeRange));
   };
 
-  const serviceDown = [overTimeIsError, byAgentIsError, byModelIsError].every(Boolean);
+  const serviceDown = [
+    overTimeIsError,
+    byAgentIsError,
+    byModelIsError,
+    isPersonalTeam ? personalSkillUsageIsError : !elevated || !teamId || skillUsageIsError,
+  ].every(Boolean);
 
   if (serviceDown) {
     return (
@@ -291,6 +317,26 @@ export default function TeamUsagePage() {
               />
             </div>
           </div>
+        </Disclosure>
+      )}
+
+      {elevated && teamId && (
+        <Disclosure title={t("rework.teamUsage.team.skillsSectionTitle")} defaultOpen>
+          <SkillUsageTable
+            data={skillUsageData}
+            isLoading={skillUsageIsLoading || (skillUsageIsFetching && !skillUsageData)}
+            isError={skillUsageIsError}
+          />
+        </Disclosure>
+      )}
+
+      {isPersonalTeam && (
+        <Disclosure title={t("rework.teamUsage.personalSkillsSectionTitle")} defaultOpen>
+          <SkillUsageTable
+            data={personalSkillUsageData}
+            isLoading={personalSkillUsageIsLoading || (personalSkillUsageIsFetching && !personalSkillUsageData)}
+            isError={personalSkillUsageIsError}
+          />
         </Disclosure>
       )}
 
