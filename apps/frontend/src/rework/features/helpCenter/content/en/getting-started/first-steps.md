@@ -39,6 +39,19 @@ Three zones:
 - **The work area**, in the middle: the current page or conversation.
 - **The profile menu**, bottom left: your profile, support, sign-out.
 
+## News after an update
+
+After an update, a window may open when you arrive in the application to
+present the changes, under a title chosen by the administrators. Close it with
+**Close**: it does not come back while you work, but it will show again the
+next time you sign in. If you tick **Don't show again** before closing, it will
+not show again, on any of your devices, unless the administrators publish it
+again. Later news will be presented to you in turn.
+
+To read it again at any time, open your profile menu, at the bottom of the side
+bar, and choose **What's new**. This entry is there as long as news is
+published.
+
 ## Your personal space
 
 From your first sign-in you have a **personal space**: a team you are the only
