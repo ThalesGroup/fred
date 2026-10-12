@@ -50,7 +50,11 @@ from fred_core.kpi.kpi_writer import to_kpi_actor
 from fred_core.logs.audit_log import emit_audit_log
 from fred_core.scheduler import SchedulerBackend
 from fred_core.store import ContentStore
-from fred_core.teams.metadata_store import TeamMetadata, TeamMetadataPatch
+from fred_core.teams.metadata_store import (
+    TEAM_DESCRIPTION_PLACEHOLDER,
+    TeamMetadata,
+    TeamMetadataPatch,
+)
 from fred_core.users.store.postgres_user_store import get_user_store
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -854,7 +858,7 @@ async def create_team(
     ]
     team_id = TeamId(uuid4().hex)
     try:
-        metadata = await store.create(team_id, request.name)
+        metadata = await store.create(team_id, request.name, request.description)
     except IntegrityError as exc:
         raise TeamAlreadyExistsError(request.name) from exc
 
@@ -2039,6 +2043,9 @@ def _build_team_dto(
         is_member=is_member,
         my_relations=sorted(my_relations, key=lambda relation: relation.value),
         description=metadata.description,
+        description_is_placeholder=(
+            metadata.description == TEAM_DESCRIPTION_PLACEHOLDER
+        ),
         joining_mode=metadata.joining_mode,
         visibility=metadata.visibility,
         avatar_image_url=avatar_image_url,

@@ -121,6 +121,7 @@ from fred_core.tasks.service import TaskService
 from fred_core.teams.metadata_store import TeamMetadataStore
 from fred_core.users.store.base_user_store import AmbiguousUsernameError
 from fred_core.users.store.postgres_user_store import PostgresUserStore
+from fred_core.teams.metadata_store import TEAM_DESCRIPTION_PLACEHOLDER
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 # ── fixtures / fakes ───────────────────────────────────────────────────────
@@ -681,7 +682,8 @@ async def test_users_phase_full_fixture_reconciles_all_identities_teams_and_role
         assert report.team_roles_skipped == 0
         # alice -> platform_admin, gabriel -> platform_observer.
         assert report.platform_roles_granted == 2
-        assert report.warnings == []
+        # Teams created on the fly carry the placeholder description.
+        assert report.warnings == ["3 teams received a default description."]
 
         metadata_store = team_deps.get_team_metadata_store()
         northbridge = await metadata_store.get_by_name("northbridge")
@@ -782,11 +784,12 @@ async def test_users_phase_grants_non_admin_role_on_fresh_team(
         assert report.team_roles_granted == 2  # alice's team_admin + bob's team_editor
         assert report.team_roles_skipped == 0
         assert report.users_processed == 2
-        assert report.warnings == []
+        assert report.warnings == ["1 team received a default description."]
 
         metadata_store = team_deps.get_team_metadata_store()
         fredlab = await metadata_store.get_by_name("fredlab")
         assert fredlab is not None
+        assert fredlab.description == TEAM_DESCRIPTION_PLACEHOLDER
         assert any(
             r.subject == RebacReference(Resource.USER, "bob-sub")
             and r.relation == RelationType.TEAM_EDITOR
@@ -813,7 +816,7 @@ async def test_users_phase_reconciles_role_on_preexisting_team_without_importer_
         team_deps = _team_deps(engine, rebac)
         metadata_store = team_deps.get_team_metadata_store()
         team_id = TeamId(uuid4().hex)
-        await metadata_store.create(team_id, "fredlab")
+        await metadata_store.create(team_id, "fredlab", TEAM_DESCRIPTION_PLACEHOLDER)
 
         user_deps, _admin = _user_deps({"bob": "bob-sub"})
         platform_admin = _admin_user()
@@ -1238,7 +1241,7 @@ async def test_grant_team_member_role_still_requires_team_admin_for_the_importer
         team_deps = _team_deps(engine, rebac)
         metadata_store = team_deps.get_team_metadata_store()
         team_id = TeamId(uuid4().hex)
-        await metadata_store.create(team_id, "fredlab")
+        await metadata_store.create(team_id, "fredlab", TEAM_DESCRIPTION_PLACEHOLDER)
         platform_admin = _admin_user()
 
         with pytest.raises(AuthorizationError):

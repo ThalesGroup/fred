@@ -1071,6 +1071,7 @@ async def test_list_teams_returns_personal_when_team_metadata_registry_is_empty(
             "admins": [],
             "is_member": True,
             "my_relations": ["team_editor"],
+            "description_is_placeholder": False,
             "joining_mode": "invite_only",
             # #2433: a personal space is stated private explicitly — it is
             # never marketplace-listed and unreadable to non-members.
@@ -1659,6 +1660,7 @@ async def test_get_personal_team_returns_shared_system_team_contract() -> None:
         "member_count": 1,
         "admins": [],
         "is_member": True,
+        "description_is_placeholder": False,
         "joining_mode": "invite_only",
         # #2433: a personal space is stated private explicitly.
         "visibility": "private",
@@ -5916,7 +5918,7 @@ async def test_update_team_checks_can_update_info_permission(
         resp = await client.patch(
             "/control-plane/v1/teams/thales",
             json={
-                "description": "Updated description",
+                "description": "Updated description for the team",
                 "joining_mode": "open",
                 "avatar_image_url": "https://example.test/banner.webp",
             },
@@ -5931,7 +5933,7 @@ async def test_update_team_checks_can_update_info_permission(
         (
             "thales",
             {
-                "description": "Updated description",
+                "description": "Updated description for the team",
                 "joining_mode": "open",
                 "banner_image_url": "https://example.test/banner.webp",
             },

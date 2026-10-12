@@ -20,6 +20,7 @@ from typing import Literal
 
 from fred_core import JoiningMode, RelationType, TeamPermission, TeamVisibility
 from fred_core.common import TeamId
+from fred_core.teams.metadata_store import TeamDescription, reject_null_description
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from control_plane_backend.marketplace_settings.schemas import TeamMarketplaceView
@@ -162,6 +163,9 @@ class Team(BaseModel):
     # too. Frontend team-role badges (#2100, #2298) need this unambiguous.
     my_relations: list[UserTeamRelation] = Field(default_factory=list)
     description: str | None = None
+    # True while the team still carries the fred-core placeholder; personal
+    # spaces have no description and stay False.
+    description_is_placeholder: bool = False
     joining_mode: JoiningMode = JoiningMode.INVITE_ONLY
     # Private by default (#2433) — kept in lockstep with `TeamMetadata` /
     # `TeamMetadataRow` in fred-core so the OpenAPI default tells the truth.
@@ -244,6 +248,7 @@ class CreateTeamRequest(BaseModel):
     """
 
     name: str = Field(min_length=1, max_length=180)
+    description: TeamDescription
     initial_team_admin_ids: list[str] = Field(min_length=1)
 
     @field_validator("name")
@@ -323,7 +328,7 @@ class UpdateTeamRequest(BaseModel):
     # A team_admin may rename their own team through this surface (the route is
     # gated on `can_update_info`, which is exactly `team_admin` in schema.fga).
     name: str | None = Field(default=None, min_length=1, max_length=180)
-    description: str | None = Field(default=None, max_length=180)
+    description: TeamDescription | None = None
     joining_mode: JoiningMode | None = None
     visibility: TeamVisibility | None = None
     avatar_image_url: str | None = Field(default=None, max_length=300)
@@ -344,6 +349,11 @@ class UpdateTeamRequest(BaseModel):
         if value is None or not value.strip():
             raise ValueError("Team name cannot be empty.")
         return value.strip()
+
+    @field_validator("description")
+    @classmethod
+    def _reject_null_description(cls, value: str | None) -> str | None:
+        return reject_null_description(value)
 
     @field_validator("team_delete_grace", "max_idle")
     @classmethod

@@ -3888,6 +3888,7 @@ export type TeamWithPermissions = {
   is_member?: boolean;
   my_relations?: UserTeamRelation[];
   description?: string | null;
+  description_is_placeholder?: boolean;
   joining_mode?: JoiningMode;
   visibility?: TeamVisibility;
   avatar_image_url?: string | null;
@@ -3910,6 +3911,7 @@ export type Team = {
   is_member?: boolean;
   my_relations?: UserTeamRelation[];
   description?: string | null;
+  description_is_placeholder?: boolean;
   joining_mode?: JoiningMode;
   visibility?: TeamVisibility;
   avatar_image_url?: string | null;
@@ -3918,6 +3920,7 @@ export type Team = {
 };
 export type CreateTeamRequest = {
   name: string;
+  description: string;
   initial_team_admin_ids: string[];
 };
 export type UpdateTeamRequest = {

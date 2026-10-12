@@ -48,6 +48,7 @@ from fred_core.security.rebac.rebac_engine import (
 )
 from fred_core.teams.team_metatada_models import TeamMetadataRow
 from fred_core.users.user_models import UserRow
+from fred_core.teams.metadata_store import TEAM_DESCRIPTION_PLACEHOLDER
 from fred_pod.security.platform_access import (
     PlatformAccessCondition,
     PlatformAccessPolicy,
@@ -127,6 +128,7 @@ async def access(tmp_path):
         )
         session.add(
             TeamMetadataRow(
+                description=TEAM_DESCRIPTION_PLACEHOLDER,
                 id="demo",
                 name="Demonstration",
                 joining_mode="invite_only",
@@ -755,7 +757,12 @@ async def pg_access(monkeypatch):
                 )
             )
             session.add(
-                TeamMetadataRow(id="demo", name="Demo", platform_access_free=True)
+                TeamMetadataRow(
+                    description=TEAM_DESCRIPTION_PLACEHOLDER,
+                    id="demo",
+                    name="Demo",
+                    platform_access_free=True,
+                )
             )
         yield value
     finally:
@@ -1349,7 +1356,10 @@ async def test_actual_full_member_removal_with_multiple_roles_revokes_other_read
     async with access.store.mutation() as session:
         session.add(
             TeamMetadataRow(
-                id="fredlab", name="Free demonstration", platform_access_free=True
+                description=TEAM_DESCRIPTION_PLACEHOLDER,
+                id="fredlab",
+                name="Free demonstration",
+                platform_access_free=True,
             )
         )
     await free_joiner(access, member.uid, "fredlab")

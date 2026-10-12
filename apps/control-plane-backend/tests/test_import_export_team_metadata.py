@@ -38,6 +38,7 @@ from fred_core.scheduler import SchedulerBackend
 from fred_core.tasks.models import StartMigrationRequest
 from fred_core.tasks.service import TaskService
 from fred_core.teams.team_metatada_models import TeamMetadataRow
+from fred_core.teams.metadata_store import TEAM_DESCRIPTION_PLACEHOLDER
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
@@ -113,7 +114,7 @@ async def test_team_metadata_round_trips_through_export_import(tmp_path: Path) -
             TeamMetadataRow(
                 id="team-alpha",
                 name="Alpha",
-                description="Alpha team space",
+                description="Alpha team space for weekly reports",
                 joining_mode="open",
                 banner_object_storage_key="teams/team-alpha/banner.png",
                 max_resources_storage_size=5_000_000,
@@ -147,7 +148,7 @@ async def test_team_metadata_round_trips_through_export_import(tmp_path: Path) -
             ).scalar_one()
 
         assert imported.name == "Alpha"
-        assert imported.description == "Alpha team space"
+        assert imported.description == "Alpha team space for weekly reports"
         assert imported.joining_mode == "open"
         assert imported.banner_object_storage_key == "teams/team-alpha/banner.png"
         assert imported.max_resources_storage_size == 5_000_000
@@ -180,6 +181,7 @@ async def test_team_metadata_import_normalizes_legacy_joining_mode(
         await _seed_team(
             source,
             TeamMetadataRow(
+                description=TEAM_DESCRIPTION_PLACEHOLDER,
                 id="team-legacy",
                 name="Legacy",
                 joining_mode=legacy_value,
@@ -230,7 +232,7 @@ async def test_team_metadata_import_is_idempotent_and_skips_existing(
             TeamMetadataRow(
                 id="team-beta",
                 name="Beta",
-                description="Live description",
+                description="Live description kept on re-import",
                 joining_mode="open",
                 team_delete_grace="P365D",
             ),
@@ -252,7 +254,7 @@ async def test_team_metadata_import_is_idempotent_and_skips_existing(
             ).scalar_one()
 
         # Unchanged — the existing row won, no clobber.
-        assert row.description == "Live description"
+        assert row.description == "Live description kept on re-import"
         assert row.joining_mode == "open"
         assert row.team_delete_grace == "P365D"
     finally:
@@ -273,7 +275,12 @@ async def test_team_metadata_import_guarantees_organization_relation(
     source = await _make_engine(tmp_path, "org-src.sqlite3")
     dest = await _make_engine(tmp_path, "org-dst.sqlite3")
     try:
-        await _seed_team(source, TeamMetadataRow(id="team-gamma", name="Gamma"))
+        await _seed_team(
+            source,
+            TeamMetadataRow(
+                description=TEAM_DESCRIPTION_PLACEHOLDER, id="team-gamma", name="Gamma"
+            ),
+        )
         snapshot = await run_export(source)
         rebac = _FakeRebac()
 
@@ -297,7 +304,12 @@ async def test_team_metadata_import_warns_when_rebac_unavailable(
     source = await _make_engine(tmp_path, "warn-src.sqlite3")
     dest = await _make_engine(tmp_path, "warn-dst.sqlite3")
     try:
-        await _seed_team(source, TeamMetadataRow(id="team-delta", name="Delta"))
+        await _seed_team(
+            source,
+            TeamMetadataRow(
+                description=TEAM_DESCRIPTION_PLACEHOLDER, id="team-delta", name="Delta"
+            ),
+        )
         snapshot = await run_export(source)
 
         report = await _import(snapshot, dest)

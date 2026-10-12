@@ -57,6 +57,9 @@ import pytest
 
 from factory_config import USERS
 
+# A valid team description: creation refuses one missing or under 20 characters.
+_DESCRIPTION = "Validation scenario team for registry authorization checks."
+
 
 def _platform_admin_username() -> str:
     for username, user in sorted(USERS.items()):
@@ -94,7 +97,10 @@ def disposable_team(cp, token_for):
 
     admin = cp(admin_username)
     name = f"val-registry-{uuid.uuid4().hex[:8]}"
-    created = admin.post("/teams", json={"name": name, "initial_team_admin_ids": [oscar_sub]})
+    created = admin.post(
+        "/teams",
+        json={"name": name, "description": _DESCRIPTION, "initial_team_admin_ids": [oscar_sub]},
+    )
     assert created.status_code == 201, (
         f"{admin_username} (platform_admin) could not bootstrap a disposable team: "
         f"{created.status_code} {created.text[:200]}"
@@ -119,7 +125,11 @@ def test_non_platform_admin_cannot_create_team(username: str, cp) -> None:
     """A non-platform-admin cannot bootstrap a new team. [username={username}]"""
     resp = cp(username).post(
         "/teams",
-        json={"name": f"deny-{uuid.uuid4().hex[:8]}", "initial_team_admin_ids": [username]},
+        json={
+            "name": f"deny-{uuid.uuid4().hex[:8]}",
+            "description": _DESCRIPTION,
+            "initial_team_admin_ids": [username],
+        },
     )
     assert resp.status_code == 403, (
         f"{username} is not platform_admin, yet created a team: {resp.status_code} {resp.text[:200]}"
@@ -223,7 +233,10 @@ def test_platform_admin_can_delete_disposable_team(cp, token_for) -> None:
     admin = cp(admin_username)
 
     name = f"val-registry-delete-{uuid.uuid4().hex[:8]}"
-    created = admin.post("/teams", json={"name": name, "initial_team_admin_ids": [oscar_sub]})
+    created = admin.post(
+        "/teams",
+        json={"name": name, "description": _DESCRIPTION, "initial_team_admin_ids": [oscar_sub]},
+    )
     assert created.status_code == 201, created.text[:200]
     team_id = created.json()["id"]
 
