@@ -5,7 +5,7 @@
   "typeCheckingMode": "basic",
   "venvPath": ".",
   "venv": ".venv",
-  "extraPaths": ["../libs/fred-core"],
+  "extraPaths": ["../../libs/fred-core"],
   "reportMissingTypeStubs": false,
   "reportIncompatibleMethodOverride": "error",
   "reportIncompatibleVariableOverride": "error",
@@ -13,7 +13,7 @@
   "executionEnvironments": [
     {
       "root": ".",
-      "extraPaths": ["../libs/fred-core"]
+      "extraPaths": ["../../libs/fred-core"]
     }
   ]
 }
