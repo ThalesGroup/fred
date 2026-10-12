@@ -741,7 +741,8 @@ describe("platform skills", () => {
     activateSkills();
     type("/");
     expect(labels()).toEqual(["/search", "/summary", "meeting-minutes", "review"]);
-    expect(options()[2].title).toBe("chatbot.skills.platformProvided");
+    // The native tooltip gives the full description, which the row may cut.
+    expect(options()[2].title).toBe("Meeting minutes");
     expect(options()[2].querySelector("[class*=customIcon]")).not.toBeNull();
     expect(options()[2].querySelector("em")?.textContent).toContain("Meeting minutes");
   });

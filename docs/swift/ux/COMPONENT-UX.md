@@ -5193,9 +5193,10 @@ between the two. The description stays on one line and is cut with an ellipsis.
 Prompts use a distinct prompt icon in a blue information tile; skills keep the
 platform pictogram. A skill's argument hint is not shown in the menu: it only
 appears in the composer once the skill is selected. The list scrolls within
-its existing limit.
-Platform skills use a dedicated hexagon/book pictogram and localized platform-origin
-hover hint. Composer and sent-message badges reuse that pictogram; their native
+its existing limit. A row's native tooltip gives its full description (the
+name when there is none): the section heading already says where it comes from.
+Platform skills use a dedicated hexagon/book pictogram. Composer and
+sent-message badges reuse that pictogram with a localized platform-origin hint; their native
 tooltip includes the current runtime catalog description when available. Missing
 catalog entries retain the name, origin and preview action without a new fetch.
 

@@ -131,8 +131,7 @@ export const CommandMenu = memo(function CommandMenu({
               role="option"
               aria-selected={index === activeIndex}
               data-active={index === activeIndex}
-              title={entry.kind === "skill" ? t("chatbot.skills.platformProvided") : undefined}
-              aria-description={entry.kind === "skill" ? t("chatbot.skills.platformProvided") : undefined}
+              title={entry.description?.trim() || entry.name}
               onMouseMove={() => onFocusEntry(index)}
               onMouseDown={activate(index)}
             >
