@@ -251,3 +251,19 @@ describe("ButtonGroup keyboard activation", () => {
     expect(first.getAttribute("aria-checked")).toBeNull();
   });
 });
+
+describe("ButtonGroup selected colour", () => {
+  it("exposes an item's selectedColor and leaves items without one on the default", () => {
+    const groupItems: ButtonGroupItemProps[] = [
+      { label: "Off", selectedColor: "error" },
+      { label: "Default" },
+      { label: "On", selectedColor: "success" },
+    ];
+    render(<ButtonGroup items={groupItems} size="small" color="secondary" variant="radio" aria-label="test" />);
+
+    const [off, def, on] = items();
+    expect(off.dataset.selectedColor).toBe("error");
+    expect(on.dataset.selectedColor).toBe("success");
+    expect(def.hasAttribute("data-selected-color")).toBe(false);
+  });
+});
