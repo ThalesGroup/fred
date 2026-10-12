@@ -270,3 +270,104 @@ async def test_metadata_rich_tree_fits_the_raised_default_budget():
     limited = await service.get_tree(_user(), DocumentTreeRequest(max_chars=6000))
     assert limited.truncated
     assert len(limited.tree) <= 6000
+
+
+@pytest.mark.asyncio
+async def test_paged_tree_continues_before_budget_omissions_and_deduplicates():
+    from fred_core.documents.document_store import BaseDocumentMetadataStore
+    from pydantic import ValidationError
+
+    from knowledge_flow_backend.features.corpus_tree.service import InvalidTreePage
+
+    docs = [_document(uid=str(i), name=f"Report-{i}.pdf") for i in range(6)]
+    for doc in docs:
+        doc.tags.tag_ids = ["a", "b"]
+    tags = [_tag(tag_id="a", full_path="A", item_ids=[]), _tag(tag_id="b", full_path="B", item_ids=[])]
+    service = _tree_service(tags=tags, docs=docs)
+
+    class Store(BaseDocumentMetadataStore):
+        async def get_all_metadata(self, filters, session=None):
+            return docs
+
+    async def descriptors(*args, **kwargs):
+        return tags
+
+    async def discover(user, **kwargs):
+        return await Store().discover_metadata_page(**kwargs)
+
+    service.tag_service.list_tag_descriptors_for_user = descriptors
+    service.metadata_service.discover_documents_page = discover
+    seen = []
+    cursor = None
+    for _ in range(10):
+        response = await service.get_tree(_user(), DocumentTreeRequest(limit=5, max_chars=600, cursor=cursor))
+        records = _records(response.tree)
+        page = {record["uid"] for record in records if "uid" in record}
+        assert page and len(response.tree) <= 600
+        assert not page.intersection(seen)
+        seen.extend(page)
+        cursor = response.next_cursor
+        if cursor is None:
+            break
+        assert response.truncated
+    assert set(seen) == {str(i) for i in range(6)}
+    with pytest.raises(InvalidTreePage):
+        await service.get_tree(_user(), DocumentTreeRequest(limit=1, cursor="bad"))
+    first = await service.get_tree(_user(), DocumentTreeRequest(limit=1))
+    with pytest.raises(InvalidTreePage):
+        await service.get_tree(_user(), DocumentTreeRequest(limit=1, cursor=first.next_cursor, name_filter="other"))
+    with pytest.raises(ValidationError):
+        DocumentTreeRequest(name_filter="Report")
+
+
+@pytest.mark.asyncio
+async def test_oversized_page_reports_budget_error_without_skipping():
+    from fred_core.documents.document_store import DocumentDiscoveryEntry
+
+    from knowledge_flow_backend.features.corpus_tree.service import InvalidTreePage, _render_page
+
+    doc = _document(uid="large", name="x" * 1000)
+    doc.tags.tag_ids = ["a"]
+    with pytest.raises(InvalidTreePage, match="Increase max_chars"):
+        _render_page([_tag(tag_id="a", full_path="A", item_ids=[])], [DocumentDiscoveryEntry(doc, doc.document_name)], 500)
+
+
+@pytest.mark.asyncio
+async def test_library_page_does_not_render_other_memberships():
+    from fred_core.documents.document_store import DocumentDiscoveryEntry
+
+    from knowledge_flow_backend.features.corpus_tree.service import _render_page, _selected_folders
+
+    doc = _document(uid="shared", name="Report.pdf")
+    doc.tags.tag_ids = ["a", "b"]
+    tags = [_tag(tag_id="a", full_path="A", item_ids=[]), _tag(tag_id="b", full_path="B", item_ids=[])]
+    entries = [DocumentDiscoveryEntry(doc, "report.pdf")]
+    text, _ = _render_page(tags, entries, 20000, {"a"}, set())
+    assert '"folder":"A"' in text and '"folder":"B"' not in text
+    text, _ = _render_page(tags, entries, 20000, {"a"}, {"shared"})
+    assert '"folder":"B"' in text
+    many = [_tag(tag_id=str(i), full_path=f"Folder-{i}", item_ids=[]) for i in range(10001)]
+    assert len(_selected_folders(many, [tag.id for tag in many])) == 10001
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("delegated", [False, True])
+async def test_discovery_service_agent_uses_authorized_team_folders_only(monkeypatch, delegated):
+    from unittest.mock import AsyncMock
+
+    from knowledge_flow_backend.features.metadata import service as module
+    from knowledge_flow_backend.features.metadata.service import MetadataService
+
+    service = MetadataService.__new__(MetadataService)
+    service.rebac = SimpleNamespace(lookup_user_resources=AsyncMock(return_value=[]))
+    service.metadata_store = SimpleNamespace(discover_metadata_page=AsyncMock(return_value=([], False)))
+    monkeypatch.setattr(module, "is_service_agent", lambda user: True)
+    monkeypatch.setattr(module, "holds_caller_role", lambda user: delegated)
+    args = dict(folder_ids=["authorized-team-folder"], selected_folder_ids=None, document_uids=None, name_filter=None, sort_by="name", sort_order="asc", limit=2, after=None)
+    await service.discover_documents_page(_user(), **args)
+    assert service.metadata_store.discover_metadata_page.call_args.kwargs["readable_uids"] == ([] if delegated else None)
+    if not delegated:
+        service.rebac.lookup_user_resources.assert_not_called()
+    service.metadata_store.discover_metadata_page.reset_mock()
+    await service.discover_documents_page(_user(), **{**args, "folder_ids": []})
+    service.metadata_store.discover_metadata_page.assert_not_called()

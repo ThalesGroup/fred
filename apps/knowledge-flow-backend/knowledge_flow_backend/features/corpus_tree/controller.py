@@ -14,10 +14,10 @@
 
 import logging
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fred_core import KeycloakUser, get_current_user
 
-from knowledge_flow_backend.features.corpus_tree.service import CorpusTreeService
+from knowledge_flow_backend.features.corpus_tree.service import CorpusTreeService, InvalidTreePage
 from knowledge_flow_backend.features.corpus_tree.structure import DocumentTreeRequest, DocumentTreeResponse
 
 logger = logging.getLogger(__name__)
@@ -56,4 +56,7 @@ class CorpusTreeController:
             request: DocumentTreeRequest,
             user: KeycloakUser = Depends(get_current_user),
         ):
-            return await self.service.get_tree(user, request)
+            try:
+                return await self.service.get_tree(user, request)
+            except InvalidTreePage as exc:
+                raise HTTPException(status_code=400, detail={"code": exc.reason, "message": str(exc)}) from exc

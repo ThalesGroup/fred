@@ -14,7 +14,8 @@
 
 import asyncio
 from abc import abstractmethod
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import List, Literal, Sequence
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -64,6 +65,28 @@ def sort_documents(
     key = document_sort_key(sort_by)
     ordered = sorted(docs, key=lambda md: (key(md), md.identity.document_uid))
     return list(reversed(ordered)) if sort_order == "desc" else ordered
+
+
+DocumentDiscoverySortField = Literal["name", "added_to_kb"]
+
+
+@dataclass(frozen=True)
+class DocumentDiscoveryEntry:
+    document: DocumentMetadata
+    sort_value: str | None
+
+
+def discovery_value(
+    document: DocumentMetadata, sort_by: DocumentDiscoverySortField
+) -> str | None:
+    if sort_by == "name":
+        return document.document_name.lower()
+    if "date_added_to_kb" not in document.source.model_fields_set:
+        return None
+    value = document.source.date_added_to_kb
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc).isoformat()
 
 
 class DocumentMetadataDeserializationError(Exception):
@@ -166,6 +189,81 @@ class BaseDocumentMetadataStore:
             if name in wanted:
                 found.setdefault(name, []).append(doc.identity.document_uid)
         return found
+
+    async def discover_metadata_page(
+        self,
+        *,
+        folder_ids: Sequence[str],
+        selected_folder_ids: Sequence[str] | None = None,
+        document_uids: Sequence[str] | None = None,
+        readable_uids: Sequence[str] | None = None,
+        name_filter: str | None = None,
+        sort_by: DocumentDiscoverySortField = "name",
+        sort_order: SortOrder = "asc",
+        limit: int = 25,
+        after: tuple[str | None, str] | None = None,
+    ) -> tuple[list[DocumentDiscoveryEntry], bool]:
+        """Portable test-store fallback; PostgreSQL selects candidates before hydration."""
+        folders = set(folder_ids)
+        selected = None if selected_folder_ids is None else set(selected_folder_ids)
+        requested = set(document_uids or ())
+        readable = None if readable_uids is None else set(readable_uids)
+        needle = (name_filter or "").lower()
+        entries = []
+        for document in await self.get_all_metadata({}):
+            uid = document.document_uid
+            tags = set(document.tags.tag_ids or ())
+            if not tags.intersection(folders) or (
+                readable is not None and uid not in readable
+            ):
+                continue
+            if (
+                selected is not None
+                and not tags.intersection(selected)
+                and uid not in requested
+            ):
+                continue
+            if needle and not any(
+                needle in text.lower()
+                for text in [document.document_name, document.identity.title or ""]
+            ):
+                continue
+            entries.append(
+                DocumentDiscoveryEntry(document, discovery_value(document, sort_by))
+            )
+        unknown = sort_by == "added_to_kb" and any(
+            entry.sort_value is None for entry in entries
+        )
+        known = sorted(
+            (entry for entry in entries if entry.sort_value is not None),
+            key=lambda entry: (entry.sort_value, entry.document.document_uid),
+            reverse=sort_order == "desc",
+        )
+        missing = sorted(
+            (entry for entry in entries if entry.sort_value is None),
+            key=lambda entry: entry.document.document_uid,
+            reverse=sort_order == "desc",
+        )
+        ordered = known + missing
+        if after is not None:
+            value, uid = after
+
+            def follows(entry: DocumentDiscoveryEntry) -> bool:
+                if value is None:
+                    return entry.sort_value is None and (
+                        entry.document.document_uid > uid
+                        if sort_order == "asc"
+                        else entry.document.document_uid < uid
+                    )
+                if entry.sort_value is None:
+                    return True
+                pair = (entry.sort_value, entry.document.document_uid)
+                return (
+                    pair > (value, uid) if sort_order == "asc" else pair < (value, uid)
+                )
+
+            ordered = [entry for entry in ordered if follows(entry)]
+        return ordered[:limit], unknown
 
     async def browse_metadata_in_tag(
         self,

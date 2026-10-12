@@ -72,6 +72,7 @@ import json
 import logging
 import time
 from collections.abc import Sequence
+from typing import Literal
 
 from fred_core.store.vector_search import (
     DEFAULT_MIN_SOURCE_SCORE_RATIO,
@@ -99,6 +100,7 @@ from fred_sdk.contracts.models import (
 )
 from fred_sdk.contracts.runtime import (
     DocumentSearchResult,
+    DocumentTreeRequestError,
     DocumentTreeResult,
     unwrap_run_stop_error,
 )
@@ -203,6 +205,8 @@ def _document_tool_failure(
     else:
         detail = f": {raw}" if raw else ""
         message = f"Could not {action}{target}: {cause} [{err_type}{detail}]."
+    if isinstance(exc, DocumentTreeRequestError):
+        message += " " + str(exc)
     # `blocks` carries the same diagnostic as `content` (CAPAB-02, same reason
     # as the success-path artifacts above): a Graph agent's plain-dict
     # invocation keeps only the artifact half of a `content_and_artifact`
@@ -705,6 +709,11 @@ class DocumentAccessCapability(
         async def list_document_tree(
             working_directory: str | None = None,
             max_chars: int = 20_000,
+            name_filter: str | None = None,
+            sort_by: Literal["name", "added_to_kb"] = "name",
+            sort_order: Literal["asc", "desc"] = "asc",
+            limit: int = 25,
+            cursor: str | None = None,
         ) -> tuple[str, ToolInvocationResult]:
             """List the folders and documents in the user's document scope as a tree.
 
@@ -713,9 +722,16 @@ class DocumentAccessCapability(
             with uid, name, added_to_kb, created and modified. Available title,
             format/MIME, language, page/row counts, labels and source are included.
 
-            For the latest document added to Fred, compare added_to_kb timestamps.
-            created is file creation metadata; modified can include Fred metadata
-            edits. Neither is an arrival date. Arrival is not ingestion completion.
+            For a filename or title lookup, pass name_filter (a literal substring,
+            case-insensitive). For content discovery, use vector search instead.
+            To get the latest known addition, use sort_by="added_to_kb",
+            sort_order="desc", limit=1, without a cursor. Unknown arrivals sort last;
+            has_unknown_arrivals in page metadata requires a latest-known qualification.
+            Never substitute file creation/modification or infer ingestion completion.
+            Page limits count unique documents, even across multiple folders.
+            Use page.next_cursor with the same scope/filter/sort to continue.
+            Absence of a next cursor ends traversal; a page alone is not the whole corpus.
+            The UI hides cursors: never quote them or internal ids in user answers.
             Dates retain time and timezone; null means unknown. Never infer an
             unknown date from another field.
 
@@ -747,6 +763,11 @@ class DocumentAccessCapability(
                     library_tag_ids=scoped_library_tag_ids,
                     document_uids=scoped_document_uids,
                     max_chars=effective_max_chars,
+                    name_filter=name_filter,
+                    sort_by=sort_by,
+                    sort_order=sort_order,
+                    limit=_clamp(limit, (1, 100)),
+                    cursor=cursor,
                 )
             except Exception as exc:
                 run_stop = unwrap_run_stop_error(exc)
@@ -763,6 +784,15 @@ class DocumentAccessCapability(
                 text = (
                     "Listing incomplete: omitted documents may be more recent.\n" + text
                 )
+            text += "\n" + json.dumps(
+                {
+                    "page": {
+                        "next_cursor": result.next_cursor,
+                        "has_unknown_arrivals": result.has_unknown_arrivals,
+                    }
+                },
+                separators=(",", ":"),
+            )
             artifact = ToolInvocationResult(
                 tool_ref="list_document_tree",
                 blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=text),),

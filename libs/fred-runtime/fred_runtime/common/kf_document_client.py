@@ -31,7 +31,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Sequence
+from typing import Any, Dict, Literal, Optional, Sequence
 
 from fred_core.common import OwnerFilter
 from pydantic import BaseModel
@@ -79,6 +79,8 @@ class SummarizeDocumentResult(BaseModel):
 
 class DocumentTreeResult(BaseModel):
     tree: str
+    next_cursor: str | None = None
+    has_unknown_arrivals: bool | None = None
     truncated: bool
 
 
@@ -194,6 +196,11 @@ class KfDocumentClient(KfBaseClient):
         tag_ids: Optional[Sequence[str]] = None,
         document_uids: Optional[Sequence[str]] = None,
         max_chars: int = 20_000,
+        name_filter: str | None = None,
+        sort_by: Literal["name", "added_to_kb"] = "name",
+        sort_order: Literal["asc", "desc"] = "asc",
+        limit: int | None = None,
+        cursor: str | None = None,
         owner_filter: Optional[OwnerFilter] = None,
         team_id: Optional[str] = None,
     ) -> DocumentTreeResult:
@@ -220,6 +227,22 @@ class KfDocumentClient(KfBaseClient):
             payload["owner_filter"] = owner_filter.value
         if team_id:
             payload["team_id"] = team_id
+
+        if limit is not None:
+            payload.update(
+                name_filter=name_filter,
+                sort_by=sort_by,
+                sort_order=sort_order,
+                limit=limit,
+                cursor=cursor,
+            )
+        elif (
+            name_filter is not None
+            or cursor is not None
+            or sort_by != "name"
+            or sort_order != "asc"
+        ):
+            raise ValueError("Paging arguments require limit")
 
         r = await self._request_with_token_refresh(
             method="POST",

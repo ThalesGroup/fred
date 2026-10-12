@@ -40,7 +40,7 @@ import re
 from collections.abc import Awaitable, Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager
 from functools import partial
-from typing import Any, Protocol, TypedDict, cast
+from typing import Any, Literal, Protocol, TypedDict, cast
 from urllib.parse import quote
 
 import httpx
@@ -90,6 +90,7 @@ from fred_sdk.contracts.runtime import (
     DocumentSummarizePort,
     DocumentSummaryResult,
     DocumentTreePort,
+    DocumentTreeRequestError,
     DocumentTreeResult,
     FolderDocumentEntry,
     SpanPort,
@@ -1834,6 +1835,11 @@ class DocumentTreeAdapter(DocumentTreePort):
         library_tag_ids: Sequence[str] | None = None,
         document_uids: Sequence[str] | None = None,
         max_chars: int = 20_000,
+        name_filter: str | None = None,
+        sort_by: Literal["name", "added_to_kb"] = "name",
+        sort_order: Literal["asc", "desc"] = "asc",
+        limit: int | None = None,
+        cursor: str | None = None,
     ) -> DocumentTreeResult:
         runtime_context = self._binding.runtime_context
         effective_libs = _narrow_port_scope_ids(
@@ -1852,12 +1858,33 @@ class DocumentTreeAdapter(DocumentTreePort):
                 tag_ids=effective_libs,
                 document_uids=effective_uids,
                 max_chars=max_chars,
+                name_filter=name_filter,
+                sort_by=sort_by,
+                sort_order=sort_order,
+                limit=limit,
+                cursor=cursor,
                 owner_filter=OwnerFilter.TEAM if scoped_team else OwnerFilter.PERSONAL,
                 team_id=team_id if scoped_team else None,
             )
         except httpx.HTTPError as exc:
+            if (
+                isinstance(exc, httpx.HTTPStatusError)
+                and exc.response.status_code == 400
+            ):
+                try:
+                    detail = exc.response.json().get("detail", {})
+                    reason = detail.get("code") if isinstance(detail, dict) else None
+                except (ValueError, AttributeError):
+                    reason = None
+                if reason in ("invalid_cursor", "budget_exceeded"):
+                    raise DocumentTreeRequestError(reason) from exc
             raise _wrap_document_port_error(exc) from exc
-        return DocumentTreeResult(tree=result.tree, truncated=result.truncated)
+        return DocumentTreeResult(
+            tree=result.tree,
+            truncated=result.truncated,
+            next_cursor=result.next_cursor,
+            has_unknown_arrivals=result.has_unknown_arrivals,
+        )
 
     async def list_by_label(
         self,

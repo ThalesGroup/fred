@@ -152,3 +152,16 @@ it("omits redundant empty ancestor groups while preserving empty leaf folders", 
   ].join("\n");
   expect(parseDocumentTreeTrace(tree)?.folders.map((folder) => folder.path)).toEqual(["Sales/HR", "Empty"]);
 });
+
+it("recognizes continuation without displaying cursors or treating paging as truncation", () => {
+  const parsed = parseDocumentTreeTrace('(empty)\n{"page":{"next_cursor":"opaque","has_unknown_arrivals":true}}');
+  expect(parsed?.hasMore).toBe(true);
+  expect(parsed?.truncated).toBe(false);
+  expect(JSON.stringify(parsed)).not.toContain("opaque");
+});
+
+it("keeps continuation metadata out of the malformed historical fallback", () => {
+  const text = 'Docs/\ninvalid extra line\n  Report.pdf [uid] (uploaded 2026-10-12)\n{"page":{"next_cursor":"opaque"}}';
+  expect(parseDocumentTreeTrace(text)).toBeNull();
+  expect(historicalDocumentTreeText(text)).toBeNull();
+});

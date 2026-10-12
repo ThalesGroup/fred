@@ -1009,6 +1009,8 @@ class DocumentTreeResult(FrozenModel):
 
     tree: str = ""
     truncated: bool = False
+    next_cursor: str | None = None
+    has_unknown_arrivals: bool | None = None
 
 
 class DocumentLabelReference(FrozenModel):
@@ -1067,6 +1069,19 @@ class DocumentPortCallError(Exception):
         self.status_code = status_code
 
 
+class DocumentTreeRequestError(DocumentPortCallError):
+    """Known discovery request errors with safe model-facing recovery guidance."""
+
+    def __init__(self, reason: Literal["invalid_cursor", "budget_exceeded"]) -> None:
+        self.reason = reason
+        advice = (
+            "Restart without a cursor using the same query and scope."
+            if reason == "invalid_cursor"
+            else "Increase max_chars up to 60000 or narrow working_directory."
+        )
+        super().__init__(advice, status_code=400)
+
+
 class DocumentScopeRefusedError(Exception):
     """
     Raised by a document port adapter when EVERY document the caller named lies
@@ -1110,6 +1125,11 @@ class DocumentTreePort(ABC):
         library_tag_ids: Sequence[str] | None = None,
         document_uids: Sequence[str] | None = None,
         max_chars: int = 20_000,
+        name_filter: str | None = None,
+        sort_by: Literal["name", "added_to_kb"] = "name",
+        sort_order: Literal["asc", "desc"] = "asc",
+        limit: int | None = None,
+        cursor: str | None = None,
     ) -> DocumentTreeResult:
         """
         Return the caller's authorized folder/document tree as rendered text.

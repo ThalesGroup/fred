@@ -90,6 +90,8 @@ class _Extraction:
 class _Tree:
     tree = "Sales/"
     truncated = False
+    next_cursor = None
+    has_unknown_arrivals = None
 
 
 def _binding(**runtime_kwargs: Any) -> BoundRuntimeContext:

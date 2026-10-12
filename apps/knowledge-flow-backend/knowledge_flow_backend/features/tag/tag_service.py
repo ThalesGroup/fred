@@ -80,25 +80,15 @@ class TagService:
 
     # ---------- Public API ----------
 
-    async def list_all_tags_for_user(
+    async def list_tag_descriptors_for_user(
         self,
         user: KeycloakUser,
         tag_type: Optional[TagType] = None,
         path_prefix: Optional[str] = None,
-        limit: int = 200,
-        offset: int = 0,
         owner_filter: Optional[OwnerFilter] = None,
         team_id: Optional[str] = None,
-    ) -> list[TagWithPermissions]:
-        """
-        List user tags, optionally filtered by type and hierarchical prefix (e.g. 'Sales' or 'Sales/HR').
-        Pagination included.
-
-        owner_filter controls which tags are returned:
-        - None: all tags the user can read (default, current behavior)
-        - PERSONAL: only tags where the user is directly owner/editor/viewer (not via team)
-        - TEAM: only tags owned by the specified team (team_id required)
-        """
+    ) -> list[Tag]:
+        """Authorized folder descriptors, without document enumeration or a page cap."""
         if team_id == "personal":
             team_id = None
             owner_filter = OwnerFilter.PERSONAL
@@ -127,6 +117,29 @@ class TagService:
 
         # 4) stable sort by full_path (optional but nice for UI determinism)
         tags.sort(key=lambda t: self._full_path_of(t).lower())
+
+        return tags
+
+    async def list_all_tags_for_user(
+        self,
+        user: KeycloakUser,
+        tag_type: Optional[TagType] = None,
+        path_prefix: Optional[str] = None,
+        limit: int = 200,
+        offset: int = 0,
+        owner_filter: Optional[OwnerFilter] = None,
+        team_id: Optional[str] = None,
+    ) -> list[TagWithPermissions]:
+        """
+        List user tags, optionally filtered by type and hierarchical prefix (e.g. 'Sales' or 'Sales/HR').
+        Pagination included.
+
+        owner_filter controls which tags are returned:
+        - None: all tags the user can read (default, current behavior)
+        - PERSONAL: only tags where the user is directly owner/editor/viewer (not via team)
+        - TEAM: only tags owned by the specified team (team_id required)
+        """
+        tags = await self.list_tag_descriptors_for_user(user, tag_type, path_prefix, owner_filter, team_id)
 
         # 5) paginate
         sliced = tags[offset : offset + limit]

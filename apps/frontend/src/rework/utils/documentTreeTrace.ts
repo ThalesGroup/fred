@@ -41,6 +41,7 @@ export interface DocumentTreeTrace {
   truncated: boolean;
   documentCount: number;
   latestUid: string | null;
+  hasMore?: boolean;
 }
 
 const INCOMPLETE_PREFIX = "Listing incomplete:";
@@ -113,6 +114,7 @@ export function parseDocumentTreeTrace(text: string): DocumentTreeTrace | null {
   const unique = new Map<string, TreeDocument>();
   const parents = new Set<string>();
   let truncated = false;
+  let hasMore: boolean | undefined;
   let latest: TreeDocument | null = null;
   let recognized = false;
   const byPath = new Map<string, TreeFolder>();
@@ -154,6 +156,13 @@ export function parseDocumentTreeTrace(text: string): DocumentTreeTrace | null {
     if (trimmed.startsWith("{")) {
       try {
         const value: unknown = JSON.parse(trimmed);
+        if (record(value) && record(value.page)) {
+          const cursor = value.page.next_cursor;
+          if (cursor !== null && typeof cursor !== "string") return null;
+          hasMore = typeof cursor === "string" && cursor.length > 0;
+          recognized = true;
+          continue;
+        }
         if (record(value) && typeof value.folder === "string") {
           paths.length = depth / 2;
           paths.push(value.folder);
@@ -197,13 +206,17 @@ export function parseDocumentTreeTrace(text: string): DocumentTreeTrace | null {
         truncated,
         documentCount: unique.size,
         latestUid: latest?.uid ?? null,
+        ...(hasMore === undefined ? {} : { hasMore }),
       }
     : null;
 }
 
 export function historicalDocumentTreeText(text: string): string | null {
   const content = treeText(text);
-  if (/"(?:uid|folder|tool_ref)"\s*:/.test(content) || !/\(uploaded (?:\d{4}-\d{2}-\d{2}|unknown date)\)/.test(content))
+  if (
+    /"(?:uid|folder|tool_ref|page|next_cursor)"\s*:/.test(content) ||
+    !/\(uploaded (?:\d{4}-\d{2}-\d{2}|unknown date)\)/.test(content)
+  )
     return null;
   return stripDocumentUids(content);
 }

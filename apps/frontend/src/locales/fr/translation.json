@@ -1680,6 +1680,7 @@
     "chatTrace": {
       "documentTree": {
         "metadataFor": "Métadonnées de {{name}}",
+        "moreAvailable": "D'autres documents sont disponibles",
         "truncated": "Tronqué",
         "unknown": "Non renseignée",
         "displayed_one": "{{count}} document affiché",

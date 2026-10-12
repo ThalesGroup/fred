@@ -353,3 +353,116 @@ async def test_uids_by_name_uses_the_document_name_index(
         plan = [row[0] for row in result]
 
     assert any("idx_metadata_document_name" in line for line in plan), plan
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("order", ["asc", "desc"])
+async def test_discovery_selects_authorized_filtered_pages_and_unknowns(
+    pg_store, order
+):
+    for uid in ["a", "b", "c", "hidden"]:
+        doc = _named(uid, "REPORT_%.pdf", ["A", "B"])
+        doc.identity.title = "Budget_% overview"
+        doc.source.date_added_to_kb = datetime(2026, 10, 12, 12, 0, tzinfo=timezone.utc)
+        await pg_store.save_metadata(doc)
+    async with pg_store._sessions() as session:
+        from sqlalchemy import update
+
+        doc = PostgresDocumentMetadataStore._to_dict(
+            _named("c", "REPORT_%.pdf", ["A", "B"])
+        )
+        doc["identity"]["title"] = "Budget_% overview"
+        del doc["source"]["date_added_to_kb"]
+        await session.execute(
+            update(DocumentMetadataRow)
+            .where(DocumentMetadataRow.document_uid == "c")
+            .values(doc=doc)
+        )
+        await session.commit()
+    seen = []
+    position = None
+    while True:
+        entries, unknown = await pg_store.discover_metadata_page(
+            folder_ids=["A", "B"],
+            readable_uids=["a", "b", "c"],
+            name_filter="budget_%",
+            sort_by="added_to_kb",
+            sort_order=order,
+            limit=1,
+            after=position,
+        )
+        assert unknown
+        if not entries:
+            break
+        entry = entries[0]
+        seen.append(entry.document.document_uid)
+        position = (entry.sort_value, entry.document.document_uid)
+    assert seen == (["a", "b", "c"] if order == "asc" else ["b", "a", "c"])
+    denied, unknown = await pg_store.discover_metadata_page(
+        folder_ids=["other"], readable_uids=["hidden"], sort_by="added_to_kb"
+    )
+    assert denied == [] and not unknown
+
+
+@pytest.mark.asyncio
+async def test_large_discovery_query_plan_keeps_metadata_hydration_bounded(
+    pg_store, monkeypatch
+):
+    from sqlalchemy import insert
+
+    docs = [
+        _named(f"synthetic-{i:05d}", f"Report-{i:05d}.pdf", ["synthetic-folder"])
+        for i in range(10000)
+    ]
+    async with pg_store._sessions() as session:
+        await session.execute(
+            insert(DocumentMetadataRow),
+            [
+                {
+                    "document_uid": doc.document_uid,
+                    "doc": pg_store._to_dict(doc),
+                    "tag_ids": ["synthetic-folder"],
+                    "date_added_to_kb": doc.source.date_added_to_kb,
+                }
+                for doc in docs
+            ],
+        )
+        await session.commit()
+        await session.execute(text(f"ANALYZE {DocumentMetadataRow.__tablename__}"))
+        query, _ = pg_store._discovery_query(
+            folder_ids=["synthetic-folder"],
+            sort_by="added_to_kb",
+            sort_order="desc",
+            limit=2,
+        )
+        connection = await session.connection()
+        compiled = query.compile(
+            dialect=connection.dialect, compile_kwargs={"render_postcompile": True}
+        )
+        plan = (
+            (
+                await connection.exec_driver_sql(
+                    "EXPLAIN (ANALYZE, FORMAT TEXT) " + str(compiled),
+                    tuple(compiled.params[key] for key in compiled.positiontup or ()),
+                )
+            )
+            .scalars()
+            .all()
+        )
+        print("\n" + "\n".join(plan))
+    hydrated = []
+    original = pg_store._from_row
+
+    def capture(row):
+        hydrated.append(row.document_uid)
+        return original(row)
+
+    monkeypatch.setattr(pg_store, "_from_row", capture)
+    entries, _ = await pg_store.discover_metadata_page(
+        folder_ids=["synthetic-folder"],
+        sort_by="added_to_kb",
+        sort_order="desc",
+        limit=2,
+    )
+    assert len(entries) == len(hydrated) == 2
+    assert any("Limit" in line for line in plan)

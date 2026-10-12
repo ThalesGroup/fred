@@ -407,3 +407,63 @@ def test_graph_agent_binding_comes_from_its_included_capability_config() -> None
     )
 
     assert _instance_bound_library_ids(registry, tuning, definition) == ["lib-a"]
+
+
+@pytest.mark.asyncio
+async def test_document_tree_forwards_paging_and_keeps_scope(monkeypatch):
+    captured = {}
+
+    class Client:
+        def __init__(self, **kwargs):
+            pass
+
+        async def tree(self, **kwargs):
+            captured.update(kwargs)
+            return DocumentTreeResult(
+                tree="(empty)", next_cursor="opaque", has_unknown_arrivals=True
+            )
+
+    monkeypatch.setattr(adapters_module, "KfDocumentClient", Client)
+    tree = adapters_module.DocumentTreeAdapter(
+        binding=_binding(["A", "B"]), settings=_FakeSettings()
+    )
+    result = await tree.tree(
+        library_tag_ids=["B", "X"],
+        name_filter="Report",
+        sort_by="added_to_kb",
+        sort_order="desc",
+        limit=1,
+        cursor="previous",
+    )
+    assert captured["tag_ids"] == ["B"]
+    assert captured["name_filter"] == "Report"
+    assert captured["limit"] == 1 and captured["cursor"] == "previous"
+    assert result.next_cursor == "opaque" and result.has_unknown_arrivals
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("reason", ["invalid_cursor", "budget_exceeded"])
+async def test_tree_maps_only_known_safe_request_errors(monkeypatch, reason):
+    import httpx
+    from fred_sdk.contracts.runtime import DocumentTreeRequestError
+
+    class Client:
+        def __init__(self, **kwargs):
+            pass
+
+        async def tree(self, **kwargs):
+            response = httpx.Response(
+                400,
+                json={"detail": {"code": reason, "message": "private arbitrary body"}},
+                request=httpx.Request("POST", "http://internal/documents/tree"),
+            )
+            response.raise_for_status()
+
+    monkeypatch.setattr(adapters_module, "KfDocumentClient", Client)
+    tree = adapters_module.DocumentTreeAdapter(
+        binding=_binding(), settings=_FakeSettings()
+    )
+    with pytest.raises(DocumentTreeRequestError) as error:
+        await tree.tree(limit=1)
+    assert error.value.reason == reason
+    assert "private" not in str(error.value) and "internal" not in str(error.value)

@@ -144,3 +144,11 @@ it("retains empty leaf folders without inventing file rows", () => {
   expect(container.querySelectorAll("button")).toHaveLength(0);
   expect(container.textContent).not.toContain("Truncated");
 });
+
+it("shows a discreet continuation footer without a truncation warning or cursor", () => {
+  const data = parseDocumentTreeTrace('(empty)\n{"page":{"next_cursor":"opaque","has_unknown_arrivals":false}}')!;
+  act(() => root.render(<DocumentTreeDetail data={data} />));
+  expect(container.textContent).toContain("More documents available");
+  expect(container.textContent).not.toContain("Truncated");
+  expect(container.textContent).not.toContain("opaque");
+});

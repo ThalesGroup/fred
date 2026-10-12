@@ -13,15 +13,23 @@
 # limitations under the License.
 
 import asyncio
+import base64
+import hashlib
+import json
 import logging
-from typing import Dict, List, Optional, Tuple
+import sys
+from datetime import datetime
+from typing import Dict, List, Optional, Sequence, Tuple
 
 from fred_core import KeycloakUser
+from fred_core.documents.document_store import DocumentDiscoveryEntry
+from fred_core.documents.document_structures import DocumentMetadata
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 from knowledge_flow_backend.features.corpus_tree.structure import DocumentTreeRequest, DocumentTreeResponse
 from knowledge_flow_backend.features.corpus_tree.tree_builder import DocLeaf, build_tree, prune_empty_folders, render_tree
 from knowledge_flow_backend.features.metadata.service import MetadataService
-from knowledge_flow_backend.features.tag.structure import TagType
+from knowledge_flow_backend.features.tag.structure import Tag, TagType
 from knowledge_flow_backend.features.tag.tag_service import TagService
 
 logger = logging.getLogger(__name__)
@@ -29,6 +37,111 @@ logger = logging.getLogger(__name__)
 # Matches the controller-level cap on /tags (tag_controller.py) -- high enough that
 # a single call returns the whole folder structure under a prefix, no pagination.
 _MAX_FOLDERS = 10_000
+
+
+class InvalidTreePage(ValueError):
+    def __init__(self, message: str, reason: str = "invalid_cursor") -> None:
+        super().__init__(message)
+        self.reason = reason
+
+
+class _TreePosition(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    version: int
+    query: str
+    uid: str
+    value: str | None
+
+
+def _query_fingerprint(user: KeycloakUser, request: DocumentTreeRequest) -> str:
+    fields = request.model_dump(exclude={"max_chars", "limit", "cursor"})
+    fields["caller"] = user.uid
+    fields["name_filter"] = (request.name_filter or "").lower()
+    fields["working_directory"] = TagService._normalize_path(request.working_directory or "")
+    for key in ("tag_ids", "document_uids"):
+        fields[key] = sorted(set(fields[key] or ()))
+    return hashlib.sha256(json.dumps(fields, sort_keys=True).encode()).hexdigest()
+
+
+def _decode_cursor(cursor: str, fingerprint: str, sort_by: str) -> tuple[str | None, str]:
+    try:
+        position = _TreePosition.model_validate_json(base64.b64decode(cursor, altchars=b"-_", validate=True))
+        if position.version != 1 or position.query != fingerprint or not position.uid:
+            raise ValueError("Cursor does not match this query or scope")
+        if sort_by == "name" and position.value is None:
+            raise ValueError("Invalid name position")
+        if sort_by == "added_to_kb" and position.value is not None:
+            value = datetime.fromisoformat(position.value)
+            if value.tzinfo is None:
+                raise ValueError("Arrival position requires timezone")
+        return position.value, position.uid
+    except (ValueError, ValidationError) as exc:
+        raise InvalidTreePage("Invalid cursor. Restart with the same query and scope without a cursor.") from exc
+
+
+def _encode_cursor(entry: DocumentDiscoveryEntry, fingerprint: str) -> str:
+    value = _TreePosition(version=1, query=fingerprint, uid=entry.document.document_uid, value=entry.sort_value)
+    return base64.urlsafe_b64encode(value.model_dump_json().encode()).decode()
+
+
+def _leaf(document: DocumentMetadata) -> DocLeaf:
+    return DocLeaf(
+        document_uid=document.document_uid,
+        document_name=document.document_name,
+        created=document.identity.created,
+        added_to_kb=document.source.date_added_to_kb if "date_added_to_kb" in document.source.model_fields_set else None,
+        modified=document.identity.modified,
+        title=document.identity.title,
+        file_type=document.file.file_type.value,
+        mime_type=document.file.mime_type,
+        language=document.file.language,
+        page_count=document.file.page_count,
+        row_count=document.file.row_count,
+        labels=document.labels,
+        source=document.source.source_tag,
+    )
+
+
+def _selected_folders(tags: Sequence[Tag], requested: Sequence[str]) -> list[str]:
+    requested_ids = set(requested)
+    paths = {tag.full_path for tag in tags if tag.id in requested_ids}
+    selected = []
+    for tag in tags:
+        segments = tag.full_path.split("/")
+        if any("/".join(segments[:depth]) in paths for depth in range(1, len(segments) + 1)):
+            selected.append(tag.id)
+    return selected
+
+
+def _render_page(tags: Sequence[Tag], entries: list[DocumentDiscoveryEntry], max_chars: int, selected_folder_ids: set[str] | None = None, explicit_uids: set[str] | None = None) -> tuple[str, int]:
+    if not entries:
+        return "(empty)", 0
+    by_id = {tag.id: tag for tag in tags}
+
+    def render(count: int) -> str:
+        docs = [entry.document for entry in entries[:count]]
+        members: dict[str, list[str]] = {}
+        for doc in docs:
+            for tag_id in doc.tags.tag_ids or ():
+                if tag_id in by_id and (selected_folder_ids is None or tag_id in selected_folder_ids or doc.document_uid in (explicit_uids or ())):
+                    members.setdefault(tag_id, []).append(doc.document_uid)
+        folders = [(by_id[tag_id].full_path, uids, tag_id) for tag_id, uids in members.items()]
+        root = build_tree(folders=folders, leaves_by_uid={doc.document_uid: _leaf(doc) for doc in docs})
+        prune_empty_folders(root)
+        return render_tree(root, max_chars=sys.maxsize)[0]
+
+    low, high = 0, len(entries)
+    best = ""
+    while low < high:
+        middle = (low + high + 1) // 2
+        text = render(middle)
+        if len(text) <= max_chars:
+            low, best = middle, text
+        else:
+            high = middle - 1
+    if low == 0:
+        raise InvalidTreePage("One document cannot fit max_chars. Increase max_chars (up to 60000) or narrow working_directory.", reason="budget_exceeded")
+    return best, low
 
 
 class CorpusTreeService:
@@ -73,6 +186,8 @@ class CorpusTreeService:
         self.metadata_service = MetadataService()
 
     async def get_tree(self, user: KeycloakUser, request: DocumentTreeRequest) -> DocumentTreeResponse:
+        if request.limit is not None:
+            return await self._get_page(user, request)
         tags = await self.tag_service.list_all_tags_for_user(
             user,
             tag_type=TagType.DOCUMENT,
@@ -117,6 +232,38 @@ class CorpusTreeService:
         text, truncated = await asyncio.to_thread(render_tree, root, max_chars=request.max_chars)
         return DocumentTreeResponse(tree=text, truncated=truncated)
 
+    async def _get_page(self, user: KeycloakUser, request: DocumentTreeRequest) -> DocumentTreeResponse:
+        limit = request.limit
+        assert limit is not None
+        fingerprint = _query_fingerprint(user, request)
+        after = _decode_cursor(request.cursor, fingerprint, request.sort_by) if request.cursor else None
+        tags = await self.tag_service.list_tag_descriptors_for_user(
+            user,
+            tag_type=TagType.DOCUMENT,
+            path_prefix=request.working_directory,
+            owner_filter=request.owner_filter,
+            team_id=request.team_id,
+        )
+        selected = None
+        if request.tag_ids:
+            selected = await asyncio.to_thread(_selected_folders, tags, request.tag_ids)
+        elif request.document_uids:
+            selected = []
+        entries, unknown = await self.metadata_service.discover_documents_page(
+            user,
+            folder_ids=[tag.id for tag in tags],
+            selected_folder_ids=selected,
+            document_uids=request.document_uids,
+            name_filter=request.name_filter,
+            sort_by=request.sort_by,
+            sort_order=request.sort_order,
+            limit=limit + 1,
+            after=after,
+        )
+        text, emitted = await asyncio.to_thread(_render_page, tags, entries[:limit], request.max_chars, None if selected is None else set(selected), set(request.document_uids or ()))
+        next_cursor = _encode_cursor(entries[emitted - 1], fingerprint) if emitted and emitted < len(entries) else None
+        return DocumentTreeResponse(tree=text, truncated=emitted < min(limit, len(entries)), next_cursor=next_cursor, has_unknown_arrivals=unknown if request.sort_by == "added_to_kb" else None)
+
     async def _resolve_leaves(self, user: KeycloakUser, document_uids: List[str]) -> Dict[str, DocLeaf]:
         if not document_uids:
             return {}
@@ -125,22 +272,4 @@ class CorpusTreeService:
         # so even a tree spanning the full `_MAX_FOLDERS` (10,000 folders)
         # cannot approach a driver bind-parameter ceiling.
         docs = await self.metadata_service.get_documents_by_uids(user, document_uids)
-        return {
-            d.document_uid: DocLeaf(
-                document_uid=d.document_uid,
-                document_name=d.document_name,
-                created=d.identity.created,
-                # Older records can omit this field; its read-time default is not an arrival.
-                added_to_kb=d.source.date_added_to_kb if "date_added_to_kb" in d.source.model_fields_set else None,
-                modified=d.identity.modified,
-                title=d.identity.title,
-                file_type=d.file.file_type.value,
-                mime_type=d.file.mime_type,
-                language=d.file.language,
-                page_count=d.file.page_count,
-                row_count=d.file.row_count,
-                labels=d.labels,
-                source=d.source.source_tag,
-            )
-            for d in docs
-        }
+        return {document.document_uid: _leaf(document) for document in docs}

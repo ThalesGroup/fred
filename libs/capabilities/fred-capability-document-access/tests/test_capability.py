@@ -31,6 +31,7 @@ Covers the runtime half of the pilot:
 from __future__ import annotations
 
 import dataclasses
+import json
 from collections.abc import Sequence
 from importlib.metadata import EntryPoint
 from types import SimpleNamespace
@@ -74,6 +75,7 @@ from fred_sdk.contracts.runtime import (
     DocumentSearchPort,
     DocumentSearchResult,
     DocumentTreePort,
+    DocumentTreeRequestError,
     DocumentTreeResult,
     RuntimeServices,
 )
@@ -193,6 +195,7 @@ class _FakeTreePort(DocumentTreePort):
         library_tag_ids=None,
         document_uids=None,
         max_chars: int = 20_000,
+        **paging: Any,
     ) -> DocumentTreeResult:
         self.calls.append(
             {
@@ -200,6 +203,7 @@ class _FakeTreePort(DocumentTreePort):
                 "library_tag_ids": library_tag_ids,
                 "document_uids": document_uids,
                 "max_chars": max_chars,
+                **paging,
             }
         )
         if self._error is not None:
@@ -936,14 +940,14 @@ async def test_tree_tool_scopes_by_bound_libraries_and_clamps_budget() -> None:
     assert call["document_uids"] is None
     # 50 is under the endpoint's floor — clamped, not 422ed.
     assert call["max_chars"] == 500
-    assert message.content == "Sales/\n  doc-a [u1]"
+    assert str(message.content).startswith('Sales/\n  doc-a [u1]\n{"page":')
     assert message.artifact.tool_ref == "list_document_tree"
     assert message.artifact.is_error is False
     # CAPAB-02: the tree text must also live in `blocks` — a Graph agent's
     # plain-dict invocation keeps only the artifact half of a
     # `content_and_artifact` return (`_adapt_capability_tool_for_graph`), so an
     # artifact with no payload would silently lose the tree for a Graph node.
-    assert message.artifact.blocks[0].text == "Sales/\n  doc-a [u1]"
+    assert message.artifact.blocks[0].text == message.content
 
 
 @pytest.mark.asyncio
@@ -961,7 +965,9 @@ async def test_tree_metadata_and_incomplete_notice_reach_both_carriers() -> None
     message = await _invoke_named_tool(cap, ctx, "list_document_tree", {})
     assert (
         message.content
-        == "Listing incomplete: omitted documents may be more recent.\n" + tree
+        == "Listing incomplete: omitted documents may be more recent.\n"
+        + tree
+        + '\n{"page":{"next_cursor":null,"has_unknown_arrivals":null}}'
     )
     assert message.artifact.blocks[0].text == message.content
     assert not message.artifact.is_error
@@ -1092,7 +1098,7 @@ async def test_tree_adapter_narrows_by_session_binding_and_team_seam(
 
         async def tree(self, **kwargs: Any):
             self.calls.append(kwargs)
-            return SimpleNamespace(tree="(empty)", truncated=False)
+            return DocumentTreeResult(tree="(empty)", truncated=False)
 
     captured: dict[str, Any] = {}
     monkeypatch.setattr(adapters_module, "KfDocumentClient", _FakeDocumentClient)
@@ -1187,3 +1193,57 @@ def test_copy_to_another_scope_drops_the_library_restriction_switch() -> None:
     assert copied.bind_libraries is False
     assert copied.library_tag_ids == []
     assert copied.default_top_k == 5
+
+
+@pytest.mark.asyncio
+async def test_tree_page_arguments_and_unknown_chronology_reach_both_carriers():
+    port = _FakeTreePort(
+        result=DocumentTreeResult(
+            tree="(empty)", next_cursor="opaque", has_unknown_arrivals=True
+        )
+    )
+    cap = DocumentAccessCapability()
+    ctx = build_capability_context(
+        cap, identity=_identity(), services=_full_services(tree=port), config={}
+    )
+    message = await _invoke_named_tool(
+        cap,
+        ctx,
+        "list_document_tree",
+        {
+            "name_filter": "Report",
+            "sort_by": "added_to_kb",
+            "sort_order": "desc",
+            "limit": 1,
+        },
+    )
+    assert port.calls[0]["limit"] == 1
+    assert port.calls[0]["sort_by"] == "added_to_kb"
+    assert port.calls[0]["name_filter"] == "Report"
+    page = json.loads(str(message.content).splitlines()[-1])["page"]
+    assert page == {"next_cursor": "opaque", "has_unknown_arrivals": True}
+    assert message.artifact.blocks[0].text == message.content
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "reason,advice",
+    [
+        ("invalid_cursor", "Restart without a cursor"),
+        ("budget_exceeded", "Increase max_chars"),
+    ],
+)
+async def test_tree_retry_guidance_is_preserved_in_both_error_carriers(reason, advice):
+    cap = DocumentAccessCapability()
+    ctx = build_capability_context(
+        cap,
+        identity=_identity(),
+        services=_full_services(
+            tree=_FakeTreePort(error=DocumentTreeRequestError(reason))
+        ),
+        config={},
+    )
+    message = await _invoke_named_tool(cap, ctx, "list_document_tree", {})
+    assert advice in message.content
+    assert message.artifact.blocks[0].text == message.content
+    assert message.artifact.is_error

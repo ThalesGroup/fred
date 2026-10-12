@@ -3136,6 +3136,8 @@ export type DocumentTreeResponse = {
   tree: string;
   /** True if any branch was pruned or items were omitted to fit max_chars. */
   truncated: boolean;
+  next_cursor?: string | null;
+  has_unknown_arrivals?: boolean | null;
 };
 export type DocumentTreeRequest = {
   /** Folder path prefix to start from, e.g. 'Sales/HR'. None lists from the root. */
@@ -3146,6 +3148,14 @@ export type DocumentTreeRequest = {
   document_uids?: string[] | null;
   /** Render budget for the returned tree text. Oversized trees are pruned, deepest branches first. */
   max_chars?: number;
+  /** Literal case-insensitive substring of filename or title; requires limit. */
+  name_filter?: string | null;
+  sort_by?: "name" | "added_to_kb";
+  sort_order?: "asc" | "desc";
+  /** Unique documents per page; omit for legacy tree browsing. */
+  limit?: number | null;
+  /** Continuation from the same query and scope; requires limit. */
+  cursor?: string | null;
   /** Filter by ownership: 'personal' for user-owned folders, 'team' for team-owned folders. */
   owner_filter?: OwnerFilter | null;
   /** Team ID, required when owner_filter is 'team'. */

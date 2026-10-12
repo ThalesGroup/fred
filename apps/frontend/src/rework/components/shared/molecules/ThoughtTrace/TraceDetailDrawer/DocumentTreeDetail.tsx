@@ -151,6 +151,7 @@ export function DocumentTreeDetail({ data }: { data: DocumentTreeTrace }) {
         {Array.from(tree.children.values(), folder)}
         {documents(tree.documents)}
       </ul>
+      {data.hasMore && <p className={styles.truncated}>{label("moreAvailable")}</p>}
       {data.truncated && <p className={styles.truncated}>{label("truncated")}</p>}
     </div>
   );

@@ -15,7 +15,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, List, Optional, Sequence, cast
 
 from pydantic import ValidationError
@@ -23,15 +23,20 @@ from sqlalchemy import (
     BigInteger,
     CursorResult,
     String,
+    and_,
+    any_,
     bindparam,
+    case,
     delete,
     func,
     literal_column,
+    or_,
     select,
     text,
     update,
 )
 from sqlalchemy import cast as sql_cast
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
@@ -42,6 +47,8 @@ from fred_core.documents.document_store import (
     DEFAULT_SORT_FIELD,
     DEFAULT_SORT_ORDER,
     BaseDocumentMetadataStore,
+    DocumentDiscoveryEntry,
+    DocumentDiscoverySortField,
     DocumentMetadataDeserializationError,
     DocumentSortField,
     SortOrder,
@@ -349,6 +356,153 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
             for name, uid in (await s.execute(query)).all():
                 found.setdefault(name, []).append(uid)
         return found
+
+    @staticmethod
+    def _discovery_query(
+        *,
+        folder_ids: Sequence[str],
+        selected_folder_ids: Sequence[str] | None = None,
+        document_uids: Sequence[str] | None = None,
+        readable_uids: Sequence[str] | None = None,
+        name_filter: str | None = None,
+        sort_by: DocumentDiscoverySortField = "name",
+        sort_order: SortOrder = "asc",
+        limit: int = 25,
+        after: tuple[str | None, str] | None = None,
+    ):
+        row = DocumentMetadataRow
+
+        def uids(values: Sequence[str]):
+            return row.document_uid == any_(
+                bindparam(None, list(values), type_=ARRAY(String))
+            )
+
+        predicates = [row.tag_ids.overlap(list(folder_ids))]
+        if selected_folder_ids is not None:
+            predicates.append(
+                or_(
+                    row.tag_ids.overlap(list(selected_folder_ids)),
+                    uids(document_uids or ()),
+                )
+            )
+        if readable_uids is not None:
+            predicates.append(uids(readable_uids))
+        name = func.lower(row.doc["identity"]["document_name"].astext)
+        if name_filter:
+            escaped = (
+                name_filter.lower()
+                .replace("\\", "\\\\")
+                .replace("%", "\\%")
+                .replace("_", "\\_")
+            )
+            pattern = "%" + escaped + "%"
+            predicates.append(
+                or_(
+                    name.like(pattern, escape="\\"),
+                    func.lower(row.doc["identity"]["title"].astext).like(
+                        pattern, escape="\\"
+                    ),
+                )
+            )
+        arrival = case(
+            (
+                row.doc["source"]["date_added_to_kb"].astext.is_not(None),
+                row.date_added_to_kb,
+            ),
+            else_=None,
+        )
+        value = name if sort_by == "name" else arrival
+        matched = and_(*predicates)
+        if after is not None:
+            position, uid = after
+            if position is None:
+                following = and_(
+                    value.is_(None),
+                    row.document_uid > uid
+                    if sort_order == "asc"
+                    else row.document_uid < uid,
+                )
+            else:
+                if sort_by == "added_to_kb":
+                    position = datetime.fromisoformat(position)
+                greater = value > position if sort_order == "asc" else value < position
+                tie = and_(
+                    value == position,
+                    row.document_uid > uid
+                    if sort_order == "asc"
+                    else row.document_uid < uid,
+                )
+                following = or_(value.is_(None), greater, tie)
+            predicates.append(following)
+        order = (
+            [value.asc().nulls_last(), row.document_uid.asc()]
+            if sort_order == "asc"
+            else [value.desc().nulls_last(), row.document_uid.desc()]
+        )
+        query = (
+            select(row, value.label("discovery_value"))
+            .where(*predicates)
+            .order_by(*order)
+            .limit(limit)
+        )
+        unknown = select(
+            select(row.document_uid).where(matched, arrival.is_(None)).exists()
+        )
+        return query, unknown
+
+    async def discover_metadata_page(
+        self,
+        *,
+        folder_ids: Sequence[str],
+        selected_folder_ids: Sequence[str] | None = None,
+        document_uids: Sequence[str] | None = None,
+        readable_uids: Sequence[str] | None = None,
+        name_filter: str | None = None,
+        sort_by: DocumentDiscoverySortField = "name",
+        sort_order: SortOrder = "asc",
+        limit: int = 25,
+        after: tuple[str | None, str] | None = None,
+    ) -> tuple[list[DocumentDiscoveryEntry], bool]:
+        if not self._is_postgres:
+            return await super().discover_metadata_page(
+                folder_ids=folder_ids,
+                selected_folder_ids=selected_folder_ids,
+                document_uids=document_uids,
+                readable_uids=readable_uids,
+                name_filter=name_filter,
+                sort_by=sort_by,
+                sort_order=sort_order,
+                limit=limit,
+                after=after,
+            )
+        if not folder_ids or readable_uids == []:
+            return [], False
+        query, unknown_query = self._discovery_query(
+            folder_ids=folder_ids,
+            selected_folder_ids=selected_folder_ids,
+            document_uids=document_uids,
+            readable_uids=readable_uids,
+            name_filter=name_filter,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            limit=limit,
+            after=after,
+        )
+        async with use_session(self._sessions) as session:
+            rows = (await session.execute(query)).all()
+            unknown = (
+                bool((await session.execute(unknown_query)).scalar_one())
+                if sort_by == "added_to_kb"
+                else False
+            )
+            documents = [self._from_row(row) for row, _ in rows]
+            await self._hydrate_labels(documents, session)
+        entries = []
+        for document, (_, value) in zip(documents, rows):
+            if isinstance(value, datetime):
+                value = value.astimezone(timezone.utc).isoformat()
+            entries.append(DocumentDiscoveryEntry(document, value))
+        return entries, unknown
 
     def _browse_order_by(self, sort_by: DocumentSortField, sort_order: SortOrder):
         """ORDER BY terms for a paginated tag browse.

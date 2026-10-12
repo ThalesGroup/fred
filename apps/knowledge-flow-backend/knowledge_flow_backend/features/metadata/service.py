@@ -32,15 +32,17 @@ from fred_core import (
     TagPermission,
     TeamMetadataStore,
     get_user_store,
+    is_service_agent,
 )
 from fred_core.common.team_id import TeamId
-from fred_core.documents.document_store import DEFAULT_SORT_FIELD, DEFAULT_SORT_ORDER
+from fred_core.documents.document_store import DEFAULT_SORT_FIELD, DEFAULT_SORT_ORDER, DocumentDiscoveryEntry, DocumentDiscoverySortField
 from fred_core.documents.document_store import DocumentMetadataDeserializationError as MetadataDeserializationError
 from fred_core.documents.document_structures import (
     DocumentMetadata,
     ProcessingStage,
     ProcessingStatus,
 )
+from fred_core.security.delegation import holds_caller_role
 from fred_core.sql.async_session import make_session_factory
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -146,6 +148,39 @@ class MetadataService:
         except Exception as e:
             logger.error(f"Error retrieving document metadata: {e}")
             raise MetadataUpdateError(f"Failed to retrieve metadata: {e}")
+
+    async def discover_documents_page(
+        self,
+        user: KeycloakUser,
+        *,
+        folder_ids: list[str],
+        selected_folder_ids: list[str] | None,
+        document_uids: list[str] | None,
+        name_filter: str | None,
+        sort_by: DocumentDiscoverySortField,
+        sort_order: SortOrder,
+        limit: int,
+        after: tuple[str | None, str] | None,
+    ) -> tuple[list[DocumentDiscoveryEntry], bool]:
+        if not folder_ids:
+            return [], False
+        if is_service_agent(user) and not holds_caller_role(user):
+            # Evaluation workers use the already-authorized team folders, like tabular discovery.
+            readable = None
+        else:
+            authorized = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
+            readable = None if isinstance(authorized, RebacDisabledResult) else [reference.id for reference in authorized]
+        return await self.metadata_store.discover_metadata_page(
+            folder_ids=folder_ids,
+            selected_folder_ids=selected_folder_ids,
+            document_uids=document_uids,
+            readable_uids=readable,
+            name_filter=name_filter,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            limit=limit,
+            after=after,
+        )
 
     async def get_documents_by_uids(self, user: KeycloakUser, document_uids: list[str]) -> list[DocumentMetadata]:
         """Targeted, ReBAC-filtered metadata fetch for an already-known uid
