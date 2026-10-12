@@ -12,14 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncio
 import logging
-from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
 from fred_core import KeycloakUser
 
 from knowledge_flow_backend.features.corpus_tree.structure import DocumentTreeRequest, DocumentTreeResponse
-from knowledge_flow_backend.features.corpus_tree.tree_builder import build_tree, prune_empty_folders, render_tree
+from knowledge_flow_backend.features.corpus_tree.tree_builder import DocLeaf, build_tree, prune_empty_folders, render_tree
 from knowledge_flow_backend.features.metadata.service import MetadataService
 from knowledge_flow_backend.features.tag.structure import TagType
 from knowledge_flow_backend.features.tag.tag_service import TagService
@@ -114,10 +114,10 @@ class CorpusTreeService:
         root = build_tree(folders=folders, leaves_by_uid=leaves_by_uid)
         if in_scope_uids is not None:
             prune_empty_folders(root)
-        text, truncated = render_tree(root, max_chars=request.max_chars)
+        text, truncated = await asyncio.to_thread(render_tree, root, max_chars=request.max_chars)
         return DocumentTreeResponse(tree=text, truncated=truncated)
 
-    async def _resolve_leaves(self, user: KeycloakUser, document_uids: List[str]) -> Dict[str, Tuple[str, Optional[datetime]]]:
+    async def _resolve_leaves(self, user: KeycloakUser, document_uids: List[str]) -> Dict[str, DocLeaf]:
         if not document_uids:
             return {}
         # `get_documents_by_uids` -> `get_metadata_by_uids` chunks its
@@ -125,4 +125,22 @@ class CorpusTreeService:
         # so even a tree spanning the full `_MAX_FOLDERS` (10,000 folders)
         # cannot approach a driver bind-parameter ceiling.
         docs = await self.metadata_service.get_documents_by_uids(user, document_uids)
-        return {d.identity.document_uid: (d.identity.document_name, d.identity.created) for d in docs}
+        return {
+            d.document_uid: DocLeaf(
+                document_uid=d.document_uid,
+                document_name=d.document_name,
+                created=d.identity.created,
+                # Older records can omit this field; its read-time default is not an arrival.
+                added_to_kb=d.source.date_added_to_kb if "date_added_to_kb" in d.source.model_fields_set else None,
+                modified=d.identity.modified,
+                title=d.identity.title,
+                file_type=d.file.file_type.value,
+                mime_type=d.file.mime_type,
+                language=d.file.language,
+                page_count=d.file.page_count,
+                row_count=d.file.row_count,
+                labels=d.labels,
+                source=d.source.source_tag,
+            )
+            for d in docs
+        }

@@ -193,7 +193,7 @@ class KfDocumentClient(KfBaseClient):
         working_directory: Optional[str] = None,
         tag_ids: Optional[Sequence[str]] = None,
         document_uids: Optional[Sequence[str]] = None,
-        max_chars: int = 6000,
+        max_chars: int = 20_000,
         owner_filter: Optional[OwnerFilter] = None,
         team_id: Optional[str] = None,
     ) -> DocumentTreeResult:

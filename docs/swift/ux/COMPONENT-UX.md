@@ -873,18 +873,25 @@ how `ThoughtTrace` trims the rail when a reasoning row opens or closes the seque
   tool shape still falls back to the original redacted view — see
   `RUNTIME-EXECUTION-CONTRACT.md` §8.21.
 
-- **Curated views for `summarize_document` and `list_document_tree` (2026-07-31)** — these
-  two first-party document-capability tools return plain text (a prose summary / an
-  indented tree listing), not a JSON envelope, so they can't be recognized by content
-  shape like SQL/RAG — they're recognized by tool name instead (`isSummarizeDocumentTool`,
-  `isDocumentTreeTool` in `traceUtils.ts`), still a curated allowlist rather than a
-  blanket raw-text pass-through. `summarize_document` renders its summary through the
-  existing `MarkdownRenderer` (same treatment as reasoning text) instead of a JSON dump.
-  `list_document_tree` renders the tree in a plaintext `CodeBlock`, with the bracketed
-  internal `document_uid` after each entry stripped before display (`stripDocumentUids()`)
-  — the tool's own docstring already forbids the model from repeating that id to the end
-  user; the drawer now honors the same identifier-hygiene rule. The header copy action
-  copies the summary text / the uid-stripped tree text respectively.
+- **Curated document tool views (updated 2026-10-12)** - `summarize_document`
+  renders its summary through `MarkdownRenderer`. `list_document_tree` shows nested,
+  collapsible folders and compact file rows, using the shared monospace font for
+  folder and document names. Hovering or keyboard-focusing a file
+  reveals its metadata through the shared Tooltip, without an information icon,
+  inline dates or expanded document blocks. The panel shows title, stored arrival,
+  MIME type, language, page/row counts, labels and source where available; creation,
+  modification and format are omitted from this view. Arrival labels use the configured
+  `siteDisplayName`. Internal ids remain hidden. Counts refer to unique displayed
+  documents; the latest known displayed arrival is identified inside its tooltip.
+  A truncated result has only a discreet localized Truncated footer. Historical
+  upload dates keep their original meaning and missing dates remain unknown.
+  Timestamp and payload semantics are defined in `openspec/specs/team-resource-spaces/spec.md`.
+
+- **First-turn session handoff (2026-10-12)** - first submission owns its newly
+  created session while asynchronous router binding commits. Navigation, a new
+  conversation or unmount revokes pending submission ownership before it can affect
+  another conversation. Saved-session availability and deletion guards remain defined
+  in `openspec/specs/managed-conversations/spec.md`.
 
 - **Monaco replaced by `CodeBlock`, single header copy action (2026-07-22)** — manual UI
   testing found the Monaco JSON pane (forced `vs-dark`, editor chrome, imposed fixed
