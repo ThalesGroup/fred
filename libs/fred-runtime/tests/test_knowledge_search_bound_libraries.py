@@ -91,12 +91,16 @@ class _RecordingSearchClient:
         return []
 
 
-def _binding(selected_libraries: list[str] | None = None) -> BoundRuntimeContext:
+def _binding(
+    selected_libraries: list[str] | None = None,
+    selected_documents: list[str] | None = None,
+) -> BoundRuntimeContext:
     return BoundRuntimeContext(
         runtime_context=RuntimeContext(
             session_id="s-1",
             team_id="team-1",
             selected_document_libraries_ids=selected_libraries,
+            selected_document_uids=selected_documents,
         ),
         portable_context=PortableContext(
             request_id="request-1",
@@ -113,10 +117,11 @@ async def _search(
     *,
     bound: list[str] | None,
     selected: list[str] | None,
+    documents: list[str] | None = None,
 ):
     _RecordingSearchClient.calls = []
     monkeypatch.setattr(adapters_module, "VectorSearchClient", _RecordingSearchClient)
-    binding = _binding(selected)
+    binding = _binding(selected, documents)
     invoker = adapters_module.FredKnowledgeSearchToolInvoker(
         binding=binding, settings=_FakeSettings(), bound_library_ids=bound
     )
@@ -161,6 +166,20 @@ async def test_selection_outside_bound_libraries_finds_nothing(
     # Never an unfiltered search: the vector client drops an empty filter.
     assert _RecordingSearchClient.calls == []
     assert result.sources == ()
+
+
+@pytest.mark.asyncio
+async def test_selection_outside_bound_libraries_still_searches_picked_documents(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Libraries and documents union in Knowledge Flow: an empty library arm
+    # leaves the picked document to search.
+    await _search(monkeypatch, bound=["lib-a"], selected=["lib-x"], documents=["doc-d"])
+
+    assert [
+        (call["document_library_tags_ids"], call["document_uids"])
+        for call in _RecordingSearchClient.calls
+    ] == [([], ["doc-d"])]
 
 
 @pytest.mark.asyncio
@@ -222,6 +241,48 @@ async def test_document_ports_find_nothing_for_an_empty_scope(
     assert result.hits == ()
     assert _RecordingTreeClient.calls == []
     assert listing.tree == ""
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "session_libraries,capability_libraries",
+    [
+        # The capability's bound libraries miss everything the client selected.
+        (["lib-x"], ["lib-a"]),
+        # The capability's own narrowing came out empty: the session's
+        # libraries must not come back in.
+        (["lib-x"], []),
+    ],
+)
+async def test_document_ports_keep_picked_documents_for_an_empty_library_scope(
+    monkeypatch: pytest.MonkeyPatch,
+    session_libraries: list[str],
+    capability_libraries: list[str],
+) -> None:
+    _RecordingSearchClient.calls = []
+    _RecordingTreeClient.calls = []
+    monkeypatch.setattr(adapters_module, "VectorSearchClient", _RecordingSearchClient)
+    monkeypatch.setattr(adapters_module, "KfDocumentClient", _RecordingTreeClient)
+    binding = _binding(session_libraries, ["doc-d"])
+    search = adapters_module.DocumentSearchAdapter(
+        binding=binding, settings=_FakeSettings()
+    )
+    tree = adapters_module.DocumentTreeAdapter(
+        binding=binding, settings=_FakeSettings()
+    )
+
+    await search.search("alpha", library_tag_ids=capability_libraries)
+    await tree.tree(library_tag_ids=capability_libraries)
+
+    # Libraries and documents union in Knowledge Flow: the picked document
+    # is still searched and listed, and no library is.
+    assert [
+        (call["document_library_tags_ids"], call["document_uids"])
+        for call in _RecordingSearchClient.calls
+    ] == [([], ["doc-d"])]
+    assert [
+        (call["tag_ids"], call["document_uids"]) for call in _RecordingTreeClient.calls
+    ] == [([], ["doc-d"])]
 
 
 class _ScopeConfig(BaseModel):

@@ -55,10 +55,13 @@ empty intersection on, and `VectorSearchClient` / the tree drop an empty filter.
 Two ways reach it with `document_access`: the turn's `turn_options` disjoint from
 the bound libraries (the capability passes `[]`, which the adapter read as "no
 narrowing"), or the `RuntimeContext` selection disjoint from them. Both searched
-the session's selection or the whole corpus. The adapters now return nothing for
-an empty scope (`_matches_nothing`), as `DocumentSimilarityAdapter` already
-refuses one, and the port docstrings say `[]` means nothing in scope. One owner,
-no capability-side guard.
+the session's selection or the whole corpus. The adapters now treat an empty
+scope as selecting nothing on its side, as `DocumentSimilarityAdapter` already
+refuses one, and the port docstrings say `[]` means nothing in scope. Knowledge
+Flow unions libraries and documents, so an empty library scope still leaves the
+picked documents: the call stops only when neither side selects anything
+(`_matches_nothing`), and the builtin `knowledge.search` applies the same test.
+One owner, no capability-side guard.
 
 ## Risks / Trade-offs
 

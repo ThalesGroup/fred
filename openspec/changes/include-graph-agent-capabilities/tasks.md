@@ -18,6 +18,6 @@
 ## 4. Close-out
 
 - [x] 4.1 Contract entries, authoring guide, migration note.
-- [x] 4.2 Make `DocumentSearchAdapter.search` and `DocumentTreeAdapter.tree` find nothing for an empty scope (design, D5); state it in the port docstrings. Verify with `test_document_ports_find_nothing_for_an_empty_scope`.
+- [x] 4.2 Make `DocumentSearchAdapter.search` and `DocumentTreeAdapter.tree` find nothing for an empty scope (design, D5); state it in the port docstrings. Verify with `test_document_ports_find_nothing_for_an_empty_scope` and `test_document_ports_keep_picked_documents_for_an_empty_library_scope`.
 - [ ] 4.3 Manual check on k3d with `mindmap`: an instance bound to one library pins the chat picker and cites only that library.
 - [ ] 4.4 Create the GitHub issue, open the PR, archive this change after merge.

@@ -6603,12 +6603,16 @@ server-side. `resolve_bound_library_ids` (`capabilities/assembly.py`) reads the
 computes from its stored config, the descriptor the composer already locks its
 picker from. `FredKnowledgeSearchToolInvoker` narrows the turn's library
 selection by it with `_narrow_scope_ids`: no selection searches the bound
-libraries, and a selection with no bound library returns no hits instead of an
-unfiltered search. Document picks are not narrowed, as in `document_access`.
+libraries, and a selection with no bound library searches no library instead of
+running unfiltered. Document picks are not narrowed, as in `document_access`:
+Knowledge Flow unions libraries and documents, so picked documents are still
+searched, and the search returns no hits only when no document is picked either.
 `DocumentSearchAdapter.search` and `DocumentTreeAdapter.tree` apply the same rule:
-an empty scope, passed by the capability or left by the session-binding
-intersection, finds nothing (`DocumentSearchPort` / `DocumentTreePort`: `[]` =
-nothing in scope, `None` = no narrowing). They used to send it on as no filter.
+a library or document scope left empty, passed by the capability or by the
+session-binding intersection, selects nothing on that side (`DocumentSearchPort` /
+`DocumentTreePort`: `[]` = nothing in scope, `None` = no narrowing), and the call
+finds nothing when neither side selects anything. They used to send it on as no
+filter.
 This is a ceiling for one port; the
 general agent scope descriptor stays open in `CAPABILITY-SCOPE-CEILING-RFC.md`.
 

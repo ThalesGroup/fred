@@ -31,8 +31,9 @@ ignores any binding.
   stored config, are a ceiling on the turn's library selection, whatever the
   client sends.
 - **Document search and tree ports (runtime):** an empty scope, passed by the
-  capability or left by intersecting it with the session's selection, finds
-  nothing instead of reaching Knowledge Flow as no filter.
+  capability or left by intersecting it with the session's selection, selects
+  nothing instead of reaching Knowledge Flow as no filter; explicitly picked
+  documents are still searched, since libraries and documents union.
 
 Out of scope: graph nodes consuming capability-provided tools, merging
 `knowledge.search` with the `document_access` tool, the general agent scope
