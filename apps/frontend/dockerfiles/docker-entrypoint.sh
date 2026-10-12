@@ -51,6 +51,8 @@ set -eu
 : "${FRONTEND_NGINX_CONFIG:=/etc/nginx/conf.d/fred.conf}"
 : "${FRONTEND_ENABLE_APPLICATIONS:=false}"
 FRONTEND_THEME_DIR=/var/lib/fred/theme
+# Overridable only so the proxy smoke test can skip it outside the image.
+: "${FRONTEND_THEME_OVERLAY_SCRIPT:=/usr/local/bin/fred-theme-overlay.sh}"
 if [ -z "${FRONTEND_APPLICATIONS_JSON:-}" ]; then
     FRONTEND_APPLICATIONS_JSON='[]'
 fi
@@ -105,7 +107,7 @@ if [ "${FRONTEND_ENABLE_APPLICATIONS}" = "true" ]; then
     fi
 fi
 
-sh /usr/local/bin/fred-theme-overlay.sh "${FRONTEND_THEME_DIR}"
+sh "${FRONTEND_THEME_OVERLAY_SCRIPT}" "${FRONTEND_THEME_DIR}"
 # nginx has no use for the store credential.
 unset FRONTEND_THEME_S3_ACCESS_KEY FRONTEND_THEME_S3_SECRET_KEY
 

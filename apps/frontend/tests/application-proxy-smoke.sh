@@ -44,6 +44,7 @@ run_entrypoint() {
         FRONTEND_APPLICATIONS_JSON="${registrations}" \
         FRONTEND_NGINX_CONFIG="${config_path}" \
         FRONTEND_DNS_RESOLVER="127.0.0.11" \
+        FRONTEND_THEME_OVERLAY_SCRIPT=/dev/null \
         sh "${FRONTEND_DIR}/dockerfiles/docker-entrypoint.sh"
 }
 
@@ -57,6 +58,7 @@ run_entrypoint_with_default_flag() {
             FRONTEND_APPLICATIONS_JSON="${registrations}" \
             FRONTEND_NGINX_CONFIG="${config_path}" \
             FRONTEND_DNS_RESOLVER="127.0.0.11" \
+            FRONTEND_THEME_OVERLAY_SCRIPT=/dev/null \
             sh "${FRONTEND_DIR}/dockerfiles/docker-entrypoint.sh"
     )
 }
