@@ -141,5 +141,9 @@ class McpToolkit(BaseToolkit):
             if isinstance(tool, ContextAwareTool):
                 wrapped.append(tool)
                 continue
-            wrapped.append(ContextAwareTool(tool, context_provider, settings_provider))
+            wrapped.append(
+                ContextAwareTool(
+                    tool, context_provider, settings_provider, agent_context=self._agent
+                )
+            )
         return wrapped

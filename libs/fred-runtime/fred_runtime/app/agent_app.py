@@ -1008,10 +1008,20 @@ def _build_runtime_services(
         settings=settings,
         credentials=credential_provider,
     )
+    document_access_config = None
+    tuning = settings.tuning
+    if capability_registry is not None and "document_access" in capability_registry:
+        stored = tuning.capability_config.get("document_access") if tuning else None
+        document_access_config = (
+            capability_registry.capability("document_access")
+            .ConfigModel.model_validate(stored.config if stored else {})
+            .model_dump()
+        )
     tool_provider = FredMcpToolProvider(
         binding=binding,
         settings=settings,
         credentials=credential_provider,
+        document_access_config=document_access_config,
     )
     workspace_fs = FredWorkspaceFs(
         binding=binding,

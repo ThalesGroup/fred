@@ -23,6 +23,7 @@ from collections.abc import Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import timedelta
+from typing import Literal
 
 import duckdb
 import pandas as pd
@@ -96,6 +97,7 @@ class ResolvedDataset:
     metadata: DocumentMetadata
     artifact: TabularArtifactV1
     query_alias: str
+    source_kind: Literal["corpus", "conversation_attachment"] = "corpus"
 
 
 class TabularDatasetAccessUnsupportedError(RuntimeError):
@@ -303,6 +305,10 @@ class TabularService:
         document_library_tags_ids: list[str] | None = None,
         owner_filter: OwnerFilter | None = None,
         team_id: str | None = None,
+        attachment_uids: list[str] | None = None,
+        include_session_scope: bool = True,
+        include_corpus_scope: bool = True,
+        corpus_document_uids: list[str] | None = None,
     ) -> list[TabularDocumentResponse]:
         """
         List every tabular document the current user is allowed to read.
@@ -323,6 +329,10 @@ class TabularService:
             document_library_tags_ids=document_library_tags_ids,
             owner_filter=owner_filter,
             team_id=team_id,
+            attachment_uids=attachment_uids,
+            include_session_scope=include_session_scope,
+            include_corpus_scope=include_corpus_scope,
+            corpus_document_uids=corpus_document_uids,
         )
         return [
             TabularDocumentResponse(
@@ -333,6 +343,7 @@ class TabularService:
                 tag_ids=list(document_datasets[0].metadata.tags.tag_ids or []),
                 tag_names=list(document_datasets[0].metadata.tags.tag_names or []),
                 source_tag=document_datasets[0].metadata.source_tag,
+                source_kind=document_datasets[0].source_kind,
             )
             for document_datasets in self._group_datasets_by_document(datasets).values()
         ]
@@ -345,6 +356,10 @@ class TabularService:
         document_library_tags_ids: list[str] | None = None,
         owner_filter: OwnerFilter | None = None,
         team_id: str | None = None,
+        attachment_uids: list[str] | None = None,
+        include_session_scope: bool = True,
+        include_corpus_scope: bool = True,
+        corpus_document_uids: list[str] | None = None,
     ) -> list[TabularDocumentDescriptionResponse]:
         """
         Return the catalog and typed tables of authorized tabular documents.
@@ -368,12 +383,16 @@ class TabularService:
             document_library_tags_ids=document_library_tags_ids,
             owner_filter=owner_filter,
             team_id=team_id,
+            attachment_uids=attachment_uids,
+            include_session_scope=include_session_scope,
+            include_corpus_scope=include_corpus_scope,
+            corpus_document_uids=corpus_document_uids,
         )
         datasets_by_uid = self._group_datasets_by_document(datasets)
         requested_uids = list(dict.fromkeys(document_uids))
 
         missing_uids = [document_uid for document_uid in requested_uids if document_uid not in datasets_by_uid]
-        if missing_uids:
+        if missing_uids and attachment_uids is None and include_session_scope:
             owned = await self._resolve_owned_attachment_datasets(user, missing_uids)
             for document_uid, dataset in owned.items():
                 datasets_by_uid[document_uid] = dataset
@@ -602,11 +621,16 @@ class TabularService:
             document_library_tags_ids=request.document_library_tags_ids,
             owner_filter=request.owner_filter,
             team_id=request.team_id,
+            attachment_uids=request.attachment_uids,
+            include_session_scope=request.include_session_scope,
+            include_corpus_scope=request.include_corpus_scope,
+            corpus_document_uids=request.corpus_document_uids,
         )
         selected_datasets = await self._select_query_datasets(
             user=user,
             requested_uids=request.dataset_uids,
             available_datasets=available_datasets,
+            allow_attachment_fallback=request.attachment_uids is None and request.include_session_scope,
         )
         if not selected_datasets:
             raise ValueError("No authorized tabular datasets are available for this query")
@@ -698,11 +722,16 @@ class TabularService:
             document_library_tags_ids=request.document_library_tags_ids,
             owner_filter=request.owner_filter,
             team_id=request.team_id,
+            attachment_uids=request.attachment_uids,
+            include_session_scope=request.include_session_scope,
+            include_corpus_scope=request.include_corpus_scope,
+            corpus_document_uids=request.corpus_document_uids,
         )
         selected_datasets = await self._select_query_datasets(
             user=user,
             requested_uids=request.dataset_uids,
             available_datasets=available_datasets,
+            allow_attachment_fallback=request.attachment_uids is None and request.include_session_scope,
         )
         if not selected_datasets:
             raise ValueError("No authorized tabular datasets are available for this search")
@@ -873,66 +902,43 @@ class TabularService:
         document_library_tags_ids: list[str] | None = None,
         owner_filter: OwnerFilter | None = None,
         team_id: str | None = None,
+        attachment_uids: list[str] | None = None,
+        include_session_scope: bool = True,
+        include_corpus_scope: bool = True,
+        corpus_document_uids: list[str] | None = None,
     ) -> list[ResolvedDataset]:
-        """
-        Resolve every readable document that has a tabular artifact.
+        """Resolve scoped corpus tables and explicitly supplied owned attachments.
 
-        Why this exists:
-        - Dataset listing, schema lookup, and query execution all need the same
-          filtered, alias-stable view of authorized tabular documents.
-        - Active team/personal/library scope must be applied before aliases are
-          exposed or mounted in DuckDB.
+        Source flags keep the branches independent; aliases stay deterministic."""
 
-        How to use:
-        - Call once per request and reuse the resulting list for downstream
-          selection or API formatting.
-        - When ReBAC is enabled, the service resolves only the authorized
-          document uids instead of scanning the whole metadata catalog.
-        - Multi-table documents (spreadsheets carrying `tabular_multi_v1`)
-          expand into one dataset per table; authorization stays at the
-          document level, upstream of this expansion.
-        """
-
-        authorized_document_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
-        scoped_tag_ids = await self._resolve_scope_tag_ids(
-            user,
-            document_library_tags_ids=document_library_tags_ids,
-            owner_filter=owner_filter,
-            team_id=team_id,
-        )
+        lookups = []
+        if include_corpus_scope:
+            lookups.extend(
+                [
+                    self.rebac.lookup_user_resources(user, DocumentPermission.READ),
+                    self._resolve_scope_tag_ids(user, document_library_tags_ids=None if corpus_document_uids is not None else document_library_tags_ids, owner_filter=owner_filter, team_id=team_id),
+                ]
+            )
+        if include_session_scope and attachment_uids:
+            lookups.append(self._resolve_owned_attachment_datasets(user, list(dict.fromkeys(attachment_uids))))
+        results = await asyncio.gather(*lookups)
+        authorized_document_ref, scoped_tag_ids = results[:2] if include_corpus_scope else ([], None)
+        owned = results[-1] if include_session_scope and attachment_uids else {}
 
         if isinstance(authorized_document_ref, RebacDisabledResult):
-            # P1 (codex review): fast-ingest attachments (ATTACH-TAB-01) are
-            # deliberately session-scoped and were never meant to depend on
-            # ReBAC being enabled for that isolation — they carry no ReBAC
-            # tuple at all, by design, and are authorized purely by ownership
-            # metadata (`_resolve_owned_attachment_dataset` below). This
-            # unfiltered "ReBAC disabled -> show everything" listing predates
-            # that document class; without excluding it, a ReBAC-disabled
-            # deployment would enumerate every user's session-scoped
-            # attachments to every other user, bypassing the ownership check
-            # entirely instead of merely being unable to use it. `source_tag`
-            # alone is not enough: it is an operator-configured string
-            # (`document_sources`) nothing reserves against a real corpus
-            # source also named "fast_ingest" -- exclude only when the
-            # document is ALSO untagged, the same "genuinely an attachment"
-            # test used everywhere else in this file, so a same-named tagged
-            # corpus document stays visible.
+            # Tagless fast-ingest documents require uploader authorization, even
+            # when corpus ReBAC is disabled.
             visible_documents = [metadata for metadata in await self.metadata_store.get_all_metadata({}) if metadata.source_tag != FAST_INGEST_SOURCE_TAG or metadata.tags.tag_ids]
-        elif is_service_agent(user) and not holds_caller_role(user):
+        elif include_corpus_scope and is_service_agent(user) and not holds_caller_role(user):
             # EVAL-AUTH (Solution A), mirrors tag_service.resolve_authorized_tag_ids_in_rebac:
             # the evaluation worker holds no per-user document relations by design, so the
             # per-user READ lookup above is always empty and would zero out every dataset.
             # Authorize via the team-scoped tag set instead; fail closed without one.
-            if not scoped_tag_ids:
-                return []
-            tag_documents = await asyncio.gather(*(self.metadata_store.get_metadata_in_tag(tag_id) for tag_id in scoped_tag_ids))
+            tag_documents = await asyncio.gather(*(self.metadata_store.get_metadata_in_tag(tag_id) for tag_id in scoped_tag_ids or ()))
             visible_documents = [metadata for documents in tag_documents for metadata in documents]
         else:
             authorized_ids = [document.id for document in authorized_document_ref]
-            if not authorized_ids:
-                return []
-            visible_documents = await self.metadata_store.get_metadata_by_uids(authorized_ids)
+            visible_documents = await self.metadata_store.get_metadata_by_uids(authorized_ids) if authorized_ids else []
 
         resolved_datasets: list[ResolvedDataset] = []
         used_aliases: set[str] = set()
@@ -947,8 +953,15 @@ class TabularService:
             return query_alias
 
         for metadata in visible_documents:
-            if scoped_tag_ids is not None and not (set(metadata.tags.tag_ids or []) & scoped_tag_ids):
+            if metadata.source_tag == FAST_INGEST_SOURCE_TAG and not metadata.tags.tag_ids:
                 continue
+            in_libraries = bool(set(metadata.tags.tag_ids or []) & (scoped_tag_ids or set()))
+            if scoped_tag_ids is not None and not in_libraries:
+                continue
+            if corpus_document_uids is not None:
+                selected_library = bool(set(metadata.tags.tag_ids or []) & set(document_library_tags_ids or []))
+                if metadata.document_uid not in corpus_document_uids and not selected_library:
+                    continue
 
             artifact = read_tabular_artifact(metadata)
             if artifact is not None:
@@ -985,6 +998,11 @@ class TabularService:
                     )
                 )
 
+        if include_session_scope and attachment_uids:
+            corpus_uids = {dataset.metadata.document_uid for dataset in resolved_datasets}
+            for uid, datasets in owned.items():
+                if uid not in corpus_uids and datasets[0].metadata.processing.stages.get(ProcessingStage.SQL_INDEXED) == ProcessingStatus.DONE:
+                    resolved_datasets.extend(datasets)
         return resolved_datasets
 
     async def _get_dataset_or_raise(
@@ -1037,6 +1055,7 @@ class TabularService:
         user: KeycloakUser,
         requested_uids: list[str] | None,
         available_datasets: list[ResolvedDataset],
+        allow_attachment_fallback: bool = True,
     ) -> list[ResolvedDataset]:
         """
         Resolve the dataset subset requested for one SQL query or value search.
@@ -1062,7 +1081,7 @@ class TabularService:
             datasets_by_uid.setdefault(dataset.metadata.document_uid, []).append(dataset)
 
         missing_uids = [document_uid for document_uid in requested_uids if document_uid not in datasets_by_uid]
-        if missing_uids:
+        if missing_uids and allow_attachment_fallback:
             owned = await self._resolve_owned_attachment_datasets(user, missing_uids)
             for document_uid, dataset in owned.items():
                 datasets_by_uid[document_uid] = dataset
@@ -1078,28 +1097,9 @@ class TabularService:
         return [dataset for document_uid in requested_uids for dataset in datasets_by_uid[document_uid]]
 
     async def _resolve_owned_attachment_dataset(self, user: KeycloakUser, document_uid: str) -> ResolvedDataset | None:
-        """
-        Authorize one session-scoped chat-attachment dataset without ReBAC.
+        """Resolve one uploader-owned CSV or Excel attachment without corpus tuples.
 
-        Why this exists:
-        - Fast-ingested attachments carry no ReBAC tuple by design — ownership
-          is proven the same way `_authorize_fast_ingest_delete`
-          (`ingestion_controller.py`) already proves it for deletion: an
-          equality check against ownership metadata, not a ReBAC lookup,
-          which can never resolve for an untagged document.
-        - One indexed `get_metadata_by_uid` lookup, not a catalog scan — see
-          DESIGN.md "Session-Scoped Attachment Datasets" for why this is
-          deliberately not folded into `_resolve_authorized_datasets`.
-
-        How to use:
-        - Call only for a uid the caller explicitly named and that the
-          ReBAC-authorized set didn't already resolve (`describe_documents`,
-          `_select_query_datasets`, `_get_dataset_or_raise`). Returns `None`
-          for anything that isn't a `tabular_v1` attachment owned by `user`
-          — including a document that simply doesn't exist, or exists but is
-          a corpus document, so the caller's existing ReBAC-based 403/404
-          decision still applies.
-        """
+        Ownership remains enforced when ReBAC is disabled."""
 
         metadata = await self.metadata_store.get_metadata_by_uid(document_uid)
         if metadata is None:
@@ -1119,13 +1119,14 @@ class TabularService:
                 ResolvedDataset(
                     metadata=metadata,
                     artifact=artifact,
+                    source_kind="conversation_attachment",
                     query_alias=build_default_query_alias(metadata.document_uid, metadata.document_name),
                 )
             ]
         multi = read_tabular_multi_artifact(metadata)
         if multi is None:
             return []
-        return [ResolvedDataset(metadata=metadata, artifact=table, query_alias=table.query_alias) for table in multi.tables]
+        return [ResolvedDataset(metadata=metadata, artifact=table, query_alias=table.query_alias, source_kind="conversation_attachment") for table in multi.tables]
 
     @staticmethod
     def _as_owned_attachment_dataset(metadata: DocumentMetadata, *, user: KeycloakUser) -> ResolvedDataset | None:
@@ -1134,26 +1135,7 @@ class TabularService:
         return datasets[0] if datasets else None
 
     async def _resolve_owned_attachment_datasets(self, user: KeycloakUser, document_uids: list[str]) -> dict[str, list[ResolvedDataset]]:
-        """
-        Batch form of `_resolve_owned_attachment_dataset` for the uids a
-        caller's ReBAC-authorized set didn't already resolve.
-
-        How to use:
-        - Pass a caller's `missing_uids`; the result contains only the ones
-          that resolved. Every batch call site (`describe_documents`,
-          `_select_query_datasets`) shares this instead of re-implementing
-          the fetch-and-filter, so `_get_dataset_or_raise`'s single-uid
-          equivalent stays the only other caller of the per-uid primitive.
-
-        One `get_metadata_by_uids` call, not one concurrent
-        `get_metadata_by_uid` per uid: `dataset_uids` is an unbounded
-        caller-supplied list (`TabularQueryRequest`, `TabularSearchRequest`),
-        so fanning out a real lookup per uid would open as many concurrent
-        metadata-store round trips as the caller cared to request. The
-        store's batch method chunks internally (`_BULK_UPDATE_CHUNK_SIZE` for
-        Postgres), so this stays bounded regardless of how many uids are
-        requested.
-        """
+        """Batch-resolve uploader-owned tables for explicit or authorized conversation UIDs."""
 
         if not document_uids:
             return {}

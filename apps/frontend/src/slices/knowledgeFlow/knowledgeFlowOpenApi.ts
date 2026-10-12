@@ -1046,6 +1046,10 @@ const injectedRtkApi = api.injectEndpoints({
           document_library_tags_ids: queryArg.documentLibraryTagsIds,
           owner_filter: queryArg.ownerFilter,
           team_id: queryArg.teamId,
+          attachment_uids: queryArg.attachmentUids,
+          include_session_scope: queryArg.includeSessionScope,
+          include_corpus_scope: queryArg.includeCorpusScope,
+          corpus_document_uids: queryArg.corpusDocumentUids,
           person: queryArg.person,
           run: queryArg.run,
           agent: queryArg.agent,
@@ -1060,6 +1064,10 @@ const injectedRtkApi = api.injectEndpoints({
           document_library_tags_ids: queryArg.documentLibraryTagsIds,
           owner_filter: queryArg.ownerFilter,
           team_id: queryArg.teamId,
+          attachment_uids: queryArg.attachmentUids,
+          include_session_scope: queryArg.includeSessionScope,
+          include_corpus_scope: queryArg.includeCorpusScope,
+          corpus_document_uids: queryArg.corpusDocumentUids,
           person: queryArg.person,
           run: queryArg.run,
           agent: queryArg.agent,
@@ -2173,6 +2181,11 @@ export type ListTabularDocumentsApiArg = {
   ownerFilter?: OwnerFilter | null;
   /** Team ID, required when owner_filter is 'team'. */
   teamId?: string | null;
+  /** Explicit uploader-owned attachment UIDs. */
+  attachmentUids?: string[] | null;
+  includeSessionScope?: boolean;
+  includeCorpusScope?: boolean;
+  corpusDocumentUids?: string[] | null;
   person?: string | null;
   run?: string | null;
   agent?: string | null;
@@ -2188,6 +2201,11 @@ export type DescribeTabularDocumentsApiArg = {
   ownerFilter?: OwnerFilter | null;
   /** Team ID, required when owner_filter is 'team'. */
   teamId?: string | null;
+  /** Explicit uploader-owned attachment UIDs. */
+  attachmentUids?: string[] | null;
+  includeSessionScope?: boolean;
+  includeCorpusScope?: boolean;
+  corpusDocumentUids?: string[] | null;
   person?: string | null;
   run?: string | null;
   agent?: string | null;
@@ -3230,6 +3248,8 @@ export type TabularDocumentListResponse = {
   document_uid: string;
   document_name: string;
   tables?: TabularDocumentListTableResponse[] | null;
+  source_kind?: "corpus" | "conversation_attachment";
+  tag_names?: string[] | null;
 };
 export type TabularColumnSchema = {
   name: string;
@@ -3273,6 +3293,11 @@ export type RawSqlResponse = {
 export type TabularQueryRequest = {
   sql: string;
   dataset_uids?: string[] | null;
+  /** Explicit uploader-owned attachment UIDs; runtime supplies the authorized conversation inventory. */
+  attachment_uids?: string[] | null;
+  include_session_scope?: boolean;
+  include_corpus_scope?: boolean;
+  corpus_document_uids?: string[] | null;
   /** Optional list of library tag IDs used to keep the query inside selected libraries. */
   document_library_tags_ids?: string[] | null;
   /** Optional ownership scope: 'personal' or 'team'. */
@@ -3307,6 +3332,11 @@ export type TabularSearchRequest = {
   /** Word or expression to locate. Use precise values only: a generic term matches too many tables and cannot disambiguate. */
   keyword: string;
   dataset_uids?: string[] | null;
+  /** Explicit uploader-owned attachment UIDs; runtime supplies the authorized conversation inventory. */
+  attachment_uids?: string[] | null;
+  include_session_scope?: boolean;
+  include_corpus_scope?: boolean;
+  corpus_document_uids?: string[] | null;
   /** Optional list of library tag IDs used to keep the search inside selected libraries. */
   document_library_tags_ids?: string[] | null;
   /** Optional ownership scope: 'personal' or 'team'. */

@@ -6616,3 +6616,22 @@ filter.
 This is a ceiling for one port; the
 general agent scope descriptor stays open in `CAPABILITY-SCOPE-CEILING-RFC.md`.
 
+
+
+### 8.106 Tabular discovery includes authorized conversation attachments (2026-10-12)
+
+`list_tabular_documents` combines enabled corpus documents and ready CSV/Excel
+attachments of the current conversation. The existing MCP wrapper obtains the
+persisted attachment inventory from the control-plane's owned-session route,
+using the shared asynchronous client and current outbound credentials. Knowledge
+Flow reuses its batch uploader-owned dataset resolver. No attachment catalog scan
+or Parquet data read is added to listing.
+
+Runtime-owned source flags and selectors are hidden from the model and applied
+consistently to listing, description, SQL and value search. Corpus selections do
+not filter tagless attachments. Listing entries carry `source_kind` (`corpus` or
+`conversation_attachment`) and available library `tag_names`; filenames do not
+establish identity. The existing tool names, table aliases and schema-before-SQL
+flow are retained. Unscoped listing excludes attachments; direct explicit-UID API
+access retains uploader authorization. Legacy text-only attachments remain on the
+text path. See the `tabular-chat-attachments` capability specification.

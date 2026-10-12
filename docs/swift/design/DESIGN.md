@@ -451,16 +451,22 @@ treated as authorized when `source_tag == "fast_ingest"` and
 `is_own_session_chunk` already applies to vector chunks). The owned resolver expands every Excel table under the same document uid.
 Only if that does not match does the existing ReBAC check decide the `403`.
 
-This is deliberately **not** wired into `_resolve_authorized_datasets`
-itself, which enumerates every document the caller can read (used by
-`list_documents`/`list_datasets`) — `get_all_metadata()` filters in Python
-over every row in the metadata table (`PostgresDocumentMetadataStore.
-get_all_metadata`), so folding attachment resolution in there would add an
-unbounded table scan to every tabular listing call. The narrower fix costs
-one indexed lookup, and only when a document_uid is actually named. Attachment
-datasets consequently never appear in a blind `list_documents`/`list_datasets`
-enumeration — harmless, since the agent is already handed the uid directly in
-the attachment prompt suffix and has no need to "discover" it.
+`list_tabular_documents` now combines its authorized corpus inventory with
+ready attachment UIDs supplied by the runtime for the current conversation.
+The runtime obtains these UIDs from control-plane's existing owned-session
+attachment route, then Knowledge Flow batch-checks uploader ownership through
+`_resolve_owned_attachment_datasets`. No global attachment scan is added.
+Unscoped `list_documents`/`list_datasets` still excludes attachments.
+
+Listing entries carry `source_kind` (`corpus` or `conversation_attachment`) and
+available corpus `tag_names`. Both source flags and corpus selectors flow through
+listing, description, SQL and value search. Library filters apply to corpus
+entries, not tagless attachments. Runtime-owned scope arguments are hidden from
+the model and enforced at invocation; explicit direct-API UID access retains
+its uploader check. CSV listings remain compact and Excel listings retain all
+table identities. The agent follows list, describe, query for either origin;
+schema inspection is required before SQL. Legacy text-only attachments are
+excluded from SQL inventory and keep their existing text fallback.
 
 **Exception: `_resolve_authorized_datasets` does exclude attachments in one
 specific branch, on purpose (P1, codex review).** When ReBAC is globally
