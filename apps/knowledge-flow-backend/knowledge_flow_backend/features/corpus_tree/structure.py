@@ -41,7 +41,8 @@ class DocumentTreeRequest(BaseModel):
     sort_by: Literal["name", "added_to_kb"] = "name"
     sort_order: Literal["asc", "desc"] = "asc"
     limit: Optional[int] = Field(default=None, ge=1, le=100, description="Unique documents per page; omit for legacy tree browsing.")
-    cursor: Optional[str] = Field(default=None, max_length=8192, description="Continuation from the same query and scope; requires limit.")
+    # Bound a renderable keyset position with UTF-8 and Base64 expansion.
+    cursor: Optional[str] = Field(default=None, max_length=4 * 4 * 60_000 // 3 + 512, description="Continuation from the same query and scope; requires limit.")
 
     @model_validator(mode="after")
     def validate_paging(self):

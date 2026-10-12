@@ -371,3 +371,18 @@ async def test_discovery_service_agent_uses_authorized_team_folders_only(monkeyp
     service.metadata_store.discover_metadata_page.reset_mock()
     await service.discover_documents_page(_user(), **{**args, "folder_ids": []})
     service.metadata_store.discover_metadata_page.assert_not_called()
+
+
+def test_a_name_fitting_the_tree_budget_can_be_used_in_a_generated_cursor():
+    from fred_core.documents.document_store import DocumentDiscoveryEntry
+
+    from knowledge_flow_backend.features.corpus_tree.service import _decode_cursor, _encode_cursor, _render_page
+
+    doc = _document(uid="renamed", name="x" * 10000 + ".pdf")
+    doc.tags.tag_ids = ["a"]
+    entry = DocumentDiscoveryEntry(doc, doc.document_name.lower())
+    tree, count = _render_page([_tag(tag_id="a", full_path="A", item_ids=[])], [entry], 20000)
+    assert count == 1 and len(tree) <= 20000
+    cursor = _encode_cursor(entry, "query")
+    request = DocumentTreeRequest(limit=1, cursor=cursor)
+    assert _decode_cursor(request.cursor, "query", "name") == (entry.sort_value, doc.document_uid)
