@@ -22,7 +22,14 @@ import type { FrontendUiThemes } from "../slices/controlPlane/controlPlaneOpenAp
  */
 export const UI_THEMES = ["pebble", "cobalt", "cloud"] as const;
 export type UiTheme = string;
-export type CustomUiTheme = { id: string; label: string; base: (typeof UI_THEMES)[number] };
+export type CustomUiTheme = {
+  id: string;
+  label: string;
+  base: (typeof UI_THEMES)[number];
+  tabTitle?: string;
+  faviconName?: string;
+  faviconNameDark?: string;
+};
 // Vite can reload this module without rerunning startup's loadConfig(). Keep
 // the already validated catalog so the current theme and picker remain stable.
 let customThemes: CustomUiTheme[] = import.meta.hot?.data?.customThemes ?? [];
@@ -58,6 +65,7 @@ export function setCustomUiThemes(themes: CustomUiTheme[]): void {
 }
 
 export const availableUiThemes = (): UiTheme[] => [...UI_THEMES, ...customThemes.map((theme) => theme.id)];
+export const uiThemeTabBranding = (id: UiTheme) => customThemes.find((theme) => theme.id === id);
 export const uiThemeBase = (id: UiTheme): string => customThemes.find((theme) => theme.id === id)?.base ?? id;
 export const uiThemeLabel = (id: UiTheme, t: (key: string) => string): string =>
   customThemes.find((theme) => theme.id === id)?.label ?? t(UI_THEME_LABEL_KEYS[id] ?? id);

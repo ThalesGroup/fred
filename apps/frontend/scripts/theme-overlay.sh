@@ -148,7 +148,10 @@ install_theme() {
             if [ "${name}" = theme-catalog.json ] && ! jq -es '
                 length == 1 and (.[0] | type == "object" and (keys == ["themes"]) and
                 (.themes | type == "array" and length <= 16 and
-                    all(.[]; type == "object" and (keys == ["base", "id", "label"]) and
+                    all(.[]; type == "object" and (keys - ["base", "id", "label", "tabTitle", "faviconName", "faviconNameDark"] | length == 0) and
+                        (if has("tabTitle") then (.tabTitle | type == "string" and length <= 200 and test("[^\\s\uFEFF]")) else true end) and
+                        (if has("faviconName") then (.faviconName | type == "string" and test("^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$")) else true end) and
+                        (if has("faviconNameDark") then (.faviconNameDark | type == "string" and test("^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$")) else true end) and
                         (.id | type == "string" and test("^[a-z][a-z0-9-]{0,31}$") and
                             . != "pebble" and . != "cobalt" and . != "cloud") and
                         (.label | type == "string" and length > 0 and length <= 80 and test("[^\\s\uFEFF]")) and

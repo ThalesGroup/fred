@@ -277,7 +277,14 @@ To add selectable themes, put entries in `theme-catalog.json`:
 ```json
 {
   "themes": [
-    { "id": "acme", "label": "Acme", "base": "pebble" },
+    {
+      "id": "acme",
+      "label": "Acme",
+      "base": "pebble",
+      "tabTitle": "Acme Portal",
+      "faviconName": "acme-icon",
+      "faviconNameDark": "acme-icon-dark"
+    },
     { "id": "partner", "label": "Partner", "base": "cloud" }
   ]
 }
@@ -285,6 +292,11 @@ To add selectable themes, put entries in `theme-catalog.json`:
 
 Each ID must be unique, lowercase and at most 32 characters; `base` is
 `pebble`, `cobalt` or `cloud`. The base supplies all tokens, fonts and shapes.
+The optional `tabTitle` (at most 200 characters) and `faviconName` /
+`faviconNameDark` (SVG basenames under `images/`, letters, digits, `_` and `-`)
+brand the browser tab while that theme is active; without them the tab keeps
+`siteDisplayName` and the global favicon, and a missing dark icon reuses the
+light one.
 Add only the differences in `theme-custom.css`, using selectors such as
 `[data-ui-theme="acme"][data-ui-base-theme="pebble"][data-theme="light"]`
 and the matching `dark` selector. Include the base attribute so the ZIP rule

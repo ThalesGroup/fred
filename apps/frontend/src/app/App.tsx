@@ -27,6 +27,7 @@ import { useFrontendProperties } from "../hooks/useFrontendProperties";
 import { AuthProvider } from "../security/AuthContext";
 import { ApplicationContext, ApplicationContextProvider } from "./ApplicationContextProvider";
 import { uiThemeBase } from "./uiThemes";
+import { useThemeBrowserTab } from "./useThemeBrowserTab";
 import GcuGuard from "@core/guards/GcuGuard.tsx";
 import BootstrapGuard from "@core/guards/BootstrapGuard.tsx";
 import styles from "./App.module.css";
@@ -61,20 +62,9 @@ function FredUiContent() {
   const [router, setRouter] = useState<any>(null);
   const { siteDisplayName, faviconName, logoName, faviconNameDark, logoNameDark } = useFrontendProperties();
   const { t } = useTranslation();
-  const { darkMode } = useContext(ApplicationContext);
+  useThemeBrowserTab();
   const favicon = faviconName || logoName || "fred";
   const faviconDark = faviconNameDark || logoNameDark || "fred-dark";
-  const baseUrl = (import.meta.env.BASE_URL ?? "/").endsWith("/")
-    ? (import.meta.env.BASE_URL ?? "/")
-    : `${import.meta.env.BASE_URL ?? "/"}/`;
-
-  useEffect(() => {
-    // Browser tab name follows the configured app display name.
-    document.title = siteDisplayName;
-    const faviconElement = document.getElementById("favicon") as HTMLLinkElement;
-    faviconElement.href = `${baseUrl}images/${darkMode ? faviconDark : favicon}.svg`;
-  }, [baseUrl, siteDisplayName, favicon, faviconDark, darkMode]);
-
   useEffect(() => {
     import("../common/router").then((mod) => {
       setRouter(mod.router);
@@ -125,7 +115,7 @@ function FredUiContent() {
                           await writeRichClipboard("", text);
                         }}
                       >
-                        {/* Same guards as the banners, and above the router: it never remounts. */}
+                        {/* Same guards as the banners; inside ToastProvider for its error toast. */}
                         <PatchNoteGate />
                         <RouterProvider router={router} />
                       </ToastProvider>

@@ -23,7 +23,7 @@ root=sys.argv[1]
 with zipfile.ZipFile(root+'/valid.zip','w') as z:
     z.writestr('brand/theme-custom.css','body { color: red; }')
     z.writestr('brand/theme-properties.json',json.dumps({'siteTitle':'Paris Airport'}))
-    z.writestr('brand/theme-catalog.json',json.dumps({'themes':[{'id':'paris','label':'Paris','base':'cobalt'}]}))
+    z.writestr('brand/theme-catalog.json',json.dumps({'themes':[{'id':'paris','label':'Paris','base':'cobalt','tabTitle':'Paris Airport','faviconName':'paris-light','faviconNameDark':'paris-dark'}]}))
     z.writestr('brand/theme-translations/fr.json',json.dumps({'rework':{'home':{'greeting':'Bienvenue'}}}))
     z.writestr('brand/images/logo.svg','<svg>Paris</svg>')
     z.writestr('brand/images/font.ttf','font-bytes')
@@ -32,6 +32,9 @@ with zipfile.ZipFile(root+'/invalid.zip','w') as z:
     z.writestr('theme-properties.json',json.dumps({'user_auth':'forbidden'}))
 with zipfile.ZipFile(root+'/blank-label.zip','w') as z:
     z.writestr('theme-catalog.json',json.dumps({'themes':[{'id':'acme','label':'   ','base':'cobalt'}]}))
+for index,metadata in enumerate([{'tabTitle':' '},{'tabTitle':'x'*201},{'tabTitle':None},{'faviconName':'../fred'},{'faviconName':'https://example.test/icon'},{'faviconNameDark':'icon.svg'},{'faviconName':''},{'faviconName':'x'*129}]):
+    with zipfile.ZipFile(root+'/bad-tab-'+str(index)+'.zip','w') as z:
+        z.writestr('theme-catalog.json',json.dumps({'themes':[dict(id='paris',label='Paris',base='cobalt',**metadata)]}))
 with zipfile.ZipFile(root+'/escaping.zip','w') as z:
     z.writestr('../theme-custom.css','escaping')
 with zipfile.ZipFile(root+'/symlink.zip','w') as z:
@@ -286,4 +289,13 @@ test("Make lets Vite parse quoted dotenv values and preserves explicit shell ove
     url: "file:///from-shell.zip",
     secret: "shell$special",
   });
+});
+
+test("invalid tab metadata is refused before archive activation", async () => {
+  for (let index = 0; index < 8; index++) {
+    await assert.rejects(
+      start({ FRONTEND_THEME_URL: archiveUrl(`bad-tab-${index}.zip`), FRONTEND_THEME_REQUIRED: "true" }),
+      /invalid theme-catalog/,
+    );
+  }
 });
