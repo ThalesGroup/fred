@@ -236,8 +236,8 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
           uploading={isUploadingAvatar}
         />
       </div>
-      <TeamDescriptionReminder team={team} />
-      <div className={styles["form-section"]}>
+      <div className={`${styles["form-section"]} ${styles["team-description-section"]}`}>
+        <TeamDescriptionReminder team={team} />
         <TextArea
           label={t("rework.teamSettings.parameters.description.label")}
           placeholder={t("rework.teamSettings.parameters.description.placeholder")}

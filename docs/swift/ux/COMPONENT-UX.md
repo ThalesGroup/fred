@@ -2259,7 +2259,8 @@ bounds and the display helper live in `src/rework/core/utils/teamFields.ts`
   variant (`info-container` / `on-info-container`; the default stays the
   neutral surface) shown to team admins (`canUpdateInfo`) while `description_is_placeholder` is true: at the top of
   `TeamAgentsPage` (the team's home) with an outlined button to the team
-  settings, and above the field in `TeamSettingsParameters` without it. It
+  settings, and inside the description card of `TeamSettingsParameters`, above the
+  field and without the button, so it points at the field to fill. It
   renders nothing for other members, described teams and personal spaces.
 
 ---
