@@ -1,0 +1,36 @@
+## 1. Hook and page
+
+- [ ] 1.1 In `useComposerCommands.ts`, delete the `includePersonalCommands` parameter (and its place in the scope key): always read the personal library unless `personalTeamId` is missing or equals `teamId`, and always set `source` on prompt and skill entries; verify with the updated hook tests of 4.1
+- [ ] 1.2 In `CommandMenu.tsx`, make `source` required on `CommandMenuEntry`; verify `npx tsc --noEmit -p .` reports no error
+- [ ] 1.3 In `ManagedChatPage.tsx`, drop `includePersonalCommands: agentCategory === "react"` and pass `teamName={team?.name}` to `CommandMenu`; delete `agentCategory` and the agent-templates query, which nothing else in the page reads; verify with the updated page test of 4.3
+
+## 2. Menu
+
+- [ ] 2.1 In `CommandMenu.tsx`, render one `role="group"` per non-empty source in the order team, personal, platform, each `aria-labelledby` its own header, rows keeping their index in `entries` for `optionId`, `aria-selected`, `data-active`, `onActivate` and `onFocusEntry`; verify with `CommandMenu.test.tsx` (4.2)
+- [ ] 2.2 Add the `teamName` prop: team header from `chatbot.commandMenu.sections.team` with the name, `sections.teamFallback` when the name is missing, full label in `title`; verify with `CommandMenu.test.tsx`
+- [ ] 2.3 Remove the row source label and the header-by-kind logic; verify no `sources.` key and no `promptsSection` or `menuTitle` key remains in `CommandMenu.tsx` (grep)
+- [ ] 2.4 In `CommandMenu.module.css`, remove `text-transform` and `letter-spacing` from `.groupTitle`, add one-line ellipsis truncation, delete `.sourceLabel`; verify no new custom property is introduced (diff review)
+
+## 3. Locales
+
+- [ ] 3.1 In `locales/fr/translation.json` and `locales/en/translation.json`, add `chatbot.commandMenu.sections.{team,teamFallback,personal,platform}` and remove `chatbot.commandMenu.promptsSection`, `chatbot.skills.menuTitle` and `chatbot.commandMenu.sources.platform`, as listed in design.md; verify by grep that no removed key is still read in `apps/frontend/src` and that both files hold the same keys
+
+## 4. Tests
+
+- [ ] 4.1 Update `useComposerCommands.test.tsx`: remove `includePersonalCommands` from the `Host` and its call sites, drop the "category" variants built on it, replace the header assertion (about line 249) and the source-label assertions (about lines 1194-1212 and 1314-1319) with section assertions (headers shown, entries per section, single personal section in a personal chat, both `/summary` rows under their section), keep the inline token hint assertion on `sources.*` and the team-precedence cases; verify the file passes
+- [ ] 4.2 Add `CommandMenu.test.tsx`: section order, hidden empty sections, team name and fallback, `title` on the team header, `role="group"` with `aria-labelledby`, global option ids and active row across sections, no row source label; verify the file passes
+- [ ] 4.3 Update `ManagedChatPage.test.tsx` ("ReAct slash prompt sources", about line 1150): the personal commands query is not skipped for react, deep, graph, proxy and an unresolved template; verify the file passes
+
+## 5. Docs
+
+- [ ] 5.1 Rewrite the behaviour paragraphs of `### CommandMenu` in `docs/swift/ux/COMPONENT-UX.md`: three sections and their headers, no row label, personal commands for every agent kind, sentence-case truncated header; correct the fill token it names to the one the stylesheet uses; verify the section no longer mentions ReAct-only sources or a heading that follows entry kinds
+- [ ] 5.2 Update the Help Center pages `rework/features/helpCenter/content/fr/features/commands.md` and `en/features/commands.md` ("Lancer une commande" / "Run a command" and the paragraph on mixing prompts and skills): sections instead of labels, personal commands with every agent, no "Deep agents retain their current behavior"; verify fr and en say the same thing in non-technical wording
+- [ ] 5.3 Add `docs/swift/ops/migrations/3073-composer-command-menu-sections.md` from the template (impact none, configuration none); verify its front matter matches `MIGRATION-NOTE-TEMPLATE.md`
+
+## 6. Verification
+
+- [ ] 6.1 From `apps/frontend`, run `npx tsc --noEmit -p .`; verify it exits 0
+- [ ] 6.2 From `apps/frontend`, run `npx eslint` and `npx prettier --check` on the touched files; verify both exit 0
+- [ ] 6.3 From `apps/frontend`, run `npx vitest run` on `useComposerCommands.test.tsx`, `CommandMenu.test.tsx`, `ManagedChatPage.test.tsx` and `InlineSkillInput.test.tsx`; verify all pass, then clean the vitest cache directories left in `/tmp`
+- [ ] 6.4 Owner check in the app: team chat with a ReAct agent and with a Deep agent (three sections, team name in the header, long name truncated, filtering hides a section, arrows cross sections, both `/summary` rows, typed `/summary` runs the team's), personal-space chat (single personal section), fr and en, light and dark theme, and the inline token hover hint
+- [ ] 6.5 Record the verification evidence in this change, then archive it once merged; verify `openspec validate --specs --strict` passes after the archive
