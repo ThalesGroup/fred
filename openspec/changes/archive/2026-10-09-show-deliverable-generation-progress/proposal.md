@@ -6,7 +6,7 @@ Tracking: https://github.com/ThalesGroup/fred/issues/3021
 
 ## What Changes
 
-- Add `begin_document_generation(title)`, `begin_ppt_generation(title)`, and `begin_html_artifact_generation(title)` to their respective capabilities.
+- Add `prepare_document_content(title)`, `prepare_presentation_content(title)`, and `prepare_html_content(title)` to their respective capabilities.
 - Instruct the agent to call preparation alone before composing the publication arguments in a later model round, including revisions.
 - Use the existing tool trace and completion behavior without frontend changes.
 - Keep direct publication, revision identifiers, output parts, validation, and existing deliverable contracts.

@@ -58,7 +58,7 @@ def _tool(
 
 @pytest.mark.asyncio
 async def test_preparation_returns_only_acknowledgement():
-    preparation = _tool(name="begin_html_artifact_generation")
+    preparation = _tool(name="prepare_html_content")
     assert isinstance(preparation.args_schema, type) and issubclass(
         preparation.args_schema, BaseModel
     )
@@ -93,7 +93,7 @@ async def test_model_overlay_requires_separate_preparation_round():
         assert overlaid.system_message is not None
         content = str(overlaid.system_message.content)
         assert content.startswith("BASE")
-        assert "begin_html_artifact_generation" in content
+        assert "prepare_html_content" in content
         assert "Wait for its result" in content
         assert "NEVER batch" in content
         return response

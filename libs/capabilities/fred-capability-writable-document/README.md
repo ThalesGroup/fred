@@ -2,7 +2,7 @@
 
 Fred agent capability that co-authors a session-scoped Markdown document from chat.
 
-The agent first calls `begin_document_generation(title)` with a short title,
+The agent first calls `prepare_document_content(title)` with a short title,
 waits for its acknowledgement, then composes the content and calls
 `write_document` in a later model round to create or revise a deliverable
 (report, email, memo, meeting notes) that is kept OUT of the conversation stream

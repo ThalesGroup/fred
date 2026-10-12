@@ -66,7 +66,7 @@ def _tool(
 async def test_preparation_does_not_create_document(
     fake_store: FakeWritableDocumentStore,
 ):
-    preparation = _tool(name="begin_document_generation")
+    preparation = _tool(name="prepare_document_content")
     assert isinstance(preparation.args_schema, type) and issubclass(
         preparation.args_schema, BaseModel
     )
@@ -97,7 +97,7 @@ async def test_preparation_preserves_existing_document(
     )
     document_id = original.artifact.ui_parts[0].document_id
 
-    await _tool(name="begin_document_generation").ainvoke({"title": "Report"})
+    await _tool(name="prepare_document_content").ainvoke({"title": "Report"})
 
     rows = await fake_store.list_for_session("s-1")
     assert len(rows) == 1

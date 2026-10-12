@@ -111,11 +111,11 @@ def test_deliverable_capabilities_keep_six_distinct_tools_when_combined() -> Non
 
     assert len(names) == 6
     assert set(names) == {
-        "begin_document_generation",
+        "prepare_document_content",
         "write_document",
-        "begin_ppt_generation",
+        "prepare_presentation_content",
         "fill_ppt_template",
-        "begin_html_artifact_generation",
+        "prepare_html_content",
         "render_html_artifact",
     }
 

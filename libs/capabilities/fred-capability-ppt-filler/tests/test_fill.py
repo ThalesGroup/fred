@@ -1070,7 +1070,7 @@ async def test_middleware_overlays_fill_instructions_when_template_configured():
     # surface the missing capability instead of inventing values.
     assert "search_documents_using_vectorization" in merged
     assert "missing the Document access capability" in merged
-    assert "begin_ppt_generation" in merged
+    assert "prepare_presentation_content" in merged
     assert "Wait for its result" in merged
     assert "NEVER batch preparation" in merged
 
@@ -1084,8 +1084,8 @@ async def test_preparation_does_not_access_template_or_workspace():
     ctx = _ctx(schema_slides(deck), workspace=workspace)
     (middleware,) = PptFillerCapability().middleware(ctx)
     tools = {tool.name: tool for tool in middleware.tools}
-    assert set(tools) == {"fill_ppt_template", "begin_ppt_generation"}
-    preparation = tools["begin_ppt_generation"]
+    assert set(tools) == {"fill_ppt_template", "prepare_presentation_content"}
+    preparation = tools["prepare_presentation_content"]
     assert isinstance(preparation.args_schema, type) and issubclass(
         preparation.args_schema, BaseModel
     )
@@ -1109,7 +1109,7 @@ def test_preparation_preserves_image_tool_availability():
     assert {tool.name for tool in middleware.tools} == {
         "fill_ppt_template",
         "list_images_in_folder",
-        "begin_ppt_generation",
+        "prepare_presentation_content",
     }
 
 

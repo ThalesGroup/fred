@@ -8,7 +8,7 @@ Design: `docs/swift/rfc/HTML-ARTIFACT-CAPABILITY-RFC.md` (issue #2478).
 
 ## What it ships
 
-- **Preparation tool** `begin_html_artifact_generation(title)` acknowledges a short
+- **Preparation tool** `prepare_html_content(title)` acknowledges a short
   title before composition without publishing a preview. The model waits for its
   result before composing new or revised markup in a later model round.
 - **Publication tool** `render_html_artifact(title, html, css, artifact_id?)` - HTML and CSS

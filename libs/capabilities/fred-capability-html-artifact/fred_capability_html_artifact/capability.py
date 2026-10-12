@@ -98,7 +98,7 @@ _HTML_INSTRUCTIONS = (
     "create, revise, design, or show a web page, HTML page, component, section, layout, "
     "mockup, or styled HTML, you MUST call the 'render_html_artifact' tool with "
     "the HTML and (optionally) the CSS. After necessary research or clarification "
-    "and BEFORE composing new or revised markup, call begin_html_artifact_generation "
+    "and BEFORE composing new or revised markup, call prepare_html_content "
     "with a short title as a separate tool round. Wait for its result, then compose "
     "the HTML/CSS and call render_html_artifact in a later round. NEVER batch "
     "preparation and publication together; never paste the HTML/CSS as a code block "
@@ -107,7 +107,7 @@ _HTML_INSTRUCTIONS = (
     "HTML and CSS only: no <script>, no JavaScript, no event handlers, and no "
     "external resources (no remote stylesheets, fonts, or images) — inline any "
     "image as a data: URI. Keep the CSS in the css argument, not in a <style> "
-    "tag. For EVERY revision, repeat begin_html_artifact_generation alone and "
+    "tag. For EVERY revision, repeat prepare_html_content alone and "
     "wait for its result, even if preparation was called in an earlier user turn. "
     "Then compose the revised markup and call render_html_artifact in the next "
     "round, passing its existing "
@@ -139,8 +139,8 @@ class _HtmlArtifactMiddleware(AgentMiddleware):
         super().__init__()
         session_id = ctx.identity.session_id
 
-        @tool("begin_html_artifact_generation")
-        async def begin_html_artifact_generation(
+        @tool("prepare_html_content")
+        async def prepare_html_content(
             title: Annotated[str, Field(min_length=1, max_length=160)],
         ) -> str:
             """Announce HTML composition before drafting new or revised markup.
@@ -168,7 +168,7 @@ class _HtmlArtifactMiddleware(AgentMiddleware):
             layout, mockup, or any styled HTML, so the RESULT is shown rendered
             (not as a code block) and the user can read the source and download it.
 
-            Before composing new or revised markup, call begin_html_artifact_generation
+            Before composing new or revised markup, call prepare_html_content
             alone and wait for its result. Publish the markup in a later tool round.
 
             Produce static HTML/CSS only: no <script>, no JavaScript, no inline
@@ -218,7 +218,7 @@ class _HtmlArtifactMiddleware(AgentMiddleware):
 
         self.tools: Sequence[BaseTool] = [
             render_html_artifact,
-            begin_html_artifact_generation,
+            prepare_html_content,
         ]
 
     async def awrap_model_call(

@@ -267,7 +267,7 @@ _FILL_INSTRUCTIONS = (
     "those document tools are not in your toolset, tell the user this agent "
     "is missing the Document access capability instead of inventing values. "
     "After gathering sources and any necessary clarification, BEFORE composing "
-    "new or revised slide values, call begin_ppt_generation with a short title "
+    "new or revised slide values, call prepare_presentation_content with a short title "
     "as a separate tool round. Wait for its result, then compose the slide "
     "values and call fill_ppt_template in a later round. NEVER batch preparation "
     "and publication together. "
@@ -292,8 +292,8 @@ class _PptFillerMiddleware(AgentMiddleware):
         self.tools = build_fill_tools(ctx)
         self._fragment = _FILL_INSTRUCTIONS if self.tools else ""
 
-        @tool("begin_ppt_generation")
-        async def begin_ppt_generation(
+        @tool("prepare_presentation_content")
+        async def prepare_presentation_content(
             title: Annotated[str, Field(min_length=1, max_length=160)],
         ) -> str:
             """Announce presentation composition before drafting new or revised slides.
@@ -308,7 +308,7 @@ class _PptFillerMiddleware(AgentMiddleware):
             )
 
         if self.tools:
-            self.tools = [*self.tools, begin_ppt_generation]
+            self.tools = [*self.tools, prepare_presentation_content]
 
     async def awrap_model_call(
         self,

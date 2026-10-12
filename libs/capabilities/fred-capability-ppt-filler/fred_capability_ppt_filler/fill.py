@@ -934,7 +934,7 @@ def build_fill_tools(
             "relevant name for the deck (the '.pptx' extension is added "
             "automatically).\n"
             "Before composing new or revised slide values, call "
-            "begin_ppt_generation alone and wait for its result. Publish the "
+            "prepare_presentation_content alone and wait for its result. Publish the "
             "values in a later tool round.\n"
             "IMAGE FIELDS: some fields are images (their description says 'its "
             "images come from the folder <path>'). Before calling THIS tool you "

@@ -118,7 +118,7 @@ def _open_documents_fragment(records: Sequence[WritableDocumentRecord]) -> str:
         f"session:\n{catalog}\n\n"
         "When the user asks to modify, revise, correct, extend, shorten, "
         "reformat, or otherwise change one of these documents, first call "
-        "begin_document_generation with a short title and wait for its result. "
+        "prepare_document_content with a short title and wait for its result. "
         "Then compose the revised content and call write_document in the next "
         "round with that exact document_id so the SAME document "
         "is updated in place. Only omit document_id when the user clearly "
@@ -139,7 +139,7 @@ _WRITE_INSTRUCTIONS = (
     "Markdown already exists in the conversation workspace and the "
     "open_writable_document tool is available, call it with the file path. "
     "Otherwise, after necessary research or clarification and BEFORE composing "
-    "new or revised content, call begin_document_generation with a short title "
+    "new or revised content, call prepare_document_content with a short title "
     "as a separate tool round. Wait for its result, then compose the full "
     "Markdown and call write_document in a later round. NEVER batch preparation "
     "and publication together. Repeat preparation for EVERY generation or "
@@ -231,8 +231,8 @@ class _WritableDocumentMiddleware(AgentMiddleware):
         session_id = identity.session_id
         user_id = identity.user_id
 
-        @tool("begin_document_generation")
-        async def begin_document_generation(
+        @tool("prepare_document_content")
+        async def prepare_document_content(
             title: Annotated[str, Field(min_length=1, max_length=160)],
         ) -> str:
             """Announce document composition before drafting new or revised content.
@@ -259,7 +259,7 @@ class _WritableDocumentMiddleware(AgentMiddleware):
             meeting notes) so the document is separated from the conversation and the user can
             edit it and export it to various formats (Word and Markdown).
 
-            Before composing new or revised content, call begin_document_generation alone
+            Before composing new or revised content, call prepare_document_content alone
             and wait for its result. Publish the full content in a later tool round.
 
             IMPORTANT - revise in place, never duplicate: to modify, correct, extend, shorten,
@@ -280,7 +280,7 @@ class _WritableDocumentMiddleware(AgentMiddleware):
                 document_id=document_id,
             )
 
-        tools: Sequence[BaseTool] = [write_document, begin_document_generation]
+        tools: Sequence[BaseTool] = [write_document, prepare_document_content]
         self.tools = tools
         self._session_id = session_id
 
