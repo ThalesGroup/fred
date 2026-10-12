@@ -30,4 +30,4 @@
 
 - [x] 3.1 Run targeted tests, full module suites, the root quality gate, and OpenSpec validation and sync; verify PR #2900 records the result and limitations. Evidence: runtime 1,745 passed, 11 skipped, 17 deselected; frontend 3,176 passed, 7 skipped; targeted batch tests 57 runtime and 109 frontend passed; root code-quality, migration check, and OpenSpec validation passed. Follow-up tool approval and thread conversion suites passed 81 tests; the root code-quality and migration check passed again.
 - [x] 3.2 Obtain independent correctness review and resolve its actionable findings.
-- [ ] 3.3 Archive the change after merge.
+- [x] 3.3 Archive the change after merge.

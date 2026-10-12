@@ -21,6 +21,9 @@ export interface HitlAnswerSummary {
   skipped: boolean;
   choiceId: string | null;
   choices: Array<{ id: string; label: string; description?: string | null }>;
+  /** Tool approval only: the gated tools' display names and the decision's i18n key. */
+  toolNames?: string[];
+  answerKey?: string | null;
 }
 
 export function hitlAnswerSummary(request: HitlRequestPart, response: HitlResponsePart): HitlAnswerSummary {

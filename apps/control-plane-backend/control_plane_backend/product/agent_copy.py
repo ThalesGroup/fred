@@ -43,7 +43,14 @@ from fred_core.logs.audit_log import emit_audit_log
 from fred_core.security.rebac.rebac_engine import RebacDisabledResult
 from fred_sdk.contracts.capability import CapabilityConfigCopyRequest
 
-from control_plane_backend.agent_instances.store import AgentInstanceRecord
+from control_plane_backend.agent_instances.names import (
+    free_imported_name,
+    normalize_agent_name,
+)
+from control_plane_backend.agent_instances.store import (
+    AgentInstanceRecord,
+    AgentNameAlreadyExistsError,
+)
 from control_plane_backend.capabilities.authz import usable_capability_ids
 from control_plane_backend.product import service as product_service
 from control_plane_backend.product.dependencies import ProductServiceDependencies
@@ -56,6 +63,7 @@ from control_plane_backend.product.schemas import (
 from control_plane_backend.product.service import (
     EnrollmentError,
     _record_to_summary,
+    agent_name_conflict,
     capability_gate_exempt,
     emit_agent_created_kpi,
     template_capability_id,
@@ -67,7 +75,6 @@ logger = logging.getLogger(__name__)
 # Destinations are prepared concurrently, each one calling the pod once per
 # capability; keep the fan-out small.
 _MAX_CONCURRENT_DESTINATIONS = 4
-_IMPORTED_NAME_BASE_MAX = 230
 
 TeamAccess = Callable[[TeamId], Awaitable[TeamId]]
 
@@ -250,17 +257,22 @@ async def _copy_name(
 ) -> str:
     """The source name when free in the destination, else the first free `_imported-N`."""
 
-    existing = {
-        r.display_name
+    taken = {
+        normalize_agent_name(r.display_name)
         for r in await deps.get_agent_instance_store().list_by_team(target_team_id)
     }
-    if record.display_name not in existing:
-        return record.display_name
-    base = record.display_name[:_IMPORTED_NAME_BASE_MAX]
-    n = 1
-    while f"{base}_imported-{n}" in existing:
-        n += 1
-    return f"{base}_imported-{n}"
+    return free_imported_name(record.display_name, taken)
+
+
+async def _ensure_duplicate_name_free(
+    target_team_id: TeamId, display_name: str, deps: ProductServiceDependencies
+) -> None:
+    taken = {
+        normalize_agent_name(r.display_name)
+        for r in await deps.get_agent_instance_store().list_by_team(target_team_id)
+    }
+    if normalize_agent_name(display_name) in taken:
+        raise agent_name_conflict(target_team_id, display_name)
 
 
 async def copy_agent_instance_to_team(
@@ -281,6 +293,10 @@ async def copy_agent_instance_to_team(
         raise EnrollmentError(
             "The agent template is not enabled for this team.", http_status=403
         )
+    # A duplicate keeps the name the user chose, so it is refused before the
+    # pod prepares anything; a copy picks a free name instead.
+    if display_name is not None:
+        await _ensure_duplicate_name_free(target_team_id, display_name, deps)
     new_instance_id = str(uuid4())
 
     async def prepare(cap_id: str) -> tuple[str, dict[str, Any] | None]:
@@ -344,7 +360,18 @@ async def copy_agent_instance_to_team(
         created_by=user.uid,
         tuning=tuning,
     )
-    created = await deps.get_agent_instance_store().create(copy)
+    store = deps.get_agent_instance_store()
+    try:
+        created = await store.create(copy)
+    except AgentNameAlreadyExistsError as exc:
+        if display_name is not None:
+            raise agent_name_conflict(target_team_id, display_name) from exc
+        # A concurrent copy took the name: pick the next free one, once.
+        copy.display_name = await _copy_name(record, target_team_id, deps)
+        try:
+            created = await store.create(copy)
+        except AgentNameAlreadyExistsError as again:
+            raise agent_name_conflict(target_team_id, copy.display_name) from again
     emit_agent_created_kpi(created, user=user, deps=deps)
     emit_audit_log(
         "agent.copied",
@@ -398,7 +425,9 @@ async def copy_agent_instance(
                     authorization=authorization,
                 )
         except EnrollmentError as exc:
-            return AgentCopyResult(team_id=str(target_team_id), error=str(exc))
+            return AgentCopyResult(
+                team_id=str(target_team_id), error=str(exc), error_code=exc.code
+            )
         except Exception:
             # One destination's unexpected failure must not hide the others' results.
             logger.exception(

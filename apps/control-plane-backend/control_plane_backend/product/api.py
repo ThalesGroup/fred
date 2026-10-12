@@ -161,12 +161,14 @@ def _document_optional_delegation_grant_query(
     """
 
 
-def _prompt_error_detail(exc: PromptRequestError) -> str | dict[str, str]:
+def _coded_error_detail(
+    exc: PromptRequestError | EnrollmentError,
+) -> str | dict[str, str]:
     """Carry a machine-readable code when one exists, a plain string otherwise.
 
-    A name conflict and a command conflict are both 409 on the same endpoint,
-    so the form needs more than prose to mark the right input. Errors with no
-    code keep the string shape callers already handle.
+    A prompt name and command conflict share a 409, and an agent name conflict
+    must land on the form's name field, so forms need more than prose to mark
+    the right input. Errors with no code keep the string shape callers handle.
     """
 
     if exc.code is None:
@@ -359,7 +361,9 @@ async def post_team_agent_instance(
             authorization=http_request.headers.get("Authorization"),
         )
     except EnrollmentError as exc:
-        raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=exc.http_status, detail=_coded_error_detail(exc)
+        ) from exc
 
 
 @router.patch(
@@ -409,7 +413,9 @@ async def patch_team_agent_instance(
             authorization=http_request.headers.get("Authorization"),
         )
     except EnrollmentError as exc:
-        raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=exc.http_status, detail=_coded_error_detail(exc)
+        ) from exc
     if result is None:
         raise HTTPException(
             status_code=404,
@@ -521,7 +527,9 @@ async def post_team_agent_instance_with_assets(
             asset_uploads=uploads,
         )
     except EnrollmentError as exc:
-        raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=exc.http_status, detail=_coded_error_detail(exc)
+        ) from exc
 
 
 @router.patch(
@@ -578,7 +586,9 @@ async def patch_team_agent_instance_with_assets(
             asset_uploads=uploads,
         )
     except EnrollmentError as exc:
-        raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=exc.http_status, detail=_coded_error_detail(exc)
+        ) from exc
     if result is None:
         raise HTTPException(
             status_code=404,
@@ -675,7 +685,9 @@ async def get_agent_instance_copy_targets(
     try:
         targets = await list_agent_copy_targets(user=user, record=record, deps=deps)
     except EnrollmentError as exc:
-        raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=exc.http_status, detail=_coded_error_detail(exc)
+        ) from exc
     return AgentCopyTargetsResponse(targets=targets)
 
 
@@ -741,7 +753,9 @@ async def post_agent_instance_copy(
             require_editor=require_editor,
         )
     except EnrollmentError as exc:
-        raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=exc.http_status, detail=_coded_error_detail(exc)
+        ) from exc
     return AgentCopyResponse(results=results)
 
 
@@ -855,7 +869,7 @@ async def post_team_prompt(
         return await create_prompt(user=user, team_id=team_id, request=body, deps=deps)
     except PromptRequestError as exc:
         raise HTTPException(
-            status_code=exc.http_status, detail=_prompt_error_detail(exc)
+            status_code=exc.http_status, detail=_coded_error_detail(exc)
         ) from exc
 
 
@@ -1016,7 +1030,7 @@ async def put_team_prompt(
         result = await update_prompt(team_id, prompt_id, body, deps)
     except PromptRequestError as exc:
         raise HTTPException(
-            status_code=exc.http_status, detail=_prompt_error_detail(exc)
+            status_code=exc.http_status, detail=_coded_error_detail(exc)
         ) from exc
     if result is None:
         raise HTTPException(
@@ -1044,7 +1058,7 @@ async def _set_team_prompt_favorite(
         await set_prompt_favorite(user, team_id, prompt_id, favorite, deps)
     except PromptRequestError as exc:
         raise HTTPException(
-            status_code=exc.http_status, detail=_prompt_error_detail(exc)
+            status_code=exc.http_status, detail=_coded_error_detail(exc)
         ) from exc
 
 
@@ -1174,7 +1188,7 @@ async def post_promote_prompt(
         return await promote_prompt(user, team_id, prompt_id, body, deps)
     except PromptRequestError as exc:
         raise HTTPException(
-            status_code=exc.http_status, detail=_prompt_error_detail(exc)
+            status_code=exc.http_status, detail=_coded_error_detail(exc)
         ) from exc
 
 
@@ -1213,7 +1227,7 @@ async def post_publish_prompt(
         result = await set_prompt_published(team_id, prompt_id, True, deps)
     except PromptRequestError as exc:
         raise HTTPException(
-            status_code=exc.http_status, detail=_prompt_error_detail(exc)
+            status_code=exc.http_status, detail=_coded_error_detail(exc)
         ) from exc
     if result is None:
         raise HTTPException(
@@ -1256,7 +1270,7 @@ async def post_unpublish_prompt(
         result = await set_prompt_published(team_id, prompt_id, False, deps)
     except PromptRequestError as exc:
         raise HTTPException(
-            status_code=exc.http_status, detail=_prompt_error_detail(exc)
+            status_code=exc.http_status, detail=_coded_error_detail(exc)
         ) from exc
     if result is None:
         raise HTTPException(
@@ -1508,7 +1522,7 @@ async def post_team_prompt_category(
         return await create_prompt_category(team_id, body, deps)
     except PromptRequestError as exc:
         raise HTTPException(
-            status_code=exc.http_status, detail=_prompt_error_detail(exc)
+            status_code=exc.http_status, detail=_coded_error_detail(exc)
         ) from exc
 
 
@@ -1542,7 +1556,7 @@ async def put_team_prompt_category(
         result = await update_prompt_category(team_id, category_id, body, deps)
     except PromptRequestError as exc:
         raise HTTPException(
-            status_code=exc.http_status, detail=_prompt_error_detail(exc)
+            status_code=exc.http_status, detail=_coded_error_detail(exc)
         ) from exc
     if result is None:
         raise HTTPException(
@@ -1584,7 +1598,7 @@ async def delete_team_prompt_category(
         deleted = await delete_prompt_category(team_id, category_id, deps)
     except PromptRequestError as exc:
         raise HTTPException(
-            status_code=exc.http_status, detail=_prompt_error_detail(exc)
+            status_code=exc.http_status, detail=_coded_error_detail(exc)
         ) from exc
     if not deleted:
         raise HTTPException(

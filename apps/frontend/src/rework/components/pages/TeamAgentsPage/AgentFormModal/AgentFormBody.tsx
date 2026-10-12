@@ -120,7 +120,10 @@ type AgentFormBodyProps = {
   errorSections: Set<SectionKey>;
   editInstance?: ManagedAgentInstanceSummary;
   teamId?: string;
+  /** Another agent of the team has this name; shown once the name field was left. */
+  nameTaken?: boolean;
   onDisplayNameChange: (v: string) => void;
+  onDisplayNameBlur?: () => void;
   onRoleChange: (v: string) => void;
   onDescriptionChange: (v: string) => void;
   onUsageStatementChange: (v: string) => void;
@@ -157,7 +160,9 @@ export function AgentFormBody({
   errorSections,
   editInstance,
   teamId,
+  nameTaken = false,
   onDisplayNameChange,
+  onDisplayNameBlur,
   onRoleChange,
   onDescriptionChange,
   onUsageStatementChange,
@@ -245,7 +250,11 @@ export function AgentFormBody({
   const effectiveSection = visibleSections.includes(activeSection) ? activeSection : (visibleSections[0] ?? "general");
   const activeSectionIndex = Math.max(0, visibleSections.indexOf(effectiveSection));
 
-  const nameError = submitAttempted && !displayName.trim() ? t("rework.teams.formAgent.fields.name.label") : undefined;
+  const nameError = nameTaken
+    ? t("rework.teams.formAgent.fields.name.taken")
+    : submitAttempted && !displayName.trim()
+      ? t("rework.teams.formAgent.fields.name.label")
+      : undefined;
   const usageStatementError =
     submitAttempted && !usageStatement.trim() ? t("rework.teams.formAgent.fields.usageStatement.label") : undefined;
 
@@ -433,6 +442,7 @@ export function AgentFormBody({
                     label={t("rework.teams.formAgent.fields.name.label")}
                     value={displayName}
                     onChange={(e) => onDisplayNameChange(e.target.value)}
+                    onBlur={onDisplayNameBlur}
                     maxLength={255}
                     required
                     disabled={isSubmitting}

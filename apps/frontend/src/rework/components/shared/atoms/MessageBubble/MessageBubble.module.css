@@ -26,6 +26,7 @@
    max-width keeps the bubble readable — 65% of the 720px lane ≈ 468px. */
 .user {
   align-self: flex-end;
+  box-shadow: var(--shadow-xs);
   border-radius: var(--radius-m);
   background: var(--secondary-container);
   padding: var(--spacing-s) var(--spacing-m);

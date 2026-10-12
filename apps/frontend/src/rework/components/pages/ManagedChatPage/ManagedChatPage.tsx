@@ -47,8 +47,10 @@ import { conversationTokenTotals } from "./toThreadMessages";
 import { useChatAutoScroll } from "../../../core/hooks/useChatAutoScroll";
 import { useConversationJump } from "../../../core/hooks/useConversationJump";
 import { useOutlineScrollSpy } from "../../../core/hooks/useOutlineScrollSpy";
+import { hitlHoldsComposer } from "./hitlHoldsComposer";
 import { useManagedChat } from "./useManagedChat";
 import { useComposerCommands } from "./useComposerCommands";
+import { useComposerRecall } from "./useComposerRecall";
 import { useUploadWarningAcknowledgement } from "../../../core/hooks/useUploadWarningAcknowledgement";
 import { usePastedFiles } from "./usePastedFiles";
 import type { AttachmentSource } from "@rework/types/attachments";
@@ -532,10 +534,10 @@ export default function ManagedChatPage() {
   const hasToolControls = chat.chatControls.some(
     (control) => control.widget !== "attach_files" && !COMPOSER_CHIP_WIDGETS.has(control.widget),
   );
-  const awaitingAgentQuestion =
-    (chat.pendingHitl?.session_id === chat.sessionId && chat.pendingHitl.payload.stage === "agent_question") ||
+  const awaitingHumanAnswer =
+    hitlHoldsComposer(chat.pendingHitl, chat.sessionId) ||
     (chat.sessionId !== null && chat.resumingAgentQuestionSessionId === chat.sessionId);
-  const composerControlsDisabled = chat.waitResponse || chat.isLoadingHistory || awaitingAgentQuestion;
+  const composerControlsDisabled = chat.waitResponse || chat.isLoadingHistory || awaitingHumanAnswer;
 
   // `/` at the start of an empty composer. Owns the menu and resolves the
   // first token on submit, so `Tab` then `Enter` and `Enter` from the open
@@ -553,6 +555,26 @@ export default function ManagedChatPage() {
       }),
   });
 
+  // Arrow keys bring back the messages sent in this conversation. A recalled
+  // line keeps the command menu shut until the person edits it.
+  const { setInput: setChatInput } = chat;
+  const { dismiss: dismissCommandQuery } = commands;
+  const recallLine = useCallback(
+    (line: string) => {
+      dismissCommandQuery(line);
+      setChatInput(line);
+      setFocusEndRequestId((n) => n + 1);
+    },
+    [dismissCommandQuery, setChatInput],
+  );
+  const recallKeyDown = useComposerRecall({
+    messages: chat.threadMessages,
+    input: chat.input,
+    menuOpen: commands.trigger.open,
+    disabled: composerControlsDisabled,
+    onRecall: recallLine,
+  });
+
   const composer = (
     <RichInputField
       value={chat.input}
@@ -562,6 +584,7 @@ export default function ManagedChatPage() {
       placeholder={t("chatbot.composerPlaceholder")}
       accessibleDescription={t("chatbot.composerPlaceholder")}
       commandTrigger={commands.trigger}
+      onRecallKeyDown={recallKeyDown}
       aboveFieldSlot={commands.menu ? <CommandMenu {...commands.menu} /> : undefined}
       disabled={composerControlsDisabled}
       sendDisabled={chat.attachmentsUploading || chat.inputTooLong}
@@ -771,6 +794,7 @@ export default function ManagedChatPage() {
                         hitlBusy={chat.resumingAgentQuestionSessionId === chat.sessionId}
                         stagedHitlAnswer={chat.stagedHitlAnswer}
                         canSendAllHitl={chat.canSendAllHitl}
+                        hitlTabStates={chat.hitlTabStates}
                         onStageHitlAnswer={chat.stageHitlAnswer}
                         onSendAllHitl={chat.handleSendAllHitl}
                         onSkipAllHitl={chat.handleSkipAllHitl}

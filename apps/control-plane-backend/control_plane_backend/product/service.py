@@ -66,7 +66,11 @@ from fred_sdk.contracts.models import TeamScopePolicy
 from fred_sdk.contracts.prompt_utils import find_reserved_prompt_tag
 from pydantic import ValidationError
 
-from control_plane_backend.agent_instances.store import AgentInstanceRecord
+from control_plane_backend.agent_instances.names import normalize_agent_name
+from control_plane_backend.agent_instances.store import (
+    AgentInstanceRecord,
+    AgentNameAlreadyExistsError,
+)
 from control_plane_backend.agent_instances.suspension import (
     SliceInvalid,
     SuspensionReason,
@@ -2403,12 +2407,44 @@ class ExecutionPreparationError(Exception):
         self.http_status = http_status
 
 
+# Stable discriminator on the 409 body, so the agent form marks its name field.
+AGENT_NAME_CONFLICT = "agent_name_conflict"
+
+
 class EnrollmentError(Exception):
     """Raised when agent instance enrollment fails."""
 
-    def __init__(self, message: str, *, http_status: int = 400) -> None:
+    def __init__(
+        self, message: str, *, http_status: int = 400, code: str | None = None
+    ) -> None:
         super().__init__(message)
         self.http_status = http_status
+        self.code = code
+
+
+def agent_name_conflict(team_id: TeamId, display_name: str) -> EnrollmentError:
+    return EnrollmentError(
+        f"An agent named {display_name!r} already exists in team {team_id!r}.",
+        http_status=409,
+        code=AGENT_NAME_CONFLICT,
+    )
+
+
+async def ensure_agent_name_free(
+    team_id: TeamId,
+    display_name: str,
+    deps: ProductServiceDependencies,
+    *,
+    exclude_agent_instance_id: str | None = None,
+) -> None:
+    """Refuse a taken name before any side effect; the unique index stays the guarantee."""
+
+    wanted = normalize_agent_name(display_name)
+    for other in await deps.get_agent_instance_store().list_by_team(team_id):
+        if other.agent_instance_id == exclude_agent_instance_id:
+            continue
+        if normalize_agent_name(other.display_name) == wanted:
+            raise agent_name_conflict(team_id, display_name)
 
 
 # Stable discriminator on the 409 body: a name conflict and a command
@@ -2652,6 +2688,7 @@ async def enroll_agent_instance(
             "Expected format: '{source_runtime_id}:{source_agent_id}'."
         )
     source_runtime_id, source_agent_id = parts
+    await ensure_agent_name_free(team_id, request.display_name, deps)
 
     source = next(
         (
@@ -2781,7 +2818,10 @@ async def enroll_agent_instance(
     )
 
     store = deps.get_agent_instance_store()
-    created = await store.create(record)
+    try:
+        created = await store.create(record)
+    except AgentNameAlreadyExistsError as exc:
+        raise agent_name_conflict(team_id, request.display_name) from exc
     emit_agent_created_kpi(created, user=user, deps=deps)
     return _record_to_summary(created)
 
@@ -2853,6 +2893,13 @@ async def update_agent_instance(
     record = await store.get_for_team(agent_instance_id, team_id)
     if record is None:
         return None
+    if request.display_name is not None:
+        await ensure_agent_name_free(
+            team_id,
+            request.display_name,
+            deps,
+            exclude_agent_instance_id=agent_instance_id,
+        )
 
     # 2026-07-19 fix (GitHub #2004 item 1): re-check the team's `can_use` on
     # this instance's own `kind="agent"` template capability, the same gate
@@ -3009,15 +3056,18 @@ async def update_agent_instance(
             update={"reasoning_default_on": request.reasoning_default_on}
         )
 
-    updated = await store.update(
-        agent_instance_id=agent_instance_id,
-        team_id=team_id,
-        display_name=request.display_name,
-        description=request.description,
-        enabled=request.status == "enabled" if request.status is not None else None,
-        tuning=new_tuning,
-        updated_by=user.uid,
-    )
+    try:
+        updated = await store.update(
+            agent_instance_id=agent_instance_id,
+            team_id=team_id,
+            display_name=request.display_name,
+            description=request.description,
+            enabled=request.status == "enabled" if request.status is not None else None,
+            tuning=new_tuning,
+            updated_by=user.uid,
+        )
+    except AgentNameAlreadyExistsError as exc:
+        raise agent_name_conflict(team_id, exc.display_name) from exc
     # A save that re-validated every ACTIVE capability slice through the pod
     # clears any suspension — the single clearing mechanism (#1975, RFC §3.9).
     # Reaching here means `_apply_capability_selection` accepted the selection

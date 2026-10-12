@@ -245,6 +245,16 @@ describe("the command menu", () => {
     expect(panel()).toBeNull();
   });
 
+  it("reopens after Esc once the query is edited, even back to the same text", () => {
+    type("/su");
+    press("Escape");
+    type("/s");
+    expect(panel()).not.toBeNull();
+
+    type("/su");
+    expect(panel()).not.toBeNull();
+  });
+
   it("closes on Esc, keeps what was typed, and gives Tab back", () => {
     type("/su");
     press("Escape");
