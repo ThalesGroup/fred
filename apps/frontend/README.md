@@ -216,6 +216,25 @@ rebuild needed. Use it for static frontend settings and branding only; do not ad
 
 ### Theme overlay (branding assets without a rebuild)
 
+The same ZIP loader runs in Docker and in the local Vite server. For local
+development, set these values in `apps/frontend/config/.env` (copy the template
+if needed), then run `make run` or the VS Code frontend / All Services PROD task:
+
+```dotenv
+FRONTEND_THEME_URL=http://localhost:8333/fred-themes/theme.zip
+FRONTEND_THEME_S3_ACCESS_KEY=your-access-key
+FRONTEND_THEME_S3_SECRET_KEY=your-secret-key
+FRONTEND_THEME_REQUIRED=false
+```
+
+Omit both credential settings for a public object. `file:///absolute/path/theme.zip`
+also works for a local archive. Shell environment values override `config/.env`.
+Local startup requires `curl`, `unzip` and `jq`. Vite serves the validated theme
+from a temporary directory ahead of stock assets and never changes `public/`.
+After replacing a ZIP, restart the frontend and reload the browser; unset
+`FRONTEND_THEME_URL` and restart to return to stock assets. Docker/k3d uses the
+same environment settings with its reachable internal storage hostname.
+
 `config.json` selects assets by name, but the files themselves are baked into
 the image. A deployment ships its own logos, favicons, default avatars, agent
 icons and legal markdown as one **theme archive**: a zip laid out like
