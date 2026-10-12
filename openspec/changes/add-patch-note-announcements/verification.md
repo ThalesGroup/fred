@@ -261,3 +261,29 @@ toggle's transaction and row lock; SQLite tests cover the outcome only).
 ### Browser visual check (2026-10-09)
 
 - Product owner tested in the running app: dense admin table, user dialog, create chooser, patch-note editor, re-enable rule and history pagination behave as specified (task 6.3).
+
+
+### Integration with swift (2026-10-12)
+
+Merged `88843a09eb654d3c33c0fa14c789852e0bca2d87` into feature head
+`9a90380453e9f6399e198f212eff1964d606b52c`. The product contract keeps both
+sections 60 and 61. The patch-note migration now follows `c82f6a91d043`;
+the operator guide uses this parent for upgrade ordering and rollback.
+
+- Backend announcement, store, migration, user-deletion, profile-picture and
+  endpoint-authorization suites: 122 passed.
+- Frontend announcements, dialogs, Markdown, profile and API-enhancement
+  suites: 15 files, 179 tests passed.
+- Regenerated with `make update-control-plane-api`: the output exactly matches
+  the merged client. No changed translation value from either parent was lost.
+- Alembic: one head `cb6f39c6d80c`; full upgrade on a disposable SQLite database,
+  `alembic check`, downgrade to `c82f6a91d043` and upgrade back all passed.
+- `openspec validate add-patch-note-announcements --strict`: passed.
+- Author and independent read-only merge reviews: no actionable findings in
+  the six overlapping files, migration ancestry and changed shared-component
+  consumers. This is integration review, not a new full review of either
+  parent's features; PostgreSQL and browser validation were not repeated.
+- Root `make code-quality`: all modules passed. Two ignored local provisioning
+  scripts under `apps/control-plane-backend/target/company-jwt-provisioning`
+  caused unrelated type errors on the first run; the directory was temporarily
+  moved outside the repository for the successful rerun and restored unchanged.

@@ -47,10 +47,16 @@
   overflow-y: auto;
 }
 
+.agentGroup {
+  display: flex;
+  flex-direction: column;
+}
+
 /* Sub-list header shown above each agent's conversations when grouping is on.
  * Truncated like the inline agent name below it — a long name must not wrap the
  * header onto a second line. */
 .groupHeader {
+  display: flex;
   margin-top: 4px;
   border-radius: var(--radius-xs);
   background-color: var(--surface-container-lowest);
@@ -58,8 +64,18 @@
   overflow: hidden;
   color: var(--primary);
   font: var(--font-label-small);
-  text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.groupName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.deletedSuffix {
+  flex: 0 0 auto;
+  white-space: pre;
 }
 
 .chatListPlaceholder {
@@ -69,4 +85,12 @@
   color: var(--on-surface-retreat);
   font: var(--font-body-medium);
   text-align: center;
+}
+
+.groupHeader[data-agent-deleted="true"] {
+  color: var(--on-surface-muted);
+
+  > span {
+    opacity: 0.7;
+  }
 }

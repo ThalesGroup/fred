@@ -2,7 +2,7 @@
 schema: 1
 title: "Patch-note announcements and announcement activation history"
 impact: minor
-after: [user-profile-picture]
+after: [2992-deleted-agent-conversations]
 configuration: none
 configuration_reason: "No configuration key, default or chart value changes; patch notes and their history live in the existing control-plane database."
 ---
@@ -21,7 +21,7 @@ No configuration changes are required.
 ## Upgrade
 
 Deploy the control-plane backend and the frontend together. The control-plane
-Alembic revision `cb6f39c6d80c` (parent `aac66348e27b`) runs with the normal
+Alembic revision `cb6f39c6d80c` (parent `c82f6a91d043`) runs with the normal
 migration step:
 
 - it adds the column `platform_announcement.kind`, with server default
@@ -46,7 +46,7 @@ still reopens it. Existing banners still show as before.
 ## Rollback
 
 With traffic paused and updated readers stopped, downgrade the control plane
-to `aac66348e27b` and restart the previous images. The downgrade deletes every
+to `c82f6a91d043` and restart the previous images. The downgrade deletes every
 patch note, then drops the new columns, the index, the dismissals and the
 activation history.
 

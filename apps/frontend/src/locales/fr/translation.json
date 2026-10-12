@@ -552,12 +552,11 @@
       "empty": "Aucun aperçu markdown disponible."
     },
     "recordAudio": "Enregistrer de l'audio",
-    "nextHitlQuestion": "Suivant",
+    "hitlAnswerValidated": "Réponse validée",
+    "validateHitlAnswer": "Valider",
     "sendAllHitlAnswers": "Tout envoyer",
     "sendHitlAnswer": "Envoyer",
     "skipHitlQuestion": "Passer",
-    "skipHitlQuestionAria": "Passer cette question",
-    "skipAllHitlQuestionsAria": "Passer toutes les questions",
     "approveForConversation": "Approuver pour toute la conversation",
     "sendMessage": "Envoyer le message",
     "sessionAttachments": {
@@ -603,6 +602,17 @@
       "empty": "Aucun prompt dans cet espace.",
       "emptyFilters": "Aucun prompt ne correspond aux filtres.",
       "categoryLabel": "Catégorie"
+    },
+    "readOnlyComposerPlaceholder": "Conversation en lecture seule",
+    "deletedAgentTooltip": "{{agentsNicknameSingular}} supprimé - conversation en lecture seule",
+    "deletedAgentSuffix": "(supprimé)",
+    "historyUnavailable": "L'historique de la conversation est indisponible. Réessayez plus tard.",
+    "skipAllHitlQuestions": "Tout passer",
+    "hitlOtherAnswerHint": "écrire votre réponse…",
+    "hitlQuestionState": {
+      "waiting": "En attente de réponse",
+      "answered": "Répondue",
+      "skipped": "Passée"
     }
   },
   "comingSoon": {
@@ -1790,7 +1800,9 @@
       "selected": "Choisi",
       "skipped": "Passé",
       "accepted": "Accepté",
-      "refused": "Refusé"
+      "refused": "Refusé",
+      "toolRecall_one": "Outil : {{tools}}",
+      "toolRecall_other": "{{count}} outils : {{tools}}"
     },
     "knowledgeHub": {
       "loading": "Chargement..."
@@ -2270,11 +2282,11 @@
           "confirm": "Supprimer",
           "cancel": "Annuler"
         },
-        "emptyManaged": "Aucune conversation pour l'instant. Démarrez un chat avec un agent géré.",
-        "groupByAgent": "Grouper par agent",
+        "emptyManaged": "Aucune conversation pour l'instant. Démarrez un chat avec un {{agentsNicknameSingular}} géré.",
+        "groupByAgent": "Grouper par {{agentsNicknameSingular}}",
         "loading": "Chargement...",
         "title": "Conversations",
-        "unknownAgent": "Agent inconnu"
+        "unknownAgent": "{{agentsNicknameSingular}} inconnu"
       },
       "marketplace": {
         "menu": {
@@ -2763,7 +2775,11 @@
             "documentProduction": "Production de documents",
             "intelligenceOrchestration": "Intelligence et orchestration"
           },
-          "notSupported": "Cet agent ne prend pas en charge la sélection de capacités.",
+          "builtIn": {
+            "section": "Inclus avec cet agent",
+            "badge": "Incluse",
+            "none": "Cet agent n'a aucune capacité à configurer."
+          },
           "packs": {
             "attachments": {
               "title": "Pièces jointes",
@@ -2804,7 +2820,8 @@
           },
           "name": {
             "label": "Nom",
-            "placeholder": "Entrez un nom original"
+            "placeholder": "Entrez un nom original",
+            "taken": "Nom déjà utilisé"
           },
           "role": {
             "label": "Rôle",

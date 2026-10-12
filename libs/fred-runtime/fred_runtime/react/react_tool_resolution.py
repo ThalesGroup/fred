@@ -58,7 +58,11 @@ from pydantic import BaseModel, Field
 
 from fred_runtime.common.context_aware_tool import ContextAwareTool
 from fred_runtime.common.mcp_utils import MCP_SERVER_ID_METADATA_KEY
-from fred_runtime.runtime_support.ask_user import AskUserArgs, ask_user
+from fred_runtime.runtime_support.ask_user import (
+    ASK_USER_DESCRIPTION,
+    AskUserArgs,
+    ask_user,
+)
 
 from .react_tool_rendering import (
     normalize_runtime_provider_artifact,
@@ -220,14 +224,7 @@ class ReActRuntimeToolResolver:
             specs.append(
                 FredRuntimeToolSpec(
                     runtime_name="ask_user",
-                    description=(
-                        "Ask the user one question and continue after their answer. "
-                        "When possible, give the question a short subject title of a few words. "
-                        "Hard limit: choices must contain no more than four items. "
-                        "If you have five or more candidates, first select the four that best satisfy the user's constraints; "
-                        "the interface always offers an Other free-text answer alongside multiple choices. "
-                        "Use allow_free_text for questions without choices."
-                    ),
+                    description=ASK_USER_DESCRIPTION,
                     args_schema=AskUserArgs,
                     tool_ref="platform.ask_user",
                     invoke=invoke_ask_user,

@@ -2338,7 +2338,7 @@ export type PostBulkDeleteMySessionsControlPlaneV1MeSessionsBulkDeletePostApiArg
   bulkDeleteSessionsRequest: BulkDeleteSessionsRequest;
 };
 export type GetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetApiResponse =
-  /** status 200 Successful Response */ SessionListItem;
+  /** status 200 Successful Response */ SessionDetails;
 export type GetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetApiArg = {
   teamId: string;
   sessionId: string;
@@ -3638,9 +3638,9 @@ export type AgentTemplateSummary = {
   status?: "available" | "unavailable";
   /** Tunable field descriptors declared by the template. The frontend renders these dynamically at enrollment time. Empty when the template declares no tunable fields. */
   default_tuning_fields?: ManagedAgentFieldSpec[];
-  /** Capabilities installed on this template's source pod (#1974/#1978, RFC AGENT-CAPABILITY §3.8), aggregated from the pod's manifest advertisement. MCP servers surface here as ordinary capabilities keyed by their plain catalog server id (#1988). Drives the one Tools tab in agent creation; config_fields render through the metadata-driven form. */
+  /** Capabilities installed on this template's source pod (#1974/#1978, RFC AGENT-CAPABILITY §3.8), aggregated from the pod's manifest advertisement. MCP servers surface here as ordinary capabilities keyed by their plain catalog server id (#1988). Drives the one Tools tab in agent creation; config_fields render through the metadata-driven form. For a template with `supports_capabilities=False` it lists only the capabilities included with the agent. */
   available_capabilities?: CapabilityCatalogEntry[];
-  /** Whether this template genuinely participates in capability selection, unfiltered by the team's can_use grants — unlike available_capabilities, which an empty team grant also empties. False means the frontend should say so, not imply zero grants. */
+  /** Whether this template genuinely participates in capability selection, unfiltered by the team's can_use grants — unlike available_capabilities, which an empty team grant also empties. False means the agent offers no free selection: every entry of available_capabilities is included with it, always active and configurable, and a submitted selection is ignored. */
   supports_capabilities?: boolean;
   /** Capability ids this template activates by default (RFC AGENT-CAPABILITY §2), verbatim from the pod's `definition.default_mcp_servers` — MCP-derived and native ids alike. Unlike `available_capabilities` this list is NOT filtered by the team's `can_use`: intersect the two client-side to get the defaults a team may actually activate. The agent-creation form uses it to pre-tick a new instance's capabilities so a template's declared defaults are not silently dropped by an explicit empty selection.
     
@@ -3807,6 +3807,8 @@ export type AgentCopyResult = {
   /** What an editor must redo in the destination, per capability. */
   notices?: AgentCopyNotice[];
   error?: string | null;
+  /** Stable code of the failure, e.g. `agent_name_conflict` for a duplicate under a taken name. */
+  error_code?: string | null;
 };
 export type AgentCopyResponse = {
   results: AgentCopyResult[];
@@ -4060,6 +4062,8 @@ export type SessionListItem = {
   session_id: string;
   team_id: string;
   agent_instance_id?: string | null;
+  /** Agent display name retained after deletion; legacy rows may have no snapshot. */
+  agent_display_name?: string | null;
   title?: string | null;
   /** Ordered prompt-library ids attached to this session as chat context (personal/team prompt UUIDs or 'default:{category}'). Empty when none are attached. Concatenated in order as conversation context at execution time. */
   context_prompt_ids?: string[];
@@ -4092,6 +4096,21 @@ export type BulkDeleteSessionRef = {
 };
 export type BulkDeleteSessionsRequest = {
   sessions: BulkDeleteSessionRef[];
+};
+export type SessionDetails = {
+  session_id: string;
+  team_id: string;
+  agent_instance_id?: string | null;
+  /** Agent display name retained after deletion; legacy rows may have no snapshot. */
+  agent_display_name?: string | null;
+  title?: string | null;
+  /** Ordered prompt-library ids attached to this session as chat context (personal/team prompt UUIDs or 'default:{category}'). Empty when none are attached. Concatenated in order as conversation context at execution time. */
+  context_prompt_ids?: string[];
+  created_at?: string | null;
+  updated_at?: string | null;
+  agent_deleted?: boolean;
+  /** Browser-facing history URL, independent of agent execution availability. */
+  messages_url?: string | null;
 };
 export type UpdateSessionRequest = {
   /** Frontend-observed last activity timestamp. Used only for control-plane session metadata freshness, not runtime message history. */

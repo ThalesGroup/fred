@@ -299,7 +299,9 @@ The control plane is a **pure proxy** for these values — it does not interpret
 
 - `agent_instance_id` — primary identifier
 - `team_id`, `template_id`
-- `display_name`, `description`, `status`
+- `display_name`, `description`, `status`. `display_name` is unique within the
+  team or personal space, ignoring case and surrounding spaces, and stored
+  trimmed (§60).
 - `role: str` — **added 2026-07-23 (#2076).** Short one-line summary of what
   the agent does, distinct from the longer `description`; shown on the agent
   card. Independently settable via `CreateAgentInstanceRequest.role` /
@@ -494,7 +496,7 @@ Accessed via:
 - `GET /agents/sessions/{session_id}/messages` — full message list for one session
 - `GET /agents/sessions` — session list for one user (or all users for admin)
 
-**Control-plane must not proxy or cache message content.** If the frontend needs message history, it calls runtime directly using the `messages_url_template` from `ExecutionPreparation`.
+**Control-plane must not proxy or cache message content.** The frontend reads history directly from the runtime using `SessionDetails.messages_url`, independently of execution preparation.
 
 **Session Metadata — owned by `control-plane-backend`** _(target state — implementation pending Phase 3b/FRONT-04)_
 
@@ -530,7 +532,7 @@ Freeze session metadata as a control-plane contract separate from runtime histor
 - `SessionPreferences`
 - `UpdateSessionPreferencesRequest`
 
-`SessionListItem` may include: `session_id`, `team_id`, `title`, `updated_at`, `created_at`, `agent_instance_id`, `context_prompt_ids` (ordered chat-context prompts — see §13).
+`SessionListItem` may include: `session_id`, `team_id`, `title`, `updated_at`, `created_at`, `agent_instance_id`, `agent_display_name`, `context_prompt_ids` (ordered chat-context prompts - see §13).
 
 `SessionAttachmentSummary` is the dedicated persisted attachment projection for the
 managed chat drawer. Freeze it as:
@@ -552,6 +554,28 @@ Session attachment routes live under the existing session surface:
 - `DELETE /teams/{team_id}/sessions/{session_id}/attachments/{attachment_id}`
 
 It must not inline full message history.
+
+The single-session GET returns `SessionDetails`, extending `SessionListItem`
+with `agent_deleted` and optional `messages_url`. Team membership and session
+ownership are both required; unknown, foreign-team and foreign-owner IDs return
+404. List, create and update responses retain `SessionListItem`.
+
+`agent_display_name` is a nullable session snapshot captured at creation and
+refreshed to the latest instance name atomically at deletion, without advancing
+conversation activity dates. Session details prefer the live name while the agent
+exists; list consumers prefer the live catalog name and fall back to this snapshot.
+Creation captures routing and name in the insertion transaction using the same
+instance lock as deletion; a missing or foreign-team instance returns 404 without
+inserting a session. Inactive-conversation previews retain the name too. One
+migration backfills names from still-present agents; names deleted before that
+migration remain unavailable.
+
+History routing uses the session's captured runtime ID, with the current live
+instance as a fallback only for legacy sessions without that snapshot. The URL
+uses the configured browser ingress and never exposes an internal runtime
+address. No execution preparation or runtime catalog call is needed. Missing
+routing leaves history explicitly unavailable; it does not imply agent deletion.
+See the [managed-conversation lifecycle spec](../../../openspec/specs/managed-conversations/spec.md).
 
 #### 3.5.5 Admin observability requirements
 
@@ -2437,7 +2461,7 @@ client removed outright. The dedicated Activity surfaces (`/admin/tasks`,
 for this data; no replacement preset was added.
 
 **`top_agents_by_conversations` series carry their owning team (2026-09-03).**
-Agent instance names are not unique across teams, and the chart's previous
+Agent instance names are unique within a team but not across teams, and the chart's previous
 tie-breaker was a truncated instance id - unreadable in a cross-team ranking.
 Each series label is now `"<agent name> - <team name>"`, resolved through the
 same `TeamMetadataStore` lookup `top_teams_by_sessions` uses (now shared as
@@ -4203,7 +4227,8 @@ the audit event.
   stored under its canonical id (`personal` → `personal-<uid>`). A target where
   the template is not enabled fails; a failed target never stops the others.
   `display_name` is only accepted for a single target equal to the source
-  (Duplicate), otherwise 422.
+  (Duplicate), otherwise 422. A Duplicate under a taken name fails with
+  `error_code: "agent_name_conflict"` on its result (§60).
 
 **What a copy carries.** Name (kept when free in the destination, else the
 first free `<name>_imported-<n>`), description, template, tuning values and
@@ -4244,6 +4269,28 @@ where a picture renders: the bootstrap `current_user` and team admin summaries
 display-name cache, so a change shows on the next call; presigns of one batch
 run concurrently, at most 8 at a time. Never exported or logged. Full behavior:
 OpenSpec `user-profile-picture`.
+
+## 60. Contract Notes — agent names unique per team (2026-10-11, #3042)
+
+**Rule.** Two agents of one team or personal space cannot share a name. Names
+are compared after trimming and ignoring case; the same name stays free in
+another team. The request schemas trim `display_name`, and the database holds
+the unique index `uq_agent_instance_team_name` on
+`(team_id, lower(display_name))` (names are stored trimmed).
+
+**Refusals.** Create (`POST …/agent-instances`, JSON or with assets) and rename
+(`PATCH …/agent-instances/{id}`) under a taken name answer **409** with
+`detail = {"code": "agent_name_conflict", "message": …}`; a rename to the
+agent's own name in another case is accepted. A Duplicate reports the same
+code as `AgentCopyResult.error_code`. Create checks before any pod call.
+
+**Resolutions.** A copy to another team keeps `<name>_imported-<n>`, compared
+the same way, and retries once with the next free name if a concurrent copy
+took it. A platform import renames a conflicting agent the same way.
+
+**Upgrade.** Migration `a4d85307ea0e` trims every name and renames later
+duplicates `<name> (2)`, `<name> (3)`… in creation order (the oldest keeps its
+name) before creating the index. Full behavior: OpenSpec `agent-names`.
 
 ## 61. Contract Notes - patch-note announcements and activation history (2026-10-09)
 
@@ -4509,3 +4556,16 @@ references to the request's diagnostic context. Attachment persistence additiona
 binds attachment/document references after ownership validation. Generic completion
 uses a shared ASGI lifecycle event and never treats logging metadata as authority.
 See [observability §6/§7](../platform/OBSERVABILITY-AND-AUDIT.md).
+
+### 2026-10-10 — Included capabilities of agents without free selection
+
+`AgentTemplateSummary.available_capabilities` of a template with
+`supports_capabilities=False` lists the capabilities included with the agent
+(its defaults, filtered by the team's `can_use`). Agent create and update ignore
+a submitted `capability_ids` for such a template and take the template-default
+path of `_apply_capability_selection`: `selected_capability_ids` is the usable
+defaults, and each one's submitted or stored config is validated through the pod
+and persisted in `capability_config`, as for any capability (a 422 when no
+default is usable by the team, as for any template declaring defaults). Chat controls such
+as `document_scope.bound_library_ids` then follow from it. An instance saved
+earlier keeps `selected_capability_ids: []` until it is edited and saved.

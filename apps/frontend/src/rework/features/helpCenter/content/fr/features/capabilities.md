@@ -156,3 +156,8 @@ clic sur leur carte. La vue **Avancé** peut faire apparaître des capacités qu
 n'appartiennent à aucun pack — notamment des capacités d'administration
 réservées à des agents d'exploitation. Elles obéissent à la même règle que les
 autres : votre équipe ne les voit que si l'administrateur les lui a ouvertes.
+
+Certains agents, comme les agents à parcours guidé, viennent avec leurs
+capacités et ne proposent pas de packs. Le formulaire les liste sous **Inclus
+avec cet agent** : elles restent actives, et vous y réglez leurs options, par
+exemple pour lier l'agent à des bibliothèques précises.
