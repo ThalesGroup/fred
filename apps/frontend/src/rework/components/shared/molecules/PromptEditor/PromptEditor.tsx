@@ -24,7 +24,7 @@ import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { Annotation, Compartment, EditorState, Transaction } from "@codemirror/state";
-import { EditorView, keymap, placeholder as placeholderExtension } from "@codemirror/view";
+import { drawSelection, EditorView, keymap, placeholder as placeholderExtension } from "@codemirror/view";
 import { styleTags, tags } from "@lezer/highlight";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
@@ -127,6 +127,8 @@ export function PromptEditor({
           keymap.of([...defaultKeymap, ...historyKeymap]),
           markdown({ extensions: [listMarkerTag] }),
           EditorView.lineWrapping,
+          // Use the placeholder's text coordinates for the caret.
+          drawSelection(),
           syntaxHighlighting(promptHighlighting),
           placeholderRef.current.of(placeholder ? placeholderExtension(placeholder) : []),
           // The editing surface is a contenteditable, not a form control, so a

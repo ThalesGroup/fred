@@ -6615,4 +6615,3 @@ finds nothing when neither side selects anything. They used to send it on as no
 filter.
 This is a ceiling for one port; the
 general agent scope descriptor stays open in `CAPABILITY-SCOPE-CEILING-RFC.md`.
-
