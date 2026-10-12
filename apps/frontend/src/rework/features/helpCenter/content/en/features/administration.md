@@ -47,6 +47,7 @@ do not necessarily reach the same page.
   model, so never put confidential notes in them.
 - **User interface** — the default theme and the themes available to users.
 - **Announcements** — the banners and patch notes shown to users.
+- **Marketplaces** — who may publish agents to the marketplace, and how many.
 - **Analytics** — platform-wide usage indicators.
 - **Activity** — running work and its history.
 - **Self-test** and **Corpus audit** — the health checks.
@@ -133,6 +134,22 @@ a column title sorts the table. The **All**, **Activations** and
 choice is kept for next time. An automatic deactivation (when another patch
 note is activated) is listed under the administrator who did the activation.
 The history stays available after an announcement is deleted.
+
+## Marketplaces
+
+On the **Marketplaces** page, a **Platform admin** decides in which teams the
+editors may publish agents to the marketplace (see
+[Agents](/help/en/features/agents#the-agents-marketplace)):
+
+- a **Publishing** row: **Disabled** or **Enabled**, and how
+  many agents a team may publish (5 unless changed). Every team follows it,
+  including teams created later;
+- per team, **Off**, **Default** or **On**. Its **Max agents** follows the
+  default value; **Customize** gives it its own, with a way back to the default.
+
+Turning publishing off for a team removes its published agents from the
+marketplace; the confirmation states how many first. Lowering the max agents
+keeps the agents already published but blocks new publications.
 
 ## Who opens functions to your team
 

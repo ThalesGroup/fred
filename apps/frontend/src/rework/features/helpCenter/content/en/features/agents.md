@@ -133,8 +133,8 @@ be an Editor of the agent's own team.
 
 Each team gets its own agent, independent of the original: changing one does
 not change the other. Every editor of the team can use and adjust it right
-away. If the name is already taken, the copy gets a suffix, for example
-`Analyst_imported-1`.
+away. If the name is already taken, the copy is numbered, for example
+`Analyst (copy 1)`.
 
 **What is carried over**: the agent's name, description, instructions and
 settings.
@@ -160,3 +160,89 @@ Before you confirm, the window flags the teams that cannot receive everything:
   agent (hover the message for the list). You can still copy: the agent will
   work there without them, with its instructions intact. To get them, ask for
   them to be opened (see [Administration](/help/en/features/administration)).
+
+## The agents marketplace
+
+The **marketplace** (**Marketplace → Agents** in the sidebar) lists the agents
+teams have chosen to share with the whole organization. Anyone can browse it,
+search it, open an agent's card, like it and import a copy of it. The search
+also looks at team names. To see only one team's agents, click its name at the
+top of a card; remove the filter with the cross on the **Team** label under the
+search.
+
+### Who can publish
+
+Every **Editor** of the team can publish, once the platform administrator has
+enabled publishing for it (see
+[Teams and permissions](/help/en/features/teams-and-permissions)). An Editor
+finds **Publish to the marketplace** in the **⋮** menu of an agent card. The
+action is greyed out, with the reason, when:
+
+- the team is **private** — only public teams publish;
+- the team has reached the **number of published agents** the platform
+  administrator allows it;
+- the agent relies on an agent type reserved to platform administrators.
+
+Agents of your personal space are never published.
+
+### What publishing shares
+
+Publishing shares a **snapshot** of the agent: its name, description,
+instructions and settings, plus a copy of its configuration files, such as a
+PowerPoint template. Everyone in the organization can read that configuration,
+so check it before you confirm: a window recalls it and asks you to tick
+**I understand**.
+
+Choices that belong to your team are **not** shared: libraries, folders and
+documents picked for the agent are left out of the snapshot.
+
+### Published, then Modified
+
+Once published, the card shows **Published** at the bottom, with its likes and
+imports. Your team keeps using and editing the agent as usual. After a change,
+editors and the team admin see **Modified, not republished**: the
+marketplace still shows the previous version. An Editor who saves a change
+is offered to republish it straight away; **Ignore** keeps the previous
+version listed.
+
+### Removal from the marketplace
+
+An Editor or the team admin can take an agent down with **Remove from the
+marketplace** in the **⋮** menu. It stays in the team, unchanged.
+
+The agent is also removed **automatically** when:
+
+- it is deactivated, suspended or deleted;
+- the team becomes private;
+- the platform administrator turns publishing off for the team;
+- a platform administrator removes it, possibly with a message.
+
+After an automatic removal, the card shows **Removed from the marketplace**.
+Click it to see why, when, and the administrator's message if there is one.
+Editors and the team admin can **Hide** this notice for the whole team.
+Publishing the agent again puts it back on the marketplace.
+
+### Likes
+
+Click the heart of a marketplace card to like an agent, even one of your own
+team; click again to take your like back. The card shows the total. An agent's
+card in detail also tells how many likes it received **since its last
+update**, so you know whether the current version is the one people
+appreciated. Likes and imports are kept when an agent is removed and later
+published again.
+
+### Import a copy
+
+**Import** (on the card or in the agent's detail) copies the agent into your
+personal space or into teams where you are an **Editor**. The team that
+published it is not offered. Before you confirm, each team shows what the
+agent would lose there, for instance a capability the team does not have; a
+team without access to the agent type cannot be picked.
+
+**Your copy is independent**: later updates made by the publishing team do
+not reach it, and your changes do not reach them. If the name is already
+taken, the copy is numbered, for example `Analyst (copy 1)`.
+
+Once imported, the window lists, per team, what to set up again there:
+libraries, documents and folders the agent should use, and anything a
+capability asks you to redo.

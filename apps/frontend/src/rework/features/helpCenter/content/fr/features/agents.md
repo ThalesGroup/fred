@@ -144,7 +144,7 @@ un ou plusieurs espaces : votre espace personnel et les équipes où vous êtes
 Chaque équipe reçoit son propre agent, indépendant de l'original : les
 modifications de l'un ne touchent pas l'autre. Tous les éditeurs de l'équipe
 peuvent l'utiliser et le régler aussitôt. Si le nom est déjà pris, la copie
-reçoit un suffixe, par exemple `Analyste_imported-1`.
+est numérotée, par exemple `Analyste (copie 1)`.
 
 **Ce qui est repris** : le nom, la description, les instructions et les
 réglages de l'agent.
@@ -173,3 +173,94 @@ recevoir :
   y fonctionnera sans elles, avec ses instructions intactes. Pour les obtenir,
   demandez leur ouverture (voir
   [Administration](/help/fr/features/administration)).
+
+## La marketplace des agents
+
+La **marketplace** (**Marketplace → Agents** dans la barre latérale) réunit
+les agents que des équipes ont choisi de partager avec toute l'organisation.
+Chacun peut la parcourir, y chercher, ouvrir la fiche d'un agent, l'aimer et
+en importer une copie. La recherche porte aussi sur le nom des équipes. Pour
+ne voir que les agents d'une équipe, cliquez sur son nom en haut d'une carte ;
+retirez le filtre avec la croix de l'étiquette **Équipe** sous la recherche.
+
+### Qui peut publier
+
+Tout **Éditeur** de l'équipe peut publier, une fois la publication activée pour
+elle par l'administrateur de la plateforme (voir
+[Équipes et droits](/help/fr/features/teams-and-permissions)). Un
+Éditeur trouve **Publier sur la marketplace** dans le menu **⋮** de la carte
+d'un agent. L'action est grisée, avec la raison, quand :
+
+- l'équipe est **privée** — seules les équipes publiques publient ;
+- l'équipe a atteint le **nombre d'agents publiés** que l'administrateur de la
+  plateforme lui accorde ;
+- l'agent repose sur un type d'agent réservé aux administrateurs de la
+  plateforme.
+
+Les agents de votre espace personnel ne sont jamais publiés.
+
+### Ce que la publication partage
+
+Publier partage un **instantané** de l'agent : son nom, sa description, ses
+instructions et ses réglages, ainsi qu'une copie de ses fichiers de
+configuration, comme un modèle PowerPoint. Toute l'organisation peut lire
+cette configuration : relisez-la avant de valider. Une fenêtre vous le
+rappelle et vous demande de cocher **J'ai compris**.
+
+Les choix propres à votre équipe ne sont **pas** partagés : les bibliothèques,
+dossiers et documents choisis pour l'agent restent en dehors de l'instantané.
+
+### Publié, puis Modifié
+
+Une fois publié, la carte affiche **Publié** en bas, avec ses j'aime et ses
+imports. Votre équipe continue d'utiliser et de modifier l'agent comme
+d'habitude. Après une modification, les éditeurs et l'admin de l'équipe voient
+**Modifié, non republié** : la marketplace montre encore la version
+précédente. Un Éditeur qui enregistre une modification se voit
+proposer de le republier aussitôt ; **Ignorer** laisse la version précédente
+en ligne.
+
+### Retrait de la marketplace
+
+Un Éditeur ou l'admin de l'équipe peut retirer un agent avec **Retirer de la
+marketplace** dans le menu **⋮**. Il reste dans l'équipe, inchangé.
+
+L'agent est aussi retiré **automatiquement** quand :
+
+- il est désactivé, suspendu ou supprimé ;
+- l'équipe devient privée ;
+- l'administrateur de la plateforme désactive la publication pour l'équipe ;
+- un administrateur de la plateforme le retire, éventuellement avec un
+  message.
+
+Après un retrait automatique, la carte affiche **Retiré de la marketplace**.
+Cliquez dessus pour voir pourquoi, quand, et le message de l'administrateur
+s'il y en a un. Les éditeurs et l'admin de l'équipe peuvent **Masquer** cette
+mention pour toute l'équipe. Publier l'agent à nouveau le remet dans la
+marketplace.
+
+### Les j'aime
+
+Cliquez sur le cœur d'une carte de la marketplace pour aimer un agent, même
+un agent de votre équipe ; cliquez à nouveau pour retirer votre j'aime. La
+carte affiche le total. La fiche de l'agent indique aussi combien de j'aime il
+a reçus **depuis sa dernière mise à jour** : vous savez ainsi si la version
+actuelle est celle qui a plu. Les j'aime et les imports sont conservés quand
+un agent est retiré puis publié à nouveau.
+
+### Importer une copie
+
+**Importer** (sur la carte ou dans la fiche de l'agent) copie l'agent dans
+votre espace personnel ou dans les équipes où vous êtes **Éditeur**. L'équipe
+qui l'a publié n'est pas proposée. Avant de valider, chaque équipe indique ce
+que l'agent y perdrait, par exemple une capacité dont elle ne dispose pas ;
+une équipe sans accès au type d'agent ne peut pas être choisie.
+
+**Votre copie est indépendante** : les mises à jour faites ensuite par
+l'équipe qui publie ne lui parviennent pas, et vos modifications ne leur
+parviennent pas non plus. Si le nom est déjà pris, la copie est numérotée,
+par exemple `Analyste (copie 1)`.
+
+Une fois l'import fait, la fenêtre liste, pour chaque équipe, ce qu'il faut y
+régler à nouveau : les bibliothèques, documents et dossiers que l'agent doit
+utiliser, et ce qu'une capacité vous demande de refaire.
