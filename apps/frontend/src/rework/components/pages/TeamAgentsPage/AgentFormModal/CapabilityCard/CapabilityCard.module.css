@@ -41,6 +41,15 @@
   box-shadow: inset 0 0 0 100vmax var(--state-on-surface-hover);
 }
 
+/* An included capability has no switch: nothing to click, no state layer. */
+.headerStatic {
+  cursor: default;
+}
+
+.headerStatic:hover {
+  box-shadow: none;
+}
+
 .meta {
   display: flex;
   flex: 1;

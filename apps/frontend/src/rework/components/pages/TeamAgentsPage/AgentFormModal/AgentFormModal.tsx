@@ -118,6 +118,17 @@ function advertisedCapabilityIds(template: AgentTemplateSummary | undefined): Se
 }
 
 /**
+ * The capabilities a save activates: the ticked ones the template advertises,
+ * or, for a template without free selection, every capability included with
+ * it (the backend ignores a selection there, so the form never offers one).
+ */
+function activeCapabilityIds(selectedIds: string[], template: AgentTemplateSummary | undefined): string[] {
+  const advertised = advertisedCapabilityIds(template);
+  if (template?.supports_capabilities === false) return [...advertised];
+  return selectedIds.filter((id) => advertised.has(id));
+}
+
+/**
  * The capabilities a NEW instance of `template` starts with ticked: its
  * declared defaults, narrowed to what it advertises to this team.
  *
@@ -173,11 +184,11 @@ export function buildAgentFormSubmitPayload(
   form: FormState,
   selectedTemplate: AgentTemplateSummary | undefined,
 ): AgentFormPayload {
-  // Only active capabilities are advertised by the template; drop selections and
-  // config slices for ids the template no longer exposes, and for capabilities
-  // that are not currently ticked, so deselected config never reaches the pod.
+  // Drop selections and config slices for ids the template no longer exposes,
+  // and for capabilities that are not active, so deselected config never
+  // reaches the pod.
   const availableCapabilityIds = advertisedCapabilityIds(selectedTemplate);
-  const effectiveCapabilityIds = form.selectedCapabilityIds.filter((id) => availableCapabilityIds.has(id));
+  const effectiveCapabilityIds = activeCapabilityIds(form.selectedCapabilityIds, selectedTemplate);
   const effectiveCapabilityConfig = Object.fromEntries(
     Object.entries(form.capabilityConfigValues).filter(([id]) => effectiveCapabilityIds.includes(id)),
   );
@@ -237,8 +248,11 @@ export function withReasoning(
 }
 
 /** Save-blocking problems reported by config widgets. Only ACTIVE capabilities count. */
-function isCapabilityBlocked(form: Pick<FormState, "selectedCapabilityIds" | "capabilityBlockingErrors">): boolean {
-  return form.selectedCapabilityIds.some((id) => !!form.capabilityBlockingErrors[id]);
+function isCapabilityBlocked(
+  form: Pick<FormState, "selectedCapabilityIds" | "capabilityBlockingErrors">,
+  template: AgentTemplateSummary | undefined,
+): boolean {
+  return activeCapabilityIds(form.selectedCapabilityIds, template).some((id) => !!form.capabilityBlockingErrors[id]);
 }
 
 const NO_NAMES: ReadonlySet<string> = new Set();
@@ -405,7 +419,7 @@ export default function AgentFormModal({
   );
   // A capability config widget may block the save (e.g. ppt_filler while its
   // mandatory template is missing, #1903) — only ACTIVE capabilities count.
-  const capabilityBlocked = isCapabilityBlocked(form);
+  const capabilityBlocked = isCapabilityBlocked(form, selectedTemplate);
   const nameTaken = nameChecked && isAgentNameTaken(form.displayName, takenNames);
   const isFormValid =
     !!form.templateId &&

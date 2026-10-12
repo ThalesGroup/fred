@@ -57,6 +57,7 @@ from fred_sdk.contracts.capability import (
     ToolCarrierMiddleware,
 )
 from fred_sdk.contracts.capability.mcp import McpCapability, McpPromptGroup
+from fred_sdk.contracts.models import DocumentScopeControlParams
 from fred_sdk.contracts.runtime import RuntimeServices
 from langchain.agents.middleware import AgentMiddleware
 from langchain_core.tools import BaseTool
@@ -196,6 +197,36 @@ def evaluate_chat_controls_batch(
             for item in request.items
         ]
     )
+
+
+def resolve_bound_library_ids(
+    registry: CapabilityRegistry,
+    *,
+    capability_ids: Iterable[str],
+    capability_config: Mapping[str, StoredCapabilityConfig | Mapping[str, Any]],
+) -> list[str] | None:
+    """
+    The libraries one agent instance's active capabilities pin it to, or None.
+
+    Read from each capability's own `document_scope` chat control, the
+    descriptor the composer locks its library picker from, so the server-side
+    ceiling and the chat UI share one definition of "bound".
+    """
+
+    bound: dict[str, None] = {}
+    for cap_id in capability_ids:
+        result = evaluate_capability_chat_controls(
+            registry,
+            capability_id=cap_id,
+            config_envelope=capability_config.get(cap_id),
+        )
+        for control in result.controls:
+            if control.widget != "document_scope":
+                continue
+            params = DocumentScopeControlParams.model_validate(control.params or {})
+            for library_id in params.bound_library_ids or ():
+                bound.setdefault(library_id, None)
+    return list(bound) or None
 
 
 def validate_turn_options(

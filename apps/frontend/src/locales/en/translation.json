@@ -2770,7 +2770,11 @@
             "documentProduction": "Document production",
             "intelligenceOrchestration": "Intelligence and orchestration"
           },
-          "notSupported": "This agent does not support capability selection.",
+          "builtIn": {
+            "section": "Included with this agent",
+            "badge": "Included",
+            "none": "This agent has no capabilities to configure."
+          },
           "packs": {
             "attachments": {
               "title": "Attachments",

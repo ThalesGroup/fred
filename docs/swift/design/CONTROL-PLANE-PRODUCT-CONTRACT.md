@@ -4480,3 +4480,17 @@ references to the request's diagnostic context. Attachment persistence additiona
 binds attachment/document references after ownership validation. Generic completion
 uses a shared ASGI lifecycle event and never treats logging metadata as authority.
 See [observability §6/§7](../platform/OBSERVABILITY-AND-AUDIT.md).
+
+### 2026-10-10 — Included capabilities of agents without free selection
+
+`AgentTemplateSummary.available_capabilities` of a template with
+`supports_capabilities=False` lists the capabilities included with the agent
+(its defaults, filtered by the team's `can_use`). Agent create and update ignore
+a submitted `capability_ids` for such a template and take the template-default
+path of `_apply_capability_selection`: `selected_capability_ids` is the usable
+defaults, and each one's submitted or stored config is validated through the pod
+and persisted in `capability_config`, as for any capability (a 422 when no
+default is usable by the team, as for any template declaring defaults). Chat controls such
+as `document_scope.bound_library_ids` then follow from it. An instance saved
+earlier keeps `selected_capability_ids: []` until it is edited and saved.
+

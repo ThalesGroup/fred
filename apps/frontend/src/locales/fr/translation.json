@@ -2770,7 +2770,11 @@
             "documentProduction": "Production de documents",
             "intelligenceOrchestration": "Intelligence et orchestration"
           },
-          "notSupported": "Cet agent ne prend pas en charge la sélection de capacités.",
+          "builtIn": {
+            "section": "Inclus avec cet agent",
+            "badge": "Incluse",
+            "none": "Cet agent n'a aucune capacité à configurer."
+          },
           "packs": {
             "attachments": {
               "title": "Pièces jointes",
