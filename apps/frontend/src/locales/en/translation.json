@@ -3687,7 +3687,8 @@
         "invalidCondition": "Invalid condition. Check its field and value.",
         "empty": "No conditions yet. Add a condition to choose a field from your account.",
         "saving": "Saving...",
-        "unsaved": "Unsaved changes"
+        "unsaved": "Unsaved changes",
+        "conditions": "Conditions"
       },
       "picker": {
         "choose": "Choose an account field",

@@ -68,7 +68,7 @@ const button = (name: string) =>
   )!;
 const input = (label: string) =>
   [...host.querySelectorAll("input")].find(
-    (node) => node.labels?.[0]?.textContent === `rework.platformAccess.rule.${label}`,
+    (node) => node.getAttribute("aria-label") === `rework.platformAccess.rule.${label}`,
   )!;
 const change = (node: HTMLInputElement, value: string) =>
   act(() => {
@@ -269,6 +269,59 @@ it("groups test, discard and save in one row with the save state beside the butt
   await act(async () => button("save").click());
   expect(status.textContent).toBe("rework.platformAccess.rule.saved");
   expect(host.textContent?.split("rework.platformAccess.rule.saved")).toHaveLength(2);
+});
+
+it("keeps the add button in the conditions header, before the list", () => {
+  render();
+  const header = host.querySelector(`.${styles.conditionsHeader}`)!;
+  expect(header.textContent).toContain("rework.platformAccess.rule.conditions");
+  expect(header.contains(button("addCondition"))).toBe(true);
+  expect(
+    header.compareDocumentPosition(host.querySelector("fieldset")!) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  act(() => button("addCondition").click());
+  confirmField();
+  valuePrompt(true);
+  expect(host.querySelectorAll("fieldset")).toHaveLength(2);
+  expect(header.contains(button("addCondition"))).toBe(true);
+  expect(header.querySelector('[role="radiogroup"]')).not.toBeNull();
+});
+
+it("lays each condition out as one row under a single heading line and names every control", () => {
+  render();
+  const [labels, row] = host.querySelectorAll<HTMLElement>(`.${styles.conditionRow}`);
+  expect(labels.getAttribute("aria-hidden")).toBe("true");
+  expect(labels.children).toHaveLength(6);
+  expect(row.children).toHaveLength(6);
+  expect(row.closest("fieldset")?.querySelector("legend")?.textContent).toBe("rework.platformAccess.rule.condition 1");
+  expect(row.querySelector('button[aria-haspopup="listbox"]')?.getAttribute("aria-label")).toBe(
+    "rework.platformAccess.rule.operator",
+  );
+  expect(input("value")).toBeDefined();
+  expect(row.querySelector('input[type="checkbox"]')?.getAttribute("aria-label")).toBe(
+    "rework.platformAccess.rule.caseSensitiveCondition 1",
+  );
+  expect(row.querySelector('button[aria-label="rework.platformAccess.rule.removeConditionNumber 1"]')).not.toBeNull();
+});
+
+it("keeps the regex hint and the test result inside the condition block", async () => {
+  state.policy!.conditions[0].operator = "regex";
+  render();
+  await act(async () => button("test").click());
+  const block = host.querySelector("fieldset")!;
+  expect(block.textContent).toContain("rework.platformAccess.rule.regexHint");
+  expect(block.textContent).toContain("rework.platformAccess.rule.result.missing");
+});
+
+it("shows the picked field in the picker's action bar, beside its buttons", () => {
+  const dialog = openPicker();
+  const chip = dialog.querySelector('code[aria-live="polite"]')!;
+  expect(chip.textContent).toBe("rework.platformAccess.picker.noSelection");
+  expect(chip.closest('[role="region"]')).toBeNull();
+  const confirm = pickerButton(dialog, "rework.platformAccess.picker.useField")!;
+  expect(chip.parentElement?.parentElement?.parentElement?.contains(confirm)).toBe(true);
+  act(() => pickerButton(dialog, '"department"')!.click());
+  expect(chip.textContent).toBe("department");
 });
 
 it("labels the case switch with its visible text", () => {

@@ -52,6 +52,8 @@ export default function PlatformAccessRuleEditor({
   const [preview] = usePreviewPlatformPolicyMutation();
   const [save] = useSavePlatformPolicyMutation();
   const generation = useRef(0);
+  const conditionList = useRef<HTMLDivElement>(null);
+  const revealLast = useRef(false);
   const [draft, setDraft] = useState(() => copyPolicy(state.policy));
   const [revision, setRevision] = useState(state.revision);
   const [dirty, setDirty] = useState(false);
@@ -86,6 +88,13 @@ export default function PlatformAccessRuleEditor({
       setRevision(state.revision);
     }
   }, [state, dirty, revision, picking, selection]);
+
+  // The add button sits above the list, so a new condition is brought into view at its end.
+  useEffect(() => {
+    if (!revealLast.current) return;
+    revealLast.current = false;
+    conditionList.current?.lastElementChild?.scrollIntoView?.({ block: "nearest" });
+  }, [draft.conditions.length]);
 
   const edit = (policy: PlatformAccessPolicy) => {
     generation.current += 1;
@@ -188,6 +197,7 @@ export default function PlatformAccessRuleEditor({
   return (
     <section className={styles.ruleEditor}>
       <Select
+        compact
         label={t("rework.platformAccess.rule.mode")}
         size="small"
         value={draft.mode ?? "allow"}
@@ -199,9 +209,9 @@ export default function PlatformAccessRuleEditor({
         }))}
         onChange={(mode) => edit({ ...draft, mode: mode === "block" ? "block" : "allow" })}
       />
-      {draft.conditions.length > 1 && (
-        <div className={styles.row}>
-          <span>{t("rework.platformAccess.rule.combination")}</span>
+      <div className={styles.conditionsHeader}>
+        <h3>{t("rework.platformAccess.rule.conditions")}</h3>
+        {draft.conditions.length > 1 && (
           <ButtonGroup
             size="small"
             color="secondary"
@@ -214,98 +224,7 @@ export default function PlatformAccessRuleEditor({
               disabled: locked,
             }))}
           />
-        </div>
-      )}
-      {draft.conditions.map((condition, index) => {
-        const selectedField = condition.claim.some(Boolean)
-          ? condition.claim.length === 1
-            ? condition.claim[0]
-            : condition.claim.map((key) => JSON.stringify(key)).join(" > ")
-          : t("rework.platformAccess.picker.choose");
-        const maxLength = condition.operator === "regex" ? 2048 : 1024;
-        const showCounter = condition.value.length >= maxLength * 0.9;
-        const conditionLabel = t("rework.platformAccess.rule.condition", { number: index + 1 });
-        return (
-          <fieldset className={styles.condition} key={index} disabled={locked}>
-            <legend className={styles.screenReaderOnly}>{conditionLabel}</legend>
-            <div className={styles.conditionHeader}>
-              <span aria-hidden="true">{conditionLabel}</span>
-              {
-                <Tooltip text={t("rework.platformAccess.rule.removeConditionNumber", { number: index + 1 })}>
-                  <IconButton
-                    variant="icon"
-                    size="small"
-                    icon={{ category: "outlined", type: "delete" }}
-                    disabled={locked}
-                    aria-label={t("rework.platformAccess.rule.removeConditionNumber", { number: index + 1 })}
-                    onClick={() => edit({ ...draft, conditions: draft.conditions.filter((_, i) => i !== index) })}
-                  />
-                </Tooltip>
-              }
-            </div>
-            <div className={styles.conditionGrid}>
-              <div className={styles.accountField}>
-                <span>{t("rework.platformAccess.rule.accountField")}</span>
-                <button
-                  type="button"
-                  disabled={locked}
-                  className={styles.fieldChoice}
-                  aria-label={`${t("rework.platformAccess.rule.accountField")}: ${selectedField}`}
-                  aria-haspopup="dialog"
-                  onClick={() => setPicking(index)}
-                >
-                  <code className={styles.fieldName} title={selectedField}>
-                    {selectedField}
-                  </code>
-                  <Icon category="outlined" type="edit" />
-                </button>
-              </div>
-              <Select
-                size="small"
-                label={t("rework.platformAccess.rule.operator")}
-                disabled={locked}
-                value={condition.operator}
-                options={operators.map((operator) => ({
-                  key: operator,
-                  value: operator,
-                  label: t(`rework.platformAccess.rule.operatorLabel.${operator}`),
-                }))}
-                onChange={(operator) => updateCondition(index, { operator })}
-              />
-              <TextInput
-                size="small"
-                compact={!conditionErrors[index] && !showCounter}
-                showCharacterCount={showCounter}
-                label={t(
-                  condition.operator === "regex"
-                    ? "rework.platformAccess.rule.regex"
-                    : "rework.platformAccess.rule.value",
-                )}
-                value={condition.value}
-                error={conditionErrors[index]}
-                maxLength={maxLength}
-                disabled={locked}
-                onChange={(event) => updateCondition(index, { value: event.target.value })}
-              />
-            </div>
-            {condition.operator === "regex" && <p>{t("rework.platformAccess.rule.regexHint")}</p>}
-            <div className={styles.row}>
-              <Switch
-                id={`${fieldId}-case-${index}`}
-                size="small"
-                checked={condition.case_sensitive ?? false}
-                disabled={locked}
-                aria-label={t("rework.platformAccess.rule.caseSensitiveCondition", { number: index + 1 })}
-                onChange={(event) => updateCondition(index, { case_sensitive: event.target.checked })}
-              />
-              <label htmlFor={`${fieldId}-case-${index}`}>{t("rework.platformAccess.rule.caseSensitive")}</label>
-            </div>
-            {result && <p>{t(`rework.platformAccess.rule.result.${result.conditions[index]}`)}</p>}
-          </fieldset>
-        );
-      })}
-      {!draft.conditions.length && <p>{t("rework.platformAccess.rule.empty")}</p>}
-      <div className={styles.row}>
+        )}
         <Button
           color="primary"
           variant="outlined"
@@ -316,6 +235,113 @@ export default function PlatformAccessRuleEditor({
           {t("rework.platformAccess.rule.addCondition")}
         </Button>
       </div>
+      {draft.conditions.length > 0 && (
+        <div className={styles.conditions} ref={conditionList}>
+          {/* Visual column headings only: each control carries its own accessible name. */}
+          <div className={`${styles.conditionRow} ${styles.conditionLabels}`} aria-hidden="true">
+            <span />
+            <span>{t("rework.platformAccess.rule.accountField")}</span>
+            <span>{t("rework.platformAccess.rule.operator")}</span>
+            <span>{t("rework.platformAccess.rule.value")}</span>
+            <span>{t("rework.platformAccess.rule.caseSensitive")}</span>
+            <span />
+          </div>
+          {draft.conditions.map((condition, index) => {
+            const selectedField = condition.claim.some(Boolean)
+              ? condition.claim.length === 1
+                ? condition.claim[0]
+                : condition.claim.map((key) => JSON.stringify(key)).join(" > ")
+              : t("rework.platformAccess.picker.choose");
+            const maxLength = condition.operator === "regex" ? 2048 : 1024;
+            const showCounter = condition.value.length >= maxLength * 0.9;
+            const conditionLabel = t("rework.platformAccess.rule.condition", { number: index + 1 });
+            const valueLabel = t(
+              condition.operator === "regex" ? "rework.platformAccess.rule.regex" : "rework.platformAccess.rule.value",
+            );
+            return (
+              <fieldset className={styles.condition} key={index} disabled={locked}>
+                <legend className={styles.screenReaderOnly}>{conditionLabel}</legend>
+                <div className={styles.conditionRow}>
+                  <span className={styles.conditionNumber} aria-hidden="true">
+                    {index + 1}
+                  </span>
+                  <div className={styles.conditionCell}>
+                    <span aria-hidden="true">{t("rework.platformAccess.rule.accountField")}</span>
+                    <button
+                      type="button"
+                      disabled={locked}
+                      className={styles.fieldChoice}
+                      aria-label={`${t("rework.platformAccess.rule.accountField")}: ${selectedField}`}
+                      aria-haspopup="dialog"
+                      onClick={() => setPicking(index)}
+                    >
+                      <code className={styles.fieldName} title={selectedField}>
+                        {selectedField}
+                      </code>
+                      <Icon category="outlined" type="edit" />
+                    </button>
+                  </div>
+                  <div className={styles.conditionCell}>
+                    <span aria-hidden="true">{t("rework.platformAccess.rule.operator")}</span>
+                    <Select
+                      compact
+                      size="xs"
+                      ariaLabel={t("rework.platformAccess.rule.operator")}
+                      disabled={locked}
+                      value={condition.operator}
+                      options={operators.map((operator) => ({
+                        key: operator,
+                        value: operator,
+                        label: t(`rework.platformAccess.rule.operatorLabel.${operator}`),
+                      }))}
+                      onChange={(operator) => updateCondition(index, { operator })}
+                    />
+                  </div>
+                  <div className={styles.conditionCell}>
+                    <span aria-hidden="true">{valueLabel}</span>
+                    <TextInput
+                      size="xs"
+                      compact={!conditionErrors[index] && !showCounter}
+                      showCharacterCount={showCounter}
+                      aria-label={valueLabel}
+                      value={condition.value}
+                      error={conditionErrors[index]}
+                      maxLength={maxLength}
+                      disabled={locked}
+                      onChange={(event) => updateCondition(index, { value: event.target.value })}
+                    />
+                  </div>
+                  <div className={`${styles.conditionCell} ${styles.conditionToggle}`}>
+                    <label htmlFor={`${fieldId}-case-${index}`}>{t("rework.platformAccess.rule.caseSensitive")}</label>
+                    <Switch
+                      id={`${fieldId}-case-${index}`}
+                      size="small"
+                      checked={condition.case_sensitive ?? false}
+                      disabled={locked}
+                      aria-label={t("rework.platformAccess.rule.caseSensitiveCondition", { number: index + 1 })}
+                      onChange={(event) => updateCondition(index, { case_sensitive: event.target.checked })}
+                    />
+                  </div>
+                  <Tooltip text={t("rework.platformAccess.rule.removeConditionNumber", { number: index + 1 })}>
+                    <IconButton
+                      color="on-surface-retreat"
+                      variant="icon"
+                      size="small"
+                      icon={{ category: "outlined", type: "delete" }}
+                      disabled={locked}
+                      aria-label={t("rework.platformAccess.rule.removeConditionNumber", { number: index + 1 })}
+                      onClick={() => edit({ ...draft, conditions: draft.conditions.filter((_, i) => i !== index) })}
+                    />
+                  </Tooltip>
+                </div>
+                {condition.operator === "regex" && <p>{t("rework.platformAccess.rule.regexHint")}</p>}
+                {result && <p>{t(`rework.platformAccess.rule.result.${result.conditions[index]}`)}</p>}
+              </fieldset>
+            );
+          })}
+        </div>
+      )}
+      {!draft.conditions.length && <p>{t("rework.platformAccess.rule.empty")}</p>}
       <div className={`${styles.row} ${styles.ruleActions}`}>
         <Button color="primary" variant="outlined" size="small" disabled={locked || !valid} onClick={() => void test()}>
           {t("rework.platformAccess.rule.test")}
@@ -365,9 +391,10 @@ export default function PlatformAccessRuleEditor({
           onClose={() => setPicking(undefined)}
           onSelect={(claim) => {
             const index = picking === "add" ? draft.conditions.length : picking;
-            if (picking === "add")
+            if (picking === "add") {
+              revealLast.current = true;
               edit({ ...draft, conditions: [...draft.conditions, { ...emptyCondition(), claim }] });
-            else updateCondition(picking, { claim });
+            } else updateCondition(picking, { claim });
             setSelection(index);
             setPicking(undefined);
           }}
