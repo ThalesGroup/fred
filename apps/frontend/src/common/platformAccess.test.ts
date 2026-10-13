@@ -12,9 +12,9 @@ import {
 beforeEach(() => window.history.replaceState({}, "", "/fred/home"));
 describe("platform admission routes", () => {
   it("uses the configured basename and recognizes standalone paths", () => {
-    expect(platformPath("/join-free/token")).toBe("/fred/join-free/token");
+    expect(platformPath("/join/token")).toBe("/fred/join/token");
     expect(isPlatformAccessStandalone()).toBe(false);
-    window.history.replaceState({}, "", "/fred/join-free/token");
+    window.history.replaceState({}, "", "/fred/join/token");
     expect(isPlatformAccessStandalone()).toBe(true);
   });
   it.each([

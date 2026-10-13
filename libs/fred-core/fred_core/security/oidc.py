@@ -51,10 +51,6 @@ from fred_core.security.structure import (
     UserSecurity,
     is_service_agent,
 )
-from fred_core.security.whitelist_access_control.access_control import (
-    is_principal_whitelisted,
-    is_whitelist_active,
-)
 
 from ..users.store import BaseUserStore
 from ..users.store.postgres_user_store import get_user_store
@@ -857,9 +853,6 @@ async def resolve_request_principal(
         if not pure_workload_mount:
             await require_active_subject(subject)
         await enforce_platform_access(subject)
-    if is_whitelist_active() and not is_principal_whitelisted(subject):
-        logger.warning("[AUTH] Request subject is not in the whitelist")
-        raise HTTPException(status_code=403, detail="user_not_whitelisted")
     request.state.principal_context = PrincipalContext(caller=caller, subject=subject)
     if isinstance(subject, AssertedUser):
         admit_delegated_log_context(

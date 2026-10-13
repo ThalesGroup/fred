@@ -647,10 +647,6 @@
       "arguments": "Arguments:"
     }
   },
-  "comingSoon": {
-    "description": "Empowering your daily work through this innovation platform: gain clarity and make smarter decisions. A new service tailored to support your daily tasks and address your operational needs.",
-    "title": "{{siteDisplayName}} is coming soon."
-  },
   "common": {
     "cancel": "Cancel",
     "close": "Close",
@@ -3637,13 +3633,14 @@
       "invalidLink": "This link cannot be used. It may be expired, revoked or suspended, or the service is unavailable.",
       "loading": "Loading...",
       "source": {
+        "admin": "Platform administrator",
         "attribute": "Identity attribute",
         "manual": "Manual exception",
         "t0": "Initial import",
         "team": "Authorized team",
         "free": "Link access"
       },
-      "actorLockout": "First grant yourself another admission source before enabling filtering or removing your last authorization.",
+      "actorLockout": "This change would remove your last admission source.",
       "rule": {
         "title": "Admission rule",
         "hint": "Individual exceptions and authorized teams always allow access.",
@@ -3729,7 +3726,8 @@
       "links": {
         "manage": "Manage links",
         "title": "Invitations for {{team}}",
-        "hint": "Share links manually. Accesses count page openings after sign-in.",
+        "hint": "Share links manually. Accesses count page openings after sign-in; Joined users lists successful enrollments.",
+        "suspendedHint": "Link access is disabled for this team. Valid invitation links are suspended until it is enabled again.",
         "note": "Note (optional)",
         "expiry": "Expiration (optional)",
         "expiryDate": "Expiration date",
@@ -3740,10 +3738,16 @@
         },
         "futureExpiry": "Choose a future date and time.",
         "never": "No expiration",
-        "untitled": "No note",
         "created": "Created",
         "statusLabel": "Status",
         "openings": "Accesses",
+        "joiners": "Joined users",
+        "deletedUser": "Deleted",
+        "joinersTitle": "Joined through {{note}}",
+        "joinedAt": "Joined at",
+        "noJoiners": "No joins recorded since tracking began.",
+        "username": "Username",
+        "joinersFailed": "Could not load the people who joined through this link.",
         "actions": "Actions",
         "revoke": "Revoke",
         "revokeTitle": "Revoke this invitation?",

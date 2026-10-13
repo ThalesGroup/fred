@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import Button, { type ButtonProps } from "../../atoms/Button/Button";
 import { type ColorTheme } from "../../utils/Type";
 import { isTopmostModal, Portal, uiPortalRoot } from "../../utils/Portal";
@@ -129,7 +129,7 @@ export function DialogPrimitive({
     (firstControl ?? node).focus();
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open) return;
     openingFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const originRoot = uiPortalRoot(originRef.current);
