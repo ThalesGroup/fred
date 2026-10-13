@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup";
 import { useTranslation } from "react-i18next";
 import { normalizeApiError } from "@core/errors/normalizeApiError";
@@ -35,7 +35,7 @@ const whitelistTabs = ["users", "teams"] as const;
 
 export default function PlatformAccessPage() {
   const { t } = useTranslation();
-  const { showError } = useToast();
+  const { showError, showSuccess } = useToast();
   const enabled = getConfig()?.platform_access_enabled ?? false;
   const [tabIndex, setTabIndex] = useState(0);
   const [whitelistTabIndex, setWhitelistTabIndex] = useState(0);
@@ -46,9 +46,22 @@ export default function PlatformAccessPage() {
   const [busy, setBusy] = useState(false);
   const [filterConfirmation, setFilterConfirmation] = useState<boolean>();
   const state = usePlatformAccessStateQuery(undefined, { skip: !enabled });
-  const searchQuery = query.trim();
-  const searching = enabled && searchQuery.length > 0;
-  const users = usePlatformAccessUsersQuery({ offset, limit: 25, query: searchQuery }, { skip: !searching });
+  const [searchQuery, setSearchQuery] = useState("");
+  // Typing narrows a server-paginated list of every known user: wait for a pause, then restart at page one.
+  useEffect(() => {
+    const next = query.trim();
+    if (next === searchQuery) return;
+    const timer = setTimeout(() => {
+      setSearchQuery(next);
+      setOffset(0);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [query, searchQuery]);
+  const usersShown = enabled && tabIndex === 1 && whitelistTabIndex === 0;
+  const users = usePlatformAccessUsersQuery({ offset, limit: 25, query: searchQuery }, { skip: !usersShown });
+  // Rows of another page or search are never shown; the total keeps the pagination in place meanwhile.
+  const userRows = users.isError ? undefined : users.currentData?.items;
+  const userTotal = users.isError ? 0 : (users.currentData?.total ?? users.data?.total ?? 0);
   const t0 = usePlatformAccessT0Query(undefined, { skip: !enabled });
   const teams = usePlatformAccessTeamsQuery(undefined, { skip: !enabled });
   const [filter] = useSetPlatformFilteringMutation();
@@ -117,7 +130,7 @@ export default function PlatformAccessPage() {
         <p>{t("rework.platformAccess.disabled")}</p>
       ) : (
         <>
-          {(state.isError || (searching && users.isError) || teams.isError || t0.isError) && (
+          {(state.isError || (usersShown && users.isError) || teams.isError || t0.isError) && (
             <p role="alert">{t("rework.platformAccess.failed")}</p>
           )}
           <div className={styles.navigation}>
@@ -191,10 +204,7 @@ export default function PlatformAccessPage() {
                     placeholder={t("rework.platformAccess.search")}
                     ariaLabel={t("rework.platformAccess.search")}
                     clearAriaLabel={t("rework.platformAccess.clearSearch")}
-                    onChange={(value) => {
-                      setQuery(value);
-                      setOffset(0);
-                    }}
+                    onChange={setQuery}
                   />
                 </div>
                 {t0.data?.completed_at ? (
@@ -235,6 +245,9 @@ export default function PlatformAccessPage() {
                     onClick={() =>
                       void run(async () => {
                         await grantUsers({ grantPlatformAccessUsers: { user_ids: selected } }).unwrap();
+                        showSuccess({
+                          summary: t("rework.platformAccess.grantedSelected", { count: selected.length }),
+                        });
                         setSelected([]);
                       })
                     }
@@ -253,14 +266,16 @@ export default function PlatformAccessPage() {
                   />
                 </div>
               )}
-              {searching && users.isFetching && <Spinner statusText={t("rework.platformAccess.loading")} />}
-              {searching && !users.isFetching && !users.isError && !users.currentData?.total && (
-                <p className={styles.hint}>{t("rework.platformAccess.noUsers")}</p>
+              {users.isFetching && !userRows && <Spinner statusText={t("rework.platformAccess.loading")} />}
+              {usersShown && !users.isFetching && !users.isError && userTotal === 0 && (
+                <p className={styles.hint}>
+                  {t(searchQuery ? "rework.platformAccess.noUsers" : "rework.platformAccess.noKnownUsers")}
+                </p>
               )}
-              {searching && !users.isFetching && !users.isError && !!users.currentData?.total && (
+              {userTotal > 0 && (
                 <DataTable
                   size="small"
-                  data={users.currentData.items}
+                  data={userRows ?? []}
                   rowKey={(user) => user.user_id}
                   selectable
                   selectedKeys={new Set(selected)}
@@ -271,7 +286,7 @@ export default function PlatformAccessPage() {
                   serverPagination={{
                     offset,
                     limit: 25,
-                    totalCount: users.currentData.total,
+                    totalCount: userTotal,
                     onOffsetChange: setOffset,
                   }}
                   columns={[
@@ -320,7 +335,17 @@ export default function PlatformAccessPage() {
                             size="small"
                             disabled={locked || users.isFetching}
                             onClick={() =>
-                              void run(() => (hasIndividual ? revoke : grant)({ userId: user.user_id }).unwrap())
+                              void run(async () => {
+                                await (hasIndividual ? revoke : grant)({ userId: user.user_id }).unwrap();
+                                showSuccess({
+                                  summary: t(
+                                    hasIndividual
+                                      ? "rework.platformAccess.revokedUser"
+                                      : "rework.platformAccess.grantedUser",
+                                    { user: user.username || user.email || user.user_id },
+                                  ),
+                                });
+                              })
                             }
                           >
                             {t(hasIndividual ? "rework.platformAccess.remove" : "rework.platformAccess.allow")}

@@ -3863,7 +3863,12 @@
       "selectedCount_one": "{{count}} utilisateur sélectionné",
       "selectedCount_other": "{{count}} utilisateurs sélectionnés",
       "noUsers": "Aucun utilisateur ne correspond à cette recherche.",
-      "teamAllowed": "Autorisée"
+      "teamAllowed": "Autorisée",
+      "noKnownUsers": "Aucun utilisateur connu pour l'instant.",
+      "grantedSelected_one": "Accès individuel accordé à l'utilisateur sélectionné.",
+      "grantedSelected_other": "Accès individuel accordé aux {{count}} utilisateurs sélectionnés.",
+      "grantedUser": "Accès individuel accordé à {{user}}.",
+      "revokedUser": "Accès individuel retiré à {{user}}."
     }
   },
   "runtime": {

@@ -14,6 +14,9 @@ const state = vi.hoisted(() => ({
     },
   ],
   searchUsers: vi.fn(),
+  usersTotal: undefined as number | undefined,
+  success: vi.fn(),
+  revoke: vi.fn(() => ({ unwrap: async () => undefined })),
   usersFetching: false,
   usersError: false,
   completed: false,
@@ -39,7 +42,9 @@ const state = vi.hoisted(() => ({
   setTeam: vi.fn(() => ({ unwrap: async () => undefined })),
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }) }));
-vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({ showError: vi.fn() }) }));
+vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
+  useToast: () => ({ showError: vi.fn(), showSuccess: state.success }),
+}));
 vi.mock("../../../../../common/config", () => ({ getConfig: () => ({ platform_access_enabled: true }) }));
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   usePlatformAccessStateQuery: () => ({
@@ -67,11 +72,15 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
   }),
   usePlatformAccessUsersQuery: (args: unknown, options: unknown) => {
     state.searchUsers(args, options);
+    // As RTK Query does: nothing while skipped, and no current data while another page or search loads.
+    if ((options as { skip: boolean }).skip) return { isFetching: false, isError: false };
     return {
       isFetching: state.usersFetching,
       isError: state.usersError,
       data: { total: 1, items: [{ user_id: "old", username: "Previous search", sources: [] }] },
-      currentData: { total: state.users.length, items: state.users },
+      currentData: state.usersFetching
+        ? undefined
+        : { total: state.usersTotal ?? state.users.length, items: state.users },
     };
   },
   usePlatformAccessT0Query: () => ({
@@ -88,7 +97,7 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
   useSetPlatformFilteringMutation: () => [state.filter],
   useGrantPlatformUsersMutation: () => [state.bulk],
   useGrantPlatformUserMutation: () => [state.grant],
-  useRevokePlatformUserMutation: () => [vi.fn()],
+  useRevokePlatformUserMutation: () => [state.revoke],
   useImportPlatformT0Mutation: () => [state.importT0],
   useSetPlatformTeamMutation: () => [state.setTeam],
   useGeneratePlatformLinkMutation: () => [vi.fn()],
@@ -120,6 +129,7 @@ beforeEach(() => {
     },
   ];
   state.completed = false;
+  state.usersTotal = undefined;
   state.usersFetching = false;
   state.usersError = false;
   state.filteringEnabled = false;
@@ -135,6 +145,7 @@ beforeEach(() => {
   state.previewError = false;
   state.configured = true;
   vi.clearAllMocks();
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -142,6 +153,7 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount());
   host.remove();
+  vi.useRealTimers();
 });
 const openTab = (tab: string) =>
   act(() =>
@@ -163,26 +175,109 @@ const search = (value: string) => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
+  act(() => vi.advanceTimersByTime(300));
 };
+const type = (value: string) => {
+  const input = host.querySelector<HTMLInputElement>('[id$="-whitelist-users-panel"] input[type="text"]')!;
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+};
+const pageButton = (key: string) =>
+  [...host.querySelectorAll<HTMLButtonElement>("button")].find((node) => node.textContent === key)!;
 const render = (query = "Al") => {
   act(() => root.render(<PlatformAccessPage />));
   openTab("users");
   search(query);
 };
 
-it("loads users only after typing and hides results when the search is cleared", () => {
-  render("");
+it("lists known users without a search and requests them only while the users sub-tab is shown", () => {
+  act(() => root.render(<PlatformAccessPage />));
   expect(state.searchUsers.mock.calls.every(([, options]) => options.skip)).toBe(true);
-  expect(host.textContent).not.toContain("Alice");
-  search(" ");
-  expect(state.searchUsers.mock.lastCall?.[1]).toEqual({ skip: true });
-  search(" A ");
-  expect(state.searchUsers.mock.lastCall).toEqual([{ offset: 0, limit: 25, query: "A" }, { skip: false }]);
+  openTab("users");
+  expect(state.searchUsers.mock.lastCall).toEqual([{ offset: 0, limit: 25, query: "" }, { skip: false }]);
   expect(host.textContent).toContain("Alice");
   expect(host.textContent).not.toContain("Previous search");
-  search("");
+  openWhitelistTab("teams");
   expect(state.searchUsers.mock.lastCall?.[1]).toEqual({ skip: true });
+  openWhitelistTab("users");
+  expect(state.searchUsers.mock.lastCall?.[1]).toEqual({ skip: false });
+  openTab("rules");
+  expect(state.searchUsers.mock.lastCall?.[1]).toEqual({ skip: true });
+});
+
+it("waits for a pause in typing, trims the search and restarts at the first page", () => {
+  state.usersTotal = 60;
+  render("");
+  act(() => host.querySelector<HTMLButtonElement>('button[aria-label="dataTable.pagination.next"]')!.click());
+  expect(state.searchUsers.mock.lastCall?.[0]).toEqual({ offset: 25, limit: 25, query: "" });
+  type(" A");
+  type(" Al ");
+  expect(state.searchUsers.mock.lastCall?.[0]).toEqual({ offset: 25, limit: 25, query: "" });
+  act(() => vi.advanceTimersByTime(300));
+  expect(state.searchUsers.mock.lastCall?.[0]).toEqual({ offset: 0, limit: 25, query: "Al" });
+  expect(state.searchUsers.mock.calls.some(([args]) => args.query === "A")).toBe(false);
+  act(() => host.querySelector<HTMLButtonElement>('button[aria-label="dataTable.pagination.next"]')!.click());
+  search("");
+  expect(state.searchUsers.mock.lastCall?.[0]).toEqual({ offset: 0, limit: 25, query: "" });
+});
+
+it("tells an empty platform apart from a search without match", () => {
+  state.users = [];
+  render("");
+  const panel = host.querySelector<HTMLElement>('[id$="-whitelist-users-panel"]')!;
+  expect(panel.textContent).toContain("rework.platformAccess.noKnownUsers");
+  search("zz");
+  expect(panel.textContent).toContain("rework.platformAccess.noUsers");
+  expect(panel.textContent).not.toContain("rework.platformAccess.noKnownUsers");
+});
+
+it("confirms a bulk grant from the selection and clears it", async () => {
+  state.users = [
+    { user_id: "first", username: "Alice", email: "", sources: [] },
+    { user_id: "second", username: "Bob", email: "", sources: [] },
+  ];
+  render("");
+  await act(async () =>
+    host.querySelector<HTMLInputElement>('input[aria-label="dataTable.selection.selectAllOnPage"]')!.click(),
+  );
+  await act(async () => pageButton("rework.platformAccess.allowSelected").click());
+  expect(state.success).toHaveBeenCalledWith({ summary: "rework.platformAccess.grantedSelected" });
+  expect(host.querySelector(`.${styles.selectionBar}`)).toBeNull();
+  expect(host.querySelectorAll('input[aria-label="dataTable.selection.selectRow"]:checked')).toHaveLength(0);
+});
+
+it("confirms a single grant and a single removal, and stays silent on failure", async () => {
+  render("");
+  await act(async () => pageButton("rework.platformAccess.allow").click());
+  expect(state.grant).toHaveBeenCalledWith({ userId: "user" });
+  expect(state.success).toHaveBeenLastCalledWith({ summary: "rework.platformAccess.grantedUser" });
+  state.users = [
+    { user_id: "user", username: "Alice", email: "", sources: [{ kind: "manual", team_id: "", team_name: "" }] },
+  ];
+  act(() => root.render(<PlatformAccessPage />));
+  await act(async () => pageButton("rework.platformAccess.remove").click());
+  expect(state.revoke).toHaveBeenCalledWith({ userId: "user" });
+  expect(state.success).toHaveBeenLastCalledWith({ summary: "rework.platformAccess.revokedUser" });
+  expect(state.success).toHaveBeenCalledTimes(2);
+  state.revoke.mockImplementationOnce(() => ({
+    unwrap: async () => {
+      throw new Error("Unsuccessful removal");
+    },
+  }));
+  await act(async () => pageButton("rework.platformAccess.remove").click());
+  expect(state.success).toHaveBeenCalledTimes(2);
+});
+
+it("keeps the pagination but no stale rows while another page or search loads", () => {
+  state.usersTotal = 60;
+  render("");
+  expect(host.textContent).toContain("Alice");
+  state.usersFetching = true;
+  act(() => root.render(<PlatformAccessPage />));
   expect(host.textContent).not.toContain("Alice");
+  expect(host.querySelector('button[aria-label="dataTable.pagination.next"]')).not.toBeNull();
 });
 
 it("hides earlier rows during a search request or a failed search", () => {

@@ -3863,7 +3863,12 @@
       "selectedCount_one": "{{count}} user selected",
       "selectedCount_other": "{{count}} users selected",
       "noUsers": "No user matches this search.",
-      "teamAllowed": "Allowed"
+      "teamAllowed": "Allowed",
+      "noKnownUsers": "No known user yet.",
+      "grantedSelected_one": "Individual access granted to the selected user.",
+      "grantedSelected_other": "Individual access granted to the {{count}} selected users.",
+      "grantedUser": "Individual access granted to {{user}}.",
+      "revokedUser": "Individual access removed from {{user}}."
     }
   },
   "runtime": {
