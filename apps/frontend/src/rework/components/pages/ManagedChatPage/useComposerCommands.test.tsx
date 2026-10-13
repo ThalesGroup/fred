@@ -55,10 +55,21 @@ const fetchPrompt = vi.fn();
 let listResult: { data?: typeof PROMPTS; currentData?: typeof PROMPTS } = { data: PROMPTS };
 let personalResult: typeof listResult = { data: [] };
 let commandsFetching = false;
+let commandsFailed = false;
 const listCommands = vi.fn();
+// What a catalog answers when the hook asks it again; nothing by default.
+const refetchCommands = vi.fn<(teamId: string) => Promise<{ data?: typeof PROMPTS }>>();
+const refetchSkills = vi.fn<() => Promise<{ data?: typeof skillCatalog }>>();
+const NO_SKILLS = { supported: false, skills: [] };
+let skillsPending = false;
+let skillsFailed = false;
 
 vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
-  useGetAgentInstanceSkillsQuery: () => ({ currentData: skillCatalog }),
+  useGetAgentInstanceSkillsQuery: () => ({
+    currentData: skillsPending ? undefined : (skillCatalog ?? NO_SKILLS),
+    isError: skillsFailed,
+    refetch: refetchSkills,
+  }),
   useGetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetQuery: (
     args: { teamId: string },
     options: { skip: boolean },
@@ -69,6 +80,8 @@ vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
       data: result.data,
       currentData: options.skip ? undefined : "currentData" in result ? result.currentData : result.data,
       isFetching: !options.skip && commandsFetching,
+      isError: !options.skip && commandsFailed,
+      refetch: () => refetchCommands(args.teamId),
     };
   },
   useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery: () => [fetchPrompt],
@@ -145,6 +158,11 @@ beforeEach(() => {
   listResult = { data: PROMPTS };
   personalResult = { data: [] };
   commandsFetching = false;
+  commandsFailed = false;
+  skillsPending = false;
+  skillsFailed = false;
+  refetchCommands.mockImplementation(async () => ({}));
+  refetchSkills.mockImplementation(async () => ({}));
   fetchPrompt.mockImplementation(({ promptId }: { promptId: string }) => ({
     unwrap: () => Promise.resolve({ id: promptId, text: PROMPT_TEXT[promptId] }),
   }));
@@ -759,7 +777,7 @@ describe("platform skills", () => {
       expect(container.querySelectorAll(".cm-content button")).toHaveLength(2);
       expect(container.querySelector(".cm-content [role=group]")).not.toBeNull();
       await act(async () => renders[renders.length - 1]!.submit());
-      expect(fetchPrompt).toHaveBeenLastCalledWith({ teamId: owner, promptId: "p-summary" }, true);
+      expect(fetchPrompt).toHaveBeenLastCalledWith({ teamId: owner, promptId: "p-summary" }, false);
       expect(onRunCommand).toHaveBeenCalledWith({
         text: "Before /review middle\n\nRésume le document en :\n\nafter /meeting-minutes Notes",
         command: {
@@ -1007,7 +1025,7 @@ describe("platform skills", () => {
     });
     await act(async () => renders[renders.length - 1]!.submit());
     expect(onRunCommand.mock.calls[0][0].command.prompt_id).toBe("personal-summary");
-    expect(fetchPrompt).toHaveBeenLastCalledWith({ teamId: "personal-1", promptId: "personal-summary" }, true);
+    expect(fetchPrompt).toHaveBeenLastCalledWith({ teamId: "personal-1", promptId: "personal-summary" }, false);
   });
   it("preserves whitespace before a leading prompt outside ReAct", async () => {
     activateSkills();
@@ -1661,15 +1679,13 @@ describe("personal and team prompt commands", () => {
   it("waits for the team's catalog before resolving a typed personal fallback", async () => {
     mountReact();
     listResult = { data: PROMPTS, currentData: undefined };
+    refetchCommands.mockImplementation(async () => ({ data: PROMPTS }));
     act(() => root.render(<Host personalTeamId="personal-1" />));
     type("/summary notes");
     await pressAsync("Enter");
-    expect(onRunCommand).not.toHaveBeenCalled();
-    expect(onResolveError.mock.calls).toEqual([["unreadable", "summary"]]);
-    // Once resolved, the same typed command takes the team's match.
-    listResult = { currentData: PROMPTS };
-    act(() => root.render(<Host personalTeamId="personal-1" />));
-    await pressAsync("Enter");
+    // The typed command takes the team's match, not the personal one already there.
+    expect(refetchCommands.mock.calls).toEqual([["team-1"]]);
+    expect(onResolveError).not.toHaveBeenCalled();
     expect(onRunCommand.mock.calls[0][0].command.prompt_id).toBe("p-summary");
   });
   it("allows an explicit personal selection while the team catalog is pending", async () => {
@@ -1714,6 +1730,171 @@ describe("personal and team prompt commands", () => {
       expect(onResolveError).not.toHaveBeenCalled();
     },
   );
+});
+
+describe("sending while a catalog has not answered", () => {
+  const TONE = { prompt_id: "p-tone", command: "tone", name: "Ton", description: "Ton formel", emoji: null };
+  /** A catalog asked again, answering when the test says so. */
+  function pending<T>() {
+    let answer!: (result: { data?: T }) => void;
+    const promise = new Promise<{ data?: T }>((done) => {
+      answer = done;
+    });
+    return { promise, answer: (data?: T) => act(async () => answer({ data })) };
+  }
+  const nothingSent = () => {
+    expect(onSend).not.toHaveBeenCalled();
+    expect(onRunCommand).not.toHaveBeenCalled();
+    expect(onRunSkill).not.toHaveBeenCalled();
+    expect(onResolveError).not.toHaveBeenCalled();
+  };
+
+  it("waits for the personal catalog, then expands a command only it holds", async () => {
+    personalResult = { currentData: undefined };
+    const personal = pending<typeof PROMPTS>();
+    refetchCommands.mockImplementation(() => personal.promise);
+    fetchPrompt.mockImplementation(({ promptId }: { promptId: string }) => ({
+      unwrap: async () => ({ text: `Text of ${promptId}` }),
+    }));
+    act(() => root.render(<Host personalTeamId="personal-1" />));
+    type("/summary and /tone now");
+    await pressAsync("Enter");
+    expect(refetchCommands.mock.calls).toEqual([["personal-1"]]);
+    nothingSent();
+
+    await personal.answer([TONE]);
+    expect(
+      onRunCommand.mock.calls[0][0].command.prompts.map((entry: { prompt_id: string }) => entry.prompt_id),
+    ).toEqual(["p-summary", "p-tone"]);
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it("waits for both prompt catalogs right after the page loads", async () => {
+    listResult = { currentData: undefined };
+    personalResult = { currentData: undefined };
+    commandsFetching = true;
+    const team = pending<typeof PROMPTS>();
+    const personal = pending<typeof PROMPTS>();
+    refetchCommands.mockImplementation((teamId) => (teamId === "team-1" ? team.promise : personal.promise));
+    act(() => root.render(<Host personalTeamId="personal-1" />));
+    type("/summary report");
+    await pressAsync("Enter");
+    // A second Enter while waiting sends nothing more.
+    await pressAsync("Enter");
+    await personal.answer([]);
+    nothingSent();
+
+    await team.answer(PROMPTS);
+    expect(onRunCommand).toHaveBeenCalledOnce();
+    expect(onRunCommand.mock.calls[0][0].command.prompt_id).toBe("p-summary");
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it("waits for the skill catalog, then runs the typed skill", async () => {
+    skillsPending = true;
+    const skills = pending<typeof skillCatalog>();
+    refetchSkills.mockImplementation(() => skills.promise);
+    act(() => root.render(<Host />));
+    type("/review notes");
+    await pressAsync("Enter");
+    nothingSent();
+
+    await skills.answer({ supported: true, skills: [{ name: "review", description: "Review" }] });
+    expect(onRunSkill).toHaveBeenCalledExactlyOnceWith({ text: "/review notes", skills: [{ name: "review" }] });
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it("sends a word no catalog knows as plain text once they have answered, with no error", async () => {
+    listResult = { currentData: undefined };
+    refetchCommands.mockImplementation(async () => ({ data: PROMPTS }));
+    act(() => root.render(<Host />));
+    type("see /etc and /nosuch please");
+    await pressAsync("Enter");
+    expect(onSend).toHaveBeenCalledOnce();
+    expect(onRunCommand).not.toHaveBeenCalled();
+    expect(onResolveError).not.toHaveBeenCalled();
+  });
+
+  it("does not wait for a draft with no command-shaped word", async () => {
+    listResult = { currentData: undefined };
+    skillsPending = true;
+    act(() => root.render(<Host />));
+    type("see /etc/hosts and a/b");
+    press("Enter");
+    expect(onSend).toHaveBeenCalledOnce();
+    expect(refetchCommands).not.toHaveBeenCalled();
+    expect(refetchSkills).not.toHaveBeenCalled();
+  });
+
+  it("sends nothing when the conversation changes while waiting", async () => {
+    listResult = { currentData: undefined };
+    const team = pending<typeof PROMPTS>();
+    refetchCommands.mockImplementation(() => team.promise);
+    act(() => root.render(<Host />));
+    type("/summary report");
+    await pressAsync("Enter");
+    act(() => root.render(<Host teamId="team-2" />));
+    await team.answer(PROMPTS);
+    nothingSent();
+  });
+
+  describe("after a catalog failed", () => {
+    beforeEach(() => {
+      listResult = { currentData: undefined };
+      commandsFailed = true;
+      act(() => root.render(<Host />));
+    });
+
+    it("asks it once more on submit and sends when it answers", async () => {
+      refetchCommands.mockImplementation(async () => ({ data: PROMPTS }));
+      type("/summary report");
+      press("Escape");
+      refetchCommands.mockClear();
+      await pressAsync("Enter");
+      expect(refetchCommands.mock.calls).toEqual([["team-1"]]);
+      expect(onResolveError).not.toHaveBeenCalled();
+      expect(onRunCommand.mock.calls[0][0].command.prompt_id).toBe("p-summary");
+    });
+
+    it("holds the message back when it fails again, and names the typed command", async () => {
+      type("hello /summary report");
+      await pressAsync("Enter");
+      expect(onResolveError.mock.calls).toEqual([["unreadable", "summary"]]);
+      expect(onSend).not.toHaveBeenCalled();
+      expect(onRunCommand).not.toHaveBeenCalled();
+    });
+
+    it("still sends ordinary text at once", () => {
+      type("hello there");
+      press("Enter");
+      expect(onSend).toHaveBeenCalledOnce();
+      expect(onResolveError).not.toHaveBeenCalled();
+    });
+
+    it("says so in the menu instead of claiming there is no command, and asks again for each new command", () => {
+      type("/");
+      expect(panel()?.getAttribute("role")).toBe("status");
+      expect(container.textContent).toContain("chatbot.commandMenu.error");
+      expect(container.textContent).not.toContain("chatbot.commandMenu.none");
+      expect(refetchCommands.mock.calls).toEqual([["team-1"]]);
+      type("/zzz");
+      expect(container.textContent).toContain("chatbot.commandMenu.error");
+      expect(container.textContent).not.toContain("chatbot.commandMenu.noMatch");
+      expect(refetchCommands).toHaveBeenCalledOnce();
+
+      type("");
+      type("/");
+      expect(refetchCommands).toHaveBeenCalledTimes(2);
+    });
+
+    it("still lists the commands of the catalogs that answered", () => {
+      skillCatalog = { supported: true, skills: [{ name: "review", description: "Review" }] };
+      act(() => root.render(<Host />));
+      type("/");
+      expect(labels()).toEqual(["/review"]);
+      expect(container.textContent).not.toContain("chatbot.commandMenu.error");
+    });
+  });
 });
 
 describe("restoring recalled invocations", () => {
@@ -1774,7 +1955,7 @@ describe("restoring recalled invocations", () => {
             teamId: variant === "personal" ? "personal-1" : "team-1",
             promptId: selectedId,
           },
-          true,
+          false,
         );
       }
       expect(onRunSkill).not.toHaveBeenCalled();
@@ -1883,8 +2064,8 @@ describe("several prompt commands in one message", () => {
     await submit();
 
     expect(fetchPrompt.mock.calls).toEqual([
-      [{ teamId: "team-1", promptId: "p-summary" }, true],
-      [{ teamId: "personal-1", promptId: "p-tone" }, true],
+      [{ teamId: "team-1", promptId: "p-summary" }, false],
+      [{ teamId: "personal-1", promptId: "p-tone" }, false],
     ]);
     expect(onRunCommand).toHaveBeenCalledExactlyOnceWith({
       text: "First\n\nSummarise the document.\n\nthen\n\nUse a formal tone.\n\nplease",
@@ -1917,6 +2098,19 @@ describe("several prompt commands in one message", () => {
     });
     expect(onRunSkill).not.toHaveBeenCalled();
     expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it("sends the prompt as its library holds it now, not the copy read for the menu", async () => {
+    mount();
+    fetchPrompt.mockImplementation((_arg: unknown, preferCache: boolean) => ({
+      unwrap: async () => ({ text: preferCache ? "Text read when the row was focused." : "Text edited since." }),
+    }));
+    cmAppend("/summ");
+    expect(fetchPrompt).toHaveBeenLastCalledWith({ teamId: "team-1", promptId: "p-summary" }, true);
+    cmPress("Tab");
+    await submit();
+    expect(fetchPrompt).toHaveBeenLastCalledWith({ teamId: "team-1", promptId: "p-summary" }, false);
+    expect(onRunCommand.mock.calls[0][0].text).toBe("Text edited since.");
   });
 
   it("starts every read before waiting for any of them", async () => {
@@ -2070,24 +2264,18 @@ describe("several prompt commands in one message", () => {
     expect(onRunCommand.mock.calls[0][0].text).toBe("My own summary.\n\nthen\n\nSummarise the document.\n\nnow");
   });
 
-  it("applies the pending team catalog guard to each typed name, not to a picked personal prompt", async () => {
+  it("waits for the team's catalog for a typed name next to a picked personal prompt", async () => {
     mount([TONE, { ...TONE, prompt_id: "p-style", command: "style", name: "Style" }]);
     listResult = { data: PROMPTS, currentData: undefined };
     act(() => root.render(<Host inlineEditor personalTeamId="personal-1" />));
     cmAppend("/sty");
     cmPress("Tab");
     cmAppend("then /tone now");
-    fetchPrompt.mockClear();
+    refetchCommands.mockImplementation(async () => ({ data: PROMPTS }));
     await submit();
 
-    expect(onResolveError.mock.calls).toEqual([["unreadable", "tone"]]);
-    expect(fetchPrompt).not.toHaveBeenCalled();
-    expect(onRunCommand).not.toHaveBeenCalled();
-
-    // Once the team has answered that it has no `/tone`, the personal one runs.
-    listResult = { currentData: PROMPTS };
-    act(() => root.render(<Host inlineEditor personalTeamId="personal-1" />));
-    await submit();
+    // The team answered that it has no `/tone`: the personal one runs.
+    expect(onResolveError).not.toHaveBeenCalled();
     expect(
       onRunCommand.mock.calls[0][0].command.prompts.map((entry: { prompt_id: string }) => entry.prompt_id),
     ).toEqual(["p-style", "p-tone"]);

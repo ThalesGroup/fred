@@ -30,8 +30,9 @@ export type CommandMenuEntry = {
 
 type CommandMenuSource = "team" | "personal" | "platform";
 
-/** Why the menu has no row: still loading, nothing exists, or nothing matches. */
-export type CommandMenuEmptyReason = "loading" | "none" | "noMatch";
+/** Why the menu has no row: still loading, a catalog that could not be read,
+ *  nothing exists, or nothing matches. */
+export type CommandMenuEmptyReason = "loading" | "error" | "none" | "noMatch";
 
 // Display order of the sections. `entries` arrives in this same order, so each
 // section is a contiguous slice and the flat index stays the visual order.

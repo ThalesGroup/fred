@@ -397,6 +397,7 @@
       "openWithText": "Open the prompt behind the /{{command}} command, followed by “{{appended}}”",
       "panelTitle": "Command prompt",
       "previewLoading": "Loading the prompt…",
+      "previewEmpty": "This prompt is empty.",
       "previewError": "This prompt cannot be shown. It may have been deleted, or you may no longer have access to it."
     },
     "commandMenu": {
@@ -408,6 +409,7 @@
         "platform": "Platform skills"
       },
       "loading": "Loading commands…",
+      "error": "The commands could not be loaded. Type / again to retry.",
       "none": "No command yet. Add one to any of your personal prompts from the Prompts page. In a team, an editor can also add one to a team prompt.",
       "noMatch": "No command matches.",
       "runErrorSummary": "Could not run the command",

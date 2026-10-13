@@ -30,6 +30,7 @@ import {
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
   assemblePromptTurn,
+  findCommandWords,
   findSkillInvocations,
   isCommandTokenAt,
   MAX_TURN_PROMPTS,
@@ -112,12 +113,44 @@ function promptEntries(prompts: PromptCommandSummary[], teamId: string, source: 
     }));
 }
 
+/** The prompt commands of a conversation: the team's, then the personal ones. */
+function promptCommands(
+  team: PromptCommandSummary[] | undefined,
+  personal: PromptCommandSummary[] | undefined,
+  teamId: string,
+  personalTeamId: string | undefined,
+) {
+  return [
+    ...promptEntries(team ?? [], teamId, personalTeamId === teamId ? "personal" : "team"),
+    ...(personalTeamId && personalTeamId !== teamId ? promptEntries(personal ?? [], personalTeamId, "personal") : []),
+  ];
+}
+
+/** What a submit resolves the names of a draft against. */
+interface Catalogs {
+  commands: ReturnType<typeof promptCommands>;
+  skillNames: readonly string[];
+  /** The team's catalog has answered, so a personal fallback is safe. */
+  teamReady: boolean;
+  /** Every prompt catalog has answered: a missing prompt is known gone. */
+  promptsReady: boolean;
+}
+
+/** The answer a catalog gives once asked again; nothing when it fails. */
+function answerOf<T>(source: { missing: boolean; refetch: () => PromiseLike<{ data?: T }> }): Promise<T | undefined> {
+  if (!source.missing) return Promise.resolve(undefined);
+  return Promise.resolve(source.refetch()).then(
+    (result) => result.data,
+    () => undefined,
+  );
+}
+
 export interface ComposerCommandsMenu {
   id: string;
   entries: CommandMenuEntry[];
   activeIndex: number;
-  /** Why `entries` is empty: catalogs still loading, no command anywhere, or
-   *  a query that matches none of the existing ones. */
+  /** Why `entries` is empty: catalogs still loading, one that could not be
+   *  read, no command anywhere, or a query that matches none of them. */
   empty: CommandMenuEmptyReason;
   optionId: (index: number) => string;
   onActivate: (index: number) => void;
@@ -172,9 +205,15 @@ export function useComposerCommands(params: {
   const pendingEditsRef = useRef<readonly DraftEdit[] | null>(null);
   const lastEditRef = useRef<{ old: string; value: string; edits: readonly DraftEdit[] } | null>(null);
   const restoredChoicesRef = useRef<readonly Choice[] | null>(null);
-  const { currentData: catalog, isFetching: skillsFetching } = useGetAgentInstanceSkillsQuery(
+  const skillsQueried = Boolean(teamId && agentInstanceId);
+  const {
+    currentData: catalog,
+    isFetching: skillsFetching,
+    isError: skillsFailed,
+    refetch: refetchSkills,
+  } = useGetAgentInstanceSkillsQuery(
     { teamId, agentInstanceId: agentInstanceId ?? "" },
-    { skip: !teamId || !agentInstanceId, refetchOnMountOrArgChange: true },
+    { skip: !skillsQueried, refetchOnMountOrArgChange: true },
   );
   const skills = catalog?.supported ? (catalog.skills ?? []) : [];
   const skillsRef = useRef(skills);
@@ -196,16 +235,24 @@ export function useComposerCommands(params: {
   // Its own endpoint rather than a filter over the prompt listing: that listing
   // is capped, and a command past the cap would resolve to nothing — silently,
   // since an unmatched token is sent to the agent as ordinary text.
-  const { currentData: prompts, isFetching: teamCommandsFetching } =
-    useGetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetQuery({ teamId }, { skip: !teamId });
+  const {
+    currentData: prompts,
+    isFetching: teamCommandsFetching,
+    isError: teamCommandsFailed,
+    refetch: refetchTeamCommands,
+  } = useGetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetQuery({ teamId }, { skip: !teamId });
   const teamCommandsReadyRef = useRef(false);
   teamCommandsReadyRef.current = prompts !== undefined;
   const personalQueried = Boolean(personalTeamId) && personalTeamId !== teamId;
-  const { currentData: personalPrompts, isFetching: personalCommandsFetching } =
-    useGetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetQuery(
-      { teamId: personalTeamId ?? "" },
-      { skip: !personalQueried },
-    );
+  const {
+    currentData: personalPrompts,
+    isFetching: personalCommandsFetching,
+    isError: personalCommandsFailed,
+    refetch: refetchPersonalCommands,
+  } = useGetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetQuery(
+    { teamId: personalTeamId ?? "" },
+    { skip: !personalQueried },
+  );
   // A prompt missing from a catalog that has not answered is not known gone.
   const promptCatalogsReadyRef = useRef(false);
   promptCatalogsReadyRef.current = prompts !== undefined && (!personalQueried || personalPrompts !== undefined);
@@ -213,15 +260,35 @@ export function useComposerCommands(params: {
     (teamCommandsFetching && prompts === undefined) ||
     (personalCommandsFetching && personalPrompts === undefined) ||
     (skillsFetching && catalog === undefined);
+  // A catalog is `missing` until it has answered once: still loading, or failed.
+  const catalogSources = {
+    team: {
+      data: prompts,
+      missing: Boolean(teamId) && prompts === undefined,
+      failed: teamCommandsFailed,
+      refetch: refetchTeamCommands,
+    },
+    personal: {
+      data: personalPrompts,
+      missing: personalQueried && personalPrompts === undefined,
+      failed: personalCommandsFailed,
+      refetch: refetchPersonalCommands,
+    },
+    skills: {
+      data: catalog,
+      missing: skillsQueried && catalog === undefined,
+      failed: skillsFailed,
+      refetch: refetchSkills,
+    },
+  };
+  const catalogSourcesRef = useRef(catalogSources);
+  catalogSourcesRef.current = catalogSources;
+  const catalogsFailed =
+    !catalogsLoading && Object.values(catalogSources).some((source) => source.missing && source.failed);
   const [fetchPrompt] = useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery();
 
   const commands = useMemo(
-    () => [
-      ...promptEntries(prompts ?? [], teamId, personalTeamId === teamId ? "personal" : "team"),
-      ...(personalTeamId && personalTeamId !== teamId
-        ? promptEntries(personalPrompts ?? [], personalTeamId, "personal")
-        : []),
-    ],
+    () => promptCommands(prompts, personalPrompts, teamId, personalTeamId),
     [prompts, personalPrompts, teamId, personalTeamId],
   );
   const commandsRef = useRef(commands);
@@ -464,8 +531,8 @@ export function useComposerCommands(params: {
     );
   }, []);
 
-  // Prefetch keeps the detail fetch off the critical path when the command
-  // runs; the set makes moving the focus back over an entry a no-op.
+  // Prefetch warms the connection and the preview for the focused row; the
+  // set makes moving the focus back over an entry a no-op. Submit reads again.
   const prefetchedRef = useRef(new Set<string>());
   const focusedEntry = panelOpen && hasEntries ? entries[safeIndex] : undefined;
   const focusedPromptId = focusedEntry?.kind === "prompt" ? focusedEntry.promptId : null;
@@ -519,14 +586,15 @@ export function useComposerCommands(params: {
       selections: SkillInvocation[],
     ) => {
       const scopeAtSubmit = scopeRef.current.version;
-      // One read per distinct prompt, all started together.
+      // One read per distinct prompt, all started together, and never from the
+      // cache: what is sent is the prompt as its library holds it now.
       const reads = new Map<string, Promise<string>>();
       for (const { entry } of targets) {
         const key = `${entry.promptTeamId}:${entry.promptId}`;
         if (reads.has(key)) continue;
         reads.set(
           key,
-          fetchPrompt({ teamId: entry.promptTeamId, promptId: entry.promptId }, true)
+          fetchPrompt({ teamId: entry.promptTeamId, promptId: entry.promptId }, false)
             .unwrap()
             .then((detail) => {
               const text = detail.text?.trim();
@@ -564,114 +632,167 @@ export function useComposerCommands(params: {
     [fetchPrompt],
   );
 
-  const submit = useCallback(() => {
-    let input = paramsRef.current.input;
-    let choiceOffset = 0;
-    const parsed = parseCommandLine(input);
-    if (parsed?.command === "skill") {
-      const match = /^(\S+)(?:\s+([\s\S]*))?$/.exec(parsed.appended);
-      if (!match) {
-        paramsRef.current.onSkillError?.("usage");
-        return;
+  const resolve = useCallback(
+    (draft: string, choices: readonly Choice[], catalogs: Catalogs) => {
+      let input = draft;
+      let choiceOffset = 0;
+      const parsed = parseCommandLine(input);
+      if (parsed?.command === "skill") {
+        const match = /^(\S+)(?:\s+([\s\S]*))?$/.exec(parsed.appended);
+        if (!match) {
+          paramsRef.current.onSkillError?.("usage");
+          return;
+        }
+        if (!catalogs.skillNames.includes(match[1])) {
+          paramsRef.current.onSkillError?.("unavailable");
+          return;
+        }
+        const originalLength = input.trimEnd().length;
+        input = `/${match[1]}${match[2] ? " " + match[2] : ""}`;
+        choiceOffset = input.length - originalLength;
       }
-      if (!skillsRef.current.some((skill) => skill.name === match[1])) {
-        paramsRef.current.onSkillError?.("unavailable");
-        return;
-      }
-      const originalLength = input.trimEnd().length;
-      input = `/${match[1]}${match[2] ? " " + match[2] : ""}`;
-      choiceOffset = input.length - originalLength;
-    }
-    // Legacy prefix normalization must preserve the chosen prompt's owner.
-    const active = choicesRef.current
-      .map((choice) => ({ ...choice, from: choice.from + choiceOffset, to: choice.to + choiceOffset }))
-      .filter((choice) => isCommandTokenAt(input, choice.from, choice.name))
-      .sort((a, b) => a.from - b.from);
-    const explicitPrompts = active.flatMap((choice) =>
-      choice.kind === "prompt" ? [{ ...choice, explicit: choice }] : [],
-    );
-    if (active.some((choice) => choice.scope !== scopeRef.current.version)) {
-      const outdated =
-        explicitPrompts.find((choice) => choice.scope !== scopeRef.current.version) ?? explicitPrompts[0];
-      if (outdated) paramsRef.current.onResolveError("stale", outdated.name);
-      else paramsRef.current.onSkillError?.("unavailable");
-      return;
-    }
-    if (
-      active.some((choice) => choice.kind === "skill" && !skillsRef.current.some((skill) => skill.name === choice.name))
-    ) {
-      paramsRef.current.onSkillError?.("unavailable");
-      return;
-    }
-    const skillRanges = findSkillInvocations(
-      input,
-      skillsRef.current.map((skill) => skill.name),
-    );
-    // A typed name that is also a skill is a skill, unless it ends the line
-    // undelimited and was not picked as one: then the prompt gets it.
-    const typedPrompts = findSkillInvocations(
-      input,
-      commandsRef.current.map((entry) => entry.command),
-    ).filter(
-      (token) =>
-        !explicitPrompts.some((choice) => choice.from === token.from) &&
-        !skillRanges.some(
-          (skill) =>
-            skill.from === token.from &&
-            (skill.to < input.length || active.some((choice) => choice.kind === "skill" && choice.from === skill.from)),
-        ),
-    );
-    const ranges = [...explicitPrompts, ...typedPrompts.map((token) => ({ ...token, explicit: undefined }))].sort(
-      (a, b) => a.from - b.from,
-    );
-    if (ranges.length > MAX_TURN_PROMPTS) {
-      paramsRef.current.onResolveError("tooMany", ranges[MAX_TURN_PROMPTS].name);
-      return;
-    }
-    const targets: { entry: PromptEntry; from: number; to: number }[] = [];
-    for (const range of ranges) {
-      const { explicit } = range;
-      const entry = commandsRef.current.find(
-        (candidate) =>
-          candidate.command === range.name &&
-          (!explicit ||
-            (candidate.promptId === explicit.promptId &&
-              (!explicit.promptTeamId || candidate.promptTeamId === explicit.promptTeamId))),
+      // Legacy prefix normalization must preserve the chosen prompt's owner.
+      const active = choices
+        .map((choice) => ({ ...choice, from: choice.from + choiceOffset, to: choice.to + choiceOffset }))
+        .filter((choice) => isCommandTokenAt(input, choice.from, choice.name))
+        .sort((a, b) => a.from - b.from);
+      const explicitPrompts = active.flatMap((choice) =>
+        choice.kind === "prompt" ? [{ ...choice, explicit: choice }] : [],
       );
-      if (!entry) {
-        paramsRef.current.onResolveError(promptCatalogsReadyRef.current ? "stale" : "unreadable", range.name);
+      if (active.some((choice) => choice.scope !== scopeRef.current.version)) {
+        const outdated =
+          explicitPrompts.find((choice) => choice.scope !== scopeRef.current.version) ?? explicitPrompts[0];
+        if (outdated) paramsRef.current.onResolveError("stale", outdated.name);
+        else paramsRef.current.onSkillError?.("unavailable");
         return;
       }
-      // A typed name falls back to the personal library only once the team's
-      // catalog has answered that it has no such command.
-      if (!explicit && entry.promptTeamId !== paramsRef.current.teamId && !teamCommandsReadyRef.current) {
-        paramsRef.current.onResolveError("unreadable", range.name);
-        return;
-      }
-      targets.push({ entry, from: range.from, to: range.to });
-    }
-    if (targets.length) {
-      const selections = [
-        ...new Set(
-          skillRanges.filter((token) => !ranges.some((range) => range.from === token.from)).map((token) => token.name),
-        ),
-      ].map((name) => ({ name }));
-      void run(input, targets, selections);
-      return;
-    }
-    if (skillRanges.length) {
-      if (!paramsRef.current.onRunSkill) {
+      if (active.some((choice) => choice.kind === "skill" && !catalogs.skillNames.includes(choice.name))) {
         paramsRef.current.onSkillError?.("unavailable");
         return;
       }
-      paramsRef.current.onRunSkill({
-        text: input,
-        skills: [...new Set(skillRanges.map((token) => token.name))].map((name) => ({ name })),
+      const skillRanges = findSkillInvocations(input, catalogs.skillNames);
+      // A typed name that is also a skill is a skill, unless it ends the line
+      // undelimited and was not picked as one: then the prompt gets it.
+      const typedPrompts = findSkillInvocations(
+        input,
+        catalogs.commands.map((entry) => entry.command),
+      ).filter(
+        (token) =>
+          !explicitPrompts.some((choice) => choice.from === token.from) &&
+          !skillRanges.some(
+            (skill) =>
+              skill.from === token.from &&
+              (skill.to < input.length ||
+                active.some((choice) => choice.kind === "skill" && choice.from === skill.from)),
+          ),
+      );
+      const ranges = [...explicitPrompts, ...typedPrompts.map((token) => ({ ...token, explicit: undefined }))].sort(
+        (a, b) => a.from - b.from,
+      );
+      if (ranges.length > MAX_TURN_PROMPTS) {
+        paramsRef.current.onResolveError("tooMany", ranges[MAX_TURN_PROMPTS].name);
+        return;
+      }
+      const targets: { entry: PromptEntry; from: number; to: number }[] = [];
+      for (const range of ranges) {
+        const { explicit } = range;
+        const entry = catalogs.commands.find(
+          (candidate) =>
+            candidate.command === range.name &&
+            (!explicit ||
+              (candidate.promptId === explicit.promptId &&
+                (!explicit.promptTeamId || candidate.promptTeamId === explicit.promptTeamId))),
+        );
+        if (!entry) {
+          paramsRef.current.onResolveError(catalogs.promptsReady ? "stale" : "unreadable", range.name);
+          return;
+        }
+        // A typed name falls back to the personal library only once the team's
+        // catalog has answered that it has no such command.
+        if (!explicit && entry.promptTeamId !== paramsRef.current.teamId && !catalogs.teamReady) {
+          paramsRef.current.onResolveError("unreadable", range.name);
+          return;
+        }
+        targets.push({ entry, from: range.from, to: range.to });
+      }
+      if (targets.length) {
+        const selections = [
+          ...new Set(
+            skillRanges
+              .filter((token) => !ranges.some((range) => range.from === token.from))
+              .map((token) => token.name),
+          ),
+        ].map((name) => ({ name }));
+        void run(input, targets, selections);
+        return;
+      }
+      if (skillRanges.length) {
+        if (!paramsRef.current.onRunSkill) {
+          paramsRef.current.onSkillError?.("unavailable");
+          return;
+        }
+        paramsRef.current.onRunSkill({
+          text: input,
+          skills: [...new Set(skillRanges.map((token) => token.name))].map((name) => ({ name })),
+        });
+        return;
+      }
+      paramsRef.current.onSend();
+    },
+    [run],
+  );
+
+  // Sending never races the catalogs. A draft holding a `/name` nobody picked
+  // waits for every catalog with no answer yet; one that failed is asked once
+  // more, and the message is held back only if it still does not answer.
+  const waitingRef = useRef(false);
+  const submit = useCallback(() => {
+    const draft = paramsRef.current.input;
+    const choices = choicesRef.current;
+    const sources = catalogSourcesRef.current;
+    const typed = findCommandWords(draft).find(
+      (word) =>
+        !choices.some((choice) => choice.from === word.from && isCommandTokenAt(draft, choice.from, choice.name)),
+    );
+    if (!typed || !(sources.team.missing || sources.personal.missing || sources.skills.missing)) {
+      resolve(draft, choices, {
+        commands: commandsRef.current,
+        skillNames: skillsRef.current.map((skill) => skill.name),
+        teamReady: teamCommandsReadyRef.current,
+        promptsReady: promptCatalogsReadyRef.current,
       });
       return;
     }
-    paramsRef.current.onSend();
-  }, [run]);
+    if (waitingRef.current) return;
+    waitingRef.current = true;
+    const scopeAtSubmit = scopeRef.current.version;
+    const { teamId, personalTeamId } = paramsRef.current;
+    void Promise.all([answerOf(sources.team), answerOf(sources.personal), answerOf(sources.skills)]).then(
+      ([team, personal, skillCatalog]) => {
+        waitingRef.current = false;
+        if (scopeRef.current.version !== scopeAtSubmit) return;
+        const answered = {
+          team: sources.team.missing ? team : sources.team.data,
+          personal: sources.personal.missing ? personal : sources.personal.data,
+          skills: sources.skills.missing ? skillCatalog : sources.skills.data,
+        };
+        if (
+          (sources.team.missing && !answered.team) ||
+          (sources.personal.missing && !answered.personal) ||
+          (sources.skills.missing && !answered.skills)
+        ) {
+          paramsRef.current.onResolveError("unreadable", typed.name);
+          return;
+        }
+        resolve(draft, choices, {
+          commands: promptCommands(answered.team, answered.personal, teamId, personalTeamId),
+          skillNames: answered.skills?.supported ? (answered.skills.skills ?? []).map((skill) => skill.name) : [],
+          teamReady: true,
+          promptsReady: true,
+        });
+      },
+    );
+  }, [resolve]);
 
   const onKeyDown = useCallback(
     (event: CommandKeyEvent): boolean => {
@@ -755,7 +876,22 @@ export function useComposerCommands(params: {
     activeDescendantId: panelOpen && hasEntries ? optionId(safeIndex) : null,
   };
 
-  const empty = catalogsLoading ? "loading" : commands.length > 0 || skillEntries.length > 0 ? "noMatch" : "none";
+  // A catalog that failed is asked again each time a command is started, not
+  // on each keystroke of its name.
+  const commandStarted = focused && query !== null;
+  useEffect(() => {
+    if (!commandStarted) return;
+    for (const source of Object.values(catalogSourcesRef.current))
+      if (source.missing && source.failed) void source.refetch();
+  }, [commandStarted]);
+
+  const empty = catalogsLoading
+    ? "loading"
+    : catalogsFailed
+      ? "error"
+      : commands.length > 0 || skillEntries.length > 0
+        ? "noMatch"
+        : "none";
   const menu = useMemo<ComposerCommandsMenu | null>(
     () =>
       panelOpen ? { id: listboxId, entries, activeIndex: safeIndex, empty, optionId, onActivate, onFocusEntry } : null,

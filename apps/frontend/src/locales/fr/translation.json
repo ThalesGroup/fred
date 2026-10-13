@@ -397,6 +397,7 @@
       "openWithText": "Ouvrir le prompt de la commande /{{command}}, suivie de « {{appended}} »",
       "panelTitle": "Prompt de la commande",
       "previewLoading": "Chargement du prompt…",
+      "previewEmpty": "Ce prompt est vide.",
       "previewError": "Ce prompt ne peut pas être affiché. Il a peut-être été supprimé, ou vous n'y avez plus accès."
     },
     "commandMenu": {
@@ -408,6 +409,7 @@
         "platform": "Skills plateforme"
       },
       "loading": "Chargement des commandes…",
+      "error": "Les commandes n'ont pas pu être chargées. Tapez / à nouveau pour réessayer.",
       "none": "Aucune commande pour l'instant. Ajoutez-en une à l'un de vos prompts personnels depuis la page Prompts. Dans une équipe, un éditeur peut aussi en ajouter une à un prompt de l'équipe.",
       "noMatch": "Aucune commande ne correspond.",
       "runErrorSummary": "Commande impossible à lancer",
