@@ -126,7 +126,7 @@ A completed prompt command or platform skill SHALL be shown as a small filled co
 
 ### Requirement: The composer caret stays visible in the empty field
 
-When the chat composer is empty and focused, the text caret SHALL be fully visible in front of the placeholder. The same SHALL hold next to the argument hint shown after a selected skill. The placeholder text SHALL NOT move and the field SHALL keep the height of one line.
+When the chat composer is empty and focused, the text caret SHALL be fully visible, at its usual height, in front of the placeholder. The placeholder SHALL NOT be part of the editable text, SHALL remain announced to assistive technology as the field's placeholder, SHALL NOT move and SHALL leave the field at the height of one line.
 
 #### Scenario: Caret over the placeholder
 
@@ -134,6 +134,36 @@ When the chat composer is empty and focused, the text caret SHALL be fully visib
 - **WHEN** the user focuses the field
 - **THEN** the whole caret is visible at the start of the line, drawn over the placeholder
 - **AND** the placeholder text and the field height are the same as before focusing
+
+### Requirement: Composer tokens behave as one block
+
+In the chat composer, a completed prompt command or platform skill token SHALL behave as a single unit of text. The Left and Right arrow keys SHALL move the caret across a token in one press, and extending a selection SHALL take a token as a whole. Backspace with the caret right after a token, and Delete with the caret right before it, SHALL remove the whole invocation, leaving no stray slash and no doubled or leading space, and SHALL NOT reopen the command menu. Undo SHALL restore the removed token with its selection identity. Tokens next to each other SHALL each behave independently. Away from a token, the same keys SHALL keep their ordinary one-character behaviour.
+
+#### Scenario: Arrow keys jump over a token
+
+- **GIVEN** a draft `Before /meeting-minutes after` whose skill is shown as a token
+- **WHEN** the caret is right after the token and the user presses the Left arrow once
+- **THEN** the caret is right before the token
+- **AND** pressing the Right arrow once puts it back right after the token
+
+#### Scenario: Backspace removes the whole token
+
+- **GIVEN** a draft `Before /meeting-minutes after` with the caret right after the token
+- **WHEN** the user presses Backspace
+- **THEN** the draft reads `Before after`, the skill is no longer selected and the command menu stays closed
+- **AND** undo restores `Before /meeting-minutes after` with its token
+
+#### Scenario: Delete removes the whole token
+
+- **GIVEN** a draft `Before /meeting-minutes after` with the caret right before the token
+- **WHEN** the user presses Delete
+- **THEN** the draft reads `Before after`
+
+#### Scenario: Two tokens side by side
+
+- **GIVEN** a draft `/review /meeting-minutes notes` showing two tokens
+- **WHEN** the user removes the second token with Delete
+- **THEN** the draft reads `/review notes` and the first token is still selected
 
 ## MODIFIED Requirements
 
@@ -212,7 +242,7 @@ Managed web chat SHALL accept `/<name> [request]` at the invocation position and
 
 - **WHEN** a user completes a known `/<name>` selection or types a whitespace-delimited known name
 - **THEN** the composer shows an icon/name token inline with the editable request, as a small filled container with the complete name visible and no separate row or removal button, allowing submission without extra text
-- **AND** editing any invocation character removes recognition and preserves surrounding text; deleting surrounding request text does not remove the skill
+- **AND** the token is edited as one block: it cannot be entered with the keyboard, and removing it removes the whole invocation while preserving surrounding text; deleting surrounding request text does not remove the skill
 - **AND** persisted name-only selection metadata lets the sent user bubble display the same skill badge alongside its request, including after reopening history without the current catalog
 - **AND** Deep selection metadata preserves the badge/preview without a preload event, instruction injection or load count; native agent-origin reads do not select ordinary user mentions
 - **AND** automatic agent/child loads and ordinary messages merely mentioning `/skill` do not label the user turn as explicitly selected

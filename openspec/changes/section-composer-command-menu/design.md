@@ -144,32 +144,54 @@ Alternative: a different fill inside the bubble. Rejected: it would break
 
 ### Caret in the empty composer
 
-In an empty document CodeMirror renders
-`<img.cm-widgetBuffer><span.cm-placeholder contenteditable=false>` and the
-selection sits before both, so the native caret is drawn at the exact left
-edge of the placeholder, on its first glyph. The placeholder is an
-`inline-block` painted in content order, after the position the caret belongs
-to, so an engine that paints the caret with that position draws the glyph over
-it. The placeholder and the argument hint now have
-`position: relative; z-index: -1`: `.cm-scroller` is a stacking context
-(`z-index: 0` in CodeMirror's base theme), so they paint below the line's
-content and caret, above the field background. No box moves.
-Alternative: CodeMirror's drawn selection layer. Rejected: a larger change for
-the same result, and it restyles selection.
+In an empty document CodeMirror's `placeholder()` renders
+`<img.cm-widgetBuffer><span.cm-placeholder contenteditable=false>` inside the
+line, and the selection sits before both. The native caret is then drawn
+against a zero-width image of `1em` aligned to the text top and an
+`inline-block`, instead of plain text: its size and paint order are whatever
+the engine does next to such boxes. A first attempt only lowered the
+placeholder's paint order (`z-index: -1`); the owner still saw the caret
+partly hidden and cut at the bottom in Firefox, so it was removed.
+
+The extension is dropped. The placeholder is a separate `aria-hidden` span,
+rendered by the component while the value is empty, in the same grid cell as
+the editor and under it, with the line's inset, font and line height. The
+empty line holds only its `<br>`, as in any empty editable; `aria-placeholder`
+is set on the content element as the extension did. Sharing a grid cell rather
+than absolute positioning keeps a long placeholder wrapping and sizing the
+field as before. Checked separately: the line box is 24px and the Geist font
+needs 21px (ascent 16, descent 5), so the row's `overflow: hidden` does not
+clip a caret sized from the font.
+
+The argument hint stays an inline widget after its token: it is a plain
+inline span, not an inline-block, and normally follows the space typed after
+the token.
+
+### Tokens as one block
+
+The token ranges are declared as `EditorView.atomicRanges` next to the replace
+decorations, so caret motion and selection take a token whole. Backspace and
+Delete get a small key binding ahead of the default keymap: when the caret
+touches a token it removes the whole `/name`, plus the following space when a
+space (or a line start) already precedes the token. Elsewhere it declines and
+the default applies. The earlier comment explained that ranges were left
+non-atomic so that editing one character dropped recognition; that path still
+exists for programmatic edits, it is just no longer reachable from the
+keyboard inside a token.
 
 ## Risks / Trade-offs
 
 - [Removing the gate also removes the page's agent-templates request, whose
   only reader was the gate] → one request less per chat page; nothing else in
   `ManagedChatPage.tsx` uses it.
-- [The caret fix could only be looked at in headless Chrome, where the caret
-  was already in front; Firefox does not paint the caret in a headless capture]
-  → the fix rests on paint order, which is engine independent; the owner check
-  covers Firefox.
-- [Tokens are replace decorations but not atomic ranges: an arrow key steps
-  through the hidden `/name` one character at a time and Backspace after a
-  token removes one hidden character, turning it back into raw text] →
-  observed, reported to the owner, deliberately not changed here.
+- [The caret could only be looked at in headless Chrome; Firefox does not
+  paint the caret in a headless capture] → the fix removes what the caret was
+  drawn against rather than tuning it; the owner check covers Firefox.
+- [With exactly `/name` and no trailing space, the caret still sits between the
+  token and the argument hint, next to CodeMirror's buffer image] → rare (the
+  completion adds a space); left for the owner check.
+- [Clicking next to a token and mouse selection were not exercised in a
+  browser] → they rely on CodeMirror's own handling of atomic ranges.
 - [A token keeps its full colours in a disabled composer] → unchanged from
   before (it kept `--primary`); left for the owner check.
 - [The inline prompt token's hover hint shows the source only when `source` is

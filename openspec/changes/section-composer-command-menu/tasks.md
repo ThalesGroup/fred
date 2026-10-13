@@ -34,6 +34,8 @@
 - [x] 7.3 Set `data-kind` on `SkillWidget` and `PromptWidget` in `InlineSkillInput.tsx` and delete `.promptToken`; verify with `InlineSkillInput.test.tsx`
 - [x] 7.4 Set `data-kind` and `data-surface` in `SkillBadge.tsx` and make `CommandTurn` reuse the shared container; verify with `UserTurn.test.tsx`
 - [x] 7.5 In `InlineSkillInput.module.css`, paint the placeholder and the argument hint one layer below the editor content; verify in a rendered sample that the caret is in front and nothing moves
+- [x] 7.7 Replace CodeMirror's `placeholder()` by an element outside the editable line (same grid cell, `aria-hidden`, `aria-placeholder` on the content) and remove the paint-order rule of 7.5; verify with `InlineSkillInput.test.tsx` and a rendered sample (empty line holds only its line break, placeholder at the same position, 24px field)
+- [x] 7.8 Declare the token ranges as atomic and bind Backspace/Delete to whole-token removal with space clean-up; verify with `InlineSkillInput.test.tsx` (arrows, selection, Backspace, Delete, undo) and `useComposerCommands.test.tsx` (two tokens, menu stays closed, undo/redo of a prompt)
 - [x] 7.6 Update `COMPONENT-UX.md` (composer token, sent badges, caret) and this change's artifacts; verify `openspec validate section-composer-command-menu --strict`
 
 ## 6. Verification
@@ -41,5 +43,5 @@
 - [x] 6.1 From `apps/frontend`, run `npx tsc --noEmit -p .`; verify it exits 0
 - [x] 6.2 From `apps/frontend`, run `npx eslint` and `npx prettier --check` on the touched files; verify both exit 0
 - [x] 6.3 From `apps/frontend`, run `npx vitest run` on `useComposerCommands.test.tsx`, `CommandMenu.test.tsx`, `ManagedChatPage.test.tsx` and `InlineSkillInput.test.tsx`; verify all pass, then clean the vitest cache directories left in `/tmp`
-- [ ] 6.4 Owner check in the app, in Firefox and Chrome: caret in the empty composer and next to a skill's argument hint, token containers in the composer and in sent messages (three themes, light and dark), and team chat with a ReAct agent and with a Deep agent (three sections, team name in the header, long name truncated, filtering hides a section, arrows cross sections, both `/summary` rows, typed `/summary` runs the team's), personal-space chat (single personal section), fr and en, light and dark theme, and the inline token hover hint
+- [ ] 6.4 Owner check in the app, in Firefox and Chrome: caret in the empty composer and next to a skill's argument hint, tokens as one block (arrows, Backspace, Delete, shift-selection, click on each side, undo), token containers in the composer and in sent messages (three themes, light and dark), and team chat with a ReAct agent and with a Deep agent (three sections, team name in the header, long name truncated, filtering hides a section, arrows cross sections, both `/summary` rows, typed `/summary` runs the team's), personal-space chat (single personal section), fr and en, light and dark theme, and the inline token hover hint
 - [ ] 6.5 Record the verification evidence in this change, then archive it once merged; verify `openspec validate --specs --strict` passes after the archive
