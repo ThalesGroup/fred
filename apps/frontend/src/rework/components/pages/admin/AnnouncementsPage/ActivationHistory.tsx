@@ -12,58 +12,58 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import Icon from "@shared/atoms/Icon/Icon";
+import IconButton from "@shared/atoms/IconButton/IconButton";
 import { Spinner } from "@shared/atoms/Spinner/Spinner";
 import StatusBadge from "@shared/atoms/StatusBadge/StatusBadge";
 import DataTable, { type DataTableColumn } from "@shared/molecules/DataTable/LocalizedDataTable";
 import FilterChips from "@shared/molecules/FilterChips/FilterChips";
 import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState";
+import { PatchNoteDialog, type PatchNote } from "@shared/molecules/PatchNoteDialog/PatchNoteDialog";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { userDisplayName } from "@core/utils/userDisplayName";
 import { useLocalStorageState } from "../../../../../hooks/useLocalStorageState";
 import { resolveAnnouncementText } from "../../../../features/announcements/announcementText";
+import { resolvePatchNotes } from "../../../../features/announcements/usePatchNoteHistory";
 import {
-  useAnnouncementActivationHistoryQuery,
+  useAnnouncementExposureHistoryQuery,
+  useLazyPatchNotePackageQuery,
   useUsersByIdsQuery,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
-import type { MaterialIconType } from "@shared/utils/Type";
-import type { AnnouncementActivationEvent } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { AnnouncementExposure } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./ActivationHistory.module.css";
 
-type HistoryAction = AnnouncementActivationEvent["action"];
-const ACTIONS: HistoryAction[] = ["activated", "deactivated", "announced", "unannounced"];
-const ACTION_ICONS = {
-  activated: "visibility",
-  deactivated: "visibility_off",
-  announced: "campaign",
-  unannounced: "do_not_disturb_on",
-} as const satisfies Record<HistoryAction, MaterialIconType>;
+type ExposureKind = AnnouncementExposure["kind"];
+const KINDS: ExposureKind[] = ["banner", "patch_note"];
 
 /**
- * Who switched which announcement on or off, announced the patch notes or had
- * that announcement cancelled, and when, as a dense full-width table.
- * The API returns the newest 100 events already sorted, also the `/users/by-ids`
- * limit, so actors resolve in one call.
+ * What users were shown, one line per exposure: a banner from its activation to
+ * its deactivation, or a patch-note announcement until it was replaced or
+ * withdrawn. An announcement's line reopens the patch notes exactly as announced.
  */
 export default function ActivationHistory() {
   const { t, i18n } = useTranslation();
-  const { data: events = [], isLoading, isError } = useAnnouncementActivationHistoryQuery();
-  // Remembered per browser: admins mostly come back to look at activations only.
-  const [storedFilter, setActionFilter] = useLocalStorageState<HistoryAction | null>(
-    "announcements.historyActionFilter",
+  const { showError } = useToast();
+  const { data: exposures = [], isLoading, isError } = useAnnouncementExposureHistoryQuery();
+  const [loadPackage] = useLazyPatchNotePackageQuery();
+  const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [opened, setOpened] = useState<PatchNote[]>([]);
+  // Remembered per browser: an admin mostly comes back for one of the two types.
+  const [storedFilter, setKindFilter] = useLocalStorageState<ExposureKind | null>(
+    "announcements.historyTypeFilter",
     null,
   );
   // A value from an older build, or hand-edited, means no filter.
-  const actionFilter = storedFilter && ACTIONS.includes(storedFilter) ? storedFilter : null;
+  const kindFilter = storedFilter && KINDS.includes(storedFilter) ? storedFilter : null;
   const shown = useMemo(
-    () => (actionFilter ? events.filter((event) => event.action === actionFilter) : events),
-    [events, actionFilter],
+    () => (kindFilter ? exposures.filter((exposure) => exposure.kind === kindFilter) : exposures),
+    [exposures, kindFilter],
   );
 
   const actorIds = useMemo(
-    () => [...new Set(events.map((event) => event.actor_uid).filter((uid): uid is string => Boolean(uid)))],
-    [events],
+    () => [...new Set(exposures.map((exposure) => exposure.actor_uid).filter((uid): uid is string => Boolean(uid)))],
+    [exposures],
   );
   const { data: actors = [] } = useUsersByIdsQuery({ ids: actorIds }, { skip: actorIds.length === 0 });
   const actorById = useMemo(() => new Map(actors.map((summary) => [summary.id, summary])), [actors]);
@@ -78,59 +78,70 @@ export default function ActivationHistory() {
   if (isError) {
     return <p className={`${styles.state} ${styles.error}`}>{t("rework.announcements.history.error")}</p>;
   }
-  if (events.length === 0) {
+  if (exposures.length === 0) {
     return <PageEmptyState icon="history" message={t("rework.announcements.history.empty")} />;
   }
 
-  const label = (event: AnnouncementActivationEvent) =>
-    resolveAnnouncementText(event.label, i18n.language) ?? event.announcement_id;
-  const kind = (event: AnnouncementActivationEvent) => t(`rework.announcements.kind.${event.kind}`);
-  const action = (event: AnnouncementActivationEvent) => t(`rework.announcements.history.${event.action}`);
-  const actor = (event: AnnouncementActivationEvent) =>
-    event.actor_uid
-      ? userDisplayName(event.actor_uid, actorById.get(event.actor_uid))
-      : t("rework.announcements.history.unknownActor");
+  const openPackage = async (exposure: AnnouncementExposure) => {
+    setLoadingId(exposure.id);
+    try {
+      const snapshots = await loadPackage({ announcementId: exposure.id }, true).unwrap();
+      setOpened(resolvePatchNotes(snapshots, i18n.language));
+    } catch {
+      showError({ summary: t("rework.announcements.history.packageFailed") });
+    } finally {
+      setLoadingId(null);
+    }
+  };
 
-  const columns: DataTableColumn<AnnouncementActivationEvent>[] = [
-    {
-      label: t("rework.announcements.history.column.announcement"),
-      size: "minmax(12rem, 3fr)",
-      cellRenderer: label,
-      sortable: true,
-      sortValue: label,
-    },
+  // A patch-note line is named after the first note of its package.
+  const title = (exposure: AnnouncementExposure) => {
+    const first = resolveAnnouncementText(exposure.label, i18n.language) ?? exposure.announcement_id;
+    const others = (exposure.note_count ?? 1) - 1;
+    return others > 0 ? t("rework.announcements.history.more", { title: first, count: others }) : first;
+  };
+  const type = (exposure: AnnouncementExposure) => t(`rework.announcements.history.type.${exposure.kind}`);
+  const actor = (exposure: AnnouncementExposure) =>
+    exposure.actor_uid
+      ? userDisplayName(exposure.actor_uid, actorById.get(exposure.actor_uid))
+      : t("rework.announcements.history.unknownActor");
+  const moment = (iso: string | null | undefined) =>
+    iso && (
+      <time className={styles.cellText} dateTime={iso}>
+        {new Date(iso).toLocaleString(i18n.language, { dateStyle: "medium", timeStyle: "short" })}
+      </time>
+    );
+
+  const columns: DataTableColumn<AnnouncementExposure>[] = [
     {
       label: t("rework.announcements.history.column.type"),
       size: "minmax(8rem, 1fr)",
-      // A banner's chip takes its severity tone, as the banner does; a patch note stays neutral.
-      cellRenderer: (event) => (
-        <StatusBadge tone={(event.kind === "banner" && event.severity) || "neutral"} label={kind(event)} />
+      // A banner's chip takes its severity tone, as the banner does; patch notes stay neutral.
+      cellRenderer: (exposure) => (
+        <StatusBadge tone={(exposure.kind === "banner" && exposure.severity) || "neutral"} label={type(exposure)} />
       ),
       sortable: true,
-      sortValue: kind,
+      sortValue: type,
     },
     {
-      label: t("rework.announcements.history.column.action"),
-      size: "minmax(9rem, 1fr)",
-      cellRenderer: (event) => (
-        <span className={styles.action} data-action={event.action}>
-          <Icon category="outlined" type={ACTION_ICONS[event.action]} />
-          {action(event)}
-        </span>
-      ),
+      label: t("rework.announcements.history.column.title"),
+      size: "minmax(12rem, 3fr)",
+      cellRenderer: title,
       sortable: true,
-      sortValue: action,
+      sortValue: title,
     },
     {
-      label: t("rework.announcements.history.column.date"),
+      label: t("rework.announcements.history.column.activation"),
       size: "minmax(11rem, 1.5fr)",
-      cellRenderer: (event) => (
-        <time className={styles.cellText} dateTime={event.occurred_at}>
-          {new Date(event.occurred_at).toLocaleString(i18n.language, { dateStyle: "medium", timeStyle: "short" })}
-        </time>
-      ),
+      cellRenderer: (exposure) => moment(exposure.activated_at),
       sortable: true,
-      sortValue: (event) => new Date(event.occurred_at),
+      sortValue: (exposure) => new Date(exposure.activated_at),
+    },
+    {
+      label: t("rework.announcements.history.column.deactivation"),
+      size: "minmax(11rem, 1.5fr)",
+      // Empty while users still see it.
+      cellRenderer: (exposure) => moment(exposure.deactivated_at),
     },
     {
       label: t("rework.announcements.history.column.by"),
@@ -139,18 +150,35 @@ export default function ActivationHistory() {
       sortable: true,
       sortValue: actor,
     },
+    {
+      label: t("rework.announcements.history.column.open"),
+      size: "4rem",
+      // Only a line that kept its package has something to open.
+      cellRenderer: (exposure) =>
+        exposure.kind === "patch_note" &&
+        exposure.note_count != null && (
+          <IconButton
+            size="small"
+            variant="icon"
+            icon={{ category: "outlined", type: "visibility" }}
+            aria-label={t("rework.announcements.history.openPackage")}
+            loading={loadingId === exposure.id}
+            onClick={() => void openPackage(exposure)}
+          />
+        ),
+    },
   ];
 
   return (
     <div className={styles.history}>
-      <FilterChips<HistoryAction>
-        options={ACTIONS.map((id) => ({
+      <FilterChips<ExposureKind>
+        options={KINDS.map((id) => ({
           id,
           label: t(`rework.announcements.history.filter.${id}`),
-          count: events.filter((event) => event.action === id).length,
+          count: exposures.filter((exposure) => exposure.kind === id).length,
         }))}
-        value={actionFilter}
-        onChange={setActionFilter}
+        value={kindFilter}
+        onChange={setKindFilter}
         allLabel={t("rework.announcements.history.filter.all")}
         aria-label={t("rework.announcements.history.filter.group")}
       />
@@ -158,12 +186,14 @@ export default function ActivationHistory() {
         <DataTable
           columns={columns}
           data={shown}
-          rowKey={(event) => event.id}
+          rowKey={(exposure) => exposure.id}
           size="small"
           firstColumnInset
           pageSize={20}
         />
       </div>
+      {/* The users' dialog, read-only: opening a past package records nothing. */}
+      <PatchNoteDialog open={opened.length > 0} notes={opened} onClose={() => setOpened([])} />
     </div>
   );
 }

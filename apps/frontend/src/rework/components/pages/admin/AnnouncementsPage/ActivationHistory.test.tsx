@@ -13,26 +13,36 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// What these pin: the history is a five-column table that keeps the API's
-// newest-first order, colours a banner's type by its severity, names the actor
-// through /users/by-ids and still shows the uid when that user is gone, filters
-// by action and remembers that filter; loading, error and empty states replace it.
+// What these pin: the history is one line per exposure (type, title,
+// activation, deactivation, author) in the API's newest-first order, with no
+// action column; a patch-note line is named after its first note and how many
+// follow, and reopens its package in the users' dialog without recording
+// anything; the filter is by type and remembered.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AnnouncementActivationEvent } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { AnnouncementExposure } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 
 const historyMock = vi.fn();
 const usersMock = vi.fn();
+const packageMock = vi.fn();
+const seenMock = vi.fn();
+const showError = vi.fn();
 
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
-  useAnnouncementActivationHistoryQuery: () => historyMock(),
+  useAnnouncementExposureHistoryQuery: () => historyMock(),
+  useLazyPatchNotePackageQuery: () => [packageMock],
   useUsersByIdsQuery: (...args: unknown[]) => usersMock(...args),
+  usePatchNoteHistoryQuery: () => ({ data: undefined }),
+  useMarkPatchNoteAnnouncementSeenMutation: () => [seenMock],
+}));
+vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
+  useToast: () => ({ showError, showSuccess: vi.fn() }),
 }));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string) => key,
+    t: (key: string, options?: Record<string, unknown>) => (options ? `${key}:${JSON.stringify(options)}` : key),
     i18n: { language: "en" },
   }),
 }));
@@ -45,18 +55,19 @@ declare global {
 }
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-function event(overrides: Partial<AnnouncementActivationEvent> = {}): AnnouncementActivationEvent {
+function exposure(overrides: Partial<AnnouncementExposure> = {}): AnnouncementExposure {
   return {
     id: "e1",
     announcement_id: "a1",
     kind: "banner",
     label: { en: "Scheduled maintenance" },
-    action: "activated",
     actor_uid: "u-alice",
-    occurred_at: "2026-10-09T08:00:00Z",
+    activated_at: "2026-10-09T08:00:00Z",
     ...overrides,
   };
 }
+const announcement = (overrides: Partial<AnnouncementExposure> = {}) =>
+  exposure({ id: "n1", kind: "patch_note", label: { en: "Release 3.4" }, note_count: 3, ...overrides });
 
 let container: HTMLDivElement | null = null;
 let root: Root | null = null;
@@ -79,6 +90,7 @@ afterEach(() => {
   container?.remove();
   container = null;
   root = null;
+  document.getElementById("modal-portal")?.remove();
   vi.clearAllMocks();
 });
 
@@ -87,27 +99,32 @@ const rows = (el: HTMLElement) => [...el.querySelectorAll<HTMLElement>('[class*=
 const cells = (row: HTMLElement) => [...row.children].map((cell) => cell.textContent);
 const buttonWith = (el: HTMLElement, label: string) =>
   [...el.querySelectorAll("button")].find((button) => button.textContent?.includes(label))!;
+const openButton = (row: HTMLElement) =>
+  row.querySelector<HTMLButtonElement>('[aria-label="rework.announcements.history.openPackage"]');
+const when = (iso: string) => new Date(iso).toLocaleString("en", { dateStyle: "medium", timeStyle: "short" });
+const HISTORY = "rework.announcements.history";
 
 describe("ActivationHistory", () => {
-  it("renders the five columns", () => {
-    historyMock.mockReturnValue({ data: [event()], isLoading: false });
+  it("renders type, title, activation, deactivation and author, with no action column", () => {
+    historyMock.mockReturnValue({ data: [exposure()], isLoading: false });
 
     const labels = [...render().querySelectorAll('[class*="datatable-header"] [class*="header-content"]')];
 
     expect(labels.map((label) => label.textContent)).toEqual([
-      "rework.announcements.history.column.announcement",
-      "rework.announcements.history.column.type",
-      "rework.announcements.history.column.action",
-      "rework.announcements.history.column.date",
-      "rework.announcements.history.column.by",
+      `${HISTORY}.column.type`,
+      `${HISTORY}.column.title`,
+      `${HISTORY}.column.activation`,
+      `${HISTORY}.column.deactivation`,
+      `${HISTORY}.column.by`,
+      `${HISTORY}.column.open`,
     ]);
   });
 
-  it("lists events newest first with type, action, date and actor names", () => {
+  it("lists one line per exposure, newest first, with both dates and the author's name", () => {
     historyMock.mockReturnValue({
       data: [
-        event({ id: "e2", action: "deactivated", actor_uid: "u-bob", occurred_at: "2026-10-09T09:00:00Z" }),
-        event({ id: "e1", kind: "patch_note", label: { fr: "Version 3.4" } }),
+        exposure({ id: "e2", actor_uid: "u-bob", activated_at: "2026-10-09T09:00:00Z" }),
+        exposure({ id: "e1", label: { fr: "Maintenance" }, deactivated_at: "2026-10-09T08:30:00Z" }),
       ],
       isLoading: false,
     });
@@ -121,32 +138,94 @@ describe("ActivationHistory", () => {
     const [first, second] = rows(render());
 
     expect(usersMock).toHaveBeenCalledWith({ ids: ["u-bob", "u-alice"] }, { skip: false });
+    // Still shown to users: the deactivation is empty.
     expect(cells(first)).toEqual([
+      `${HISTORY}.type.banner`,
       "Scheduled maintenance",
-      "rework.announcements.kind.banner",
-      "visibility_offrework.announcements.history.deactivated",
-      new Date("2026-10-09T09:00:00Z").toLocaleString("en", { dateStyle: "medium", timeStyle: "short" }),
+      when("2026-10-09T09:00:00Z"),
+      "",
       "bob",
+      "",
     ]);
-    // A French-only label still names the patch note for an English viewer.
-    expect(cells(second)[0]).toBe("Version 3.4");
-    expect(cells(second)[1]).toBe("rework.announcements.kind.patch_note");
-    expect(cells(second)[2]).toBe("visibilityrework.announcements.history.activated");
-    expect(cells(second)[4]).toBe("Alice Martin");
-    expect(second.querySelector("time")?.getAttribute("dateTime")).toBe("2026-10-09T08:00:00Z");
+    // A French-only title still names the line for an English viewer.
+    expect(cells(second).slice(1, 5)).toEqual([
+      "Maintenance",
+      when("2026-10-09T08:00:00Z"),
+      when("2026-10-09T08:30:00Z"),
+      "Alice Martin",
+    ]);
+  });
+
+  it("names a patch-note line after its first note and how many follow", () => {
+    historyMock.mockReturnValue({
+      data: [announcement(), announcement({ id: "n0", note_count: 1 }), announcement({ id: "old", note_count: null })],
+      isLoading: false,
+    });
+
+    const [several, single, old] = rows(render());
+
+    expect(cells(several).slice(0, 2)).toEqual([
+      `${HISTORY}.type.patch_note`,
+      `${HISTORY}.more:${JSON.stringify({ title: "Release 3.4", count: 2 })}`,
+    ]);
+    expect(cells(single)[1]).toBe("Release 3.4");
+    expect(cells(old)[1]).toBe("Release 3.4");
+  });
+
+  it("offers to open the package on a patch-note line that kept one, and on no other", () => {
+    historyMock.mockReturnValue({
+      data: [announcement(), announcement({ id: "old", note_count: null }), exposure()],
+      isLoading: false,
+    });
+
+    const [withPackage, withoutPackage, banner] = rows(render());
+
+    expect(openButton(withPackage)).not.toBeNull();
+    expect(openButton(withoutPackage)).toBeNull();
+    expect(openButton(banner)).toBeNull();
+  });
+
+  it("opens a line's package in the users' dialog, with its navigation, and records nothing", async () => {
+    historyMock.mockReturnValue({ data: [announcement()], isLoading: false });
+    packageMock.mockReturnValue({
+      unwrap: () =>
+        Promise.resolve([
+          { id: "p2", title: { en: "Release 3.4" }, description_long: { en: "# Three point four" } },
+          { id: "p1", title: { en: "Release 3.3" }, description_long: { en: "# Three point three" } },
+        ]),
+    });
+    const el = render();
+
+    await act(async () => openButton(rows(el)[0])!.click());
+
+    expect(packageMock).toHaveBeenCalledExactlyOnceWith({ announcementId: "n1" }, true);
+    const dialog = document.body.querySelector('[role="dialog"]')!;
+    expect(dialog.querySelector("h1")?.textContent).toBe("Three point four");
+    expect(dialog.querySelector("nav")?.textContent).toContain("1 / 2");
+
+    act(() => void window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })));
+    expect(document.body.querySelector('[role="dialog"]')).toBeNull();
+    expect(seenMock).not.toHaveBeenCalled();
+  });
+
+  it("says so when the package cannot be read", async () => {
+    historyMock.mockReturnValue({ data: [announcement()], isLoading: false });
+    packageMock.mockReturnValue({ unwrap: () => Promise.reject({ status: 404 }) });
+    const el = render();
+
+    await act(async () => openButton(rows(el)[0])!.click());
+
+    expect(showError).toHaveBeenCalledExactlyOnceWith({ summary: `${HISTORY}.packageFailed` });
+    expect(document.body.querySelector('[role="dialog"]')).toBeNull();
   });
 
   it("colours a banner's type chip by its severity and keeps patch notes neutral", () => {
     historyMock.mockReturnValue({
-      data: [
-        event({ id: "e3", severity: "warning" }),
-        event({ id: "e2", severity: null }),
-        event({ id: "e1", kind: "patch_note", severity: null }),
-      ],
+      data: [exposure({ id: "e3", severity: "warning" }), exposure({ id: "e2", severity: null }), announcement()],
       isLoading: false,
     });
 
-    const chips = rows(render()).map((row) => row.children[1].querySelector("span")!.className);
+    const chips = rows(render()).map((row) => row.children[0].querySelector("span")!.className);
 
     expect(chips[0]).toContain("toneWarning");
     // Recorded before severity was kept: no colour to give it.
@@ -154,15 +233,14 @@ describe("ActivationHistory", () => {
     expect(chips[2]).toContain("toneNeutral");
   });
 
-  it("sorts by date from the column header", () => {
+  it("sorts by activation from the column header", () => {
     historyMock.mockReturnValue({
-      data: [event({ id: "e2", occurred_at: "2026-10-09T09:00:00Z" }), event({ id: "e1" })],
+      data: [exposure({ id: "e2", activated_at: "2026-10-09T09:00:00Z" }), exposure({ id: "e1" })],
       isLoading: false,
     });
     const el = render();
-    const dateHeader = buttonWith(el, "rework.announcements.history.column.date");
 
-    act(() => dateHeader.click());
+    act(() => buttonWith(el, `${HISTORY}.column.activation`).click());
 
     expect(rows(el).map((row) => row.querySelector("time")?.getAttribute("dateTime"))).toEqual([
       "2026-10-09T08:00:00Z",
@@ -170,18 +248,13 @@ describe("ActivationHistory", () => {
     ]);
   });
 
-  it("filters by action and remembers the choice", () => {
-    historyMock.mockReturnValue({
-      data: [event({ id: "e2", action: "deactivated" }), event({ id: "e1" })],
-      isLoading: false,
-    });
+  it("filters by type and remembers the choice", () => {
+    historyMock.mockReturnValue({ data: [announcement(), exposure()], isLoading: false });
     const el = render();
     expect(rows(el)).toHaveLength(2);
 
-    act(() => buttonWith(el, "rework.announcements.history.filter.activated").click());
-    expect(rows(el).map((row) => row.querySelector("[data-action]")?.getAttribute("data-action"))).toEqual([
-      "activated",
-    ]);
+    act(() => buttonWith(el, `${HISTORY}.filter.patch_note`).click());
+    expect(rows(el).map((row) => cells(row)[0])).toEqual([`${HISTORY}.type.patch_note`]);
 
     // A fresh mount starts on the remembered filter.
     act(() => root?.unmount());
@@ -189,73 +262,40 @@ describe("ActivationHistory", () => {
     expect(rows(render())).toHaveLength(1);
   });
 
-  it("shows and filters announcements to users and their cancellation", () => {
-    historyMock.mockReturnValue({
-      data: [
-        event({ id: "e3", action: "unannounced", kind: "patch_note" }),
-        event({ id: "e2", action: "announced", kind: "patch_note" }),
-        event({ id: "e1", action: "activated" }),
-      ],
-      isLoading: false,
-    });
-    const el = render();
-
-    expect(rows(el)).toHaveLength(3);
-    expect(el.querySelector('[data-action="announced"]')?.textContent).toContain(
-      "rework.announcements.history.announced",
-    );
-    expect(el.querySelector('[data-action="unannounced"]')?.textContent).toContain(
-      "rework.announcements.history.unannounced",
-    );
-
-    act(() => buttonWith(el, "rework.announcements.history.filter.announced").click());
-    expect(el.querySelectorAll("[data-action]")).toHaveLength(1);
-    expect(el.querySelector('[data-action="announced"]')).not.toBeNull();
-
-    act(() => buttonWith(el, "rework.announcements.history.filter.unannounced").click());
-    expect(el.querySelectorAll("[data-action]")).toHaveLength(1);
-    expect(el.querySelector('[data-action="unannounced"]')).not.toBeNull();
-  });
-
   it("names its filter group and ignores an unknown remembered filter", () => {
-    historyMock.mockReturnValue({
-      data: [event({ id: "e2", action: "deactivated" }), event({ id: "e1" })],
-      isLoading: false,
-    });
+    historyMock.mockReturnValue({ data: [announcement(), exposure()], isLoading: false });
     const el = render();
-    act(() => buttonWith(el, "rework.announcements.history.filter.activated").click());
-    const key = Object.keys(window.localStorage).find((k) => k.endsWith("announcements.historyActionFilter"))!;
+    act(() => buttonWith(el, `${HISTORY}.filter.banner`).click());
+    const key = Object.keys(window.localStorage).find((k) => k.endsWith("announcements.historyTypeFilter"))!;
     act(() => root?.unmount());
     container?.remove();
 
-    window.localStorage.setItem(key, JSON.stringify("archived"));
+    window.localStorage.setItem(key, JSON.stringify("activated"));
     const fresh = render();
 
-    expect(fresh.querySelector('[role="group"]')?.getAttribute("aria-label")).toBe(
-      "rework.announcements.history.filter.group",
-    );
+    expect(fresh.querySelector('[role="group"]')?.getAttribute("aria-label")).toBe(`${HISTORY}.filter.group`);
     expect(rows(fresh)).toHaveLength(2);
   });
 
-  it("pages the events, 20 per page", () => {
+  it("pages the lines, 20 per page", () => {
     historyMock.mockReturnValue({
-      data: Array.from({ length: 25 }, (_, i) => event({ id: `e${i}` })),
+      data: Array.from({ length: 25 }, (_, i) => exposure({ id: `e${i}` })),
       isLoading: false,
     });
 
     expect(rows(render())).toHaveLength(20);
   });
 
-  it("falls back to the uid, and says when there is no actor", () => {
+  it("falls back to the uid, and says when there is no author", () => {
     historyMock.mockReturnValue({
-      data: [event({ id: "e2", actor_uid: "u-deleted" }), event({ id: "e1", actor_uid: null })],
+      data: [exposure({ id: "e2", actor_uid: "u-deleted" }), exposure({ id: "e1", actor_uid: null })],
       isLoading: false,
     });
 
     const [first, second] = rows(render());
 
     expect(cells(first)[4]).toBe("u-deleted");
-    expect(cells(second)[4]).toBe("rework.announcements.history.unknownActor");
+    expect(cells(second)[4]).toBe(`${HISTORY}.unknownActor`);
   });
 
   it("shows the empty state", () => {
@@ -263,7 +303,7 @@ describe("ActivationHistory", () => {
 
     const el = render();
 
-    expect(el.textContent).toContain("rework.announcements.history.empty");
+    expect(el.textContent).toContain(`${HISTORY}.empty`);
     expect(el.querySelector('[class*="datatable"]')).toBeNull();
     expect(usersMock).toHaveBeenCalledWith({ ids: [] }, { skip: true });
   });
@@ -273,7 +313,7 @@ describe("ActivationHistory", () => {
 
     const el = render();
 
-    expect(el.textContent).toContain("rework.announcements.history.error");
+    expect(el.textContent).toContain(`${HISTORY}.error`);
     expect(el.querySelector('[class*="datatable"]')).toBeNull();
   });
 });

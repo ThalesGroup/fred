@@ -20,7 +20,7 @@
 // first, because an announcement is not recoverable. And the header reports
 // how many banners are actually live, the number an admin loses track of.
 // Banners and patch notes each have their tab, their empty state and their
-// create button; a patch note's switch only decides whether users can read it,
+// create button; a patch note's switch only decides whether the next announcement includes it,
 // so it never asks, and its preview is the users' dialog with that single note.
 
 import { act } from "react";
@@ -48,7 +48,8 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
   useDeleteAnnouncementMutation: () => [deleteMock, { isLoading: false }],
   useMarkPatchNoteAnnouncementSeenMutation: () => [seenMock, { isLoading: false }],
   useSetPatchNoteOrderMutation: () => [vi.fn(), { isLoading: false }],
-  useAnnouncementActivationHistoryQuery: () => historyMock(),
+  useAnnouncementExposureHistoryQuery: () => historyMock(),
+  useLazyPatchNotePackageQuery: () => [vi.fn()],
   useUsersByIdsQuery: () => ({ data: [] }),
 }));
 vi.mock("@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider", () => ({
@@ -77,8 +78,8 @@ const patchNoteEditor = vi.hoisted(() => ({
   },
 }));
 vi.mock("./PatchNoteAnnouncer", () => ({
-  default: ({ visibleNotes }: { visibleNotes: Announcement[] }) => (
-    <div data-testid="announcer" data-visible={visibleNotes.map((note) => note.id).join()} />
+  default: ({ includedNotes }: { includedNotes: Announcement[] }) => (
+    <div data-testid="announcer" data-included={includedNotes.map((note) => note.id).join()} />
   ),
 }));
 vi.mock("./PatchNoteEditorDialog", () => ({
@@ -159,9 +160,9 @@ beforeEach(() => {
         announcement_id: "p1",
         kind: "patch_note",
         label: { en: "Release 3.4" },
-        action: "activated",
+        note_count: 1,
         actor_uid: "u-alice",
-        occurred_at: "2026-10-09T08:00:00Z",
+        activated_at: "2026-10-09T08:00:00Z",
       },
     ],
     isLoading: false,
@@ -328,7 +329,7 @@ describe("AnnouncementsPage", () => {
     expect(row.textContent).not.toContain("dismissalCount");
   });
 
-  it("makes a second patch note visible at once, without asking and without touching the first", () => {
+  it("includes a second patch note at once, without asking and without touching the first", () => {
     listMock.mockReturnValue({
       data: [patchNote({ id: "p1", enabled: true }), patchNote({ id: "p2" })],
       isLoading: false,
@@ -346,7 +347,7 @@ describe("AnnouncementsPage", () => {
     });
   });
 
-  it("hands the announce action the visible patch notes, in order", () => {
+  it("hands the announce action the included patch notes, in order", () => {
     listMock.mockReturnValue({
       data: [patchNote({ id: "p3", enabled: true }), patchNote({ id: "p2" }), patchNote({ id: "p1", enabled: true })],
       isLoading: false,
@@ -354,7 +355,7 @@ describe("AnnouncementsPage", () => {
 
     const el = renderPatchNotes();
 
-    expect(el.querySelector('[data-testid="announcer"]')?.getAttribute("data-visible")).toBe("p3,p1");
+    expect(el.querySelector('[data-testid="announcer"]')?.getAttribute("data-included")).toBe("p3,p1");
   });
 
   it("disables a row's switch while its toggle is saving, and only that row's", async () => {
@@ -529,11 +530,12 @@ describe("AnnouncementsPage", () => {
     expect(el.querySelector("li")).toBeNull();
     expect(buttonWith(el, "rework.announcements.page.create")).toHaveLength(0);
     expect(columnLabels()).toEqual([
-      "rework.announcements.history.column.announcement",
       "rework.announcements.history.column.type",
-      "rework.announcements.history.column.action",
-      "rework.announcements.history.column.date",
+      "rework.announcements.history.column.title",
+      "rework.announcements.history.column.activation",
+      "rework.announcements.history.column.deactivation",
       "rework.announcements.history.column.by",
+      "rework.announcements.history.column.open",
     ]);
     expect(el.textContent).toContain("Release 3.4");
 

@@ -3443,7 +3443,7 @@
         "subtitle_other": "{{count}} banners are live for every user.",
         "subtitle_zero": "No banner is showing right now.",
         "emptyBanners": "No banner yet.\nCreate one to show a message at the top of the app.",
-        "emptyPatchNotes": "No patch note yet.\nCreate one: it stays hidden until you show it.",
+        "emptyPatchNotes": "No patch note yet.\nCreate one: users do not see it until you announce the update.",
         "createBanner": "New banner",
         "createPatchNote": "New patch note"
       },
@@ -3487,10 +3487,6 @@
         "title": "Delete this announcement?",
         "message": "\"{{title}}\" will be removed for good. Users who can see it will stop seeing it."
       },
-      "kind": {
-        "banner": "Banner",
-        "patch_note": "Patch note"
-      },
       "patchNote": {
         "dialog": {
           "navigation": "Browse patch notes",
@@ -3511,7 +3507,7 @@
           "bodyRequired": "Write the content in this language.",
           "tooLong": "The content is longer than {{max}} characters in one language.",
           "incomplete": "The {{language}} version needs both a title and content, or neither.",
-          "saveAndActivate": "Save and show"
+          "saveAndActivate": "Save and include"
         },
         "discard": {
           "title": "Discard your changes?",
@@ -3519,14 +3515,14 @@
           "confirm": "Discard changes",
           "cancel": "Keep writing"
         },
-        "savedActive": "Patch note saved. Users can read it in What's new.",
-        "savedInactive": "Patch note saved. It stays hidden: show it for users to read it.",
+        "savedActive": "Patch note saved. It is included in the next announcement.",
+        "savedInactive": "Patch note saved. It is not included in the next announcement.",
         "row": {
-          "enabled": "Show this patch note in What's new",
-          "enableHint": "Show in users' What's new",
-          "disableHint": "Hide from users' What's new",
-          "statusVisible": "Visible in What's new",
-          "statusHidden": "Hidden",
+          "enabled": "Include this patch note in the next announcement",
+          "enableHint": "Include in the next announcement",
+          "disableHint": "Leave out of the next announcement",
+          "statusVisible": "Included in the next announcement",
+          "statusHidden": "Not included",
           "preview": "Preview as users see it",
           "edit": "Edit this patch note",
           "delete": "Delete this patch note",
@@ -3534,7 +3530,7 @@
         },
         "delete": {
           "title": "Delete this patch note?",
-          "message": "“{{title}}” will be removed for good. Users will no longer be able to read it."
+          "message": "“{{title}}” will be removed for good. The current announcement is not changed."
         },
         "deleted": "Patch note deleted.",
         "reorder": {
@@ -3549,39 +3545,50 @@
         "announce": {
           "action": "Announce the update",
           "lastUse": "Last announced on {{date}}, by {{name}}",
-          "noneVisible": "Show at least one patch note to announce the update.",
+          "noneVisible": "Include at least one patch note to announce the update.",
           "confirm": {
-            "title": "Announce the update?",
-            "message_one": "Every user will see the What's new dialog at their next sign-in. It holds {{count}} patch note: “{{title}}”.",
-            "message_other": "Every user will see the What's new dialog at their next sign-in. It holds {{count}} patch notes and opens on “{{title}}”.",
+            "title": "Send this list to users?",
+            "message": "Users will see exactly this list, in this order, at their next sign-in and in What's new. Your later changes will not reach them until the next announcement.",
+            "list": "Patch notes included in the announcement",
             "confirm": "Announce"
           },
           "done": "Update announced. Users will see it at their next sign-in.",
-          "failed": "The update was not announced."
+          "failed": "The update was not announced.",
+          "withdraw": {
+            "action": "Withdraw the current announcement",
+            "title": "Withdraw the current announcement?",
+            "message": "What's new will be empty for every user and nobody will get the dialog until the next announcement. Your patch notes are not changed.",
+            "confirm": "Withdraw the announcement",
+            "done": "Announcement withdrawn.",
+            "failed": "The announcement was not withdrawn."
+          }
         }
       },
       "history": {
         "empty": "No activation yet.",
-        "activated": "Activated",
-        "deactivated": "Deactivated",
-        "announced": "Announced to users",
-        "unannounced": "Announcement cancelled",
         "unknownActor": "Unknown author",
-        "error": "Could not load the activation history.",
+        "error": "Could not load the history.",
+        "type": {
+          "banner": "Banner",
+          "patch_note": "Patch notes"
+        },
+        "more_one": "{{title}} + {{count}} other",
+        "more_other": "{{title}} + {{count}} others",
+        "openPackage": "View the announced patch notes",
+        "packageFailed": "Could not open this announcement's patch notes.",
         "column": {
-          "announcement": "Announcement",
           "type": "Type",
-          "action": "Action",
-          "date": "Date and time",
-          "by": "By"
+          "title": "Title",
+          "activation": "Activation",
+          "deactivation": "Deactivation",
+          "by": "By",
+          "open": "Open"
         },
         "filter": {
           "all": "All",
-          "activated": "Activations",
-          "deactivated": "Deactivations",
-          "announced": "Announcements to users",
-          "unannounced": "Cancelled announcements",
-          "group": "Filter by action"
+          "banner": "Banners",
+          "patch_note": "Patch notes",
+          "group": "Filter by type"
         }
       },
       "view": {

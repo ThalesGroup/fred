@@ -141,7 +141,7 @@ describe("PatchNoteGate", () => {
 
     act(() => closeButton().click());
 
-    expect(seenMock).toHaveBeenCalledExactlyOnceWith({ announcementEventId: "ann-1" });
+    expect(seenMock).toHaveBeenCalledExactlyOnceWith({ announcementId: "ann-1" });
     expect(dialog()).toBeNull();
     act(() => root!.render(<PatchNoteGate />));
     expect(dialog()).toBeNull();
@@ -153,7 +153,7 @@ describe("PatchNoteGate", () => {
 
     act(() => void window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })));
 
-    expect(seenMock).toHaveBeenCalledExactlyOnceWith({ announcementEventId: "ann-1" });
+    expect(seenMock).toHaveBeenCalledExactlyOnceWith({ announcementId: "ann-1" });
     expect(dialog()).toBeNull();
   });
 
@@ -169,7 +169,7 @@ describe("PatchNoteGate", () => {
     expect(heading()).toBe("Release 3.3");
     act(() => closeButton().click());
 
-    expect(seenMock).toHaveBeenCalledExactlyOnceWith({ announcementEventId: "ann-1" });
+    expect(seenMock).toHaveBeenCalledExactlyOnceWith({ announcementId: "ann-1" });
   });
 
   it("stays closed for the page view when the record fails", async () => {

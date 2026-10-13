@@ -128,7 +128,7 @@ function SortablePatchNote({ reducedMotion, ...card }: PatchNoteCardProps & { re
 }
 
 /**
- * The Patch notes tab's list: its order is the order of the users' dialog, and
+ * The Patch notes tab's list: its order is the order of the next announcement, and
  * the administrator changes it by dragging a card's handle or with the keyboard
  * (Space or Enter on the handle, arrows, Space or Enter again).
  */

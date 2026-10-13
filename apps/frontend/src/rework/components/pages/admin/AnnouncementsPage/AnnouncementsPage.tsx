@@ -61,7 +61,7 @@ function announcementName(announcement: Announcement, language: string): string 
 
 /**
  * Platform announcements, one tab per kind: banners at the top of the app, and
- * patch notes users browse in "What's new". The live banner count sits in the
+ * patch notes, a working area that reaches users only when announced. The live banner count sits in the
  * header, the number an admin most easily loses track of; the activation
  * history is the third tab.
  */
@@ -245,7 +245,7 @@ export default function AnnouncementsPage() {
             </ul>
           ) : (
             <>
-              <PatchNoteAnnouncer visibleNotes={patchNotes.filter((a) => a.enabled)} />
+              <PatchNoteAnnouncer includedNotes={patchNotes.filter((a) => a.enabled)} />
               <PatchNoteList
                 notes={patchNotes}
                 pendingIds={pendingIds}

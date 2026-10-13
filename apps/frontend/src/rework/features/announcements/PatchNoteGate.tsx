@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Opens the patch-note history when an announcement is pending for this user at
+// Opens the announced patch notes when an announcement is pending for this user at
 // app load, and records it as seen on close. Mounted inside GcuGuard/BootstrapGuard
 // (see App.tsx), above the router, so it never remounts on navigation.
 
@@ -36,7 +36,7 @@ export default function PatchNoteGate() {
     // Closed for this page view whatever the write does; a failed one only
     // means the dialog may open again at a later load.
     setClosed(true);
-    void markSeen({ announcementEventId: pendingAtLoad });
+    void markSeen({ announcementId: pendingAtLoad });
   };
 
   return <PatchNoteDialog open notes={notes} onClose={onClose} />;

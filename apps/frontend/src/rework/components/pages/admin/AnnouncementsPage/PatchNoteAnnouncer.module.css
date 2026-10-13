@@ -29,3 +29,16 @@
   color: var(--on-surface-retreat);
   font: var(--font-body-medium);
 }
+
+/* The numbered titles the confirmation asks about, in the order users get them. */
+.included {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  margin: 0;
+  padding-left: var(--spacing-l);
+  max-height: 40vh;
+  overflow-y: auto;
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+}

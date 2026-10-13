@@ -128,7 +128,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     },
     // The activation history, the users' patch-note history and the current
     // announcement all move with admin mutations, so they ride the LIST tag.
-    listActivationHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGet: {
+    listExposureHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGet: {
       providesTags: [{ type: "ControlPlaneAnnouncement" as const, id: "LIST" }],
     },
     getPatchNoteHistoryControlPlaneV1AnnouncementsPatchNotesGet: {
@@ -141,6 +141,9 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
       invalidatesTags: [{ type: "ControlPlaneAnnouncement" as const, id: "LIST" }],
     },
     announcePatchNotesControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementPost: {
+      invalidatesTags: [{ type: "ControlPlaneAnnouncement" as const, id: "LIST" }],
+    },
+    withdrawPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementDelete: {
       invalidatesTags: [{ type: "ControlPlaneAnnouncement" as const, id: "LIST" }],
     },
     // Team wiki (WIKI-01/02). One tag per team carries the tree; one per PAGE ID
@@ -923,15 +926,19 @@ export const {
   useDeleteAnnouncementControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdDeleteMutation:
     useDeleteAnnouncementMutation,
   useGetPatchNoteHistoryControlPlaneV1AnnouncementsPatchNotesGetQuery: usePatchNoteHistoryQuery,
-  useMarkPatchNoteAnnouncementSeenControlPlaneV1AnnouncementsPatchNoteAnnouncementsAnnouncementEventIdSeenPutMutation:
+  useMarkPatchNoteAnnouncementSeenControlPlaneV1AnnouncementsPatchNoteAnnouncementsAnnouncementIdSeenPutMutation:
     useMarkPatchNoteAnnouncementSeenMutation,
   useSetPatchNoteOrderControlPlaneV1AdminPlatformAnnouncementsPatchNotesOrderPutMutation: useSetPatchNoteOrderMutation,
   useGetPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementGetQuery:
     usePatchNoteAnnouncementQuery,
   useAnnouncePatchNotesControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementPostMutation:
     useAnnouncePatchNotesMutation,
-  useListActivationHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetQuery:
-    useAnnouncementActivationHistoryQuery,
+  useWithdrawPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementDeleteMutation:
+    useWithdrawPatchNoteAnnouncementMutation,
+  useLazyGetPatchNotePackageControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementsAnnouncementIdGetQuery:
+    useLazyPatchNotePackageQuery,
+  useListExposureHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetQuery:
+    useAnnouncementExposureHistoryQuery,
   // Team administrator charter acceptance.
   useAcceptTeamAdminCharterControlPlaneV1TeamAdminCharterPostMutation: useAcceptTeamAdminCharterMutation,
   useGetTeamAdminCharterAcceptanceControlPlaneV1TeamAdminCharterGetQuery: useGetTeamAdminCharterAcceptanceQuery,

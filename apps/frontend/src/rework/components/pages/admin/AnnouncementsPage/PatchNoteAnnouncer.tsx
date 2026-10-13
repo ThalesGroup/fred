@@ -12,8 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
+import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialog";
 import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { normalizeApiError } from "@core/errors/normalizeApiError";
@@ -23,52 +25,50 @@ import {
   useAnnouncePatchNotesMutation,
   usePatchNoteAnnouncementQuery,
   useUsersByIdsQuery,
+  useWithdrawPatchNoteAnnouncementMutation,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { Announcement } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./PatchNoteAnnouncer.module.css";
 
+const KEYS = "rework.announcements.patchNote.announce";
+
 /**
- * "Announce the update": the only thing that opens the What's new dialog on its
- * own, for every user at their next load. Beside it, when and by whom it was
- * last used; that line empties when hiding the last note cancels the announcement.
+ * "Announce the update" freezes the included patch notes as what users read,
+ * until the next announcement; nothing else reaches them. Beside it, when and
+ * by whom it was last used, and a way to withdraw the announcement in effect.
  */
-export default function PatchNoteAnnouncer({ visibleNotes }: { visibleNotes: Announcement[] }) {
+export default function PatchNoteAnnouncer({ includedNotes }: { includedNotes: Announcement[] }) {
   const { t, i18n } = useTranslation();
   const { showSuccess, showError } = useToast();
   const { showConfirmationDialog } = useConfirmationDialog();
   const { data: announcement } = usePatchNoteAnnouncementQuery();
-  const [announce, { isLoading }] = useAnnouncePatchNotesMutation();
+  const [announce, { isLoading: isAnnouncing }] = useAnnouncePatchNotesMutation();
+  const [withdraw, { isLoading: isWithdrawing }] = useWithdrawPatchNoteAnnouncementMutation();
+  const [confirming, setConfirming] = useState(false);
   const actorId = announcement?.announced_by;
   const { data: actors = [] } = useUsersByIdsQuery({ ids: actorId ? [actorId] : [] }, { skip: !actorId });
 
-  const first = visibleNotes[0];
-
-  const confirmed = async () => {
+  const run = async (action: () => Promise<unknown>, keys: string) => {
     try {
-      await announce().unwrap();
-      showSuccess({ summary: t("rework.announcements.patchNote.announce.done") });
+      await action();
+      showSuccess({ summary: t(`${keys}.done`) });
     } catch (error: unknown) {
-      showError({
-        summary: t("rework.announcements.patchNote.announce.failed"),
-        detail: normalizeApiError(error).detail,
-      });
+      showError({ summary: t(`${keys}.failed`), detail: normalizeApiError(error).detail });
     }
   };
 
-  const ask = () =>
+  const askWithdraw = () =>
     showConfirmationDialog({
-      title: t("rework.announcements.patchNote.announce.confirm.title"),
-      message: t("rework.announcements.patchNote.announce.confirm.message", {
-        count: visibleNotes.length,
-        title: resolveAnnouncementText(first.title, i18n.language) || first.id,
-      }),
-      confirmButtonLabel: t("rework.announcements.patchNote.announce.confirm.confirm"),
-      onConfirm: () => void confirmed(),
+      title: t(`${KEYS}.withdraw.title`),
+      message: t(`${KEYS}.withdraw.message`),
+      confirmButtonLabel: t(`${KEYS}.withdraw.confirm`),
+      criticalAction: true,
+      onConfirm: () => void run(() => withdraw().unwrap(), `${KEYS}.withdraw`),
     });
 
   const lastUse =
     announcement &&
-    t("rework.announcements.patchNote.announce.lastUse", {
+    t(`${KEYS}.lastUse`, {
       date: new Date(announcement.announced_at).toLocaleString(i18n.language, {
         dateStyle: "medium",
         timeStyle: "short",
@@ -89,15 +89,47 @@ export default function PatchNoteAnnouncer({ visibleNotes }: { visibleNotes: Ann
         variant="tonal"
         size="medium"
         icon={{ category: "outlined", type: "campaign" }}
-        disabled={!first || isLoading}
-        onClick={ask}
+        disabled={includedNotes.length === 0 || isAnnouncing}
+        onClick={() => setConfirming(true)}
       >
-        {t("rework.announcements.patchNote.announce.action")}
+        {t(`${KEYS}.action`)}
       </Button>
-      {/* Polite: the line changes on its own when a toggle cancels the announcement. */}
       <p className={styles.lastUse} aria-live="polite">
-        {first ? lastUse : t("rework.announcements.patchNote.announce.noneVisible")}
+        {lastUse || (includedNotes.length === 0 && t(`${KEYS}.noneVisible`))}
       </p>
+      {announcement && (
+        <Button
+          type="button"
+          color="on-surface"
+          variant="text"
+          size="medium"
+          disabled={isWithdrawing}
+          onClick={askWithdraw}
+        >
+          {t(`${KEYS}.withdraw.action`)}
+        </Button>
+      )}
+
+      {/* The list is the question: what is shown here is exactly what gets frozen. */}
+      <ConfirmationDialog
+        open={confirming}
+        title={t(`${KEYS}.confirm.title`)}
+        message={t(`${KEYS}.confirm.message`)}
+        details={
+          <ol className={styles.included} aria-label={t(`${KEYS}.confirm.list`)}>
+            {includedNotes.map((note) => (
+              <li key={note.id}>{resolveAnnouncementText(note.title, i18n.language) || note.id}</li>
+            ))}
+          </ol>
+        }
+        confirmLabel={t(`${KEYS}.confirm.confirm`)}
+        cancelLabel={t("common.cancel")}
+        onConfirm={() => {
+          setConfirming(false);
+          void run(() => announce().unwrap(), KEYS);
+        }}
+        onCancel={() => setConfirming(false)}
+      />
     </div>
   );
 }

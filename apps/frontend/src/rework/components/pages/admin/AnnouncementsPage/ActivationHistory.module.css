@@ -48,20 +48,6 @@
   color: var(--error);
 }
 
-.action {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-2xs);
-  min-width: 0;
-  color: var(--on-surface);
-  font-size: inherit;
-}
-
-.action[data-action="deactivated"],
-.action[data-action="unannounced"] {
-  color: var(--on-surface-retreat);
-}
-
 .cellText {
   overflow: hidden;
   text-overflow: ellipsis;

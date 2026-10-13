@@ -3443,7 +3443,7 @@
         "subtitle_other": "{{count}} bandeaux sont affichés à tous les utilisateurs.",
         "subtitle_zero": "Aucun bandeau n'est affiché actuellement.",
         "emptyBanners": "Aucun bandeau pour l'instant.\nCréez-en un pour afficher un message en haut de l'application.",
-        "emptyPatchNotes": "Aucun patch note pour l'instant.\nCréez-en un : il reste masqué tant que vous ne l'affichez pas.",
+        "emptyPatchNotes": "Aucun patch note pour l'instant.\nCréez-en un : les utilisateurs ne le voient pas tant que vous n'annoncez pas la mise à jour.",
         "createBanner": "Nouveau bandeau",
         "createPatchNote": "Nouveau patch note"
       },
@@ -3487,10 +3487,6 @@
         "title": "Supprimer cette annonce ?",
         "message": "« {{title}} » sera définitivement supprimée. Les utilisateurs qui la voient cesseront de la voir."
       },
-      "kind": {
-        "banner": "Bandeau",
-        "patch_note": "Patch note"
-      },
       "patchNote": {
         "dialog": {
           "navigation": "Parcourir les patch notes",
@@ -3511,7 +3507,7 @@
           "bodyRequired": "Rédigez le contenu dans cette langue.",
           "tooLong": "Le contenu dépasse {{max}} caractères dans une langue.",
           "incomplete": "La version {{language}} doit avoir un titre et un contenu, ou aucun des deux.",
-          "saveAndActivate": "Enregistrer et afficher"
+          "saveAndActivate": "Enregistrer et inclure"
         },
         "discard": {
           "title": "Abandonner vos modifications ?",
@@ -3519,14 +3515,14 @@
           "confirm": "Abandonner les modifications",
           "cancel": "Continuer la rédaction"
         },
-        "savedActive": "Patch note enregistré. Les utilisateurs peuvent le lire dans les nouveautés.",
-        "savedInactive": "Patch note enregistré. Il reste masqué : affichez-le pour que les utilisateurs puissent le lire.",
+        "savedActive": "Patch note enregistré. Il est inclus dans la prochaine annonce.",
+        "savedInactive": "Patch note enregistré. Il n'est pas inclus dans la prochaine annonce.",
         "row": {
-          "enabled": "Afficher ce patch note dans les nouveautés",
-          "enableHint": "Afficher dans les nouveautés des utilisateurs",
-          "disableHint": "Masquer des nouveautés des utilisateurs",
-          "statusVisible": "Visible dans les nouveautés",
-          "statusHidden": "Masqué",
+          "enabled": "Inclure ce patch note dans la prochaine annonce",
+          "enableHint": "Inclure dans la prochaine annonce",
+          "disableHint": "Retirer de la prochaine annonce",
+          "statusVisible": "Inclus dans la prochaine annonce",
+          "statusHidden": "Non inclus",
           "preview": "Prévisualiser comme les utilisateurs",
           "edit": "Modifier ce patch note",
           "delete": "Supprimer ce patch note",
@@ -3534,7 +3530,7 @@
         },
         "delete": {
           "title": "Supprimer ce patch note ?",
-          "message": "« {{title}} » sera définitivement supprimé. Les utilisateurs ne pourront plus le lire."
+          "message": "« {{title}} » sera définitivement supprimé. L'annonce en cours n'est pas modifiée."
         },
         "deleted": "Patch note supprimé.",
         "reorder": {
@@ -3549,39 +3545,50 @@
         "announce": {
           "action": "Annoncer la mise à jour",
           "lastUse": "Dernière annonce le {{date}}, par {{name}}",
-          "noneVisible": "Affichez au moins un patch note pour annoncer la mise à jour.",
+          "noneVisible": "Incluez au moins un patch note pour annoncer la mise à jour.",
           "confirm": {
-            "title": "Annoncer la mise à jour ?",
-            "message_one": "Tous les utilisateurs verront la fenêtre « Nouveautés » à leur prochaine connexion. Elle présente {{count}} patch note : « {{title}} ».",
-            "message_other": "Tous les utilisateurs verront la fenêtre « Nouveautés » à leur prochaine connexion. Elle présente {{count}} patch notes et s'ouvre sur « {{title}} ».",
+            "title": "Envoyer cette liste aux utilisateurs ?",
+            "message": "Les utilisateurs verront exactement cette liste, dans cet ordre, à leur prochaine connexion et dans « Nouveautés ». Vos modifications ultérieures ne leur parviendront qu'à la prochaine annonce.",
+            "list": "Patch notes inclus dans l'annonce",
             "confirm": "Annoncer"
           },
           "done": "Mise à jour annoncée. Les utilisateurs la verront à leur prochaine connexion.",
-          "failed": "La mise à jour n'a pas été annoncée."
+          "failed": "La mise à jour n'a pas été annoncée.",
+          "withdraw": {
+            "action": "Retirer l'annonce en cours",
+            "title": "Retirer l'annonce en cours ?",
+            "message": "« Nouveautés » sera vide pour tous les utilisateurs et plus personne ne verra la fenêtre s'ouvrir, jusqu'à la prochaine annonce. Vos patch notes ne sont pas modifiés.",
+            "confirm": "Retirer l'annonce",
+            "done": "Annonce retirée.",
+            "failed": "L'annonce n'a pas été retirée."
+          }
         }
       },
       "history": {
         "empty": "Aucune activation pour l'instant.",
-        "activated": "Activation",
-        "deactivated": "Désactivation",
-        "announced": "Annonce aux utilisateurs",
-        "unannounced": "Annonce annulée",
         "unknownActor": "Auteur inconnu",
-        "error": "Impossible de charger l'historique des activations.",
+        "error": "Impossible de charger l'historique.",
+        "type": {
+          "banner": "Bandeau",
+          "patch_note": "Patch notes"
+        },
+        "more_one": "{{title}} + {{count}} autre",
+        "more_other": "{{title}} + {{count}} autres",
+        "openPackage": "Voir les patch notes annoncés",
+        "packageFailed": "Impossible d'ouvrir les patch notes de cette annonce.",
         "column": {
-          "announcement": "Annonce",
           "type": "Type",
-          "action": "Action",
-          "date": "Date et heure",
-          "by": "Par"
+          "title": "Titre",
+          "activation": "Activation",
+          "deactivation": "Désactivation",
+          "by": "Par",
+          "open": "Ouvrir"
         },
         "filter": {
           "all": "Tout",
-          "activated": "Activations",
-          "deactivated": "Désactivations",
-          "announced": "Annonces aux utilisateurs",
-          "unannounced": "Annonces annulées",
-          "group": "Filtrer par action"
+          "banner": "Bandeaux",
+          "patch_note": "Patch notes",
+          "group": "Filtrer par type"
         }
       },
       "view": {
