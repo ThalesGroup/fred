@@ -112,7 +112,7 @@ async def _deployment(
 
     container = SimpleNamespace(
         get_rebac_engine=lambda: engine_under_test,
-        get_pg_async_engine=lambda: object(),
+        get_pg_async_engine=object,
         get_platform_bootstrap_store=lambda: SimpleNamespace(get_completed_by=root),
         get_prompt_store=lambda: SimpleNamespace(
             delete_favorites_for_user=no_favorites
