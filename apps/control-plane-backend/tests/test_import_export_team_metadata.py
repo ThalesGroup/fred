@@ -37,8 +37,8 @@ from fred_core.models import Base as CoreBase
 from fred_core.scheduler import SchedulerBackend
 from fred_core.tasks.models import StartMigrationRequest
 from fred_core.tasks.service import TaskService
-from fred_core.teams.team_metatada_models import TeamMetadataRow
 from fred_core.teams.metadata_store import TEAM_DESCRIPTION_PLACEHOLDER
+from fred_core.teams.team_metatada_models import TeamMetadataRow
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 

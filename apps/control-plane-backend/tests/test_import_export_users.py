@@ -118,10 +118,12 @@ from fred_core.tasks.models import (
     TaskState,
 )
 from fred_core.tasks.service import TaskService
-from fred_core.teams.metadata_store import TeamMetadataStore
+from fred_core.teams.metadata_store import (
+    TEAM_DESCRIPTION_PLACEHOLDER,
+    TeamMetadataStore,
+)
 from fred_core.users.store.base_user_store import AmbiguousUsernameError
 from fred_core.users.store.postgres_user_store import PostgresUserStore
-from fred_core.teams.metadata_store import TEAM_DESCRIPTION_PLACEHOLDER
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 # ── fixtures / fakes ───────────────────────────────────────────────────────

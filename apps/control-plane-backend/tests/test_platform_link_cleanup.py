@@ -9,8 +9,8 @@ from control_plane_backend.platform_access import api, service
 from fastapi import FastAPI, HTTPException
 from fred_core.security.platform_access.access_control import get_platform_access
 from fred_core.security.platform_access.models import PlatformAccessLinkRow
-from fred_core.teams.team_metatada_models import TeamMetadataRow
 from fred_core.teams.metadata_store import TEAM_DESCRIPTION_PLACEHOLDER
+from fred_core.teams.team_metatada_models import TeamMetadataRow
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import event, select
 from test_platform_access import access as access_fixture

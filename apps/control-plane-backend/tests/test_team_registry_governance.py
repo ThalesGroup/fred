@@ -60,8 +60,7 @@ from fred_core import (
     TeamPermission,
 )
 from fred_core.common import TeamId
-from fred_core.teams.metadata_store import TeamMetadata
-from fred_core.teams.metadata_store import TEAM_DESCRIPTION_PLACEHOLDER
+from fred_core.teams.metadata_store import TEAM_DESCRIPTION_PLACEHOLDER, TeamMetadata
 from httpx import ASGITransport, AsyncClient
 from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError

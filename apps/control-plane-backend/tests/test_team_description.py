@@ -37,6 +37,7 @@ from fred_core.teams.metadata_store import TEAM_DESCRIPTION_PLACEHOLDER, TeamMet
 from fred_core.teams.team_metatada_models import TeamMetadataRow
 from httpx import ASGITransport, AsyncClient
 from pydantic import ValidationError
+from sqlalchemy.exc import IntegrityError
 from test_import_export_team_metadata import _import, _make_engine, _seed_team
 from test_team_registry_governance import (
     _deps,
@@ -292,7 +293,7 @@ def test_migration_backfills_then_downgrade_restores_the_old_column() -> None:
         "t-short": TEAM_DESCRIPTION_PLACEHOLDER,
         "t-padded": "Draft and review procurement contracts.",
     }
-    with pytest.raises(sa.exc.IntegrityError), engine.begin() as connection:
+    with pytest.raises(IntegrityError), engine.begin() as connection:
         connection.execute(teams.update().values(description="Short"))
     with engine.begin() as connection:
         connection.execute(

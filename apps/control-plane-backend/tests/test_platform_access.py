@@ -46,9 +46,9 @@ from fred_core.security.rebac.rebac_engine import (
     RebacReference,
     RelationType,
 )
+from fred_core.teams.metadata_store import TEAM_DESCRIPTION_PLACEHOLDER
 from fred_core.teams.team_metatada_models import TeamMetadataRow
 from fred_core.users.user_models import UserRow
-from fred_core.teams.metadata_store import TEAM_DESCRIPTION_PLACEHOLDER
 from fred_pod.security.platform_access import (
     PlatformAccessCondition,
     PlatformAccessPolicy,
