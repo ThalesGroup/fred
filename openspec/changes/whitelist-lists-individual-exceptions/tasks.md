@@ -38,6 +38,13 @@
 - [x] 7.5 Update the contract entry, `COMPONENT-UX.md` and the migration note; record the evidence below and re-run `openspec validate whitelist-lists-individual-exceptions --strict`.
 - [x] 7.6 Title the Users block with an `h3` above the toolbar and reword the search; verify with a page test that the heading is the panel's first element and the only `h3` in it.
 
+## 8. One navigation level, whitelist wording, compact other access
+
+- [ ] 8.1 Replace the Whitelist tab and its sub-tabs by top-level Users and Teams tabs, each with an `h3` title and a description above its controls; verify with page tests (three tabs, one exposed panel, keyboard navigation, users request skipped on other tabs, draft/search/page/page size preserved, header action present on each tab).
+- [ ] 8.2 Show other access as one chip with a grouped tooltip and an empty cell otherwise; verify with page tests (one chip per row with other access, none without, grouped content for each kind and several teams, focusable trigger with an accessible name).
+- [ ] 8.3 Reword the French strings to "de la liste blanche" and delete unused keys; verify key parity and that no deleted key is referenced.
+- [ ] 8.4 Update `COMPONENT-UX.md`, record the evidence and re-run `openspec validate whitelist-lists-individual-exceptions --strict`.
+
 ## Verification evidence (2026-10-13)
 
 Nothing visual was checked: the page and the dialog were not rendered in a browser, and the running control-plane was not restarted, so the new filter was not exercised against a live backend or PostgreSQL.
