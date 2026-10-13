@@ -27,6 +27,8 @@ Two behaviours of `GET /admin/platform/access/users` change for anyone calling i
 - It accepts the optional query parameter `exceptions_only` (default `false`). When `true`, the returned page and `total` cover only users holding an individual exception.
 - Without `exceptions_only`, rows are now ordered by username without regard to case, users without a username last, then by user id. They were previously ordered by user id. With `exceptions_only=true`, the most recently granted exceptions come first, that alphabetical rule breaking ties. A script paging through this endpoint keeps working; only the order of rows differs.
 
+- Its `query` search now ignores accents as well as case ("helene" finds "Hélène" and the reverse). No database extension is needed.
+
 The response shape does not change.
 
 ## Validation

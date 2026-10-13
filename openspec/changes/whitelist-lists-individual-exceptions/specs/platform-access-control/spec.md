@@ -42,7 +42,7 @@ Only people holding the existing platform-management permission SHALL read or mo
 - **WHEN** a save uses an older revision than the active policy
 - **THEN** the system SHALL return HTTP 409 and retain the newer policy, while the UI preserves the unsaved draft and explains the conflict
 
-The paginated user listing SHALL accept an optional restriction to people holding an individual exception (manual or T0). With the restriction, both the returned page and its total SHALL cover only those people; without it, every known user SHALL be listed as before. Without the restriction, with or without a search, rows SHALL be returned in a stable alphabetical order: by username without regard to case, people without a username after all others, the user identifier breaking ties. With the restriction, the most recently granted exceptions SHALL come first, that alphabetical order breaking ties between exceptions granted at the same time. Each row's admission sources SHALL be reported identically in both modes, the individual source carrying its grant time.
+The paginated user listing SHALL accept an optional restriction to people holding an individual exception (manual or T0). The listing's search SHALL ignore letter case and accents on both the searched text and the stored identifier, email, first name and last name, so that a letter with a diacritic and its plain letter match each other in either direction; ligatures and letters without a plain base letter SHALL match only themselves. With the restriction, both the returned page and its total SHALL cover only those people; without it, every known user SHALL be listed as before. Without the restriction, with or without a search, rows SHALL be returned in a stable alphabetical order: by username without regard to case, people without a username after all others, the user identifier breaking ties. With the restriction, the most recently granted exceptions SHALL come first, that alphabetical order breaking ties between exceptions granted at the same time. Each row's admission sources SHALL be reported identically in both modes, the individual source carrying its grant time.
 
 User rows SHALL show identifier, first name and last name using the team-member table presentation, then when the individual access was added in the administrator's locale, its origin (manual or initial import), and, when the person has other admission sources (rule, platform administration, authorized teams, link-access teams), one compact "other access" indicator whose detail lists those sources grouped by kind with team names, without repeating the individual access. That detail SHALL be reachable by pointer and by keyboard and SHALL be exposed to assistive technology. A row with no other source SHALL leave that cell empty, so that it is visible that removing the person withdraws their access. The Users block SHALL carry a heading naming the whitelisted users, placed above its search and actions. The Users list SHALL show, by default and without any search, only the people holding an individual exception, paginated by the server with the real total and never loading the full directory. Its search SHALL narrow that list and SHALL be sent after a pause in typing, restarting at the first page. Only the current response SHALL provide rows; a loading or failed request SHALL hide previous rows. Each listed row SHALL offer removal of the individual exception and SHALL confirm a successful removal. A list with no individual exception SHALL say so and point to the add action, and SHALL be distinguishable from a search without match.
 
@@ -82,6 +82,11 @@ Adding people SHALL go through a dialog that searches all known users on the ser
 - **WHEN** the listing is requested with the restriction and a search text
 - **THEN** only people who hold an individual exception and match the search SHALL be returned and counted
 
+#### Scenario: Search ignores accents and case
+
+- **WHEN** people named "Hélène" and "Helene" are known and the listing is searched for "helene", then for "HÉLÈNE"
+- **THEN** both people SHALL be returned and counted by each search, with or without the restriction to individual exceptions
+
 #### Scenario: Listing without the restriction
 
 - **WHEN** the listing is requested without the restriction
@@ -104,7 +109,7 @@ Adding people SHALL go through a dialog that searches all known users on the ser
 
 ### Requirement: Access administration has readable section navigation
 
-The page SHALL provide one level of navigation with localized Rules, Users and Teams tabs using the shared Fred navigation presentation, without sub-tabs. Only the active panel SHALL be exposed visually or to keyboard and assistive navigation, and no listing SHALL be requested for a tab that is not shown. The rule draft, the user search, page and page size SHALL survive tab changes without implicit saving or admission mutations. Users and Teams are the two halves of the whitelist: each SHALL open with a heading naming it and a short description stating that its entries always have access whatever the rule, placed above its controls. Import existing users and individual exceptions SHALL appear in Users; independent team authorization SHALL appear in Teams. A top-right filtering action in the page header SHALL remain available across all tabs, without a separate Activation tab. Ordinary content, secondary explanations and section headings SHALL use a consistent readable typography scale across the page and its dialogs. Repeated explanations SHALL be removed while authorization exceptions, revocation consequences, validation and errors remain understandable.
+The page SHALL provide one level of navigation with localized Rules, Users and Teams tabs using the shared Fred navigation presentation, without sub-tabs. Only the active panel SHALL be exposed visually or to keyboard and assistive navigation, and no listing SHALL be requested for a tab that is not shown. The rule draft, the user search, page and page size SHALL survive tab changes without implicit saving or admission mutations. Users and Teams are the two halves of the whitelist: each SHALL open with a heading naming it and a short description stating that its entries always have access whatever the rule, placed above its controls. Import existing users and individual exceptions SHALL appear in Users; independent team authorization SHALL appear in Teams. Every search field of the page (users, teams, account-field picker) SHALL ignore letter case and accents. A top-right filtering action in the page header SHALL remain available across all tabs, without a separate Activation tab. Ordinary content, secondary explanations and section headings SHALL use a consistent readable typography scale across the page and its dialogs. Repeated explanations SHALL be removed while authorization exceptions, revocation consequences, validation and errors remain understandable.
 
 #### Scenario: Return to an unsaved rule or selected users
 
@@ -126,6 +131,11 @@ The page SHALL provide one level of navigation with localized Rules, Users and T
 - **WHEN** an administrator opens Users, then Teams
 - **THEN** each SHALL show its own heading and description
 - **AND** only the selected panel SHALL be exposed, with import/individual controls in Users and live team authorization in Teams
+
+#### Scenario: Team and field searches ignore accents
+
+- **WHEN** an administrator types "equipe demos" in the Teams search while a team is named "Équipe Démos", or types an accented spelling of a field name in the account-field picker
+- **THEN** the team, respectively the field, SHALL be listed
 
 #### Scenario: Filtering action available in the header
 

@@ -45,6 +45,12 @@
 - [x] 8.3 Reword the French strings to "de la liste blanche" and delete unused keys; verify key parity and that no deleted key is referenced.
 - [x] 8.4 Update `COMPONENT-UX.md`, record the evidence and re-run `openspec validate whitelist-lists-individual-exceptions --strict`.
 
+## 9. Accent-insensitive searches
+
+- [x] 9.1 Fold accents and case in the server-side user search with a shared SQL construct and its Python twin; verify with fred-core tests (accent on either side and both, mixed case, with the exception filter, symbols and other scripts unchanged, PostgreSQL expression compiled).
+- [x] 9.2 Fold accents and case in the teams filter and the account-field picker with the existing `stripDiacritics`; verify with page tests (match, no-match line, clear) and a picker test.
+- [x] 9.3 Update the contract entry, `COMPONENT-UX.md` and the migration note; record the evidence and re-run `openspec validate whitelist-lists-individual-exceptions --strict`.
+
 ## Verification evidence (2026-10-13)
 
 Nothing visual was checked: the page and the dialog were not rendered in a browser, and the running control-plane was not restarted, so the new filter was not exercised against a live backend or PostgreSQL.
@@ -108,4 +114,14 @@ From `apps/frontend`, no make target:
 - Page tests rewritten for this section: one tablist of three tabs with matching `aria-controls` / `aria-labelledby`, one exposed panel at a time, arrow-key navigation through the three tabs, header filtering action present on each; title then description as the first element of the Users and Teams panels, before any control; users request skipped on the Rules and Teams tabs; rule draft, search and page preserved across the three tabs; one focusable chip per row with other access, its accessible name and its tooltip listing rule, administrator, two authorized teams on one line and the link-access team; a single-kind row; an empty cell without chip for a row with no other access.
 - No shared component was changed. `Chip` has a single size and accepts neither focus nor ARIA props; it is wrapped, not extended.
 - `rework.platformAccess` exposes the same 223 keys in French and English; `whitelistTabs.*`, `whitelistHint`, `teamHint`, `source.*` and `otherSources` are removed and no longer referenced.
+- `openspec validate whitelist-lists-individual-exceptions --strict`: valid.
+
+## Verification evidence for section 9 (2026-10-14)
+
+Not run: anything in a browser, and the PostgreSQL path against a real server (the running control-plane keeps the previous code until restarted; the PostgreSQL-backed tests need `FRED_PLATFORM_ACCESS_TEST_DATABASE_URL`).
+
+- `libs/fred-core`: `make test` 1250 passed, 1 skipped, 42 deselected; `ruff check`, `ruff check --select I`, `ruff format --check` pass; `basedpyright --baseline-file .baseline/basedpyright-baseline.json` 0 errors. `test_user_search_ignores_accents_and_case_on_both_sides` (SQLite): accent on the stored side, on the query side, on both, mixed case, a letter typed as base + combining mark, every column still searched, combined with `exceptions_only`, total equal to the rows, symbols and `%` as before, Cyrillic, ligatures matching only themselves. `test_accent_folding_table_and_postgresql_expression`: the letters listed in the request and their upper cases fold to their base, and the PostgreSQL statement compiles to four `translate(lower(users.…))` with the folded pattern and no `replace`.
+- `apps/control-plane-backend`: `make test` 1788 passed, 10 skipped (PostgreSQL-backed, including the new `test_pg_user_search_ignores_accents_and_case`), 11 deselected; same four lint and type checks clean.
+- `apps/frontend`, no make target: `npx tsc --noEmit` exit 0; `npx eslint src/rework/components/pages/admin/PlatformAccessPage` exit 0; prettier check passes on that folder; `npx vitest run`, one file at a time: `PlatformAccessPage.test.tsx` 34 passed (one added: teams filter with accents either side, case, unnamed team, no-match line, clear), `PlatformAccessRuleEditor.test.tsx` 34 passed (picker search extended with an accented query), `PlatformAccessAddUsersDialog.test.tsx` 9 and `PlatformAccessLinkManager.test.tsx` 27 passed, unmodified.
+- No response shape change: the generated client was not regenerated.
 - `openspec validate whitelist-lists-individual-exceptions --strict`: valid.
