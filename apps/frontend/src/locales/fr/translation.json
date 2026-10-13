@@ -3546,6 +3546,7 @@
           "action": "Annoncer la mise à jour",
           "lastUse": "Dernière annonce le {{date}}, par {{name}}",
           "noneVisible": "Incluez au moins un patch note pour annoncer la mise à jour.",
+          "tooMany": "Une annonce contient au plus {{max}} patch notes. Désélectionnez-en pour annoncer.",
           "confirm": {
             "title": "Envoyer cette liste aux utilisateurs ?",
             "message": "Les utilisateurs verront exactement cette liste, dans cet ordre, à leur prochaine connexion et dans « Nouveautés ». Vos modifications ultérieures ne leur parviendront qu'à la prochaine annonce.",
@@ -3554,6 +3555,7 @@
           },
           "done": "Mise à jour annoncée. Les utilisateurs la verront à leur prochaine connexion.",
           "failed": "La mise à jour n'a pas été annoncée.",
+          "changed": "Les patch notes ont changé entre-temps. Vérifiez la liste, puis annoncez de nouveau.",
           "withdraw": {
             "action": "Retirer l'annonce en cours",
             "title": "Retirer l'annonce en cours ?",

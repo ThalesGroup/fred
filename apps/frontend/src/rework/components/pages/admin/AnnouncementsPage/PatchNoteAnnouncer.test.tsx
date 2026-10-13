@@ -54,7 +54,7 @@ vi.mock("react-i18next", () => ({
   }),
 }));
 
-import PatchNoteAnnouncer from "./PatchNoteAnnouncer";
+import PatchNoteAnnouncer, { MAX_PATCH_NOTES_PER_ANNOUNCEMENT } from "./PatchNoteAnnouncer";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -70,11 +70,17 @@ const KEYS = "rework.announcements.patchNote.announce";
 let container: HTMLDivElement | null = null;
 let root: Root | null = null;
 
-function render(includedNotes = INCLUDED): HTMLDivElement {
+const onSelectionChanged = vi.fn();
+
+function render(includedNotes = INCLUDED, settling = false): HTMLDivElement {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
-  act(() => root!.render(<PatchNoteAnnouncer includedNotes={includedNotes} />));
+  act(() =>
+    root!.render(
+      <PatchNoteAnnouncer includedNotes={includedNotes} settling={settling} onSelectionChanged={onSelectionChanged} />,
+    ),
+  );
   return container;
 }
 
@@ -126,7 +132,8 @@ describe("PatchNoteAnnouncer", () => {
 
     await act(async () => buttonWith(confirmation()!, `${KEYS}.confirm.confirm`)!.click());
 
-    expect(announceMock).toHaveBeenCalledOnce();
+    // The ids of the list just confirmed, in its order: the server freezes those or refuses.
+    expect(announceMock.mock.calls).toEqual([[{ patchNoteAnnounceRequest: { ids: ["p2", "p1"] } }]]);
     expect(confirmation()).toBeNull();
     expect(showSuccess).toHaveBeenCalledWith({ summary: `${KEYS}.done` });
   });
@@ -141,16 +148,49 @@ describe("PatchNoteAnnouncer", () => {
     expect(announceMock).not.toHaveBeenCalled();
   });
 
-  it("reports a refused announcement", async () => {
+  it("reports a failed announcement", async () => {
     announceMock.mockReturnValue({
-      unwrap: () => Promise.reject({ status: 409, data: { detail: "nothing included" } }),
+      unwrap: () => Promise.reject({ status: 500, data: { detail: "boom" } }),
     });
     render();
     act(() => announceButton().click());
 
     await act(async () => buttonWith(confirmation()!, `${KEYS}.confirm.confirm`)!.click());
 
-    expect(showError).toHaveBeenCalledWith({ summary: `${KEYS}.failed`, detail: "nothing included" });
+    expect(showError).toHaveBeenCalledWith({ summary: `${KEYS}.failed`, detail: "boom" });
+    expect(onSelectionChanged).not.toHaveBeenCalled();
+  });
+
+  it("reloads the list and says the selection changed when the server refuses the confirmed one", async () => {
+    announceMock.mockReturnValue({
+      unwrap: () => Promise.reject({ status: 409, data: { detail: "the included patch notes changed" } }),
+    });
+    render();
+    act(() => announceButton().click());
+
+    await act(async () => buttonWith(confirmation()!, `${KEYS}.confirm.confirm`)!.click());
+
+    expect(onSelectionChanged).toHaveBeenCalledOnce();
+    expect(showError).toHaveBeenCalledWith({ summary: `${KEYS}.changed` });
+    expect(showSuccess).not.toHaveBeenCalled();
+  });
+
+  it("waits for a toggle or a reorder under way before it can announce", () => {
+    render(INCLUDED, true);
+
+    expect(announceButton().disabled).toBe(true);
+  });
+
+  it("is unavailable above the most an announcement holds, and says to deselect some", () => {
+    const eleven = Array.from({ length: MAX_PATCH_NOTES_PER_ANNOUNCEMENT + 1 }, (_, index) => note(`p${index}`, "N"));
+    inEffect();
+
+    render(eleven);
+
+    expect(announceButton().disabled).toBe(true);
+    expect(line()).toBe(`${KEYS}.tooMany:{"max":${MAX_PATCH_NOTES_PER_ANNOUNCEMENT}}`);
+    act(() => root!.render(<PatchNoteAnnouncer includedNotes={eleven.slice(1)} />));
+    expect(announceButton().disabled).toBe(false);
   });
 
   it("is unavailable while no patch note is included, and says what to do", () => {

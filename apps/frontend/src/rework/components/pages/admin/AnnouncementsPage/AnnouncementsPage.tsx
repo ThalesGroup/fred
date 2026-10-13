@@ -69,7 +69,7 @@ export default function AnnouncementsPage() {
   const { t, i18n } = useTranslation();
   const { showSuccess, showError } = useToast();
   const { showConfirmationDialog } = useConfirmationDialog();
-  const { data: announcements = [], isLoading } = useAnnouncementsQuery();
+  const { data: announcements = [], isLoading, isFetching, refetch } = useAnnouncementsQuery();
   const [createAnnouncement, { isLoading: isCreating }] = useCreateAnnouncementMutation();
   const [updateAnnouncement, { isLoading: isUpdating }] = useUpdateAnnouncementMutation();
   const [setEnabled] = useSetAnnouncementEnabledMutation();
@@ -81,6 +81,7 @@ export default function AnnouncementsPage() {
   const [previewing, setPreviewing] = useState<Announcement | null>(null);
   const [serverError, setServerError] = useState<string | undefined>();
   const [pendingIds, setPendingIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [reordering, setReordering] = useState(false);
 
   const setPending = (id: string, pending: boolean) =>
     setPendingIds((previous) => {
@@ -94,6 +95,8 @@ export default function AnnouncementsPage() {
   const banners = announcements.filter((a) => a.kind !== "patch_note");
   const patchNotes = announcements.filter((a) => a.kind === "patch_note");
   const enabledCount = banners.filter((a) => a.enabled).length;
+  // What the confirmation lists must be what the server holds: wait for it.
+  const settling = isFetching || reordering || patchNotes.some((note) => pendingIds.has(note.id));
   const list = view === "history" ? undefined : LISTS[view];
 
   const closeEditor = () => {
@@ -219,6 +222,14 @@ export default function AnnouncementsPage() {
         <ActivationHistory />
       ) : (
         <div className={styles.main}>
+          {/* Above the empty state too: an announcement can outlive its patch notes. */}
+          {view === "patchNotes" && (
+            <PatchNoteAnnouncer
+              includedNotes={patchNotes.filter((a) => a.enabled)}
+              settling={settling}
+              onSelectionChanged={() => void refetch()}
+            />
+          )}
           {!isLoading && (view === "banners" ? banners : patchNotes).length === 0 ? (
             // No action of its own: the header button is always there.
             <PageEmptyState icon={list.icon} message={t(`rework.announcements.page.${list.empty}`)} />
@@ -244,17 +255,15 @@ export default function AnnouncementsPage() {
               ))}
             </ul>
           ) : (
-            <>
-              <PatchNoteAnnouncer includedNotes={patchNotes.filter((a) => a.enabled)} />
-              <PatchNoteList
-                notes={patchNotes}
-                pendingIds={pendingIds}
-                onPreview={setPreviewing}
-                onToggle={(note, enabled) => void toggle(note, enabled)}
-                onEdit={(announcement) => setEditing({ kind: "patch_note", announcement })}
-                onDelete={onDelete}
-              />
-            </>
+            <PatchNoteList
+              notes={patchNotes}
+              pendingIds={pendingIds}
+              onPreview={setPreviewing}
+              onToggle={(note, enabled) => void toggle(note, enabled)}
+              onEdit={(announcement) => setEditing({ kind: "patch_note", announcement })}
+              onDelete={onDelete}
+              onReorderingChange={setReordering}
+            />
           )}
         </div>
       )}

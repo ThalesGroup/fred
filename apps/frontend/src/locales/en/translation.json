@@ -3546,6 +3546,7 @@
           "action": "Announce the update",
           "lastUse": "Last announced on {{date}}, by {{name}}",
           "noneVisible": "Include at least one patch note to announce the update.",
+          "tooMany": "An announcement holds at most {{max}} patch notes. Deselect some to announce.",
           "confirm": {
             "title": "Send this list to users?",
             "message": "Users will see exactly this list, in this order, at their next sign-in and in What's new. Your later changes will not reach them until the next announcement.",
@@ -3554,6 +3555,7 @@
           },
           "done": "Update announced. Users will see it at their next sign-in.",
           "failed": "The update was not announced.",
+          "changed": "The patch notes changed meanwhile. Check the list, then announce again.",
           "withdraw": {
             "action": "Withdraw the current announcement",
             "title": "Withdraw the current announcement?",

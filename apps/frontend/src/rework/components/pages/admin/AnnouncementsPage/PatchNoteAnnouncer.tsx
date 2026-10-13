@@ -32,12 +32,24 @@ import styles from "./PatchNoteAnnouncer.module.css";
 
 const KEYS = "rework.announcements.patchNote.announce";
 
+/** Most patch notes one announcement may hold; the server refuses more. */
+export const MAX_PATCH_NOTES_PER_ANNOUNCEMENT = 10;
+
+interface PatchNoteAnnouncerProps {
+  /** The included patch notes, in order: what the next announcement freezes. */
+  includedNotes: Announcement[];
+  /** A toggle, a reorder or a reload is under way: the list is not yet the server's. */
+  settling?: boolean;
+  /** The server refused the confirmed list as out of date. */
+  onSelectionChanged?: () => void;
+}
+
 /**
  * "Announce the update" freezes the included patch notes as what users read,
  * until the next announcement; nothing else reaches them. Beside it, when and
  * by whom it was last used, and a way to withdraw the announcement in effect.
  */
-export default function PatchNoteAnnouncer({ includedNotes }: { includedNotes: Announcement[] }) {
+export default function PatchNoteAnnouncer({ includedNotes, settling, onSelectionChanged }: PatchNoteAnnouncerProps) {
   const { t, i18n } = useTranslation();
   const { showSuccess, showError } = useToast();
   const { showConfirmationDialog } = useConfirmationDialog();
@@ -56,6 +68,25 @@ export default function PatchNoteAnnouncer({ includedNotes }: { includedNotes: A
       showError({ summary: t(`${keys}.failed`), detail: normalizeApiError(error).detail });
     }
   };
+
+  // The ids sent are the list the confirmation showed: the server freezes
+  // those or refuses, so nothing else can reach users.
+  const announceConfirmed = async () => {
+    try {
+      await announce({ patchNoteAnnounceRequest: { ids: includedNotes.map((note) => note.id) } }).unwrap();
+      showSuccess({ summary: t(`${KEYS}.done`) });
+    } catch (error: unknown) {
+      const { status, detail } = normalizeApiError(error);
+      if (status === 409) {
+        onSelectionChanged?.();
+        showError({ summary: t(`${KEYS}.changed`) });
+      } else {
+        showError({ summary: t(`${KEYS}.failed`), detail });
+      }
+    }
+  };
+
+  const tooMany = includedNotes.length > MAX_PATCH_NOTES_PER_ANNOUNCEMENT;
 
   const askWithdraw = () =>
     showConfirmationDialog({
@@ -89,13 +120,15 @@ export default function PatchNoteAnnouncer({ includedNotes }: { includedNotes: A
         variant="tonal"
         size="medium"
         icon={{ category: "outlined", type: "campaign" }}
-        disabled={includedNotes.length === 0 || isAnnouncing}
+        disabled={includedNotes.length === 0 || tooMany || settling || isAnnouncing}
         onClick={() => setConfirming(true)}
       >
         {t(`${KEYS}.action`)}
       </Button>
       <p className={styles.lastUse} aria-live="polite">
-        {lastUse || (includedNotes.length === 0 && t(`${KEYS}.noneVisible`))}
+        {tooMany
+          ? t(`${KEYS}.tooMany`, { max: MAX_PATCH_NOTES_PER_ANNOUNCEMENT })
+          : lastUse || (includedNotes.length === 0 && t(`${KEYS}.noneVisible`))}
       </p>
       {announcement && (
         <div className={styles.withdraw}>
@@ -128,7 +161,7 @@ export default function PatchNoteAnnouncer({ includedNotes }: { includedNotes: A
         cancelLabel={t("common.cancel")}
         onConfirm={() => {
           setConfirming(false);
-          void run(() => announce().unwrap(), KEYS);
+          void announceConfirmed();
         }}
         onCancel={() => setConfirming(false)}
       />

@@ -95,10 +95,13 @@ function show(notes: Announcement[]) {
         onToggle={vi.fn()}
         onEdit={vi.fn()}
         onDelete={vi.fn()}
+        onReorderingChange={reorderingMock}
       />,
     ),
   );
 }
+
+const reorderingMock = vi.fn();
 
 function render(notes = SERVED): HTMLDivElement {
   container = document.createElement("div");
@@ -147,7 +150,10 @@ describe("PatchNoteList", () => {
     show([...SERVED]);
     expect(order()).toEqual(["Note b", "Note a", "Note c"]);
 
+    // Told while the save is in flight, so nothing announces the old order.
+    expect(reorderingMock.mock.calls).toEqual([[true]]);
     await act(async () => settle());
+    expect(reorderingMock.mock.calls).toEqual([[true], [false]]);
     show([patchNote("b", 1), patchNote("a", 2), patchNote("c", 3)]);
     expect(order()).toEqual(["Note b", "Note a", "Note c"]);
   });

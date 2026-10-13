@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useMemo, useState, type ButtonHTMLAttributes, type Ref } from "react";
+import { useMemo, useRef, useState, type ButtonHTMLAttributes, type Ref } from "react";
 import { useTranslation } from "react-i18next";
 import {
   closestCenter,
@@ -57,9 +57,11 @@ interface PatchNoteListProps {
   onToggle: (note: Announcement, enabled: boolean) => void;
   onEdit: (note: Announcement) => void;
   onDelete: (note: Announcement) => void;
+  /** Told while an order is being saved: the list shown is not yet the server's. */
+  onReorderingChange?: (reordering: boolean) => void;
 }
 
-interface PatchNoteCardProps extends Omit<PatchNoteListProps, "notes" | "pendingIds"> {
+interface PatchNoteCardProps extends Omit<PatchNoteListProps, "notes" | "pendingIds" | "onReorderingChange"> {
   note: Announcement;
   pending: boolean;
   /** `placeholder` marks where a dragged card will land; `lifted` is the card under the pointer. */
@@ -150,7 +152,7 @@ function SortablePatchNote({ reducedMotion, ...card }: PatchNoteCardProps & { re
  * the administrator changes it by dragging a card's handle or with the keyboard
  * (Space or Enter on the handle, arrows, Space or Enter again).
  */
-export default function PatchNoteList({ notes, pendingIds, ...actions }: PatchNoteListProps) {
+export default function PatchNoteList({ notes, pendingIds, onReorderingChange, ...actions }: PatchNoteListProps) {
   const { t, i18n } = useTranslation();
   const { showError } = useToast();
   const [setOrder] = useSetPatchNoteOrderMutation();
@@ -158,6 +160,8 @@ export default function PatchNoteList({ notes, pendingIds, ...actions }: PatchNo
   // The order just dropped, shown until the list read back from the server
   // differs from the one it was dropped on: no jump back while the save is in flight.
   const [dropped, setDropped] = useState<{ on: string; ids: string[] } | null>(null);
+  // Drops can overlap: reordering ends when the last save does.
+  const saving = useRef(0);
   const reducedMotion = useMemo(() => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false, []);
   const sensors = useSensors(
     // A few pixels of travel first, so a plain click on the handle is not a drag.
@@ -195,6 +199,7 @@ export default function PatchNoteList({ notes, pendingIds, ...actions }: PatchNo
     if (!over || active.id === over.id) return;
     const next = arrayMove(ids, ids.indexOf(String(active.id)), ids.indexOf(String(over.id)));
     setDropped({ on: served, ids: next });
+    if (++saving.current === 1) onReorderingChange?.(true);
     setOrder({ patchNoteOrderRequest: { ids: next } })
       .unwrap()
       .catch((error: unknown) => {
@@ -204,6 +209,9 @@ export default function PatchNoteList({ notes, pendingIds, ...actions }: PatchNo
           summary: t("rework.announcements.patchNote.reorder.failed"),
           detail: normalizeApiError(error).detail,
         });
+      })
+      .finally(() => {
+        if (--saving.current === 0) onReorderingChange?.(false);
       });
   };
 

@@ -78,8 +78,13 @@ const patchNoteEditor = vi.hoisted(() => ({
   },
 }));
 vi.mock("./PatchNoteAnnouncer", () => ({
-  default: ({ includedNotes }: { includedNotes: Announcement[] }) => (
-    <div data-testid="announcer" data-included={includedNotes.map((note) => note.id).join()} />
+  default: (props: { includedNotes: Announcement[]; settling?: boolean; onSelectionChanged?: () => void }) => (
+    <button
+      data-testid="announcer"
+      data-included={props.includedNotes.map((note) => note.id).join()}
+      data-settling={props.settling || undefined}
+      onClick={props.onSelectionChanged}
+    />
   ),
 }));
 vi.mock("./PatchNoteEditorDialog", () => ({
@@ -230,11 +235,22 @@ describe("AnnouncementsPage", () => {
 
     act(() => tab(el, "patchNotes").click());
     expect(el.textContent).toContain("rework.announcements.page.emptyPatchNotes");
-    // Nothing to announce and nothing to say about it either.
-    expect(el.querySelector('[data-testid="announcer"]')).toBeNull();
+    // An announcement can outlive its patch notes: withdrawing stays reachable.
+    expect(el.querySelector('[data-testid="announcer"]')?.getAttribute("data-included")).toBe("");
 
     act(() => tab(el, "banners").click());
     expect(el.querySelectorAll("li")).toHaveLength(1);
+  });
+
+  it("holds the announce action while the list reloads, and reloads it when the server refuses a stale one", () => {
+    listMock.mockReturnValue({ data: [patchNote()], isLoading: false, isFetching: true, refetch: refetchMock });
+    const el = renderPatchNotes();
+    const announcer = el.querySelector<HTMLButtonElement>('[data-testid="announcer"]')!;
+
+    expect(announcer.dataset.settling).toBe("true");
+    act(() => announcer.click());
+
+    expect(refetchMock).toHaveBeenCalledOnce();
   });
 
   it("empty state shows no duplicate action", () => {
