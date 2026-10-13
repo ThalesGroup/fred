@@ -498,7 +498,7 @@ wheels = [
 
 [[package]]
 name = "fred-capability-ppt-filler"
-version = "4.4.3"
+version = "4.5.0"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
@@ -572,7 +572,7 @@ dev = [
 
 [[package]]
 name = "fred-core"
-version = "4.4.3"
+version = "4.5.0"
 source = { editable = "../../fred-core" }
 dependencies = [
     { name = "aiosqlite" },
@@ -676,7 +676,7 @@ dev = [
 
 [[package]]
 name = "fred-pod"
-version = "4.4.3"
+version = "4.5.0"
 source = { editable = "../../fred-pod" }
 dependencies = [
     { name = "httpx" },
@@ -716,7 +716,7 @@ dev = [
 
 [[package]]
 name = "fred-sdk"
-version = "4.4.3"
+version = "4.5.0"
 source = { editable = "../../fred-sdk" }
 dependencies = [
     { name = "fred-pod" },

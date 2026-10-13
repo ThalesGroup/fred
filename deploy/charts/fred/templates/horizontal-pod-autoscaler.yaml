@@ -1,0 +1,38 @@
+{{- range $name, $rawApp := .Values.applications }}
+  {{- $app := $rawApp }}
+  {{- if hasKey $rawApp "inheritFrom" }}
+    {{- $app = include "fred.resolvedApp" (dict "app" $rawApp "root" $ "name" $name) | fromYaml }}
+  {{- end }}
+  {{- $appEnabled := true }}
+  {{- if hasKey $app "enabled" }}
+    {{- $appEnabled = $app.enabled }}
+  {{- end }}
+  {{- if and $appEnabled $app.autoscaling $app.autoscaling.enabled }}
+    {{- if not $app.deployment.enabled }}
+      {{- fail (printf "applications.%s.autoscaling.enabled requires applications.%s.deployment.enabled" $name $name) }}
+    {{- end }}
+    {{- if gt (int $app.autoscaling.minReplicas) (int $app.autoscaling.maxReplicas) }}
+      {{- fail (printf "applications.%s.autoscaling.minReplicas must be less than or equal to maxReplicas" $name) }}
+    {{- end }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ $app.applicationName }}
+  labels:
+    app: {{ $app.applicationName }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ $app.applicationName }}
+  minReplicas: {{ $app.autoscaling.minReplicas }}
+  maxReplicas: {{ $app.autoscaling.maxReplicas }}
+  metrics:
+{{ toYaml $app.autoscaling.metrics | nindent 4 }}
+  {{- with $app.autoscaling.behavior }}
+  behavior:
+{{ toYaml . | nindent 4 }}
+  {{- end }}
+  {{- end }}
+{{- end }}

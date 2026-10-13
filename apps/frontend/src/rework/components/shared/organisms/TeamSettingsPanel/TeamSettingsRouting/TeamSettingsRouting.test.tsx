@@ -40,6 +40,8 @@ const h = vi.hoisted(() => ({
   fetching: false,
   readError: false,
   refetch: vi.fn(),
+  showSuccess: vi.fn(),
+  showError: vi.fn(),
   showWarn: vi.fn(),
   updateRoutingPolicy: vi.fn((_: unknown) => ({ unwrap: () => Promise.resolve() as Promise<unknown> })),
   fetchDisableImpact: vi.fn((_: unknown, __?: boolean) => ({ unwrap: () => Promise.resolve(h.impact) })),
@@ -49,7 +51,9 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({ showWarn: h.showWarn }) }));
+vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
+  useToast: () => ({ showSuccess: h.showSuccess, showError: h.showError, showWarn: h.showWarn }),
+}));
 
 vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useTeamRoutingPolicyQuery: () => ({
@@ -86,6 +90,8 @@ afterEach(() => {
   h.updateRoutingPolicy.mockClear();
   h.fetchDisableImpact.mockClear();
   h.refetch.mockClear();
+  h.showSuccess.mockClear();
+  h.showError.mockClear();
   h.showWarn.mockClear();
   h.fetching = false;
   h.readError = false;
@@ -233,6 +239,13 @@ describe("TeamSettingsRouting", () => {
         expected_version: 1,
       },
     });
+    expect(h.showSuccess).not.toHaveBeenCalled();
+    await act(async () => {
+      resolveSave();
+      await saved;
+    });
+    expect(h.showSuccess).toHaveBeenCalledExactlyOnceWith({ summary: "rework.teamSettings.routing.saveSuccess" });
+    expect(h.showError).not.toHaveBeenCalled();
   });
 
   it("lists the recommending agents and the conversation fallback, then saves on confirm", async () => {

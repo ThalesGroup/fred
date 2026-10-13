@@ -17,9 +17,24 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Any, Iterable
+from typing import Any, Iterable, cast
 
 import duckdb
+import pandas as pd
+
+
+def dataframe_to_records(frame: pd.DataFrame) -> list[dict[str, object]]:
+    """Return SQL rows with pandas missing values represented by Python None.
+
+    Why this exists: NaT survives ordinary to_dict conversion and fails JSON
+    date serialization. Both query results and search samples need null cells.
+    Use this on a result frame before building its API response; populated
+    dates and other values retain their types, positions and row order.
+    """
+    # Object dtype is necessary: datetime columns otherwise turn None back into NaT.
+    normalized = frame.astype(object).where(frame.notna(), None)
+    # SQL result column names are strings; pandas also permits other label types.
+    return cast(list[dict[str, object]], normalized.to_dict(orient="records"))
 
 
 @dataclass(frozen=True)

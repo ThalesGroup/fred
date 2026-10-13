@@ -895,9 +895,13 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
         binding: BoundRuntimeContext,
         settings: AgentSettingsLike,
         credentials: OutboundCredentialProvider | None = None,
+        bound_library_ids: Sequence[str] | None = None,
     ) -> None:
         self._credentials = credentials
         self._settings = settings
+        # The agent instance's library binding, resolved server-side from its
+        # stored capability config: the client's selection can only narrow it.
+        self._bound_library_ids = list(bound_library_ids or ()) or None
         self.rebind(binding)
 
     def rebind(self, binding: BoundRuntimeContext) -> None:
@@ -947,21 +951,31 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
             top_k_raw = nested_dict.get("top_k", 8)
         top_k = top_k_raw if isinstance(top_k_raw, int) and top_k_raw > 0 else 8
 
-        runtime_context = self._binding.runtime_context
-        if get_rag_knowledge_scope(runtime_context) == "general_only":
+        def _no_hits(note: str) -> ToolInvocationResult:
             return ToolInvocationResult(
                 tool_ref=request.tool_ref,
                 blocks=(
                     ToolContentBlock(
                         kind=ToolContentKind.JSON,
-                        data={
-                            "sources": [],
-                            "note": "Corpus retrieval skipped in general-only mode.",
-                        },
+                        data={"sources": [], "note": note},
                     ),
                 ),
                 sources=(),
             )
+
+        runtime_context = self._binding.runtime_context
+        if get_rag_knowledge_scope(runtime_context) == "general_only":
+            return _no_hits("Corpus retrieval skipped in general-only mode.")
+
+        # Bound libraries are a ceiling: the turn's selection only narrows them.
+        library_ids = _narrow_scope_ids(
+            self._bound_library_ids, get_document_library_tags_ids(runtime_context)
+        )
+        # Document picks are not narrowed: they still search when no selected
+        # library is bound.
+        document_uids = get_document_uids(runtime_context) or None
+        if _matches_nothing(library_ids, document_uids):
+            return _no_hits("None of the selected libraries is bound to this agent.")
 
         include_session_scope, include_corpus_scope = get_vector_search_scopes(
             runtime_context
@@ -969,8 +983,8 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
         hits = await self._search_client.search(
             question=query,
             top_k=top_k,
-            document_library_tags_ids=get_document_library_tags_ids(runtime_context),
-            document_uids=get_document_uids(runtime_context),
+            document_library_tags_ids=library_ids,
+            document_uids=document_uids,
             search_policy=get_search_policy(runtime_context),
             owner_filter=OwnerFilter.TEAM
             if self._settings.team_id
@@ -1312,6 +1326,30 @@ def _narrow_scope_ids(
     return [value for value in inner if value in allowed]
 
 
+def _narrow_port_scope_ids(
+    outer: Sequence[str] | None, inner: Sequence[str] | None
+) -> list[str] | None:
+    """`_narrow_scope_ids` for a port parameter, where an empty `inner` means
+    nothing in scope (the port contract), not "no bound at this level"."""
+
+    if inner is not None and not inner:
+        return []
+    return _narrow_scope_ids(outer, inner)
+
+
+def _matches_nothing(
+    library_ids: Sequence[str] | None, document_uids: Sequence[str] | None
+) -> bool:
+    """Knowledge Flow unions the library and document scopes and reads an empty
+    filter as no filter at all. The scope finds nothing only when neither selects
+    anything and one of them was narrowed to nothing (both None is no narrowing);
+    the caller must then stop instead of sending it."""
+
+    if library_ids or document_uids:
+        return False
+    return library_ids is not None or document_uids is not None
+
+
 def _ensure_uid_in_turn_scope(
     runtime_context: RuntimeContext | None, document_uid: str
 ) -> None:
@@ -1417,12 +1455,14 @@ class DocumentSearchAdapter(DocumentSearchPort):
 
         # Session-binding seam: bound the capability's params by the session's
         # own scope so the effective set stays `⊆ session_binding`.
-        effective_libs = _narrow_scope_ids(
+        effective_libs = _narrow_port_scope_ids(
             get_document_library_tags_ids(runtime_context), library_tag_ids
         )
-        effective_uids = _narrow_scope_ids(
+        effective_uids = _narrow_port_scope_ids(
             get_document_uids(runtime_context), document_uids
         )
+        if _matches_nothing(effective_libs, effective_uids):
+            return DocumentSearchResult(hits=())
         policy = search_policy or get_search_policy(runtime_context)
 
         team_id = self._settings.team_id
@@ -1793,15 +1833,17 @@ class DocumentTreeAdapter(DocumentTreePort):
         working_directory: str | None = None,
         library_tag_ids: Sequence[str] | None = None,
         document_uids: Sequence[str] | None = None,
-        max_chars: int = 6000,
+        max_chars: int = 20_000,
     ) -> DocumentTreeResult:
         runtime_context = self._binding.runtime_context
-        effective_libs = _narrow_scope_ids(
+        effective_libs = _narrow_port_scope_ids(
             get_document_library_tags_ids(runtime_context), library_tag_ids
         )
-        effective_uids = _narrow_scope_ids(
+        effective_uids = _narrow_port_scope_ids(
             get_document_uids(runtime_context), document_uids
         )
+        if _matches_nothing(effective_libs, effective_uids):
+            return DocumentTreeResult(tree="", truncated=False)
         team_id = self._settings.team_id
         scoped_team = bool(team_id) and not is_personal_team_id(team_id)
         try:

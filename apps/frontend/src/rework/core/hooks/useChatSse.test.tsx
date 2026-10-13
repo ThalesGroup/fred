@@ -127,6 +127,7 @@ function TestHost({ onRender }: { onRender: (hook: ReturnType<typeof useChatSse>
     onTurnRejected: (draft, sessionId) => onTurnRejectedMock(draft, sessionId),
     onAwaitingHuman: (event) => onAwaitingHumanMock(event),
     isTurnCurrent,
+    isExecutionAllowed,
   });
   onRender(hook);
   return null;
@@ -134,6 +135,7 @@ function TestHost({ onRender }: { onRender: (hook: ReturnType<typeof useChatSse>
 
 let flushPendingWrites: ((sessionId: string) => Promise<boolean>) | undefined;
 let isTurnCurrent: ((sessionId: string) => boolean) | undefined;
+let isExecutionAllowed: (() => boolean) | undefined;
 const onErrorMock = vi.fn();
 const onTurnStartedMock = vi.fn();
 const onTurnRejectedMock = vi.fn();
@@ -156,6 +158,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
   beforeEach(() => {
     flushPendingWrites = undefined;
     isTurnCurrent = undefined;
+    isExecutionAllowed = undefined;
     onErrorMock.mockClear();
     onTurnStartedMock.mockClear();
     onTurnRejectedMock.mockClear();
@@ -181,6 +184,47 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       root.unmount();
     });
     container.remove();
+  });
+
+  it.each([false, true])("rejects %s resume/send when availability changes during preparation", async (resume) => {
+    vi.stubGlobal("fetch", vi.fn());
+    let available = true;
+    isTurnCurrent = () => true;
+    isExecutionAllowed = () => available;
+    const preparation = deferred<unknown>();
+    prepareExecutionImpl = () => preparation.promise;
+    mount();
+    let result!: Promise<boolean>;
+    await act(async () => {
+      result = resume
+        ? latest.sendHitlResume(
+            {
+              type: "awaiting_human",
+              session_id: "saved",
+              exchange_id: "exchange",
+              payload: {
+                stage: "agent_question",
+                question: "Question",
+                interrupt_id: "interrupt",
+                occurrence_id: "occurrence",
+              },
+            },
+            undefined,
+            "answer",
+          )
+        : latest.send("preserved draft", "saved");
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+    });
+    available = false;
+    let accepted: boolean | undefined;
+    await act(async () => {
+      preparation.resolve({ execute_stream_url: "/runtime/stream", chat_controls: [], capability_base_urls: {} });
+      accepted = await result;
+    });
+    expect(accepted).toBe(false);
+    expect(onTurnStartedMock).not.toHaveBeenCalled();
+    expect(latest.messages).toEqual([]);
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it("does not send the bearer to a tampered preparation URL", async () => {
@@ -296,6 +340,42 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     fetchSpy.mockRestore();
   });
 
+  it.each(["user", "agent", "child"] as const)(
+    "projects one compact %s skill load from repeated live statuses",
+    async (source) => {
+      const load = {
+        name: "meeting-minutes",
+        origin: source === "user" ? "user" : "agent",
+        load_id: "same-load",
+        revision: "snapshot",
+        agent_id: "test",
+        child: source === "child",
+        child_id: source === "child" ? "child" : null,
+      };
+      const status = { kind: "status", status: "skill_loaded", skill_load: load };
+      const fetchSpy = vi
+        .spyOn(globalThis, "fetch")
+        .mockResolvedValue(
+          new Response(`data: ${JSON.stringify(status)}\n\ndata: ${JSON.stringify(status)}\n\n`, { status: 200 }),
+        );
+      mount();
+      await act(async () => {
+        await latest.send("notes", "session-1", { skill: { name: "meeting-minutes" } });
+      });
+      const rows = latest.messages.filter((message) => message.channel === "system_note");
+      expect(rows).toHaveLength(1);
+      expect(rows[0].parts).toEqual([{ type: "text", text: "meeting-minutes" }]);
+      expect(rows[0].metadata?.extras).toEqual({ skill_load: load });
+      expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body)).runtime_context.skill).toEqual({
+        name: "meeting-minutes",
+      });
+      expect(latest.messages.find((message) => message.role === "user")?.metadata?.extras?.skill_invocation).toEqual({
+        name: "meeting-minutes",
+      });
+      fetchSpy.mockRestore();
+    },
+  );
+
   it("calls prepare-execution and fires onTurnStarted exactly once when the write barrier reports success", async () => {
     flushPendingWrites = async () => true;
     // The stream fetch itself is irrelevant to this assertion — let it fail
@@ -313,6 +393,20 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     // a reason to have skipped clearing the composer.
     expect(onTurnStartedMock).toHaveBeenCalledTimes(1);
     fetchSpy.mockRestore();
+  });
+
+  it("restores the draft and removes the optimistic turn after a runtime admission 404", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ detail: "Agent instance not found" }), { status: 404 })),
+    );
+    mount();
+    await act(async () => {
+      expect(await latest.send("preserved draft", "saved")).toBe(false);
+    });
+    expect(latest.messages).toEqual([]);
+    expect(onTurnRejectedMock).toHaveBeenCalledWith("preserved draft", "saved");
+    expect(onErrorMock).toHaveBeenCalled();
   });
 
   it("parses a structured length rejection, removes the optimistic message, and restores the full draft", async () => {

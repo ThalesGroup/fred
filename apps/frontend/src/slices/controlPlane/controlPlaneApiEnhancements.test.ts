@@ -164,6 +164,140 @@ describe("capability enablement invalidation", () => {
   });
 });
 
+describe("creation assistant model activation invalidation", () => {
+  it("refreshes offered models after a platform activation change", async () => {
+    const settingsPath = "/control-plane/v1/admin/platform/creation-assistant";
+    let enabled = true;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: Request | string) => {
+        const request = typeof input === "string" ? new Request(input) : input;
+        requested.push(request.url);
+        if (request.method === "PUT") {
+          enabled = false;
+          return json({});
+        }
+        return json({
+          text: "Write in {language}.",
+          model_profile_id: null,
+          model_options: enabled
+            ? [{ profile_id: "chat.model", name: "Model", supports_reasoning: false, reasoning_efforts: [] }]
+            : [],
+        });
+      }),
+    );
+    const store = makeStore();
+    const settings = store.dispatch(
+      api.endpoints.getCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantGet.initiate(),
+    );
+    await settings;
+    const selectSettings = () =>
+      api.endpoints.getCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantGet.select()(
+        store.getState(),
+      ).data;
+    expect(selectSettings()?.model_options.map((option) => option.profile_id)).toEqual(["chat.model"]);
+    await store.dispatch(
+      api.endpoints.putCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPut.initiate({
+        capabilityId: "model.openai.test",
+        setCapabilityDefaultOnRequest: { default_on: false },
+      }),
+    );
+    await vi.waitFor(() => {
+      expect(callsTo(settingsPath)).toBe(2);
+      expect(selectSettings()?.model_options).toEqual([]);
+    });
+    settings.unsubscribe();
+  });
+});
+
+describe("conversation availability invalidation", () => {
+  it("refreshes owned session details after deleting their stored agent", async () => {
+    let deleted = false;
+    const detailPath = `${teamSessionsPath("team-a")}/saved`;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: Request | string) => {
+        const request = typeof input === "string" ? new Request(input) : input;
+        requested.push(request.url);
+        if (request.method === "DELETE") {
+          deleted = true;
+          return json({});
+        }
+        return json({
+          session_id: "saved",
+          team_id: "team-a",
+          agent_instance_id: "agent-1",
+          agent_deleted: deleted,
+          messages_url: "/runtime/messages",
+        });
+      }),
+    );
+    const store = makeStore();
+    const detail = store.dispatch(
+      api.endpoints.getTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGet.initiate({
+        teamId: "team-a",
+        sessionId: "saved",
+      }),
+    );
+    await detail;
+    await store.dispatch(
+      api.endpoints.deleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDelete.initiate({
+        teamId: "team-a",
+        agentInstanceId: "agent-1",
+      }),
+    );
+    await vi.waitFor(() => {
+      expect(callsTo(detailPath)).toBe(2);
+      expect(
+        api.endpoints.getTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGet.select({
+          teamId: "team-a",
+          sessionId: "saved",
+        })(store.getState()).data?.agent_deleted,
+      ).toBe(true);
+    });
+    detail.unsubscribe();
+  });
+  it("retries a pending session-detail 404 after its first creation commits", async () => {
+    let created = false;
+    const detailPath = `${teamSessionsPath("team-a")}/new`;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: Request | string) => {
+        const request = typeof input === "string" ? new Request(input) : input;
+        requested.push(request.url);
+        if (request.method === "POST") {
+          created = true;
+          return json({ session_id: "new" });
+        }
+        return created
+          ? json({
+              session_id: "new",
+              agent_instance_id: "agent-1",
+              agent_deleted: false,
+              messages_url: "/runtime/messages",
+            })
+          : new Response("{}", { status: 404 });
+      }),
+    );
+    const store = makeStore();
+    const detail = store.dispatch(
+      api.endpoints.getTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGet.initiate({
+        teamId: "team-a",
+        sessionId: "new",
+      }),
+    );
+    await detail;
+    await store.dispatch(
+      api.endpoints.postTeamSessionControlPlaneV1TeamsTeamIdSessionsPost.initiate({
+        teamId: "team-a",
+        createSessionRequest: { session_id: "new", agent_instance_id: "agent-1" },
+      }),
+    );
+    await vi.waitFor(() => expect(callsTo(detailPath)).toBe(2));
+    detail.unsubscribe();
+  });
+});
+
 describe("team creation admission invalidation", () => {
   it("makes a newly created team available for Free enrollment without reloading", async () => {
     const store = makeStore();

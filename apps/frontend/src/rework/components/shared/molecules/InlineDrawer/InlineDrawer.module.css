@@ -245,6 +245,11 @@
   font: var(--font-title-small);
 }
 
+.drawer[data-title-size="large"] .title {
+  font: var(--font-title-large);
+  overflow-wrap: anywhere;
+}
+
 .titleGroup {
   display: flex;
   align-items: center;

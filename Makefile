@@ -179,6 +179,8 @@ install-wtf: ## Install the wtf worktree CLI locally (uv tool install, or fallba
 ##@ Release
 
 VERSION ?=
+PYPI_UV ?= $(shell command -v uv 2>/dev/null)
+PYPI_RELEASE_CHECK ?= python3 scripts/validate_python_release.py
 
 # The Python packages published to PyPI, in dependency order: the libs, then
 # the capabilities. All of them carry one version, set by `libs-version`.
@@ -212,11 +214,16 @@ publish-libs-tests: ## Test bulk publishing offline with fake packages
 
 .PHONY: publish-libs-dry-run
 publish-libs-dry-run: ## Build every PyPI package in dependency order, stop at the first failure, upload nothing
+	@test -n "$(PYPI_UV)" || { echo "uv is required to build the PyPI packages."; exit 1; }
 	@set -e; \
 	for dir in $(PYPI_PACKAGES); do \
 		echo "************ Building $$dir ************"; \
-		env -u VIRTUAL_ENV $(MAKE) -C $$dir publish-dry-run; \
+		env -u VIRTUAL_ENV $(MAKE) -C $$dir UV="$(PYPI_UV)" publish-dry-run; \
 	done
+
+.PHONY: validate-python-release
+validate-python-release: ## Fail unless all coordinated PyPI artifacts have one version and exact internal floors
+	$(PYPI_RELEASE_CHECK) $(PYPI_PACKAGES)
 
 # The packages whose version is not on PyPI yet, one directory per line; a
 # package already there is reported on stderr. PyPI answers 200 for a release
@@ -236,14 +243,15 @@ _pypi-pending:
 	done
 
 .PHONY: publish-libs
-publish-libs: ## Build every PyPI package, then publish, in order, each version PyPI does not have yet (requires PYPI_TOKEN)
+publish-libs: ## Validate and publish prebuilt PyPI artifacts in order, skipping versions already present (requires PYPI_TOKEN)
+	@test -n "$(PYPI_UV)" || { echo "uv is required to publish the PyPI packages."; exit 1; }
 	@test -n "$$PYPI_TOKEN" || { echo "PYPI_TOKEN is not set: nothing was built or uploaded."; exit 1; }
-	$(MAKE) publish-libs-dry-run
+	$(MAKE) validate-python-release
 	@set -e; \
 	pending=$$($(MAKE) --no-print-directory -s _pypi-pending); \
 	for dir in $$pending; do \
 		echo "************ Publishing $$dir ************"; \
-		env -u VIRTUAL_ENV $(MAKE) -C $$dir publish; \
+		env -u VIRTUAL_ENV $(MAKE) -C $$dir UV="$(PYPI_UV)" publish; \
 	done; \
 	echo "Every PyPI package is published."
 

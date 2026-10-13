@@ -1002,7 +1002,10 @@ class AgentDefinition(FrozenModel, ABC):
             "`supports_capabilities = True` on their own definition. This is "
             "orthogonal to `declared_tool_refs` / `default_mcp_servers` (the "
             "separate, older mechanism both agent kinds already use to declare "
-            "their own hardcoded tool needs) — do not conflate the two."
+            "their own hardcoded tool needs) — do not conflate the two. With "
+            "False, the capabilities listed in `default_mcp_servers` are still "
+            "shown as included with the agent: always active and configurable, "
+            "never selectable."
         ),
     )
     reasoning_enabled: bool = Field(

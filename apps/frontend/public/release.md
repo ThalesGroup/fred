@@ -1,3 +1,40 @@
+**v3.4.0** - 2026-10-12
+
+- **Summary**
+
+  Describe an agent to draft its setup, combine reusable skills in chat and let enabled agents research the web. Administrators can manage platform access and publish release announcements.
+
+- **Features**
+
+  - Draft an agent's name, description and instructions from a plain-language request (#3009)
+  - Combine shared skills and saved prompts in chat, with instructions available to preview (#2711)
+  - Search the web and read public pages with agents when web research is enabled (#2980)
+  - Manage platform access rules, user and team exceptions, and team invitation links (#2965)
+  - Publish release announcements that users can reopen from What's new (#3016)
+  - Recall sent messages with the arrow keys to edit and send them again (#3038)
+
+- **Improvements**
+
+  - Inspect document details directly from an agent's folder listing (#3052)
+  - Configure the capabilities included with Graph agents from the agent form (#3049)
+  - Agent questions and tool approvals have clearer choices and keyboard shortcuts (#3034)
+  - Agent names stay distinct within each team or personal space (#3042)
+  - Fill PowerPoint templates using either single or double braces around placeholders (#3020)
+
+- **Bug Fixes**
+
+  - Read saved conversations after deleting their agent (#2992)
+  - Document uploads renew an expiring sign-in token instead of failing immediately (#3019)
+  - Opening an in-app page in a new tab preserves the destination and sign-in session (#3000)
+  - Document searches consider every selected file on affected deployments (#3002)
+  - Agent searches respect the libraries assigned to the agent (#3049)
+  - Agents can pause for free-text answers without failing the conversation (#3035)
+  - The Help Center shows your configured contact-support link throughout its pages (#3018)
+
+- **Deployment note**
+
+  Follow the operator guide for the permission model, database migrations and staged worker and application upgrade. Access filtering will be activated later; web research, skills and autoscaling also need separate activation. No document re-ingestion is required.
+
 **v3.3.0** — 2026-10-08
 
 - **Summary**

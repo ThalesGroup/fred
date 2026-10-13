@@ -51,7 +51,7 @@ type PendingDisable = { row: TeamModelRow; impact?: DisableImpact; failed?: bool
  */
 export default function TeamSettingsRouting({ team, canWrite }: TeamSettingsRoutingProps) {
   const { t } = useTranslation();
-  const { showWarn } = useToast();
+  const { showSuccess, showError, showWarn } = useToast();
   const {
     data: policy,
     isLoading,
@@ -110,6 +110,7 @@ export default function TeamSettingsRouting({ team, canWrite }: TeamSettingsRout
           ...patch,
         },
       }).unwrap();
+      showSuccess({ summary: t("rework.teamSettings.routing.saveSuccess") });
     } catch (err) {
       const normalized = normalizeApiError(err);
       if (normalized.kind === "conflict") {
@@ -122,6 +123,7 @@ export default function TeamSettingsRouting({ team, canWrite }: TeamSettingsRout
         return;
       }
       setError(normalized.detail ?? t("rework.teamSettings.routing.saveError"));
+      showError({ summary: t("rework.teamSettings.routing.saveError") });
     }
   };
 

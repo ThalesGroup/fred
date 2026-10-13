@@ -1,21 +1,24 @@
-/* Compact record of an answered agent question, using Fred's HITL surfaces. */
+/* Answered agent question or tool approval: the person's reply. A light card with a pastel
+   secondary border, so it stays in the user bubble's family without its full fill. */
 .card {
   display: flex;
   flex-direction: column;
   align-self: flex-end;
   gap: var(--spacing-2xs);
-  border: 1px solid var(--outline-variant);
-  border-radius: var(--radius-m);
-  background: var(--surface-container);
+  box-shadow: var(--shadow-xs);
+  border: 1px solid var(--secondary-container);
+  border-radius: var(--radius-s);
+  background: var(--surface-container-highest);
   padding: var(--spacing-s) var(--spacing-m);
-  width: min(65%, 30rem);
+  max-width: 65%;
+  color: var(--on-surface);
   user-select: text;
   overflow-wrap: anywhere;
 }
 
+/* In the trace the bubble lines up with the steps instead of the user side. */
 .inTrace {
   align-self: flex-start;
-  width: min(100%, 30rem);
 }
 
 .question,
@@ -26,27 +29,37 @@
 }
 
 .question {
-  color: var(--on-surface-retreat);
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-2xs);
   font: var(--font-body-small);
+}
+
+.questionIcon {
+  display: flex;
+  flex: none;
+  color: var(--secondary);
+  font-size: 1rem;
+}
+
+.questionIcon :global(.material-symbols-outlined) {
+  font-size: inherit;
 }
 
 .answer {
-  color: var(--on-surface);
-  font: var(--font-body-medium-emphasized);
+  font: var(--font-body-large);
+}
+
+.skipped {
+  font-style: italic;
 }
 
 .comment {
-  color: var(--on-surface-retreat);
-  font: var(--font-body-small);
+  font: var(--font-body-medium);
 }
 
 @media (max-width: 600px) {
   .card {
-    width: min(90%, 30rem);
-  }
-
-  .inTrace {
-    align-self: flex-start;
-    width: min(100%, 30rem);
+    max-width: 90%;
   }
 }

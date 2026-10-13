@@ -299,7 +299,9 @@ The control plane is a **pure proxy** for these values — it does not interpret
 
 - `agent_instance_id` — primary identifier
 - `team_id`, `template_id`
-- `display_name`, `description`, `status`
+- `display_name`, `description`, `status`. `display_name` is unique within the
+  team or personal space, ignoring case and surrounding spaces, and stored
+  trimmed (§60).
 - `role: str` — **added 2026-07-23 (#2076).** Short one-line summary of what
   the agent does, distinct from the longer `description`; shown on the agent
   card. Independently settable via `CreateAgentInstanceRequest.role` /
@@ -382,6 +384,55 @@ Do not model platform-owned selectors as generic tuning fields. In particular:
 - `require_tools: list[str]` — tool names the agent requires
 - `config_fields: list[ManagedAgentFieldSpec]` — configurable parameters owned by the MCP tool and persisted via `mcp_config_values`
 
+#### Skill catalog for a managed instance
+
+`GET /control-plane/v1/teams/{team_id}/agent-instances/{agent_instance_id}/skills`
+requires `CAN_USE_TEAM_AGENTS`, verifies the instance belongs to that team and
+is enabled, and proxies only its enabled `source_runtime_id`. It forwards the
+verified bearer identity to that runtime's authenticated metadata route; it never
+merges other pod catalogs. `SkillCatalog` contains only support, revision and
+name/description and optional advisory `argument_hint` metadata (defined by the
+runtime contract). A 404 from an older runtime means unsupported during
+rolling upgrades; an unavailable source and invalid upstream metadata fail safely.
+The composer fetches the actual selected instance and ignores stale data from
+previous selections. Runtime selection and load attribution are defined in the
+runtime execution contract.
+
+`GET /control-plane/v1/teams/{team_id}/agent-instances/{agent_instance_id}/skills/{skill_name}`
+provides a separate `SkillDetail` preview with the same `CAN_USE_TEAM_AGENTS`, team,
+instance availability and configured-source checks. It forwards verified identity,
+validates the typed response and selected skill name, and never falls back to another
+runtime. Runtime 404 remains an unavailable preview; malformed responses return 502.
+Only opening the inline skill label requests content. Preview leaves the composer
+and execution state intact and reads the current runtime snapshot. Technical
+version details are not exposed in the user preview.
+
+Successful `read_skill_file` trace activation previews the exact stored tool
+result in the same resizable right-hand panel (2026-10-07), replacing its current
+skill/file view. It performs no new read and leaves the draft intact; activating
+the same reference again closes it. Pending/failed reads retain ordinary trace
+details. Markdown is sanitized; other accepted text references are escaped.
+Successful native Deep `read_file` references under `/skills/<name>/` use the
+same panel. They are labeled as excerpts and render the exact returned window,
+including native pagination/line information, as escaped text.
+
+`GET /control-plane/v1/kpi/presets/skill_usage` reports successful procedure loads
+by skill and user/model origin on the existing date range. It shares KPI scope:
+`can_read_members` for an explicit team, `can_observe_platform` for the platform.
+The typed response contains `rows` (`skill_name`, `user_count`, `model_count`,
+`total`), `since`, `until` and `truncated`. It returns at most 100 skills ranked
+by total descending/name ascending. Platform, team and personal dashboards reuse a dedicated subsection, sortable table and
+five-minute query cache. Each space shows only its matching skill subsection;
+team display retains existing elevated-role gating and does not query personal
+skill usage.
+`GET /control-plane/v1/kpi/presets/user_skill_usage` (2026-10-07) returns the same
+shape for the authenticated user's own conversations across teams. Like existing
+personal presets it requires authentication, filters `dims.user_id` server-side,
+and rejects team parameters; user/model columns describe invocation origin,
+not which user's conversations are included. Members can view personal usage
+without elevated team permissions.
+Collection starts with instrumentation deployment, with no historical backfill.
+
 ### 3.3 Runtime binding stays internal
 
 `RuntimeBinding` is not a primary frontend product contract.
@@ -407,12 +458,11 @@ Execution semantics:
   - ReAct/Deep runtime also mirrors non-blank `prompts.system` onto
     `ReActAgentDefinition.system_prompt_template`
   - blank value means "keep the author-defined default prompt"
-  - Fred's shared global base prompt (the Mermaid output contract) is **not**
-    part of this editable value or the author-defined default. It is appended by
-    the runtime at execution time, after the effective/overridden prompt
-    (RUNTIME-09; see RUNTIME-EXECUTION-CONTRACT §8.12), so it applies uniformly
-    even when an operator overrides `prompts.system` and never appears in the
-    agent editor.
+  - Platform skill bodies, including Mermaid diagram rules, are **not** part
+    of this editable value or the author-defined default. Configured runtime
+    catalogs advertise metadata; explicit user or model loading supplies the
+    instructions through the ordinary conversation context. Overriding
+    `prompts.system` does not alter the runtime catalog or skill-loading tools.
 - Graph agents read prompt and setting values through `context.tuning_values`
 - tool-owned chat affordances are computed on the pod by
   `capability.chat_controls(config)` and shipped as
@@ -494,7 +544,7 @@ Accessed via:
 - `GET /agents/sessions/{session_id}/messages` — full message list for one session
 - `GET /agents/sessions` — session list for one user (or all users for admin)
 
-**Control-plane must not proxy or cache message content.** If the frontend needs message history, it calls runtime directly using the `messages_url_template` from `ExecutionPreparation`.
+**Control-plane must not proxy or cache message content.** The frontend reads history directly from the runtime using `SessionDetails.messages_url`, independently of execution preparation.
 
 **Session Metadata — owned by `control-plane-backend`** _(target state — implementation pending Phase 3b/FRONT-04)_
 
@@ -530,7 +580,7 @@ Freeze session metadata as a control-plane contract separate from runtime histor
 - `SessionPreferences`
 - `UpdateSessionPreferencesRequest`
 
-`SessionListItem` may include: `session_id`, `team_id`, `title`, `updated_at`, `created_at`, `agent_instance_id`, `context_prompt_ids` (ordered chat-context prompts — see §13).
+`SessionListItem` may include: `session_id`, `team_id`, `title`, `updated_at`, `created_at`, `agent_instance_id`, `agent_display_name`, `context_prompt_ids` (ordered chat-context prompts - see §13).
 
 `SessionAttachmentSummary` is the dedicated persisted attachment projection for the
 managed chat drawer. Freeze it as:
@@ -552,6 +602,28 @@ Session attachment routes live under the existing session surface:
 - `DELETE /teams/{team_id}/sessions/{session_id}/attachments/{attachment_id}`
 
 It must not inline full message history.
+
+The single-session GET returns `SessionDetails`, extending `SessionListItem`
+with `agent_deleted` and optional `messages_url`. Team membership and session
+ownership are both required; unknown, foreign-team and foreign-owner IDs return
+404. List, create and update responses retain `SessionListItem`.
+
+`agent_display_name` is a nullable session snapshot captured at creation and
+refreshed to the latest instance name atomically at deletion, without advancing
+conversation activity dates. Session details prefer the live name while the agent
+exists; list consumers prefer the live catalog name and fall back to this snapshot.
+Creation captures routing and name in the insertion transaction using the same
+instance lock as deletion; a missing or foreign-team instance returns 404 without
+inserting a session. Inactive-conversation previews retain the name too. One
+migration backfills names from still-present agents; names deleted before that
+migration remain unavailable.
+
+History routing uses the session's captured runtime ID, with the current live
+instance as a fallback only for legacy sessions without that snapshot. The URL
+uses the configured browser ingress and never exposes an internal runtime
+address. No execution preparation or runtime catalog call is needed. Missing
+routing leaves history explicitly unavailable; it does not imply agent deletion.
+See the [managed-conversation lifecycle spec](../../../openspec/specs/managed-conversations/spec.md).
 
 #### 3.5.5 Admin observability requirements
 
@@ -650,6 +722,7 @@ managed agent instances:
 Rules:
 
 - prompt ownership is team-scoped
+- `skill` is reserved for platform skills; command assignment/copy rules and legacy handling are defined in `PROMPTS.md` §3.2
 - the reserved system team `personal` is the personal prompt library; do not
   introduce a parallel user-scoped prompt API
 - prompt `text` uses the same template-validation contract as agent
@@ -1178,8 +1251,7 @@ Live impact before the fix: 6 frontend routes and 3 in-page controls were
 unreachable/disabled for all users.
 
 `PermissionSummary` now carries exactly `is_platform_admin` and
-`is_platform_observer` — unchanged, already OpenFGA-derived since review item
-4. (Superseded 2026-09-09 by §51: both booleans became `platform_roles`.)
+`is_platform_observer` — unchanged, already OpenFGA-derived since review item 4. (Superseded 2026-09-09 by §51: both booleans became `platform_roles`.)
 Team-scoped gating was never this field's job; it goes through
 `TeamWithPermissions.permissions` (`list[TeamPermission]`), already returned
 by every team-fetching endpoint and unaffected by this change.
@@ -2441,7 +2513,7 @@ client removed outright. The dedicated Activity surfaces (`/admin/tasks`,
 for this data; no replacement preset was added.
 
 **`top_agents_by_conversations` series carry their owning team (2026-09-03).**
-Agent instance names are not unique across teams, and the chart's previous
+Agent instance names are unique within a team but not across teams, and the chart's previous
 tie-breaker was a truncated instance id - unreadable in a cross-team ranking.
 Each series label is now `"<agent name> - <team name>"`, resolved through the
 same `TeamMetadataStore` lookup `top_teams_by_sessions` uses (now shared as
@@ -4062,7 +4134,6 @@ version: existing admins become pending at the next startup and see the charter
 when they open their team. Unsetting the version promotes every pending admin
 at the next startup.
 
-
 ## 55. Contract Notes - platform announcements (2026-09-25, issue #2805)
 
 **What it is.** A platform admin authors announcements at runtime; every
@@ -4072,13 +4143,13 @@ configuration and is **removed** — see "Removal" below.
 
 **Model.** One `platform_announcement` row per announcement.
 
-| Field                                                | Meaning                                                                                        |
-| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `severity`                                           | `info \| warning \| error \| success`, the same `Literal` as `platform.frontend.upload_warning`. Fixes the banner's colour and icon; neither is separately authorable. |
-| `title`, `description_short`, `description_long`     | Locale → text maps (`fr`, `en`), resolved against the viewer's locale with an `en` fallback. The two descriptions are markdown. `description_long` empty for every locale is what removes the more-info action from the banner. |
-| `enabled`                                            | Whether it is delivered. Created disabled.                                                     |
-| `dismissible`                                        | Whether a user may close the banner.                                                           |
-| `content_version`                                    | Bumped when a reader-visible field changes — severity, any text, or `dismissible` — and when a disabled announcement is enabled again. **Never** when one is disabled. |
+| Field                                            | Meaning                                                                                                                                                                                                                         |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `severity`                                       | `info \| warning \| error \| success`, the same `Literal` as `platform.frontend.upload_warning`. Fixes the banner's colour and icon; neither is separately authorable.                                                          |
+| `title`, `description_short`, `description_long` | Locale → text maps (`fr`, `en`), resolved against the viewer's locale with an `en` fallback. The two descriptions are markdown. `description_long` empty for every locale is what removes the more-info action from the banner. |
+| `enabled`                                        | Whether it is delivered. Created disabled.                                                                                                                                                                                      |
+| `dismissible`                                    | Whether a user may close the banner.                                                                                                                                                                                            |
+| `content_version`                                | Bumped when a reader-visible field changes — severity, any text, or `dismissible` — and when a disabled announcement is enabled again. **Never** when one is disabled.                                                          |
 
 **`content_version` is the dismissal key.** The frontend records a dismissal in
 `localStorage` as `<id>@<content_version>`, so bumping the version is the only
@@ -4096,17 +4167,17 @@ banner show again.
 
 **Endpoints.**
 
-| Method | Path                                                             | Permission           |
-| ------ | ---------------------------------------------------------------- | -------------------- |
-| GET    | `/announcements/active`                                          | authenticated        |
-| GET    | `/admin/platform/announcements`                                  | `can_manage_platform` |
-| POST   | `/admin/platform/announcements`                                  | `can_manage_platform` |
-| PUT    | `/admin/platform/announcements/{id}`                             | `can_manage_platform` |
-| PUT    | `/admin/platform/announcements/{id}/enabled`                     | `can_manage_platform` |
-| DELETE | `/admin/platform/announcements/{id}`                             | `can_manage_platform` |
+| Method | Path                                         | Permission            |
+| ------ | -------------------------------------------- | --------------------- |
+| GET    | `/announcements/active`                      | authenticated         |
+| GET    | `/admin/platform/announcements`              | `can_manage_platform` |
+| POST   | `/admin/platform/announcements`              | `can_manage_platform` |
+| PUT    | `/admin/platform/announcements/{id}`         | `can_manage_platform` |
+| PUT    | `/admin/platform/announcements/{id}/enabled` | `can_manage_platform` |
+| DELETE | `/admin/platform/announcements/{id}`         | `can_manage_platform` |
 
-`/announcements/active` returns the enabled set and is gated by authentication
-only — an announcement is content every user is meant to see. Every admin
+`/announcements/active` returns the enabled banners (patch notes excluded since
+section 61) and is gated by authentication only — an announcement is content every user is meant to see. Every admin
 mutation emits an audit record (`platform.announcement.created` / `.updated` /
 `.toggled` / `.deleted`).
 
@@ -4151,7 +4222,9 @@ uncapped.
 **Error shape — one new code.** A prompt write that collides on the command
 returns 409 with an **object** detail, `{"code": "prompt_command_conflict",
 "message": ...}`, so a form can mark the command field rather than the name.
-Every other prompt error keeps the plain-string detail. The two conflicts are
+Reserved `skill` assignment also returns an object detail with
+`prompt_command_reserved`; legacy and batch-import rules are in `PROMPTS.md`
+§3.2. Other prompt errors keep plain-string detail. Name and command conflicts are
 told apart by asking the database which constraint fired, not by parsing the
 driver's message; a name collision wins when both apply.
 
@@ -4215,7 +4288,8 @@ the audit event.
   stored under its canonical id (`personal` → `personal-<uid>`). A target where
   the template is not enabled fails; a failed target never stops the others.
   `display_name` is only accepted for a single target equal to the source
-  (Duplicate), otherwise 422.
+  (Duplicate), otherwise 422. A Duplicate under a taken name fails with
+  `error_code: "agent_name_conflict"` on its result (§60).
 
 **What a copy carries.** Name (kept when free in the destination, else the
 first free `<name>_imported-<n>`), description, template, tuning values and
@@ -4256,6 +4330,163 @@ where a picture renders: the bootstrap `current_user` and team admin summaries
 display-name cache, so a change shows on the next call; presigns of one batch
 run concurrently, at most 8 at a time. Never exported or logged. Full behavior:
 OpenSpec `user-profile-picture`.
+
+## 60. Contract Notes — agent names unique per team (2026-10-11, #3042)
+
+**Rule.** Two agents of one team or personal space cannot share a name. Names
+are compared after trimming and ignoring case; the same name stays free in
+another team. The request schemas trim `display_name`, and the database holds
+the unique index `uq_agent_instance_team_name` on
+`(team_id, lower(display_name))` (names are stored trimmed).
+
+**Refusals.** Create (`POST …/agent-instances`, JSON or with assets) and rename
+(`PATCH …/agent-instances/{id}`) under a taken name answer **409** with
+`detail = {"code": "agent_name_conflict", "message": …}`; a rename to the
+agent's own name in another case is accepted. A Duplicate reports the same
+code as `AgentCopyResult.error_code`. Create checks before any pod call.
+
+**Resolutions.** A copy to another team keeps `<name>_imported-<n>`, compared
+the same way, and retries once with the next free name if a concurrent copy
+took it. A platform import renames a conflicting agent the same way.
+
+**Upgrade.** Migration `a4d85307ea0e` trims every name and renames later
+duplicates `<name> (2)`, `<name> (3)`… in creation order (the oldest keeps its
+name) before creating the index. Full behavior: OpenSpec `agent-names`.
+
+## 61. Contract Notes - patch-note announcements and activation history (2026-10-09)
+
+Extends section 55. OpenSpec change `add-patch-note-announcements`.
+
+**Kind.** `platform_announcement.kind` is `banner` (default, every pre-existing
+row) or `patch_note`, fixed at creation (an update changing it is refused,
+`422`). `Announcement.kind` is always present; `AnnouncementWriteRequest.kind`
+defaults to `banner`. A patch note keeps one markdown body per locale in
+`description_long` (same 20,000-character cap); the server stores it with
+`severity="info"`, `dismissible=true` and an empty `description_short`. Its
+`title` is a plain-text locale map validated like a banner's (200 characters),
+and must cover exactly the locales that have a body.
+
+**One active patch note.** Enabling a patch note (toggle, or create with
+`enabled=true`) disables the active one in the same transaction. Banners are
+untouched. A partial unique index (`uq_platform_announcement_active_patch_note`,
+`enabled AND kind = 'patch_note'`) makes two enabled patch notes impossible; a
+concurrent activation that loses on it gets `409`.
+
+**Dismissal and re-show.** Server-side, one row per user and patch note
+(`platform_announcement_dismissal`); a row present means hidden for that user.
+Every off-to-on toggle deletes all of the note's dismissals in the same
+transaction as the enable, so a re-enabled note is shown to everyone again; a
+content edit keeps them. A patch note's `content_version` never moves on a
+content edit and is bumped on every off-to-on toggle, as for a banner: it keys
+the client's "closed this sign-in" flag. Dismissals are also removed with the
+patch note and with the user (`DELETE /users/{id}`). Banners keep their
+per-browser dismissal. The admin list (`AdminAnnouncement`) gives each patch
+note a `dismissal_count`: its rows (one grouped count). Toggle, content update and delete read
+the row `FOR UPDATE`.
+
+**Activation history.** `platform_announcement_activation_event`, append-only,
+no foreign key so it outlives the announcement. One event per real `enabled`
+change: toggle on/off, creation enabled, automatic disable of the previous
+patch note (actor = the admin enabling the new one) and deletion of an enabled
+announcement (`deactivated`). Each event carries `announcement_id`, `kind`,
+`label` (title per locale at event time), `severity` (the
+banner's severity at event time; `null` for a patch note, whose stored
+severity is a placeholder), `action` (`activated | deactivated`), `actor_uid`
+and `occurred_at`, written in the same
+transaction as the change. The `.toggled` and `.created` audit records gain
+`auto_disabled_ids`.
+
+| Method | Path                                                  | Permission            | Response                                   |
+| ------ | ----------------------------------------------------- | --------------------- | ------------------------------------------ |
+| GET    | `/announcements/patch-note`                           | authenticated         | `ActivePatchNote { patch_note: Announcement \| null, dismissed: bool }`: the enabled patch note and whether the caller dismissed it since it was last enabled |
+| PUT    | `/announcements/{id}/dismissal`                       | authenticated         | `204`, idempotent (one row per user and note); `404` when the id is not a patch note. Identity from the token only |
+| GET    | `/admin/platform/announcements/activation-history`    | `can_manage_platform` | `AnnouncementActivationEvent[]`, 100 newest first |
+
+`GET /announcements/patch-note` is read once per application load (no
+polling); a patch note enabled mid-session is seen at the next load. The client
+opens it at load unless `dismissed`, and the profile menu reopens it on request.
+`GET /admin/platform/announcements` now returns `AdminAnnouncement[]`
+(`Announcement` plus `dismissal_count`, null for a banner).
+
+## 62. Contract Notes — agent creation assistant (2026-10-08)
+
+**What it is.** In the agent form header, a user describes in plain words what
+the agent should do; the platform drafts a short name, role and description, a
+system prompt and a capability selection. Nothing is saved: the form applies
+the items the user ticks. Templates without free capability selection offer
+no capability recommendations; their included capabilities and saved
+configuration remain unchanged.
+
+**Endpoint.** `POST …/teams/{team_id}/agent-templates/{template_id}/draft-agent`,
+body `AgentDraftRequest` (`description` 1-4000 chars, `language`,
+optional `agent_name` / `agent_role`, `capabilities`: `{id, name, description}`
+already translated by the client) → `AgentDraftResult` (`name` ≤ 60,
+`role` ≤ 120, `description` ≤ 300 chars, each nullable; `system_prompt`,
+`capability_ids`). At most 500 candidate
+capabilities. Requires `team.can_update_agents`; the
+template is resolved exactly as for agent creation (404 when missing or not
+usable by the team). Only candidate ids the template advertises and the team
+`can_use` reach the pod, and only those can come back. Forwarded with the
+caller's token to the pod's `/agents/creation-assistant/draft`
+(`RUNTIME-EXECUTION-CONTRACT.md` §8.111); the pod reads the admin settings
+below itself. The 404 also covers edit mode when the agent's template is no
+longer usable; the frontend shows its "not available" copy for 404 and 501.
+Errors: 422 invalid body or pod 422; 403/503/504 passed through; 504 when the
+pod does not answer within 55 s; 503 unreachable pod, or no free connection
+to it within 5 s (shared runtime client pool); 501 pod without the
+operation; 502 otherwise, including a pod 401. Full behavior: OpenSpec
+`agent-creation-assistant`.
+
+**Admin settings.** `GET`/`PUT`/`DELETE
+/control-plane/v1/admin/platform/creation-assistant`, gated like the platform
+prompt (`can_edit_platform_prompt`). Stored in the single-row
+`creation_assistant_settings` table (Alembic `93427a5fe874`): `text` and
+`model_profile_id`, both nullable (`NULL` = pod default), and
+`reasoning_effort` (text not null, default `off`, check constraint
+`off`/`low`/`medium`/`high`). All three return
+`CreationAssistantSettings`: `text` (override or pod default), `default_text`
+(from the pod's `/agents/platform-prompt`), `default_revised_at`,
+`default_changed_since_override` (an override exists and the pod's revision
+date is later than the row's `updated_at` date; `updated_at`/`updated_by` date
+the meta-prompt, so a model-only or reasoning-only save leaves them unchanged),
+`is_default`, `source_unavailable`, `missing_language_placeholder`,
+`model_profile_id`, `reasoning_effort`, `default_model_profile_id` (the pods'
+default chat profile when every reachable pod names the same one, else
+`null`), `model_options` (`{profile_id, name, supports_reasoning,
+reasoning_efforts}`: the chat profiles every enabled pod advertises whose
+model is activated platform-wide (`default_on`); team-only and personal-space
+grants do not qualify,
+`supports_reasoning` when the profile is among the catalog's
+`model_thinking_profile_ids` and `model_reasoning_efforts` does not map it to
+`[]` (nothing the pod can send), `reasoning_efforts` its selectable levels from
+`model_reasoning_efforts`, empty for on/off), `updated_by`, `updated_at`. PUT
+`{text, model_profile_id, reasoning_effort}` (`reasoning_effort` defaults to
+`off`) replaces all three: `text` is `null` (keep the built-in text) or non-blank, at most
+20,000 characters and free of reserved tags (422); a missing `{language}`
+placeholder is accepted and flagged; a new `model_profile_id` outside
+`model_options` is refused (422); the stored one is accepted without
+re-checking the catalog; a `reasoning_effort` outside the four values is
+refused (422), but it is never checked against the model: the pod clamps it
+(any non-`off` value is "on" for an on/off profile, the nearest declared level
+otherwise), so a catalog change cannot block a save. DELETE clears `text`
+only, keeping model and effort. The pod reads both from
+`GET /teams/{team_id}/creation-assistant/settings` (`can_update_agents`,
+returns `CreationAssistantRuntimeSettings`: `creation_assistant_prompt`,
+`model_profile_id`, `reasoning_effort`) with the caller's bearer while drafting; no request body,
+to the control plane or to the pod, can set them. The model only selects
+what the assistant calls; the drafted agent keeps its routed model.
+
+**Token usage.** The six token-usage KPI presets (`user_token_usage_*`,
+`token_usage_*`: over time, by model, by agent) sum `agent.turn_completed` and
+the pod's `agent.creation_assistant_completed` events that carry tokens (a
+timeout or provider error is emitted without them), so a draft counts for the
+calling user and the team in the path even if the agent is never saved.
+By-agent rows put these calls under `__creation_assistant__`, translated by the
+frontend. Turn, conversation and activity presets are unchanged. The platform
+preset `creation_assistant_usage` (`can_observe_platform`, no `team_id`)
+returns `CreationAssistantUsageResponse`: `total_tokens`, `input_tokens`,
+`output_tokens` and `drafts` (calls the provider answered, usable or not) for
+the period, read from `agent.creation_assistant_completed` only.
 
 ## 62. Contract Notes — team model settings, recommended model and composer model choice (2026-10-09, #3029)
 
@@ -4482,7 +4713,6 @@ With the Keycloak directory and account status disabled, deletion writes no susp
 scenarios are maintained in the
 [subject and account status specification](../../../openspec/changes/add-delegated-agent-execution/specs/delegation-subject-and-account-status/spec.md).
 
-
 ## Knowledge Flow ingestion admission and relaunch — 2026-09-26
 
 `POST /process-documents` returns `task_ids` keyed by document UID as well as the
@@ -4602,3 +4832,16 @@ references to the request's diagnostic context. Attachment persistence additiona
 binds attachment/document references after ownership validation. Generic completion
 uses a shared ASGI lifecycle event and never treats logging metadata as authority.
 See [observability §6/§7](../platform/OBSERVABILITY-AND-AUDIT.md).
+
+### 2026-10-10 — Included capabilities of agents without free selection
+
+`AgentTemplateSummary.available_capabilities` of a template with
+`supports_capabilities=False` lists the capabilities included with the agent
+(its defaults, filtered by the team's `can_use`). Agent create and update ignore
+a submitted `capability_ids` for such a template and take the template-default
+path of `_apply_capability_selection`: `selected_capability_ids` is the usable
+defaults, and each one's submitted or stored config is validated through the pod
+and persisted in `capability_config`, as for any capability (a 422 when no
+default is usable by the team, as for any template declaring defaults). Chat controls such
+as `document_scope.bound_library_ids` then follow from it. An instance saved
+earlier keeps `selected_capability_ids: []` until it is edited and saved.

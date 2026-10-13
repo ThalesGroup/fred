@@ -98,14 +98,16 @@ _HTML_INSTRUCTIONS = (
     "create, design, or show a web page, HTML page, component, section, layout, "
     "mockup, or styled HTML, you MUST call the 'render_html_artifact' tool with "
     "the HTML and (optionally) the CSS; never paste the HTML/CSS as a code block "
-    "in the chat. A rendered preview opens in a viewer beside the chat where the "
+    "in the chat. For Mermaid diagrams, use a fenced mermaid Markdown block in "
+    "the chat: its diagram renderer handles that syntax. This static HTML viewer "
+    "does not render Mermaid source. A rendered preview opens in a viewer beside the chat where the "
     "user can see the result, read the source, and download it. Produce STATIC "
     "HTML and CSS only: no <script>, no JavaScript, no event handlers, and no "
     "external resources (no remote stylesheets, fonts, or images) — inline any "
     "image as a data: URI. Keep the CSS in the css argument, not in a <style> "
     "tag. To revise an artifact you already produced, pass its existing "
-    "artifact_id so the SAME preview updates in place. In the chat, reply only "
-    "with a short summary of what you built."
+    "artifact_id so the SAME preview updates in place. After rendering an HTML "
+    "artifact, reply in the chat with a short summary of what you built."
 )
 
 
@@ -144,6 +146,9 @@ class _HtmlArtifactMiddleware(AgentMiddleware):
             Use this whenever the user asks for a web page, component, section,
             layout, mockup, or any styled HTML, so the RESULT is shown rendered
             (not as a code block) and the user can read the source and download it.
+
+            For Mermaid diagrams, return a fenced mermaid Markdown block in the
+            chat. This static HTML viewer does not render Mermaid source.
 
             Produce static HTML/CSS only: no <script>, no JavaScript, no inline
             event handlers, and no external resources (inline images as data: URIs).

@@ -33,12 +33,14 @@ drift/fail-closed rules on top of them.
 #   suite's lightweight-fake-in-place-of-real-protocol tests.
 from __future__ import annotations
 
+import logging
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
 from conftest import ToolFriendlyFakeChatModel
 from fred_core.common import ModelConfiguration
+from fred_runtime.app.execution_diagnostics import report_execution_error
 from fred_runtime.model_routing.authz import usable_model_capability_ids
 from fred_runtime.model_routing.contracts import (
     ModelCapability,
@@ -165,6 +167,25 @@ def test_disallowed_model_fails_closed() -> None:
             binding=_binding(("model__azure__gpt-4o",)),
         )
     assert exc_info.value.capability_id == model_capability_id("openai", "gpt-5.1")
+
+
+def test_disallowed_model_tells_the_user_to_ask_an_admin(caplog) -> None:
+    # The turn fails at runtime setup; the user must read why and who can fix
+    # it, not only "could not initialize its execution" and a reference.
+    with pytest.raises(ModelNotUsableError) as exc_info:
+        _factory().build_for_chat(
+            definition=_DEFINITION,
+            binding=_binding(()),
+        )
+    message = report_execution_error(
+        logging.getLogger(__name__), exc_info.value, "runtime_setup"
+    )
+    assert message.startswith(
+        "The model 'gpt-5.1' used by this agent is not enabled for your team. "
+        "Ask a platform administrator to enable it for the team. "
+    )
+    assert "could not initialize its execution" not in message
+    assert "Contact support with reference " in message
 
 
 def test_empty_usable_set_denies_everything() -> None:

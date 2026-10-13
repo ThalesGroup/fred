@@ -24,6 +24,7 @@ import { useDispatch } from "react-redux";
 import { setCapabilityBaseUrls } from "../../../../../common/capabilityRoutingSlice.ts";
 import type {
   AgentTemplateSummary,
+  CapabilityCatalogEntry,
   ManagedAgentFieldSpec,
   ManagedAgentInstanceSummary,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
@@ -117,7 +118,10 @@ type AgentFormBodyProps = {
   errorSections: Set<SectionKey>;
   editInstance?: ManagedAgentInstanceSummary;
   teamId?: string;
+  /** Another agent of the team has this name; shown once the name field was left. */
+  nameTaken?: boolean;
   onDisplayNameChange: (v: string) => void;
+  onDisplayNameBlur?: () => void;
   onRoleChange: (v: string) => void;
   onDescriptionChange: (v: string) => void;
   onUsageStatementChange: (v: string) => void;
@@ -130,6 +134,8 @@ type AgentFormBodyProps = {
   onCapabilityConfigChange: (capabilityId: string, key: string, value: unknown) => void;
   onCapabilityAssetFileChange: (capabilityId: string, slotKey: string, file: File | null) => void;
   onCapabilityBlockingErrorChange: (capabilityId: string, message: string | null) => void;
+  /** Bumped when the creation assistant fills the form: prompt fields show the editor again. */
+  draftRevision?: number;
 };
 
 export function AgentFormBody({
@@ -152,7 +158,9 @@ export function AgentFormBody({
   errorSections,
   editInstance,
   teamId,
+  nameTaken = false,
   onDisplayNameChange,
+  onDisplayNameBlur,
   onRoleChange,
   onDescriptionChange,
   onUsageStatementChange,
@@ -163,6 +171,7 @@ export function AgentFormBody({
   onCapabilityConfigChange,
   onCapabilityAssetFileChange,
   onCapabilityBlockingErrorChange,
+  draftRevision = 0,
 }: AgentFormBodyProps) {
   const { t, i18n } = useTranslation();
   const uiLang = i18n.language.split("-")[0];
@@ -176,6 +185,9 @@ export function AgentFormBody({
   // section switches) so a field the user emptied doesn't auto-reopen the
   // library when they leave and return to the Prompts section (#bug).
   const [promptPickerExplicit, setPromptPickerExplicit] = useState<Record<string, boolean | null>>({});
+  useEffect(() => {
+    if (draftRevision > 0) setPromptPickerExplicit({});
+  }, [draftRevision]);
 
   // Resolve audit uids (created_by / updated_by) to display names (#1952).
   const auditUids = Array.from(
@@ -187,6 +199,8 @@ export function AgentFormBody({
   const selectedTemplate = templates.find((tpl) => tpl.template_id === templateId);
   const templateMissing = mode === "edit" && !selectedTemplate;
   const capabilities = selectedTemplate?.available_capabilities ?? [];
+  // False: `capabilities` are included with the agent, always on, only configured.
+  const supportsCapabilities = selectedTemplate?.supports_capabilities ?? true;
 
   // Pre-save capability routing (RFC §9.1): custom config widgets may call
   // their capability's own pod routes (e.g. ppt_filler's stateless /analyze,
@@ -237,7 +251,11 @@ export function AgentFormBody({
   const effectiveSection = visibleSections.includes(activeSection) ? activeSection : (visibleSections[0] ?? "general");
   const activeSectionIndex = Math.max(0, visibleSections.indexOf(effectiveSection));
 
-  const nameError = submitAttempted && !displayName.trim() ? t("rework.teams.formAgent.fields.name.label") : undefined;
+  const nameError = nameTaken
+    ? t("rework.teams.formAgent.fields.name.taken")
+    : submitAttempted && !displayName.trim()
+      ? t("rework.teams.formAgent.fields.name.label")
+      : undefined;
   const usageStatementError =
     submitAttempted && !usageStatement.trim() ? t("rework.teams.formAgent.fields.usageStatement.label") : undefined;
 
@@ -272,6 +290,39 @@ export function AgentFormBody({
         error={fieldError(field)}
       />
     ));
+
+  // One capability's `config_fields` form, shared by the Advanced cards and the
+  // Simple view's included capabilities.
+  const renderConfigForm = (capability: CapabilityCatalogEntry) =>
+    (capability.config_fields ?? []).length > 0 && (
+      <CapabilityConfigForm
+        capability={capability}
+        configFields={capability.config_fields ?? []}
+        configValues={capabilityConfigValues[capability.id] ?? {}}
+        disabled={isSubmitting}
+        teamId={teamId}
+        agentInstanceId={editInstance?.agent_instance_id}
+        agentDisplayName={editInstance?.display_name}
+        assetFiles={capabilityAssetFiles[capability.id] ?? {}}
+        onConfigChange={(key, val) => onCapabilityConfigChange(capability.id, key, val)}
+        onAssetFileChange={(slotKey, file) => onCapabilityAssetFileChange(capability.id, slotKey, file)}
+        onBlockingErrorChange={(message) => onCapabilityBlockingErrorChange(capability.id, message)}
+      />
+    );
+
+  // Simple view of an included capability: document access keeps the same
+  // library-binding control as the Team documents pack.
+  const renderIncludedOptions = (capability: CapabilityCatalogEntry) =>
+    capability.id === CAP_DOCUMENT_ACCESS ? (
+      <DocumentAccessPackOptions
+        configValues={capabilityConfigValues[CAP_DOCUMENT_ACCESS] ?? {}}
+        onConfigChange={(key, value) => onCapabilityConfigChange(CAP_DOCUMENT_ACCESS, key, value)}
+        teamId={teamId}
+        disabled={isSubmitting}
+      />
+    ) : (
+      renderConfigForm(capability)
+    );
 
   // Per-pack options for the Simple capabilities view — each wired to the same
   // capability config/asset state the Advanced view writes, so the two stay in
@@ -392,6 +443,7 @@ export function AgentFormBody({
                     label={t("rework.teams.formAgent.fields.name.label")}
                     value={displayName}
                     onChange={(e) => onDisplayNameChange(e.target.value)}
+                    onBlur={onDisplayNameBlur}
                     maxLength={255}
                     required
                     disabled={isSubmitting}
@@ -452,7 +504,9 @@ export function AgentFormBody({
                 {capabilityView === "simple" ? (
                   <SimpleCapabilitiesView
                     availableIds={availableCapabilityIds}
-                    supportsCapabilities={selectedTemplate?.supports_capabilities ?? true}
+                    supportsCapabilities={supportsCapabilities}
+                    includedCapabilities={capabilities}
+                    renderIncludedOptions={renderIncludedOptions}
                     selection={{ selectedCapabilityIds, capabilityConfigValues }}
                     disabled={isSubmitting}
                     onSelectionChange={onCapabilitySelectionReplace}
@@ -461,8 +515,20 @@ export function AgentFormBody({
                 ) : (
                   <ul className={styles.toolsList}>
                     {capabilities.map((capability) => {
+                      const name = t(capability.name, { defaultValue: capability.name });
+                      const description = t(capability.description, { defaultValue: capability.description });
+                      if (!supportsCapabilities) {
+                        return (
+                          <CapabilityCard
+                            key={capability.id}
+                            name={name}
+                            description={description}
+                            included
+                            subForm={renderConfigForm(capability)}
+                          />
+                        );
+                      }
                       const checked = selectedCapabilityIds.includes(capability.id);
-                      const configFields = capability.config_fields ?? [];
                       const toggle = () => {
                         const next = checked
                           ? selectedCapabilityIds.filter((id) => id !== capability.id)
@@ -472,33 +538,12 @@ export function AgentFormBody({
                       return (
                         <CapabilityCard
                           key={capability.id}
-                          name={t(capability.name, { defaultValue: capability.name })}
-                          description={t(capability.description, { defaultValue: capability.description })}
+                          name={name}
+                          description={description}
                           checked={checked}
                           disabled={isSubmitting}
                           onToggle={toggle}
-                          subForm={
-                            checked &&
-                            configFields.length > 0 && (
-                              <CapabilityConfigForm
-                                capability={capability}
-                                configFields={configFields}
-                                configValues={capabilityConfigValues[capability.id] ?? {}}
-                                disabled={isSubmitting}
-                                teamId={teamId}
-                                agentInstanceId={editInstance?.agent_instance_id}
-                                agentDisplayName={editInstance?.display_name}
-                                assetFiles={capabilityAssetFiles[capability.id] ?? {}}
-                                onConfigChange={(key, val) => onCapabilityConfigChange(capability.id, key, val)}
-                                onAssetFileChange={(slotKey, file) =>
-                                  onCapabilityAssetFileChange(capability.id, slotKey, file)
-                                }
-                                onBlockingErrorChange={(message) =>
-                                  onCapabilityBlockingErrorChange(capability.id, message)
-                                }
-                              />
-                            )
-                          }
+                          subForm={checked && renderConfigForm(capability)}
                         />
                       );
                     })}

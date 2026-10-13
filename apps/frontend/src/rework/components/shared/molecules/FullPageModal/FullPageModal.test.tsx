@@ -22,6 +22,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FullPageModal } from "./FullPageModal";
+import { DialogPrimitive } from "../Dialog/DialogPrimitive";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -86,6 +87,83 @@ describe("FullPageModal backdrop click", () => {
       dialog.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
+    expect(onClose).not.toHaveBeenCalled();
+  });
+});
+
+describe("FullPageModal Escape", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  afterEach(() => {
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+    document.getElementById("modal-portal")?.remove();
+  });
+
+  const render = (onClose: () => void, nested?: { onCancel: () => void }) => {
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() => {
+      root.render(
+        <FullPageModal isOpen onClose={onClose} id="test-modal">
+          <div>form</div>
+          {nested && (
+            <DialogPrimitive open title="Nested" confirmLabel="OK" onConfirm={() => {}} onCancel={nested.onCancel}>
+              nested content
+            </DialogPrimitive>
+          )}
+        </FullPageModal>,
+      );
+    });
+  };
+
+  const pressEscape = () => {
+    act(() => {
+      (document.activeElement ?? document.body).dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+      );
+    });
+  };
+
+  it("closes when it is the only modal", () => {
+    const onClose = vi.fn();
+    render(onClose);
+    pressEscape();
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves Escape to a dialog opened over it", () => {
+    const onClose = vi.fn();
+    const onCancel = vi.fn();
+    render(onClose, { onCancel });
+    pressEscape();
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("treats an alertdialog opened over it as the topmost modal", () => {
+    const onClose = vi.fn();
+    render(onClose);
+    const alert = document.createElement("div");
+    alert.setAttribute("role", "alertdialog");
+    alert.setAttribute("aria-modal", "true");
+    document.body.appendChild(alert);
+    pressEscape();
+    alert.remove();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("ignores an Escape another handler already consumed", () => {
+    const onClose = vi.fn();
+    render(onClose);
+    const consume = (event: KeyboardEvent) => event.preventDefault();
+    window.addEventListener("keydown", consume, { capture: true });
+    pressEscape();
+    window.removeEventListener("keydown", consume, { capture: true });
     expect(onClose).not.toHaveBeenCalled();
   });
 });

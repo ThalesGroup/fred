@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from knowledge_flow_backend.core.processors.input.common.base_input_processor import read_text_with_fallback
 from knowledge_flow_backend.core.processors.input.fast_text_processor.base_fast_text_processor import (
     BaseFastTextProcessor,
     FastTextOptions,
@@ -31,7 +32,7 @@ class FastPlainTextProcessor(BaseFastTextProcessor):
 
     def extract(self, file_path: Path, options: FastTextOptions | None = None) -> FastTextResult:
         opts = options or FastTextOptions()
-        text = file_path.read_text(encoding="utf-8", errors="ignore")
+        text = read_text_with_fallback(file_path)
         if opts.normalize_whitespace:
             text = collapse_whitespace(text)
         if opts.trim_empty_lines:

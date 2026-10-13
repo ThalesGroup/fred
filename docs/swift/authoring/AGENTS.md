@@ -265,7 +265,10 @@ nodes offline for the full example.
 
 **Opting in to capability selection:** `GraphAgentDefinition` defaults
 `supports_capabilities = False` — today's node functions don't consume
-capability-provided tools, so the agent-creation form doesn't offer any.
+capability-provided tools, so the agent-creation form offers no free
+selection. The capabilities in your `default_mcp_servers` are still shown
+there as included with the agent: always active, configurable (for example
+`document_access`'s library binding, which `knowledge.search` then enforces).
 Set `supports_capabilities = True` on your own definition only if your
 node functions genuinely read from the capability/tool-selection surface.
 

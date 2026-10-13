@@ -21,16 +21,30 @@ from datetime import datetime, timezone
 
 from fred_core.common import TeamId
 from fred_core.sql import make_session_factory, use_session
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.engine import CursorResult
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
+from control_plane_backend.agent_instances.names import is_agent_name_violation
 from control_plane_backend.config.models import ManagedAgentTuning
 from control_plane_backend.models.agent_instance_models import AgentInstanceRow
 from control_plane_backend.models.routing_policy_models import TeamRoutingPolicyRow
+from control_plane_backend.models.session_metadata_models import SessionMetadataRow
 from control_plane_backend.routing_policy.schemas import ModelDisabledForTeamError
 
 logger = logging.getLogger(__name__)
+
+
+class AgentNameAlreadyExistsError(Exception):
+    """Another agent of the team already has this name (case and spaces ignored)."""
+
+    def __init__(self, team_id: TeamId, display_name: str) -> None:
+        super().__init__(
+            f"Agent name {display_name!r} already exists in team {team_id!r}."
+        )
+        self.team_id = team_id
+        self.display_name = display_name
 
 
 def _utcnow() -> datetime:
@@ -217,16 +231,25 @@ class AgentInstanceStore:
             created_at=created_at,
             updated_at=updated_at,
         )
-        async with use_session(self._sessions, session) as s:
-            recommended = record.tuning.recommended_chat_profile_id
-            if recommended_capability_id is not None and recommended is not None:
-                await _require_model_enabled_for_team(
-                    s,
-                    team_id=record.team_id,
-                    capability_id=recommended_capability_id,
-                    profile_id=recommended,
-                )
-            s.add(row)
+        try:
+            async with use_session(self._sessions, session) as s:
+                recommended = record.tuning.recommended_chat_profile_id
+                if recommended_capability_id is not None and recommended is not None:
+                    await _require_model_enabled_for_team(
+                        s,
+                        team_id=record.team_id,
+                        capability_id=recommended_capability_id,
+                        profile_id=recommended,
+                    )
+                s.add(row)
+                # Flushed here so a caller-owned session still gets the typed error.
+                await s.flush()
+        except IntegrityError as exc:
+            if is_agent_name_violation(exc):
+                raise AgentNameAlreadyExistsError(
+                    record.team_id, record.display_name
+                ) from exc
+            raise
         return await self.get(record.agent_instance_id)  # type: ignore[return-value]
 
     async def count_all(self, session: AsyncSession | None = None) -> int:
@@ -326,51 +349,57 @@ class AgentInstanceStore:
         the row's current recommendation, which a policy write may have
         cleared since ``tuning`` was loaded.
         """
-        async with use_session(self._sessions, session) as s:
-            recommended = tuning.recommended_chat_profile_id if tuning else None
-            if recommended_capability_id is not None and recommended is not None:
-                await _require_model_enabled_for_team(
-                    s,
-                    team_id=team_id,
-                    capability_id=recommended_capability_id,
-                    profile_id=recommended,
-                )
-            rows = (
-                (
-                    await s.execute(
-                        select(AgentInstanceRow)
-                        .where(
-                            AgentInstanceRow.agent_instance_id == agent_instance_id,
-                            AgentInstanceRow.team_id == str(team_id),
-                        )
-                        .with_for_update()
+        try:
+            async with use_session(self._sessions, session) as s:
+                recommended = tuning.recommended_chat_profile_id if tuning else None
+                if recommended_capability_id is not None and recommended is not None:
+                    await _require_model_enabled_for_team(
+                        s,
+                        team_id=team_id,
+                        capability_id=recommended_capability_id,
+                        profile_id=recommended,
                     )
+                rows = (
+                    (
+                        await s.execute(
+                            select(AgentInstanceRow)
+                            .where(
+                                AgentInstanceRow.agent_instance_id == agent_instance_id,
+                                AgentInstanceRow.team_id == str(team_id),
+                            )
+                            .with_for_update()
+                        )
+                    )
+                    .scalars()
+                    .all()
                 )
-                .scalars()
-                .all()
-            )
-            if not rows:
-                return None
-            row = rows[0]
-            if tuning is not None and keep_stored_recommendation:
-                tuning = tuning.model_copy(
-                    update={
-                        "recommended_chat_profile_id": _row_to_record(
-                            row
-                        ).tuning.recommended_chat_profile_id
-                    }
-                )
-            if display_name is not None:
-                row.display_name = display_name
-            if description is not None:
-                row.description = description
-            if enabled is not None:
-                row.enabled = enabled
-            if tuning is not None:
-                row.tuning_json = tuning.model_dump_json()
-            if updated_by is not None:
-                row.updated_by = updated_by
-            row.updated_at = _utcnow()
+                if not rows:
+                    return None
+                row = rows[0]
+                if tuning is not None and keep_stored_recommendation:
+                    tuning = tuning.model_copy(
+                        update={
+                            "recommended_chat_profile_id": _row_to_record(
+                                row
+                            ).tuning.recommended_chat_profile_id
+                        }
+                    )
+                if display_name is not None:
+                    row.display_name = display_name
+                if description is not None:
+                    row.description = description
+                if enabled is not None:
+                    row.enabled = enabled
+                if tuning is not None:
+                    row.tuning_json = tuning.model_dump_json()
+                if updated_by is not None:
+                    row.updated_by = updated_by
+                row.updated_at = _utcnow()
+                await s.flush()
+        except IntegrityError as exc:
+            if display_name is not None and is_agent_name_violation(exc):
+                raise AgentNameAlreadyExistsError(team_id, display_name) from exc
+            raise
         return await self.get(agent_instance_id)
 
     async def set_suspension(
@@ -422,6 +451,28 @@ class AgentInstanceStore:
     ) -> bool:
         """Delete one instance scoped to team_id. Returns True if a row was removed."""
         async with use_session(self._sessions, session) as s:
+            instance = await s.scalar(
+                select(AgentInstanceRow)
+                .where(
+                    AgentInstanceRow.agent_instance_id == agent_instance_id,
+                    AgentInstanceRow.team_id == str(team_id),
+                )
+                .with_for_update()
+            )
+            if instance is None:
+                return False
+            # Keep the last name without making deletion look like chat activity.
+            await s.execute(
+                update(SessionMetadataRow)
+                .where(
+                    SessionMetadataRow.agent_instance_id == agent_instance_id,
+                    SessionMetadataRow.team_id == str(team_id),
+                )
+                .values(
+                    agent_display_name=instance.display_name,
+                    updated_at=SessionMetadataRow.updated_at,
+                )
+            )
             result: CursorResult = await s.execute(  # type: ignore[assignment]
                 delete(AgentInstanceRow).where(
                     AgentInstanceRow.agent_instance_id == agent_instance_id,

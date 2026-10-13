@@ -547,6 +547,31 @@ applications:
     deployment:
       enabled: true
     replicaCount: 1
+    # CPU autoscaling example. Add CPU requests to deployment values before enabling.
+    autoscaling:
+      enabled: false
+      minReplicas: 1
+      maxReplicas: 3
+      metrics:
+        - type: Resource
+          resource:
+            name: cpu
+            target:
+              type: Utilization
+              averageUtilization: 70
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: 0
+          policies:
+            - type: Pods
+              value: 1
+              periodSeconds: 60
+        scaleDown:
+          stabilizationWindowSeconds: 600
+          policies:
+            - type: Pods
+              value: 1
+              periodSeconds: 180
     statefulset:
       enabled: false
     job:
@@ -731,6 +756,11 @@ applications:
         # Maximum Unicode code points accepted in one submitted chat message.
         max_chat_input_chars: 5000
         openai_compat: true
+
+      # Optional platform skill activation. Set to {directory: package} for the
+      # fred_runtime resources, or to an existing read-only volume mount path.
+      # No folder is read and no skill tools are added when omitted/null.
+      skills: null
 
       security:
         # ── Classification posture (RUNTIME-07 rev. 2) ──────────────────────────
@@ -933,6 +963,12 @@ applications:
           capability: chat
           model_display_name: "GPT-5.1"
           description: "Default balanced chat model for production conversations."
+          # Selectable reasoning effort (optional): list the levels the provider
+          # really accepts, e.g. for GPT-5.1 (with supports_thinking: true):
+          #   reasoning_efforts: [low, medium, high]
+          # Absent or one level means on/off only: "on" sends settings.reasoning_effort,
+          # else the single listed level (neither: the assistant cannot reason with it).
+          # Never declare levels Mistral rejects: its models take only `high` (or none).
           model:
             provider: openai
             name: gpt-5.1
@@ -1055,6 +1091,31 @@ applications:
     deployment:
       enabled: true
     replicaCount: 1
+    # CPU autoscaling example. Add CPU requests to deployment values before enabling.
+    autoscaling:
+      enabled: false
+      minReplicas: 1
+      maxReplicas: 3
+      metrics:
+        - type: Resource
+          resource:
+            name: cpu
+            target:
+              type: Utilization
+              averageUtilization: 70
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: 0
+          policies:
+            - type: Pods
+              value: 1
+              periodSeconds: 60
+        scaleDown:
+          stabilizationWindowSeconds: 600
+          policies:
+            - type: Pods
+              value: 1
+              periodSeconds: 180
     statefulset:
       enabled: false
     job:
@@ -1264,6 +1325,31 @@ applications:
     deployment:
       enabled: true
     replicaCount: 1
+    # CPU autoscaling example. Add CPU requests to deployment values before enabling.
+    autoscaling:
+      enabled: false
+      minReplicas: 1
+      maxReplicas: 3
+      metrics:
+        - type: Resource
+          resource:
+            name: cpu
+            target:
+              type: Utilization
+              averageUtilization: 70
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: 0
+          policies:
+            - type: Pods
+              value: 1
+              periodSeconds: 60
+        scaleDown:
+          stabilizationWindowSeconds: 600
+          policies:
+            - type: Pods
+              value: 1
+              periodSeconds: 180
     statefulset:
       enabled: false
     job:
@@ -1494,6 +1580,31 @@ applications:
     deployment:
       enabled: false
     replicaCount: 3 # Common-role replicas in isolated mode; use 1 for compact mode.
+    # Optional HPA example. Enable only when this worker Deployment is enabled.
+    autoscaling:
+      enabled: false
+      minReplicas: 2
+      maxReplicas: 6
+      metrics:
+        - type: Resource
+          resource:
+            name: cpu
+            target:
+              type: Utilization
+              averageUtilization: 60
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: 0
+          policies:
+            - type: Pods
+              value: 2
+              periodSeconds: 60
+        scaleDown:
+          stabilizationWindowSeconds: 600
+          policies:
+            - type: Pods
+              value: 1
+              periodSeconds: 180
     statefulset:
       enabled: false
     job:
@@ -1710,6 +1821,30 @@ applications:
     enabled: false
     applicationName: knowledge-flow-worker-extraction-fast
     replicaCount: 2
+    autoscaling:
+      enabled: false
+      minReplicas: 1
+      maxReplicas: 4
+      metrics:
+        - type: Resource
+          resource:
+            name: cpu
+            target:
+              type: Utilization
+              averageUtilization: 70
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: 0
+          policies:
+            - type: Pods
+              value: 2
+              periodSeconds: 60
+        scaleDown:
+          stabilizationWindowSeconds: 600
+          policies:
+            - type: Pods
+              value: 1
+              periodSeconds: 180
     volumeMounts:
       - name: knowledge-flow-worker-extraction-fast-vol
         mountPath: /app/config/configuration.yaml
@@ -1743,6 +1878,30 @@ applications:
     enabled: false
     applicationName: knowledge-flow-worker-extraction-medium
     replicaCount: 2
+    autoscaling:
+      enabled: false
+      minReplicas: 1
+      maxReplicas: 3
+      metrics:
+        - type: Resource
+          resource:
+            name: cpu
+            target:
+              type: Utilization
+              averageUtilization: 70
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: 0
+          policies:
+            - type: Pods
+              value: 1
+              periodSeconds: 60
+        scaleDown:
+          stabilizationWindowSeconds: 900
+          policies:
+            - type: Pods
+              value: 1
+              periodSeconds: 300
     volumeMounts:
       - name: knowledge-flow-worker-extraction-medium-vol
         mountPath: /app/config/configuration.yaml
@@ -1776,6 +1935,30 @@ applications:
     enabled: false
     applicationName: knowledge-flow-worker-extraction-rich
     replicaCount: 2
+    autoscaling:
+      enabled: false
+      minReplicas: 1
+      maxReplicas: 3
+      metrics:
+        - type: Resource
+          resource:
+            name: cpu
+            target:
+              type: Utilization
+              averageUtilization: 70
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: 0
+          policies:
+            - type: Pods
+              value: 1
+              periodSeconds: 60
+        scaleDown:
+          stabilizationWindowSeconds: 900
+          policies:
+            - type: Pods
+              value: 1
+              periodSeconds: 300
     volumeMounts:
       - name: knowledge-flow-worker-extraction-rich-vol
         mountPath: /app/config/configuration.yaml
@@ -1812,6 +1995,31 @@ applications:
     deployment:
       enabled: true
     replicaCount: 1
+    # CPU autoscaling example. Add CPU requests to deployment values before enabling.
+    autoscaling:
+      enabled: false
+      minReplicas: 1
+      maxReplicas: 3
+      metrics:
+        - type: Resource
+          resource:
+            name: cpu
+            target:
+              type: Utilization
+              averageUtilization: 70
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: 0
+          policies:
+            - type: Pods
+              value: 1
+              periodSeconds: 60
+        scaleDown:
+          stabilizationWindowSeconds: 600
+          policies:
+            - type: Pods
+              value: 1
+              periodSeconds: 180
     statefulset:
       enabled: false
     job:
@@ -2108,6 +2316,31 @@ applications:
     deployment:
       enabled: false
     replicaCount: 1
+    # CPU autoscaling example. Add CPU requests to deployment values before enabling.
+    autoscaling:
+      enabled: false
+      minReplicas: 1
+      maxReplicas: 3
+      metrics:
+        - type: Resource
+          resource:
+            name: cpu
+            target:
+              type: Utilization
+              averageUtilization: 70
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: 0
+          policies:
+            - type: Pods
+              value: 1
+              periodSeconds: 60
+        scaleDown:
+          stabilizationWindowSeconds: 600
+          policies:
+            - type: Pods
+              value: 1
+              periodSeconds: 180
     statefulset:
       enabled: false
     job:

@@ -398,6 +398,11 @@
       "panelTitle": "Command prompt"
     },
     "commandMenu": {
+      "sources": {
+        "platform": "Platform skill",
+        "personal": "Personal prompt",
+        "team": "Team prompt"
+      },
       "ariaLabel": "Available commands",
       "promptsSection": "Prompt library",
       "noneInTeam": "No command in this team yet. An editor can give one to a prompt from the Prompts page.",
@@ -554,12 +559,11 @@
       "empty": "No markdown preview available."
     },
     "recordAudio": "Record audio",
-    "nextHitlQuestion": "Next",
+    "hitlAnswerValidated": "Answer confirmed",
+    "validateHitlAnswer": "Confirm",
     "sendAllHitlAnswers": "Send all",
     "sendHitlAnswer": "Send",
     "skipHitlQuestion": "Skip",
-    "skipHitlQuestionAria": "Skip this question",
-    "skipAllHitlQuestionsAria": "Skip all questions",
     "approveForConversation": "Approve for this conversation",
     "sendMessage": "Send message",
     "sessionAttachments": {
@@ -605,6 +609,38 @@
       "empty": "No prompts in this space.",
       "emptyFilters": "No prompts match these filters.",
       "categoryLabel": "Category"
+    },
+    "readOnlyComposerPlaceholder": "Read-only conversation",
+    "deletedAgentTooltip": "{{agentsNicknameSingular}} deleted - read-only conversation",
+    "deletedAgentSuffix": "(deleted)",
+    "historyUnavailable": "Conversation history is unavailable. Please try again later.",
+    "skipAllHitlQuestions": "Skip all",
+    "hitlOtherAnswerHint": "write your answer…",
+    "hitlQuestionState": {
+      "waiting": "Waiting for an answer",
+      "answered": "Answered",
+      "skipped": "Skipped"
+    },
+    "skills": {
+      "badge": "Skill: {{name}}",
+      "platformProvided": "Skill provided by the platform",
+      "requestPlaceholder": "Your request (optional)",
+      "menuTitle": "Skills",
+      "usage": "Use /<skill-name> [request]. Select a skill; the request is optional.",
+      "errorTitle": "Skill could not be used",
+      "unavailable": "This skill’s content is unavailable.",
+      "loaded": "Skill loaded",
+      "originUser": "Requested by you",
+      "originAgent": "Selected by the agent",
+      "originChild": "Selected by a sub-agent",
+      "open": "View skill {{name}}",
+      "panelTitle": "Skill: {{name}}",
+      "fileTitle": "File: {{path}}",
+      "fileExcerptTitle": "Excerpt: {{path}}",
+      "loading": "Loading skill…",
+      "retry": "Try again",
+      "description": "Description:",
+      "arguments": "Arguments:"
     }
   },
   "comingSoon": {
@@ -1336,6 +1372,16 @@
       "missingTeamId": "Missing team id in route."
     },
     "analytics": {
+      "skillUsage": {
+        "title": "Skill usage",
+        "skill": "Skill",
+        "user_count": "User",
+        "model_count": "Model",
+        "total": "Total",
+        "description": "Successful skill loads in the selected period, requested by users or chosen by the model. Collection starts when this feature is enabled.",
+        "empty": "No skill loads recorded in this period.",
+        "truncated": "Showing the 100 most loaded skills. Sorting applies to these results."
+      },
       "activeUsers": {
         "title": "Active users",
         "uniqueTotal": "Active users (over full period)",
@@ -1455,6 +1501,7 @@
       "tokenUsage": {
         "byAgent": {
           "empty": "No agent usage in this period.",
+          "creationAssistant": "Creation assistant",
           "title": "Token usage by agent",
           "valueLabel": "Tokens"
         },
@@ -1462,6 +1509,11 @@
           "empty": "No model usage in this period.",
           "title": "Token usage by model",
           "valueLabel": "Tokens"
+        },
+        "creationAssistant": {
+          "drafts_one": "{{count, number}} use",
+          "drafts_other": "{{count, number}} uses",
+          "label": "Creation assistant"
         },
         "overTime": {
           "title": "Token usage over time",
@@ -1602,7 +1654,8 @@
       "summary": "≈ {{co2e}} g CO₂e · {{kwh}} kWh (estimated)"
     },
     "teamUsage": {
-      "title": "My token usage",
+      "personalSkillsSectionTitle": "My skill usage",
+      "title": "My usage",
       "personalSectionTitle": "My usage",
       "tokensOverTime": {
         "title": "Token usage over time",
@@ -1619,6 +1672,7 @@
         "valueLabel": "Tokens"
       },
       "team": {
+        "skillsSectionTitle": "Team skill usage",
         "pageTitle": "Team usage",
         "sectionTitle": "Team usage",
         "membersLabel": "Members",
@@ -1670,6 +1724,35 @@
     },
     "cancel": "Cancel",
     "chatTrace": {
+      "documentTree": {
+        "metadataFor": "Metadata for {{name}}",
+        "truncated": "Truncated",
+        "unknown": "Unknown",
+        "displayed_one": "{{count}} document displayed",
+        "displayed_other": "{{count}} documents displayed",
+        "incomplete": "Partial listing: omitted documents may be more recent.",
+        "empty": "No documents in this listing.",
+        "root": "Root",
+        "latestDisplayed": "Most recent displayed",
+        "arrival": "Added to {{siteDisplayName}}: {{date}}",
+        "legacyDate": "Historical upload date: {{date}}",
+        "addedToKb": "Added to {{siteDisplayName}}",
+        "created": "File creation",
+        "modified": "Modification",
+        "title": "Title",
+        "format": "Format",
+        "mimeType": "MIME type",
+        "language": "Language",
+        "volume": "Pages",
+        "rowsLabel": "Rows",
+        "pages_one": "{{count}} page",
+        "pages_other": "{{count}} pages",
+        "rows_one": "{{count}} row",
+        "rows_other": "{{count}} rows",
+        "source": "Source",
+        "labels": "Labels",
+        "legacyUploaded": "Historical upload date"
+      },
       "ariaLabel": "Agent reasoning trace",
       "awaitingConfirmation": "awaiting confirmation…",
       "cancelledByUser": "cancelled by the user",
@@ -1738,6 +1821,7 @@
         "success": "Success"
       },
       "toolLabels": {
+        "readSkillFile": "Reading skill file",
         "readQuery": "Reading query",
         "documents": "Listing tabular documents",
         "markdown": "Reading the workbook catalog",
@@ -1792,7 +1876,9 @@
       "selected": "Selected",
       "skipped": "Skipped",
       "accepted": "Accepted",
-      "refused": "Refused"
+      "refused": "Refused",
+      "toolRecall_one": "Tool: {{tools}}",
+      "toolRecall_other": "{{count}} tools: {{tools}}"
     },
     "knowledgeHub": {
       "loading": "Loading..."
@@ -1978,7 +2064,8 @@
     "profileMenu": {
       "contactSupport": "Contact support",
       "profile": "Profile",
-      "trigger": "{{name}}'s account"
+      "trigger": "{{name}}'s account",
+      "whatsNew": "What's new"
     },
     "promptCategories": {
       "pickerTitle": "Category",
@@ -2258,7 +2345,7 @@
           "selftest": "Self-test",
           "tasks": "Activity",
           "teams": "Teams",
-          "platformPrompt": "Platform global prompt",
+          "platformPrompt": "Platform prompts",
           "announcements": "Announcements",
           "uiSettings": "User interface"
         },
@@ -2271,11 +2358,11 @@
           "confirm": "Delete",
           "cancel": "Cancel"
         },
-        "emptyManaged": "No conversations yet. Start a new chat with a managed agent.",
-        "groupByAgent": "Group by agent",
+        "emptyManaged": "No conversations yet. Start a new chat with a managed {{agentsNicknameSingular}}.",
+        "groupByAgent": "Group by {{agentsNicknameSingular}}",
         "loading": "Loading...",
         "title": "Chat",
-        "unknownAgent": "Unknown agent"
+        "unknownAgent": "Unknown {{agentsNicknameSingular}}"
       },
       "marketplace": {
         "menu": {
@@ -2647,6 +2734,7 @@
         "isDefault": "Default",
         "setDefault": "Set as default",
         "defaultUnavailable": "The team's default model is no longer available to this team. Set another model as default.",
+        "saveSuccess": "Model routing saved.",
         "saveError": "Could not save the team's models.",
         "disableDialog": {
           "title": "Disable {{model}}?",
@@ -2770,7 +2858,11 @@
             "dataKnowledge": "Data and knowledge",
             "documentProduction": "Document production"
           },
-          "notSupported": "This agent does not support capability selection.",
+          "builtIn": {
+            "section": "Included with this agent",
+            "badge": "Included",
+            "none": "This agent has no capabilities to configure."
+          },
           "packs": {
             "attachments": {
               "title": "Attachments",
@@ -2807,7 +2899,8 @@
           },
           "name": {
             "label": "Name",
-            "placeholder": "Enter an original name"
+            "placeholder": "Enter an original name",
+            "taken": "Name already used"
           },
           "role": {
             "label": "Role",
@@ -2839,6 +2932,48 @@
           "pickFromLibrary": "Pick from library",
           "removeTagAria": "Remove {{tag}}",
           "tagsPlaceholder": "Type and press Enter to add tags..."
+        },
+        "creationAssistant": {
+          "open": "Assistant",
+          "title": "Creation assistant",
+          "intro": "Describe in your own words what your agent should do: its role, its mission, its audience, its constraints… The assistant suggests a name, a role, a description, instructions (the system prompt) and capabilities. You choose what to keep.",
+          "descriptionLabel": "What your agent should do",
+          "descriptionPlaceholder": "Example: an assistant for the HR team that answers employees' questions about leave and health insurance from our internal documents. Friendly tone, short answers, always cite the source document. Never give legal advice.",
+          "generate": "Suggest",
+          "loading": "Preparing suggestions…",
+          "apply": "Apply",
+          "editDescription": "Edit the description",
+          "identityHeading": "Proposed identity",
+          "promptHeading": "Suggested system prompt",
+          "fields": {
+            "name": "Name",
+            "role": "Role",
+            "description": "Description"
+          },
+          "capabilitiesHeading": "Recommended capabilities",
+          "noCapabilities": "No capability recommended: the agent will answer from its instructions alone.",
+          "selectHint": "Select the assistant's proposals you want to apply.",
+          "applyHint": "Apply fills in only the ticked items; ticked capabilities replace the current selection. Nothing is saved until you save the agent.",
+          "overwrite": {
+            "title": "Replace what is already filled in?",
+            "message": "Applying replaces these values in the form:",
+            "confirm": "Replace",
+            "items": {
+              "systemPrompt": "System prompt",
+              "name": "Name",
+              "role": "Role",
+              "description": "Description",
+              "capabilities": "Capability selection"
+            }
+          },
+          "errors": {
+            "forbidden": "You are not allowed to edit this team's agents.",
+            "unsupported": "The creation assistant is not available for this agent template. Fill in the form yourself or contact an administrator.",
+            "timeout": "The suggestions took too long. Try again, possibly with a shorter description.",
+            "unavailable": "The creation assistant is unavailable right now. Try again in a moment.",
+            "invalid": "The description was not accepted. Check that it is not empty and does not exceed 4000 characters.",
+            "failed": "The suggestions could not be prepared. Your description is kept: you can try again."
+          }
         },
         "sections": {
           "aria": "Form sections",
@@ -2887,7 +3022,8 @@
           "commandHelp": "Launch shortcuts in the chat",
           "description": "Description",
           "name": "Name",
-          "text": "Prompt text"
+          "text": "Prompt text",
+          "commandReserved": "/skill is reserved for platform skills. Choose another command."
         },
         "loading": "Loading prompts...",
         "modalCreate": "New prompt",
@@ -3034,7 +3170,7 @@
       "unknownAuthor": "an administrator"
     },
     "platformPrompt": {
-      "title": "Platform global prompt",
+      "title": "Platform prompts",
       "subtitle": "The two platform-wide blocks every agent receives, in the order the model reads them: the operating instructions shipped with the platform, then your global prompt. The tool rules and each agent's own instructions come after.",
       "editor": {
         "title": "Global prompt",
@@ -3061,7 +3197,48 @@
         "note": "These instructions belong to the platform itself: they are what keeps every agent behaving consistently — using the tools it was actually given, never inventing a result, recovering from a failed call. They are shipped with the platform and cannot be edited by anyone, so that a change to one team's prompt can never weaken how the whole platform behaves. Use the global prompt, alongside, to give your platform its personality and its own standards.",
         "unavailable": "No agent pod could be reached to read these instructions. They still apply to agents; it is only this display that is unavailable."
       },
-      "sourceUnavailable": "No agent pod could be reached to read the default prompt. What you see here is not what agents receive — don't save anything until a pod answers."
+      "sourceUnavailable": "No agent pod could be reached to read the default prompt. What you see here is not what agents receive — don't save anything until a pod answers.",
+      "tabs": {
+        "aria": "Platform prompts",
+        "system": "Platform system prompt",
+        "creationAssistant": "Creation assistant"
+      },
+      "creationAssistant": {
+        "title": "Creation assistant",
+        "badgeDefault": "Default",
+        "badgeCustom": "Customised",
+        "subtitle": "The creation assistant drafts an agent (name, role, description, instructions, capabilities) from the description a user types in the agent form. These are the instructions it follows. Keep the {language} text: it is replaced with the user's language.",
+        "hint": "Edit them to fit drafted agents to your organisation's style. \"Restore default\" goes back to the text shipped with the platform; it does not change the model.",
+        "missingLanguage": "The {language} text is missing: drafts may no longer be written in the user's language. You can still save.",
+        "defaultRevised": "The default prompt was updated on {{revised}}, after your customisation of {{customized}}.",
+        "viewDefault": "View default",
+        "hideDefault": "Hide default",
+        "empty": "The instructions cannot be empty.",
+        "reset": "Restore default",
+        "resetConfirm": {
+          "title": "Restore the default text?",
+          "message": "Your customised instructions will be deleted and the creation assistant will use the text shipped with the platform again. The chosen model is kept."
+        },
+        "resetDone": "Default text restored.",
+        "resetFailed": "Could not restore the default text.",
+        "saved": "Creation assistant settings saved.",
+        "saveFailed": "Could not save the creation assistant settings.",
+        "model": {
+          "label": "Model",
+          "default": "Platform default model",
+          "missing": "{{id}} (no longer selectable)"
+        },
+        "reasoning": {
+          "label": "Reasoning",
+          "unsupported": "This model cannot reason.",
+          "levels": {
+            "off": "Off",
+            "low": "Low",
+            "medium": "Medium",
+            "high": "High"
+          }
+        }
+      }
     },
     "wiki": {
       "title": "Wiki",
@@ -3267,11 +3444,16 @@
       },
       "page": {
         "title": "Announcements",
-        "subtitle_one": "{{count}} announcement is live for every user.",
-        "subtitle_other": "{{count}} announcements are live for every user.",
-        "subtitle_zero": "Nothing is showing to users right now.",
-        "create": "New announcement",
-        "empty": "No announcement yet.\nCreate one to show a banner at the top of the app."
+        "subtitle_one": "{{count}} banner is live for every user.",
+        "subtitle_other": "{{count}} banners are live for every user.",
+        "subtitle_zero": "No banner is showing right now.",
+        "empty": "No announcement yet.\nCreate a banner, shown at the top of the app, or a patch note, shown to users when they arrive.",
+        "create": "New announcement"
+      },
+      "chooser": {
+        "title": "New announcement",
+        "bannerDescription": "A short message shown at the top of the app.",
+        "patchNoteDescription": "What's new in a release, shown to users when they arrive."
       },
       "severity": {
         "info": "Info",
@@ -3288,7 +3470,8 @@
         "enableHint": "Enable for all users",
         "disableHint": "Disable for all users",
         "edit": "Edit this announcement",
-        "delete": "Delete this announcement"
+        "delete": "Delete this announcement",
+        "preview": "Preview as users see it"
       },
       "editor": {
         "createTitle": "New announcement",
@@ -3312,6 +3495,73 @@
       "delete": {
         "title": "Delete this announcement?",
         "message": "\"{{title}}\" will be removed for good. Users who can see it will stop seeing it."
+      },
+      "kind": {
+        "banner": "Banner",
+        "patch_note": "Patch note"
+      },
+      "patchNote": {
+        "dialog": {
+          "dontShowAgain": "Don't show again"
+        },
+        "editor": {
+          "createTitle": "New patch note",
+          "editTitle": "Edit patch note",
+          "title": "Patch note title",
+          "titleRequired": "Give the patch note a title in this language.",
+          "body": "Content (Markdown)",
+          "placeholder": "Describe what's new in this release in Markdown…",
+          "hint": "Headings, lists, links and code are supported.",
+          "preview": "Preview",
+          "previewEmpty": "The preview appears here as you type.",
+          "previewAsUsers": "Preview as users see it",
+          "bodyRequired": "Write the content in this language.",
+          "tooLong": "The content is longer than {{max}} characters in one language.",
+          "incomplete": "The {{language}} version needs both a title and content, or neither.",
+          "saveAndActivate": "Save and activate"
+        },
+        "dismissFailed": "Your choice was not saved. This note may show again next time.",
+        "discard": {
+          "title": "Discard your changes?",
+          "message": "The patch note you are writing has not been saved.",
+          "confirm": "Discard changes",
+          "cancel": "Keep writing"
+        },
+        "activate": {
+          "title": "Switch the active patch note?",
+          "message": "Only one patch note can be active at a time: “{{title}}” will be switched off.",
+          "confirm": "Activate"
+        },
+        "savedActive": "Patch note saved. Users see it when they arrive.",
+        "savedInactive": "Patch note saved. It is not active: switch it on for users to see it.",
+        "dismissalCount_zero": "No user has chosen to hide this patch note",
+        "dismissalCount_one": "{{count}} user chose to hide this patch note",
+        "dismissalCount_other": "{{count}} users chose to hide this patch note"
+      },
+      "history": {
+        "empty": "No activation yet.",
+        "activated": "Activated",
+        "deactivated": "Deactivated",
+        "unknownActor": "Unknown author",
+        "error": "Could not load the activation history.",
+        "column": {
+          "announcement": "Announcement",
+          "type": "Type",
+          "action": "Action",
+          "date": "Date and time",
+          "by": "By"
+        },
+        "filter": {
+          "all": "All",
+          "activated": "Activations",
+          "deactivated": "Deactivations",
+          "group": "Filter by action"
+        }
+      },
+      "view": {
+        "group": "Announcements page view",
+        "announcements": "Announcements",
+        "history": "History"
       }
     },
     "copyToTeams": {

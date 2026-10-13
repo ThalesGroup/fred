@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect, ReactNode } from "react";
+import { useEffect, useRef, ReactNode } from "react";
 import styles from "./FullPageModal.module.scss";
-import { Portal } from "@shared/utils/Portal.tsx";
+import { isTopmostModal, Portal } from "@shared/utils/Portal.tsx";
 
 interface FullPageModalProps {
   isOpen: boolean;
@@ -31,6 +31,7 @@ export interface ModalInteractionProps {
 }
 
 export const FullPageModal = ({ isOpen, onClose, children, id, background = "main" }: FullPageModalProps) => {
+  const modalRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = "hidden";
@@ -41,8 +42,11 @@ export const FullPageModal = ({ isOpen, onClose, children, id, background = "mai
   }, [isOpen]);
 
   useEffect(() => {
+    // Escape belongs to the topmost modal: a dialog opened over this page
+    // closes alone instead of taking the whole page (and its input) with it.
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && isOpen) onClose();
+      if (e.key !== "Escape" || !isOpen || e.defaultPrevented || !isTopmostModal(modalRef.current)) return;
+      onClose();
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
@@ -63,6 +67,7 @@ export const FullPageModal = ({ isOpen, onClose, children, id, background = "mai
   return (
     <Portal id="modal-portal">
       <div
+        ref={modalRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={`${id}-title`}

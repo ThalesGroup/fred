@@ -39,7 +39,8 @@ const PROMPTS = [
 ];
 
 vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
-  useGetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetQuery: () => ({ data: PROMPTS }),
+  useGetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetQuery: () => ({ currentData: PROMPTS }),
+  useGetAgentInstanceSkillsQuery: () => ({ currentData: { supported: true, skills: [] } }),
   useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery: () => [vi.fn()],
 }));
 
@@ -84,8 +85,8 @@ function Host() {
   });
   const { dismiss } = commands;
   const onRecall = useCallback(
-    (line: string) => {
-      dismiss(line);
+    (line: string, message?: ThreadMessage) => {
+      dismiss(line, message);
       setInput(line);
       setFocusEndRequestId((n) => n + 1);
     },
@@ -188,6 +189,31 @@ describe("recallLinesOf", () => {
 
     expect(lines).toEqual(["/summary focus on risks", "/summary"]);
   });
+});
+
+it("recalls canonical mixed drafts and legacy skill selections without exposing prompt bodies", () => {
+  const draft = "  Before /meeting-minutes /summary after  ";
+  expect(
+    recallLinesOf([
+      {
+        ...turn("user", "Expanded instructions", { ...summaryCommand("after"), draft_text: draft }),
+        skillNames: ["meeting-minutes"],
+      },
+    ]),
+  ).toEqual([draft]);
+  expect(recallLinesOf([{ ...turn("user", "Notes"), skillName: "meeting-minutes" }])).toEqual([
+    "/meeting-minutes Notes",
+  ]);
+});
+
+it("keeps identical drafts with different selected prompt identities available in recall", () => {
+  const line = "/summary Notes";
+  expect(
+    recallLinesOf([
+      turn("user", "Team body", { ...summaryCommand(), prompt_id: "team", draft_text: line }),
+      turn("user", "Personal body", { ...summaryCommand(), prompt_id: "personal", draft_text: line }),
+    ]),
+  ).toEqual([line, line]);
 });
 
 describe("recalling sent messages in the composer", () => {

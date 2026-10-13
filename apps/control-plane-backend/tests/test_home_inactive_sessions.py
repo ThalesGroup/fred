@@ -158,3 +158,22 @@ def test_bulk_delete_splits_deleted_and_failed(monkeypatch) -> None:
     assert set(result.deleted) == {"ok1", "ok2"}
     assert result.failed == ["boom"]
     assert set(calls) == {"ok1", "boom", "ok2"}
+
+
+def test_inactive_preview_keeps_the_deleted_agent_name(monkeypatch) -> None:
+    saved = _session("deleted", "team-a", "agent-deleted", days_ago=10)
+    saved.agent_display_name = "Preserved assistant"
+    monkeypatch.setattr(
+        service,
+        "list_teams_from_service",
+        lambda *_: _async_result([SimpleNamespace(id="team-a")]),
+    )
+    monkeypatch.setattr(
+        service, "list_sessions", lambda *_, **__: _async_result([saved])
+    )
+    result = _run(service.list_inactive_sessions(_user(), _deps(), inactive_days=5))
+    assert result.sessions[0].agent_name == "Preserved assistant"
+
+
+async def _async_result(value):
+    return value

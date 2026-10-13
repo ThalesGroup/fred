@@ -19,15 +19,29 @@
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
+import type { CapabilityCatalogEntry } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
 import type { CapabilitySelectionState } from "../toolPackLogic";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
+vi.mock("../../../../../features/capabilities/configWidgetRegistry.ts", () => ({
+  configWidgetFor: () => undefined,
+}));
+
 import { SimpleCapabilitiesView } from "./SimpleCapabilitiesView";
 
-const NOT_SUPPORTED_KEY = "rework.teams.formAgent.capabilities.notSupported";
+const INCLUDED_SECTION_KEY = "rework.teams.formAgent.capabilities.builtIn.section";
+const INCLUDED_BADGE_KEY = "rework.teams.formAgent.capabilities.builtIn.badge";
+const NOTHING_INCLUDED_KEY = "rework.teams.formAgent.capabilities.builtIn.none";
+const DOCUMENT_ACCESS: CapabilityCatalogEntry = {
+  id: "document_access",
+  version: "1",
+  name: "capability.document_access.name",
+  description: "capability.document_access.description",
+  icon: "extension",
+} as CapabilityCatalogEntry;
 
 const selection: CapabilitySelectionState = {
   selectedCapabilityIds: [],
@@ -92,14 +106,53 @@ describe("SimpleCapabilitiesView hides packs the team cannot use", () => {
   });
 });
 
-describe("SimpleCapabilitiesView supportsCapabilities", () => {
-  it("shows the not-supported message when the template opts out, even with nothing selected", () => {
-    expect(render(new Set(), false)).toContain(NOT_SUPPORTED_KEY);
+function renderIncluded(includedCapabilities: CapabilityCatalogEntry[]): string {
+  return renderToStaticMarkup(
+    <SimpleCapabilitiesView
+      availableIds={new Set(includedCapabilities.map((capability) => capability.id))}
+      supportsCapabilities={false}
+      includedCapabilities={includedCapabilities}
+      renderIncludedOptions={(capability) => <span>{`options:${capability.id}`}</span>}
+      selection={selection}
+      disabled={false}
+      onSelectionChange={() => {}}
+    />,
+  );
+}
+
+describe("SimpleCapabilitiesView for an agent without free selection", () => {
+  it("lists an included capability as always on, with its configuration", () => {
+    const html = renderIncluded([DOCUMENT_ACCESS]);
+
+    expect(html).toContain(INCLUDED_SECTION_KEY);
+    expect(html).toContain("capability.document_access.name");
+    expect(html).toContain(INCLUDED_BADGE_KEY);
+    // A badge, not a switch: nothing to turn off.
+    expect(html).not.toContain('type="checkbox"');
+    expect(html).toContain("options:document_access");
   });
 
-  it("does not show the not-supported message for a supporting template with zero team-granted capabilities", () => {
+  it("offers no capability pack beside it, even one the team could use", () => {
+    const html = renderIncluded([DOCUMENT_ACCESS]);
+
+    expect(html).not.toContain(DATA_KNOWLEDGE_KEY);
+    expect(html).not.toContain(TEAM_DOCUMENTS_KEY);
+    expect(html).toContain(REASONING_KEY);
+  });
+
+  it("says so neutrally when the agent includes nothing", () => {
+    const html = renderIncluded([]);
+
+    expect(html).toContain(NOTHING_INCLUDED_KEY);
+    expect(html).not.toContain(INCLUDED_BADGE_KEY);
+  });
+
+  it("is not shown for a supporting template with zero team-granted capabilities", () => {
     // availableIds empty here too — only supportsCapabilities distinguishes
-    // "team has no grants" from "template doesn't support selection".
-    expect(render(new Set(), true)).not.toContain(NOT_SUPPORTED_KEY);
+    // "team has no grants" from "template has no free selection".
+    const html = render(new Set(), true);
+
+    expect(html).not.toContain(INCLUDED_SECTION_KEY);
+    expect(html).not.toContain(NOTHING_INCLUDED_KEY);
   });
 });

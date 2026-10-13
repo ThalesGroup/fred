@@ -73,6 +73,16 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/pod/v1/agents/checkpoints/${queryArg.sessionId}` }),
     }),
+    draftAgentPodV1AgentsCreationAssistantDraftPost: build.mutation<
+      DraftAgentPodV1AgentsCreationAssistantDraftPostApiResponse,
+      DraftAgentPodV1AgentsCreationAssistantDraftPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/creation-assistant/draft`,
+        method: "POST",
+        body: queryArg.agentDraftPodRequest,
+      }),
+    }),
     evaluateAgent: build.mutation<EvaluateAgentApiResponse, EvaluateAgentApiArg>({
       query: (queryArg) => ({
         url: `/pod/v1/agents/evaluate`,
@@ -167,6 +177,27 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/pod/v1/agents/sessions/${queryArg.sessionId}/messages` }),
     }),
+    getRuntimeInstanceSkills: build.query<GetRuntimeInstanceSkillsApiResponse, GetRuntimeInstanceSkillsApiArg>({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/skills`,
+        params: {
+          agent_instance_id: queryArg.agentInstanceId,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    getRuntimeInstanceSkillDetail: build.query<
+      GetRuntimeInstanceSkillDetailApiResponse,
+      GetRuntimeInstanceSkillDetailApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/skills/${queryArg.skillName}`,
+        params: {
+          agent_instance_id: queryArg.agentInstanceId,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
     listAgentTemplatesPodV1AgentsTemplatesGet: build.query<
       ListAgentTemplatesPodV1AgentsTemplatesGetApiResponse,
       ListAgentTemplatesPodV1AgentsTemplatesGetApiArg
@@ -242,6 +273,11 @@ export type GetCheckpointThreadPodV1AgentsCheckpointsSessionIdGetApiResponse =
   /** status 200 Successful Response */ CheckpointThreadDetail;
 export type GetCheckpointThreadPodV1AgentsCheckpointsSessionIdGetApiArg = {
   sessionId: string;
+};
+export type DraftAgentPodV1AgentsCreationAssistantDraftPostApiResponse =
+  /** status 200 Successful Response */ AgentDraftResult;
+export type DraftAgentPodV1AgentsCreationAssistantDraftPostApiArg = {
+  agentDraftPodRequest: AgentDraftPodRequest;
 };
 export type EvaluateAgentApiResponse = /** status 200 Successful Response */ EvalTrace;
 export type EvaluateAgentApiArg = {
@@ -337,6 +373,17 @@ export type GetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetApiResponse
   /** status 200 Successful Response */ ChatMessage[];
 export type GetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetApiArg = {
   sessionId: string;
+};
+export type GetRuntimeInstanceSkillsApiResponse = /** status 200 Successful Response */ SkillCatalog;
+export type GetRuntimeInstanceSkillsApiArg = {
+  agentInstanceId: string;
+  teamId: string;
+};
+export type GetRuntimeInstanceSkillDetailApiResponse = /** status 200 Successful Response */ SkillDetail;
+export type GetRuntimeInstanceSkillDetailApiArg = {
+  skillName: string;
+  agentInstanceId: string;
+  teamId: string;
 };
 export type ListAgentTemplatesPodV1AgentsTemplatesGetApiResponse =
   /** status 200 Successful Response */ AgentTemplateSummary[];
@@ -451,6 +498,30 @@ export type CheckpointThreadDetail = {
   checkpoints: CheckpointEntry[];
   session_id: string;
 };
+export type AgentDraftResult = {
+  /** Recommended capabilities, always a subset of the request's. */
+  capability_ids?: string[];
+  /** One sentence; None when the model gave none. */
+  description?: string | null;
+  name?: string | null;
+  role?: string | null;
+  system_prompt: string;
+};
+export type AgentDraftCapabilityCandidate = {
+  description?: string;
+  id: string;
+  name: string;
+};
+export type AgentDraftPodRequest = {
+  agent_name?: string | null;
+  agent_role?: string | null;
+  capabilities?: AgentDraftCapabilityCandidate[];
+  /** The user's own words: role, mission, audience, constraints. */
+  description: string;
+  /** UI language (BCP 47, e.g. 'fr', 'en'); the prompt is written in it. */
+  language?: string;
+  team_id: string;
+};
 export type EvalStep = {
   arguments?: {
     [key: string]: any;
@@ -488,8 +559,13 @@ export type ConversationTurn = {
 export type TurnCommand = {
   appended_text?: string;
   command: string;
+  draft_command_offset?: number | null;
+  draft_text?: string | null;
   prompt_id?: string | null;
   prompt_name?: string | null;
+};
+export type SkillInvocation = {
+  name: string;
 };
 export type RuntimeContext = {
   access_token?: string | null;
@@ -528,6 +604,8 @@ export type RuntimeContext = {
   selected_document_libraries_ids?: string[] | null;
   selected_document_uids?: string[] | null;
   session_id?: string | null;
+  skill?: SkillInvocation | null;
+  skills?: SkillInvocation[] | null;
   team_id?: string | null;
   template_agent_id?: string | null;
   trace_id?: string | null;
@@ -774,10 +852,20 @@ export type NodeErrorRuntimeEvent = {
   routed_to: string;
   sequence?: number;
 };
+export type SkillLoadAttribution = {
+  agent_id: string;
+  child?: boolean;
+  child_id?: string | null;
+  load_id: string;
+  name: string;
+  origin: "user" | "agent";
+  revision: string;
+};
 export type StatusRuntimeEvent = {
   detail?: string | null;
   kind?: "status";
   sequence?: number;
+  skill_load?: SkillLoadAttribution | null;
   status: string;
 };
 export type ThoughtDeltaEvent = {
@@ -871,6 +959,9 @@ export type ModelCatalogEntry = {
   name: string;
   profile_ids?: string[];
   provider: string;
+  reasoning_efforts?: {
+    [key: string]: ("low" | "medium" | "high")[];
+  };
   thinking_profile_ids?: string[];
 };
 export type ModelCatalogResponse = {
@@ -881,6 +972,8 @@ export type ModelCatalogResponse = {
   models: ModelCatalogEntry[];
 };
 export type PlatformPromptFileResponse = {
+  creation_assistant_prompt: string;
+  creation_assistant_prompt_revised_at: string;
   platform_instructions: string;
   platform_prompt: string;
 };
@@ -901,6 +994,8 @@ export type Channel =
 export type CommandDescriptor = {
   appended_text?: string;
   command: string;
+  draft_command_offset?: number | null;
+  draft_text?: string | null;
   prompt_id?: string | null;
   prompt_name?: string | null;
   [key: string]: any;
@@ -1016,6 +1111,21 @@ export type ChatMessage = {
   session_id: string;
   timestamp: string;
 };
+export type SkillSummary = {
+  argument_hint?: string | null;
+  description: string;
+  name: string;
+};
+export type SkillCatalog = {
+  revision?: string;
+  skills?: SkillSummary[];
+  supported?: boolean;
+};
+export type SkillDetail = {
+  content: string;
+  revision: string;
+  skill: SkillSummary;
+};
 export type AssetSlot = {
   accepted_types: string[];
   key: string;
@@ -1109,6 +1219,9 @@ export type CapabilityCatalogEntry = {
   model_chat_profile_ids?: string[];
   model_display_name?: string | null;
   model_profile_ids?: string[];
+  model_reasoning_efforts?: {
+    [key: string]: ("low" | "medium" | "high")[];
+  };
   model_thinking_profile_ids?: string[];
   /** i18n key */
   name: string;
@@ -1231,6 +1344,7 @@ export const {
   useDeleteCheckpointThreadPodV1AgentsCheckpointsSessionIdDeleteMutation,
   useGetCheckpointThreadPodV1AgentsCheckpointsSessionIdGetQuery,
   useLazyGetCheckpointThreadPodV1AgentsCheckpointsSessionIdGetQuery,
+  useDraftAgentPodV1AgentsCreationAssistantDraftPostMutation,
   useEvaluateAgentMutation,
   useExecuteAgentMutation,
   useExecuteAgentStreamMutation,
@@ -1248,6 +1362,10 @@ export const {
   useDeleteSessionFilesystemPodV1AgentsSessionsSessionIdFilesystemDeleteMutation,
   useGetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetQuery,
   useLazyGetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetQuery,
+  useGetRuntimeInstanceSkillsQuery,
+  useLazyGetRuntimeInstanceSkillsQuery,
+  useGetRuntimeInstanceSkillDetailQuery,
+  useLazyGetRuntimeInstanceSkillDetailQuery,
   useListAgentTemplatesPodV1AgentsTemplatesGetQuery,
   useLazyListAgentTemplatesPodV1AgentsTemplatesGetQuery,
   useListWebResearchActivityPodV1AgentsWebResearchActivityGetQuery,

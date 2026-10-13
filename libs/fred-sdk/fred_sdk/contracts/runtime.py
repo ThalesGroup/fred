@@ -61,6 +61,7 @@ from .context import (
     UiPart,
 )
 from .models import AgentDefinition
+from .skills import SkillLoadAttribution, SkillsPort
 from .web_research import WebResearchPort
 
 ChatModelHandle: TypeAlias = object
@@ -220,6 +221,7 @@ class StatusRuntimeEvent(RuntimeEventBase):
     kind: Literal[RuntimeEventKind.STATUS] = RuntimeEventKind.STATUS
     status: str = Field(..., min_length=1)
     detail: str | None = None
+    skill_load: SkillLoadAttribution | None = None
 
 
 class ThoughtStartEvent(RuntimeEventBase):
@@ -860,8 +862,10 @@ class DocumentSearchPort(ABC):
         Run one scoped vector search and return typed hits.
 
         `library_tag_ids` / `document_uids` are the capability's already-narrowed
-        scope (None = "no capability-side narrowing at this level"); the adapter
-        further bounds them by the session binding. `search_policy` overrides the
+        scope (None = "no capability-side narrowing at this level", an empty list
+        = nothing in scope); the adapter further bounds them by the session
+        binding. Libraries and documents union, so the search finds nothing only
+        when neither selects anything. `search_policy` overrides the
         binding's default policy when provided. `include_attachments` /
         `include_team_documents` are ceilings on the conversation's attached
         files and the team corpus: the per-turn RAG scope can only narrow them.
@@ -1107,15 +1111,18 @@ class DocumentTreePort(ABC):
         working_directory: str | None = None,
         library_tag_ids: Sequence[str] | None = None,
         document_uids: Sequence[str] | None = None,
-        max_chars: int = 6000,
+        max_chars: int = 20_000,
     ) -> DocumentTreeResult:
         """
         Return the caller's authorized folder/document tree as rendered text.
 
         `library_tag_ids` / `document_uids` are the capability's already-narrowed
-        scope (None = "no capability-side narrowing at that level"); the adapter
-        further bounds them by the session binding before calling Knowledge Flow,
-        completing `turn_option ⊆ capability_config ⊆ session_binding`. A
+        scope (None = "no capability-side narrowing at that level", an empty list
+        = nothing in scope); the adapter further bounds them by the session
+        binding before calling Knowledge Flow, completing
+        `turn_option ⊆ capability_config ⊆ session_binding`. Libraries and
+        documents union, so the listing is empty only when neither selects
+        anything. A
         document scope prunes the listing to those leaves and drops the folders
         left empty, so a one-document selection renders one document. Raises
         `DocumentPortCallError` on transport failure.
@@ -1618,6 +1625,7 @@ class RuntimeServices:
     # Appended last to preserve positional compatibility.
     conversation_filesystem: ConversationFilesystemPort | None = None
     web_research: WebResearchPort | None = None
+    skills: SkillsPort | None = None
 
 
 InputModelT = TypeVar("InputModelT", bound=BaseModel)

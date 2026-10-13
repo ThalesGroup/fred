@@ -150,3 +150,8 @@ click on their card. The **Advanced** view may reveal capabilities belonging to 
 notably administration capabilities reserved for operations agents. They follow
 the same rule as the others: your team only sees them if the administrator
 opened them to it.
+
+Some agents, such as guided workflow agents, come with their capabilities and
+offer no packs. The form lists them under **Included with this agent**: they
+stay on, and you set their options there, for example to bind the agent to
+specific libraries.

@@ -32,9 +32,9 @@ class DocumentTreeRequest(BaseModel):
         description="Restrict the listing to these documents, dropping the folders left empty, when set.",
     )
     max_chars: int = Field(
-        default=6000,
+        default=20_000,
         ge=500,
-        le=20_000,
+        le=60_000,
         description="Render budget for the returned tree text. Oversized trees are pruned, deepest branches first.",
     )
     owner_filter: Optional[OwnerFilter] = Field(

@@ -18,6 +18,7 @@ import type {
   ManagedAgentInstanceSummary,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
+  draftTargets,
   buildAgentFormSubmitPayload,
   defaultCapabilitySelection,
   extractCapabilityConfigValues,
@@ -96,6 +97,36 @@ describe("buildAgentFormSubmitPayload", () => {
       usageStatement: "Screens inbound requests for policy violations.",
       recommendedChatProfileId: null,
     });
+  });
+
+  it("submits every included capability and its config for a template without free selection", () => {
+    // A Graph agent's included capability stays active whatever the stored
+    // selection says (often [] for an instance saved before it was shown).
+    const template = {
+      ...makeCapabilityTemplate(["document_access"]),
+      supports_capabilities: false,
+      default_capability_ids: ["document_access"],
+    } as AgentTemplateSummary;
+    const bound = { bind_libraries: true, library_tag_ids: ["lib-a"] };
+    const payload = buildAgentFormSubmitPayload(
+      {
+        templateId: "runtime:agent",
+        displayName: "Mindmap",
+        role: "",
+        description: "",
+        usageStatement: "",
+        reasoningEnabled: false,
+        reasoningDefaultOn: false,
+        tuningValues: {},
+        ...EMPTY_CAPABILITY_STATE,
+        capabilityConfigValues: { document_access: bound },
+      },
+      template,
+    );
+
+    expect(payload.selectedCapabilityIds).toEqual(["document_access"]);
+    expect(payload.capabilityConfigValues).toEqual({ document_access: bound });
+    expect(payload.templateHasCapabilities).toBe(true);
   });
 
   it("flags templateHasCapabilities false and empties capability selection for capability-less templates", () => {
@@ -262,6 +293,87 @@ describe("extractCapabilityConfigValues", () => {
     expect(extractCapabilityConfigValues(stored)).toEqual({
       document_access: { attachments: true, team_documents: false, bind_libraries: false },
       other: { search_attachments_only: true },
+    });
+  });
+});
+
+describe("draftTargets", () => {
+  const template = {
+    template_id: "t",
+    display_name: "Template name",
+    description: "Template description",
+    description_by_lang: { fr: "Description du modèle" },
+    default_capability_ids: ["team_wiki"],
+    available_capabilities: [{ id: "team_wiki" }, { id: "html_artifact" }],
+    default_tuning_fields: [{ key: "prompts.system", type: "prompt", default: "Seed prompt" }],
+  } as unknown as AgentTemplateSummary;
+
+  it("treats values still equal to the template's seeds as empty", () => {
+    const targets = draftTargets(
+      {
+        displayName: "Template name",
+        role: "",
+        description: "Description du modèle",
+        tuningValues: { "prompts.system": "Seed prompt" },
+        selectedCapabilityIds: ["team_wiki"],
+        capabilityConfigValues: {},
+      },
+      template,
+      "fr",
+      "prompts.system",
+      "create",
+    );
+    expect(targets).toEqual({
+      name: "",
+      role: "",
+      description: "",
+      systemPrompt: "",
+      capabilityIds: [],
+      capabilityConfigValues: {},
+    });
+  });
+
+  it("keeps what the user wrote", () => {
+    const targets = draftTargets(
+      {
+        displayName: "Mine",
+        role: "My role",
+        description: "My text",
+        tuningValues: { "prompts.system": "My prompt" },
+        selectedCapabilityIds: ["html_artifact"],
+        capabilityConfigValues: {},
+      },
+      template,
+      "fr",
+      "prompts.system",
+      "create",
+    );
+    expect(targets).toEqual({
+      name: "Mine",
+      role: "My role",
+      description: "My text",
+      systemPrompt: "My prompt",
+      capabilityIds: ["html_artifact"],
+      capabilityConfigValues: {},
+    });
+  });
+
+  it("keeps saved values equal to the template's seeds when editing an agent", () => {
+    const saved = {
+      displayName: "Template name",
+      role: "",
+      description: "Description du modèle",
+      tuningValues: { "prompts.system": "Seed prompt" },
+      selectedCapabilityIds: ["team_wiki"],
+      capabilityConfigValues: {},
+    };
+    expect(draftTargets(saved, template, "fr", "prompts.system", "edit")).toEqual({
+      name: "Template name",
+      role: "",
+      description: "Description du modèle",
+      systemPrompt: "Seed prompt",
+      capabilityIds: ["team_wiki"],
+      capabilityConfigValues: {},
     });
   });
 });

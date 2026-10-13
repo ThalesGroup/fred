@@ -101,6 +101,10 @@ from fred_core.security.rebac.rebac_engine import (
 )
 from fred_core.security.rebac.rebac_factory import rebac_factory
 from fred_core.security.structure import KeycloakUser, is_service_agent
+from fred_sdk.contracts.agent_draft import (
+    AgentDraftPodRequest,
+    AgentDraftResult,
+)
 from fred_sdk.contracts.capability import (
     CapabilityCatalogEntry,
     CapabilityConfigCopyRequest,
@@ -112,6 +116,7 @@ from fred_sdk.contracts.capability import (
     StoredCapabilityConfig,
     UploadedFile,
 )
+from fred_sdk.contracts.capability.manifest import ReasoningEffortLevel
 from fred_sdk.contracts.context import (
     AgentInvocationRequest,
     AgentInvocationResult,
@@ -156,6 +161,7 @@ from fred_sdk.contracts.runtime import (
     RuntimeServices,
     parse_human_input_answer,
 )
+from fred_sdk.contracts.skills import SkillCatalog, SkillDetail, SkillInvocation
 from fred_sdk.contracts.ui_part_union import current_ui_part_union
 from fred_sdk.support.authored_toolsets import (
     AuthoredToolRuntimePorts,
@@ -177,6 +183,7 @@ from fred_runtime.capabilities import (
     build_capability_contexts,
     enforce_asset_slots,
     evaluate_chat_controls_batch,
+    resolve_bound_library_ids,
     validate_turn_options,
 )
 from fred_runtime.capabilities.copy import (
@@ -266,6 +273,7 @@ from ..runtime_support.run_scope import (
     reset_owner_execution,
     set_owner_execution,
 )
+from . import creation_assistant
 from .chat_input_limit import validate_runtime_request
 from .config import AgentPodConfig, ConversationFilesystemQuotaConfig
 from .container import build_pod_container
@@ -921,6 +929,7 @@ def _build_runtime_services(
     capability_registry: CapabilityRegistry | None = None,
     credential_provider: OutboundCredentialProvider | None = None,
     conversation_filesystem: ConversationFilesystemService | None = None,
+    bound_library_ids: Sequence[str] | None = None,
 ) -> RuntimeServices:
     """
     Assemble the full `RuntimeServices` bundle for one pod request.
@@ -947,13 +956,19 @@ def _build_runtime_services(
         conversation_filesystem = _build_conversation_filesystem(binding)
     conversation_port = None
     if conversation_filesystem is not None:
-        backend, permissions = build_conversation_filesystem(conversation_filesystem)
+        backend, permissions = build_conversation_filesystem(
+            conversation_filesystem,
+            skills=runtime_config.skills
+            if isinstance(definition, DeepAgentDefinition)
+            else None,
+        )
         conversation_port = DeepConversationFilesystemPort(backend, permissions)
     settings = _build_agent_settings(definition, team_id=team_id)
     base_tool_invoker = FredKnowledgeSearchToolInvoker(
         binding=binding,
         settings=settings,
         credentials=credential_provider,
+        bound_library_ids=bound_library_ids,
     )
     # Capability-safe scoped vector search (CAPAB-01 #1906). Wraps the same
     # per-turn binding as the builtin invoker but exposes ONLY the parameterized
@@ -1103,6 +1118,7 @@ def _build_runtime_services(
             credentials=credential_provider,
         ),
         conversation_filesystem=conversation_port,
+        skills=runtime_config.skills,
     )
 
 
@@ -1274,13 +1290,13 @@ class _AgentTemplateSummary(BaseModel):
     kind: ExecutionCategory
     default_tuning: AgentTuning
     available_mcp_servers: list[MCPServerConfiguration] = Field(default_factory=list)
-    # Filtered by supports_capabilities below: [] outright for a template that
-    # opts out, so a coincidentally pod-registered capability is never offered.
+    # Filtered by supports_capabilities below: only the template's included
+    # defaults for one that opts out, so a coincidentally pod-registered
+    # capability is never offered.
     available_capabilities: list[CapabilityCatalogEntry] = Field(default_factory=list)
     # Mirrors AgentDefinition.supports_capabilities verbatim (unfiltered by team
-    # grants) — the only way control-plane can tell "this team has zero usable
-    # capabilities" apart from "this template doesn't support selection at all"
-    # once available_capabilities has been narrowed to the team's can_use set.
+    # grants). False means available_capabilities lists capabilities included
+    # with the agent: always active, configurable, never selectable.
     supports_capabilities: bool = True
     # This template's declared default capability ids (RFC §2), verbatim from
     # `definition.default_mcp_servers` — MCP-derived and native ids alike, no
@@ -1335,6 +1351,13 @@ class _ModelCatalogEntry(BaseModel):
     shows no reasoning control at all — aptitude is not a choice, an
     administrator cannot make a model reason. Non-empty means the row carries
     the toggle. Same established join as `profile_ids` above."""
+    reasoning_efforts: dict[str, list[ReasoningEffortLevel]] = Field(
+        default_factory=dict
+    )
+    """Selectable reasoning levels per profile id of `thinking_profile_ids`,
+    for profiles declaring two or more (`ModelProfile.reasoning_levels`).
+    Absent: that thinking profile is on/off only. Empty: no level a platform
+    helper can send (`ModelProfile.reasoning_on_effort` is None)."""
     display_name: str | None = None
     """The ops-authored `model_display_name` of this model's first profile that
     declares one — the label the composer shows instead of splitting the
@@ -1364,6 +1387,11 @@ class _PlatformPromptFileResponse(BaseModel):
     """The read-only block, rendered directly under the one above on every turn.
     Nothing can edit it; the admin UI displays it so an admin can see exactly
     what agents are told alongside their own prompt."""
+    creation_assistant_prompt: str
+    """The built-in meta-prompt of `POST /agents/creation-assistant/draft`, shown
+    as the default of the admin editor that can override it."""
+    creation_assistant_prompt_revised_at: str
+    """ISO date of the last edit of `creation_assistant_prompt`."""
 
 
 def _platform_prompt_file_field(config: AgentPodConfig, field: str) -> str | None:
@@ -1465,6 +1493,13 @@ def _project_model_catalog_entries(catalog: Any) -> list[_ModelCatalogEntry]:
         # this one condition is the whole projection between them.
         if profile.supports_thinking:
             existing.thinking_profile_ids.append(profile.profile_id)
+            if profile.reasoning_levels:
+                existing.reasoning_efforts[profile.profile_id] = list(
+                    profile.reasoning_levels
+                )
+            elif profile.reasoning_on_effort is None:
+                # Nothing a platform helper could send: reported as no levels.
+                existing.reasoning_efforts[profile.profile_id] = []
     return list(seen.values())
 
 
@@ -1665,6 +1700,31 @@ def _apply_runtime_tuning(
         ):
             update["system_prompt_template"] = system_prompt
     return definition.model_copy(update=update)
+
+
+def _template_capability_entries(
+    definition: ReActAgentDefinition | GraphAgentDefinition,
+    entries: Sequence[CapabilityCatalogEntry],
+) -> list[CapabilityCatalogEntry]:
+    """
+    The pod's capability entries one template advertises.
+
+    A ReAct-only capability (CAPAB-02 `execution_models`) is never listed on a
+    Graph template: `_build_capability_block` would refuse it at run time. A
+    definition with `supports_capabilities=False` lists only its included
+    defaults, which the form shows and configures but never lets anyone pick.
+    """
+
+    included_ids = {ref.id for ref in definition.default_mcp_servers}
+    return [
+        entry
+        for entry in entries
+        if (
+            not isinstance(definition, GraphAgentDefinition)
+            or "graph" in entry.execution_models
+        )
+        and (definition.supports_capabilities or entry.id in included_ids)
+    ]
 
 
 def _available_mcp_servers_for_definition(
@@ -2419,6 +2479,21 @@ async def _authorize_and_resolve(
                 credentials=credentials or static_person_provider(access_token),
             )
         _validate_resolved_team(request, target.team_id, container)
+        selections = (
+            request.runtime_context.selected_skills if request.runtime_context else ()
+        )
+        if selections and request.resume_payload is None:
+            skills = get_runtime_context().config.skills
+            if isinstance(target.definition, GraphAgentDefinition) or skills is None:
+                raise HTTPException(
+                    status_code=422, detail="Platform skills unavailable for this agent"
+                )
+            if not isinstance(target.definition, DeepAgentDefinition):
+                try:
+                    for selection in selections:
+                        skills.read(selection.name)
+                except ValueError as exc:
+                    raise HTTPException(status_code=422, detail=str(exc)) from None
     except BaseException as exc:
         # Nothing past admission got as far as starting the run, so the record
         # it wrote has no owner left to release it.
@@ -2872,6 +2947,8 @@ async def _write_turn_history(
     user_id: str,
     request_message: str | None,
     turn_command: CommandDescriptor | None = None,
+    skill_invocation: SkillInvocation | dict[str, Any] | None = None,
+    skill_invocations: list[SkillInvocation | dict[str, Any]] | None = None,
     payloads: list[dict[str, Any]],
     history_store: HistoryStorePort,
     team_id: str | None = None,
@@ -2990,11 +3067,29 @@ async def _write_turn_history(
                 )
                 rank += 1
     elif request_message:
-        messages.append(
-            make_user_text(
-                session_id, exchange_id, rank, request_message, command=turn_command
-            )
+        user_message = make_user_text(
+            session_id, exchange_id, rank, request_message, command=turn_command
         )
+        if skill_invocations:
+            extras = {
+                "skill_invocations": [
+                    SkillInvocation.model_validate(item).model_dump(mode="json")
+                    for item in skill_invocations
+                ]
+            }
+            user_message.metadata = user_message.metadata.model_copy(
+                update={"extras": extras}
+            )
+        elif skill_invocation is not None:
+            extras = {
+                "skill_invocation": SkillInvocation.model_validate(
+                    skill_invocation
+                ).model_dump(mode="json")
+            }
+            user_message.metadata = user_message.metadata.model_copy(
+                update={"extras": extras}
+            )
+        messages.append(user_message)
         rank += 1
 
     # Reasoning blocks still accumulating, keyed by thought_id. A block reserves
@@ -3055,10 +3150,33 @@ async def _write_turn_history(
     final_finish_reason: str | None = None
     final_context_tokens: int | None = None
 
+    skill_load_ids: set[str] = set()
     for payload in payloads:
         kind = payload.get("kind")
 
-        if kind == "tool_call":
+        if kind == "status" and isinstance(payload.get("skill_load"), dict):
+            from fred_sdk.contracts.skills import SkillLoadAttribution
+
+            attribution = SkillLoadAttribution.model_validate(payload["skill_load"])
+            if attribution.load_id in skill_load_ids:
+                continue
+            skill_load_ids.add(attribution.load_id)
+            messages.append(
+                ChatMessage(
+                    session_id=session_id,
+                    exchange_id=exchange_id,
+                    rank=rank,
+                    timestamp=datetime.now(timezone.utc),
+                    role=Role.system,
+                    channel=Channel.system_note,
+                    parts=[TextPart(text=attribution.name)],
+                    metadata=ChatMetadata.model_validate(
+                        {"extras": {"skill_load": attribution.model_dump(mode="json")}}
+                    ),
+                )
+            )
+            rank += 1
+        elif kind == "tool_call":
             messages.append(
                 make_tool_call(
                     session_id,
@@ -3683,6 +3801,8 @@ async def _stream(
                     user_id=user_id,
                     request_message=request.message,
                     turn_command=_turn_command(ctx),
+                    skill_invocation=ctx.get("skill"),
+                    skill_invocations=ctx.get("skills"),
                     payloads=collected,
                     history_store=history_store,
                     team_id=resolved_team_id,
@@ -3805,6 +3925,28 @@ def _effective_capability_ids(
         or mcp_config is None
         or cap_id not in known_catalog_ids
     ]
+
+
+def _instance_bound_library_ids(
+    capability_registry: CapabilityRegistry | None,
+    tuning: AgentTuning | None,
+    definition: ReActAgentDefinition | GraphAgentDefinition,
+) -> list[str] | None:
+    """
+    The libraries this instance's active capabilities bind it to, from its
+    stored config. Enforced on `knowledge.search` whatever context the client
+    sent, so a run without the chat UI cannot widen the binding.
+    """
+
+    if capability_registry is None:
+        return None
+    return resolve_bound_library_ids(
+        capability_registry,
+        capability_ids=_effective_capability_ids(
+            tuning, definition, capability_registry
+        ),
+        capability_config=tuning.capability_config if tuning is not None else {},
+    )
 
 
 def _enforce_turn_options(
@@ -4457,6 +4599,8 @@ async def _iterate_runtime_event_payloads_inner(
         agent_instance_id=request.agent_instance_id,
         template_agent_id=definition.agent_id,
         execution_action=execution_action,
+        skill=ctx.get("skill"),
+        skills=ctx.get("skills"),
         # Chat options forwarded from the frontend RuntimeContext.
         # These were present in ctx but were silently dropped, causing
         # ContextAwareTool and all KF search helpers to always use defaults.
@@ -4528,6 +4672,9 @@ async def _iterate_runtime_event_payloads_inner(
         capability_registry=capability_registry,
         credential_provider=credential_provider,
         conversation_filesystem=conversation_filesystem,
+        bound_library_ids=_instance_bound_library_ids(
+            capability_registry, tuning, definition
+        ),
     )
     # session_id drives LangGraph checkpointing: the agent resumes its graph
     # state on every turn. Falls back to request_id for one-shot calls so
@@ -5053,26 +5200,8 @@ def _build_agent_router(
                 kind=definition.execution_category,
                 default_tuning=_definition_to_agent_tuning(definition),
                 available_mcp_servers=_available_mcp_servers_for_definition(definition),
-                # CAPAB-02: a capability declared `execution_models=("react",)`
-                # must not even be offered for selection on a Graph template —
-                # `_build_capability_block` would refuse it loudly at save/run
-                # time regardless, but a picker that lists it first invites the
-                # exact "select it, save it, discover the incompatibility at
-                # first launch" flow the loud refusal exists to prevent.
-                #
-                # A definition opting out via supports_capabilities=False never
-                # offers one, regardless of pod registration — short-circuit
-                # rather than let that leak into the picker.
-                available_capabilities=(
-                    []
-                    if not definition.supports_capabilities
-                    else all_capability_entries
-                    if not isinstance(definition, GraphAgentDefinition)
-                    else [
-                        entry
-                        for entry in all_capability_entries
-                        if "graph" in entry.execution_models
-                    ]
+                available_capabilities=_template_capability_entries(
+                    definition, all_capability_entries
                 ),
                 supports_capabilities=definition.supports_capabilities,
                 default_capability_ids=[
@@ -5083,6 +5212,55 @@ def _build_agent_router(
             for definition in registry.values()
             if include_non_public or getattr(definition, "public", True)
         ]
+
+    @router.get(
+        "/skills",
+        response_model=SkillCatalog,
+        operation_id="get_runtime_instance_skills",
+    )
+    async def get_skills(
+        http_request: Request,
+        agent_instance_id: str,
+        team_id: str,
+        container: PodApplicationContext = Depends(get_pod_container),
+        caller: KeycloakUser | None = Depends(_authenticated_user),
+    ) -> SkillCatalog:
+        """List metadata after the same team-use and target checks as execution."""
+        from fred_runtime.skills.api import get_instance_skills
+
+        return await get_instance_skills(
+            agent_instance_id,
+            team_id,
+            caller,
+            http_request.headers.get("Authorization"),
+            container,
+            registry,
+        )
+
+    @router.get(
+        "/skills/{skill_name}",
+        response_model=SkillDetail,
+        operation_id="get_runtime_instance_skill_detail",
+    )
+    async def get_skill_detail(
+        http_request: Request,
+        skill_name: str,
+        agent_instance_id: str,
+        team_id: str,
+        container: PodApplicationContext = Depends(get_pod_container),
+        caller: KeycloakUser | None = Depends(_authenticated_user),
+    ) -> SkillDetail:
+        from fred_runtime.skills.api import get_instance_skill_detail
+
+        return await get_instance_skill_detail(
+            skill_name,
+            agent_instance_id,
+            team_id,
+            caller,
+            http_request.headers.get("Authorization"),
+            container,
+            registry,
+        )
 
     @router.get("/mcp-catalog")
     async def get_mcp_catalog() -> _McpCatalogResponse:
@@ -5157,7 +5335,8 @@ def _build_agent_router(
     @router.get("/platform-prompt")
     async def get_platform_prompt_file() -> _PlatformPromptFileResponse:
         """
-        Return the two head blocks this pod ships in `config/platform_prompt.json`.
+        Return the two head blocks this pod ships in `config/platform_prompt.json`,
+        plus the creation assistant's built-in meta-prompt.
 
         Why this endpoint exists:
         - the admin UI shows both: the platform prompt an admin edits (this file
@@ -5188,6 +5367,24 @@ def _build_agent_router(
         return _PlatformPromptFileResponse(
             platform_prompt=runtime_config.default_platform_prompt or "",
             platform_instructions=runtime_config.platform_instructions or "",
+            creation_assistant_prompt=creation_assistant.CREATION_ASSISTANT_SYSTEM_PROMPT,
+            creation_assistant_prompt_revised_at=creation_assistant.CREATION_ASSISTANT_REVISED_AT,
+        )
+
+    @router.post("/creation-assistant/draft")
+    async def draft_agent(
+        body: AgentDraftPodRequest,
+        http_request: Request,
+        caller: KeycloakUser | None = Depends(_authenticated_user),
+    ) -> AgentDraftResult:
+        """
+        Draft an agent system prompt and capability selection from a user's
+        plain-language description (`creation_assistant.py`).
+        """
+        return await creation_assistant.handle_draft_request(
+            body,
+            caller=caller,
+            authorization=http_request.headers.get("Authorization"),
         )
 
     @router.post("/capabilities/{capability_id}/validate-config")
@@ -6036,6 +6233,8 @@ def _build_agent_router(
                     user_id=user_id_str,
                     request_message=request.input,
                     turn_command=_turn_command(internal_req.context or {}),
+                    skill_invocation=(internal_req.context or {}).get("skill"),
+                    skill_invocations=(internal_req.context or {}).get("skills"),
                     payloads=payloads,
                     history_store=history_store,
                     team_id=target.team_id,
@@ -6141,6 +6340,8 @@ def _build_agent_router(
                     user_id=user_id_str,
                     request_message=request.input,
                     turn_command=_turn_command(internal_req.context or {}),
+                    skill_invocation=(internal_req.context or {}).get("skill"),
+                    skill_invocations=(internal_req.context or {}).get("skills"),
                     payloads=payloads,
                     history_store=history_store,
                     team_id=target.team_id,
@@ -6457,6 +6658,15 @@ def create_agent_app(
                 raise RuntimeError(
                     "Invalid runtime storage state: checkpointer and history store must be configured together."
                 )
+            from fred_runtime.skills.catalog import PlatformSkills
+
+            skills = (
+                await asyncio.to_thread(
+                    PlatformSkills.from_directory, config.skills.directory
+                )
+                if config.skills is not None
+                else None
+            )
             set_runtime_context(
                 FredRuntimeContext(
                     RuntimeConfig(
@@ -6467,6 +6677,7 @@ def create_agent_app(
                         checkpointer=checkpointer,
                         history_store=history_store,
                         filesystem=container.get_filesystem(),
+                        skills=skills,
                         conversation_filesystem_quotas=(
                             config.storage.conversation_filesystem
                         ),

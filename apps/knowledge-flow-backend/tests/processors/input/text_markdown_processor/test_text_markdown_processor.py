@@ -17,6 +17,9 @@
 import tempfile
 from pathlib import Path
 
+import pytest
+
+from knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor import MarkdownMarkdownProcessor
 from knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor import TextMarkdownProcessor
 
 
@@ -43,3 +46,18 @@ def test_sample_markdown_processor_end_to_end():
         # Convert to markdown
         result = processor.convert_file_to_markdown(input_file, output_dir, metadata.document_uid)
         assert Path(result["md_file"]).exists()
+
+
+@pytest.mark.parametrize("processor", [TextMarkdownProcessor(), MarkdownMarkdownProcessor()], ids=["text", "markdown"])
+@pytest.mark.parametrize(
+    "raw",
+    ["Réunion du comité\r\nbudget validé".encode("cp1252"), b"\xef\xbb\xbf" + "Réunion du comité\r\nbudget validé".encode("utf-8")],
+    ids=["cp1252", "utf8-bom"],
+)
+def test_non_utf8_input_keeps_accents(tmp_path: Path, processor, raw: bytes):
+    input_file = tmp_path / "note.md"
+    input_file.write_bytes(raw)
+
+    result = processor.convert_file_to_markdown(input_file, tmp_path / "output", "uid")
+
+    assert Path(result["md_file"]).read_bytes().decode("utf-8") == "Réunion du comité\nbudget validé"

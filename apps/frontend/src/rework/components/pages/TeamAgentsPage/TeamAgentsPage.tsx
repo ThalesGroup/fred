@@ -34,6 +34,13 @@ import { duplicateCopyArgs, duplicateWarning } from "./duplicateAgent.ts";
 import DuplicateAgentDialog from "./DuplicateAgentDialog/DuplicateAgentDialog.tsx";
 import TeamAgentEmptyState from "./TeamAgentEmptyState/TeamAgentEmptyState.tsx";
 import { filterAgents } from "./agentFilter.ts";
+import {
+  AGENT_NAME_CONFLICT,
+  freeAgentName,
+  isAgentNameConflict,
+  normalizeAgentName,
+  takenAgentNames,
+} from "./agentNames.ts";
 import { getStoredAgentSort, sortAgents, storeAgentSort, type AgentSortValue } from "./agentSort.ts";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
 import { useUsersByIdsQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
@@ -122,6 +129,12 @@ export default function TeamAgentsPage() {
   const [isEnrollOpen, setIsEnrollOpen] = useState(false);
   const [editingInstance, setEditingInstance] = useState<ManagedAgentInstanceSummary | null>(null);
   const [duplicatingInstance, setDuplicatingInstance] = useState<ManagedAgentInstanceSummary | null>(null);
+  // Chosen when the dialog opens, so a later refresh of the list never
+  // replaces what the person is typing.
+  const [duplicateName, setDuplicateName] = useState("");
+  // Names the server refused as taken but the loaded list does not show yet
+  // (taken in the meantime); kept so the form marks its name field.
+  const [refusedNames, setRefusedNames] = useState<ReadonlySet<string>>(new Set());
   const [copyingInstance, setCopyingInstance] = useState<ManagedAgentInstanceSummary | null>(null);
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<AgentSortValue>(getStoredAgentSort);
@@ -195,6 +208,19 @@ export default function TeamAgentsPage() {
   const [deleteManagedInstance] =
     useDeleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDeleteMutation();
 
+  const takenNames = useMemo(
+    () => new Set([...takenAgentNames(managedInstances, editingInstance?.agent_instance_id), ...refusedNames]),
+    [managedInstances, editingInstance, refusedNames],
+  );
+  const duplicateTakenNames = useMemo(
+    () => new Set([...takenAgentNames(managedInstances), ...refusedNames]),
+    [managedInstances, refusedNames],
+  );
+  const refuseName = (name: string) => {
+    setRefusedNames((prev) => new Set([...prev, normalizeAgentName(name)]));
+    void refetchInstances();
+  };
+
   const handleEnroll = async (payload: AgentFormPayload) => {
     if (!teamId) return;
     const request: CreateAgentInstanceRequest = {
@@ -232,6 +258,10 @@ export default function TeamAgentsPage() {
       setIsEnrollOpen(false);
       await refetchInstances();
     } catch (error: unknown) {
+      if (isAgentNameConflict(error)) {
+        refuseName(request.display_name);
+        return;
+      }
       showError({
         summary: t("rework.agentCard.createError", { agent: agentsNicknameSingular.toLowerCase() }),
         detail: extractApiErrorDetail(error) ?? t("rework.agentCard.unexpectedError"),
@@ -282,6 +312,10 @@ export default function TeamAgentsPage() {
       setEditingInstance(null);
       await refetchInstances();
     } catch (error: unknown) {
+      if (isAgentNameConflict(error) && request.display_name) {
+        refuseName(request.display_name);
+        return;
+      }
       showError({
         summary: t("rework.agentCard.updateError", { agent: agentsNicknameSingular.toLowerCase() }),
         detail: extractApiErrorDetail(error) ?? t("rework.agentCard.unexpectedError"),
@@ -319,6 +353,10 @@ export default function TeamAgentsPage() {
     try {
       const { results } = await copyAgent(duplicateCopyArgs(source, teamId, newName)).unwrap();
       const [result] = results;
+      if (result?.error_code === AGENT_NAME_CONFLICT) {
+        refuseName(newName);
+        return;
+      }
       if (!result?.agent) throw new Error(result?.error ?? t("rework.agentCard.unexpectedError"));
       showSuccess({ summary: t("rework.agentCard.duplicateSuccess", { agent: agentsNicknameSingular }) });
       // Never lose a capability silently: say what was left out or must be redone.
@@ -475,7 +513,10 @@ export default function TeamAgentsPage() {
                 auditUserById={auditUserById}
                 onEdit={() => setEditingInstance(instance)}
                 onToggleEnabled={() => handleToggleEnabled(instance)}
-                onDuplicate={() => setDuplicatingInstance(instance)}
+                onDuplicate={() => {
+                  setDuplicateName(freeAgentName(instance.display_name, duplicateTakenNames));
+                  setDuplicatingInstance(instance);
+                }}
                 onCopyTo={() => setCopyingInstance(instance)}
                 onDelete={() => handleDelete(instance)}
               />
@@ -503,12 +544,14 @@ export default function TeamAgentsPage() {
         }}
         onSubmit={editingInstance ? handleEdit : handleEnroll}
         onDelete={editingInstance ? () => handleDelete(editingInstance) : undefined}
+        takenNames={takenNames}
       />
 
       <DuplicateAgentDialog
         open={duplicatingInstance !== null}
-        initialName={duplicatingInstance?.display_name ?? ""}
+        initialName={duplicateName}
         isSubmitting={isCopyingInstance}
+        takenNames={duplicateTakenNames}
         onCancel={() => setDuplicatingInstance(null)}
         onConfirm={(newName) => {
           if (duplicatingInstance) void handleDuplicate(duplicatingInstance, newName);

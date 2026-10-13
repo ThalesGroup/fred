@@ -22,12 +22,14 @@ import {
   useAgentsPerUserQuery,
   useAgentsPerUserTrendQuery,
   useAgentsTotalQuery,
+  useSkillUsageQuery,
   useConversationDepthQuery,
   useConversationDepthTrendQuery,
   useConversationsPerUserQuery,
   useConversationsPerUserTrendQuery,
   useDocumentsTotalQuery,
   useMessagesOverTimeQuery,
+  useCreationAssistantUsageQuery,
   useSessionsByScopeQuery,
   useSessionsOverTimeQuery,
   useStorageByTeamQuery,
@@ -38,6 +40,7 @@ import {
   useTopTeamsBySessionsQuery,
   useUniqueUsersTotalQuery,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import SkillUsageTable from "@shared/molecules/SkillUsageTable/SkillUsageTable";
 import TimeRangeSelector from "@shared/molecules/TimeRangeSelector/TimeRangeSelector";
 import type { TimeRange } from "@shared/molecules/TimeRangeSelector/timeRange.types";
 import { refreshTimeRange, resolvePreset } from "@shared/molecules/TimeRangeSelector/timeRange.types";
@@ -46,6 +49,7 @@ import MultiSeriesLineChart from "@shared/molecules/MultiSeriesLineChart/MultiSe
 import KpiStatCard from "@shared/molecules/KpiStatCard/LocalizedKpiStatCard";
 import PieChart from "@shared/molecules/PieChart/PieChart";
 import BarChart from "@shared/molecules/BarChart/BarChart";
+import { agentUsageRows } from "@rework/utils/agentUsageRows";
 import HistogramChart from "@shared/molecules/HistogramChart/HistogramChart";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
 import IconButton from "@shared/atoms/IconButton/IconButton";
@@ -69,6 +73,13 @@ export default function AnalyticsPage() {
   // client-side TTL, does not re-fetch on every render" policy
   // KPI-ANALYTICS-RFC.md §2.6 already documents — every preset below used
   // `true` instead, which ignored cache age and refetched on every mount.
+  const {
+    currentData: skillUsageData,
+    isFetching: skillUsageIsFetching,
+    isLoading: skillUsageIsLoading,
+    isError: skillUsageIsError,
+  } = useSkillUsageQuery({ since: timeRange.since, until: timeRange.until }, { refetchOnMountOrArgChange: 300 });
+
   const { data, isLoading, isFetching, isError } = useActiveUsersOverTimeQuery(
     { since: timeRange.since, until: timeRange.until },
     { refetchOnMountOrArgChange: 300 },
@@ -252,6 +263,15 @@ export default function AnalyticsPage() {
     isError: tokenUsageByModelIsError,
   } = useTokenUsageByModelQuery({ since: timeRange.since, until: timeRange.until }, { refetchOnMountOrArgChange: 300 });
 
+  const {
+    data: creationAssistantData,
+    isLoading: creationAssistantIsLoading,
+    isError: creationAssistantIsError,
+  } = useCreationAssistantUsageQuery(
+    { since: timeRange.since, until: timeRange.until },
+    { refetchOnMountOrArgChange: 300 },
+  );
+
   // Admin-only section (§2.4/§2.5) — can_manage_platform, not the weaker
   // can_observe_platform every query above requires. Skipped entirely for a
   // plain platform_observer, both to avoid the wasted call and because
@@ -289,6 +309,7 @@ export default function AnalyticsPage() {
   // shared "service not running" notice instead of a grid of error cards.
   const serviceDown = [
     isError,
+    skillUsageIsError,
     totalIsError,
     sessionsIsError,
     messagesIsError,
@@ -568,9 +589,28 @@ export default function AnalyticsPage() {
         </div>
       </Disclosure>
 
+      <Disclosure title={t("rework.analytics.skillUsage.title")} defaultOpen>
+        <SkillUsageTable
+          data={skillUsageData}
+          isLoading={skillUsageIsLoading || (skillUsageIsFetching && !skillUsageData)}
+          isError={skillUsageIsError}
+        />
+      </Disclosure>
+
       {/* New (v3, §2.7): platform-wide token usage + green/cost, inline with
           the same charts — not a separate panel. */}
       <Disclosure title={t("rework.analytics.sections.tokenUsage")} defaultOpen>
+        <div className={styles.kpiRow}>
+          <KpiStatCard
+            label={t("rework.analytics.tokenUsage.creationAssistant.label")}
+            value={creationAssistantData?.total_tokens}
+            caption={t("rework.analytics.tokenUsage.creationAssistant.drafts", {
+              count: creationAssistantData?.drafts ?? 0,
+            })}
+            isLoading={creationAssistantIsLoading}
+            isError={creationAssistantIsError}
+          />
+        </div>
         <div className={styles.chartGrid}>
           <div className={styles.cellWide}>
             <TimeSeriesLineChart
@@ -586,7 +626,7 @@ export default function AnalyticsPage() {
           </div>
           <BarChart
             title={t("rework.analytics.tokenUsage.byAgent.title")}
-            rows={tokenUsageByAgentData?.rows ?? []}
+            rows={agentUsageRows(tokenUsageByAgentData?.rows, t)}
             valueLabel={t("rework.analytics.tokenUsage.byAgent.valueLabel")}
             emptyMessage={t("rework.analytics.tokenUsage.byAgent.empty")}
             isLoading={tokenUsageByAgentIsLoading}

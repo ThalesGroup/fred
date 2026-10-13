@@ -40,6 +40,7 @@ from fred_runtime.react.middleware.tool_call_recovery import (
     RECOVERED_TOOL_CALL_TEXT_METADATA_KEY,
 )
 from fred_runtime.react.react_runtime import _TransportBackedReActExecutor
+from fred_sdk.contracts.context import RuntimeContext
 from fred_sdk.contracts.react_contract import ReActInput, ReActMessage, ReActMessageRole
 from fred_sdk.contracts.runtime import (
     AssistantDeltaRuntimeEvent,
@@ -59,16 +60,13 @@ class _FakePortable:
     baggage: dict[str, object] = {}
 
 
-class _FakeRuntimeContext:
-    pass
-
-
 class _FakeBinding:
     portable_context = _FakePortable()
-    runtime_context = _FakeRuntimeContext()
+    runtime_context = RuntimeContext()
 
 
 class _FakeServices:
+    skills = None
     tracer = None
     metrics = None
 

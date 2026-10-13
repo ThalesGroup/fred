@@ -49,7 +49,7 @@ test("accepts the actual packed UI archive", async () => {
     ),
   );
   assert.equal(evidence.package, `${manifest.name}@${manifest.version}`);
-  assert.equal(evidence.glyphCount, 136);
+  assert.equal(evidence.glyphCount, 139);
   assert.deepEqual(evidence.externalModules, [
     "react",
     "react-dom",
@@ -192,6 +192,7 @@ test("accepts an executable runtime relative reference", async (context) => {
 
 for (const forbidden of [
   "customAgent",
+  "customPlatformSkill",
   "react-i18next",
   "OptionModel",
   "Aucune option disponible",

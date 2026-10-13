@@ -27,13 +27,13 @@ list of those issues, organized per component. It feeds the UX review session ag
 Token names confirmed from `src/styles/themes/pebble.css` (every theme declares the same names).
 Use **only** these names — no hardcoded hex fallbacks for color tokens.
 
-| Purpose                         | Correct token                                                                                                 | Common wrong names                                                                   |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| Elevated surface (hover states) | `--surface-container-high`                                                                                    | ~~`--surface-container-hight`~~ (extra `t`)                                          |
+| Purpose                         | Correct token                                                                                                         | Common wrong names                                                                   |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Elevated surface (hover states) | `--surface-container-high`                                                                                            | ~~`--surface-container-hight`~~ (extra `t`)                                          |
 | Surfaces                        | `--surface-main`, `--surface-container-*`, `--surface-floating` (by role: FRONTEND_CODING_GUIDELINES §Surface tokens) |                                                                                      |
-| Text                            | `--on-surface`, `--on-surface-retreat`, `--on-surface-muted`                                                  | ~~`--on-surface-variant`~~ (doesn't exist)                                           |
-| Status colours                  | `--success`, `--error`, `--warning`, `--primary`                                                              | ~~`--success-main`~~, ~~`--error-main`~~, ~~`--warning-main`~~, ~~`--primary-main`~~ |
-| Borders                         | `--outline`, `--outline-variant`, `--outline-muted`                                                           | ~~`--outline-variant`~~ was previously undefined — added to token files 2026-06-02   |
+| Text                            | `--on-surface`, `--on-surface-retreat`, `--on-surface-muted`                                                          | ~~`--on-surface-variant`~~ (doesn't exist)                                           |
+| Status colours                  | `--success`, `--error`, `--warning`, `--primary`                                                                      | ~~`--success-main`~~, ~~`--error-main`~~, ~~`--warning-main`~~, ~~`--primary-main`~~ |
+| Borders                         | `--outline`, `--outline-variant`, `--outline-muted`                                                                   | ~~`--outline-variant`~~ was previously undefined — added to token files 2026-06-02   |
 
 Spacing and font tokens (`--spacing-*`, `--font-*`, `--radius-*`) are safe to use with numeric fallbacks since they are theme-neutral.
 
@@ -126,7 +126,16 @@ Escape/scrim dismissal, and focus restoration. `Dialog.tsx` remains a thin FRED
 wrapper supplying its translated Cancel default; neutral callers supply their
 own labels. Consumer-root portals inherit light/dark theme; the application
 without `.fred-ui` retains its body portal. An open Select gets the first Escape
-inside Dialog, and option selection does not confirm the Dialog.
+inside Dialog, and option selection does not confirm the Dialog. Escape, Tab and
+Enter belong to the topmost modal only (`isTopmostModal` in `utils/Portal.tsx`,
+any `dialog` or `alertdialog` with `aria-modal`): a `ConfirmationDialog` opened
+over a Dialog gets the keyboard, and an Escape already handled is ignored.
+Opt-in props:
+`actionsAddon` (e.g. a checkbox) renders in the action bar before the buttons;
+`dividers` rules off the header and action bar with `outline-variant`;
+`initialFocus="dialog"` focuses the dialog itself rather than its first
+control, so a long body opens at its top; `hideConfirm` leaves a text Cancel as
+the only action.
 
 Removable Chip controls are named `Remove <label>` unless a caller supplies
 `removeAriaLabel`. Tooltip preserves hover/keyboard descriptions and viewport
@@ -219,9 +228,14 @@ Chrome (label, border, focus ring, error state) mirrors the `TextArea` atom so a
 does not read as a foreign widget next to the other fields. The editing surface is a `contenteditable`,
 not a form control, so it is named with `aria-labelledby` rather than a `<label for>`, and
 `disabled` sets `EditorState.readOnly` alongside `EditorView.editable` — the drop handler gates on
-the former alone, so `editable` by itself still let a drop edit a locked field. Spell-checking is
+the former alone, so `editable` by itself still let a drop edit a locked field. `readOnly` (a draft
+to review) keeps the surface editable with `EditorState.readOnly` and `aria-readonly="true"`: it
+stays a tab stop, so keyboard users can focus, scroll and select it, while typing is blocked. Spell-checking is
 turned back on (CodeMirror defaults it off); `autocorrect`/`autocapitalize` stay off, since they
 rewrite what is typed and a prompt's tags must survive verbatim.
+
+CodeMirror draws the caret and selection so the caret follows the empty
+placeholder's text position. The caret uses `--on-surface` in both themes.
 
 A transparent (`variant="icon"`) copy button fades in over the top-right corner on hover, and on
 keyboard focus so it is reachable without a pointer. The reveal keys on `:focus-visible`, not
@@ -258,25 +272,72 @@ right in the order the model receives the blocks — the read-only platform inst
 which carry the precedence rule, then the editable global prompt — and a backend 422 is
 shown under the editor rather than only as a toast.
 
----
+2026-10-08: the page is now **Platform prompts**, with `ButtonGroup variant="tabs"` in the
+`PageHeader` (`?tab=creation-assistant` keeps the choice). Tab 1 is the content above, unchanged
+(`PlatformSystemPromptPane`); tab 2 (`CreationAssistantPane`) holds the creation assistant's
+settings: a small, label-less model `Select` (named by `ariaLabel`) at the top right of the
+card, facing the title and description and wrapping under them when narrow. It offers
+"Platform default model" first, then the universally served chat profiles of models with
+platform `default_on` activation. An unavailable saved profile stays displayed as a disabled
+current value. Capability enablement changes invalidate these settings so the list refreshes.
+The following "Reasoning" control follows the selected model: a `2xs` radio `ButtonGroup`
+(Off/Low/Medium/High, only the declared levels, named "Reasoning") when the option has two or more
+`reasoning_efforts`, else a small `Switch` (on stores `medium`; disabled, with a tooltip and the
+reason in its accessible name, when the option reports `supports_reasoning: false`). "Platform
+default model" uses the pods' default profile's control when known; a model change normalises the
+value (a level becomes on, on becomes the nearest offered level). When the model's control is
+unknown (pods disagree on the default, or a saved profile no pod serves) the switch keeps the
+stored level untouched until the user toggles it, as does a model that cannot reason; and a meta-prompt editor in `fillHeight` mode so it stays inside the card, with a
+Default/Customised badge, a confirmed "Restore default" (text only, model and reasoning are kept), and a
+non-blocking warning when `{language}` is missing. Save sends both; an untouched built-in text is
+not saved as an override. When the built-in text was revised after the override, a second warning
+(left-bordered `.warning` row) gives both dates and a text "View default" button that toggles the
+built-in text read-only above the editor, styled like the platform instructions block.
 
-### `PromptPicker`
+### `CreationAssistantDialog` (agent form header)
 
-**Location:** `src/rework/components/shared/molecules/PromptPicker/PromptPicker.tsx`
-**Status:** `Functional`
+**Location:** `src/rework/components/pages/TeamAgentsPage/AgentFormModal/CreationAssistantDialog/`
+**Status:** `Functional` — not UX-reviewed
 
-Inline prompt library picker used inside `TuningFieldRenderer` for `type: "prompt"` tuning fields.
-Renders a toggle button ("Pick from library"). When open, shows all available `ContextPromptSummary`
-items (personal + team scope pooled by `GetContextPromptsEarly`) reusing the exact same `PromptCard`
-organism and `FilterChips` category filter bar as the team prompt library page (`PromptsPage`), for
-visual consistency between the two prompt-browsing surfaces (PROMPT-09 follow-up). `canManage` is
-always `false` here (no more-menu — picking, not managing) and the card's click handler is
-rewired to `onSelect(id)` instead of opening the read-only view dialog. Categories come from
-`GetTeamPromptCategories` scoped to the current team; a pooled prompt whose `category_id` doesn't
-match any of those (e.g. a personal-scope prompt's own category) falls into the "Sans catégorie"
-bucket rather than crashing or mismatching. The scope badge ("personal"/"team") the old plain-grid
-version showed per card is gone — `PromptCard` doesn't render one, and reusing "the exact same card"
-was the explicit ask.
+The single entry point is an **Assistant** button (`Button variant="tonal"`, new: M3 filled
+tonal, same `container` / `on-container` tokens as `IconButton`'s tonal; `auto_awesome`, small) in
+the `SettingsModal` header actions, before Cancel, in create and edit modes. It is hidden on the
+template step: the assistant cannot pick a template from a description yet. It opens a
+`Dialog` (new `compactTitle` prop: no padding under the title, no ad-hoc custom property) in two steps: a plain-words description (`TextArea`, 4000 characters, spinner while
+drafting, friendly inline errors that keep the description), then a review where every proposal is
+a selectable tile (not a checkbox, which cost width and indented the values), all selected by
+default. A tile is a `button role="checkbox"` whose content starts at the left edge, with a status
+icon top-right (`check_circle` filled `--primary` / `radio_button_unchecked` `--on-surface-retreat`);
+selected: 1px `--primary` 70% border on `--surface-container`, `--on-surface` text; unselected:
+transparent, `--on-surface-retreat` text; inset state-layer hover, 2px `--primary` focus ring,
+`--radius-s`, `--spacing-xs` padding, `--spacing-2xs` between tiles. The review step's header carries a
+`--primary` instruction pushed right of the title ("select the proposals to apply"); it takes the whole
+dialog height in three full-height columns (stacked under 40rem): the proposed identity (name, role
+and description, label over value); the drafted prompt in a read-only `PromptEditor` filling that
+height (new `fillHeight` prop, 2.4 of 4.4 width shares; editor label visually hidden via
+`hideLabel`; new `highlighted` prop gives it a `--primary` border while the prompt is ticked), the
+editor itself staying free for text selection; then the recommended capabilities.
+Each column is a `--surface-container-low` panel (`--radius-s`, clipped) with a fixed section header
+over a scrolling body (`--spacing-xs` padding). The header is a full-width `button role="checkbox"`
+on `--surface-container` (`--spacing-xs` `--spacing-s` padding, `--font-title-small`, top corners
+following the panel) that selects or clears the whole section: tri-state icon right (`check_circle`,
+`remove_circle` with `aria-checked="mixed"` when partly selected, `radio_button_unchecked`), inset
+state-layer hover, 2px `--primary` focus ring. Wherever the Simple view offers its reasoning pack,
+the capabilities column always starts with a reasoning tile (the pack's title), selected by default
+and counted in the header's tri-state; applied, it turns reasoning on with conversations starting
+in it, unticked it leaves the form's reasoning alone. The hint shows when no capability is
+recommended and no reasoning tile is offered; the header is a plain title only when the column has no tile at all. **Apply** is disabled when nothing is ticked and writes only ticked items
+(capabilities replace the selection, document access through the resource pack). If a ticked item
+would replace a value the user wrote (on create, template seeds count as empty; capabilities compare
+what Apply would write, selection and document sources), a critical `ConfirmationDialog` lists
+those fields first; it takes focus on Cancel and keeps Tab inside, Cancel returns to the review.
+Escape closes only the topmost layer: the confirmation, else the dialog, never the form.
+The description step's **Suggest** button shows the outlined `auto_awesome` icon
+through Dialog's optional `confirmIcon`; the review **Apply** action keeps its text.
+
+Its token use shows on the admin `AnalyticsPage` as a **Creation assistant** `KpiStatCard`
+(token-usage section) with the number of uses in the card's optional `caption`
+(`--font-body-small`, retreat).
 
 ---
 
@@ -764,18 +825,25 @@ how `ThoughtTrace` trims the rail when a reasoning row opens or closes the seque
   tool shape still falls back to the original redacted view — see
   `RUNTIME-EXECUTION-CONTRACT.md` §8.21.
 
-- **Curated views for `summarize_document` and `list_document_tree` (2026-07-31)** — these
-  two first-party document-capability tools return plain text (a prose summary / an
-  indented tree listing), not a JSON envelope, so they can't be recognized by content
-  shape like SQL/RAG — they're recognized by tool name instead (`isSummarizeDocumentTool`,
-  `isDocumentTreeTool` in `traceUtils.ts`), still a curated allowlist rather than a
-  blanket raw-text pass-through. `summarize_document` renders its summary through the
-  existing `MarkdownRenderer` (same treatment as reasoning text) instead of a JSON dump.
-  `list_document_tree` renders the tree in a plaintext `CodeBlock`, with the bracketed
-  internal `document_uid` after each entry stripped before display (`stripDocumentUids()`)
-  — the tool's own docstring already forbids the model from repeating that id to the end
-  user; the drawer now honors the same identifier-hygiene rule. The header copy action
-  copies the summary text / the uid-stripped tree text respectively.
+- **Curated document tool views (updated 2026-10-12)** - `summarize_document`
+  renders its summary through `MarkdownRenderer`. `list_document_tree` shows nested,
+  collapsible folders and compact file rows, using the shared monospace font for
+  folder and document names. Hovering or keyboard-focusing a file
+  reveals its metadata through the shared Tooltip, without an information icon,
+  inline dates or expanded document blocks. The panel shows title, stored arrival,
+  MIME type, language, page/row counts, labels and source where available; creation,
+  modification and format are omitted from this view. Arrival labels use the configured
+  `siteDisplayName`. Internal ids remain hidden. Counts refer to unique displayed
+  documents; the latest known displayed arrival is identified inside its tooltip.
+  A truncated result has only a discreet localized Truncated footer. Historical
+  upload dates keep their original meaning and missing dates remain unknown.
+  Timestamp and payload semantics are defined in `openspec/specs/team-resource-spaces/spec.md`.
+
+- **First-turn session handoff (2026-10-12)** - first submission owns its newly
+  created session while asynchronous router binding commits. Navigation, a new
+  conversation or unmount revokes pending submission ownership before it can affect
+  another conversation. Saved-session availability and deletion guards remain defined
+  in `openspec/specs/managed-conversations/spec.md`.
 
 - **Monaco replaced by `CodeBlock`, single header copy action (2026-07-22)** — manual UI
   testing found the Monaco JSON pane (forced `vs-dark`, editor chrome, imposed fixed
@@ -805,7 +873,7 @@ how `ThoughtTrace` trims the rail when a reasoning row opens or closes the seque
 
 #### Resolved
 
-_(none yet)_
+- **Soft elevation (2026-10-10)** — the user bubble takes the new `--shadow-xs` token (`0 1px 2px`, black 8% light / 32% dark), shared with the HITL answer bubble so both read as the person's own turns.
 
 ---
 
@@ -1046,7 +1114,9 @@ The name `small` is scoped to this component. On the shared scale, 24px is
   counters follow the current value, including an uncontrolled input's actual value
   after an uncancelled native form reset. A canceled reset leaves both value and count
   unchanged. Compact presentation keeps any visually omitted help/error text associated
-  through `aria-describedby`.
+  through `aria-describedby`. An error message is shown in `--error`, like the label
+  and the border (2026-10-11: the non-compact hint rule had been overriding it with
+  `--on-surface-retreat`).
 - `Spinner` keeps `Loading` as its default status name, accepts caller-supplied status
   text, and remains label-free when decorative.
 
@@ -1811,12 +1881,24 @@ _(none yet)_
 **Location:** `src/rework/components/shared/molecules/HitlPrompt/HitlPrompt.tsx`
 **Status:** `Functional`
 
-#### Open UX issues
-
-- **Focus management** — when `HitlPrompt` appears, focus should move to the first
-  actionable element (first choice button or the free-text input). Not yet implemented.
-
 #### Resolved
+
+- **Focus management (2026-10-10)** — closed without autofocus (owner decision): the card never takes focus, and number keys, Enter and Escape answer it instead (see the visual refresh below).
+
+- **Visual refresh, design tokens only (2026-10-10)** — OpenSpec `refresh-hitl-card-visuals`.
+  - **Tokens:** no hard-coded font size, spacing or colour mix remains. Only layout widths stay literal, and the glow shared with `RichInputField`.
+  - **Radii:** cards use `--radius-ms`. Inner controls (choices, "Other", free text, recap rows) use `--radius-xs`.
+  - **Choices:** full-width rows with left-aligned text, label in `--on-surface`, `--spacing-xs` vertical padding. Border `--outline-muted` at rest, `--outline-variant` on hover; a staged choice uses `--state-primary-selected`.
+  - **"Other" row:** it reads as a field, with the input surface (`--surface-container-low`, `--outline-variant`), an `edit` icon, the "Other" label styled like the choices, a placeholder, and typed text in `--font-body-large`.
+  - **Close cross removed:** a single question has "Skip" left of "Send".
+  - **Grouped questions:** no "Next". Skipping one question is its last choice (neutral ESC key hint); the action row keeps "Skip all" and "Send all". Typed text counts once validated with a small primary check icon button or its shortcut, which advances; the button becomes a `--success` check while that text stays validated, and editing brings it back.
+  - **Question header:** title and question share a full-bleed `--surface-container-highest` band, question in `--font-body-medium-emphasized`. Grouped tabs (`ButtonGroup` `2xs`) sit above it.
+  - **Number badges and keys:** square `--secondary-container` badge before each choice. Keys 1 to 9 pick it, Enter sends grouped answers, Escape skips (Skip shows an ESC key hint); never from a field, Escape never with a drawer or dialog open, no autofocus.
+  - **Composer held:** every pending card holds the composer (draft kept), not only agent questions; the interrupted-run card leaves it free.
+  - **Tab states:** `radio_button_unchecked`, then `check_circle` in `--success`, then `do_not_disturb_on`.
+  - **Tool approval:** only the labels carry meaning. Accept is in `--success`, refuse in `--error`, both `--font-title-small-emphasized`; "Approve for this conversation" stays neutral.
+  - **Answers in the conversation:** `HitlAnswerSummary` is a light card in the user bubble's family: `--surface-container-highest` fill, 1px `--secondary-container` border, `--radius-s`, `--shadow-xs`, text `--on-surface`, `reply` icon `--secondary`. A translucent secondary fill was tried and dropped: it read grey in every light theme. The same bubble shows below the `ask_user` line in the trace, left-aligned, which is where a ReAct question's answer appears. A tool-approval reply now recalls the gated tools.
+  - **Superseded:** this replaces the centered choice rows and the gray "Other" label.
 
 - **Choice row hidden once answered; active-state border/shadow (2026-08-05)** — the
   choices row (and its right-alignment fix below) now renders only when `!readonly`:
@@ -1970,7 +2052,7 @@ Composition and states:
   catch a regression here.
 
 Wording is deployment-configurable: the placeholder interpolates
-`agentsNicknamePlural`, since a deployment renames agents (e.g. "Lumis").
+`agentsNicknamePlural`, using the deployment's chosen label.
 
 **Sort.** A `Select` (`size="small"`, `compact`, no label, `min-width: 200px`
 so the control does not resize as the picked option changes length) sits after
@@ -2253,6 +2335,11 @@ every existing critical dialog (leave team, delete agent, delete session,
 delete prompt) now gets the inverted emphasis for free — the three call
 sites that used to pass the override triplet by hand had it removed since
 it's now redundant with the default.
+
+Keyboard: on open, focus lands on Cancel (the safe choice); Tab and Shift+Tab
+wrap inside the dialog; Escape cancels only while it is the topmost modal;
+closing gives focus back to the element that opened it. A Dialog or
+`FullPageModal` underneath leaves Escape, Tab and Enter to it.
 
 #### Open UX issues
 
@@ -2736,6 +2823,9 @@ high-information-density, zero decoration, color used only as a semantic signal 
 
 Error toasts additionally expose a copy-to-clipboard icon button (`content_copy`) for developer convenience.
 
+Team model routing shows a success toast after the save succeeds, or an error
+toast when it fails, keeping the server's error detail inline in the form.
+
 #### Open UX issues
 
 _(none — design approved at implementation)_
@@ -2764,7 +2854,7 @@ Step 1: template browser. Step 2: a full-width `ButtonGroup` tab strip (`variant
 
 - **Général** — Nom, Rôle, Description, plus every tuning field whose `ui.group` is not `"Prompts"` (the pre-#2105 catch-all "Settings" tab content — `Settings`, `Credentials`, `Document reading`, `Mindmap`, `Grounding`, `Comparison`, `Fallback`, ... — verified against real `fred-agents` templates). No template-side (`ui.group`) changes; purely a frontend regrouping.
 - **Prompts** — every `ui.group == "Prompts"` field, unchanged content.
-- **Outils** - the Simple view offers two document packs, Attachments and Team documents, each turning on one `document_access` source (`attachments` / `team_documents`). Shared members (document access, tabular, summarize, verbatim, extract) stay while either pack is on; similarity belongs to Team documents only; turning off the last pack deselects document access. Library binding lives under Team documents. A pack reads on when document access is selected and its source is on; legacy configs are read through the source mapping on load, without rewriting the stored selection. In Advanced, the Documents card shows the two source switches first, hides the scope fields while Team documents is off (a hidden `visible_when` gate also hides its dependants), and turning off the last source deselects the card (both sources reset to on). Pack cards are compact for small screens: `radius-s`, 12px padding, a 32px icon, `title-small` / `body-small` text and 32px section headers. They have no switch: the card body is the pack's switch (`role="switch"`, pointer cursor, its own hover), and a separate full-height end segment with its own hover expands the included capabilities. The on state shows through the primary title and icon colors, and a missing admin-enabled capability shows as an error icon next to the title. Inactive pack and Advanced cards use `surface-container-low`, active ones `surface-container` with a 0.5px primary border at 70% (pack cards). Reasoning comes first; turning it on also ticks "on by default". The tab header reads "Activer des capacités pour votre agent" with a "En savoir plus" link to the Help Center Capabilities page; the info banner and the empty "Actions and integration" section are gone; Advanced switches are `small`.
+- **Outils** - the Simple view offers two document packs, Attachments and Team documents, each turning on one `document_access` source (`attachments` / `team_documents`). Shared members (document access, tabular, summarize, verbatim, extract) stay while either pack is on; similarity belongs to Team documents only; turning off the last pack deselects document access. Library binding lives under Team documents. A pack reads on when document access is selected and its source is on; legacy configs are read through the source mapping on load, without rewriting the stored selection. In Advanced, the Documents card shows the two source switches first, hides the scope fields while Team documents is off (a hidden `visible_when` gate also hides its dependants), and turning off the last source deselects the card (both sources reset to on). Pack cards are compact for small screens: `radius-s`, 12px padding, a 32px icon, `title-small` / `body-small` text and 32px section headers. They have no switch: the card body is the pack's switch (`role="switch"`, pointer cursor, its own hover), and a separate full-height end segment with its own hover expands the included capabilities. The on state shows through the primary title and icon colors, and a missing admin-enabled capability shows as an error icon next to the title. Inactive pack and Advanced cards use `surface-container-low`, active ones `surface-container` with a 0.5px primary border at 70% (pack cards). Reasoning comes first; turning it on also ticks "on by default". The tab header reads "Activer des capacités pour votre agent" with a "En savoir plus" link to the Help Center Capabilities page; the info banner and the empty "Actions and integration" section are gone; Advanced switches are `small`. An agent without free selection (`supports_capabilities=false`, the Graph default) gets no capability packs: Simple lists its included capabilities under "Inclus avec cet agent" as `CapabilityCard`s with a neutral `StatusBadge` "Incluse" in place of the switch, each with its configuration (Documents keeps the Team documents library-binding control, others the `CapabilityConfigForm`); Advanced shows the same cards with the full config form; an agent that includes nothing shows one neutral empty-state line.
 - **Agent form layout** - 720px max width; small section tabs (equal widths, 36rem) centered over a full-width 50% `outline-muted` divider at mid-height; Name (40%) and Role (60%) share one row. `SettingsModal` exposes `--settings-modal-max-width`, `--settings-modal-header-padding`, `--settings-modal-body-padding-inline` and `--settings-modal-body-padding-bottom`, and its header actions wrap under the title only when they no longer fit in the card.
 - **Engagement** — required "Cas d'usage" field (large `TextArea`, label + placeholder, no field-level hint text), persisted as `ManagedAgentInstanceSummary.usage_statement` (screens agent purpose for platform/org risk). A compliance-framing paragraph sits above the textarea ("Afin de garantir la conformité de votre agent aux normes et règlementations en vigueur...", i18n'd) explaining why the field is mandatory.
 
@@ -4295,7 +4385,7 @@ clears the binding back to "Using pod default".
 
 ---
 
-## Platform announcement banners (2026-08-19 as the config-driven info banner, replaced 2026-09-25, issue #2805)
+## Platform announcements: banners and patch notes (2026-08-19 as the config-driven info banner, replaced 2026-09-25, issue #2805; patch notes 2026-10-09)
 
 ### `AnnouncementStack` / `AnnouncementBanner`
 
@@ -4364,12 +4454,60 @@ work; what a WYSIWYG toolbar bought was not worth its weight for two fields
 that hold a sentence and a paragraph. Composing never publishes — an admin
 enables from the list once the wording is right.
 
+### `PatchNoteDialog` / `PatchNoteGate`
+
+**Location:** `src/rework/components/shared/molecules/PatchNoteDialog/` (the
+dialog and `PatchNoteBody`) and `src/rework/features/announcements/`
+(`PatchNoteGate`, `useActivePatchNote`)
+**Status:** `Functional`
+
+The shared `Dialog` at `maxWidth` 720, `dividers`, `initialFocus="dialog"`,
+one "Fermer" button, titled with the note's title. `PatchNoteBody` renders the
+markdown for both this dialog and the editor's inline preview: first heading
+on a neutral `surface-container` band, `h2` sections ruled with
+`outline-muted`, links in a new tab. "Ne plus afficher" sits in the action bar
+(`actionsAddon`); Escape and the scrim report it like "Fermer". The gate,
+mounted once in `App.tsx` above the router, opens the note at load unless the
+server flags it `dismissed` or it was closed during this sign-in (flag keyed by
+user, login session, note and `content_version`). The profile menu's
+"Nouveautés" entry reopens the active note on request, without the checkbox.
+The admin preview is this same component and records nothing.
+
+### Patch-note admin row, editor and activation history
+
+**Location:** `src/rework/components/pages/admin/AnnouncementsPage/`
+**Status:** `Functional`
+
+- **Header and views.** One filled "Nouvelle annonce" button opens
+  `AnnouncementKindChooser` (two `SelectableCard` tiles, text Cancel only;
+  `SelectableCard` gained optional `icon` and `selected`, additive in
+  `@fred-oss/ui`);
+  a `ButtonGroup` tabs switch shows "Annonces" or "Historique" (not remembered).
+- **Patch-note row.** Neutral `surface-container` card (`outline-*` border,
+  `new_releases` icon, title, the number of users who hid it in
+  `--font-body-small` / `on-surface-retreat`), then Preview, `Switch`, Edit,
+  Delete aligned with banner rows. Enabling a note while another is active
+  first confirms, naming the one switched off.
+- **`PatchNoteEditorDialog`.** `maxWidth` 1200; FR/EN tabs (opens on the first
+  language with content), title `TextInput`, `PromptEditor` beside the
+  `PatchNoteBody` preview (stacked under 900 px). Save needs a title and body
+  in the same languages. "Enregistrer et activer" (outlined, `actionsAddon`)
+  on an inactive note. Escape, scrim or Cancel with unsaved changes ask
+  through `ConfirmationDialog`. Other dialogs (preview, confirmations) replace
+  the editor rather than stack on it.
+- **History.** `LocalizedDataTable` (`size="small"`), newest first, sortable,
+  with `FilterChips` (named group; remembered per browser, unknown values
+  ignored). A banner's Type chip takes its severity tone. Client-side
+  pagination (20 per page) over the API's newest 100 events; the table fills
+  the page body and scrolls its rows, the page never scrolls (server-side
+  paging: #3015).
+
 #### Open UX issues
 
 - **No cap on the stack.** Four enabled announcements take real vertical space
   at the top of every page. Deliberate for now — silently truncating would hide
-  exactly the announcement someone published — and the enabled count in the
-  admin header is the mitigation. Revisit alongside scheduling, which will
+  exactly the announcement someone published — and the live banner count in
+  the admin header is the mitigation. Revisit alongside scheduling, which will
   bound how long a banner lingers.
 
 ---
@@ -4403,7 +4541,7 @@ _Priority order for the next UX session. Update before each session._
 21. **AgentFormModal — tuning field groups** — accordion vs. flat scroll for agents with many fields (UX decision — still open)
 22. **AgentFormModal — template browser on mobile** — single-column grid vs. list layout on narrow viewports (UX decision)
 23. **AgentFormModal — single-template auto-collapse** — when one template available, hide browser or show non-interactive card?
-24. **HitlPrompt — focus management** — focus should move to the first actionable element when the prompt appears (interaction design; may require Figma update). Elevation/containment resolved 2026-08-05 (see component section).
+24. **HitlPrompt — focus management** — closed 2026-10-10 without autofocus; keyboard answers replace it (see component section).
 
 ## Composer model and reasoning control (2026-10-09)
 
@@ -4988,10 +5126,11 @@ so an earlier failure does not outlive a successful retry.
 
 The trigger is an opt-in prop, not a behaviour of the field: without it a
 leading `/` is ordinary text and the component is the plain textarea it has
-always been. It fires **only on a `/` at the first position of an empty value**,
-and stays open while the value is that `/` plus one unbroken token — so
-`cat /tmp`, "et/ou", and the trailing space a completion adds never leave a menu
-on screen.
+always been. Available prompt commands and skills support whitespace-boundary
+completion near the caret in every managed chat, preserving surrounding request
+text and either invocation order. Ordinary paths
+and slashes in prose remain text unless they match an available command or catalog skill. A trailing
+space imports a complete skill name and closes its suggestions.
 
 The composer is modelled as a combobox pointing at a listbox it never gives
 focus to: the caret stays in the textarea, which is what frees `Tab` to mean
@@ -5007,9 +5146,31 @@ announced nor durable past the first keystroke.
 
 ### `CommandMenu`
 
-Sectioned from day one with a single section, titled for the prompt library:
-introducing a second kind of invocable object is then a new entry rather than a
-visual change. Only the active team's prompts that carry a command are offered.
+The menu offers prompt commands from the active team and skills from the
+selected agent's runtime catalog. For a resolved ReAct template, it additionally
+offers the caller's personal prompt commands, with visible and accessible labels
+for platform skills, personal prompts and team prompts. Personal chats offer one
+prompt source. Entries preserve their owning team and id; choosing either
+homonymous prompt runs that exact prompt after completion. A typed prompt
+command without an explicit row prefers the chat team's match, then the personal
+one, once the team's command catalog has resolved. An invalidated completed
+prompt requires command editing or reselection rather than dispatching a homonym.
+Explicit personal selections are usable while team discovery is pending.
+In the managed-chat composer, a completed recognized prompt command uses the same
+inline icon-and-name treatment as platform skills, with a distinct blue prompt
+icon and no visible slash. Its hover hint gives the full
+prompt title, personal/team source and description. The document retains
+`/command` for editing, copying and undo; the visual follows the exact prompt
+selected for submission, including homonyms. Incomplete, removed or invalidated
+prompt selections receive no prompt visual.
+Deep and other execution families retain their current sources. Its heading follows the kinds of entries
+currently displayed. `/` lists the available skills directly alongside prompt
+commands without a standalone `/skill` dispatcher; `/comp` filters `compare-options`
+and `/meet` filters `meeting-minutes`. Choosing a skill completes the existing
+canonical invocation and preserves the request, without sending a turn.
+Direct skill-name prefixes also work at the caret within existing text; only
+names from the current runtime catalog enable these inline suggestions.
+Homonymous prompt and skill entries remain separate, with prompt commands first.
 
 Dressed in the shared menu grammar (`MenuPopover`): `--shadow-m`, `1px solid
 --outline-muted`, `--radius-s`, `--surface-container-high` fill,
@@ -5018,11 +5179,16 @@ It is anchored above the composer field rather than floating free. Keyboard
 focus and hover share that one highlight, so a pointer never leaves two rows
 looking active.
 
-A row is one line: the command, then its description beside it on the same
-baseline, so the list shows more of the library before it has to scroll. The
-command never truncates — it is what the user is about to type — and the
-description gives up the width instead. The emoji container is sized to that
-single line rather than to the two it used to hold.
+Prompt and skill rows share the same two-line layout: command or skill name
+above, full description in italics below. Prompts use a distinct prompt icon
+in a blue information tile; skills keep the platform pictogram. Skill names
+(without `/skill`) and their optional argument hints share the first line.
+Text wraps at narrow widths; the hint displays its value
+without the frontmatter field label. The list scrolls within its existing limit.
+Platform skills use a dedicated hexagon/book pictogram and localized platform-origin
+hover hint. Composer and sent-message badges reuse that pictogram; their native
+tooltip includes the current runtime catalog description when available. Missing
+catalog entries retain the name, origin and preview action without a new fetch.
 
 The focused entry's prompt detail is prefetched as the focus moves: the listing
 carries only a preview, so running a command needs the detail endpoint, and the
@@ -5043,6 +5209,60 @@ read as a broken hint. Such a panel is a `role="status"` line rather than an
 empty listbox (the swap `Menu` already makes) and claims no key but `Esc`: the
 typed token still submits as ordinary text and `Tab` still moves focus.
 
+### Inline skill invocation
+
+A completed `/<name>` stays at its invocation position within the editable text. The full name (without a visible slash) and platform icon form a discreet clickable label without a filled pill, border, removal cross or separate row. Chat uses a CodeMirror plain-text document with an inline replacement decoration; ordinary textarea consumers are unchanged. Wrapped lines and explicit newlines start at the normal text inset, and the label scrolls with its line. Editing any invocation character removes recognition while preserving surrounding text. A skill can be sent alone. Its advisory argument hint appears after a bare selected invocation without becoming document content.
+
+Skill suggestions use the command range at the caret, including before, after or within existing text. Completion replaces only that range and preserves its position. An exact catalog name followed by whitespace also imports on typing or paste. Neither action sends. Available prompt commands also complete inline without erasing surrounding text, before or after selected skills in every managed execution family. ReAct alone adds the caller's separate personal library to a team chat. A complete delimited skill name takes precedence, while choosing the prompt entry explicitly preserves prompt dispatch.
+
+Sent attributed user messages render the same inline token at its stored position. Full copy, native selection-copy and edit use `/name`. Older request-only and `/skill name` turns normalize to this canonical form for display/copy/edit without a backend schema change. Multiple skills can coexist with one available prompt in either selection order. Draft and history retain the blue prompt icon/name and purple skill badges. Each occurrence remains independently editable; repeated names load once. A catalog refresh invalidating a completed selection fails submission rather than dropping it. Canonical prompt draft text and its selected occurrence preserve mixed history, copying and editing.
+Agent-selected skills appear in the reasoning trace rather than labeling the user
+message. The inline icon/name is a keyboard-accessible button that opens the
+existing exclusive right-hand chat panel; activating the same skill again closes
+it, while activating another skill replaces the preview. The header reads
+`Skill: <name>` with the large title token and normal text color, without an icon.
+When supplied, `Arguments:` and the argument hint appear first, followed by
+`Description:` and its text, a divider and sanitized Markdown instructions without a redundant
+content heading. YAML metadata is presented separately. Technical runtime-version
+labels are omitted. Loading, unavailable and retry states never display another
+skill’s cached content. Opening and closing preserve
+the draft and invoke no agent tool.
+Skill-local reference links are readable labels rather than application routes.
+A successful reference tool row is localized as “Reading skill file” and names
+the relative path. Pointer/Enter/Space activation replaces the skill panel body
+with the exact stored reference text; another activation closes it. One shared
+panel preserves its width across skill/reference switching, and session/scope
+changes clear the view. Pending/failed reads use ordinary tool details.
+
+Team, platform and personal analytics share a dedicated skill-usage subsection
+with a table showing Skill, User, Model
+and Total columns, sortable within the returned top 100. It follows the existing
+date selector and cache/access rules, and distinguishes loading/error/empty
+states and truncated results. Counts cover successful procedure loads, starting
+at instrumentation deployment; references and context reuse are excluded.
+Personal usage includes only the authenticated user’s conversations across teams,
+including model-selected loads in those conversations. Each space shows only
+its matching skill subsection: personal usage in personal space, team usage in
+team space and platform usage in platform analytics. Team space does not query
+personal skill counts; team aggregates retain elevated-role gating.
+
+Deep skill selections retain their inline badge and preview after reopening through
+name-only user-message `metadata.extras.skill_invocations` (legacy singular metadata remains readable). This metadata records
+the user's selection, not a skill load. DeepAgents loads instructions through
+native model-driven filesystem reads. An actual instruction read matching the
+any current selected name displays user origin, including child reads; other skill
+reads display model origin. Legacy ReAct attribution remains supported for
+existing history.
+
+The interaction contract is in the platform-agent-skills OpenSpec change.
+
+In the expanded reasoning trace, successful skill loads share the tools’ compact
+step-number marker and chronological numbering. A load followed by two tools is
+numbered 1, 2, 3; reasoning and ordinary notes remain unnumbered. Attribution and
+the header’s tool-execution count retain their existing meaning. Each skill-load
+row is a native button that opens the same skill preview, including agent and
+child loads, and toggles it closed on a second activation.
+
 ### Running a command, and the turn it leaves
 
 Resolution happens on submit, whatever the menu is doing, so `Tab` then `Enter`
@@ -5050,12 +5270,19 @@ and `Enter` from the open menu reach the same send. A token no prompt holds is
 sent as typed — the user may genuinely have meant to write it.
 
 What goes on the wire is the **prompt's text**, never the command: the text does
-not pass through the composer and the user never sees it there. Text typed after
-the command is appended as free-text continuation, nothing parsed or named.
+not pass through the composer and the user never sees it there. In ReAct, text
+before and after the token stays on its respective side of the expanded prompt,
+including other selected skills. A single prompt and several skills share the
+turn; all skill names travel together in its runtime context.
 
 The turn itself renders as its command rather than as the assembled text
 (`UserMessage` + `CommandTurn`), which keeps a transcript of long prompts
-readable. The command and the text typed after it are laid out as one inline
+readable. Sent prompt tokens retain the composer's blue `--info` colour and
+decorative `edit_note` icon, with the same compact inline presentation as skill
+badges. Legacy appended text keeps the bubble's text colour. Hover underlines
+the prompt; keyboard focus is visible. Selection-copy omits decorative glyph
+names and preserves the command and skill slashes.
+The command and the text typed after it are laid out as one inline
 sentence, not as a flex row: they are one string and have to reflow as one when
 the bubble narrows (opening a side panel), where flex items would each wrap on
 their own and read as two unrelated texts. A control on that turn opens the text that was actually sent, read
@@ -5122,9 +5349,9 @@ descriptions and actions stay readable. Simultaneous questions share one card
 with short subject tabs that scroll horizontally when needed. The mouse wheel
 and trackpad scroll overflowing titles without dragging the scrollbar; page
 scrolling continues at the ends. A choice or Skip records a local draft and advances
-to the next unanswered tab. Nonblank free text counts as an answer while typing,
-without requiring Next or switching tabs; clearing it removes that answer unless
-a choice remains selected. The person can revisit any tab and revise the choice
+to the next unanswered tab. Typed text counts as an answer once validated with
+the small Confirm action or its shortcut, which also advances; editing it withdraws
+the answer until it is validated again. The person can revisit any tab and revise the choice
 or text. Send all becomes available only when every tab has an answer or skip;
 it sends one request for the complete set. Closing the grouped card skips all
 pending questions in one request, replacing any local drafts. The card stays
@@ -5213,6 +5440,39 @@ Fred's control-plane and knowledge-flow services. Evaluation progress belongs
 to the external application's UI. Shared SDK components and backend evaluation
 permissions remain available; no evaluation data is removed.
 
+### Conversations after agent deletion (2026-10-07)
+
+A saved conversation remains navigable after its managed agent is deleted. Its
+preserved agent name carries a localized suffix, "(deleted)" in English and
+"(supprimé)" in French, in the header and sidebar, including grouped headers.
+The sidebar title and metadata use 70% opacity, as does the grouped agent label.
+The suffix stays visible when a long name is truncated. The name is not struck
+through, and the conversation title stays readable. Hovering or focusing the
+entry reveals the full agent name and explains the deleted/read-only state in
+the selected language; a durable
+accessible description carries the same state. Status text, generic name fallback,
+grouping and empty-list labels interpolate the configured `agentsNicknameSingular`.
+The suffix and disabled composer show read-only mode without a separate
+deletion banner. `chatbot.deletedAgentTooltip` is shared by tooltips and the
+disabled composer's hidden accessible description. Names are snapshotted in
+session metadata before deletion, including renamed agents.
+Legacy names already lost use the existing localized generic agent fallback.
+The composer stays visible and natively disabled with a read-only placeholder,
+matching disabled surface/text tokens and no active elevation. Existing drafts
+remain visible but cannot be submitted. In dark mode, selected sidebar rows use
+a softer 8% secondary tint, including the matching delete-action hover overlay.
+Grouped rows retain the full list width even when a tooltip wraps a short title.
+History loads independently of execution preparation. Missing routing or a failed
+history request shows an unavailable notice while retaining already cached text.
+
+Send, commands, retries, new-conversation, voice, attachment edits and context
+controls are disabled, including their retained callbacks. Pending human questions
+and interrupted-execution cards remain readable without resume, skip, continue or
+restart actions. Title editing, conversation deletion and attachment previews stay
+available. Current owned session details drive the execution state; agent-list
+errors never imply deletion. Existing query invalidation, bounded refresh and window
+focus revalidation catch a deletion from the same client or another session.
+See the [managed-conversation lifecycle spec](../../../openspec/specs/managed-conversations/spec.md).
 ## Platform access screens (2026-10-05)
 
 The page groups administration into Rules and Whitelist using the shared home-page ButtonGroup with tab semantics. Panels retain local drafts, selections and pagination. Ordinary text uses 16 px, secondary guidance 14 px and section headings 22 px through existing tokens. The filtering action remains available at the top right of the shared page header across all tabs. Enabling requires at least one saved rule, individual exception or eligible authorized/Free team, then opens a confirmation with counted Allowed and Blocked tabs under the saved configuration. The activation body uses standard padding and consistent gaps between the warning, result heading, timestamp and table. Blocked users appear first when present, otherwise Allowed; empty groups show a short message instead of an empty table. Populated dry-run tables have a bounded height; the shared DataTable scrolls only its rows while its column header and pagination remain fixed. The initial page size is 20, matching the shared selector's supported 20/50/100 options. Accounts that cannot be evaluated appear only in a separate expandable Verification unavailable section. This indicates missing or unusable review evidence, not a third admission state; a missing field in a verified token is evaluated normally. A circular refresh icon beside the last-check timestamp refreshes the read-only population snapshot, reference policy and import status; stale rows disappear and confirmation stays disabled during loading, errors or revision conflicts. There is no separate Activation tab; the header action opens the reviewed confirmation. Unsaved rule edits are never applied by activation. If the initial import has not completed, this modal explicitly offers Continue without importing or Go to whitelist; the second choice opens Whitelist > Users without activating. Import-status loading or failure prevents activation confirmation and offers retry, while disabling does not require that status.

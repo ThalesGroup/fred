@@ -55,7 +55,7 @@
   max-width: var(--composer-max-width, 720px);
 }
 
-.field:focus-within:not(:has(.textarea:disabled)) {
+.field:focus-within:not(:has(.textarea:disabled, [aria-disabled="true"])) {
   /* Small, subtle primary-tinted glow on top of the resting elevation shadow —
      just enough to read as "active", not a full elevation change. */
   box-shadow:
@@ -65,12 +65,15 @@
   background: var(--surface-container-highest);
 }
 
-.field:hover:not(:focus-within):not(:has(.textarea:disabled)) {
+.field:hover:not(:focus-within):not(:has(.textarea:disabled, [aria-disabled="true"])) {
   border-color: var(--outline-variant);
 }
 
-.field:has(.textarea:disabled) {
+.field:has(.textarea:disabled, [aria-disabled="true"]) {
+  cursor: not-allowed;
+  box-shadow: none;
   background: var(--state-surface-main-disabled);
+  color: var(--state-text-disabled);
 }
 
 /* Off-screen but announced: the durable form of the placeholder's hint. */
@@ -94,17 +97,16 @@
 
 .textarea {
   display: block;
-  /* flex-basis must be `auto` (not the `0%` that plain `flex: 1` sets) so the
-     inline height JS assigns in resize() governs the main-axis size in the
-     column layout — otherwise flex-basis:0 pins it to min-height (one line)
-     and the auto-grow never takes. */
-  flex: 1 1 auto;
+  flex: 1 1 0;
   outline: none;
   border: none;
   background: transparent;
+  padding-top: 0;
   padding-right: var(--spacing-xs);
+  padding-bottom: 0;
   padding-left: var(--spacing-xs);
   width: 100%;
+  min-width: 0;
   max-height: 200px;
   overflow-y: hidden; /* JS switches to auto at maxHeight */
   resize: none;
@@ -113,12 +115,23 @@
   line-height: 1.5;
 }
 
+.textRow {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+}
+
 .textarea::placeholder {
   color: var(--on-surface-muted);
 }
 
 .textarea:disabled {
-  color: var(--state-on-surface-disabled);
+  cursor: not-allowed;
+  color: var(--state-text-disabled);
+}
+
+.textarea:disabled::placeholder {
+  color: var(--state-text-disabled);
 }
 
 /* Aligns the over-limit notice with the textarea's own inline padding; the

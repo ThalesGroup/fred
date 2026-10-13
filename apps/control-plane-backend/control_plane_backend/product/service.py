@@ -62,12 +62,20 @@ from fred_sdk.contracts.capability import (
     ChatControlsResponse,
     StoredCapabilityConfig,
 )
+from fred_sdk.contracts.capability.manifest import (
+    REASONING_EFFORT_LEVELS,
+    ReasoningEffortLevel,
+)
 from fred_sdk.contracts.models import TeamScopePolicy
 from fred_sdk.contracts.prompt_utils import find_reserved_prompt_tag
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from control_plane_backend.agent_instances.store import AgentInstanceRecord
+from control_plane_backend.agent_instances.names import normalize_agent_name
+from control_plane_backend.agent_instances.store import (
+    AgentInstanceRecord,
+    AgentNameAlreadyExistsError,
+)
 from control_plane_backend.agent_instances.suspension import (
     SliceInvalid,
     SuspensionReason,
@@ -84,6 +92,7 @@ from control_plane_backend.common.field_values import validate_field_values
 from control_plane_backend.config.models import (
     ManagedAgentFieldSpec,
     ManagedAgentTuning,
+    RuntimeCatalogSourceConfig,
 )
 from control_plane_backend.platform_prompt.service import resolve_platform_prompt_text
 from control_plane_backend.product.dependencies import ProductServiceDependencies
@@ -150,6 +159,7 @@ from control_plane_backend.sessions.erasure_tasks import (
     schedule_erasure_task,
 )
 from control_plane_backend.sessions.store import (
+    SessionMetadataAgentMissingError,
     SessionMetadataAlreadyExistsError,
     SessionMetadataRecord,
 )
@@ -904,6 +914,21 @@ async def _model_capabilities_for_source(
     return await _model_capabilities_for_source_uncached(base_url)
 
 
+def _reasoning_efforts(raw: object) -> dict[str, tuple[ReasoningEffortLevel, ...]]:
+    """A pod's `reasoning_efforts` map, keeping known levels only; an empty
+    list (a thinking profile with nothing to send) is kept as is."""
+    if not isinstance(raw, dict):
+        return {}
+    known = set(REASONING_EFFORT_LEVELS)
+    return {
+        str(profile_id): tuple(
+            level for level in REASONING_EFFORT_LEVELS if level in levels
+        )
+        for profile_id, levels in raw.items()
+        if isinstance(levels, list) and (not levels or known.intersection(levels))
+    }
+
+
 async def _model_capabilities_for_source_uncached(
     base_url: str,
 ) -> PodModelCatalog | None:
@@ -975,6 +1000,9 @@ async def _model_capabilities_for_source_uncached(
             # then reads as "no reasoning-capable profile" and shows no
             # reasoning control — the safe direction (§5.6).
             model_thinking_profile_ids=tuple(entry.get("thinking_profile_ids") or ()),
+            # Selectable levels per thinking profile; absent on an older pod,
+            # which then reads as on/off only.
+            model_reasoning_efforts=_reasoning_efforts(entry.get("reasoning_efforts")),
             # Ops-authored display label, carried verbatim. Absent on an older
             # pod, which reads as unnamed and leaves the frontend on its
             # id-splitting heuristic — the previous behaviour exactly.
@@ -1366,6 +1394,7 @@ async def _apply_capability_selection(
     context_label: str,
     deps: ProductServiceDependencies | None = None,
     asset_uploads: Mapping[str, Sequence[CapabilityAssetFile]] | None = None,
+    supports_capabilities: bool = True,
 ) -> ManagedAgentTuning:
     """
     Resolve one save's capability selection into pod-validated tuning slices
@@ -1396,7 +1425,12 @@ async def _apply_capability_selection(
       capability it is not enabled for (→ 403). The team subject — not the
       acting user — is what keeps a capability enabled for one of the user's
       other teams from being saved here.
+    - a template without free selection (`supports_capabilities=False`)
+      ignores any submitted selection, as the runtime does: its included
+      defaults always take the template-default path, configured like any other
     """
+    if not supports_capabilities:
+        selected_ids = None
     if selected_ids is not None:
         _validate_capability_ids(
             submitted_ids=selected_ids,
@@ -2324,18 +2358,51 @@ class ExecutionPreparationError(Exception):
         self.http_status = http_status
 
 
+# Stable discriminator on the 409 body, so the agent form marks its name field.
+AGENT_NAME_CONFLICT = "agent_name_conflict"
+
+
 class EnrollmentError(Exception):
     """Raised when agent instance enrollment fails."""
 
-    def __init__(self, message: str, *, http_status: int = 400) -> None:
+    def __init__(
+        self, message: str, *, http_status: int = 400, code: str | None = None
+    ) -> None:
         super().__init__(message)
         self.http_status = http_status
+        self.code = code
+
+
+def agent_name_conflict(team_id: TeamId, display_name: str) -> EnrollmentError:
+    return EnrollmentError(
+        f"An agent named {display_name!r} already exists in team {team_id!r}.",
+        http_status=409,
+        code=AGENT_NAME_CONFLICT,
+    )
+
+
+async def ensure_agent_name_free(
+    team_id: TeamId,
+    display_name: str,
+    deps: ProductServiceDependencies,
+    *,
+    exclude_agent_instance_id: str | None = None,
+) -> None:
+    """Refuse a taken name before any side effect; the unique index stays the guarantee."""
+
+    wanted = normalize_agent_name(display_name)
+    for other in await deps.get_agent_instance_store().list_by_team(team_id):
+        if other.agent_instance_id == exclude_agent_instance_id:
+            continue
+        if normalize_agent_name(other.display_name) == wanted:
+            raise agent_name_conflict(team_id, display_name)
 
 
 # Stable discriminator on the 409 body: a name conflict and a command
 # conflict share the status and the endpoint, and the form marks a different
 # input for each.
 PROMPT_COMMAND_CONFLICT = "prompt_command_conflict"
+PROMPT_COMMAND_RESERVED = "prompt_command_reserved"
 
 
 class PromptRequestError(Exception):
@@ -2358,6 +2425,10 @@ class SessionAlreadyExistsError(Exception):
     def __init__(self, session_id: str) -> None:
         super().__init__(f"Session {session_id!r} already exists.")
         self.session_id = session_id
+
+
+class SessionAgentUnavailableError(Exception):
+    """Raised when a new conversation's managed agent no longer exists."""
 
 
 class SessionAttachmentRequestError(Exception):
@@ -2575,6 +2646,94 @@ async def _recommendation_capability_id(
         raise EnrollmentError(str(exc), http_status=422) from exc
 
 
+async def _resolve_enrollable_template(
+    *,
+    user: KeycloakUser,
+    team_id: TeamId,
+    template_id: str,
+    deps: ProductServiceDependencies,
+) -> tuple[RuntimeCatalogSourceConfig, _RuntimeTemplatePayload]:
+    """
+    Resolve `{source_runtime_id}:{source_agent_id}` to its enabled source and
+    the live template this team may use, raising `EnrollmentError` otherwise.
+    """
+    parts = template_id.split(":", 1)
+    if len(parts) != 2:
+        raise EnrollmentError(
+            f"Invalid template_id {template_id!r}. "
+            "Expected format: '{source_runtime_id}:{source_agent_id}'."
+        )
+    source_runtime_id, source_agent_id = parts
+
+    source = next(
+        (
+            s
+            for s in deps.configuration.platform.runtime_catalog_sources
+            if s.runtime_id == source_runtime_id and s.enabled
+        ),
+        None,
+    )
+    if source is None:
+        raise EnrollmentError(
+            f"Runtime source {source_runtime_id!r} is not available or not enabled.",
+            http_status=404,
+        )
+
+    # Internal (non-public) templates are admin-only to enroll: resolve with the
+    # caller's OpenFGA platform_admin privilege (same check as the read-side
+    # `get_team_agent_templates`'s `include_non_public`, api.py) so a Keycloak
+    # `admin` role alone is not sufficient and a non-admin who guesses a hidden
+    # template_id simply gets "template not found" (404) below, exactly as if
+    # it did not exist.
+    can_see_non_public_templates = (
+        await deps.team_dependencies.rebac.has_user_permission(
+            user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+        )
+    )
+    runtime_templates = await _fetch_runtime_templates(
+        source.base_url, include_non_public=can_see_non_public_templates
+    )
+    template = next(
+        (
+            item
+            for item in runtime_templates
+            if item.template_agent_id == source_agent_id
+        ),
+        None,
+    )
+    if template is None:
+        raise EnrollmentError(
+            f"Template {template_id!r} was not found on runtime source "
+            f"{source_runtime_id!r}.",
+            http_status=404,
+        )
+    # Defense in depth (CAPAB-01, RFC §8.6): `list_agent_templates` already
+    # hides a template the team isn't granted, but never trust the frontend
+    # filter alone — re-check here too, same pattern as every other ReBAC gate
+    # in this codebase. 404, not 403: a team that guesses a hidden
+    # `template_id` gets exactly the same response as a nonexistent one (RFC
+    # §7.2/§10 anti-guessing rule, matching the non-public-template check
+    # above).
+    #
+    # An explicitly allowlisted internal harness template (e.g. self-test) is
+    # exempt, same reasoning and same narrow allowlist as `list_agent_templates`
+    # above (`capability_gate_exempt`) — never any `public=False` template,
+    # which has its own, independent meaning.
+    gate_exempt = capability_gate_exempt(source_agent_id)
+    if not gate_exempt and not await can_team_use_capability(
+        deps.team_dependencies.rebac,
+        team_id,
+        capability_id=template_capability_id(source_runtime_id, source_agent_id),
+    ):
+        raise EnrollmentError(
+            f"Template {template_id!r} was not found on runtime source "
+            f"{source_runtime_id!r}.",
+            http_status=404,
+        )
+
+    return source, template
+
+
 async def enroll_agent_instance(
     *,
     user: KeycloakUser,
@@ -2603,85 +2762,15 @@ async def enroll_agent_instance(
     Example:
     - `item = await enroll_agent_instance(user=user, team_id=team_id, request=body, deps=deps)`
     """
-    parts = request.template_id.split(":", 1)
-    if len(parts) != 2:
-        raise EnrollmentError(
-            f"Invalid template_id {request.template_id!r}. "
-            "Expected format: '{source_runtime_id}:{source_agent_id}'."
-        )
-    source_runtime_id, source_agent_id = parts
-
-    source = next(
-        (
-            s
-            for s in deps.configuration.platform.runtime_catalog_sources
-            if s.runtime_id == source_runtime_id and s.enabled
-        ),
-        None,
+    await ensure_agent_name_free(team_id, request.display_name, deps)
+    source, template = await _resolve_enrollable_template(
+        user=user, team_id=team_id, template_id=request.template_id, deps=deps
     )
-    if source is None:
-        raise EnrollmentError(
-            f"Runtime source {source_runtime_id!r} is not available or not enabled.",
-            http_status=404,
-        )
-
     agent_instance_id = str(uuid4())
-    # Internal (non-public) templates are admin-only to enroll: resolve with the
-    # caller's OpenFGA platform_admin privilege (same check as the read-side
-    # `get_team_agent_templates`'s `include_non_public`, api.py) so a Keycloak
-    # `admin` role alone is not sufficient and a non-admin who guesses a hidden
-    # template_id simply gets "template not found" (404) below, exactly as if
-    # it did not exist.
-    can_see_non_public_templates = (
-        await deps.team_dependencies.rebac.has_user_permission(
-            user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
-        )
-    )
-    runtime_templates = await _fetch_runtime_templates(
-        source.base_url, include_non_public=can_see_non_public_templates
-    )
-    template = next(
-        (
-            item
-            for item in runtime_templates
-            if item.template_agent_id == source_agent_id
-        ),
-        None,
-    )
-    if template is None:
-        raise EnrollmentError(
-            f"Template {request.template_id!r} was not found on runtime source "
-            f"{source_runtime_id!r}.",
-            http_status=404,
-        )
-    # Defense in depth (CAPAB-01, RFC §8.6): `list_agent_templates` already
-    # hides a template the team isn't granted, but never trust the frontend
-    # filter alone — re-check here too, same pattern as every other ReBAC gate
-    # in this codebase. 404, not 403: a team that guesses a hidden
-    # `template_id` gets exactly the same response as a nonexistent one (RFC
-    # §7.2/§10 anti-guessing rule, matching the non-public-template check
-    # above).
-    #
-    # An explicitly allowlisted internal harness template (e.g. self-test) is
-    # exempt, same reasoning and same narrow allowlist as `list_agent_templates`
-    # above (`capability_gate_exempt`) — never any `public=False` template,
-    # which has its own, independent meaning.
-    gate_exempt = capability_gate_exempt(source_agent_id)
-    if not gate_exempt and not await can_team_use_capability(
-        deps.team_dependencies.rebac,
-        team_id,
-        capability_id=template_capability_id(source_runtime_id, source_agent_id),
-    ):
-        raise EnrollmentError(
-            f"Template {request.template_id!r} was not found on runtime source "
-            f"{source_runtime_id!r}.",
-            http_status=404,
-        )
-
     recommended_capability_id = await _recommendation_capability_id(
         request.recommended_chat_profile_id,
         team_id=team_id,
-        source_runtime_id=source_runtime_id,
+        source_runtime_id=source.runtime_id,
         deps=deps,
     )
     tuning = template.default_tuning.model_copy(
@@ -2723,13 +2812,14 @@ async def enroll_agent_instance(
         context_label="agent enrollment",
         deps=deps,
         asset_uploads=asset_uploads,
+        supports_capabilities=template.supports_capabilities,
     )
     record = AgentInstanceRecord(
         agent_instance_id=agent_instance_id,
         team_id=team_id,
         template_id=request.template_id,
-        source_runtime_id=source_runtime_id,
-        source_agent_id=source_agent_id,
+        source_runtime_id=source.runtime_id,
+        source_agent_id=template.template_agent_id,
         display_name=request.display_name,
         description=request.description,
         enabled=True,
@@ -2738,9 +2828,12 @@ async def enroll_agent_instance(
     )
 
     store = deps.get_agent_instance_store()
-    created = await store.create(
-        record, recommended_capability_id=recommended_capability_id
-    )
+    try:
+        created = await store.create(
+            record, recommended_capability_id=recommended_capability_id
+        )
+    except AgentNameAlreadyExistsError as exc:
+        raise agent_name_conflict(team_id, request.display_name) from exc
     emit_agent_created_kpi(created, user=user, deps=deps)
     return _record_to_summary(created)
 
@@ -2812,6 +2905,13 @@ async def update_agent_instance(
     record = await store.get_for_team(agent_instance_id, team_id)
     if record is None:
         return None
+    if request.display_name is not None:
+        await ensure_agent_name_free(
+            team_id,
+            request.display_name,
+            deps,
+            exclude_agent_instance_id=agent_instance_id,
+        )
 
     # 2026-07-19 fix (GitHub #2004 item 1): re-check the team's `can_use` on
     # this instance's own `kind="agent"` template capability, the same gate
@@ -2929,6 +3029,7 @@ async def update_agent_instance(
                 context_label="agent update",
                 deps=deps,
                 asset_uploads=asset_uploads,
+                supports_capabilities=template.supports_capabilities,
             )
         new_tuning = base
 
@@ -2965,18 +3066,21 @@ async def update_agent_instance(
             update={"recommended_chat_profile_id": request.recommended_chat_profile_id}
         )
 
-    updated = await store.update(
-        agent_instance_id=agent_instance_id,
-        team_id=team_id,
-        display_name=request.display_name,
-        description=request.description,
-        enabled=request.status == "enabled" if request.status is not None else None,
-        tuning=new_tuning,
-        updated_by=user.uid,
-        recommended_capability_id=recommended_capability_id,
-        # Never write back a recommendation a policy write cleared meanwhile.
-        keep_stored_recommendation=not recommendation_set,
-    )
+    try:
+        updated = await store.update(
+            agent_instance_id=agent_instance_id,
+            team_id=team_id,
+            display_name=request.display_name,
+            description=request.description,
+            enabled=request.status == "enabled" if request.status is not None else None,
+            tuning=new_tuning,
+            updated_by=user.uid,
+            recommended_capability_id=recommended_capability_id,
+            # Never write back a recommendation a policy write cleared meanwhile.
+            keep_stored_recommendation=not recommendation_set,
+        )
+    except AgentNameAlreadyExistsError as exc:
+        raise agent_name_conflict(team_id, exc.display_name) from exc
     # A save that re-validated every ACTIVE capability slice through the pod
     # clears any suspension — the single clearing mechanism (#1975, RFC §3.9).
     # Reaching here means `_apply_capability_selection` accepted the selection
@@ -3654,6 +3758,16 @@ def _prompt_record_to_detail(record: PromptRecord) -> PromptDetail:
     )
 
 
+def _reject_reserved_prompt_command(command: str | None) -> None:
+    """Reserve the platform skill dispatcher while preserving legacy rows."""
+    if command == "skill":
+        raise PromptRequestError(
+            "The /skill command is reserved for platform skills; rename this prompt command.",
+            http_status=409,
+            code=PROMPT_COMMAND_RESERVED,
+        )
+
+
 async def create_prompt(
     *,
     user: KeycloakUser,
@@ -3676,6 +3790,7 @@ async def create_prompt(
     - `summary = await create_prompt(user=user, team_id=team_id, request=body, deps=deps)`
     """
 
+    _reject_reserved_prompt_command(request.command)
     record = PromptRecord(
         prompt_id=str(uuid4()),
         team_id=team_id,
@@ -3774,6 +3889,7 @@ async def list_prompt_commands(
             emoji=record.emoji,
         )
         for record in records
+        if record.command != "skill"
     ]
 
 
@@ -3844,6 +3960,12 @@ async def update_prompt(
     - `summary = await update_prompt(team_id, prompt_id, request, deps)`
     """
 
+    if request.command == "skill":
+        existing = await deps.get_prompt_store().get_for_team(prompt_id, team_id)
+        if existing is None:
+            return None
+        if existing.command != "skill":
+            _reject_reserved_prompt_command(request.command)
     try:
         updated = await deps.get_prompt_store().update(
             prompt_id,
@@ -3961,6 +4083,7 @@ async def promote_prompt(
         raise PromptRequestError(
             f"Prompt {prompt_id!r} not found for team {team_id!r}.", http_status=404
         )
+    _reject_reserved_prompt_command(source.command)
     target_team_id = TeamId(request.target_team_id)
     record = PromptRecord(
         prompt_id=str(uuid4()),
@@ -4154,6 +4277,7 @@ async def _next_imported_command(
     still fits the 64-character column.
     """
 
+    _reject_reserved_prompt_command(base_command)
     if base_command is None:
         return None
     taken = await store.list_commands_by_team(target_team_id)
@@ -4190,11 +4314,11 @@ async def import_published_prompt_into_team(
             f"Published prompt {prompt_id!r} not found in the marketplace.",
             http_status=404,
         )
-    name = await _next_imported_name(store, target_team_id, source.name)
     # Copied, unlike `category_id` just below: a category is an id pointing at
     # a row the destination team does not have, while a command is a plain
     # string meaning the same thing everywhere.
     command = await _next_imported_command(store, target_team_id, source.command)
+    name = await _next_imported_name(store, target_team_id, source.name)
     record = PromptRecord(
         prompt_id=str(uuid4()),
         team_id=target_team_id,
@@ -4369,36 +4493,29 @@ async def create_session(
     Example:
     - `item = await create_session(user, team_id, request, deps)`
     """
-    source_runtime_id: str | None = None
-    if request.agent_instance_id is not None:
-        # Capture the instance's source_runtime_id now, while it is certainly
-        # live, so a later agent-instance deletion can never strand erasure's
-        # runtime resolution for this session (issue #2089, RFC §7).
-        instance = await deps.get_agent_instance_store().get_for_team(
-            request.agent_instance_id, team_id
-        )
-        if instance is not None:
-            source_runtime_id = instance.source_runtime_id
-    bind_operation_context(
-        {"agent_instance_id": request.agent_instance_id}
-        if request.agent_instance_id and source_runtime_id is not None
-        else {},
-        user_id=user.uid,
-        team_id=str(team_id),
-    )
+    bind_operation_context(user_id=user.uid, team_id=str(team_id))
     record = SessionMetadataRecord(
         session_id=request.session_id,
         team_id=team_id,
         agent_instance_id=request.agent_instance_id,
-        source_runtime_id=source_runtime_id,
         user_id=user.uid,
         title=request.title,
     )
     try:
-        created = await deps.get_session_metadata_store().create(record)
+        created = await deps.get_session_metadata_store().create(
+            record, capture_agent_snapshot=True
+        )
     except SessionMetadataAlreadyExistsError as exc:
         raise SessionAlreadyExistsError(request.session_id) from exc
-    bind_operation_context(session_id=created.session_id)
+    except SessionMetadataAgentMissingError as exc:
+        raise SessionAgentUnavailableError("Unknown agent instance.") from exc
+    bind_operation_context(
+        {"agent_instance_id": created.agent_instance_id}
+        if created.agent_instance_id is not None
+        and created.source_runtime_id is not None
+        else {},
+        session_id=created.session_id,
+    )
     try:
         deps.get_kpi_writer().count(
             "session.created_total",
@@ -4497,7 +4614,9 @@ async def list_inactive_sessions(
                 team_id=team_id,
                 title=s.title,
                 agent_name=(
-                    name_by_id.get(s.agent_instance_id) if s.agent_instance_id else None
+                    name_by_id.get(s.agent_instance_id, s.agent_display_name)
+                    if s.agent_instance_id
+                    else None
                 ),
                 updated_at=s.updated_at,
             )
@@ -4617,30 +4736,6 @@ async def update_session_activity(
         ):
             return None
 
-    return _record_to_item(record)
-
-
-async def get_session(
-    team_id: TeamId,
-    session_id: str,
-    deps: ProductServiceDependencies,
-) -> SessionListItem | None:
-    """
-    Fetch one control-plane session metadata record by ID, scoped to a team.
-
-    Why this function exists:
-    - the chat header needs the session title without loading the full session list
-
-    How to use it:
-    - call from the GET session-by-id route
-    - returns None when the session does not exist or belongs to a different team
-
-    Example:
-    - `item = await get_session(team_id, session_id, deps)`
-    """
-    record = await deps.get_session_metadata_store().get(session_id)
-    if record is None or str(record.team_id) != str(team_id):
-        return None
     return _record_to_item(record)
 
 
@@ -5047,6 +5142,7 @@ def _record_to_item(record: SessionMetadataRecord) -> SessionListItem:
         session_id=record.session_id,
         team_id=record.team_id,
         agent_instance_id=record.agent_instance_id,
+        agent_display_name=record.agent_display_name,
         title=record.title,
         context_prompt_ids=record.context_prompt_ids,
         created_at=record.created_at,

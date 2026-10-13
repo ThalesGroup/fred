@@ -57,6 +57,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     "ControlPlaneAgentInstance",
     "ControlPlanePlatformModelBinding",
     "ControlPlanePlatformPrompt",
+    "ControlPlaneCreationAssistantSettings",
     "ControlPlanePlatformUiSettings",
     "ControlPlanePlatformDefaultTeams",
     "ControlPlanePlatformRole",
@@ -65,6 +66,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     "PlatformAccess",
     "PlatformAccessLinks",
     "ControlPlaneAnnouncement",
+    "ControlPlanePatchNote",
   ],
   endpoints: {
     validateGcuControlPlaneV1GcuPost: { invalidatesTags: ["PlatformAccess"] },
@@ -124,6 +126,17 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     },
     deleteAnnouncementControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdDelete: {
       invalidatesTags: [{ type: "ControlPlaneAnnouncement" as const, id: "LIST" }],
+    },
+    // The history moves with every admin mutation, so it rides the LIST tag. The
+    // patch-note read is per user and read once per load: only a dismissal refreshes it.
+    listActivationHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGet: {
+      providesTags: [{ type: "ControlPlaneAnnouncement" as const, id: "LIST" }],
+    },
+    getActivePatchNoteControlPlaneV1AnnouncementsPatchNoteGet: {
+      providesTags: [{ type: "ControlPlanePatchNote" as const, id: "ACTIVE" }],
+    },
+    dismissPatchNoteControlPlaneV1AnnouncementsAnnouncementIdDismissalPut: {
+      invalidatesTags: [{ type: "ControlPlanePatchNote" as const, id: "ACTIVE" }],
     },
     // Team wiki (WIKI-01/02). One tag per team carries the tree; one per PAGE ID
     // carries a page's content and its history.
@@ -288,8 +301,19 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     getTeamSessionsControlPlaneV1TeamsTeamIdSessionsGet: {
       providesTags: (_, __, arg) => [{ type: "ControlPlaneSession" as const, id: `LIST-${arg.teamId}` }],
     },
+    getTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGet: {
+      providesTags: (result, _error, arg) => [
+        { type: "ControlPlaneSession", id: arg.sessionId },
+        ...(result?.agent_instance_id
+          ? [{ type: "ControlPlaneAgentInstance" as const, id: result.agent_instance_id }]
+          : []),
+      ],
+    },
     postTeamSessionControlPlaneV1TeamsTeamIdSessionsPost: {
-      invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneSession", id: `LIST-${arg.teamId}` }],
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneSession", id: `LIST-${arg.teamId}` },
+        { type: "ControlPlaneSession", id: arg.createSessionRequest.session_id },
+      ],
     },
     deleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDelete: {
       invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneSession", id: `LIST-${arg.teamId}` }],
@@ -731,6 +755,19 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     putPlatformPromptControlPlaneV1AdminPlatformPromptPut: {
       invalidatesTags: [{ type: "ControlPlanePlatformPrompt", id: "LIST" }],
     },
+    // Creation assistant settings (meta-prompt override, model): one row too.
+    getCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantGet: {
+      providesTags: [
+        { type: "ControlPlaneCreationAssistantSettings" as const, id: "LIST" },
+        { type: "ControlPlaneCapability" as const, id: "LIST" },
+      ],
+    },
+    putCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantPut: {
+      invalidatesTags: [{ type: "ControlPlaneCreationAssistantSettings", id: "LIST" }],
+    },
+    deleteCreationAssistantPromptControlPlaneV1AdminPlatformCreationAssistantDelete: {
+      invalidatesTags: [{ type: "ControlPlaneCreationAssistantSettings", id: "LIST" }],
+    },
     // Platform UI theme settings: a single row, one LIST tag.
     getPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGet: {
       providesTags: [{ type: "ControlPlanePlatformUiSettings" as const, id: "LIST" }],
@@ -757,6 +794,8 @@ export const {
   useListKnowledgeBaseDefinitionsControlPlaneV1KnowledgeBasesDefinitionsGetQuery: useKnowledgeBaseDefinitionsQuery,
   useGetDefinitionFieldsControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdFieldsGetQuery: useKnowledgeBaseFieldsQuery,
   useListUsersControlPlaneV1UsersGetQuery: useListUsersQuery,
+  // Creation assistant: drafts an agent from a plain description; nothing is saved.
+  usePostDraftAgentControlPlaneV1TeamsTeamIdAgentTemplatesTemplateIdDraftAgentPostMutation: useDraftAgentMutation,
   // Platform-role management (PLATFORM-ADMIN-DELEGATION-RFC.md, #2405).
   useListPlatformRolesControlPlaneV1UsersPlatformRolesGetQuery: usePlatformRolesQuery,
   useGrantPlatformRoleControlPlaneV1UsersUserIdPlatformRolesPostMutation: useGrantPlatformRoleMutation,
@@ -795,6 +834,8 @@ export const {
   useGetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetQuery: useEffectiveChatModelQuery,
   useLazyGetRoutingPolicyDisableImpactControlPlaneV1TeamsTeamIdRoutingPolicyDisableImpactGetQuery:
     useLazyDisableImpactQuery,
+  useHandlerControlPlaneV1KpiPresetsSkillUsageGetQuery: useSkillUsageQuery,
+  useHandlerControlPlaneV1KpiPresetsUserSkillUsageGetQuery: useUserSkillUsageQuery,
   useHandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetQuery: useActiveUsersOverTimeQuery,
   useHandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetQuery: useUniqueUsersTotalQuery,
   useHandlerControlPlaneV1KpiPresetsSessionsOverTimeGetQuery: useSessionsOverTimeQuery,
@@ -838,6 +879,7 @@ export const {
   useHandlerControlPlaneV1KpiPresetsTokenUsageOverTimeGetQuery: useTokenUsageOverTimeQuery,
   useHandlerControlPlaneV1KpiPresetsTokenUsageByAgentGetQuery: useTokenUsageByAgentQuery,
   useHandlerControlPlaneV1KpiPresetsTokenUsageByModelGetQuery: useTokenUsageByModelQuery,
+  useHandlerControlPlaneV1KpiPresetsCreationAssistantUsageGetQuery: useCreationAssistantUsageQuery,
   useHandlerControlPlaneV1KpiPresetsStorageByTeamGetQuery: useStorageByTeamQuery,
   useHandlerControlPlaneV1KpiPresetsWebResearchSummaryGetQuery: useWebResearchSummaryQuery,
   // Persisted task acknowledgement (OPS-04, TASK-EVENT-STREAM-RFC.md §2.10 rev 3).
@@ -870,6 +912,13 @@ export const {
   // Platform-wide platform prompt — the first block of every agent's system prompt.
   useGetPlatformPromptControlPlaneV1AdminPlatformPromptGetQuery: usePlatformPromptQuery,
   usePutPlatformPromptControlPlaneV1AdminPlatformPromptPutMutation: useSetPlatformPromptMutation,
+  // Creation assistant settings (meta-prompt override + reset, model).
+  useGetCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantGetQuery:
+    useCreationAssistantSettingsQuery,
+  usePutCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantPutMutation:
+    useSetCreationAssistantSettingsMutation,
+  useDeleteCreationAssistantPromptControlPlaneV1AdminPlatformCreationAssistantDeleteMutation:
+    useResetCreationAssistantPromptMutation,
   // Platform UI theme settings (default theme, hidden themes).
   useGetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetQuery: usePlatformUiSettingsQuery,
   usePutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutMutation: useSetPlatformUiSettingsMutation,
@@ -903,6 +952,10 @@ export const {
     useSetAnnouncementEnabledMutation,
   useDeleteAnnouncementControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdDeleteMutation:
     useDeleteAnnouncementMutation,
+  useGetActivePatchNoteControlPlaneV1AnnouncementsPatchNoteGetQuery: useActivePatchNoteQuery,
+  useDismissPatchNoteControlPlaneV1AnnouncementsAnnouncementIdDismissalPutMutation: useDismissPatchNoteMutation,
+  useListActivationHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetQuery:
+    useAnnouncementActivationHistoryQuery,
   // Team administrator charter acceptance.
   useAcceptTeamAdminCharterControlPlaneV1TeamAdminCharterPostMutation: useAcceptTeamAdminCharterMutation,
   useGetTeamAdminCharterAcceptanceControlPlaneV1TeamAdminCharterGetQuery: useGetTeamAdminCharterAcceptanceQuery,

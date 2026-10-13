@@ -48,6 +48,9 @@ vi.mock("../../../../security/KeycloakService", () => ({
 }));
 
 const translate = vi.hoisted(() => (key: string) => key);
+vi.mock("../../../../hooks/useFrontendProperties", () => ({
+  useFrontendProperties: () => ({ agentsNicknameSingular: "" }),
+}));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: translate, i18n: { language: "en" } }),
 }));
@@ -59,6 +62,8 @@ vi.mock("react-i18next", () => ({
 // arbitrary previously-visited sid (e.g. clicking a session in a sidebar) —
 // something `startNewConversation()`/`handleSend()` alone can't simulate,
 // since both only ever mint a brand-new sid, never rebind to an existing one.
+let postponeNavigation = false;
+let commitNavigation: (() => void) | undefined;
 let capturedSetSearchParams:
   | ((updater: URLSearchParams | ((prev: URLSearchParams) => URLSearchParams)) => void)
   | undefined;
@@ -69,7 +74,9 @@ vi.mock("react-router-dom", () => ({
       updater: URLSearchParams | ((prev: URLSearchParams) => URLSearchParams),
       _opts?: unknown,
     ) => {
-      setParams((prev) => (typeof updater === "function" ? updater(prev) : updater));
+      const commit = () => setParams((prev) => (typeof updater === "function" ? updater(prev) : updater));
+      if (postponeNavigation) commitNavigation = commit;
+      else commit();
     };
     capturedSetSearchParams = setSearchParams;
     return [params, setSearchParams] as const;
@@ -195,7 +202,11 @@ let registerSessionImpl: (args: unknown) => Promise<unknown> = async () => ({});
 let patchSessionImpl: (args: unknown) => Promise<unknown> = async () => ({});
 const registerSessionCalls: unknown[] = [];
 const patchSessionCalls: unknown[] = [];
-let sessionData: { context_prompt_ids?: string[]; title?: string } | undefined;
+let sessionData:
+  | { context_prompt_ids?: string[]; title?: string; agent_deleted?: boolean; agent_display_name?: string | null }
+  | undefined;
+let sessionQueryUnresolved = false;
+const refetchSessionMock = vi.fn();
 // True only for the regression test below modeling RTK Query's data/
 // currentData divergence during a session switch (`data` reuses the last
 // resolved result across an arg change; `currentData` doesn't). Every other
@@ -232,7 +243,12 @@ vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
   useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery: () => ({ data: [] }),
   useGetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetQuery: () => ({
     data: sessionData,
-    currentData: sessionDataIsStaleForCurrentArgs ? undefined : sessionData,
+    currentData:
+      sessionQueryUnresolved || sessionDataIsStaleForCurrentArgs
+        ? undefined
+        : { agent_instance_id: "agent-1", agent_deleted: false, messages_url: "/runtime/messages", ...sessionData },
+    refetch: refetchSessionMock,
+    isError: false,
   }),
   usePatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchMutation: () => [
     (args: unknown) => {
@@ -298,6 +314,8 @@ describe("useManagedChat — session write reliability", () => {
   };
 
   beforeEach(() => {
+    postponeNavigation = false;
+    commitNavigation = undefined;
     localStorage.clear();
     composerValue.askUser = true;
     composerValue.reasoning = false;
@@ -312,6 +330,8 @@ describe("useManagedChat — session write reliability", () => {
     registerSessionCalls.length = 0;
     patchSessionCalls.length = 0;
     sessionData = undefined;
+    sessionQueryUnresolved = false;
+    refetchSessionMock.mockClear();
     sessionDataIsStaleForCurrentArgs = false;
     // `mockReset`, not `mockClear`: `mockClear` empties the call history and
     // NOTHING else (@vitest/spy `mockClear` — `state.calls = []` and friends).
@@ -409,6 +429,108 @@ describe("useManagedChat — session write reliability", () => {
     expect(sendMock).not.toHaveBeenCalled();
     expect(registerSessionCalls).toHaveLength(0);
     expect(latest.input).toBe("  🙂🙂🙂🙂🙂🙂  ");
+  });
+
+  it("starts the first send after an intermediate render before router binding", async () => {
+    sessionQueryUnresolved = true;
+    mount();
+    act(() => latest.setInput("hello"));
+    const create = deferred<unknown>();
+    registerSessionImpl = () => create.promise;
+    postponeNavigation = true;
+    const first = latest.handleSend();
+    await tick();
+    expect(registerSessionCalls).toHaveLength(1);
+    // Mutation updates can render before the router commits its new search params.
+    rerender();
+    act(() => commitNavigation?.());
+    expect(latest.executionDisabled).toBe(false);
+    await act(async () => {
+      create.resolve({});
+      await first;
+    });
+    expect(sendMock).toHaveBeenCalledOnce();
+    expect(capturedIsTurnCurrent?.(latest.sessionId!)).toBe(true);
+  });
+
+  it("keeps the effective first-turn identity when preparation precedes router binding", async () => {
+    sessionQueryUnresolved = true;
+    mount();
+    act(() => latest.setInput("first draft"));
+    postponeNavigation = true;
+    sendMock.mockImplementationOnce(async (_text, sid) => {
+      expect(capturedIsTurnCurrent?.(sid as string)).toBe(true);
+      capturedOnTurnStarted?.();
+      return true;
+    });
+    await act(async () => {
+      await latest.handleSend();
+    });
+    expect(latest.sessionId).toBeNull();
+    expect(latest.input).toBe("");
+    act(() => commitNavigation?.());
+    expect(latest.executionDisabled).toBe(false);
+    expect(sendMock).toHaveBeenCalledOnce();
+  });
+
+  it.each([false, true])(
+    "revokes a pending first send on navigation, including return to its sid (%s)",
+    async (returnToOrigin) => {
+      sessionQueryUnresolved = true;
+      mount();
+      act(() => latest.setInput("first draft"));
+      const create = deferred<unknown>();
+      registerSessionImpl = () => create.promise;
+      const first = latest.handleSend();
+      await tick();
+      const sid = latest.sessionId!;
+      sessionQueryUnresolved = false;
+      act(() => capturedSetSearchParams?.(new URLSearchParams("session=other")));
+      if (returnToOrigin) act(() => capturedSetSearchParams?.(new URLSearchParams(`session=${sid}`)));
+      act(() => capturedOnAwaitingHuman?.(awaitingHumanEvent));
+      const question = latest.pendingHitl;
+      await act(async () => {
+        create.resolve({});
+        await first;
+      });
+      expect(sendMock).not.toHaveBeenCalled();
+      expect(latest.pendingHitl).toBe(question);
+    },
+  );
+
+  it("revokes a deferred draft handoff when starting another new conversation", async () => {
+    sessionQueryUnresolved = true;
+    mount();
+    act(() => latest.setInput("first draft"));
+    postponeNavigation = true;
+    const create = deferred<unknown>();
+    registerSessionImpl = () => create.promise;
+    const first = latest.handleSend();
+    await tick();
+    act(() => latest.startNewConversation());
+    await act(async () => {
+      create.resolve({});
+      await first;
+    });
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(latest.sessionId).toBeNull();
+    expect(latest.input).toBe("");
+  });
+
+  it("does not start a first turn when session creation finishes after unmount", async () => {
+    sessionQueryUnresolved = true;
+    mount();
+    act(() => latest.setInput("first draft"));
+    const create = deferred<unknown>();
+    registerSessionImpl = () => create.promise;
+    const first = latest.handleSend();
+    await tick();
+    act(() => root.unmount());
+    await act(async () => {
+      create.resolve({});
+      await first;
+    });
+    expect(sendMock).not.toHaveBeenCalled();
   });
 
   it("accepts an exact-limit Unicode draft", async () => {
@@ -734,6 +856,7 @@ describe("useManagedChat — session write reliability", () => {
 
   it("retries session creation for the same bound sid after a prior failure, without double-sending", async () => {
     mount();
+    sessionQueryUnresolved = true;
     registerSessionImpl = async () => {
       throw new Error("transient failure");
     };
@@ -768,6 +891,7 @@ describe("useManagedChat — session write reliability", () => {
     // making it unsendable forever. Fixed by keying it per sid, like
     // writeTailsRef.
     mount();
+    sessionQueryUnresolved = true;
     registerSessionImpl = async () => {
       throw new Error("transient failure");
     };
@@ -1586,7 +1710,8 @@ describe("useManagedChat — session write reliability", () => {
     act(() => latest.stageHitlAnswer("paris"));
     act(() => latest.selectHitlTab(first));
     act(() => latest.setHitlFreeText("Lyon"));
-    expect(latest.stagedHitlAnswer).toEqual({ answer: undefined, freeText: "Lyon", skipped: false });
+    // Typing withdraws the staged choice; the text counts once validated.
+    expect(latest.stagedHitlAnswer).toBeUndefined();
     act(() => latest.stageHitlAnswer(undefined, "Lyon"));
     act(() => latest.stageHitlAnswer("low"));
 
@@ -1639,6 +1764,46 @@ describe("useManagedChat — session write reliability", () => {
     expect(latest.pendingHitl).toEqual(questions[2]);
   });
 
+  it("replaces a validated Other text with a later choice", () => {
+    const first = {
+      ...awaitingHumanEvent,
+      payload: {
+        stage: "agent_question",
+        question: "Destination?",
+        interrupt_id: "interrupt-a",
+        occurrence_id: "call-a",
+        choices: [{ id: "paris", label: "Paris" }],
+        free_text: true,
+      },
+    };
+    const second = {
+      ...awaitingHumanEvent,
+      payload: {
+        stage: "agent_question",
+        question: "Budget?",
+        interrupt_id: "interrupt-b",
+        occurrence_id: "call-b",
+        free_text: true,
+      },
+    };
+    mount();
+    bindSession("session-1");
+    act(() => {
+      capturedOnAwaitingHuman?.(first);
+      capturedOnAwaitingHuman?.(second);
+    });
+    rerender();
+    act(() => latest.setHitlFreeText("Lyon"));
+    act(() => latest.stageHitlAnswer(undefined, "Lyon"));
+    act(() => latest.selectHitlTab(first));
+    // What the card does on a choice click: clear the Other field, then stage the choice.
+    act(() => latest.setHitlFreeText(""));
+    act(() => latest.stageHitlAnswer("paris"));
+    act(() => latest.selectHitlTab(first));
+    expect(latest.stagedHitlAnswer).toEqual({ answer: "paris", freeText: undefined, skipped: false });
+    expect(latest.hitlFreeText).toBe("");
+  });
+
   it("stages simultaneous answers, permits revision, then resumes once", async () => {
     const first = {
       ...awaitingHumanEvent,
@@ -1679,12 +1844,17 @@ describe("useManagedChat — session write reliability", () => {
 
     act(() => latest.setHitlFreeText("No limit"));
     expect(latest.pendingHitl).toEqual(second);
+    // Typed text is only a draft until validated.
+    expect(latest.stagedHitlCount).toBe(1);
+    expect(latest.canSendAllHitl).toBe(false);
+    act(() => latest.stageHitlAnswer(undefined, "No limit"));
     expect(latest.stagedHitlCount).toBe(2);
     expect(latest.canSendAllHitl).toBe(true);
     expect(sendHitlResumeMock).not.toHaveBeenCalled();
     act(() => latest.setHitlFreeText("  "));
     expect(latest.canSendAllHitl).toBe(false);
     act(() => latest.setHitlFreeText("No limit"));
+    act(() => latest.stageHitlAnswer(undefined, "No limit"));
     expect(latest.canSendAllHitl).toBe(true);
     act(() => latest.selectHitlTab(first));
     act(() => latest.stageHitlAnswer("rome"));
@@ -1812,8 +1982,9 @@ describe("useManagedChat — session write reliability", () => {
     });
     rerender();
     act(() => latest.setHitlFreeText("Paris"));
-    act(() => latest.selectHitlTab(second));
+    act(() => latest.stageHitlAnswer(undefined, "Paris"));
     act(() => latest.setHitlFreeText("No limit"));
+    act(() => latest.stageHitlAnswer(undefined, "No limit"));
     act(() => latest.handleSendAllHitl());
     expect(latest.pendingHitlTabs).toEqual([first, second]);
 
@@ -1868,6 +2039,9 @@ describe("useManagedChat — session write reliability", () => {
     expect(latest.canSendAllHitl).toBe(true);
     expect(sendHitlResumeMock).toHaveBeenCalledTimes(1);
     act(() => latest.setHitlFreeText("A different answer"));
+    // Editing withdraws the staged skip until the new text is validated.
+    expect(latest.stagedHitlAnswer).toBeUndefined();
+    act(() => latest.stageHitlAnswer(undefined, "A different answer"));
     expect(latest.stagedHitlAnswer).toEqual({
       answer: undefined,
       freeText: "A different answer",
@@ -2037,6 +2211,91 @@ describe("useManagedChat — session write reliability", () => {
       undefined,
       false,
     );
+  });
+
+  it.each([
+    { exchangeId: "exch-1", invocation: { name: "meeting-minutes" }, expected: "meeting-minutes" },
+    { exchangeId: "older-exchange", invocation: { name: "meeting-minutes" }, expected: undefined },
+    { exchangeId: "exch-1", invocation: { name: 42 }, expected: undefined },
+  ])("restores only the resumed exchange's typed skill ($exchangeId)", async ({ exchangeId, invocation, expected }) => {
+    chatSseMessages = [
+      {
+        session_id: "session-1",
+        exchange_id: exchangeId,
+        timestamp: "2026-10-09T00:00:00Z",
+        rank: 0,
+        role: "user",
+        channel: "final",
+        parts: [{ type: "text", text: "/meeting-minutes notes" }],
+        metadata: { extras: { skill_invocation: invocation } },
+      },
+    ];
+    mount();
+    bindSession("session-1");
+    act(() => capturedOnAwaitingHuman?.(awaitingHumanEvent));
+    rerender();
+    await act(async () => latest.handleHitlAnswer("proceed"));
+    expect(sendHitlResumeMock).toHaveBeenCalledWith(
+      awaitingHumanEvent,
+      "proceed",
+      undefined,
+      expected
+        ? expect.objectContaining({ skills: [{ name: expected }] })
+        : expect.not.objectContaining({ skills: expect.anything() }),
+      undefined,
+      false,
+    );
+    act(() => latest.setInput("follow up"));
+    await act(async () => {
+      await latest.handleSend();
+    });
+    expect(sendMock).toHaveBeenCalledOnce();
+    expect(sendMock.mock.calls[0]?.[2]).not.toHaveProperty("skill");
+  });
+
+  it("sends a prompt with all skills and restores them only for its interrupted exchange", async () => {
+    const skills = [{ name: "meeting-minutes" }, { name: "mermaid" }];
+    const command = {
+      command: "summary",
+      prompt_id: "p-summary",
+      draft_text: "Before /summary /meeting-minutes /mermaid after",
+      draft_command_offset: 7,
+    };
+    mount();
+    bindSession("session-1");
+    await act(async () =>
+      latest.runCommand({ text: "Before\n\nPrompt instructions\n\n/meeting-minutes /mermaid after", command, skills }),
+    );
+    expect(sendMock.mock.calls[sendMock.mock.calls.length - 1]?.[2]).toEqual(
+      expect.objectContaining({ command, skills }),
+    );
+    chatSseMessages = [
+      {
+        session_id: "session-1",
+        exchange_id: "exch-1",
+        timestamp: "2026-10-09T00:00:00Z",
+        rank: 0,
+        role: "user",
+        channel: "final",
+        parts: [{ type: "text", text: "assembled prompt" }],
+        metadata: { command, extras: { skill_invocations: skills } },
+      },
+    ];
+    rerender();
+    act(() => capturedOnAwaitingHuman?.(awaitingHumanEvent));
+    rerender();
+    await act(async () => latest.handleHitlAnswer("proceed"));
+    expect(sendHitlResumeMock).toHaveBeenCalledWith(
+      awaitingHumanEvent,
+      "proceed",
+      undefined,
+      expect.objectContaining({ skills }),
+      undefined,
+      false,
+    );
+    act(() => latest.setInput("follow up"));
+    await act(async () => latest.handleSend());
+    expect(sendMock.mock.calls[sendMock.mock.calls.length - 1]?.[2]).not.toHaveProperty("skills");
   });
 
   it("blocks new turns while an agent question is pending and during its resume", async () => {
@@ -2337,5 +2596,204 @@ describe("useManagedChat — session write reliability", () => {
 
     expect(latest.pendingHitl).toEqual(newerPrompt);
     expect(latest.hitlFreeText).toBe("answer for the newer prompt");
+  });
+  it("freezes an existing conversation after deletion and resumes normal behavior on a live conversation", async () => {
+    mount();
+    act(() => capturedSetSearchParams?.(new URLSearchParams("session=saved")));
+    act(() => latest.setInput("draft to preserve"));
+    const retainedSend = latest.handleSend;
+    const retainedUpload = latest.handleAddAttachments;
+    sessionData = { agent_deleted: true, agent_display_name: "Preserved assistant", title: "Preserved title" };
+    rerender();
+    expect(latest.isReadOnly).toBe(true);
+    expect(latest.agentDisplayName).toBe("Preserved assistant");
+    const prepCalls = prepareChatControlsMock.mock.calls.length;
+    const writes = patchSessionCalls.length;
+    await act(async () => {
+      await retainedSend();
+    });
+    act(() => {
+      retainedUpload([new File(["content"], "file.txt")], "picker");
+      latest.setContextPrompts(["blocked"]);
+      latest.setAskUser(false);
+      latest.startNewConversation();
+    });
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(chatAttachmentsValue.addFiles).not.toHaveBeenCalled();
+    expect(patchSessionCalls).toHaveLength(writes);
+    expect(latest.sessionId).toBe("saved");
+    expect(latest.input).toBe("draft to preserve");
+    expect(prepareChatControlsMock).toHaveBeenCalledTimes(prepCalls);
+    act(() => latest.commitTitle("Readable title"));
+    expect(patchSessionCalls[patchSessionCalls.length - 1]).toMatchObject({
+      updateSessionRequest: { title: "Readable title" },
+    });
+    sessionData = { agent_deleted: false };
+    act(() => capturedSetSearchParams?.(new URLSearchParams("session=live")));
+    expect(latest.isReadOnly).toBe(false);
+    expect(latest.executionDisabled).toBe(false);
+    act(() => latest.setInput("send to live agent"));
+    await act(async () => {
+      await latest.handleSend();
+    });
+    expect(sendMock).toHaveBeenCalledOnce();
+  });
+
+  it.each(["agent_question", "tool_approval", "execution_interrupted"] as const)(
+    "blocks retained single, batch, skip and interruption callbacks after deletion (%s)",
+    async (stage) => {
+      mount();
+      act(() => capturedSetSearchParams?.(new URLSearchParams("session=saved")));
+      act(() =>
+        capturedOnAwaitingHuman?.({
+          type: "awaiting_human",
+          session_id: "saved",
+          exchange_id: "exchange",
+          payload: {
+            stage,
+            question: "Preserved question",
+            interrupt_id: "interrupt",
+            occurrence_id: "occurrence",
+            free_text: true,
+          },
+        }),
+      );
+      const answer = latest.handleHitlAnswer;
+      const skipAll = latest.handleSkipAllHitl;
+      sessionData = { agent_deleted: true };
+      rerender();
+      act(() => {
+        answer(stage === "execution_interrupted" ? "continue" : "yes");
+        answer("restart");
+        skipAll();
+        latest.handleSendAllHitl();
+        latest.stageHitlAnswer("yes");
+        latest.setHitlFreeText("blocked answer");
+      });
+      await tick();
+      expect(sendMock).not.toHaveBeenCalled();
+      expect(sendHitlResumeMock).not.toHaveBeenCalled();
+      expect(latest.pendingHitl?.payload.question).toBe("Preserved question");
+      expect(latest.hitlFreeText).toBe("");
+    },
+  );
+
+  it("still permits retrying a known failed local creation after leaving and returning", async () => {
+    mount();
+    sessionQueryUnresolved = true;
+    registerSessionImpl = async () => {
+      throw new Error("creation failed");
+    };
+    act(() => latest.setInput("preserved draft"));
+    await act(async () => {
+      await latest.handleSend();
+    });
+    const failed = latest.sessionId!;
+    act(() => capturedSetSearchParams?.(new URLSearchParams("session=other")));
+    act(() => capturedSetSearchParams?.(new URLSearchParams(`session=${failed}`)));
+    expect(latest.executionDisabled).toBe(false);
+    registerSessionImpl = async () => ({});
+    act(() => latest.setInput("retry after creation failure"));
+    await act(async () => {
+      await latest.handleSend();
+    });
+    expect(sendMock).toHaveBeenCalledOnce();
+  });
+
+  it("ends a failed-create exemption once current details confirm the saved session", async () => {
+    mount();
+    sessionQueryUnresolved = true;
+    registerSessionImpl = async () => {
+      throw new Error("POST response lost after commit");
+    };
+    act(() => latest.setInput("preserved draft"));
+    await act(async () => {
+      await latest.handleSend();
+    });
+    const created = latest.sessionId!;
+    sessionQueryUnresolved = false;
+    rerender();
+    await act(async () => {
+      await latest.handleSend();
+    });
+    expect(registerSessionCalls).toHaveLength(1);
+    expect(sendMock).toHaveBeenCalledOnce();
+    act(() => capturedSetSearchParams?.(new URLSearchParams("session=other")));
+    sessionQueryUnresolved = true;
+    act(() => capturedSetSearchParams?.(new URLSearchParams(`session=${created}`)));
+    expect(latest.executionDisabled).toBe(true);
+    await act(async () => {
+      await latest.handleSend();
+    });
+    expect(sendMock).toHaveBeenCalledOnce();
+  });
+
+  it("limits the local creation exemption to its first handoff and blocks a later unresolved visit", async () => {
+    mount();
+    sessionQueryUnresolved = true;
+    act(() => latest.setContextPrompts(["initial"]));
+    await tick();
+    const created = latest.sessionId!;
+    expect(latest.executionDisabled).toBe(false);
+    sessionQueryUnresolved = false;
+    rerender();
+    act(() => capturedSetSearchParams?.(new URLSearchParams("session=other")));
+    sessionQueryUnresolved = true;
+    act(() => capturedSetSearchParams?.(new URLSearchParams(`session=${created}`)));
+    expect(latest.executionDisabled).toBe(true);
+    expect(latest.isReadOnly).toBe(false);
+  });
+
+  it("keeps a failed context write blocked through confirmed creation retries until the context saves", async () => {
+    mount();
+    sessionQueryUnresolved = true;
+    registerSessionImpl = async () => {
+      throw new Error("POST response lost or duplicate");
+    };
+    act(() => latest.setInput("draft"));
+    await act(async () => {
+      await latest.handleSend();
+    });
+    patchSessionImpl = async () => {
+      throw new Error("context save failed");
+    };
+    act(() => latest.setContextPrompts(["uncommitted"]));
+    await flush(latest.sessionId);
+    expect(latest.contextPromptIds).toEqual([]);
+    await act(async () => {
+      await latest.handleSend();
+    });
+    expect(sendMock).not.toHaveBeenCalled();
+    sessionQueryUnresolved = false;
+    sessionData = { context_prompt_ids: [] };
+    rerender();
+    await act(async () => {
+      await latest.handleSend();
+    });
+    expect(sendMock).not.toHaveBeenCalled();
+    patchSessionImpl = async () => ({});
+    act(() => latest.setContextPrompts(["committed"]));
+    await flush(latest.sessionId);
+    await act(async () => {
+      await latest.handleSend();
+    });
+    expect(sendMock).toHaveBeenCalledOnce();
+  });
+
+  it("does not interpret unresolved session metadata as a deleted agent", async () => {
+    mount();
+    sessionQueryUnresolved = true;
+    act(() => capturedSetSearchParams?.(new URLSearchParams("session=loading")));
+    expect(latest.isReadOnly).toBe(false);
+    expect(latest.executionDisabled).toBe(true);
+    const before = prepareChatControlsMock.mock.calls.length;
+    act(() => latest.setInput("waiting"));
+    await act(async () => {
+      await latest.handleSend();
+    });
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(prepareChatControlsMock).toHaveBeenCalledTimes(before);
+    act(() => window.dispatchEvent(new Event("focus")));
+    expect(refetchSessionMock).toHaveBeenCalled();
   });
 });

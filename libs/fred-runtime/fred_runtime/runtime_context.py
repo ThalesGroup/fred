@@ -25,6 +25,7 @@ from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
 from fred_sdk.contracts.context import BoundRuntimeContext
 from fred_sdk.contracts.models import MCPServerConfiguration
 from fred_sdk.contracts.runtime import PlatformSqlPort
+from fred_sdk.contracts.skills import SkillsPort
 from fred_sdk.contracts.web_research import WebResearchPort
 from langchain_core.language_models.chat_models import BaseChatModel
 
@@ -177,6 +178,7 @@ class RuntimeConfig:
     filesystem: BaseFilesystem | None = None
     # Grouped code-default quotas for the two conversation filesystem namespaces.
     conversation_filesystem_quotas: ConversationFilesystemQuotaSettings | None = None
+    skills: SkillsPort | None = None
 
 
 class RuntimeContext:

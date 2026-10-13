@@ -21,6 +21,7 @@ import { useTranslation } from "react-i18next";
 import { RouterProvider } from "react-router-dom";
 import { ConfirmationDialogProvider } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
 import AnnouncementStack from "../rework/features/announcements/AnnouncementStack";
+import PatchNoteGate from "../rework/features/announcements/PatchNoteGate";
 import { ToastProvider } from "@shared/molecules/Toast/ToastProvider";
 import { useFrontendProperties } from "../hooks/useFrontendProperties";
 import { AuthProvider } from "../security/AuthContext";
@@ -124,6 +125,8 @@ function FredUiContent() {
                           await writeRichClipboard("", text);
                         }}
                       >
+                        {/* Same guards as the banners; inside ToastProvider for its error toast. */}
+                        <PatchNoteGate />
                         <RouterProvider router={router} />
                       </ToastProvider>
                     </ConfirmationDialogProvider>

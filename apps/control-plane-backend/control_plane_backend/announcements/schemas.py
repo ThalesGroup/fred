@@ -17,7 +17,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from control_plane_backend.models.announcement_models import (
     MAX_DESCRIPTION_LONG_CHARS,
@@ -30,6 +30,10 @@ from control_plane_backend.models.announcement_models import (
 # strip means on one should not have to relearn it on the other. Each value
 # fixes both the colour and the icon — neither is separately authorable.
 AnnouncementSeverity = Literal["info", "warning", "error", "success"]
+
+# A banner is a strip at the top of every page; a patch note is a markdown
+# "what's new" note shown once per user at load, with at most one enabled.
+AnnouncementKind = Literal["banner", "patch_note"]
 
 #: Locale the frontend falls back to when the viewer's has no entry.
 FALLBACK_LOCALE = "en"
@@ -59,6 +63,9 @@ class Announcement(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: str
+    kind: AnnouncementKind = Field(
+        description="`banner` or `patch_note`. Fixed at creation."
+    )
     severity: AnnouncementSeverity
     title: dict[str, str] = Field(
         description=(
@@ -71,8 +78,9 @@ class Announcement(BaseModel):
     )
     description_long: dict[str, str] = Field(
         description=(
-            "Locale → markdown map rendered in the more-info dialog. Empty for "
-            "every locale means the banner offers no more-info action."
+            "Locale → markdown map. For a banner, the more-info dialog (empty "
+            "for every locale means no more-info action). For a patch note, "
+            "its body."
         )
     )
     enabled: bool = Field(
@@ -86,10 +94,9 @@ class Announcement(BaseModel):
     )
     content_version: int = Field(
         description=(
-            "Changes only when reader-visible content changes, never on an "
-            "enabled/disabled toggle. The frontend keys each user's dismissal "
-            "on it, so a bump makes the banner reappear for everyone who had "
-            "closed the previous wording."
+            "The edition the browser-side close is keyed on, so a bump shows "
+            "the announcement again to everyone who had closed it. Both kinds "
+            "bump when re-enabled; a banner also on a content edit."
         )
     )
     created_at: datetime
@@ -98,51 +105,84 @@ class Announcement(BaseModel):
     updated_by: str | None = None
 
 
+class AdminAnnouncement(Announcement):
+    """An announcement as the admin list reports it."""
+
+    dismissal_count: int | None = Field(
+        default=None,
+        description=(
+            'Patch note only: how many users ticked "Don\'t show again" '
+            "since it was last enabled. Null for a banner."
+        ),
+    )
+
+
 class AnnouncementWriteRequest(BaseModel):
     """Admin create/update payload. Replaces every content field wholesale."""
 
     model_config = ConfigDict(extra="forbid")
 
-    severity: AnnouncementSeverity
+    kind: AnnouncementKind = Field(
+        default="banner",
+        description="`banner` or `patch_note`. An update cannot change it.",
+    )
+    severity: AnnouncementSeverity = Field(
+        description="Banner only; a patch note is stored as `info`."
+    )
     title: dict[str, str] = Field(
-        description="Locale → title map. At least one locale must be non-empty."
+        description=(
+            "Locale → plain-text title map. Both kinds need at least one "
+            "non-empty locale; a patch note needs a title in exactly the "
+            "locales that have a body."
+        ),
     )
     description_short: dict[str, str] = Field(
         description=(
-            "Locale → markdown map shown in the banner. At least one locale "
-            "must be non-empty."
-        )
+            "Locale → markdown map shown in the banner. A banner needs at least "
+            "one non-empty locale; a patch note has none."
+        ),
     )
     description_long: dict[str, str] = Field(
         default_factory=dict,
         description=(
-            "Locale → markdown map for the more-info dialog. Optional: leaving "
-            "it empty is what removes the more-info action from the banner."
+            "Locale → markdown map. For a banner, the optional more-info "
+            "dialog. For a patch note, its body: at least one non-empty locale."
         ),
     )
     enabled: bool = Field(
         default=False,
         description="Create disabled by default so an admin can draft in peace.",
     )
-    dismissible: bool = Field(default=True)
+    dismissible: bool = Field(
+        default=True, description="Banner only; a patch note is always dismissible."
+    )
 
-    @field_validator("title")
-    @classmethod
-    def _check_title(cls, value: dict[str, str]) -> dict[str, str]:
-        return _require_one_locale(_clean(value, MAX_TITLE_CHARS, "title"), "title")
-
-    @field_validator("description_short")
-    @classmethod
-    def _check_short(cls, value: dict[str, str]) -> dict[str, str]:
-        return _require_one_locale(
-            _clean(value, MAX_DESCRIPTION_SHORT_CHARS, "description_short"),
+    @model_validator(mode="after")
+    def _apply_kind_rules(self) -> AnnouncementWriteRequest:
+        self.description_long = _clean(
+            self.description_long, MAX_DESCRIPTION_LONG_CHARS, "description_long"
+        )
+        self.title = _require_one_locale(
+            _clean(self.title, MAX_TITLE_CHARS, "title"), "title"
+        )
+        if self.kind == "patch_note":
+            _require_one_locale(self.description_long, "description_long")
+            if set(self.title) != set(self.description_long):
+                raise ValueError(
+                    "a patch note needs a title and a body in the same locales"
+                )
+            # Nothing else is authorable on a patch note: normalize, never reject.
+            self.severity = "info"
+            self.dismissible = True
+            self.description_short = {}
+            return self
+        self.description_short = _require_one_locale(
+            _clean(
+                self.description_short, MAX_DESCRIPTION_SHORT_CHARS, "description_short"
+            ),
             "description_short",
         )
-
-    @field_validator("description_long")
-    @classmethod
-    def _check_long(cls, value: dict[str, str]) -> dict[str, str]:
-        return _clean(value, MAX_DESCRIPTION_LONG_CHARS, "description_long")
+        return self
 
 
 def _require_one_locale(cleaned: dict[str, str], field: str) -> dict[str, str]:
@@ -157,3 +197,45 @@ class SetAnnouncementEnabledRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     enabled: bool
+
+
+class ActivePatchNote(BaseModel):
+    """The enabled patch note, if any, and whether the caller dismissed it."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    patch_note: Announcement | None = None
+    dismissed: bool = Field(
+        default=False,
+        description=(
+            'Whether the caller ticked "Don\'t show again" since it was last '
+            "enabled: the client does not open it at load, only on request."
+        ),
+    )
+
+
+AnnouncementActivationAction = Literal["activated", "deactivated"]
+
+
+class AnnouncementActivationEvent(BaseModel):
+    """One announcement going on or off air, as the admin history lists it."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    announcement_id: str = Field(
+        description="May name an announcement that has since been deleted."
+    )
+    kind: AnnouncementKind
+    label: dict[str, str] = Field(
+        description="Locale → title as it was when the event happened."
+    )
+    severity: AnnouncementSeverity | None = Field(
+        default=None,
+        description="The banner's severity when the event happened; null for a patch note.",
+    )
+    action: AnnouncementActivationAction
+    actor_uid: str | None = Field(
+        default=None, description="Uid of the administrator who made the change."
+    )
+    occurred_at: datetime

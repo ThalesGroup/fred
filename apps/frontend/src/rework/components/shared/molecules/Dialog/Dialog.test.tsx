@@ -26,6 +26,7 @@ import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Dialog } from "./Dialog.tsx";
+import styles from "./Dialog.module.css";
 import Select from "@shared/molecules/Select/Select.tsx";
 import type { OptionModel } from "@models/Option.model.ts";
 
@@ -156,6 +157,97 @@ describe("Dialog focus and consumer-root portal", () => {
     expect(document.activeElement).toBe(portal().querySelector("input"));
   });
 
+  it("renders actionsAddon in the action bar, before the buttons", () => {
+    render(
+      <Dialog
+        open
+        title="Notice"
+        confirmLabel="Done"
+        onConfirm={() => {}}
+        onCancel={() => {}}
+        actionsAddon={<input type="checkbox" aria-label="Addon" />}
+      >
+        Message
+      </Dialog>,
+    );
+    const buttons = [...portal().querySelectorAll("button")];
+    const actions = buttons[0].parentElement!;
+
+    expect([...actions.querySelectorAll("input, button")]).toEqual([
+      portal().querySelector('[aria-label="Addon"]'),
+      ...buttons,
+    ]);
+  });
+
+  it("focuses the dialog itself when initialFocus is dialog", () => {
+    render(
+      <Dialog open title="Notes" confirmLabel="Done" onConfirm={() => {}} onCancel={() => {}} initialFocus="dialog">
+        <a href="https://example.com">Link</a>
+      </Dialog>,
+    );
+
+    expect(document.activeElement).toBe(portal().querySelector('[role="dialog"]'));
+  });
+
+  it("hideConfirm leaves Cancel as the only action and Enter inert", () => {
+    const onConfirm = vi.fn();
+    render(
+      <Dialog open title="Pick" confirmLabel="Done" onConfirm={onConfirm} onCancel={() => {}} hideConfirm>
+        <input aria-label="Field" />
+      </Dialog>,
+    );
+    const buttons = [...portal().querySelectorAll("button")];
+    expect(buttons.map((button) => button.textContent)).toEqual(["common.cancel"]);
+
+    const field = portal().querySelector("input")!;
+    act(() => {
+      field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    });
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
+  it("combines assistant slots and surface classes with announcement options", () => {
+    render(
+      <Dialog
+        open
+        title="Review"
+        confirmLabel="Apply"
+        onConfirm={() => {}}
+        onCancel={() => {}}
+        className="assistant-surface"
+        titlePrefix={<button>Back</button>}
+        footerStart={<span>Choose proposals</span>}
+        actionsAddon={<input type="checkbox" aria-label="Hide at startup" />}
+        dividers
+        initialFocus="dialog"
+      >
+        Draft
+      </Dialog>,
+    );
+    const dialog = portal().querySelector('[role="dialog"]')!;
+    expect(dialog.className).toContain("assistant-surface");
+    expect(dialog.className).toContain(styles.dividers);
+    expect(document.activeElement).toBe(dialog);
+    expect(dialog.textContent).toContain("Back");
+    expect(dialog.textContent).toContain("Choose proposals");
+    expect(dialog.querySelector('[aria-label="Hide at startup"]')).not.toBeNull();
+  });
+
+  it("adds dividers only when asked", () => {
+    const dialog = (dividers?: boolean) => (
+      <Dialog open title="Notice" confirmLabel="Done" onConfirm={() => {}} onCancel={() => {}} dividers={dividers}>
+        Message
+      </Dialog>
+    );
+    render(dialog());
+    const classes = () => portal().querySelector('[role="dialog"]')!.className.split(" ");
+    expect(classes()).toHaveLength(1);
+
+    act(() => root.render(dialog(true)));
+    expect(classes()).toHaveLength(2);
+    expect(classes()[1]).toMatch(/dividers/);
+  });
+
   it("focuses the first control, contains Tab, and restores the trigger after Escape", () => {
     const onCancel = vi.fn();
     function Harness() {
@@ -248,6 +340,24 @@ describe("Dialog focus and consumer-root portal", () => {
       ),
     );
     expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("drops the space under the title only when compactTitle is set", () => {
+    const titleContainer = () => portal().querySelector('[role="dialog"] p')!.parentElement!;
+    render(
+      <Dialog open title="Notice" confirmLabel="Done" onConfirm={() => {}} onCancel={() => {}}>
+        Message
+      </Dialog>,
+    );
+    expect(titleContainer().classList.contains(styles.compactTitle)).toBe(false);
+    act(() => {
+      root.render(
+        <Dialog open compactTitle title="Notice" confirmLabel="Done" onConfirm={() => {}} onCancel={() => {}}>
+          Message
+        </Dialog>,
+      );
+    });
+    expect(titleContainer().classList.contains(styles.compactTitle)).toBe(true);
   });
 });
 

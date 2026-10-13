@@ -533,6 +533,22 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.createAgentInstanceRequest,
       }),
     }),
+    postDraftAgentControlPlaneV1TeamsTeamIdAgentTemplatesTemplateIdDraftAgentPost: build.mutation<
+      PostDraftAgentControlPlaneV1TeamsTeamIdAgentTemplatesTemplateIdDraftAgentPostApiResponse,
+      PostDraftAgentControlPlaneV1TeamsTeamIdAgentTemplatesTemplateIdDraftAgentPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/agent-templates/${queryArg.templateId}/draft-agent`,
+        method: "POST",
+        body: queryArg.agentDraftRequest,
+      }),
+    }),
+    getCreationAssistantRuntimeSettingsControlPlaneV1TeamsTeamIdCreationAssistantSettingsGet: build.query<
+      GetCreationAssistantRuntimeSettingsControlPlaneV1TeamsTeamIdCreationAssistantSettingsGetApiResponse,
+      GetCreationAssistantRuntimeSettingsControlPlaneV1TeamsTeamIdCreationAssistantSettingsGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/creation-assistant/settings` }),
+    }),
     patchTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPatch: build.mutation<
       PatchTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPatchApiResponse,
       PatchTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPatchApiArg
@@ -884,6 +900,18 @@ const injectedRtkApi = api.injectEndpoints({
           },
         }),
       }),
+    getAgentInstanceSkills: build.query<GetAgentInstanceSkillsApiResponse, GetAgentInstanceSkillsApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances/${queryArg.agentInstanceId}/skills`,
+      }),
+    }),
+    getAgentInstanceSkillDetail: build.query<GetAgentInstanceSkillDetailApiResponse, GetAgentInstanceSkillDetailApiArg>(
+      {
+        query: (queryArg) => ({
+          url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances/${queryArg.agentInstanceId}/skills/${queryArg.skillName}`,
+        }),
+      },
+    ),
     prepareAgentExecution: build.mutation<PrepareAgentExecutionApiResponse, PrepareAgentExecutionApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances/${queryArg.agentInstanceId}/prepare-execution`,
@@ -1277,6 +1305,28 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/control-plane/v1/admin/platform/instructions` }),
     }),
+    getCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantGet: build.query<
+      GetCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantGetApiResponse,
+      GetCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/creation-assistant` }),
+    }),
+    putCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantPut: build.mutation<
+      PutCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantPutApiResponse,
+      PutCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/creation-assistant`,
+        method: "PUT",
+        body: queryArg.setCreationAssistantSettingsRequest,
+      }),
+    }),
+    deleteCreationAssistantPromptControlPlaneV1AdminPlatformCreationAssistantDelete: build.mutation<
+      DeleteCreationAssistantPromptControlPlaneV1AdminPlatformCreationAssistantDeleteApiResponse,
+      DeleteCreationAssistantPromptControlPlaneV1AdminPlatformCreationAssistantDeleteApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/creation-assistant`, method: "DELETE" }),
+    }),
     getPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGet: build.query<
       GetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetApiResponse,
       GetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetApiArg
@@ -1298,6 +1348,27 @@ const injectedRtkApi = api.injectEndpoints({
       GetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetApiArg
     >({
       query: () => ({ url: `/control-plane/v1/announcements/active` }),
+    }),
+    getActivePatchNoteControlPlaneV1AnnouncementsPatchNoteGet: build.query<
+      GetActivePatchNoteControlPlaneV1AnnouncementsPatchNoteGetApiResponse,
+      GetActivePatchNoteControlPlaneV1AnnouncementsPatchNoteGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/announcements/patch-note` }),
+    }),
+    dismissPatchNoteControlPlaneV1AnnouncementsAnnouncementIdDismissalPut: build.mutation<
+      DismissPatchNoteControlPlaneV1AnnouncementsAnnouncementIdDismissalPutApiResponse,
+      DismissPatchNoteControlPlaneV1AnnouncementsAnnouncementIdDismissalPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/announcements/${queryArg.announcementId}/dismissal`,
+        method: "PUT",
+      }),
+    }),
+    listActivationHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGet: build.query<
+      ListActivationHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetApiResponse,
+      ListActivationHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/announcements/activation-history` }),
     }),
     listAnnouncementsControlPlaneV1AdminPlatformAnnouncementsGet: build.query<
       ListAnnouncementsControlPlaneV1AdminPlatformAnnouncementsGetApiResponse,
@@ -1382,6 +1453,32 @@ const injectedRtkApi = api.injectEndpoints({
       AcknowledgeTaskControlPlaneV1TasksTaskIdAckPostApiArg
     >({
       query: (queryArg) => ({ url: `/control-plane/v1/tasks/${queryArg.taskId}/ack`, method: "POST" }),
+    }),
+    handlerControlPlaneV1KpiPresetsSkillUsageGet: build.query<
+      HandlerControlPlaneV1KpiPresetsSkillUsageGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsSkillUsageGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/skill_usage`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsUserSkillUsageGet: build.query<
+      HandlerControlPlaneV1KpiPresetsUserSkillUsageGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsUserSkillUsageGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/user_skill_usage`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
     }),
     handlerControlPlaneV1KpiPresetsActiveUsersOverTimeGet: build.query<
       HandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetApiResponse,
@@ -1740,6 +1837,19 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({
         url: `/control-plane/v1/kpi/presets/token_usage_by_model`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsCreationAssistantUsageGet: build.query<
+      HandlerControlPlaneV1KpiPresetsCreationAssistantUsageGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsCreationAssistantUsageGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/creation_assistant_usage`,
         params: {
           since: queryArg.since,
           until: queryArg.until,
@@ -2140,6 +2250,18 @@ export type PostTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesPostApiA
   teamId: string;
   createAgentInstanceRequest: CreateAgentInstanceRequest;
 };
+export type PostDraftAgentControlPlaneV1TeamsTeamIdAgentTemplatesTemplateIdDraftAgentPostApiResponse =
+  /** status 200 Successful Response */ AgentDraftResult;
+export type PostDraftAgentControlPlaneV1TeamsTeamIdAgentTemplatesTemplateIdDraftAgentPostApiArg = {
+  teamId: string;
+  templateId: string;
+  agentDraftRequest: AgentDraftRequest;
+};
+export type GetCreationAssistantRuntimeSettingsControlPlaneV1TeamsTeamIdCreationAssistantSettingsGetApiResponse =
+  /** status 200 Successful Response */ CreationAssistantRuntimeSettings;
+export type GetCreationAssistantRuntimeSettingsControlPlaneV1TeamsTeamIdCreationAssistantSettingsGetApiArg = {
+  teamId: string;
+};
 export type PatchTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPatchApiResponse =
   /** status 200 Successful Response */ ManagedAgentInstanceSummary;
 export type PatchTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPatchApiArg = {
@@ -2328,7 +2450,7 @@ export type PostBulkDeleteMySessionsControlPlaneV1MeSessionsBulkDeletePostApiArg
   bulkDeleteSessionsRequest: BulkDeleteSessionsRequest;
 };
 export type GetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetApiResponse =
-  /** status 200 Successful Response */ SessionListItem;
+  /** status 200 Successful Response */ SessionDetails;
 export type GetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetApiArg = {
   teamId: string;
   sessionId: string;
@@ -2376,6 +2498,17 @@ export type PostPrepareRuntimeAgentExecutionControlPlaneV1TeamsTeamIdRuntimesRun
     run?: string | null;
     agent?: string | null;
   };
+export type GetAgentInstanceSkillsApiResponse = /** status 200 Successful Response */ SkillCatalog;
+export type GetAgentInstanceSkillsApiArg = {
+  teamId: string;
+  agentInstanceId: string;
+};
+export type GetAgentInstanceSkillDetailApiResponse = /** status 200 Successful Response */ SkillDetail;
+export type GetAgentInstanceSkillDetailApiArg = {
+  teamId: string;
+  agentInstanceId: string;
+  skillName: string;
+};
 export type PrepareAgentExecutionApiResponse = /** status 200 Successful Response */ ExecutionPreparation;
 export type PrepareAgentExecutionApiArg = {
   teamId: string;
@@ -2624,6 +2757,17 @@ export type PutPlatformPromptControlPlaneV1AdminPlatformPromptPutApiArg = {
 export type GetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetApiResponse =
   /** status 200 Successful Response */ PlatformInstructions;
 export type GetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetApiArg = void;
+export type GetCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantGetApiResponse =
+  /** status 200 Successful Response */ CreationAssistantSettings;
+export type GetCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantGetApiArg = void;
+export type PutCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantPutApiResponse =
+  /** status 200 Successful Response */ CreationAssistantSettings;
+export type PutCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantPutApiArg = {
+  setCreationAssistantSettingsRequest: SetCreationAssistantSettingsRequest;
+};
+export type DeleteCreationAssistantPromptControlPlaneV1AdminPlatformCreationAssistantDeleteApiResponse =
+  /** status 200 Successful Response */ CreationAssistantSettings;
+export type DeleteCreationAssistantPromptControlPlaneV1AdminPlatformCreationAssistantDeleteApiArg = void;
 export type GetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetApiResponse =
   /** status 200 Successful Response */ PlatformUiSettings;
 export type GetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetApiArg = void;
@@ -2635,8 +2779,18 @@ export type PutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutApiArg 
 export type GetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetApiResponse =
   /** status 200 Successful Response */ Announcement[];
 export type GetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetApiArg = void;
+export type GetActivePatchNoteControlPlaneV1AnnouncementsPatchNoteGetApiResponse =
+  /** status 200 Successful Response */ ActivePatchNote;
+export type GetActivePatchNoteControlPlaneV1AnnouncementsPatchNoteGetApiArg = void;
+export type DismissPatchNoteControlPlaneV1AnnouncementsAnnouncementIdDismissalPutApiResponse = unknown;
+export type DismissPatchNoteControlPlaneV1AnnouncementsAnnouncementIdDismissalPutApiArg = {
+  announcementId: string;
+};
+export type ListActivationHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetApiResponse =
+  /** status 200 Successful Response */ AnnouncementActivationEvent[];
+export type ListActivationHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetApiArg = void;
 export type ListAnnouncementsControlPlaneV1AdminPlatformAnnouncementsGetApiResponse =
-  /** status 200 Successful Response */ Announcement[];
+  /** status 200 Successful Response */ AdminAnnouncement[];
 export type ListAnnouncementsControlPlaneV1AdminPlatformAnnouncementsGetApiArg = void;
 export type CreateAnnouncementControlPlaneV1AdminPlatformAnnouncementsPostApiResponse =
   /** status 201 Successful Response */ Announcement;
@@ -2698,6 +2852,26 @@ export type AcknowledgeTaskControlPlaneV1TasksTaskIdAckPostApiResponse =
   /** status 200 Successful Response */ AcknowledgeTaskResponse;
 export type AcknowledgeTaskControlPlaneV1TasksTaskIdAckPostApiArg = {
   taskId: string;
+};
+export type HandlerControlPlaneV1KpiPresetsSkillUsageGetApiResponse =
+  /** status 200 Successful Response */ SkillUsageResponse;
+export type HandlerControlPlaneV1KpiPresetsSkillUsageGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsUserSkillUsageGetApiResponse =
+  /** status 200 Successful Response */ SkillUsageResponse;
+export type HandlerControlPlaneV1KpiPresetsUserSkillUsageGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
 };
 export type HandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetApiResponse =
   /** status 200 Successful Response */ TimeSeriesResponse;
@@ -2972,6 +3146,16 @@ export type HandlerControlPlaneV1KpiPresetsTokenUsageByAgentGetApiArg = {
 export type HandlerControlPlaneV1KpiPresetsTokenUsageByModelGetApiResponse =
   /** status 200 Successful Response */ LabelValueResponse;
 export type HandlerControlPlaneV1KpiPresetsTokenUsageByModelGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsCreationAssistantUsageGetApiResponse =
+  /** status 200 Successful Response */ CreationAssistantUsageResponse;
+export type HandlerControlPlaneV1KpiPresetsCreationAssistantUsageGetApiArg = {
   /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
@@ -3606,6 +3790,9 @@ export type CapabilityCatalogEntry = {
   model_profile_ids?: string[];
   model_chat_profile_ids?: string[];
   model_thinking_profile_ids?: string[];
+  model_reasoning_efforts?: {
+    [key: string]: ("low" | "medium" | "high")[];
+  };
   model_display_name?: string | null;
 };
 export type AgentTemplateSummary = {
@@ -3624,9 +3811,9 @@ export type AgentTemplateSummary = {
   status?: "available" | "unavailable";
   /** Tunable field descriptors declared by the template. The frontend renders these dynamically at enrollment time. Empty when the template declares no tunable fields. */
   default_tuning_fields?: ManagedAgentFieldSpec[];
-  /** Capabilities installed on this template's source pod (#1974/#1978, RFC AGENT-CAPABILITY §3.8), aggregated from the pod's manifest advertisement. MCP servers surface here as ordinary capabilities keyed by their plain catalog server id (#1988). Drives the one Tools tab in agent creation; config_fields render through the metadata-driven form. */
+  /** Capabilities installed on this template's source pod (#1974/#1978, RFC AGENT-CAPABILITY §3.8), aggregated from the pod's manifest advertisement. MCP servers surface here as ordinary capabilities keyed by their plain catalog server id (#1988). Drives the one Tools tab in agent creation; config_fields render through the metadata-driven form. For a template with `supports_capabilities=False` it lists only the capabilities included with the agent. */
   available_capabilities?: CapabilityCatalogEntry[];
-  /** Whether this template genuinely participates in capability selection, unfiltered by the team's can_use grants — unlike available_capabilities, which an empty team grant also empties. False means the frontend should say so, not imply zero grants. */
+  /** Whether this template genuinely participates in capability selection, unfiltered by the team's can_use grants — unlike available_capabilities, which an empty team grant also empties. False means the agent offers no free selection: every entry of available_capabilities is included with it, always active and configurable, and a submitted selection is ignored. */
   supports_capabilities?: boolean;
   /** Capability ids this template activates by default (RFC AGENT-CAPABILITY §2), verbatim from the pod's `definition.default_mcp_servers` — MCP-derived and native ids alike. Unlike `available_capabilities` this list is NOT filtered by the team's `can_use`: intersect the two client-side to get the defaults a team may actually activate. The agent-creation form uses it to pre-tick a new instance's capabilities so a template's declared defaults are not silently dropped by an explicit empty selection.
     
@@ -3711,6 +3898,36 @@ export type CreateAgentInstanceRequest = {
   /** Optional recommended chat profile. Must be a chat profile the team can use and has not disabled, served by the template's pod (else 422). Null follows the team default. */
   recommended_chat_profile_id?: string | null;
 };
+export type AgentDraftResult = {
+  name?: string | null;
+  role?: string | null;
+  /** One sentence; None when the model gave none. */
+  description?: string | null;
+  system_prompt: string;
+  /** Recommended capabilities, always a subset of the request's. */
+  capability_ids?: string[];
+};
+export type AgentDraftCapabilityCandidate = {
+  id: string;
+  name: string;
+  description?: string;
+};
+export type AgentDraftRequest = {
+  /** The user's own words: role, mission, audience, constraints. */
+  description: string;
+  /** UI language (BCP 47, e.g. 'fr', 'en'); the prompt is written in it. */
+  language?: string;
+  agent_name?: string | null;
+  agent_role?: string | null;
+  capabilities?: AgentDraftCapabilityCandidate[];
+};
+export type CreationAssistantRuntimeSettings = {
+  creation_assistant_prompt?: string | null;
+  /** Chat profile; one unknown to the pod uses the pod default. */
+  model_profile_id?: string | null;
+  /** Reasoning of the assistant's own call. The pod clamps it to the profile: any non-'off' value means on for an on/off profile, the nearest declared level otherwise. */
+  reasoning_effort?: "off" | "low" | "medium" | "high";
+};
 export type UpdateAgentInstanceRequest = {
   display_name?: string | null;
   description?: string | null;
@@ -3783,6 +4000,8 @@ export type AgentCopyResult = {
   /** What an editor must redo in the destination, per capability. */
   notices?: AgentCopyNotice[];
   error?: string | null;
+  /** Stable code of the failure, e.g. `agent_name_conflict` for a duplicate under a taken name. */
+  error_code?: string | null;
 };
 export type AgentCopyResponse = {
   results: AgentCopyResult[];
@@ -3930,6 +4149,7 @@ export type MarketplaceImportResult = {
   team_id: string;
   prompt?: PromptSummary | null;
   error?: string | null;
+  error_code?: string | null;
 };
 export type MarketplaceImportResponse = {
   results: MarketplaceImportResult[];
@@ -4029,6 +4249,8 @@ export type SessionListItem = {
   session_id: string;
   team_id: string;
   agent_instance_id?: string | null;
+  /** Agent display name retained after deletion; legacy rows may have no snapshot. */
+  agent_display_name?: string | null;
   title?: string | null;
   /** Ordered prompt-library ids attached to this session as chat context (personal/team prompt UUIDs or 'default:{category}'). Empty when none are attached. Concatenated in order as conversation context at execution time. */
   context_prompt_ids?: string[];
@@ -4061,6 +4283,21 @@ export type BulkDeleteSessionRef = {
 };
 export type BulkDeleteSessionsRequest = {
   sessions: BulkDeleteSessionRef[];
+};
+export type SessionDetails = {
+  session_id: string;
+  team_id: string;
+  agent_instance_id?: string | null;
+  /** Agent display name retained after deletion; legacy rows may have no snapshot. */
+  agent_display_name?: string | null;
+  title?: string | null;
+  /** Ordered prompt-library ids attached to this session as chat context (personal/team prompt UUIDs or 'default:{category}'). Empty when none are attached. Concatenated in order as conversation context at execution time. */
+  context_prompt_ids?: string[];
+  created_at?: string | null;
+  updated_at?: string | null;
+  agent_deleted?: boolean;
+  /** Browser-facing history URL, independent of agent execution availability. */
+  messages_url?: string | null;
 };
 export type UpdateSessionRequest = {
   /** Frontend-observed last activity timestamp. Used only for control-plane session metadata freshness, not runtime message history. */
@@ -4096,6 +4333,21 @@ export type RuntimeAgentExecutionPreparation = {
   team_id: string;
   /** Ingress-relative URL for POST /agents/evaluate. */
   evaluate_url: string;
+};
+export type SkillSummary = {
+  name: string;
+  description: string;
+  argument_hint?: string | null;
+};
+export type SkillCatalog = {
+  supported?: boolean;
+  revision?: string;
+  skills?: SkillSummary[];
+};
+export type SkillDetail = {
+  skill: SkillSummary;
+  revision: string;
+  content: string;
 };
 export type ChatControlDescriptor = {
   capability_id: string;
@@ -4526,6 +4778,49 @@ export type PlatformInstructions = {
   /** True when no runtime pod could be reached to report its shipped instructions. `text` is then empty for lack of an answer, not because agents receive no instructions — the UI must distinguish the two rather than render an empty read-only panel. */
   source_unavailable?: boolean;
 };
+export type CreationAssistantModelOption = {
+  profile_id: string;
+  /** Catalog model name, for display. */
+  name: string;
+  /** True when this profile declares `supports_thinking` and has a reasoning effort the pod can send. */
+  supports_reasoning?: boolean;
+  /** Selectable reasoning levels, weakest first; empty for an on/off profile (or one that cannot reason). */
+  reasoning_efforts?: ("low" | "medium" | "high")[];
+};
+export type CreationAssistantSettings = {
+  /** The meta-prompt in force: the saved override, or the pod default when `is_default` is true (empty if no pod could be reached). */
+  text: string;
+  /** The pod's built-in meta-prompt; None when no pod answered. */
+  default_text?: string | null;
+  /** Date of the last edit of the built-in meta-prompt; None for an older or unreachable pod. */
+  default_revised_at?: string | null;
+  /** True when an override is saved and the built-in meta-prompt was revised on a later date. The admin UI shows it as a warning. */
+  default_changed_since_override?: boolean;
+  /** True when no override is saved. */
+  is_default: boolean;
+  /** True when no runtime pod could report its built-in meta-prompt. */
+  source_unavailable?: boolean;
+  /** True when `text` lacks the `{language}` placeholder. Saving is allowed; the admin UI shows it as a warning. */
+  missing_language_placeholder?: boolean;
+  /** Chat profile the creation assistant uses; None = the pod default. */
+  model_profile_id?: string | null;
+  /** Reasoning of the assistant's own call. Any non-'off' value means on for an on/off profile; a level the profile does not offer is clamped by the pod to the nearest one. */
+  reasoning_effort?: "off" | "low" | "medium" | "high";
+  /** The pods' default chat profile, when every reachable pod names the same one; tells the UI which reasoning control the platform default offers. */
+  default_model_profile_id?: string | null;
+  /** Chat profiles every enabled pod advertises; empty when none answered. */
+  model_options?: CreationAssistantModelOption[];
+  updated_by?: string | null;
+  updated_at?: string | null;
+};
+export type SetCreationAssistantSettingsRequest = {
+  /** Meta-prompt override; None keeps the pod's built-in text. */
+  text?: string | null;
+  /** One of `model_options`; None uses the pod default. */
+  model_profile_id?: string | null;
+  /** Reasoning of the assistant's call; clamped to the model by the pod. */
+  reasoning_effort?: "off" | "low" | "medium" | "high";
+};
 export type PlatformUiSettings = {
   /** Theme new users get, or null to use the frontend's own default. */
   default_theme?: string | null;
@@ -4541,6 +4836,8 @@ export type SetPlatformUiSettingsRequest = {
 };
 export type Announcement = {
   id: string;
+  /** `banner` or `patch_note`. Fixed at creation. */
+  kind: "banner" | "patch_note";
   severity: "info" | "warning" | "error" | "success";
   /** Locale → title map. The frontend resolves it against the viewer's locale and falls back to 'en'. */
   title: {
@@ -4550,7 +4847,7 @@ export type Announcement = {
   description_short: {
     [key: string]: string;
   };
-  /** Locale → markdown map rendered in the more-info dialog. Empty for every locale means the banner offers no more-info action. */
+  /** Locale → markdown map. For a banner, the more-info dialog (empty for every locale means no more-info action). For a patch note, its body. */
   description_long: {
     [key: string]: string;
   };
@@ -4558,29 +4855,84 @@ export type Announcement = {
   enabled: boolean;
   /** Whether a user may close the banner. A non-dismissible announcement stays until an admin disables it. */
   dismissible: boolean;
-  /** Changes only when reader-visible content changes, never on an enabled/disabled toggle. The frontend keys each user's dismissal on it, so a bump makes the banner reappear for everyone who had closed the previous wording. */
+  /** The edition the browser-side close is keyed on, so a bump shows the announcement again to everyone who had closed it. Both kinds bump when re-enabled; a banner also on a content edit. */
   content_version: number;
   created_at: string;
   updated_at: string;
   created_by?: string | null;
   updated_by?: string | null;
 };
-export type AnnouncementWriteRequest = {
+export type ActivePatchNote = {
+  patch_note?: Announcement | null;
+  /** Whether the caller ticked "Don't show again" since it was last enabled: the client does not open it at load, only on request. */
+  dismissed?: boolean;
+};
+export type AnnouncementActivationEvent = {
+  id: string;
+  /** May name an announcement that has since been deleted. */
+  announcement_id: string;
+  kind: "banner" | "patch_note";
+  /** Locale → title as it was when the event happened. */
+  label: {
+    [key: string]: string;
+  };
+  /** The banner's severity when the event happened; null for a patch note. */
+  severity?: ("info" | "warning" | "error" | "success") | null;
+  action: "activated" | "deactivated";
+  /** Uid of the administrator who made the change. */
+  actor_uid?: string | null;
+  occurred_at: string;
+};
+export type AdminAnnouncement = {
+  id: string;
+  /** `banner` or `patch_note`. Fixed at creation. */
+  kind: "banner" | "patch_note";
   severity: "info" | "warning" | "error" | "success";
-  /** Locale → title map. At least one locale must be non-empty. */
+  /** Locale → title map. The frontend resolves it against the viewer's locale and falls back to 'en'. */
   title: {
     [key: string]: string;
   };
-  /** Locale → markdown map shown in the banner. At least one locale must be non-empty. */
+  /** Locale → markdown map rendered inside the banner itself. */
   description_short: {
     [key: string]: string;
   };
-  /** Locale → markdown map for the more-info dialog. Optional: leaving it empty is what removes the more-info action from the banner. */
+  /** Locale → markdown map. For a banner, the more-info dialog (empty for every locale means no more-info action). For a patch note, its body. */
+  description_long: {
+    [key: string]: string;
+  };
+  /** Whether the announcement is delivered to users right now. */
+  enabled: boolean;
+  /** Whether a user may close the banner. A non-dismissible announcement stays until an admin disables it. */
+  dismissible: boolean;
+  /** The edition the browser-side close is keyed on, so a bump shows the announcement again to everyone who had closed it. Both kinds bump when re-enabled; a banner also on a content edit. */
+  content_version: number;
+  created_at: string;
+  updated_at: string;
+  created_by?: string | null;
+  updated_by?: string | null;
+  /** Patch note only: how many users ticked "Don't show again" since it was last enabled. Null for a banner. */
+  dismissal_count?: number | null;
+};
+export type AnnouncementWriteRequest = {
+  /** `banner` or `patch_note`. An update cannot change it. */
+  kind?: "banner" | "patch_note";
+  /** Banner only; a patch note is stored as `info`. */
+  severity: "info" | "warning" | "error" | "success";
+  /** Locale → plain-text title map. Both kinds need at least one non-empty locale; a patch note needs a title in exactly the locales that have a body. */
+  title: {
+    [key: string]: string;
+  };
+  /** Locale → markdown map shown in the banner. A banner needs at least one non-empty locale; a patch note has none. */
+  description_short: {
+    [key: string]: string;
+  };
+  /** Locale → markdown map. For a banner, the optional more-info dialog. For a patch note, its body: at least one non-empty locale. */
   description_long?: {
     [key: string]: string;
   };
   /** Create disabled by default so an admin can draft in peace. */
   enabled?: boolean;
+  /** Banner only; a patch note is always dismissible. */
   dismissible?: boolean;
 };
 export type SetAnnouncementEnabledRequest = {
@@ -4699,6 +5051,18 @@ export type AcknowledgeTaskResponse = {
   acknowledged_at: string;
   acknowledged_by: string | null;
 };
+export type SkillUsageRow = {
+  skill_name: string;
+  user_count: number;
+  model_count: number;
+  total: number;
+};
+export type SkillUsageResponse = {
+  rows: SkillUsageRow[];
+  since: string;
+  until: string;
+  truncated?: boolean;
+};
 export type TimeSeriesPoint = {
   date: string;
   value: number;
@@ -4775,6 +5139,14 @@ export type UserRecentAgentRow = {
 };
 export type UserRecentAgentsResponse = {
   rows: UserRecentAgentRow[];
+  since: string;
+  until: string;
+};
+export type CreationAssistantUsageResponse = {
+  total_tokens: number;
+  input_tokens: number;
+  output_tokens: number;
+  drafts: number;
   since: string;
   until: string;
 };
@@ -5027,6 +5399,9 @@ export const {
   useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery,
   useLazyGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery,
   usePostTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesPostMutation,
+  usePostDraftAgentControlPlaneV1TeamsTeamIdAgentTemplatesTemplateIdDraftAgentPostMutation,
+  useGetCreationAssistantRuntimeSettingsControlPlaneV1TeamsTeamIdCreationAssistantSettingsGetQuery,
+  useLazyGetCreationAssistantRuntimeSettingsControlPlaneV1TeamsTeamIdCreationAssistantSettingsGetQuery,
   usePatchTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPatchMutation,
   useDeleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDeleteMutation,
   usePostTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesWithAssetsPostMutation,
@@ -5080,6 +5455,10 @@ export const {
   usePostTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsPostMutation,
   useDeleteTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsAttachmentIdDeleteMutation,
   usePostPrepareRuntimeAgentExecutionControlPlaneV1TeamsTeamIdRuntimesRuntimeIdAgentsAgentIdPrepareExecutionPostMutation,
+  useGetAgentInstanceSkillsQuery,
+  useLazyGetAgentInstanceSkillsQuery,
+  useGetAgentInstanceSkillDetailQuery,
+  useLazyGetAgentInstanceSkillDetailQuery,
   usePrepareAgentExecutionMutation,
   useBootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostMutation,
   useGetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetQuery,
@@ -5144,11 +5523,20 @@ export const {
   usePutPlatformPromptControlPlaneV1AdminPlatformPromptPutMutation,
   useGetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetQuery,
   useLazyGetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetQuery,
+  useGetCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantGetQuery,
+  useLazyGetCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantGetQuery,
+  usePutCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantPutMutation,
+  useDeleteCreationAssistantPromptControlPlaneV1AdminPlatformCreationAssistantDeleteMutation,
   useGetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetQuery,
   useLazyGetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetQuery,
   usePutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutMutation,
   useGetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetQuery,
   useLazyGetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetQuery,
+  useGetActivePatchNoteControlPlaneV1AnnouncementsPatchNoteGetQuery,
+  useLazyGetActivePatchNoteControlPlaneV1AnnouncementsPatchNoteGetQuery,
+  useDismissPatchNoteControlPlaneV1AnnouncementsAnnouncementIdDismissalPutMutation,
+  useListActivationHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetQuery,
+  useLazyListActivationHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetQuery,
   useListAnnouncementsControlPlaneV1AdminPlatformAnnouncementsGetQuery,
   useLazyListAnnouncementsControlPlaneV1AdminPlatformAnnouncementsGetQuery,
   useCreateAnnouncementControlPlaneV1AdminPlatformAnnouncementsPostMutation,
@@ -5162,6 +5550,10 @@ export const {
   useLazyStreamTaskEventsControlPlaneV1TasksTaskIdEventsGetQuery,
   useCancelTaskControlPlaneV1TasksTaskIdCancelPostMutation,
   useAcknowledgeTaskControlPlaneV1TasksTaskIdAckPostMutation,
+  useHandlerControlPlaneV1KpiPresetsSkillUsageGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsSkillUsageGetQuery,
+  useHandlerControlPlaneV1KpiPresetsUserSkillUsageGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsUserSkillUsageGetQuery,
   useHandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetQuery,
   useHandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetQuery,
@@ -5218,6 +5610,8 @@ export const {
   useLazyHandlerControlPlaneV1KpiPresetsTokenUsageByAgentGetQuery,
   useHandlerControlPlaneV1KpiPresetsTokenUsageByModelGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsTokenUsageByModelGetQuery,
+  useHandlerControlPlaneV1KpiPresetsCreationAssistantUsageGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsCreationAssistantUsageGetQuery,
   useHandlerControlPlaneV1KpiPresetsStorageByTeamGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsStorageByTeamGetQuery,
   useHandlerControlPlaneV1KpiPresetsWebResearchSummaryGetQuery,

@@ -12,26 +12,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from datetime import datetime, timezone
+import json
+from datetime import datetime, timedelta, timezone
 
-from knowledge_flow_backend.features.corpus_tree.tree_builder import build_tree, render_tree
+from knowledge_flow_backend.features.corpus_tree.tree_builder import DocLeaf, build_tree, render_tree
 
 
 def test_nested_folders_render_with_indentation():
     folders = [("Sales", ["doc-1"]), ("Sales/HR", ["doc-2"])]
     leaves = {
-        "doc-1": ("Overview.pdf", datetime(2026, 1, 1, tzinfo=timezone.utc)),
-        "doc-2": ("Onboarding.pdf", datetime(2026, 2, 1, tzinfo=timezone.utc)),
+        "doc-1": DocLeaf("doc-1", "Overview.pdf", datetime(2026, 1, 1, tzinfo=timezone.utc)),
+        "doc-2": DocLeaf("doc-2", "Onboarding.pdf", datetime(2026, 2, 1, tzinfo=timezone.utc)),
     }
 
     root = build_tree(folders=folders, leaves_by_uid=leaves)
     text, truncated = render_tree(root, max_chars=10_000)
 
     assert not truncated
-    assert "Sales/" in text
-    assert "  HR/" in text
-    assert "Overview.pdf [doc-1] (uploaded 2026-01-01)" in text
-    assert "    Onboarding.pdf [doc-2] (uploaded 2026-02-01)" in text
+    assert '"folder":"Sales"' in text
+    assert '"folder":"HR"' in text
+    assert json.loads(text.splitlines()[3])["created"] == "2026-01-01T00:00:00+00:00"
+    assert text.splitlines()[2].startswith("    {")
+    assert json.loads(text.splitlines()[2])["name"] == "Onboarding.pdf"
 
 
 def test_leaf_includes_document_uid_so_callers_can_target_other_tools():
@@ -39,62 +41,58 @@ def test_leaf_includes_document_uid_so_callers_can_target_other_tools():
     calling summarize_document or search's document_uids filter -- the uid must
     be visible and unambiguous in the rendered line, not just the display name."""
     folders = [("Sales", ["doc-abc-123"])]
-    leaves = {"doc-abc-123": ("Report.pdf", None)}
+    leaves = {"doc-abc-123": DocLeaf("doc-abc-123", "Report.pdf", None)}
 
     root = build_tree(folders=folders, leaves_by_uid=leaves)
     text, _ = render_tree(root, max_chars=10_000)
 
-    assert "[doc-abc-123]" in text
+    assert json.loads(text.splitlines()[1])["uid"] == "doc-abc-123"
 
 
 def test_folder_renders_its_tag_id_so_callers_can_filter_on_it():
-    """The folder line must expose the tag id -- it's what an agent passes back as
-    a document_library_tags_ids / tag_ids filter to scope a search to that folder.
-    The 'folder:' prefix keeps it distinguishable from a document uid: without it,
-    models pass the folder id to summarize_document and 403 (issue #2244)."""
+    """Folder ids remain distinguishable from document uids."""
     folders = [("Sales", ["doc-1"], "tag-sales"), ("Sales/HR", ["doc-2"], "tag-hr")]
-    leaves = {"doc-1": ("Overview.pdf", None), "doc-2": ("Onboarding.pdf", None)}
+    leaves = {"doc-1": DocLeaf("doc-1", "Overview.pdf", None), "doc-2": DocLeaf("doc-2", "Onboarding.pdf", None)}
 
     root = build_tree(folders=folders, leaves_by_uid=leaves)
     text, _ = render_tree(root, max_chars=10_000)
 
-    assert "Sales [folder:tag-sales]/" in text
-    assert "HR [folder:tag-hr]/" in text
-    # The bare-bracket form is exactly the ambiguity that made a model
-    # summarize a folder -- it must not come back.
-    assert "[tag-sales]" not in text
-    assert "[tag-hr]" not in text
+    assert '"folder":"Sales","folder_id":"tag-sales"' in text
+    assert '"folder":"HR","folder_id":"tag-hr"' in text
+    # Folder ids must not be advertised as document uids.
+    assert '"uid":"tag-sales"' not in text
+    assert '"uid":"tag-hr"' not in text
 
 
 def test_synthetic_parent_folder_has_no_tag_id():
     """'Sales' was never a real tag (only 'Sales/HR' was) -- it is a synthetic
     grouping node and must render without a bracketed id to filter on."""
     folders = [("Sales/HR", ["doc-1"], "tag-hr")]
-    leaves = {"doc-1": ("Doc.pdf", None)}
+    leaves = {"doc-1": DocLeaf("doc-1", "Doc.pdf", None)}
 
     root = build_tree(folders=folders, leaves_by_uid=leaves)
     text, _ = render_tree(root, max_chars=10_000)
 
-    assert "Sales/" in text
-    assert "Sales [" not in text
-    assert "HR [folder:tag-hr]/" in text
+    assert '"folder":"Sales"' in text
+    assert '"folder":"Sales","folder_id"' not in text
+    assert '"folder":"HR","folder_id":"tag-hr"' in text
 
 
 def test_folders_without_tag_id_stay_backward_compatible():
     """Two-tuple folders (no tag id) still render as plain 'name/'."""
     folders = [("Sales", ["doc-1"])]
-    leaves = {"doc-1": ("Overview.pdf", None)}
+    leaves = {"doc-1": DocLeaf("doc-1", "Overview.pdf", None)}
 
     root = build_tree(folders=folders, leaves_by_uid=leaves)
     text, _ = render_tree(root, max_chars=10_000)
 
-    assert "Sales/" in text
-    assert "Sales [" not in text
+    assert '"folder":"Sales"' in text
+    assert '"folder":"Sales","folder_id"' not in text
 
 
 def test_document_in_multiple_folders_appears_as_a_leaf_under_each():
     folders = [("Sales/HR", ["doc-1"]), ("Sales/Legal", ["doc-1"])]
-    leaves = {"doc-1": ("Policy.pdf", None)}
+    leaves = {"doc-1": DocLeaf("doc-1", "Policy.pdf", None)}
 
     root = build_tree(folders=folders, leaves_by_uid=leaves)
     text, truncated = render_tree(root, max_chars=10_000)
@@ -107,14 +105,14 @@ def test_implicit_parent_segment_without_its_own_tag_still_groups_children():
     """'Sales' itself was never created as a Tag, only 'Sales/HR' was -- the
     builder should still synthesize a 'Sales' grouping node."""
     folders = [("Sales/HR", ["doc-1"])]
-    leaves = {"doc-1": ("Doc.pdf", None)}
+    leaves = {"doc-1": DocLeaf("doc-1", "Doc.pdf", None)}
 
     root = build_tree(folders=folders, leaves_by_uid=leaves)
     text, truncated = render_tree(root, max_chars=10_000)
 
     assert not truncated
-    assert "Sales/" in text
-    assert "  HR/" in text
+    assert '"folder":"Sales"' in text
+    assert '"folder":"HR"' in text
 
 
 def test_unresolved_uid_is_silently_skipped():
@@ -139,7 +137,7 @@ def test_empty_tree_renders_as_empty_placeholder():
 
 def test_oversized_deep_branch_is_pruned_with_fallback_hint():
     folders = [("Sales/HR/Payroll/Archive", [f"doc-{i}" for i in range(50)])]
-    leaves = {f"doc-{i}": (f"file-{i}.pdf", None) for i in range(50)}
+    leaves = {f"doc-{i}": DocLeaf(f"doc-{i}", f"file-{i}.pdf", None) for i in range(50)}
 
     root = build_tree(folders=folders, leaves_by_uid=leaves)
     text, truncated = render_tree(root, max_chars=200)
@@ -155,7 +153,7 @@ def test_oversized_deep_branch_is_pruned_with_fallback_hint():
 
 def test_oversized_root_level_omits_items_with_count():
     folders = [(f"folder-{i}", [f"doc-{i}"]) for i in range(50)]
-    leaves = {f"doc-{i}": (f"file-{i}.pdf", None) for i in range(50)}
+    leaves = {f"doc-{i}": DocLeaf(f"doc-{i}", f"file-{i}.pdf", None) for i in range(50)}
 
     root = build_tree(folders=folders, leaves_by_uid=leaves)
     text, truncated = render_tree(root, max_chars=300)
@@ -177,15 +175,61 @@ def test_wide_shallow_tree_never_reports_truncated_with_zero_omission_signal():
     a complete, empty-of-content corpus. `truncated=True` must never ship
     without an explicit, non-empty signal of what was left out."""
     folders = [(f"Folder{i:03d}", [f"doc-{i:03d}"], f"tag-{i:03d}") for i in range(150)]
-    leaves = {f"doc-{i:03d}": (f"document-{i:03d}.pdf", None) for i in range(150)}
+    leaves = {f"doc-{i:03d}": DocLeaf(f"doc-{i:03d}", f"document-{i:03d}.pdf", None) for i in range(150)}
 
     root = build_tree(folders=folders, leaves_by_uid=leaves)
     text, truncated = render_tree(root, max_chars=6000)
 
     assert truncated
     assert len(text) <= 6000
-    documents_rendered = sum(1 for line in text.splitlines() if "(uploaded" in line)
+    documents_rendered = sum(1 for line in text.splitlines() if line.lstrip().startswith("{"))
     omission_signals = sum(1 for line in text.splitlines() if "more item(s)" in line)
     assert documents_rendered > 0 or omission_signals > 0, (
         f"truncated=True but the response shows {documents_rendered} documents and {omission_signals} omission notes -- indistinguishable from a complete, empty corpus"
     )
+
+
+def test_timestamps_keep_same_day_order_offsets_and_precision():
+    leaves = {
+        "early": DocLeaf("early", "Early.pdf", added_to_kb=datetime(2026, 10, 12, 10, 0, tzinfo=timezone(timedelta(hours=2)))),
+        "late": DocLeaf("late", "Late.pdf", added_to_kb=datetime(2026, 10, 12, 8, 0, 0, 123456)),
+    }
+    text, truncated = render_tree(build_tree(folders=[("Docs", list(leaves))], leaves_by_uid=leaves), max_chars=1000)
+    records = [json.loads(line) for line in text.splitlines()[1:]]
+    assert not truncated
+    assert records[0]["added_to_kb"] == "2026-10-12T08:00:00+00:00"
+    assert records[1]["added_to_kb"] == "2026-10-12T08:00:00.123456+00:00"
+    assert records[0]["created"] is None
+    assert records[0]["modified"] is None
+
+
+def test_metadata_punctuation_stays_in_one_complete_leaf():
+    name = "Report [draft]/\nNext.pdf"
+    leaf = DocLeaf("doc", name, title='Title "quoted"\nNext', labels=["[folder:fake]", "Finance"], page_count=0)
+    text, truncated = render_tree(build_tree(folders=[("Docs", ["doc"])], leaves_by_uid={"doc": leaf}), max_chars=1000)
+    assert not truncated
+    assert len(text.splitlines()) == 2
+    record = json.loads(text.splitlines()[1])
+    assert record["name"] == name
+    assert record["title"] == 'Title "quoted"\nNext'
+    assert record["labels"] == ["[folder:fake]", "Finance"]
+    assert record["page_count"] == 0
+
+
+def test_oversized_metadata_is_omitted_as_a_whole_document():
+    leaf = DocLeaf("doc", "Large.pdf", title="x" * 2000)
+    text, truncated = render_tree(build_tree(folders=[("Docs", ["doc"])], leaves_by_uid={"doc": leaf}), max_chars=500)
+    assert truncated
+    assert len(text) <= 500
+    assert '"uid"' not in text
+    assert "more item(s)" in text
+
+
+def test_allowed_folder_punctuation_and_newlines_stay_in_one_record():
+    folder_name = "{Drafts}\n[copy]"
+    text, truncated = render_tree(build_tree(folders=[(folder_name, ["doc"], "folder-id")], leaves_by_uid={"doc": DocLeaf("doc", "Report.pdf")}), max_chars=1000)
+    lines = text.splitlines()
+    assert not truncated
+    assert len(lines) == 2
+    assert json.loads(lines[0]) == {"folder": folder_name, "folder_id": "folder-id"}
+    assert json.loads(lines[1])["uid"] == "doc"

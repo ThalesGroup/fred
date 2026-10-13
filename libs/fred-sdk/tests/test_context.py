@@ -638,3 +638,36 @@ def test_agent_tuning_reads_legacy_reasoning_keys_and_carries_recommendation() -
     assert tuning.recommended_chat_profile_id == "chat.fast"
     assert "reasoning_enabled" not in tuning.model_dump()
     assert AgentTuning(role="r", description="d").recommended_chat_profile_id is None
+
+
+@pytest.mark.parametrize(
+    "payload,names",
+    [
+        ({}, []),
+        ({"skill": {"name": "review"}}, ["review"]),
+        ({"skills": []}, []),
+        (
+            {"skills": [{"name": "review"}, {"name": "mermaid"}, {"name": "review"}]},
+            ["review", "mermaid"],
+        ),
+    ],
+)
+def test_runtime_context_resolves_legacy_and_multiple_skills(payload, names):
+    context = RuntimeContext.model_validate(payload)
+    assert [skill.name for skill in context.selected_skills] == names
+    assert "body" not in str(context.model_dump())
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"skill": {"name": "review"}, "skills": []},
+        {"skills": [{"name": "review", "body": "FORGED"}]},
+        {"skills": [{"name": "../review"}]},
+        {"skills": [{"name": "review"}, {"name": ""}]},
+        {"skills": {"name": "review"}},
+    ],
+)
+def test_runtime_context_rejects_ambiguous_or_malformed_skills(payload):
+    with pytest.raises(ValidationError):
+        RuntimeContext.model_validate(payload)
