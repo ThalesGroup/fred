@@ -5,7 +5,7 @@ import { useLayoutEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Annotation, Compartment, EditorState, StateEffect, StateField, Transaction, Prec } from "@codemirror/state";
 import { defaultKeymap, history, historyKeymap, invertedEffects } from "@codemirror/commands";
-import { Decoration, EditorView, keymap, placeholder, WidgetType } from "@codemirror/view";
+import { Decoration, EditorView, keymap, WidgetType } from "@codemirror/view";
 import type { CommandChoice, CommandKeyEvent, CommandTriggerBinding } from "./RichInputField";
 import badgeStyles from "../SkillBadge/SkillBadge.module.css";
 import iconStyles from "../../atoms/Icon/Icon.module.scss";
@@ -282,9 +282,9 @@ export function InlineSkillInput(props: Props) {
           EditorView.editable.of(!props.disabled),
           EditorState.readOnly.of(props.disabled),
           EditorView.decorations.of(decorations),
-          props.placeholder ? placeholder(props.placeholder) : [],
           EditorView.contentAttributes.of({
             spellcheck: "true",
+            ...(props.placeholder ? { "aria-placeholder": props.placeholder } : {}),
             "aria-label": t("chatbot.composerPlaceholder"),
             "aria-invalid": String(props.invalid),
             ...(props.describedBy ? { "aria-describedby": props.describedBy } : {}),
@@ -345,13 +345,22 @@ export function InlineSkillInput(props: Props) {
     if (!props.disabled) viewRef.current?.focus();
   }, [props.disabled]);
 
+  // The placeholder lives outside the editable line, which then holds nothing
+  // the native caret could be drawn against or sized from.
   return (
-    <div
-      ref={hostRef}
-      className={styles.editor}
-      aria-disabled={props.disabled}
-      style={{ maxHeight: props.maxHeight }}
-    />
+    <div className={styles.field}>
+      {props.placeholder && props.value === "" && (
+        <span className={styles.placeholder} aria-hidden="true">
+          {props.placeholder}
+        </span>
+      )}
+      <div
+        ref={hostRef}
+        className={styles.editor}
+        aria-disabled={props.disabled}
+        style={{ maxHeight: props.maxHeight }}
+      />
+    </div>
   );
 }
 

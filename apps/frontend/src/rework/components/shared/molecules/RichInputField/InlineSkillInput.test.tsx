@@ -248,3 +248,17 @@ it("routes modified arrow keys to recall and lets a consumed recall stop the edi
   expect(editor().state.doc.toString()).toBe("Before /meeting-minutes after\nAction");
   expect(onSend).not.toHaveBeenCalled();
 });
+
+it("shows the placeholder outside the editable line while the field is empty", () => {
+  act(() => editor().dispatch({ changes: { from: 0, to: editor().state.doc.length } }));
+  const line = container.querySelector(".cm-line")!;
+  expect(line.textContent).toBe("");
+  expect(line.querySelector("img, span")).toBeNull();
+  const placeholder = container.querySelector<HTMLElement>("[class*=placeholder]")!;
+  expect(placeholder.textContent).toBe("[notes]");
+  expect(placeholder.getAttribute("aria-hidden")).toBe("true");
+  expect(editor().contentDOM.contains(placeholder)).toBe(false);
+  expect(editor().contentDOM.getAttribute("aria-placeholder")).toBe("[notes]");
+  act(() => editor().dispatch({ changes: { from: 0, insert: "a" } }));
+  expect(container.querySelector("[class*=placeholder]")).toBeNull();
+});
