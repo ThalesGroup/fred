@@ -4580,7 +4580,9 @@ on a neutral `surface-container` band, `h2` sections ruled with
   Motion is dropped under `prefers-reduced-motion`.
 - **Announce (`PatchNoteAnnouncer`).** Above the list, and above the empty
   state when the list holds no patch note, a tonal "Annoncer
-  la mise à jour" button (`campaign` icon), disabled when nothing is included
+  la mise à jour (X/10)" button (`campaign` icon) whose label carries the
+  number of included patch notes against the cap of 10 per announcement
+  ("(0/10)" when none is), disabled when nothing is included
   (a short line then says to include a note), and beside it the date and time
   of the announcement in effect with the administrator's name. It is also
   disabled above 10 included patch notes, the line then saying to deselect

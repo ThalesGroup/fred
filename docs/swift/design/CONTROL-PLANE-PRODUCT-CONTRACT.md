@@ -4405,10 +4405,11 @@ the same transaction as the change.
 
 **Seen.** `platform_announcement_seen`, one row per user (`user_id`,
 `announcement_id`, `seen_at`), replaces `platform_announcement_dismissal`. An
-announcement is pending for a user when one is in effect and the user's row
-does not name it. A record never moves a user back to an older announcement
-(one guarded upsert).
-Rows are removed with the user (`DELETE /users/{id}`).
+announcement is pending for a user when one is in effect, it opens the dialog
+(every package does, except the one the upgrade creates, see below) and the
+user's row does not name it. A record never moves a user back to an older
+announcement (one guarded upsert). Rows are removed with the user
+(`DELETE /users/{id}`).
 
 | Method | Path                                                         | Permission            | Request / response |
 | ------ | ------------------------------------------------------------ | --------------------- | ------------------ |

@@ -45,7 +45,7 @@ What administrators and users see afterwards:
 - users keep reading the patch note that was enabled, from **What's new**; no
   patch-note dialog opens for anyone until an administrator uses **Announce
   the update**;
-- the Patch notes tab is a working area: its toggles choose what the next
+- the Patch notes tab is a working area: its checkboxes choose what the next
   announcement includes, and nothing done there reaches users before that;
 - earlier "Don't show again" choices are discarded: that option no longer
   exists;
@@ -73,5 +73,5 @@ the earlier "Don't show again" choices are not restored.
 
 An announced package cannot be edited: correcting a typo means editing the
 patch note and announcing again, which shows the dialog to every user once
-more. An announcement holds at most 10 patch notes. **Withdraw the current announcement** leaves **What's new** empty until
-the next announcement.
+more. An announcement holds at most 10 patch notes. **Withdraw the current
+announcement** leaves **What's new** empty until the next announcement.
