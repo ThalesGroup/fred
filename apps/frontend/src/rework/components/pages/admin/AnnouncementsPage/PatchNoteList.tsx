@@ -36,13 +36,15 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import Icon from "@shared/atoms/Icon/Icon";
+import Checkbox from "@shared/atoms/Checkbox/Checkbox";
 import IconButton from "@shared/atoms/IconButton/IconButton";
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { normalizeApiError } from "@core/errors/normalizeApiError";
 import { resolveAnnouncementText } from "../../../../features/announcements/announcementText";
 import { useSetPatchNoteOrderMutation } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { Announcement } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
-import { RowActions, RowSwitch } from "./RowControls";
+import { RowActions } from "./RowControls";
 import styles from "./PatchNoteList.module.css";
 
 const verticalOnly: Modifier = ({ transform }) => ({ ...transform, x: 0 });
@@ -69,6 +71,7 @@ interface PatchNoteCardProps extends Omit<PatchNoteListProps, "notes" | "pending
 function PatchNoteCard({ note, pending, state, handle, onPreview, onToggle, onEdit, onDelete }: PatchNoteCardProps) {
   const { t, i18n } = useTranslation();
   const title = resolveAnnouncementText(note.title, i18n.language) || note.id;
+  const checkboxId = `patch-note-included-${note.id}`;
   return (
     <div className={styles.card} data-state={state}>
       <button
@@ -79,16 +82,31 @@ function PatchNoteCard({ note, pending, state, handle, onPreview, onToggle, onEd
       >
         <Icon category="outlined" type="drag_indicator" />
       </button>
-      {/* Beside the status line it drives, so the two read as one. */}
-      <RowSwitch announcement={note} pending={pending} onToggle={(enabled) => onToggle(note, enabled)} />
-      <div className={styles.text}>
+      {/* The title and status are its label: the whole text is the click target. */}
+      <Tooltip
+        text={
+          note.enabled
+            ? t("rework.announcements.patchNote.row.disableHint")
+            : t("rework.announcements.patchNote.row.enableHint")
+        }
+      >
+        <Checkbox
+          id={checkboxId}
+          className={styles.check}
+          checked={note.enabled}
+          disabled={pending}
+          onChange={(event) => onToggle(note, event.target.checked)}
+          aria-label={t("rework.announcements.patchNote.row.enabled")}
+        />
+      </Tooltip>
+      <label className={styles.text} htmlFor={checkboxId}>
         <span className={styles.title}>{title}</span>
         <span className={styles.status} data-visible={note.enabled || undefined}>
           {note.enabled
             ? t("rework.announcements.patchNote.row.statusVisible")
             : t("rework.announcements.patchNote.row.statusHidden")}
         </span>
-      </div>
+      </label>
       <div className={styles.controls}>
         <IconButton
           size="small"

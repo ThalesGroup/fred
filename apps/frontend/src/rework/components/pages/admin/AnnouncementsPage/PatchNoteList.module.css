@@ -93,11 +93,25 @@
   outline-color: var(--on-surface);
 }
 
+/* The checkbox's click target, sized like a medium icon button. */
+.check {
+  flex: none;
+  justify-content: center;
+  align-items: center;
+  border-radius: var(--radius-full);
+  width: 2.5rem;
+  height: 2.5rem;
+}
+
+.check:hover {
+  background: var(--state-on-surface-hover);
+}
+
 .text {
   display: flex;
   flex: 1;
   flex-direction: column;
-  margin-left: var(--spacing-xs);
+  cursor: pointer;
   min-width: 0;
 }
 

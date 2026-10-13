@@ -98,16 +98,18 @@ export default function PatchNoteAnnouncer({ includedNotes }: { includedNotes: A
         {lastUse || (includedNotes.length === 0 && t(`${KEYS}.noneVisible`))}
       </p>
       {announcement && (
-        <Button
-          type="button"
-          color="on-surface"
-          variant="text"
-          size="medium"
-          disabled={isWithdrawing}
-          onClick={askWithdraw}
-        >
-          {t(`${KEYS}.withdraw.action`)}
-        </Button>
+        <div className={styles.withdraw}>
+          <Button
+            type="button"
+            color="error"
+            variant="text"
+            size="medium"
+            disabled={isWithdrawing}
+            onClick={askWithdraw}
+          >
+            {t(`${KEYS}.withdraw.action`)}
+          </Button>
+        </div>
       )}
 
       {/* The list is the question: what is shown here is exactly what gets frozen. */}

@@ -30,6 +30,11 @@
   font: var(--font-body-medium);
 }
 
+/* Withdrawing stops the announcement for everyone: kept apart, at the far right. */
+.withdraw {
+  margin-left: auto;
+}
+
 /* The numbered titles the confirmation asks about, in the order users get them. */
 .included {
   display: flex;
