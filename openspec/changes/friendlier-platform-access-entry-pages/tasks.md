@@ -11,7 +11,7 @@
 
 - [x] 3.1 Valid state: new title, team in its inner surface, "Join the team" without icon, sentence removed; verify the updated `FreeEnrollmentPage.test.tsx`.
 - [x] 3.2 Invalid-link state for `404 free_enrollment_link_invalid` (no retry, footer only with a support link); verify with tests.
-- [x] 3.3 Temporary-problem state with retry for any other preview error and for a failed terms acceptance or join; verify with tests that it never shows the invalid-link copy.
+- [x] 3.3 Temporary-problem state with retry for any other preview error and for a terms acceptance or join that fails for any other reason; a terms acceptance or join refused as `404 free_enrollment_link_invalid` shows the invalid-link state instead. Verify with tests ("keeps a retry when joining fails", "reports a link revoked while the page was open as no longer valid").
 
 ## 4. Copy
 
@@ -25,7 +25,7 @@
 
 ## Verification evidence (2026-10-13)
 
-Run from `apps/frontend`, on the branch stacked on `feat/platform-access-ui-condense`:
+Run from `apps/frontend`. The branch was stacked on `feat/platform-access-ui-condense` at that date; it is now based directly on `swift` (see the 2026-10-14 evidence below, which supersedes the counts here):
 
 - `npx tsc --noEmit`: exit 0.
 - `npx eslint src/rework/components/pages/PlatformAccessPage`: exit 0, no finding.
@@ -38,10 +38,26 @@ Run from `apps/frontend`, on the branch stacked on `feat/platform-access-ui-cond
 - Help Center content (fr, en): no page describes these screens; nothing to update.
 - `openspec validate friendlier-platform-access-entry-pages --strict`: valid.
 
-Not run:
+Not run on 2026-10-13 (run since, see below): `make code-quality`, `make test`, `make migration-check`.
 
-- `make code-quality` and `make test` (they restart the dev server the owner was using); the commands above cover the touched files only.
-- `make migration-check` (`uv` not on this shell's PATH); the note follows the template by inspection.
+Still not run:
+
 - No visual check: rendered layout, the one-line invitation title in both languages, footer alignment and both themes remain to be confirmed on screen.
 
 Divergence from the first plan: while the invitation is loading the card title is "Checking your invitation…" instead of the invitation title, so an invalid link never flashes "You have been invited".
+
+## 6. Pre-PR review fixes
+
+- [x] 6.1 Make the delta spec say what the page does when a terms acceptance or a join is refused as `404 free_enrollment_link_invalid` (the link is reported as no longer valid; every other failure keeps the temporary-problem state with a retry). Spec wording only: the code and its tests already behave this way.
+- [x] 6.2 Test the "Check my access" action: it replaces the location with the platform root, including under a base path ("re-checks access by replacing the location with the platform root").
+
+## Verification evidence (2026-10-14)
+
+Run on the branch based directly on `swift`, after the review fixes:
+
+- `make code-quality` from `apps/frontend` (tsc, prettier, eslint): exit 0, all clean.
+- `make test` from `apps/frontend` (full vitest suite with coverage): 331 files passed, 1 skipped; 4115 tests passed, 7 skipped.
+- `npx vitest run src/rework/components/pages/PlatformAccessPage src/rework/core/guards/PlatformAdmissionGuard.test.tsx`: 3 files, 25 tests passed (`PlatformAccessDeniedPage.test.tsx` 8, one added).
+- `rework.platformAccess` exposes the same 198 leaf keys in French and English (recursive count on this branch, plural forms included).
+- `make migration-check` from the repository root: "Migration notes valid: 1 new declaration(s)".
+- `openspec validate friendlier-platform-access-entry-pages --strict`: valid.
