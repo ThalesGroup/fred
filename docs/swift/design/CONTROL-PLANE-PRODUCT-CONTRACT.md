@@ -2169,7 +2169,7 @@ freshness treatment — see `RUNTIME-EXECUTION-CONTRACT.md` §8.55.
 
 ### Addendum — REASON-01 phase 2, reasoning is an agent property (2026-07-30)
 
-**2026-10-09 — retired by §62.** The per-agent offer and default below, and
+**2026-10-09 — retired by §63.** The per-agent offer and default below, and
 the Amendment B, Capabilities-tab and #2473 addenda, no longer apply: the
 platform activation alone gates reasoning, and the team sets per-model defaults.
 
@@ -2527,10 +2527,10 @@ values inside `series`/`rows`.
 
 ## 37. Contract Notes — TEAM-05, team routing policy (2026-07-30, issue #2118; simplified 2026-08, `llm-routing-simplify`)
 
-**2026-10-09 — amended by §62.** Per-agent overrides removed, team disabled
+**2026-10-09 — amended by §63.** Per-agent overrides removed, team disabled
 models and reasoning defaults added, write gate narrowed to `team_admin`. The
 data model, resolution, authorization and frontend paragraphs below describe
-the pre-§62 policy where they mention `agent_profile_overrides` or
+the pre-§63 policy where they mention `agent_profile_overrides` or
 `team_editor` writes.
 
 **2026-08-16 — chat profile typing (#2365).** The pod catalog now projects
@@ -2615,9 +2615,9 @@ panel with every input disabled (read-only), not a second component.
 **Explicit non-goals (V1):** per-user routing inside a shared multi-member
 team (distinct from personal-space support, which is just a team routing
 policy scoped to a one-member team), model temperature/timeout tuning, a
-per-message composer picker (**reversed 2026-10-09, §62**), direct
+per-message composer picker (**reversed 2026-10-09, §63**), direct
 `models_catalog.yaml` editing from the product. Per-agent routing
-(`agent_profile_overrides`) was in scope until §62 replaced it with the
+(`agent_profile_overrides`) was in scope until §63 replaced it with the
 instance recommended model.
 
 ## 38. Contract Notes — team image renamed banner → avatar (2026-08-08, #2300)
@@ -2833,7 +2833,7 @@ deciding level is visible.
 elevated-role gate** §37's policy reads use. Anyone entitled to hold a
 conversation with an agent is entitled to know which model answers them, and
 that is safe precisely because the response carries no policy detail (above).
-Editing the policy is `team_admin`-only since §62.
+Editing the policy is `team_admin`-only since §63.
 
 **`reasoning_enabled` and the reasoning toggle.** The `reasoning_toggle` control
 on `ExecutionPreparation` answers "the platform enabled reasoning on _some_
@@ -2890,7 +2890,7 @@ control. Always `true` when a platform binding decided, which bypasses team
 enablement by design (§40's ReBAC exemption).
 
 **Explicit non-goals:** making the chip a model _picker_ (**reversed
-2026-10-09, §62**: the chip lists `selectable_models`),
+2026-10-09, §63**: the chip lists `selectable_models`),
 surfacing the deciding precedence level in the UI, per-turn re-resolution, and
 any non-chat capability — `embedding` has no
 production consumer.
@@ -4488,10 +4488,10 @@ returns `CreationAssistantUsageResponse`: `total_tokens`, `input_tokens`,
 `output_tokens` and `drafts` (calls the provider answered, usable or not) for
 the period, read from `agent.creation_assistant_completed` only.
 
-## 62. Contract Notes — team model settings, recommended model and composer model choice (2026-10-09, #3029)
+## 63. Contract Notes — team model settings, recommended model and composer model choice (2026-10-09, #3029)
 
 Amends §33 (per-agent reasoning), §37 (team routing policy) and §41 (effective
-chat model). Runtime side: `RUNTIME-EXECUTION-CONTRACT.md` §8.108. OpenSpec
+chat model). Runtime side: `RUNTIME-EXECUTION-CONTRACT.md` §8.112. OpenSpec
 change `chat-model-and-reasoning-picker`.
 
 ### §37 amended — the team policy becomes the team's Models section

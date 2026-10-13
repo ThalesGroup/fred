@@ -1988,7 +1988,7 @@ config) and 4 (composer control) are phase 2 and not implemented here.
 Levels 3-4 of REASON-01 (per-agent and per-question reasoning), plus its three
 tool-loop-safety preconditions. Builds on §8.29 (levels 1-2); read that first.
 
-**2026-10-09 — superseded in part by §8.108.** Level 3 (the agent offer,
+**2026-10-09 — superseded in part by §8.112.** Level 3 (the agent offer,
 `AgentTuning.reasoning_enabled`) is removed: the platform activation alone is
 the ceiling. The tri-state below is redefined: only `True` reasons, `None`
 no longer defers to the ceiling.
@@ -2113,7 +2113,7 @@ model — see §C.9 and the note below.
 ### 8.32 ✅ `RuntimeContext` gains team routing policy fields (TEAM-05, #2118, 2026-07-27)
 
 **2026-10-09 — `agent_profile_overrides` and `resolve_team_override` removed
-(§8.108).** The user's choice (`chat_profile_id`) and the instance
+(§8.112).** The user's choice (`chat_profile_id`) and the instance
 recommendation now sit between the pod override and the team default;
 `chat_default_profile_id` below is unchanged.
 
@@ -6904,7 +6904,7 @@ provider may bill it). The log line adds the same fields and `reasoning`
 Never the description or any drafted text. Acceptance:
 `openspec/changes/add-agent-creation-assistant/`.
 
-### 8.108 Per-conversation model choice, instance recommendation and model-led reasoning (2026-10-09, #3029)
+### 8.112 Per-conversation model choice, instance recommendation and model-led reasoning (2026-10-09, #3029)
 
 Supersedes the team per-agent level of §8.32 and the agent gate and tri-state
 of §8.30. OpenSpec change `chat-model-and-reasoning-picker`; product side in
