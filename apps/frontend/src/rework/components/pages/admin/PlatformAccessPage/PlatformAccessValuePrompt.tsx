@@ -52,7 +52,7 @@ export default function PlatformAccessValuePrompt({
         if (value !== undefined && value.length > 0 && value.length <= limit) onSelect(value);
       }}
     >
-      <div className={`${styles.dialogBody} ${styles.valuePrompt}`}>
+      <div className={styles.dialogBody}>
         <p>{t("rework.platformAccess.picker.valueHint")}</p>
         <dl className={styles.tokenExample}>
           <div>

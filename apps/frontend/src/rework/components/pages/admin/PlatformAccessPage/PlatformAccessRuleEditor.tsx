@@ -186,7 +186,7 @@ export default function PlatformAccessRuleEditor({
   };
 
   return (
-    <section className={`${styles.section} ${styles.ruleEditor}`}>
+    <section className={styles.ruleEditor}>
       <Select
         label={t("rework.platformAccess.rule.mode")}
         size="small"
