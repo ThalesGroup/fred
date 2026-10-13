@@ -1,39 +1,47 @@
 ---
 title: Commands
 order: 45
-description: Run one of the team's prompts from the input field, by typing /.
+description: Run a prompt from the input field, by typing /.
 icon: bolt
 ---
 
 # Commands
 
-A **command** is a shortcut to one of the team's prompts. In a conversation,
-type `/` followed by its name and the agent receives the prompt's text
-directly, without going through the library.
+A **command** is a shortcut to a prompt, yours or a team's. In a conversation,
+type `/` followed by its name: when you send, the agent receives the prompt's
+text directly, without going through the library.
 
 It pays off on the requests you make over and over: a review, a summary, a
 framed search.
 
 ## Give a prompt a command
 
-On the team's **Prompts** page, any prompt can carry a command — one short
-word, lowercase, no accents and no spaces: `summary`, `review`,
-`internal-note`. The field sits just under the prompt's title.
+On the **Prompts** page, any prompt can carry a command — one short word,
+lowercase, no accents and no spaces: `summary`, `review`, `internal-note`. The
+field sits just under the prompt's title.
 
-> Assigning a command requires the **Editor** role, like creating a prompt.
-> Every member of the team can then use it.
+> In your personal space, you can give a command to any of your prompts: it
+> follows you into all your conversations. In a team, it requires the
+> **Editor** role, like creating a prompt; every member of the team can then
+> use it.
 
-A command belongs to one team: two teams can each have their own `/summary`,
-but inside a team it can only point at a single prompt. A prompt without a
-command stays usable as usual from the library.
+A command belongs to one space: two teams can each have their own `/summary`,
+and you can have yours, but inside one team or inside your personal space it
+can only point at a single prompt. A prompt without a command stays usable as
+usual from the library.
 
-When you import a prompt whose command is already taken in the receiving team,
-a suffix is added (`/summary-2`) so both stay reachable.
+When you import a prompt whose command is already taken in the receiving
+space, a suffix is added (`/summary-2`) so both stay reachable.
 
 ## Run a command
 
-In an **empty** conversation input field, type `/`: the list of commands opens
-above it. Keep typing to filter it.
+In a conversation's input field, type `/`: the list of commands opens above
+it. You can do this anywhere in your message, even when the field already
+contains text: start the command after a space or on a new line.
+
+Keep typing to search. The list keeps the commands whose name contains what
+you type, in upper or lower case, and puts first the ones whose name starts
+with it.
 
 The list comes in three parts, each under its own title:
 
@@ -50,15 +58,21 @@ you type the name without picking a row, the team's command comes first, then
 yours if the team has none.
 
 - **↓** and **↑** walk the list;
-- **Tab** completes the command without sending it;
-- **Enter** sends it;
+- **Enter**, **Tab** or a click add the command to your message, without
+  sending anything;
+- once the command is added, **Enter** sends the message;
 - **Esc** closes the list and keeps what you typed.
 
-You can place one available prompt command and several platform skills
-anywhere in a managed-chat message, in either order. Completion keeps your text before and after
-each token. On send, the prompt expands in place and all selected skills are
-requested together. ReAct preloads each distinct requested skill once. Deep uses native
-model-driven reads; requesting a skill alone does not guarantee its loading.
+So it takes two presses of Enter to run a command picked from the list: the
+first adds it, the second sends. In between, you can complete your message.
+
+The added command shows as a small label in your message. Click it to read the
+prompt's text again before sending.
+
+You can place one prompt command and several platform skills anywhere in a
+message, in the order you like. The text written before and after is kept. On
+send, the prompt's text takes the place of its command and all the chosen
+skills are requested together.
 
 For example, `Before /summary after /verify-answer` keeps “Before” ahead of the
 summary prompt, and “after /verify-answer” behind it.
@@ -69,28 +83,42 @@ Your message appears as the command you ran, not as the prompt's full text, so
 the conversation stays readable. A button on that message opens the text that
 was actually sent, if you want to check it.
 
-To read or adapt a prompt before sending it, go through the library instead —
-see [Prompts](/help/en/features/prompts) and
+To adapt a prompt before sending it, go through the library instead — see
+[Prompts](/help/en/features/prompts) and
 [Conversations](/help/en/features/chat).
 
 ## Platform skills
 
-For agents whose runtime provides skills, type `/`, choose a skill with
-**↑/↓** and **Tab** or **Enter**, then optionally add your request. For example:
+Some agents come with skills: ready-made procedures provided by the platform.
+When the agent offers some, they appear in the list under **Platform skills**.
+Type `/`, choose a skill with **↑/↓** then **Enter**, **Tab** or a click, and
+add a request if you wish. For example:
 
 `/meeting-minutes Summarize these meeting notes: we chose option A; Alex will draft the proposal.`
 
-Tab, a click or Enter completes the name without sending. Once the skill is selected, press Enter again or use the send button. You can send `/meeting-minutes` alone. The agent uses relevant
-conversation content or asks for missing notes. `argument-hint` appears when
-a skill suggests useful input; it never makes that input mandatory for sending.
-The skill stays where you insert it in the text. Typing its exact slash name followed by a space (for example `/meeting-minutes `) also selects it; pasting uses the same format. Copying a full message or selecting only the skill name preserves `/skill-name`. For a homonymous prompt command, explicitly choose the prompt in the menu to run it.
-The catalog depends on the selected agent. The agent may also
-choose relevant skills on an ordinary request and use several before answering.
-A compact step shows the skill name and whether you, the agent or a child agent
-requested it, including after reopening the conversation.
+As with a command, choosing a skill adds it to your message without sending
+anything: press Enter again or use the send button. You can send
+`/meeting-minutes` alone: the agent uses what the conversation already
+contains or asks you for the missing notes. Some skills show, after their
+name, a hint of what is useful to give them; it is never mandatory.
 
-Loaded instructions remain in the conversation context and apply when relevant
-to the current request. They grant no additional tools or permissions.
+The skill stays where you insert it in the text. Typing its exact name with a
+slash, then a space (for example `/meeting-minutes `), also selects it;
+pasting uses the same format. Copying the whole message or selecting only the
+skill's name keeps `/skill-name`. If a prompt has the same name as a skill,
+pick the row you want in the list: their icon tells them apart.
+
+The skills offered depend on the chosen agent. Depending on the agent, the
+instructions of a requested skill are read before answering, or only if the
+agent finds it useful. The agent may also decide by itself to use one or
+several skills on an ordinary request. A line in the details of its answer
+then shows the skill's name and who asked for it: you, the agent or an agent
+it handed part of the work to. It stays visible when you reopen the
+conversation.
+
+A skill's instructions remain valid for the rest of the conversation and apply
+when the request calls for them. They give the agent no additional tool or
+permission.
 
 `/skill` is reserved. An older prompt with that command remains available in the
 library and editable; rename its command to restore its command shortcut. It
