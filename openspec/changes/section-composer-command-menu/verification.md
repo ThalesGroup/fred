@@ -8,7 +8,7 @@ Run from `apps/frontend` on 2026-10-13, branch
 | `npx tsc --noEmit -p .` | exit 0 |
 | `npx eslint` on the 11 touched `.ts`/`.tsx` files | exit 0, no warning |
 | `npx prettier --check` on the 19 touched frontend files | all formatted |
-| `npx vitest run` (full suite) | 329 files passed, 1 skipped; 3963 tests passed, 7 skipped |
+| `npx vitest run` (full suite) | 329 files passed, 1 skipped; 3966 tests passed, 7 skipped |
 | `openspec validate section-composer-command-menu --strict` | valid |
 | `scripts/migration_guides.py check-pr --base origin/swift --worktree` | valid, 1 new declaration |
 
@@ -68,6 +68,18 @@ one character; of two adjacent tokens each is removed alone
 (`/review /meeting-minutes notes` → `/review notes` → `notes`) and the command
 menu stays closed; a prompt token removed whole comes back through undo with
 its selection identity and redo removes it again.
+
+Hand-typed tokens (owner report: Backspace "went inside" a typed token): a
+prompt typed by hand has no selection behind it and was shown only while text
+followed it, so removing the trailing space un-rendered it and the next
+Backspace edited raw text. Fixed in `useComposerCommands.ts`; a typed skill
+was not affected. `useComposerCommands.test.tsx` now types a skill and a
+prompt one character at a time, at the start and in the middle of a draft,
+with and without text after: no token while the name is being typed
+(Backspace edits one character), then Backspace down to the token keeps it,
+one arrow press crosses it, Backspace removes it whole, and Delete before it
+does the same. With the token at the very end of the draft the command menu is
+open again above it, as it already was for a picked prompt.
 
 Not proven: clicking on either side of a token and mouse selection (no layout
 in the test environment), and the caret sitting between a token and the

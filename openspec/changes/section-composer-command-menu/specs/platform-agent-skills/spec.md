@@ -159,6 +159,13 @@ In the chat composer, a completed prompt command or platform skill token SHALL b
 - **WHEN** the user presses Delete
 - **THEN** the draft reads `Before after`
 
+#### Scenario: A token typed by hand behaves like a picked one
+
+- **GIVEN** the user typed `/summary` and a space by hand, without picking a row, and the prompt is shown as a token
+- **WHEN** the user presses Backspace once
+- **THEN** only the space is removed and the token is still shown
+- **AND** a second Backspace removes the whole token
+
 #### Scenario: Two tokens side by side
 
 - **GIVEN** a draft `/review /meeting-minutes notes` showing two tokens
