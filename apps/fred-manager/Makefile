@@ -20,7 +20,7 @@ BOOTSTRAP_PASSWORD ?=
 KEYCLOAK_REGISTER_URL ?= http://localhost:8080/realms/app/account
 
 .PHONY: bootstrap-local
-bootstrap-local: ## Become the root platform admin with FRED_BOOTSTRAP_TOKEN from config/.env (usage: make bootstrap-local BOOTSTRAP_USER=<you> BOOTSTRAP_PASSWORD=<pw>). Pauses once for Keycloak self-registration.
+bootstrap-local: ## Become the root platform admin with FRED_BOOTSTRAP_TOKEN, given or from config/.env (usage: make bootstrap-local BOOTSTRAP_USER=<you> BOOTSTRAP_PASSWORD=<pw>). Pauses once for Keycloak self-registration.
 	@if [ -z "$(BOOTSTRAP_USER)" ] || [ -z "$(BOOTSTRAP_PASSWORD)" ]; then \
 		echo "❌ Usage: make bootstrap-local BOOTSTRAP_USER=<you> BOOTSTRAP_PASSWORD=<pw>"; \
 		exit 1; \
@@ -30,7 +30,9 @@ bootstrap-local: ## Become the root platform admin with FRED_BOOTSTRAP_TOKEN fro
 		echo "   Register yourself now at: $(KEYCLOAK_REGISTER_URL)  (username: $(BOOTSTRAP_USER))"; \
 		read -p "   Press Enter once you've registered... " _unused; \
 	fi
-	@set -a; if [ -f "$(ENV_FILE)" ]; then . "$(ENV_FILE)"; fi; set +a; \
+	@GIVEN_TOKEN="$$FRED_BOOTSTRAP_TOKEN"; \
+	set -a; if [ -f "$(ENV_FILE)" ]; then . "$(ENV_FILE)"; fi; set +a; \
+	if [ -n "$$GIVEN_TOKEN" ]; then FRED_BOOTSTRAP_TOKEN="$$GIVEN_TOKEN"; fi; \
 	if [ -z "$$FRED_BOOTSTRAP_TOKEN" ]; then \
 		echo "❌ Missing FRED_BOOTSTRAP_TOKEN in $(ENV_FILE)"; \
 		exit 1; \
