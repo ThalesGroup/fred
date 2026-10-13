@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.1",
+  "type_definitions": [
+    { "type": "user" },
+    {
+      "type": "space",
+      "relations": {
+        "member": { "this": {} },
+        "editor": { "this": {} },
+        "admin": { "this": {} },
+        "can_read": {
+          "union": {
+            "child": [
+              { "computedUserset": { "relation": "member" } },
+              { "computedUserset": { "relation": "editor" } }
+            ]
+          }
+        },
+        "can_write": { "computedUserset": { "relation": "editor" } },
+        "can_manage": { "computedUserset": { "relation": "admin" } }
+      },
+      "metadata": {
+        "relations": {
+          "member": { "directly_related_user_types": [{ "type": "user" }] },
+          "editor": { "directly_related_user_types": [{ "type": "user" }] },
+          "admin": { "directly_related_user_types": [{ "type": "user" }] }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+model
+  schema 1.1
+
+type user
+
+# One type, direct roles only, no parent relation: the tree lives in SQL.
+# A role on a space requires a content role on its parent (enforced by fred-manager).
+type space
+  relations
+    define member: [user]
+    define editor: [user]
+    define admin: [user]
+    define can_read: member or editor
+    define can_write: editor
+    define can_manage: admin

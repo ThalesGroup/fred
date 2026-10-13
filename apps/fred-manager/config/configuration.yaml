@@ -1,0 +1,36 @@
+# fred-manager on the host, against the local k3d stack (fred-deployment-factory).
+# Same sections and names as the Python backends; secrets come from config/.env.
+
+app:
+  name: Fred Manager
+  base_url: /fred-manager/v1
+  address: 0.0.0.0
+  port: 8400
+
+security:
+  profile: c3
+  m2m:
+    realm_url: http://localhost:8080/realms/app
+  user:
+    enabled: true
+    realm_url: http://localhost:8080/realms/app
+    client_id: app
+  authorized_origins:
+    - http://localhost:5173
+  rebac:
+    type: openfga
+    api_url: "http://localhost:9080"
+    store_name: fred-manager
+
+storage:
+  postgres:
+    host: localhost
+    port: 5432
+    database: fred
+    username: fred
+
+scheduler:
+  temporal:
+    host: localhost:7233
+    namespace: default
+    task_queue: fred-ingestion

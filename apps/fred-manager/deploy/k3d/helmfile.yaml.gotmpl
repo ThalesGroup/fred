@@ -1,0 +1,15 @@
+# fred-manager on the local k3d instance of fred-deployment-factory, which runs
+#   make k3d-app DIR=<this checkout>/apps/fred-manager
+# and passes the kube context and the namespace. ./build writes the image values
+# (K3D_IMAGE_VALUES); without it the chart's default image runs.
+releases:
+  - name: fred-manager
+    # fred's chart through symlinks, minus values.schema.json: the schema lists fred's
+    # applications only, and helm lint enforces it even with --skip-schema-validation.
+    # Temporary, until fred-manager joins the chart.
+    chart: ./chart
+    values:
+      - values.yaml
+      {{- with env "K3D_IMAGE_VALUES" }}
+      - {{ . | quote }}
+      {{- end }}
