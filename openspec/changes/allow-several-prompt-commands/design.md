@@ -383,6 +383,50 @@ apps/control-plane-backend/.venv/bin/python scripts/migration_guides.py check-pr
 - The control-plane and knowledge-flow clients come out byte for byte the same
   after regeneration.
 
+### 14. What building the frontend part showed
+
+- The helpers are `assemblePromptTurn` and `usablePromptList` in
+  `utils/skillInvocation.ts`, with the client cap `MAX_TURN_PROMPTS` next to
+  them. The reader also refuses a list longer than the cap and one whose turn
+  has no `draft_text`.
+- `CommandTurn` keeps its `command` prop and accepts either the descriptor or
+  one entry of its list (both have `command`), so no existing call or test
+  changed. Its click no longer hands the mouse event to the opener.
+- `onResolveError(reason, command)`: `reason` gains `tooMany`, whose `command`
+  is the first one past the cap. The page builds the three toasts.
+- Composer tokens: `InlineSkillInput` takes `promptTokens` and one
+  `onOpenPrompt` callback; a token carries `promptId` and `promptTeamId`, and
+  the widget hands the opener its identity (ids, name, command), never a
+  position, since a widget outlives the edits made before it.
+- The remembered hand-typed tokens are mapped through each edit at render
+  time (common prefix and suffix of the previous and current draft), so a
+  token left at the very end of the line survives text inserted before it.
+- No existing case of `useComposerCommands.test.tsx` asserted that the menu
+  hides prompts after a first one: the 121 cases pass with a rename
+  (`selectedPrompt` to `selectedPrompts`), the command name added to seven
+  error assertions and the list added to two exact descriptors.
+- `useManagedChat.ts` needed no change: the limit already measures the text
+  it is given and the title already reads the single fields, which describe
+  the first prompt. `useChatSse.ts` and `toThreadMessages.ts` needed none
+  either.
+
+Divergences from the artifacts as first written:
+
+- Delta spec, scenario "Team catalog still loading": it said "a picked team
+  prompt". A team prompt cannot be resolved while the team catalog has not
+  answered, so that message is held back on the team command first. The
+  scenario now says "a picked personal prompt", which is the case the guard
+  exists for; the rule itself is unchanged.
+- A behaviour change that follows from the first requirement and is worth
+  stating: a prompt name typed by hand next to a picked prompt used to be
+  sent as the text `/name`; it now expands like any other typed prompt name.
+- A typed name that is both a prompt and a skill, left undelimited at the very
+  end of the line, is a prompt (the existing rule, now applied to each token).
+  Before, with another prompt earlier in the line, it travelled as a skill.
+- The read of `fred-performance-reviewer` that section 12 expected for the
+  client is covered by a test, not by a run of the skill, which reviews the
+  runtime: every read starts before any is awaited, one per distinct prompt.
+
 ## Risks / Trade-offs
 
 - [Offsets are only right if the stored text is the sent text] → it is today

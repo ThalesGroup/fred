@@ -178,7 +178,7 @@ A prompt command typed in full without picking a row SHALL be recognised and res
 
 #### Scenario: Team catalog still loading
 
-- **GIVEN** a message with a picked team prompt and a typed `/tone` known only in the personal space, while the team catalog has not answered
+- **GIVEN** a message with a picked personal prompt and a typed `/tone` known only in the personal space, while the team catalog has not answered
 - **WHEN** the user submits
 - **THEN** nothing is sent and the error says that `/tone` could not be read and to try again
 

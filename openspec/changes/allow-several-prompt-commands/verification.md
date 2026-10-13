@@ -2,7 +2,7 @@
 
 Run on 2026-10-13, branch `feat/composer-command-menu-sections`, with each
 project's own `.venv` and no `make` target. The frontend behaviour (groups 4 to
-6) is not built yet: nothing sends the list.
+6) was built afterwards; its evidence is in the second part of this file.
 
 ### Python
 
@@ -119,12 +119,140 @@ To review when the frontend part is built (not in this diff): the send then
 waits for one prompt read per distinct prompt, up to 16, which must run in
 parallel and not one after the other.
 
-### Not verified
+### Not verified (contract part)
 
 - No end-to-end run against the local services: no turn was sent with a
-  `prompts` list, since no client builds one yet.
+  `prompts` list (still true after the frontend part, see below).
 - The behaviour of a pod on an older fred-sdk is read from the models' extra
   policy and from the unknown-key test, not exercised against an old build.
 - The tests and quality checks of the other projects that depend on fred-core
   and fred-sdk (control-plane, knowledge-flow, fred-agents, capabilities) were
   not run; the change is additive and none of them reads the descriptor.
+
+## Frontend part (groups 4 to 6, tasks 7.1, 7.2, 7.4)
+
+Run on 2026-10-13, same branch, from `apps/frontend` with Node from fnm on the
+`PATH`, no `make` target.
+
+| Check | Result |
+| --- | --- |
+| `npx --no-install tsc --noEmit -p .` | exit 0 |
+| `npx --no-install eslint` on the 19 touched `.ts`/`.tsx` files | exit 0, no warning |
+| `npx --no-install prettier --check` on the touched `.ts`, `.tsx`, `.json` files and the two Help Center pages | all formatted |
+| `npx --no-install vitest run` on the 9 touched test files and the 2 Help Center test files | 11 files, 412 tests passed |
+| `npx --no-install vitest run` (full suite) | 330 files passed, 1 skipped; 4051 tests passed, 7 skipped (3985 before this part) |
+| `openspec validate allow-several-prompt-commands --strict` | valid |
+| `openspec validate section-composer-command-menu --strict` | valid |
+| `apps/control-plane-backend/.venv/bin/python scripts/migration_guides.py check-pr --base origin/swift --worktree` | valid, 1 new declaration |
+
+Tests added: 23 in the new `utils/skillInvocation.test.ts`; 19 in
+`useComposerCommands.test.tsx`; 8 in `ManagedChatPage.test.tsx`; 6 in
+`UserTurn.test.tsx`; 2 in `CommandTurn.test.tsx`; 3 in
+`useComposerRecall.test.tsx`; 2 in `toThreadMessages.test.ts`; 2 in
+`useManagedChat.test.tsx`; 1 in `InlineSkillInput.test.tsx`.
+
+Proven by tests, by requirement of the delta spec:
+
+- **Several prompt commands in the composer.** After a first prompt token the
+  menu lists the team's and the personal prompts and the skills; two tokens
+  picked from two libraries keep their own library, and one Backspace on the
+  first leaves the second with its library; two tokens in the editor are each
+  one block with their own hint and label, each opens its own preview, and
+  typing after or between them rebuilds neither; the page previews the
+  activated token and closes on a second click; 17 prompt commands send
+  nothing and report the limit, 16 are sent.
+- **Expansion on send.** Two prompts expand in the order of the line with the
+  user's text on its side of each; the reads start together and answers
+  arriving out of order do not change the text; prompts and a skill travel in
+  one turn; a 404 on one prompt, a 500 on one prompt and an empty prompt each
+  hold the whole message back, with no command turn, no skills-only turn and
+  no ordinary send, the draft unchanged, and the error naming that command;
+  with two failures the first command of the line is reported, not the first
+  failure in time; the page's toast carries the command name, and the limit
+  for the cap; the length limit is measured on the assembled text.
+- **Descriptor.** One prompt gives byte for byte the text and the single
+  fields sent before (four line shapes compared with the former formula); two
+  prompts and a repeated one give the expected text, offsets and
+  `appended_text`; offsets are string indices with an emoji in the line and in
+  the prompts; the list reaches the thread message from history and from the
+  optimistic row.
+- **Sent message and panel.** Two badges at their positions with a skill
+  badge and no prompt text; each badge opens with its own index; copy, edit
+  and selection give the typed line; the same command twice shows two badges;
+  the panel of the second badge shows its name, command and text only, and
+  the library is not read; a single listed prompt no longer shows the user's
+  words; a turn with the single fields only, and a turn whose list does not
+  fit its text, render one badge and open the whole text. The reader refuses
+  a list that is empty, not a list, unsorted, overlapping, at the same
+  position twice, outside the text, with an empty slice, a negative or
+  non-integer position, a command not at its position or not the one typed
+  there, an empty command, more than 16 entries, or no stored typed line.
+- **Recall.** Both prompts restored as choices with their ids and libraries,
+  and read from their own libraries on an unchanged submit; a prompt whose id
+  is gone holds the message back and is named, with no fallback to a prompt of
+  the same command; the same line with different prompts stays recallable
+  twice and a true repetition collapses; a turn without the list restores its
+  single prompt.
+- **Hand-typed names.** Three typed occurrences resolve one by one, the team
+  first, the personal one when the team has none, one read per distinct
+  prompt; a picked personal homonym and the same name typed run two different
+  prompts; the pending-team-catalog guard holds back a typed personal-only
+  name next to a picked personal prompt and lets it run once the team has
+  answered; a typed name that is also a skill stays a skill next to a prompt,
+  and becomes a prompt, and no longer a skill, when its prompt row is picked;
+  hand-typed tokens survive deleting the text after them and an edit before
+  them.
+- **Same command twice.** Two tokens, two expansions, two entries, one read.
+- **Title.** A first message `/summary /tone the Q3 report` names the
+  conversation `Weekly review — the Q3 report`.
+- **Older turns.** The existing single-prompt cases of `UserTurn.test.tsx`,
+  `CommandTurn.test.tsx`, `useComposerRecall.test.tsx` and
+  `ManagedChatPage.test.tsx` pass unchanged, apart from the page test's
+  composer mock (token list) and the seven error assertions of the hook file
+  that now also expect the command name.
+
+Client performance point left open by the contract part: confirmed by the test
+"starts every read before waiting for any of them" (both reads are issued
+before the first answer) and by "expands the same command at each occurrence
+and reads its prompt once". `fetchPrompt` is called with `preferCacheValue`,
+so a prompt prefetched when its row was focused costs no request on send.
+
+### Not verified
+
+- Nothing was looked at in a browser: no rendering, no real keyboard, no
+  Firefox or Chrome check, no fr or en reading of the toasts in place. Task
+  7.5 is the owner's.
+- No turn was sent to a running runtime: the 422 for a malformed list, the
+  stored row and the reload are covered on the Python side and by client
+  tests on hand-built descriptors, not end to end.
+- "Running prompt commands leaves prompt use counters unchanged" is true by
+  construction (the send path calls no `/use` mutation, as before) and has no
+  test of its own.
+- "A reader that ignores the list" and "a runtime that does not know the
+  list" are covered through the same fallback (a descriptor with the single
+  fields only renders one badge), not against an older bundle or pod.
+
+### Questions for the reviewer
+
+No pull request is open yet; these go in its description when it is.
+
+- Is 16 the right cap on prompt commands per message?
+- Migration impact: `minor` (a recommended deployment order exists) or `none`
+  with the same Limitations text?
+
+### Owner check (task 7.5)
+
+- [ ] Two and three prompts picked from both sections
+- [ ] The same prompt twice
+- [ ] Prompts mixed with skills
+- [ ] Typed names
+- [ ] Each composer preview
+- [ ] Send, badges, each panel
+- [ ] Reload
+- [ ] Recall
+- [ ] Copy
+- [ ] A deleted prompt among several
+- [ ] The limit
+- [ ] An old conversation
+- [ ] A new conversation's title
+- [ ] Firefox and Chrome, fr and en
