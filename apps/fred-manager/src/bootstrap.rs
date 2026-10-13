@@ -16,13 +16,13 @@
 //! Two independent proofs (a verified bearer and the deploy-time secret), self-promotion
 //! only, and a durable marker so removing every admin later never reopens it.
 
-use sqlx::PgPool;
+use sqlx::{PgPool, Postgres, Transaction};
 
 use crate::{error::AppError, fga::Fga};
 
 pub const MIN_TOKEN_LENGTH: usize = 16;
 /// `advisory_lock_key("fred-manager.platform_bootstrap")`, as fred-core derives it.
-const LOCK_KEY: i64 = -1609067376650834247;
+pub const LOCK_KEY: i64 = -1609067376650834247;
 
 pub const INVALID: &str = "Invalid or disabled bootstrap secret.";
 pub const COMPLETED: &str = "Root bootstrap already completed — this endpoint is permanently \
@@ -49,21 +49,14 @@ pub fn same_secret(a: &str, b: &str) -> bool {
     a.len() == b.len() && a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
 }
 
-/// Grants platform admin to `uid`, the caller's own subject. Unlike the control-plane,
-/// the marker naming the caller commits before the OpenFGA write, and the bootstrap only
-/// finishes once that write is recorded: an interrupted grant can be finished by its
-/// claimant only, and a finished bootstrap never reopens, even if that admin is removed.
+/// Grants platform admin to `uid`, the caller's own subject, in two steps under the same
+/// lock. Unlike the control-plane, the reservation naming the caller commits first, so an
+/// interrupted grant can only be finished by its claimant; the grant then re-reads the
+/// marker and records its completion under the lock, so a finished bootstrap never
+/// reopens, even for a concurrent retry or for its own admin after removal.
 pub async fn grant_root(pool: &PgPool, fga: &Fga, uid: &str) -> Result<(), AppError> {
-    let mut tx = pool.begin().await?;
-    sqlx::query("select pg_advisory_xact_lock($1)")
-        .bind(LOCK_KEY)
-        .execute(&mut *tx)
-        .await?;
-    let marker: Option<(String, bool)> =
-        sqlx::query_as("select completed_by, granted_at is not null from platform_bootstrap")
-            .fetch_optional(&mut *tx)
-            .await?;
-    match marker {
+    let mut tx = locked(pool).await?;
+    match marker(&mut tx).await? {
         None => {
             sqlx::query("insert into platform_bootstrap (completed_by) values ($1)")
                 .bind(uid)
@@ -74,11 +67,36 @@ pub async fn grant_root(pool: &PgPool, fga: &Fga, uid: &str) -> Result<(), AppEr
         Some(_) => return Err(AppError::Conflict(COMPLETED.into())),
     }
     tx.commit().await?;
+
+    let mut tx = locked(pool).await?;
+    match marker(&mut tx).await? {
+        Some((claimant, false)) if claimant == uid => {}
+        _ => return Err(AppError::Conflict(COMPLETED.into())),
+    }
     fga.grant_platform_admin(uid).await?;
-    sqlx::query("update platform_bootstrap set granted_at = now() where granted_at is null")
-        .execute(pool)
+    sqlx::query("update platform_bootstrap set granted_at = now()")
+        .execute(&mut *tx)
         .await?;
+    tx.commit().await?;
     Ok(())
+}
+
+async fn locked(pool: &PgPool) -> Result<Transaction<'static, Postgres>, AppError> {
+    let mut tx = pool.begin().await?;
+    sqlx::query("select pg_advisory_xact_lock($1)")
+        .bind(LOCK_KEY)
+        .execute(&mut *tx)
+        .await?;
+    Ok(tx)
+}
+
+/// The claimant, and whether their grant is recorded.
+async fn marker(tx: &mut Transaction<'_, Postgres>) -> Result<Option<(String, bool)>, AppError> {
+    Ok(
+        sqlx::query_as("select completed_by, granted_at is not null from platform_bootstrap")
+            .fetch_optional(&mut **tx)
+            .await?,
+    )
 }
 
 #[cfg(test)]

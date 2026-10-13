@@ -299,6 +299,38 @@ async fn a_finished_bootstrap_stays_closed_after_its_admin_is_removed() {
 
 #[tokio::test]
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn concurrent_retries_finish_a_bootstrap_once() {
+    let e = env().await;
+    // Both calls wait on the bootstrap lock, so both pass the reservation step.
+    let mut held = e.pool.begin().await.unwrap();
+    sqlx::query("select pg_advisory_xact_lock($1)")
+        .bind(bootstrap::LOCK_KEY)
+        .execute(&mut *held)
+        .await
+        .unwrap();
+    let call = || {
+        let (pool, fga) = (e.pool.clone(), e.fga.clone());
+        tokio::spawn(async move { bootstrap::grant_root(&pool, &fga, "alice").await })
+    };
+    let (first, second) = (call(), call());
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    held.commit().await.unwrap();
+
+    let results = [first.await.unwrap(), second.await.unwrap()];
+    assert_eq!(
+        results.iter().filter(|r| r.is_ok()).count(),
+        1,
+        "{results:?}"
+    );
+    assert!(
+        results
+            .iter()
+            .any(|r| matches!(r, Err(AppError::Conflict(_))))
+    );
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
 async fn an_interrupted_bootstrap_is_finished_by_its_caller_only() {
     let e = env().await;
     // The marker committed, then the OpenFGA write never happened.

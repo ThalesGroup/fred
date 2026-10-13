@@ -122,7 +122,8 @@ when authentication is disabled. Unlike the control-plane, the marker naming the
 `platform_bootstrap` commits before the OpenFGA write, and the bootstrap is finished once
 `granted_at` records that write: if it fails, only the same caller can finish by
 retrying, so a second secret holder is never promoted, and a finished bootstrap never
-reopens, even for its own admin after removal. The secret is a
+reopens, even for a concurrent retry or for its own admin after removal: the grant
+re-reads the marker and records its completion under the bootstrap lock. The secret is a
 secret like the others, read from the variable `app.bootstrap_token_env_var` names
 (`FRED_BOOTSTRAP_TOKEN`): `config/.env` locally, and on k3d the control-plane's
 `CONTROL_PLANE_BOOTSTRAP_TOKEN` from `fred-secrets`. Each service keeps its own marker,
