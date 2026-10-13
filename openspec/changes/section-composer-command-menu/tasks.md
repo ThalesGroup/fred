@@ -36,6 +36,8 @@
 - [x] 7.5 In `InlineSkillInput.module.css`, paint the placeholder and the argument hint one layer below the editor content; verify in a rendered sample that the caret is in front and nothing moves
 - [x] 7.7 Replace CodeMirror's `placeholder()` by an element outside the editable line (same grid cell, `aria-hidden`, `aria-placeholder` on the content) and remove the paint-order rule of 7.5; verify with `InlineSkillInput.test.tsx` and a rendered sample (empty line holds only its line break, placeholder at the same position, 24px field)
 - [x] 7.8 Declare the token ranges as atomic and bind Backspace/Delete to whole-token removal with space clean-up; verify with `InlineSkillInput.test.tsx` (arrows, selection, Backspace, Delete, undo) and `useComposerCommands.test.tsx` (two tokens, menu stays closed, undo/redo of a prompt)
+- [x] 7.9 Keep a hand-typed prompt token rendered once shown and keep the command menu closed on any rendered token; verify with `useComposerCommands.test.tsx` and `useComposerRecall.test.tsx`
+- [x] 7.10 Show the leading slash on every command name (menu rows, composer tokens, sent skill badge) without changing stored text, labels or copy; verify with `useComposerCommands.test.tsx`, `InlineSkillInput.test.tsx` and `UserTurn.test.tsx`
 - [x] 7.6 Update `COMPONENT-UX.md` (composer token, sent badges, caret) and this change's artifacts; verify `openspec validate section-composer-command-menu --strict`
 
 ## 6. Verification

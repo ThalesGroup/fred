@@ -144,6 +144,19 @@ change.
 Alternative: a different fill inside the bubble. Rejected: it would break
 "same colours in the composer and in the message".
 
+### Slash on every name
+
+Skills used to show a bare name where prompts showed `/name`. The slash is now
+part of the displayed text in the three renderers (menu row, composer widgets,
+`SkillBadge`); nothing else changes: the document still holds `/name`,
+`data-skill-name` and the accessible labels keep the bare name, and offsets and
+atomic ranges are untouched. `selectedSkillText` no longer re-inserts a slash
+in a copied selection, since the badge's own text has it; it still serialises
+any selection touching a badge, to drop icon glyphs and avoid line breaks
+around the badge's flex box. Kept bare on purpose: the skill panel title
+(`Skill: name`), the "Skill loaded" trace row and the skill usage table, which
+name a skill in prose or as data rather than as something to type.
+
 ### Caret in the empty composer
 
 In an empty document CodeMirror's `placeholder()` renders

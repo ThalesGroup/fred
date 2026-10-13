@@ -96,6 +96,16 @@ Not proven: clicking on either side of a token and mouse selection (no layout
 in the test environment), and the caret sitting between a token and the
 argument hint when the draft is exactly `/name`.
 
+Slash on every name, proven by tests: menu labels read `/search`, `/summary`,
+`/meeting-minutes`, `/review` (20 label expectations updated in
+`useComposerCommands.test.tsx`); composer tokens read `/summary` and
+`/meeting-minutes` over an unchanged document; sent messages read
+`Before /meeting-minutes after`; a selection-copy of a skill badge, of its
+name alone and of the whole message gives one slash; legacy `/skill name`
+turns still display as `/name` (existing `UserTurn.test.tsx` cases). The full
+suite count is unchanged at 3968: expectations were updated, none removed
+except one partial-name selection assertion that no longer has a meaning.
+
 ## Divergence from the plan
 
 - The spec delta uses REMOVED plus ADDED instead of RENAMED plus MODIFIED, to

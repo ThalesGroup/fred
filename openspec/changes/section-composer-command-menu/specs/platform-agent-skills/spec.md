@@ -103,13 +103,13 @@ The slash menu SHALL group its entries in up to three sections, always in this o
 
 ### Requirement: Invoked prompts and skills are shown as small containers
 
-A completed prompt command or platform skill SHALL be shown as a small filled container holding its icon and name, in the composer and in sent or reopened user messages. Every container SHALL use the same colour pair, the secondary container one, for a platform skill and for a prompt whether it comes from the team or from the personal space, so that a prompt and a skill differ by their icon only; icon and name SHALL take the container's content colour. The container SHALL have a small corner radius and light horizontal padding and SHALL NOT change the height of the line it sits on. In the user's sent message, whose bubble has the same colour as the container, the container SHALL carry a thin outline that keeps it distinguishable without changing its size. Clickable containers SHALL keep their hover and keyboard-focus indication.
+A completed prompt command or platform skill SHALL be shown as a small filled container holding its icon and its name, in the composer and in sent or reopened user messages. A command name SHALL always be displayed with its leading `/`, for prompts and platform skills alike, in the command menu rows, in composer tokens and in sent-message badges; the slash SHALL NOT be doubled, and the legacy `/skill <name>` form SHALL be displayed as `/<name>`. Displaying the slash SHALL NOT change the stored text, what is copied, or how a command is recognised. Every container SHALL use the same colour pair, the secondary container one, for a platform skill and for a prompt whether it comes from the team or from the personal space, so that a prompt and a skill differ by their icon only; icon and name SHALL take the container's content colour. The container SHALL have a small corner radius and light horizontal padding and SHALL NOT change the height of the line it sits on. In the user's sent message, whose bubble has the same colour as the container, the container SHALL carry a thin outline that keeps it distinguishable without changing its size. Clickable containers SHALL keep their hover and keyboard-focus indication.
 
 #### Scenario: Tokens in the composer
 
 - **GIVEN** a draft holding a completed prompt command and a completed platform skill among ordinary text
 - **WHEN** the composer shows the draft
-- **THEN** the prompt and the skill each appear in a container of the same colour, with their own icon and their name
+- **THEN** the prompt and the skill each appear in a container of the same colour, with their own icon and their name preceded by `/`
 - **AND** the line is exactly as tall as a line of plain text
 
 #### Scenario: Badges in a sent message
@@ -118,6 +118,13 @@ A completed prompt command or platform skill SHALL be shown as a small filled co
 - **WHEN** the conversation shows the message
 - **THEN** both appear as containers with the same colours as in the composer
 - **AND** each container is visibly outlined against the message bubble, whose height per line is unchanged
+
+#### Scenario: Every command name shows its slash
+
+- **GIVEN** a prompt command `summary` and a platform skill `review`
+- **WHEN** they are listed in the command menu, completed in the composer and shown in a sent message
+- **THEN** they read `/summary` and `/review` in all three places
+- **AND** copying a sent message that invoked the skill gives `/review` once, not `//review`
 
 #### Scenario: Team and personal prompts look the same
 
@@ -256,7 +263,7 @@ Managed web chat SHALL accept `/<name> [request]` at the invocation position and
 #### Scenario: Skill badge in the composer and user message
 
 - **WHEN** a user completes a known `/<name>` selection or types a whitespace-delimited known name
-- **THEN** the composer shows an icon/name token inline with the editable request, as a small filled container with the complete name visible and no separate row or removal button, allowing submission without extra text
+- **THEN** the composer shows an icon/name token inline with the editable request, as a small filled container with the complete name visible after its leading slash and no separate row or removal button, allowing submission without extra text
 - **AND** the token is edited as one block: it cannot be entered with the keyboard, and removing it removes the whole invocation while preserving surrounding text; deleting surrounding request text does not remove the skill
 - **AND** persisted name-only selection metadata lets the sent user bubble display the same skill badge alongside its request, including after reopening history without the current catalog
 - **AND** Deep selection metadata preserves the badge/preview without a preload event, instruction injection or load count; native agent-origin reads do not select ordinary user mentions
