@@ -3868,7 +3868,22 @@
       "grantedSelected_one": "Individual access granted to the selected user.",
       "grantedSelected_other": "Individual access granted to the {{count}} selected users.",
       "grantedUser": "Individual access granted to {{user}}.",
-      "revokedUser": "Individual access removed from {{user}}."
+      "revokedUser": "Individual access removed from {{user}}.",
+      "addDialog": {
+        "title": "Add users",
+        "subtitle": "People added here get individual access: they can use the platform whatever the rule says.",
+        "searchPlaceholder": "Enter a username, a name or an email",
+        "pendingListHeader": "Users to add to the whitelist",
+        "pendingListEmpty": "No user selected yet",
+        "removeAria": "Remove {{name}} from the selection",
+        "confirm": "Add",
+        "searching": "Searching...",
+        "noMatch": "No user matches this search.",
+        "searchFailed": "The search could not be completed. Try again.",
+        "alreadyGranted": "Already has individual access",
+        "more_one": "{{count}} more result. Refine the search to see it.",
+        "more_other": "{{count}} more results. Refine the search to see them."
+      }
     }
   },
   "runtime": {

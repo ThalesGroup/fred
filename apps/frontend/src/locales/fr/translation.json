@@ -3868,7 +3868,22 @@
       "grantedSelected_one": "Accès individuel accordé à l'utilisateur sélectionné.",
       "grantedSelected_other": "Accès individuel accordé aux {{count}} utilisateurs sélectionnés.",
       "grantedUser": "Accès individuel accordé à {{user}}.",
-      "revokedUser": "Accès individuel retiré à {{user}}."
+      "revokedUser": "Accès individuel retiré à {{user}}.",
+      "addDialog": {
+        "title": "Ajouter des utilisateurs",
+        "subtitle": "Les personnes ajoutées reçoivent un accès individuel : elles ont accès à la plateforme, quelle que soit la règle.",
+        "searchPlaceholder": "Entrer un identifiant, un nom ou un e-mail",
+        "pendingListHeader": "Utilisateurs à ajouter à la liste blanche",
+        "pendingListEmpty": "Aucun utilisateur sélectionné pour l'instant",
+        "removeAria": "Retirer {{name}} de la sélection",
+        "confirm": "Ajouter",
+        "searching": "Recherche en cours...",
+        "noMatch": "Aucun utilisateur ne correspond à cette recherche.",
+        "searchFailed": "La recherche n'a pas abouti. Réessayez.",
+        "alreadyGranted": "A déjà un accès individuel",
+        "more_one": "{{count}} autre résultat. Précisez la recherche pour l'afficher.",
+        "more_other": "{{count}} autres résultats. Précisez la recherche pour les afficher."
+      }
     }
   },
   "runtime": {
