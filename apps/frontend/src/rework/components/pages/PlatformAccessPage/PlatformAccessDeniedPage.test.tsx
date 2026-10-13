@@ -8,6 +8,7 @@ const state = vi.hoisted(() => ({
   fullName: "Camille Durand" as string | null,
   email: "camille.durand@example.org" as string | null,
   support: "https://support.example.org",
+  basename: "/" as string,
   logout: vi.fn(),
 }));
 vi.mock("react-i18next", () => ({
@@ -18,6 +19,7 @@ vi.mock("react-i18next", () => ({
 vi.mock("../../../../hooks/useFrontendProperties", () => ({
   useFrontendProperties: () => ({ contactSupportLink: state.support, siteDisplayName: "Acme Assistant" }),
 }));
+vi.mock("../../../../common/config", () => ({ getConfig: () => ({ frontend_basename: state.basename }) }));
 vi.mock("../../../../security/KeycloakService", () => ({
   KeyCloakService: {
     GetUserGivenName: () => state.givenName,
@@ -36,6 +38,7 @@ beforeEach(() => {
     fullName: "Camille Durand",
     email: "camille.durand@example.org",
     support: "https://support.example.org",
+    basename: "/",
   });
   vi.clearAllMocks();
   vi.stubGlobal("open", open);
@@ -108,6 +111,20 @@ it("opens the support link in a new tab, and offers sign-out and a re-check", ()
   expect(button("rework.platformAccess.denied.check")).toBeDefined();
   act(() => button("rework.platformAccess.signOut")!.click());
   expect(state.logout).toHaveBeenCalledTimes(1);
+});
+
+it("re-checks access by replacing the location with the platform root", () => {
+  const replace = vi.spyOn(window.location, "replace").mockImplementation(() => {});
+  render();
+  act(() => button("rework.platformAccess.denied.check")!.click());
+  expect(replace.mock.calls).toEqual([["/"]]);
+  // A deployment served under a base path goes back to that base.
+  state.basename = "/fred/";
+  render();
+  act(() => button("rework.platformAccess.denied.check")!.click());
+  expect(replace.mock.lastCall).toEqual(["/fred/"]);
+  expect(open).not.toHaveBeenCalled();
+  replace.mockRestore();
 });
 
 it("hides the request action when no support link is configured", () => {
