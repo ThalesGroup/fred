@@ -31,11 +31,11 @@
 
 ## 7. Grant date, origin and newest first
 
-- [ ] 7.1 Return each user with their exception row from the page query and order by grant date (newest first) under the filter; verify with fred-core tests (order with the filter, order unchanged without it, search with the filter, pagination stability, ties alphabetical).
-- [ ] 7.2 Use that row in the service projection instead of a per-row read; verify with control-plane tests that the individual source carries its grant date, that users without an exception carry none, and that no per-row exception read remains.
-- [ ] 7.3 Show "Added on", "Origin" and "Other access" in the whitelist table; verify with page tests for the date cell and origin of both origins, the filtered chips and the empty-cell marker.
-- [ ] 7.4 Add the French and English strings and delete the unused ones; verify key parity and that no deleted key is referenced.
-- [ ] 7.5 Update the contract entry, `COMPONENT-UX.md` and the migration note; record the evidence below and re-run `openspec validate whitelist-lists-individual-exceptions --strict`.
+- [x] 7.1 Return each user with their exception row from the page query and order by grant date (newest first) under the filter; verify with fred-core tests (order with the filter, order unchanged without it, search with the filter, pagination stability, ties alphabetical).
+- [x] 7.2 Use that row in the service projection instead of a per-row read; verify with control-plane tests that the individual source carries its grant date, that users without an exception carry none, and that no per-row exception read remains.
+- [x] 7.3 Show "Added on", "Origin" and "Other access" in the whitelist table; verify with page tests for the date cell and origin of both origins, the filtered chips and the empty-cell marker.
+- [x] 7.4 Add the French and English strings and delete the unused ones; verify key parity and that no deleted key is referenced.
+- [x] 7.5 Update the contract entry, `COMPONENT-UX.md` and the migration note; record the evidence below and re-run `openspec validate whitelist-lists-individual-exceptions --strict`.
 
 ## Verification evidence (2026-10-13)
 
@@ -72,3 +72,17 @@ Docs:
 - `openspec validate whitelist-lists-individual-exceptions --strict`: valid.
 
 Divergence from the proposal: none. The scenario "Return to an unsaved rule or selected users" keeps its name because a MODIFIED requirement cannot drop a scenario; its body now covers the user search.
+
+## Verification evidence for section 7 (2026-10-14)
+
+Nothing visual was checked, and the new order was not run against the live control-plane or PostgreSQL (the running service still serves the previous code until it is restarted).
+
+- `libs/fred-core`: `make test` 1248 passed, 1 skipped, 42 deselected; `ruff check`, `ruff check --select I`, `ruff format --check` pass; `basedpyright --baseline-file .baseline/basedpyright-baseline.json` 0 errors. `test_user_listing_filters_individual_exceptions_and_orders_each_mode` covers the order with the filter (newest first, a shared date alphabetical), the unchanged order without it, search with the filter, pages of 3 and of 1 reproducing the full order, and each user paired with their own exception row or none.
+- `apps/control-plane-backend`: `make test` 1788 passed, 9 skipped (PostgreSQL-backed), 11 deselected; same four lint and type checks clean. `test_users_listing_restricts_to_individual_exceptions_newest_first` covers the individual source carrying its grant date, no individual source for a user without an exception, identical sources with and without the filter, pagination, search with the filter, the HTTP route, and fails if the per-row exception read is called.
+- SQL statements issued by one page of n rows: before, 3 + 2n (settings, page, count, and per row one exception read and one eligible-teams read); after, 3 + n. For the default page of 20: 43, then 23. The two authorization checks per row are unchanged.
+- Generated contract: both regeneration commands were re-run; `controlPlaneOpenApi.ts` is unchanged, as the response shape did not change.
+- `apps/frontend`: `npx tsc --noEmit` exit 0; `npx eslint src/rework/components/pages/admin/PlatformAccessPage` exit 0; `npx prettier --config .prettierrc --check` on that folder and both `translation.json` passes; `npx vitest run`, one file at a time: `PlatformAccessPage.test.tsx` 33 passed (one added: column order, date cell and origin for a manual and an imported access, chips limited to the other sources, "-" when there is none), `PlatformAccessAddUsersDialog.test.tsx` 9 passed, `PlatformAccessRuleEditor.test.tsx` 34 passed, `PlatformAccessLinkManager.test.tsx` 27 passed (the last three unmodified).
+- `rework.platformAccess` exposes the same 221 keys in French and English; `sources`, `source.manual` and `source.t0` are removed and no longer referenced. The rule tester uses `rule.accessSource.*` and the activation dialog shows no source label, so neither is affected.
+- `openspec validate whitelist-lists-individual-exceptions --strict`: valid.
+
+Divergence from the request: no top-level grant-date field was added to the user, because the individual source of each row already carries `granted_at`; see design.md.
