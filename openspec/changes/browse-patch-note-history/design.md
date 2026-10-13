@@ -275,6 +275,21 @@ Closed by the owner; written into the specs and tasks.
 - New routes are listed in `docs/swift/platform/authz-endpoint-matrix.yaml`,
   which a backend test requires; the plan did not name that file.
 
+## Divergences Of The Rework
+
+- The history read is one table read, but `package` is a deferred column and
+  each package is fetched by its own route, so a history of 100 lines stays
+  small.
+- The history route keeps its path (`.../activation-history`); only its
+  response and operation name change (`list_exposure_history`).
+- The seen route's parameter is `{announcement_id}`.
+- A line records who started the exposure only; who ended it stays in the
+  audit records.
+- Banners enabled before the history existed have no line; disabling one ends
+  nothing and writes nothing.
+- Still open on the backend: a real `alembic upgrade head` on PostgreSQL (task
+  2.2); both migrations are exercised on SQLite only.
+
 ## Frontend Divergences
 
 Written before the rework to packages and exposures; the points about the
