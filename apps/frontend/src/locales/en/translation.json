@@ -3760,7 +3760,9 @@
         "cleanupConfirm": "Delete links",
         "cleanupHint": "Permanently delete {{count}} expired or revoked links for {{team}}, including their notes and access counts. Team members and usable links will be kept.",
         "deleted": "{{count}} obsolete links deleted.",
-        "loading": "Loading links..."
+        "loading": "Loading links...",
+        "noteColumn": "Note",
+        "expiryColumn": "Expiry"
       },
       "activation": {
         "emptyAllowed": "No users are allowed by this review.",

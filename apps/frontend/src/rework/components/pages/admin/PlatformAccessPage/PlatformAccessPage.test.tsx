@@ -471,6 +471,7 @@ it("requires configuration and confirmation across all tabs before activating", 
   expect(state.filter).not.toHaveBeenCalled();
   const dialog = document.querySelector('[role="dialog"]')!;
   expect(dialog.textContent).toContain("rework.platformAccess.activation.groups");
+  expect(dialog.querySelector(`.${styles.importWarning}`)?.getAttribute("role")).toBe("alert");
   expect(dialog.textContent).toContain("rework.platformAccess.activation.importWarning");
   act(() =>
     [...dialog.querySelectorAll("button")]
@@ -630,13 +631,16 @@ it("keeps unevaluable accounts outside the two main result lists", () => {
   expect(document.querySelector('[role="dialog"]')?.querySelectorAll('[role="tab"]')).toHaveLength(2);
   expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Known");
   expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("Uncertain");
-  const details = document.querySelector<HTMLDetailsElement>('[role="dialog"] details')!;
-  expect(details.open).toBe(false);
-  expect(details.querySelector("summary")?.textContent).toContain("rework.platformAccess.activation.unverified");
-  expect(details.textContent).toContain("Unverified");
-  const summary = details.querySelector("summary")!;
-  summary.focus();
-  act(() => summary.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })));
+  const dialog = document.querySelector('[role="dialog"]')!;
+  const disclosure = [...dialog.querySelectorAll<HTMLButtonElement>("button[aria-expanded]")].find((node) =>
+    node.textContent?.includes("rework.platformAccess.activation.unverified"),
+  )!;
+  expect(disclosure.getAttribute("aria-expanded")).toBe("false");
+  expect(dialog.textContent).not.toContain("Unverified");
+  act(() => disclosure.click());
+  expect(disclosure.getAttribute("aria-expanded")).toBe("true");
+  expect(dialog.textContent).toContain("Unverified");
+  expect(dialog.textContent).toContain("rework.platformAccess.activation.unknownHint");
   expect(state.filter).not.toHaveBeenCalled();
   expect(
     document.querySelector('[role="dialog"]')?.querySelectorAll('[role="tab"]')[1].getAttribute("aria-selected"),
@@ -653,7 +657,7 @@ it("starts with blocked users when present and omits unavailable verification wh
   const dialog = document.querySelector('[role="dialog"]')!;
   expect(dialog.textContent).toContain("Refused");
   expect(dialog.textContent).not.toContain("Admitted");
-  expect(dialog.querySelector("details")).toBeNull();
+  expect(dialog.textContent).not.toContain("rework.platformAccess.activation.unverified");
   expect(dialog.querySelectorAll('[role="tab"]')[0].getAttribute("aria-selected")).toBe("true");
   act(() => (dialog.querySelectorAll('[role="tab"]')[1] as HTMLButtonElement).click());
   expect(dialog.textContent).toContain("Admitted");

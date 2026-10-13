@@ -3760,7 +3760,9 @@
         "cleanupConfirm": "Supprimer les liens",
         "cleanupHint": "Supprimer définitivement {{count}} liens expirés ou révoqués pour {{team}}, ainsi que leurs notes et compteurs d'accès. Les membres et les liens utilisables seront conservés.",
         "deleted": "{{count}} liens obsolètes supprimés.",
-        "loading": "Chargement des liens..."
+        "loading": "Chargement des liens...",
+        "noteColumn": "Note",
+        "expiryColumn": "Expiration"
       },
       "activation": {
         "emptyAllowed": "Aucun utilisateur n'est autorisé par cette évaluation.",
