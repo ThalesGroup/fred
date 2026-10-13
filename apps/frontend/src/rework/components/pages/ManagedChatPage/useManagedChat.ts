@@ -1257,6 +1257,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
       setRagScope: guardChange(composer.setRagScope),
       setReasoning: guardChange(composer.setReasoning),
       setAskUser: guardChange(composer.setAskUser),
+      setChatProfileId: guardChange(composer.setChatProfileId),
     }),
     [
       guardChange,
@@ -1266,6 +1267,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
       composer.setRagScope,
       composer.setReasoning,
       composer.setAskUser,
+      composer.setChatProfileId,
     ],
   );
   const setComposerInput = useMemo(() => guardChange(setInput), [guardChange]);
@@ -1327,7 +1329,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     askUser: composer.askUser,
     setAskUser: guardedComposer.setAskUser,
     chatProfileId: composer.chatProfileId,
-    setChatProfileId: composer.setChatProfileId,
+    setChatProfileId: guardedComposer.setChatProfileId,
     contextPromptIds,
     setContextPrompts,
     threadMessages,

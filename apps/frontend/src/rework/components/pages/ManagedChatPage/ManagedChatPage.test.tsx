@@ -42,7 +42,11 @@ const bootstrap = vi.hoisted(() => ({ activeTeamId: "team-1" }));
 // The composer's recall handler, captured so a test can press an arrow on it.
 const composerKeys = vi.hoisted(() => ({ recall: undefined as undefined | ((event: unknown) => boolean) }));
 // The composer's model read: refetched when the window regains focus or a conversation opens.
-const modelRead = vi.hoisted(() => ({ refetch: vi.fn(), fulfilledTimeStamp: undefined as number | undefined }));
+const modelRead = vi.hoisted(() => ({
+  refetch: vi.fn(),
+  fulfilledTimeStamp: undefined as number | undefined,
+  options: undefined as { skip?: boolean } | undefined,
+}));
 
 vi.mock("react-router-dom", () => ({ useParams: () => ({ teamId: "team-1", agentInstanceId: "agent-1" }) }));
 // A fresh object per read, like a real selector over changing store state: the
@@ -119,12 +123,15 @@ vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   // #2387 — the composer's model label. Undefined here: this file covers the
   // chat-input policy wiring, and the label's own behaviour is covered in
   // ReasoningChip.test.tsx.
-  useEffectiveChatModelQuery: () => ({
-    data: undefined,
-    currentData: undefined,
-    fulfilledTimeStamp: modelRead.fulfilledTimeStamp,
-    refetch: modelRead.refetch,
-  }),
+  useEffectiveChatModelQuery: (_: unknown, options?: { skip?: boolean }) => {
+    modelRead.options = options;
+    return {
+      data: undefined,
+      currentData: undefined,
+      fulfilledTimeStamp: modelRead.fulfilledTimeStamp,
+      refetch: modelRead.refetch,
+    };
+  },
   useAddPromptFavoriteMutation: () => [vi.fn()],
   useRemovePromptFavoriteMutation: () => [vi.fn()],
 }));
@@ -1017,6 +1024,21 @@ describe("ManagedChatPage — the model list follows admin changes made elsewher
     });
 
     expect(modelRead.refetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops reading the model list once the conversation's agent is deleted", () => {
+    expect(modelRead.options?.skip).toBeFalsy();
+
+    chatValue = { ...chatValue, sessionId: "session-2", isReadOnly: true, executionDisabled: true };
+    act(() => {
+      root.render(<ManagedChatPage />);
+    });
+    act(() => {
+      window.dispatchEvent(new Event("focus"));
+    });
+
+    expect(modelRead.options?.skip).toBe(true);
+    expect(modelRead.refetch).not.toHaveBeenCalled();
   });
 });
 

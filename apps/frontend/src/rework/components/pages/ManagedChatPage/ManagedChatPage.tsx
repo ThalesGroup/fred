@@ -228,26 +228,31 @@ export default function ManagedChatPage() {
   // made in another browser lands on window focus (at most every 30 s: each read
   // also asks the pod for its catalog) or when a conversation opens.
   // `currentData`: another agent's model list must never judge this agent's choice.
+  // A deleted agent has no model to read: its conversation is read-only.
+  const [agentDeleted, setAgentDeleted] = useState(false);
   const {
     currentData: effectiveChatModel,
     fulfilledTimeStamp: modelReadAt,
     refetch: refetchEffectiveChatModel,
   } = useEffectiveChatModelQuery(
     { teamId, agentInstanceId },
-    { refetchOnMountOrArgChange: MODEL_READ_MIN_AGE_MS / 1000 },
+    { skip: agentDeleted, refetchOnMountOrArgChange: MODEL_READ_MIN_AGE_MS / 1000 },
   );
   const refetchStaleModelRead = useCallback(() => {
     if (modelReadAt !== undefined && Date.now() - modelReadAt < MODEL_READ_MIN_AGE_MS) return;
     void refetchEffectiveChatModel();
   }, [modelReadAt, refetchEffectiveChatModel]);
-  useRefetchOnWindowFocus(refetchStaleModelRead, false);
+  useRefetchOnWindowFocus(refetchStaleModelRead, agentDeleted);
   const chat = useManagedChat({ teamId, agentInstanceId, effectiveChatModel });
+  // The chat hook needs the model read, so its verdict comes back through state.
+  if (chat.isReadOnly !== agentDeleted) setAgentDeleted(chat.isReadOnly);
   const lastModelReadSessionId = useRef(chat.sessionId);
   useEffect(() => {
     if (lastModelReadSessionId.current === chat.sessionId) return;
     lastModelReadSessionId.current = chat.sessionId;
-    void refetchEffectiveChatModel();
-  }, [chat.sessionId, refetchEffectiveChatModel]);
+    // A skipped query cannot be refetched; it starts by itself once the agent is live.
+    if (!agentDeleted) void refetchEffectiveChatModel();
+  }, [chat.sessionId, agentDeleted, refetchEffectiveChatModel]);
   const { currentData: agentTemplates } = useGetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetQuery({
     teamId,
   });

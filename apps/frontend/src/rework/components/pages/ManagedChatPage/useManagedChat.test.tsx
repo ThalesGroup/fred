@@ -2616,9 +2616,11 @@ describe("useManagedChat — session write reliability", () => {
       retainedUpload([new File(["content"], "file.txt")], "picker");
       latest.setContextPrompts(["blocked"]);
       latest.setAskUser(false);
+      latest.setChatProfileId("chat.fast");
       latest.startNewConversation();
     });
     expect(sendMock).not.toHaveBeenCalled();
+    expect(composerValue.setChatProfileId).not.toHaveBeenCalled();
     expect(chatAttachmentsValue.addFiles).not.toHaveBeenCalled();
     expect(patchSessionCalls).toHaveLength(writes);
     expect(latest.sessionId).toBe("saved");
