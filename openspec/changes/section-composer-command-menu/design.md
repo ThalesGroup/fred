@@ -270,42 +270,42 @@ before the prompt catalogs are known to have answered.
 
 - [Searching inside names opens the menu on more text typed after a space and
   a slash, for example a path fragment that happens to sit inside a command
-  name; Enter would then insert that command instead of sending] → same risk
+  name; Enter would then insert that command instead of sending] -> same risk
   as before with names starting with the text, slightly wider; `Esc` closes
   the menu and nothing is ever sent by the menu any more.
-- [A user used to running a prompt with one Enter now needs two] → decided by
+- [A user used to running a prompt with one Enter now needs two] -> decided by
   the owner, and said in the Help Center.
 - [A catalog whose read failed for good shows "no command" or the rows of the
-  other catalogs, not an error] → unchanged; only an in-flight read shows the
+  other catalogs, not an error] -> unchanged; only an in-flight read shows the
   loading line.
 
 - [Removing the gate also removes the page's agent-templates request, whose
-  only reader was the gate] → one request less per chat page; nothing else in
+  only reader was the gate] -> one request less per chat page; nothing else in
   `ManagedChatPage.tsx` uses it.
 - [The caret could only be looked at in headless Chrome; Firefox does not
-  paint the caret in a headless capture] → the fix removes what the caret was
+  paint the caret in a headless capture] -> the fix removes what the caret was
   drawn against rather than tuning it; the owner check covers Firefox.
 - [With exactly `/name` and no trailing space, the caret still sits between the
-  token and the argument hint, next to CodeMirror's buffer image] → rare (the
+  token and the argument hint, next to CodeMirror's buffer image] -> rare (the
   completion adds a space); left for the owner check.
 - [Clicking next to a token and mouse selection were not exercised in a
-  browser] → they rely on CodeMirror's own handling of atomic ranges.
-- [A token keeps its full colours in a disabled composer] → unchanged from
+  browser] -> they rely on CodeMirror's own handling of atomic ranges.
+- [A token keeps its full colours in a disabled composer] -> unchanged from
   before (it kept `--primary`); left for the owner check.
 - [The inline prompt token's hover hint shows the source only when `source` is
-  set, which today means ReAct only] → with the gate gone it shows for every
+  set, which today means ReAct only] -> with the gate gone it shows for every
   agent kind. This follows from offering both libraries everywhere and is
   called out for the owner check.
 - [With non-ReAct agents a typed command the team does not hold now falls back
-  to the personal library] → intended consequence of the agreed scope; the
+  to the personal library] -> intended consequence of the agreed scope; the
   existing precedence and pending-catalog guard apply unchanged.
 - [Team prompts are tagged `team` until the bootstrap gives the personal team
-  id, so a personal chat could briefly show a team header] → the bootstrap is
+  id, so a personal chat could briefly show a team header] -> the bootstrap is
   loaded by the shell before the page; no extra guard is added.
-- [Homonym rows no longer differ by their own text] → the group label
+- [Homonym rows no longer differ by their own text] -> the group label
   (`aria-labelledby`) and the visible header tell them apart.
 - [`useComposerCommands.test.tsx` passes `includePersonalCommands` in about 25
-  places and has "category" variants built on it] → the test rework is larger
+  places and has "category" variants built on it] -> the test rework is larger
   than the code change; it is mechanical.
 
 ## Migration Plan

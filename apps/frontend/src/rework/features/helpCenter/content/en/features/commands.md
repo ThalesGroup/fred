@@ -16,7 +16,7 @@ framed search.
 
 ## Give a prompt a command
 
-On the **Prompts** page, any prompt can carry a command — one short word,
+On the **Prompts** page, any prompt can carry a command: one short word,
 lowercase, no accents and no spaces: `summary`, `review`, `internal-note`. The
 field sits just under the prompt's title.
 
@@ -76,8 +76,8 @@ each prompt's text takes the place of its own command and all the chosen
 skills are requested together. Each command has its own label, and you can use
 the same command more than once.
 
-For example, `First /summary then /tone please /verify-answer` sends “First”,
-the summary prompt, “then”, the tone prompt, and “please /verify-answer”, in
+For example, `First /summary then /tone please /verify-answer` sends "First",
+the summary prompt, "then", the tone prompt, and "please /verify-answer", in
 that order.
 
 A message can hold up to 16 prompt commands. If one of them can no longer be
@@ -92,7 +92,7 @@ the prompts' full text, so the conversation stays readable. Click a label to
 open the text that was actually sent for that command, if you want to check
 it. Copying the message gives the line you typed.
 
-To adapt a prompt before sending it, go through the library instead — see
+To adapt a prompt before sending it, go through the library instead: see
 [Prompts](/help/en/features/prompts) and
 [Conversations](/help/en/features/chat).
 

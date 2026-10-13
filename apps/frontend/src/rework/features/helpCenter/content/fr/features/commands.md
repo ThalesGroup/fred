@@ -16,7 +16,7 @@ résumé, une recherche cadrée.
 
 ## Donner une commande à un prompt
 
-Sur la page **Prompts**, chaque prompt peut porter une commande — un mot court,
+Sur la page **Prompts**, chaque prompt peut porter une commande : un mot court,
 en minuscules, sans accent ni espace : `resume`, `relecture`, `note-interne`.
 Le champ se trouve juste sous le titre du prompt.
 
@@ -84,8 +84,8 @@ ensemble. Chaque commande a sa propre étiquette, et vous pouvez utiliser la
 même commande plusieurs fois.
 
 Par exemple, `D'abord /resume puis /ton merci /verify-answer` envoie
-« D'abord », le prompt de résumé, « puis », le prompt de ton et
-« merci /verify-answer », dans cet ordre.
+"D'abord", le prompt de résumé, "puis", le prompt de ton et
+"merci /verify-answer", dans cet ordre.
 
 Un message peut contenir jusqu'à 16 commandes de prompt. Si l'une d'elles
 n'est plus utilisable, par exemple parce que son prompt a été supprimé, rien
@@ -100,7 +100,7 @@ reste lisible. Cliquez sur une étiquette pour ouvrir le texte réellement
 envoyé pour cette commande, si vous voulez le vérifier. Copier le message
 redonne la ligne que vous avez tapée.
 
-Pour adapter un prompt avant de l'envoyer, passez plutôt par la bibliothèque —
+Pour adapter un prompt avant de l'envoyer, passez plutôt par la bibliothèque :
 voir [Les prompts](/help/fr/features/prompts) et
 [Les conversations](/help/fr/features/chat).
 

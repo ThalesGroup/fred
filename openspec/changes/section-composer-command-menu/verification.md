@@ -66,7 +66,7 @@ shift-selection takes it whole; Backspace right after and Delete right before
 turn `Before /meeting-minutes after` into `Before after` with the caret where
 the token was, and undo restores text and token; Backspace elsewhere removes
 one character; of two adjacent tokens each is removed alone
-(`/review /meeting-minutes notes` → `/review notes` → `notes`) and the command
+(`/review /meeting-minutes notes` -> `/review notes` -> `notes`) and the command
 menu stays closed; a prompt token removed whole comes back through undo with
 its selection identity and redo removes it again.
 

@@ -5296,7 +5296,7 @@ The menu never sends. `Enter` on a row inserts the command like `Tab` and a
 click; a second `Enter`, with the menu closed, sends the message. Resolution
 happens on that ordinary submit only, so every way of picking a row reaches the
 same send, with the same pinned prompt and the same turn descriptor. A token no
-prompt holds is sent as typed — the user may genuinely have meant to write it.
+prompt holds is sent as typed: the user may genuinely have meant to write it.
 
 When a command cannot run, the toast names it (`/command`) and says which case
 it is. If its prompt was deleted or renamed, or the token was picked for

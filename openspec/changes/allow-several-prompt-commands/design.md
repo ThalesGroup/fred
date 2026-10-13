@@ -429,26 +429,26 @@ Divergences from the artifacts as first written:
 
 ## Risks / Trade-offs
 
-- [Offsets are only right if the stored text is the sent text] → it is today
+- [Offsets are only right if the stored text is the sent text] -> it is today
   (`request.message` is stored as is); a runtime test pins it, and the reader
   ignores a list that does not fit and falls back to the single fields.
-- [The hook is dense: about 680 lines and 90 tests built on one prompt] → the
+- [The hook is dense: about 680 lines and 90 tests built on one prompt] -> the
   assemble and read logic moves to two pure functions tested alone; the hook
   keeps the selection and menu state. Still the largest and riskiest part.
 - [The pull request grows from frontend only (53 files) to three Python
-  libraries and a frozen contract] → the contract lands as its own commits,
+  libraries and a frozen contract] -> the contract lands as its own commits,
   before any frontend change; CI then also runs quality, tests and OpenAPI
   drift for every module depending on fred-core and fred-sdk.
-- [Rows written through an older pod keep the degraded rendering for good] →
+- [Rows written through an older pod keep the degraded rendering for good] ->
   stated in the migration note; avoided by the order.
-- [A user can no longer see their own words in the panel] → intended; they
+- [A user can no longer see their own words in the panel] -> intended; they
   are in the bubble.
-- [Each distinct prompt is one more read on send] → reads run in parallel and
+- [Each distinct prompt is one more read on send] -> reads run in parallel and
   the focused menu row is already prefetched; capped at 16.
-- [The two constants (fred-sdk, fred-core) and the client one can drift] → a
+- [The two constants (fred-sdk, fred-core) and the client one can drift] -> a
   fred-runtime test builds a 16-entry and a 17-entry descriptor through both
   models; the client constant names its source in a comment.
-- [A hand-typed name that is also a skill still becomes a skill] → unchanged
+- [A hand-typed name that is also a skill still becomes a skill] -> unchanged
   rule, restated in the delta; the menu is the way to choose the prompt.
 
 ## Migration Plan
