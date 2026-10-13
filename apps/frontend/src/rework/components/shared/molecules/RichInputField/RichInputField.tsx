@@ -71,8 +71,9 @@ export function commandQueryOf(
   const match =
     /^\/(skill [a-z0-9-]*|\S*)$/.exec(value) ?? /(?:^|\s)\/(skill(?: [a-z0-9-]*)?|skil|ski|sk|s|)$/.exec(beforeCaret);
   if (match) return match[1];
-  const named = /(?:^|\s)\/([a-z0-9_-]+)$/.exec(beforeCaret);
-  return named && inlineCommandNames.some((name) => name.startsWith(named[1])) ? named[1] : null;
+  // Same match as the menu's filter: anywhere inside a name, whatever the case.
+  const named = /(?:^|\s)\/([a-z0-9_-]+)$/i.exec(beforeCaret)?.[1];
+  return named !== undefined && inlineCommandNames.some((name) => name.includes(named.toLowerCase())) ? named : null;
 }
 
 interface RichInputFieldProps {

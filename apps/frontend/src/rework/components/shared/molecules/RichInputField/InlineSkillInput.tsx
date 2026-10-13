@@ -17,6 +17,10 @@ export interface InlinePromptToken {
   name: string;
   description?: string | null;
   source?: "personal" | "team";
+  /** Name of the conversation's team, for the hover hint of a team prompt. */
+  teamName?: string;
+  /** Opens the prompt's preview; without it the token is not clickable. */
+  onOpen?: () => void;
 }
 
 export interface InlineSkillToken {
@@ -71,19 +75,34 @@ class PromptWidget extends WidgetType {
   constructor(
     readonly command: string,
     readonly hint: string,
+    readonly label: string,
+    readonly onOpen?: () => void,
   ) {
     super();
   }
   eq(other: PromptWidget) {
-    return this.command === other.command && this.hint === other.hint;
+    return (
+      this.command === other.command &&
+      this.hint === other.hint &&
+      this.label === other.label &&
+      this.onOpen === other.onOpen
+    );
   }
   toDOM() {
-    const token = document.createElement("span");
+    // A button when it can open its preview, like the skill token.
+    const token = document.createElement(this.onOpen ? "button" : "span");
     token.className = badgeStyles.badge;
     token.dataset.kind = "prompt";
     token.title = this.hint;
-    token.setAttribute("role", "group");
-    token.setAttribute("aria-label", this.hint);
+    if (token instanceof HTMLButtonElement) {
+      token.type = "button";
+      token.classList.add(badgeStyles.action);
+      token.setAttribute("aria-label", this.label);
+      token.onclick = () => this.onOpen?.();
+    } else {
+      token.setAttribute("role", "group");
+      token.setAttribute("aria-label", this.hint);
+    }
     const icon = document.createElement("span");
     icon.className = `material-symbols-outlined ${iconStyles.icon}`;
     icon.textContent = "edit_note";
@@ -95,7 +114,7 @@ class PromptWidget extends WidgetType {
     return token;
   }
   ignoreEvent() {
-    return false;
+    return Boolean(this.onOpen);
   }
 }
 
@@ -247,6 +266,8 @@ export function InlineSkillInput(props: Props) {
   const promptName = props.promptToken?.name;
   const promptDescription = props.promptToken?.description;
   const promptSource = props.promptToken?.source;
+  const promptTeamName = props.promptToken?.teamName;
+  const promptOnOpen = props.promptToken?.onOpen;
   const hasTrigger = Boolean(props.commandTrigger);
   const triggerOpen = props.commandTrigger?.open;
   const triggerListboxId = props.commandTrigger?.listboxId;
@@ -283,13 +304,22 @@ export function InlineSkillInput(props: Props) {
               Decoration.replace({
                 widget: new PromptWidget(
                   props.value.slice(promptFrom, promptTo),
+                  // The source reads like the heading of its section in the menu.
                   [
                     promptName,
-                    promptSource ? t(`chatbot.commandMenu.sources.${promptSource}`) : "",
+                    promptSource === "personal"
+                      ? t("chatbot.commandMenu.sections.personal")
+                      : promptSource === "team"
+                        ? promptTeamName
+                          ? t("chatbot.commandMenu.sections.team", { name: promptTeamName })
+                          : t("chatbot.commandMenu.sections.teamFallback")
+                        : "",
                     promptDescription?.trim(),
                   ]
                     .filter(Boolean)
                     .join("\n"),
+                  t("chatbot.commandTurn.open", { command: props.value.slice(promptFrom + 1, promptTo) }),
+                  promptOnOpen,
                 ),
               }).range(promptFrom, promptTo),
             ]
@@ -347,6 +377,8 @@ export function InlineSkillInput(props: Props) {
     promptName,
     promptDescription,
     promptSource,
+    promptTeamName,
+    promptOnOpen,
     props.placeholder,
     props.disabled,
     props.invalid,

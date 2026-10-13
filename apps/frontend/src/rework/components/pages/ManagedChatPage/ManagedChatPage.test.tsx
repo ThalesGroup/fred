@@ -63,7 +63,10 @@ vi.mock("@shared/molecules/RichInputField/RichInputField", async (importOriginal
     characterCount?: number;
     characterLimit?: number;
     focusEndRequestId?: number;
-    inlineSkills?: { tokens: { name: string; description?: string; onOpen: (name: string) => void }[] };
+    inlineSkills?: {
+      tokens: { name: string; description?: string; onOpen: (name: string) => void }[];
+      promptToken?: { name: string; teamName?: string; onOpen?: () => void } | null;
+    };
     onRecallKeyDown?: (event: unknown) => boolean;
   }) => {
     composerKeys.recall = props.onRecallKeyDown;
@@ -79,6 +82,16 @@ vi.mock("@shared/molecules/RichInputField/RichInputField", async (importOriginal
         data-focus-request={props.focusEndRequestId}
       >
         {props.inlineSkills?.tokens.map((token) => <SkillBadge key={token.name} {...token} />)}
+        {props.inlineSkills?.promptToken && (
+          <button
+            type="button"
+            data-testid="prompt-token"
+            data-team-name={props.inlineSkills.promptToken.teamName}
+            onClick={props.inlineSkills.promptToken.onOpen}
+          >
+            {props.inlineSkills.promptToken.name}
+          </button>
+        )}
       </div>
     );
   },
@@ -113,7 +126,7 @@ vi.mock("../../../../hooks/useFrontendBootstrap", () => ({
   useFrontendBootstrap: () => ({ activeTeam: { id: bootstrap.activeTeamId } }),
 }));
 vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
-  useGetTeamQuery: () => ({ data: undefined }),
+  useGetTeamQuery: () => ({ data: fetchedTeam.current }),
   // #2387 — the composer's model label. Undefined here: this file covers the
   // chat-input policy wiring, and the label's own behaviour is covered in
   // ReasoningChip.test.tsx.
@@ -122,6 +135,15 @@ vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useRemovePromptFavoriteMutation: () => [vi.fn()],
 }));
 const commandQueries = vi.hoisted(() => vi.fn());
+const fetchedTeam = vi.hoisted(() => ({ current: undefined as { id: string; name: string } | undefined }));
+const teamCommands = vi.hoisted(() => ({ current: [] as unknown[] }));
+const promptPreviewFetch = vi.hoisted(() => vi.fn());
+const promptPreviewResult = vi.hoisted(() => ({
+  currentData: undefined as { text: string } | undefined,
+  isFetching: false,
+  isError: false,
+  originalArgs: undefined as { promptId: string } | undefined,
+}));
 const skillPreviewQuery = vi.hoisted(() => vi.fn());
 const previewResult = vi.hoisted(() => ({
   currentData: undefined as unknown,
@@ -145,7 +167,12 @@ vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
   },
 
   useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery: () => [
-    () => ({ unwrap: async () => ({ text: "" }) }),
+    (args: { promptId: string }) => {
+      promptPreviewFetch(args);
+      promptPreviewResult.originalArgs = args;
+      return { unwrap: async () => ({ text: "" }) };
+    },
+    promptPreviewResult,
   ],
   // Read by the prompt-selection panel the page mounts; it is closed here, so
   // the queries are skipped and only their shape matters.
@@ -158,7 +185,7 @@ vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
   // trigger stays closed and the composer behaves as it did before.
   useGetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetQuery: (args: unknown, options: unknown) => {
     commandQueries(args, options);
-    return { currentData: [] };
+    return { currentData: (args as { teamId: string }).teamId === "team-1" ? teamCommands.current : [] };
   },
 }));
 vi.mock("@hooks/useTeamCapabilities.ts", () => ({
@@ -1154,5 +1181,63 @@ describe("ManagedChatPage slash prompt sources", () => {
       [{ teamId: "personal-1" }, { skip: false }],
     ]);
     bootstrap.activeTeamId = "team-1";
+  });
+});
+
+describe("ManagedChatPage prompt token preview", () => {
+  it("opens the prompt behind the composer token in the side panel and toggles it closed", () => {
+    teamCommands.current = [
+      { prompt_id: "p-summary", name: "Résumé", command: "summary", description: "Résumer", emoji: null },
+    ];
+    fetchedTeam.current = { id: "team-1", name: "Finance" };
+    bootstrap.activeTeamId = "personal-1";
+    chatValue = baseChatValue([]);
+    chatValue.input = "/summary keep this";
+    const setInput = vi.fn();
+    const handleSend = vi.fn();
+    chatValue.setInput = setInput;
+    chatValue.handleSend = handleSend;
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const panel = () => container.querySelector('aside[data-open="true"]');
+    try {
+      act(() => root.render(<ManagedChatPage />));
+      const token = container.querySelector<HTMLButtonElement>('[data-testid="prompt-token"]')!;
+      expect(token.dataset.teamName).toBe("Finance");
+      expect(panel()).toBeNull();
+
+      promptPreviewResult.isFetching = true;
+      act(() => token.click());
+      expect(promptPreviewFetch).toHaveBeenCalledWith({ teamId: "team-1", promptId: "p-summary" });
+      expect(panel()?.textContent).toContain("Résumé");
+      expect(panel()?.textContent).toContain("/summary");
+      expect(panel()?.querySelector('[role="status"]')?.textContent).toBe("chatbot.commandTurn.previewLoading");
+
+      promptPreviewResult.isFetching = false;
+      promptPreviewResult.currentData = { text: "Résume le document en trois points." };
+      act(() => root.render(<ManagedChatPage />));
+      expect(panel()?.querySelector('[role="status"]')).toBeNull();
+      // Name, then command, then the instructions.
+      expect(panel()?.textContent).toMatch(/Résumé\/summaryRésume le document en trois points\.$/);
+
+      promptPreviewResult.isError = true;
+      act(() => root.render(<ManagedChatPage />));
+      expect(panel()?.querySelector('[role="status"]')?.textContent).toBe("chatbot.commandTurn.previewError");
+      expect(panel()?.textContent).not.toContain("trois points");
+
+      act(() => token.click());
+      expect(panel()).toBeNull();
+      expect(promptPreviewFetch).toHaveBeenCalledOnce();
+      expect(setInput).not.toHaveBeenCalled();
+      expect(handleSend).not.toHaveBeenCalled();
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+      teamCommands.current = [];
+      fetchedTeam.current = undefined;
+      bootstrap.activeTeamId = "team-1";
+      Object.assign(promptPreviewResult, { currentData: undefined, isFetching: false, isError: false });
+    }
   });
 });

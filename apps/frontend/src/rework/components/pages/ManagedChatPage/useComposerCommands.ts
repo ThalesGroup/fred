@@ -14,7 +14,7 @@
 
 import type { ThreadMessage } from "@rework/types/thread";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import type { CommandMenuEntry } from "@shared/molecules/CommandMenu/CommandMenu";
+import type { CommandMenuEmptyReason, CommandMenuEntry } from "@shared/molecules/CommandMenu/CommandMenu";
 import {
   commandQueryOf,
   type CommandChoice,
@@ -34,10 +34,8 @@ import type { SkillInvocation, TurnCommand } from "../../../../slices/runtime/ru
  * The composer's command trigger: the menu `/` opens, and the resolution of a
  * command on submit.
  *
- * Resolution happens on submit rather than only from the menu, so completing
- * with `Tab` and then pressing `Enter` reaches exactly the same place as
- * `Enter` from the open menu. Full rationale:
- * `openspec/changes/add-prompt-command-trigger/design.md`.
+ * The menu only ever inserts a command: `Tab`, `Enter` and a click all complete
+ * the row and send nothing. Resolution happens on submit, with the menu closed.
  */
 
 /** A composer line that starts with a command, split from its trailing text. */
@@ -48,6 +46,20 @@ export function parseCommandLine(value: string): { command: string; appended: st
 
 function completionRange(input: string, range: { start: number; end: number }) {
   return { ...range, end: range.end + (/^[a-z0-9_-]+/.exec(input.slice(range.end))?.[0].length ?? 0) };
+}
+
+/** Entries whose name contains the query; names starting with it come first. */
+function matchByName<T extends { command: string }>(entries: readonly T[], query: string): T[] {
+  const needle = query.toLowerCase();
+  const hits = entries.filter((entry) => entry.command.toLowerCase().includes(needle));
+  const starts = (entry: T) => entry.command.toLowerCase().startsWith(needle);
+  return [...hits.filter(starts), ...hits.filter((entry) => !starts(entry))];
+}
+
+/** A deleted or forbidden prompt will not come back by retrying. */
+function isGone(error: unknown): boolean {
+  const status = (error as { status?: unknown } | null)?.status;
+  return status === 403 || status === 404;
 }
 
 function promptEntries(prompts: PromptCommandSummary[], teamId: string, source: "personal" | "team") {
@@ -69,9 +81,9 @@ export interface ComposerCommandsMenu {
   id: string;
   entries: CommandMenuEntry[];
   activeIndex: number;
-  /** False when the team holds no command at all — a different empty state
-   *  from a query that happens to match none of them. */
-  teamHasCommands: boolean;
+  /** Why `entries` is empty: catalogs still loading, no command anywhere, or
+   *  a query that matches none of the existing ones. */
+  empty: CommandMenuEmptyReason;
   optionId: (index: number) => string;
   onActivate: (index: number) => void;
   onFocusEntry: (index: number) => void;
@@ -90,8 +102,9 @@ export function useComposerCommands(params: {
   onRunCommand: (run: { text: string; command: TurnCommand; skills?: SkillInvocation[] }) => void;
   /** Ordinary submit — no command, or a token no prompt holds. */
   onSend: () => void;
-  /** The prompt behind a command could not be read. */
-  onResolveError: () => void;
+  /** The command cannot run: `stale` when its prompt is gone, renamed or from
+   *  another agent or team; `unreadable` when the read failed for now. */
+  onResolveError: (reason: "stale" | "unreadable") => void;
 }): {
   trigger: CommandTriggerBinding;
   menu: ComposerCommandsMenu | null;
@@ -120,7 +133,7 @@ export function useComposerCommands(params: {
   choicesRef.current = choices;
   const draftReplaceRef = useRef(false);
   const restoredChoicesRef = useRef<readonly Choice[] | null>(null);
-  const { currentData: catalog } = useGetAgentInstanceSkillsQuery(
+  const { currentData: catalog, isFetching: skillsFetching } = useGetAgentInstanceSkillsQuery(
     { teamId, agentInstanceId: agentInstanceId ?? "" },
     { skip: !teamId || !agentInstanceId, refetchOnMountOrArgChange: true },
   );
@@ -144,16 +157,23 @@ export function useComposerCommands(params: {
   // Its own endpoint rather than a filter over the prompt listing: that listing
   // is capped, and a command past the cap would resolve to nothing — silently,
   // since an unmatched token is sent to the agent as ordinary text.
-  const { currentData: prompts } = useGetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetQuery(
-    { teamId },
-    { skip: !teamId },
-  );
+  const { currentData: prompts, isFetching: teamCommandsFetching } =
+    useGetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetQuery({ teamId }, { skip: !teamId });
   const teamCommandsReadyRef = useRef(false);
   teamCommandsReadyRef.current = prompts !== undefined;
-  const { currentData: personalPrompts } = useGetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetQuery(
-    { teamId: personalTeamId ?? "" },
-    { skip: !personalTeamId || personalTeamId === teamId },
-  );
+  const personalQueried = Boolean(personalTeamId) && personalTeamId !== teamId;
+  const { currentData: personalPrompts, isFetching: personalCommandsFetching } =
+    useGetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetQuery(
+      { teamId: personalTeamId ?? "" },
+      { skip: !personalQueried },
+    );
+  // A prompt missing from a catalog that has not answered is not known gone.
+  const promptCatalogsReadyRef = useRef(false);
+  promptCatalogsReadyRef.current = prompts !== undefined && (!personalQueried || personalPrompts !== undefined);
+  const catalogsLoading =
+    (teamCommandsFetching && prompts === undefined) ||
+    (personalCommandsFetching && personalPrompts === undefined) ||
+    (skillsFetching && catalog === undefined);
   const [fetchPrompt] = useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery();
 
   const commands = useMemo(
@@ -286,18 +306,24 @@ export function useComposerCommands(params: {
   // over the thread after a click elsewhere, with no way back to it but typing.
   const [focused, setFocused] = useState(false);
 
-  const entries = useMemo(
+  // Filtered source by source, so the flat list stays grouped like the menu's
+  // sections and the arrow keys walk it in display order.
+  const entries = useMemo<CommandMenuEntry[]>(
     () =>
       query === null
         ? []
         : query === "skill" || query.startsWith("skill ")
-          ? skillEntries.filter((entry) => entry.name.startsWith(query.startsWith("skill ") ? query.slice(6) : ""))
+          ? matchByName(skillEntries, query.startsWith("skill ") ? query.slice(6) : "")
           : [
-              ...commands.filter(
-                (entry) =>
-                  entry.command.startsWith(query) && (!promptChoice || commandRange?.start === promptChoice.from),
-              ),
-              ...skillEntries.filter((entry) => entry.name.startsWith(query)),
+              ...(!promptChoice || commandRange?.start === promptChoice.from
+                ? (["team", "personal"] as const).flatMap((source) =>
+                    matchByName(
+                      commands.filter((entry) => entry.source === source),
+                      query,
+                    ),
+                  )
+                : []),
+              ...matchByName(skillEntries, query),
             ],
     [commands, skillEntries, query, commandRange, promptChoice],
   );
@@ -328,8 +354,8 @@ export function useComposerCommands(params: {
   const onQueryChange = useCallback((next: string | null, range?: { start: number; end: number }) => {
     setQuery(next);
     setCommandRange(next === null ? undefined : range);
-    // Re-filtering re-focuses the best match, so the focus is never left on
-    // something that is no longer on screen.
+    // Re-filtering puts the focus back on the first row shown, so it is never
+    // left on something that is no longer on screen.
     setActiveIndex(0);
     // Any other query clears the dismissal, or deleting then retyping the last
     // character after an Esc (or a recall) would find the menu still shut.
@@ -424,27 +450,12 @@ export function useComposerCommands(params: {
   );
 
   const run = useCallback(
-    async (entry: CommandMenuEntry, draft: string, range: { from: number; to: number }) => {
-      if (entry.kind === "skill") {
-        complete(entry);
-        return;
-      }
+    async (
+      entry: Extract<CommandMenuEntry, { kind: "prompt" }>,
+      draft: string,
+      range: { from: number; to: number },
+    ) => {
       const scopeAtSubmit = scopeRef.current.version;
-      const active = choicesRef.current.filter(
-        (choice) => paramsRef.current.input.slice(choice.from, choice.to) === `/${choice.name}`,
-      );
-      if (active.some((choice) => choice.scope !== scopeAtSubmit)) {
-        paramsRef.current.onResolveError();
-        return;
-      }
-      if (
-        active.some(
-          (choice) => choice.kind === "skill" && !skillsRef.current.some((skill) => skill.name === choice.name),
-        )
-      ) {
-        paramsRef.current.onSkillError?.("unavailable");
-        return;
-      }
       const selections = [
         ...new Set(
           findSkillInvocations(
@@ -475,11 +486,12 @@ export function useComposerCommands(params: {
           },
           ...(selections.length ? { skills: selections } : {}),
         });
-      } catch {
-        if (scopeRef.current.version === scopeAtSubmit) paramsRef.current.onResolveError();
+      } catch (error) {
+        if (scopeRef.current.version === scopeAtSubmit)
+          paramsRef.current.onResolveError(isGone(error) ? "stale" : "unreadable");
       }
     },
-    [fetchPrompt, complete],
+    [fetchPrompt],
   );
 
   const submit = useCallback(() => {
@@ -506,7 +518,7 @@ export function useComposerCommands(params: {
       .filter((choice) => input.slice(choice.from, choice.to) === `/${choice.name}`);
     const explicitPrompt = active.find((choice) => choice.kind === "prompt");
     if (active.some((choice) => choice.scope !== scopeRef.current.version)) {
-      if (explicitPrompt) paramsRef.current.onResolveError();
+      if (explicitPrompt) paramsRef.current.onResolveError("stale");
       else paramsRef.current.onSkillError?.("unavailable");
       return;
     }
@@ -546,12 +558,12 @@ export function useComposerCommands(params: {
         )
       : undefined;
     if (explicitPrompt && !entry) {
-      paramsRef.current.onResolveError();
+      paramsRef.current.onResolveError(promptCatalogsReadyRef.current ? "stale" : "unreadable");
       return;
     }
     if (entry && range) {
       if (!explicitPrompt && entry.promptTeamId !== paramsRef.current.teamId && !teamCommandsReadyRef.current) {
-        paramsRef.current.onResolveError();
+        paramsRef.current.onResolveError("unreadable");
         return;
       }
       void run(entry, input, range);
@@ -597,31 +609,18 @@ export function useComposerCommands(params: {
           setActiveIndex((index) => Math.max(Math.min(index, count - 1) - 1, 0));
           return true;
         case "Tab":
-          event.preventDefault();
-          complete(focusedEntry);
-          return true;
         case "Enter":
-          if (event.shiftKey || event.nativeEvent.isComposing) return false;
+          if (event.key === "Enter" && (event.shiftKey || event.nativeEvent.isComposing)) return false;
           event.preventDefault();
-          // Preserve the highlighted row's identity, including homonyms.
-          // Skill completion never sends; the next Enter submits the draft.
-          if (focusedEntry.kind === "skill") complete(focusedEntry);
-          else {
-            const range = commandRangeRef.current;
-            if (range) {
-              const input = paramsRef.current.input;
-              const replacement = completionRange(input, range);
-              const draft =
-                input.slice(0, replacement.start) + `/${focusedEntry.command}` + input.slice(replacement.end);
-              void run(focusedEntry, draft, { from: range.start, to: range.start + focusedEntry.command.length + 1 });
-            }
-          }
+          // Enter picks the row like Tab and sends nothing: the next Enter,
+          // with the menu closed, goes through the ordinary submit.
+          complete(focusedEntry);
           return true;
         default:
           return false;
       }
     },
-    [complete, run],
+    [complete],
   );
 
   const onActivate = useCallback(
@@ -661,13 +660,11 @@ export function useComposerCommands(params: {
     activeDescendantId: panelOpen && hasEntries ? optionId(safeIndex) : null,
   };
 
-  const teamHasCommands = commands.length > 0 || skillEntries.length > 0;
+  const empty = catalogsLoading ? "loading" : commands.length > 0 || skillEntries.length > 0 ? "noMatch" : "none";
   const menu = useMemo<ComposerCommandsMenu | null>(
     () =>
-      panelOpen
-        ? { id: listboxId, entries, activeIndex: safeIndex, teamHasCommands, optionId, onActivate, onFocusEntry }
-        : null,
-    [panelOpen, listboxId, entries, safeIndex, teamHasCommands, optionId, onActivate, onFocusEntry],
+      panelOpen ? { id: listboxId, entries, activeIndex: safeIndex, empty, optionId, onActivate, onFocusEntry } : null,
+    [panelOpen, listboxId, entries, safeIndex, empty, optionId, onActivate, onFocusEntry],
   );
 
   return {

@@ -24,11 +24,24 @@ let root: Root;
 let container: HTMLDivElement;
 const onSend = vi.fn();
 const onOpen = vi.fn();
+const onOpenPrompt = vi.fn();
 const onChange = vi.fn();
 const onFiles = vi.fn();
 const recallKey = vi.fn<(event: import("./RichInputField").CommandKeyEvent) => boolean>(() => false);
 const claimKey = vi.fn<(event: import("./RichInputField").CommandKeyEvent) => boolean>(() => false);
-function Host({ disabled = false, prompt = false }: { disabled?: boolean; prompt?: boolean }) {
+function Host({
+  disabled = false,
+  prompt = false,
+  source = "personal",
+  teamName,
+  inert = false,
+}: {
+  disabled?: boolean;
+  prompt?: boolean;
+  source?: "personal" | "team";
+  teamName?: string;
+  inert?: boolean;
+}) {
   usePastedFiles({ enabled: !disabled, onFiles });
   const [value, setValue] = useState(prompt ? "/hello Notes" : "Before /meeting-minutes after\nAction");
   const token = findSkillInvocation(value, ["meeting-minutes"], true);
@@ -48,7 +61,15 @@ function Host({ disabled = false, prompt = false }: { disabled?: boolean; prompt
         tokens: token ? [{ ...token, description: "Meeting minutes", onOpen }] : [],
         promptToken:
           prompt && value.startsWith("/hello ")
-            ? { from: 0, to: 6, name: "Hello", description: "Say hello", source: "personal" }
+            ? {
+                from: 0,
+                to: 6,
+                name: "Hello",
+                description: "Say hello",
+                source,
+                teamName,
+                onOpen: inert ? undefined : onOpenPrompt,
+              }
             : null,
       }}
       commandTrigger={{
@@ -249,6 +270,42 @@ it("keeps a prompt command copyable, editable and undoable beneath its visual", 
   act(() => root.render(<Host prompt />));
   expect(dispatch).not.toHaveBeenCalled();
   dispatch.mockRestore();
+});
+
+it("opens the prompt preview from its token, which stays one block and sends nothing", () => {
+  const mount = (props: Parameters<typeof Host>[0]) =>
+    act(() => {
+      root.unmount();
+      root = createRoot(container);
+      root.render(<Host prompt {...props} />);
+    });
+  const token = () => container.querySelector<HTMLElement>("[data-kind=prompt]")!;
+  mount({});
+  expect(token().tagName).toBe("BUTTON");
+  expect((token() as HTMLButtonElement).type).toBe("button");
+  expect(token().className).toMatch(/action/);
+  expect(token().getAttribute("aria-label")).toBe("chatbot.commandTurn.open");
+  // The hover hint names the source like the menu's section headings.
+  expect(token().title).toBe("Hello\nchatbot.commandMenu.sections.personal\nSay hello");
+  act(() => token().click());
+  expect(onOpenPrompt).toHaveBeenCalledOnce();
+  expect(onSend).not.toHaveBeenCalled();
+  expect(onChange).not.toHaveBeenCalled();
+  act(() => editor().dispatch({ selection: { anchor: 6 } }));
+  act(() => {
+    cursorCharLeft(editor());
+  });
+  expect(editor().state.selection.main.head).toBe(0);
+
+  mount({ source: "team", teamName: "Finance" });
+  expect(token().title.split("\n")[1]).toBe("chatbot.commandMenu.sections.team");
+  mount({ source: "team" });
+  expect(token().title.split("\n")[1]).toBe("chatbot.commandMenu.sections.teamFallback");
+
+  // Without a preview to open the token is not a control.
+  mount({ inert: true });
+  expect(token().tagName).toBe("SPAN");
+  expect(token().getAttribute("role")).toBe("group");
 });
 
 it("routes modified arrow keys to recall and lets a consumed recall stop the editor", () => {

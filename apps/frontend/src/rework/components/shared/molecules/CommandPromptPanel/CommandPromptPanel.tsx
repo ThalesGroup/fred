@@ -19,15 +19,24 @@ import styles from "./CommandPromptPanel.module.css";
 interface CommandPromptPanelProps {
   open: boolean;
   onClose: () => void;
-  /** The turn's own stored text — what was actually sent. Never re-fetched
-   *  from the prompt: it is overwritten on edit and gone once deleted. */
+  /** For a sent turn, its own stored text: what was actually sent, never
+   *  re-fetched. For a composer token, the prompt's current instructions. */
   text: string;
   command: string | null;
   promptName: string | null;
+  /** Set while a composer token's prompt is being read, or when it cannot be. */
+  status?: "loading" | "error";
 }
 
-/** Shows the prompt a command turn actually sent, kept out of the chat body. */
-export default function CommandPromptPanel({ open, onClose, text, command, promptName }: CommandPromptPanelProps) {
+/** Shows the prompt behind a command, kept out of the chat body. */
+export default function CommandPromptPanel({
+  open,
+  onClose,
+  text,
+  command,
+  promptName,
+  status,
+}: CommandPromptPanelProps) {
   const { t } = useTranslation();
 
   return (
@@ -41,7 +50,13 @@ export default function CommandPromptPanel({ open, onClose, text, command, promp
         {promptName && <span className={styles.name}>{promptName}</span>}
         {command && <span className={styles.slug}>/{command}</span>}
       </div>
-      <p className={styles.text}>{text}</p>
+      {status ? (
+        <p className={styles.text} role="status">
+          {t(status === "loading" ? "chatbot.commandTurn.previewLoading" : "chatbot.commandTurn.previewError")}
+        </p>
+      ) : (
+        <p className={styles.text}>{text}</p>
+      )}
     </ChatSidePanel>
   );
 }

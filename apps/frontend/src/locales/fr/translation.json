@@ -395,13 +395,11 @@
     "commandTurn": {
       "open": "Ouvrir le prompt de la commande /{{command}}",
       "openWithText": "Ouvrir le prompt de la commande /{{command}}, suivie de « {{appended}} »",
-      "panelTitle": "Prompt de la commande"
+      "panelTitle": "Prompt de la commande",
+      "previewLoading": "Chargement du prompt…",
+      "previewError": "Ce prompt ne peut pas être affiché. Il a peut-être été supprimé, ou vous n'y avez plus accès."
     },
     "commandMenu": {
-      "sources": {
-        "personal": "Prompt personnel",
-        "team": "Prompt d’équipe"
-      },
       "ariaLabel": "Commandes disponibles",
       "sections": {
         "team": "Équipe « {{name}} »",
@@ -409,10 +407,12 @@
         "personal": "Espace personnel",
         "platform": "Skills plateforme"
       },
-      "noneInTeam": "Aucune commande dans cette équipe. Un éditeur peut en attribuer une à un prompt depuis la page Prompts.",
+      "loading": "Chargement des commandes…",
+      "none": "Aucune commande pour l'instant. Ajoutez-en une à l'un de vos prompts personnels depuis la page Prompts. Dans une équipe, un éditeur peut aussi en ajouter une à un prompt de l'équipe.",
       "noMatch": "Aucune commande ne correspond.",
       "runErrorSummary": "Commande impossible à lancer",
-      "runErrorDetail": "Le prompt de cette commande n'a pas pu être lu. Réessayez dans un instant."
+      "runErrorDetail": "Le prompt de cette commande n'a pas pu être lu. Réessayez dans un instant.",
+      "runErrorStale": "Cette commande n'est plus disponible : son prompt a été supprimé ou renommé, ou elle vient d'un autre agent ou d'une autre équipe. Retirez la commande de votre message et choisissez-la à nouveau."
     },
     "composerPlaceholder": "Posez votre question, ou tapez / pour une commande",
     "newConversation": "Nouvelle conversation",

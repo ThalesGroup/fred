@@ -143,6 +143,8 @@ type ActivePushDrawer =
   // Carries the turn's own stored text: the prompt is overwritten on edit
   // and gone once deleted, so it cannot be re-fetched by id.
   | { kind: "command-prompt"; text: string; command: string | null; promptName: string | null }
+  // A composer token: nothing is sent yet, so the prompt is read as it is now.
+  | { kind: "prompt-preview"; promptId: string; promptTeamId: string; command: string; promptName: string }
   | null;
 
 export default function ManagedChatPage() {
@@ -169,6 +171,9 @@ export default function ManagedChatPage() {
     [],
   );
   const previewSkillName = activePushDrawer?.kind === "skill" ? activePushDrawer.name : null;
+  const promptPreviewDrawer = activePushDrawer?.kind === "prompt-preview" ? activePushDrawer : null;
+  const previewPromptIdRef = useRef<string | null>(null);
+  previewPromptIdRef.current = promptPreviewDrawer?.promptId ?? null;
   const skillPreview = useGetAgentInstanceSkillDetailQuery(
     { teamId, agentInstanceId, skillName: previewSkillName ?? "" },
     { skip: !previewSkillName, refetchOnMountOrArgChange: true },
@@ -176,7 +181,9 @@ export default function ManagedChatPage() {
   const previewScope = useRef({ teamId, agentInstanceId });
   useEffect(() => {
     if (previewScope.current.teamId !== teamId || previewScope.current.agentInstanceId !== agentInstanceId) {
-      setActivePushDrawer((drawer) => (drawer?.kind === "skill" || drawer?.kind === "skill-file" ? null : drawer));
+      setActivePushDrawer((drawer) =>
+        drawer?.kind === "skill" || drawer?.kind === "skill-file" || drawer?.kind === "prompt-preview" ? null : drawer,
+      );
       previewScope.current = { teamId, agentInstanceId };
     }
   }, [teamId, agentInstanceId]);
@@ -626,12 +633,34 @@ export default function ManagedChatPage() {
     setInput: chat.setInput,
     onRunCommand: (run) => void chat.runCommand(run),
     onSend: () => void chat.handleSend(),
-    onResolveError: () =>
+    onResolveError: (reason) =>
       showError({
         summary: t("chatbot.commandMenu.runErrorSummary"),
-        detail: t("chatbot.commandMenu.runErrorDetail"),
+        detail: t(reason === "stale" ? "chatbot.commandMenu.runErrorStale" : "chatbot.commandMenu.runErrorDetail"),
       }),
   });
+
+  // The composer's prompt token opens its prompt; a second click closes it.
+  const [fetchPromptPreview, promptPreview] = useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery();
+  const selectedPrompt = commands.selectedPrompt;
+  const selectedPromptRef = useRef(selectedPrompt);
+  selectedPromptRef.current = selectedPrompt;
+  // One identity across keystrokes, so the token is not rebuilt as the user types.
+  const openPromptPreview = useCallback(() => {
+    const prompt = selectedPromptRef.current;
+    if (!prompt) return;
+    const { promptId, promptTeamId, command, name } = prompt;
+    const open = previewPromptIdRef.current === promptId;
+    setActivePushDrawer(open ? null : { kind: "prompt-preview", promptId, promptTeamId, command, promptName: name });
+    if (!open) void fetchPromptPreview({ teamId: promptTeamId, promptId });
+  }, [fetchPromptPreview]);
+  const promptPreviewStatus = !promptPreviewDrawer
+    ? undefined
+    : promptPreview.isFetching
+      ? ("loading" as const)
+      : promptPreview.isError || promptPreview.originalArgs?.promptId !== promptPreviewDrawer.promptId
+        ? ("error" as const)
+        : undefined;
 
   // Arrow keys bring back the messages sent in this conversation. A recalled
   // line keeps the command menu shut until the person edits it.
@@ -684,7 +713,7 @@ export default function ManagedChatPage() {
       focusEndRequestId={focusEndRequestId}
       showSendButton
       inlineSkills={{
-        promptToken: commands.selectedPrompt,
+        promptToken: selectedPrompt && { ...selectedPrompt, teamName: team?.name, onOpen: openPromptPreview },
         tokens: commands.selectedSkills.map((token) => ({
           ...token,
           description: commands.skillDescriptions.get(token.name),
@@ -983,11 +1012,26 @@ export default function ManagedChatPage() {
           />
 
           <CommandPromptPanel
-            open={activePushDrawer?.kind === "command-prompt"}
-            onClose={() => setActivePushDrawer((v) => (v?.kind === "command-prompt" ? null : v))}
-            text={activePushDrawer?.kind === "command-prompt" ? activePushDrawer.text : ""}
-            command={activePushDrawer?.kind === "command-prompt" ? activePushDrawer.command : null}
-            promptName={activePushDrawer?.kind === "command-prompt" ? activePushDrawer.promptName : null}
+            open={activePushDrawer?.kind === "command-prompt" || promptPreviewDrawer !== null}
+            onClose={() =>
+              setActivePushDrawer((v) => (v?.kind === "command-prompt" || v?.kind === "prompt-preview" ? null : v))
+            }
+            text={
+              activePushDrawer?.kind === "command-prompt"
+                ? activePushDrawer.text
+                : (promptPreview.currentData?.text ?? "")
+            }
+            command={
+              activePushDrawer?.kind === "command-prompt"
+                ? activePushDrawer.command
+                : (promptPreviewDrawer?.command ?? null)
+            }
+            promptName={
+              activePushDrawer?.kind === "command-prompt"
+                ? activePushDrawer.promptName
+                : (promptPreviewDrawer?.promptName ?? null)
+            }
+            status={promptPreviewStatus}
           />
 
           <FullReasoningPanel

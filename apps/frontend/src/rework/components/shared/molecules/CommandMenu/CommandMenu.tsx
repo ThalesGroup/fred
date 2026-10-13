@@ -30,6 +30,9 @@ export type CommandMenuEntry = {
 
 type CommandMenuSource = "team" | "personal" | "platform";
 
+/** Why the menu has no row: still loading, nothing exists, or nothing matches. */
+export type CommandMenuEmptyReason = "loading" | "none" | "noMatch";
+
 // Display order of the sections. `entries` arrives in this same order, so each
 // section is a contiguous slice and the flat index stays the visual order.
 const SECTION_ORDER: readonly CommandMenuSource[] = ["team", "personal", "platform"];
@@ -40,14 +43,13 @@ interface CommandMenuProps {
   entries: CommandMenuEntry[];
   /** Index of the focused entry — the composer keeps the caret, this the focus. */
   activeIndex: number;
-  /** False when the team holds no command at all, which is worth saying plainly
-   *  — a different miss from a query that matches none of the ones it has. */
-  teamHasCommands: boolean;
+  /** Which line to show when `entries` is empty. */
+  empty: CommandMenuEmptyReason;
   /** Name of the conversation's team, shown in its section heading. */
   teamName?: string;
   /** Builds the id the composer's active-descendant names. */
   optionId: (index: number) => string;
-  /** Pointer activation, which behaves as `Tab`: completes, never sends. */
+  /** Pointer activation, which behaves as `Tab` and `Enter`: completes, never sends. */
   onActivate: (index: number) => void;
   /** Hovering an entry focuses it, so pointer and keyboard share one highlight. */
   onFocusEntry: (index: number) => void;
@@ -57,7 +59,7 @@ export const CommandMenu = memo(function CommandMenu({
   id,
   entries,
   activeIndex,
-  teamHasCommands,
+  empty,
   teamName,
   optionId,
   onActivate,
@@ -95,9 +97,7 @@ export const CommandMenu = memo(function CommandMenu({
   if (entries.length === 0) {
     return (
       <div id={id} className={styles.menu} role="status">
-        <p className={styles.empty}>
-          {teamHasCommands ? t("chatbot.commandMenu.noMatch") : t("chatbot.commandMenu.noneInTeam")}
-        </p>
+        <p className={styles.empty}>{t(`chatbot.commandMenu.${empty}`)}</p>
       </div>
     );
   }

@@ -15,7 +15,7 @@
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { CommandMenu, type CommandMenuEntry } from "./CommandMenu";
+import { CommandMenu, type CommandMenuEmptyReason, type CommandMenuEntry } from "./CommandMenu";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -39,14 +39,17 @@ const skill = (name: string): CommandMenuEntry => ({
   name,
 });
 
-function render(entries: CommandMenuEntry[], props: { activeIndex?: number; teamName?: string } = {}) {
+function render(
+  entries: CommandMenuEntry[],
+  props: { activeIndex?: number; teamName?: string; empty?: CommandMenuEmptyReason } = {},
+) {
   const host = document.createElement("div");
   host.innerHTML = renderToStaticMarkup(
     <CommandMenu
       id="menu"
       entries={entries}
       activeIndex={props.activeIndex ?? 0}
-      teamHasCommands
+      empty={props.empty ?? "noMatch"}
       teamName={props.teamName}
       optionId={(index) => `option-${index}`}
       onActivate={() => {}}
@@ -101,6 +104,18 @@ describe("CommandMenu sections", () => {
     const selected = Array.from(host.querySelectorAll('[role="option"][aria-selected="true"]'));
     expect(selected.map((option) => option.id)).toEqual(["option-2"]);
     expect(selected[0].closest('[role="group"]')?.getAttribute("data-source")).toBe("personal");
+  });
+
+  it.each(["loading", "none", "noMatch"] as const)("shows the %s line as a status when it has no row", (empty) => {
+    const { host } = render([], { empty });
+    expect(host.querySelector('[role="status"]')?.textContent).toBe(`chatbot.commandMenu.${empty}`);
+    expect(host.querySelector('[role="listbox"]')).toBeNull();
+  });
+
+  it("shows its rows rather than a status line whatever the empty reason", () => {
+    const { host } = render(ALL, { empty: "loading" });
+    expect(host.querySelector('[role="status"]')).toBeNull();
+    expect(host.querySelectorAll('[role="option"]')).toHaveLength(4);
   });
 
   it("shows no source label on a row", () => {

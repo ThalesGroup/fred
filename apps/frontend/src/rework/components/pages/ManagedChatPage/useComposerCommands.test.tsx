@@ -54,6 +54,7 @@ const PROMPT_TEXT: Record<string, string> = {
 const fetchPrompt = vi.fn();
 let listResult: { data?: typeof PROMPTS; currentData?: typeof PROMPTS } = { data: PROMPTS };
 let personalResult: typeof listResult = { data: [] };
+let commandsFetching = false;
 const listCommands = vi.fn();
 
 vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
@@ -67,6 +68,7 @@ vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
     return {
       data: result.data,
       currentData: options.skip ? undefined : "currentData" in result ? result.currentData : result.data,
+      isFetching: !options.skip && commandsFetching,
     };
   },
   useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery: () => [fetchPrompt],
@@ -142,6 +144,7 @@ beforeEach(() => {
   skillCatalog = undefined;
   listResult = { data: PROMPTS };
   personalResult = { data: [] };
+  commandsFetching = false;
   fetchPrompt.mockImplementation(({ promptId }: { promptId: string }) => ({
     unwrap: () => Promise.resolve({ id: promptId, text: PROMPT_TEXT[promptId] }),
   }));
@@ -249,7 +252,7 @@ describe("the command menu", () => {
       }),
     });
   });
-  it("opens on a slash under a titled section, with the best match focused", () => {
+  it("opens on a slash under a titled section, with the first row focused", () => {
     type("/");
 
     expect(container.querySelector('[role="listbox"]')).not.toBeNull();
@@ -271,6 +274,50 @@ describe("the command menu", () => {
 
     expect(labels()).toEqual(["/summary"]);
     expect(focusedLabel()).toBe("/summary");
+  });
+
+  it("matches anywhere inside a command name, whatever the case, and nowhere else", () => {
+    type("/MAR");
+    expect(labels()).toEqual(["/summary"]);
+    type("see /Ear");
+    expect(labels()).toEqual(["/search"]);
+    // "Recherche" and "Chercher" are the prompt's name and description.
+    type("/cher");
+    expect(labels()).toEqual([]);
+    expect(container.textContent).toContain("chatbot.commandMenu.noMatch");
+  });
+
+  it("lists names starting with the typed text first in each section and focuses the first row", () => {
+    listResult = {
+      data: [
+        { prompt_id: "t-1", name: "A", command: "pre-sum", description: null, emoji: null },
+        { prompt_id: "t-2", name: "B", command: "big-sum", description: null, emoji: null },
+      ] as unknown as typeof PROMPTS,
+    };
+    personalResult = {
+      data: [
+        { prompt_id: "p-1", name: "C", command: "my-sum", description: null, emoji: null },
+        { prompt_id: "p-2", name: "D", command: "sum-up", description: null, emoji: null },
+        { prompt_id: "p-3", name: "E", command: "sum", description: null, emoji: null },
+      ] as unknown as typeof PROMPTS,
+    };
+    skillCatalog = {
+      supported: true,
+      skills: [
+        { name: "resume", description: "Resume" },
+        { name: "summarize", description: "Summarize" },
+      ],
+    };
+    act(() => root.render(<Host personalTeamId="personal-1" />));
+    type("/sum");
+
+    expect(sections()).toEqual([
+      ["chatbot.commandMenu.sections.teamFallback", ["/pre-sum", "/big-sum"]],
+      ["chatbot.commandMenu.sections.personal", ["/sum-up", "/sum", "/my-sum"]],
+      ["chatbot.commandMenu.sections.platform", ["/summarize", "/resume"]],
+    ]);
+    // The first row keeps the focus even though a later section starts with the text.
+    expect(focusedLabel()).toBe("/pre-sum");
   });
 
   it("closes when the slash is deleted away", () => {
@@ -421,7 +468,7 @@ describe("the command menu", () => {
 });
 
 describe("with nothing to offer", () => {
-  it("says the team holds no command rather than vanishing", () => {
+  it("says there is no command yet rather than vanishing", () => {
     listResult = { data: [] };
     act(() => {
       root.render(<Host />);
@@ -429,15 +476,40 @@ describe("with nothing to offer", () => {
 
     type("/");
     expect(panel()?.getAttribute("role")).toBe("status");
-    expect(container.textContent).toContain("chatbot.commandMenu.noneInTeam");
+    expect(container.textContent).toContain("chatbot.commandMenu.none");
     expect(options()).toHaveLength(0);
+  });
+
+  it("says the commands are loading instead of claiming there is none", () => {
+    listResult = { currentData: undefined };
+    commandsFetching = true;
+    act(() => root.render(<Host personalTeamId="personal-1" />));
+
+    type("/");
+    expect(panel()?.getAttribute("role")).toBe("status");
+    expect(container.textContent).toContain("chatbot.commandMenu.loading");
+    expect(container.textContent).not.toContain("chatbot.commandMenu.none");
+    type("/zzz");
+    expect(container.textContent).toContain("chatbot.commandMenu.loading");
+    expect(container.textContent).not.toContain("chatbot.commandMenu.noMatch");
+
+    // What has already answered is offered while the rest loads.
+    personalResult = { data: [PROMPTS[1]] };
+    act(() => root.render(<Host personalTeamId="personal-1" />));
+    type("/");
+    expect(labels()).toEqual(["/summary"]);
+
+    listResult = { data: [] };
+    personalResult = { data: [] };
+    commandsFetching = false;
+    act(() => root.render(<Host personalTeamId="personal-1" />));
+    expect(container.textContent).toContain("chatbot.commandMenu.none");
   });
 
   it("distinguishes a query that matches none of the team's commands", () => {
     type("/zzz");
 
-    expect(container.textContent).toContain("chatbot.commandMenu.noMatch");
-    expect(container.textContent).not.toContain("chatbot.commandMenu.noneInTeam");
+    expect(panel()?.textContent).toBe("chatbot.commandMenu.noMatch");
   });
 
   // The panel is shown but claims no key: the ordinary send has to still work.
@@ -460,17 +532,57 @@ describe("with nothing to offer", () => {
 });
 
 describe("running a command", () => {
-  it("sends the prompt behind the focused entry on Enter", async () => {
+  it("inserts the focused prompt on Enter like Tab, and sends it on the second Enter", async () => {
     type("/su");
     await pressAsync("Enter");
 
+    expect(textarea().value).toBe("/summary ");
+    expect(container.querySelector('[role="listbox"]')).toBeNull();
+    expect(fetchPrompt).toHaveBeenCalledTimes(1);
+    expect(onRunCommand).not.toHaveBeenCalled();
+    expect(onSend).not.toHaveBeenCalled();
+
+    await pressAsync("Enter");
     expect(onRunCommand).toHaveBeenCalledWith({
       text: "Résume le document en :",
-      command: expect.objectContaining({ command: "summary", prompt_id: "p-summary", prompt_name: "Résumé" }),
+      command: {
+        command: "summary",
+        prompt_id: "p-summary",
+        prompt_name: "Résumé",
+        draft_text: "/summary ",
+        draft_command_offset: 0,
+      },
     });
     expect(onSend).not.toHaveBeenCalled();
-    // The prompt's text never passed through the composer.
+  });
+
+  it("sends the same turn whether the row was picked with Enter or with Tab", async () => {
+    type("Avant /su");
+    await pressAsync("Enter");
+    await pressAsync("Enter");
+    type("");
+    type("Avant /su");
+    press("Tab");
+    await pressAsync("Enter");
+
+    expect(onRunCommand).toHaveBeenCalledTimes(2);
+    expect(onRunCommand.mock.calls[1]).toEqual(onRunCommand.mock.calls[0]);
+    expect(onRunCommand.mock.calls[0][0]).toMatchObject({
+      text: "Avant\n\nRésume le document en :",
+      command: { prompt_id: "p-summary", appended_text: "Avant", draft_command_offset: 6 },
+    });
+  });
+
+  it("leaves Shift+Enter to the composer while the menu is open", () => {
+    type("/su");
+    act(() => {
+      textarea().dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", shiftKey: true, bubbles: true, cancelable: true }),
+      );
+    });
+
     expect(textarea().value).toBe("/su");
+    expect(onRunCommand).not.toHaveBeenCalled();
   });
 
   it("runs a completed command on submit with the menu closed", async () => {
@@ -511,8 +623,21 @@ describe("running a command", () => {
     fetchPrompt.mockImplementation(() => ({ unwrap: () => Promise.reject(new Error("boom")) }));
     type("/summary");
     await pressAsync("Enter");
+    expect(onResolveError).not.toHaveBeenCalled();
+    await pressAsync("Enter");
 
-    expect(onResolveError).toHaveBeenCalledOnce();
+    expect(onResolveError.mock.calls).toEqual([["unreadable"]]);
+    expect(onRunCommand).not.toHaveBeenCalled();
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it.each([403, 404])("says the command must be chosen again when its prompt answers %s", async (status) => {
+    type("/su");
+    press("Tab");
+    fetchPrompt.mockImplementation(() => ({ unwrap: () => Promise.reject({ status, data: {} }) }));
+    await pressAsync("Enter");
+
+    expect(onResolveError.mock.calls).toEqual([["stale"]]);
     expect(onRunCommand).not.toHaveBeenCalled();
     expect(onSend).not.toHaveBeenCalled();
   });
@@ -993,6 +1118,8 @@ describe("platform skills", () => {
     type("/ski");
     expect(labels()).toEqual(["/ski"]);
     await pressAsync("Enter");
+    expect(onRunCommand).not.toHaveBeenCalled();
+    await pressAsync("Enter");
     expect(onRunCommand).toHaveBeenCalledOnce();
     expect(onRunSkill).not.toHaveBeenCalled();
   });
@@ -1231,7 +1358,7 @@ describe("platform skills", () => {
     activateSkills(true);
     cmType("/s existing notes");
     act(() => cm().dispatch({ selection: { anchor: 2 } }));
-    expect(labels()).toEqual(["/search", "/summary"]);
+    expect(labels()).toEqual(["/search", "/summary", "/meeting-minutes"]);
     cmPress("Tab");
     expect(cm().state.doc.toString()).toBe("/search existing notes");
     expect(cm().state.selection.main.head).toBe(8);
@@ -1311,7 +1438,9 @@ describe("personal and team prompt commands", () => {
     const token = container.querySelector<HTMLElement>("[data-kind=prompt]")!;
     expect(token).not.toBeNull();
     expect(token.textContent).toBe("edit_note/summary");
-    expect(token.title).toContain(`chatbot.commandMenu.sources.${source}`);
+    expect(token.title.split("\n")[1]).toBe(
+      `chatbot.commandMenu.sections.${source === "team" ? "teamFallback" : "personal"}`,
+    );
     expect(token.querySelector('[aria-hidden="true"]')?.textContent).toBe("edit_note");
     expect(view.state.doc.toString()).toBe("/summary ");
     expect(onRunCommand).not.toHaveBeenCalled();
@@ -1359,21 +1488,19 @@ describe("personal and team prompt commands", () => {
       type("/su");
       press("ArrowDown");
       expect(fetchPrompt).toHaveBeenCalledWith({ teamId: "personal-1", promptId: "personal-summary" }, true);
-      if (selection === "Enter") await pressAsync("Enter");
-      else {
-        if (selection === "Tab") press("Tab");
-        else act(() => options()[1].dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true })));
-        expect(onRunCommand).not.toHaveBeenCalled();
-        type("/summary additional notes");
-        await pressAsync("Enter");
-      }
+      if (selection === "pointer")
+        act(() => options()[1].dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true })));
+      else await pressAsync(selection);
+      expect(onRunCommand).not.toHaveBeenCalled();
+      type("/summary additional notes");
+      await pressAsync("Enter");
       expect(onRunCommand).toHaveBeenCalledWith({
-        text: selection === "Enter" ? "Personal instructions" : "Personal instructions\n\nadditional notes",
+        text: "Personal instructions\n\nadditional notes",
         command: expect.objectContaining({
           command: "summary",
           prompt_id: "personal-summary",
           prompt_name: "Personal summary",
-          ...(selection === "Enter" ? {} : { appended_text: "additional notes" }),
+          appended_text: "additional notes",
         }),
       });
       expect(onRunSkill).not.toHaveBeenCalled();
@@ -1431,7 +1558,7 @@ describe("personal and team prompt commands", () => {
     act(() => root.render(<Host personalTeamId="personal-1" />));
     await pressAsync("Enter");
     expect(renders[renders.length - 1]?.selectedPrompt).toBeNull();
-    expect(onResolveError).toHaveBeenCalledOnce();
+    expect(onResolveError.mock.calls).toEqual([["stale"]]);
     expect(onRunCommand).not.toHaveBeenCalled();
     expect(onSend).not.toHaveBeenCalled();
   });
@@ -1446,7 +1573,7 @@ describe("personal and team prompt commands", () => {
       },
     }));
     await pressAsync("Enter");
-    expect(onResolveError).toHaveBeenCalledOnce();
+    expect(onResolveError.mock.calls).toEqual([["unreadable"]]);
     expect(onRunCommand).not.toHaveBeenCalled();
   });
   it("queries a personal chat once and lists its prompts in the personal section only", () => {
@@ -1493,7 +1620,7 @@ describe("personal and team prompt commands", () => {
         ),
       );
       await pressAsync("Enter");
-      expect(onResolveError).toHaveBeenCalledOnce();
+      expect(onResolveError.mock.calls).toEqual([["stale"]]);
       expect(onRunCommand).not.toHaveBeenCalled();
       expect(onRunSkill).not.toHaveBeenCalled();
       expect(onSend).not.toHaveBeenCalled();
@@ -1511,7 +1638,7 @@ describe("personal and team prompt commands", () => {
     type("/summary notes");
     await pressAsync("Enter");
     expect(onRunCommand).not.toHaveBeenCalled();
-    expect(onResolveError).toHaveBeenCalledOnce();
+    expect(onResolveError.mock.calls).toEqual([["unreadable"]]);
     // Once resolved, the same typed command takes the team's match.
     listResult = { currentData: PROMPTS };
     act(() => root.render(<Host personalTeamId="personal-1" />));
@@ -1607,7 +1734,7 @@ describe("restoring recalled invocations", () => {
       }
       await act(async () => renders[renders.length - 1]!.submit());
       if (variant === "missing") {
-        expect(onResolveError).toHaveBeenCalledOnce();
+        expect(onResolveError.mock.calls).toEqual([["stale"]]);
         expect(onRunCommand).not.toHaveBeenCalled();
       } else {
         expect(onRunCommand).toHaveBeenCalledOnce();
