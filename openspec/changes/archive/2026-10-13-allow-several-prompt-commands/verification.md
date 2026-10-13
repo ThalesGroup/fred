@@ -306,18 +306,18 @@ feature as a whole; the points below are ticked on that basis, not from a
 point-by-point report.
 
 - [x] Two and three prompts picked from both sections
-- [x] The same prompt twice
-- [x] Prompts mixed with skills
-- [x] Typed names
+- [ ] The same prompt twice: covered by tests, not reported as tried by the owner
+- [ ] Prompts mixed with skills: covered by tests, not reported as tried by the owner
+- [ ] Typed names: covered by tests, not reported as tried by the owner
 - [x] Each composer preview
 - [x] Send, badges, each panel
 - [x] Reload
 - [x] Recall
-- [x] Copy
+- [ ] Copy: covered by tests, not reported as tried by the owner
 - [x] A deleted prompt among several
-- [x] The limit
-- [x] An old conversation
-- [x] A new conversation's title
+- [ ] The limit: covered by tests, not reported as tried by the owner
+- [ ] An old conversation: covered by tests, not reported as tried by the owner
+- [ ] A new conversation's title: covered by tests, not reported as tried by the owner
 - [x] Firefox
 - [ ] Chrome: not confirmed by the owner
 
