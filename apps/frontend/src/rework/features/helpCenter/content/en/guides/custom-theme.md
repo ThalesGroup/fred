@@ -117,6 +117,10 @@ Cloud included:
   support link;
 - `shared/theme-translations/en.json` and `fr.json`: the interface texts.
 
+Any interface text can be renamed this way, and "Agents" through the agent
+nicknames, but for the whole platform: two themes in the same archive cannot
+have different texts.
+
 For a theme that does not spill over the others, leave them out or neutral,
 and carry the theme's identity through the catalog and the CSS.
 

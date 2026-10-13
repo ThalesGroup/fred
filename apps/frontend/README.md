@@ -329,8 +329,10 @@ into `theme-translations/fr.json`, for example:
 ```
 
 Use `theme-translations/en.json` for English. Only supplied keys change; the
-rest keep their shipped translations. These overrides apply to all themes in
-the ZIP. Use `theme-catalog.json` for each theme's display name and
+rest keep their shipped translations. These overrides apply to the whole
+deployment, whichever theme is selected: one ZIP carries one set of labels, and
+themes in the same ZIP cannot have different labels. Rename "Agents" with the
+agent nicknames in `theme-properties.json`. Use `theme-catalog.json` for each theme's display name and
 `theme-properties.json` for shared brand labels and image names.
 
 | Variable                                                        | Meaning                                                                                                                                                                                                                                  |

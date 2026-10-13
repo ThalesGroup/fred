@@ -25,6 +25,7 @@ See proposal.md. `theme-properties.json` is global. `FredUiContent` sets the bro
 - Two themes may contain identically named images. Reject those archives with a clear filename error and document unique image names; do not let ZIP entry order choose which asset wins.
 - Newly hidden active themes can change a connected user's appearance: apply the documented resolution without erasing their preference.
 - Refetch failures must not reset the selection or expose hidden themes: retain the startup/last good configuration and test this transition.
+- `shared/theme-translations/` and `shared/theme-properties.json` are deployment-wide, as root files were in flat ZIPs: themes in one ZIP cannot carry different labels, and stock themes show them too. Documented in the README and guides; per-theme translations stay a follow-up if a multi-brand ZIP needs them.
 
 ## Migration Plan
 

@@ -119,6 +119,10 @@ compris Pebble, Cobalt et Cloud :
   défaut, lien du support ;
 - `shared/theme-translations/fr.json` et `en.json` : les textes de l'interface.
 
+Tout texte de l'interface peut être renommé ainsi, et « Agents » par les
+surnoms des agents, mais pour toute la plateforme : deux thèmes d'une même
+archive ne peuvent pas avoir des textes différents.
+
 Pour un thème qui ne déborde pas sur les autres, laissez-les absents ou neutres,
 et portez l'identité du thème par le catalogue et le CSS.
 
