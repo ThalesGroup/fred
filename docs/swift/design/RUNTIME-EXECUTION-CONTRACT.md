@@ -598,6 +598,11 @@ Key models:
 Fred-specific metadata travels in the top-level `fred` field of each chunk.
 Standard OpenAI clients ignore unknown top-level fields.
 
+The `finish_reason` chunk carries the `final` event's `content` in `delta.content`
+when no `assistant_delta` was streamed since the last `tool_call` (non-streaming
+model, graph answer, tool error surfaced as the answer); a streamed answer is
+never repeated.
+
 Session ownership uses the native route's shared gate: with authentication enabled,
 `X-Fred-Session-Id` targeting another user's existing history session returns HTTP 403
 and emits `session_owner_mismatch` before credential admission or agent resolution.
