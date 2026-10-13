@@ -1,25 +1,9 @@
-//! fred-manager: ownership of spaces, folders and documents, their authorization,
-//! and submission of ingestion work to the Python workers.
-
-mod api;
-mod auth;
-mod bootstrap;
-mod config;
-mod db;
-mod domain;
-mod error;
-mod fga;
-mod ingestion;
+//! fred-manager command line: serve the API, or create an organization.
 
 use anyhow::{Context, Result, bail};
 use sqlx::postgres::PgPoolOptions;
-use uuid::Uuid;
 
-use crate::{
-    config::Configuration as Config,
-    domain::{Role, Space, SpaceKind},
-    fga::{Fga, Tuple},
-};
+use fred_manager::{api, auth, config::Configuration as Config, fga::Fga, ingestion, spaces};
 
 const USAGE: &str = "usage: fred-manager [serve | create-org <name> <admin-user>]";
 
@@ -106,30 +90,9 @@ async fn serve(config: Config) -> Result<()> {
 async fn create_org(config: Config, name: &str, admin: &str) -> Result<()> {
     let pool = pool(&config).await?;
     let fga = fga(&config).await?;
-    let id = Uuid::new_v4();
-    let org = Space {
-        id,
-        kind: SpaceKind::Organization,
-        name: name.to_string(),
-        parent_id: None,
-        personal_owner: None,
-        path: vec![id],
-    };
-    let tuples = [
-        Tuple {
-            user: admin,
-            role: Role::Admin,
-            space: id,
-        },
-        Tuple {
-            user: admin,
-            role: Role::Member,
-            space: id,
-        },
-    ];
-    api::persist_space_with(&pool, &fga, &org, &tuples)
+    let org = spaces::create_organization(&pool, &fga, name, admin)
         .await
         .map_err(|e| anyhow::anyhow!("{e}"))?;
-    println!("{id}");
+    println!("{}", org.id);
     Ok(())
 }

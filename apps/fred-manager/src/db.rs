@@ -36,10 +36,13 @@ pub async fn spaces(pool: &PgPool, ids: &[Uuid]) -> sqlx::Result<Vec<Space>> {
         .await
 }
 
-pub async fn child_space_ids(pool: &PgPool, parent: Uuid) -> sqlx::Result<Vec<Uuid>> {
+pub async fn child_space_ids<'e>(
+    ex: impl sqlx::PgExecutor<'e>,
+    parent: Uuid,
+) -> sqlx::Result<Vec<Uuid>> {
     sqlx::query_scalar("select id from space where parent_id = $1")
         .bind(parent)
-        .fetch_all(pool)
+        .fetch_all(ex)
         .await
 }
 
@@ -120,22 +123,25 @@ pub async fn document(pool: &PgPool, id: Uuid) -> sqlx::Result<Document> {
 }
 
 /// One page of a folder (or of the space root when `folder` is None), keyset on (name, id).
+/// The cursor carries the last row's sort values, so deleting that row changes nothing;
+/// a document renamed across the cursor between two pages may be skipped or repeated.
 pub async fn documents(
     pool: &PgPool,
     space: Uuid,
     folder: Option<Uuid>,
-    after: Option<Uuid>,
+    after: Option<(&str, Uuid)>,
     limit: i64,
 ) -> sqlx::Result<Vec<Document>> {
     sqlx::query_as(concat!(
         document!(),
         " where space_id = $1 and folder_id is not distinct from $2
-           and ($3::uuid is null or (name, id) > (select name, id from document where id = $3))
-         order by name, id limit $4"
+           and ($3::text is null or (name, id) > ($3, $4))
+         order by name, id limit $5"
     ))
     .bind(space)
     .bind(folder)
-    .bind(after)
+    .bind(after.map(|(name, _)| name))
+    .bind(after.map(|(_, id)| id))
     .bind(limit)
     .fetch_all(pool)
     .await

@@ -21,6 +21,8 @@ pub enum AppError {
     BadRequest(String),
     #[error("{0}")]
     Conflict(String),
+    #[error("{0}")]
+    Unprocessable(String),
     #[error(transparent)]
     Internal(#[from] anyhow::Error),
 }
@@ -56,6 +58,7 @@ impl IntoResponse for AppError {
             AppError::Unavailable(_) => StatusCode::SERVICE_UNAVAILABLE,
             AppError::BadRequest(_) => StatusCode::BAD_REQUEST,
             AppError::Conflict(_) => StatusCode::CONFLICT,
+            AppError::Unprocessable(_) => StatusCode::UNPROCESSABLE_ENTITY,
             AppError::Internal(e) => {
                 tracing::error!(error = ?e, "internal error");
                 StatusCode::INTERNAL_SERVER_ERROR
@@ -66,5 +69,23 @@ impl IntoResponse for AppError {
             other => other.to_string(),
         };
         (status, Json(json!({ "detail": message }))).into_response()
+    }
+}
+
+/// `Json` whose rejections answer like FastAPI: 422 with a `detail`, never plain text.
+pub struct ApiJson<T>(pub T);
+
+impl<T, S> axum::extract::FromRequest<S> for ApiJson<T>
+where
+    Json<T>: axum::extract::FromRequest<S, Rejection = axum::extract::rejection::JsonRejection>,
+    S: Send + Sync,
+{
+    type Rejection = AppError;
+
+    async fn from_request(req: axum::extract::Request, state: &S) -> Result<Self, AppError> {
+        match Json::<T>::from_request(req, state).await {
+            Ok(Json(value)) => Ok(ApiJson(value)),
+            Err(rejection) => Err(AppError::Unprocessable(rejection.body_text())),
+        }
     }
 }

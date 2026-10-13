@@ -18,9 +18,10 @@ use crate::{
     auth::{Authenticator, CurrentUser},
     bootstrap, db,
     domain::{self, Document, Folder, Permission, Role, Space, SpaceKind},
-    error::{AppError, AppResult},
-    fga::{Fga, Tuple},
+    error::{ApiJson, AppError, AppResult},
+    fga::Fga,
     ingestion::{DeleteDocument, IngestDocument, Ingestion, Submitted},
+    spaces,
 };
 
 #[derive(Clone)]
@@ -118,8 +119,13 @@ struct BootstrapResponse {
 async fn bootstrap_platform_admin(
     State(s): State<AppState>,
     user: CurrentUser,
-    Json(req): Json<BootstrapRequest>,
+    ApiJson(req): ApiJson<BootstrapRequest>,
 ) -> AppResult<Json<BootstrapResponse>> {
+    if req.token.chars().count() < bootstrap::MIN_TOKEN_LENGTH {
+        return Err(AppError::Unprocessable(
+            "token: at least 16 characters".into(),
+        ));
+    }
     let configured = bootstrap::configured_token(s.bootstrap_token_env_var.as_deref());
     if !configured.is_some_and(|t| bootstrap::same_secret(&t, &req.token)) {
         return Err(AppError::Denied(bootstrap::INVALID.into()));
@@ -203,33 +209,16 @@ struct CreateSpace {
 async fn create_space(
     State(s): State<AppState>,
     CurrentUser { uid: user, .. }: CurrentUser,
-    Json(req): Json<CreateSpace>,
+    ApiJson(req): ApiJson<CreateSpace>,
 ) -> AppResult<(StatusCode, Json<Space>)> {
-    let parent = db::space(&s.pool, req.parent_id).await?;
-    domain::check_parent(req.kind, Some(&parent))?;
-    require(&s.fga, &user, Permission::Manage, parent.id).await?;
-    if !s.fga.check(&req.admin, Permission::Read, parent.id).await? {
-        return Err(AppError::Conflict(
-            "the administrator must be able to read the parent space".into(),
-        ));
-    }
-    let id = Uuid::new_v4();
-    let space = Space {
-        id,
-        kind: req.kind,
-        name: req.name,
-        parent_id: Some(parent.id),
-        personal_owner: None,
-        path: domain::space_path(Some(&parent), id),
-    };
-    persist_space(
-        &s,
-        &space,
-        &[Tuple {
-            user: &req.admin,
-            role: Role::Admin,
-            space: id,
-        }],
+    let space = spaces::create_space(
+        &s.pool,
+        &s.fga,
+        &user,
+        req.kind,
+        req.parent_id,
+        req.name,
+        &req.admin,
     )
     .await?;
     Ok((StatusCode::CREATED, Json(space)))
@@ -243,53 +232,10 @@ struct CreatePersonalSpace {
 async fn create_personal_space(
     State(s): State<AppState>,
     CurrentUser { uid: user, .. }: CurrentUser,
-    Json(req): Json<CreatePersonalSpace>,
+    ApiJson(req): ApiJson<CreatePersonalSpace>,
 ) -> AppResult<(StatusCode, Json<Space>)> {
-    let org = db::space(&s.pool, req.organization_id).await?;
-    domain::check_parent(SpaceKind::Team, Some(&org))?;
-    require(&s.fga, &user, Permission::Read, org.id).await?;
-    let id = Uuid::new_v4();
-    let space = Space {
-        id,
-        kind: SpaceKind::Team,
-        name: user.clone(),
-        parent_id: Some(org.id),
-        personal_owner: Some(user.clone()),
-        path: domain::space_path(Some(&org), id),
-    };
-    let tuples = [
-        Tuple {
-            user: &user,
-            role: Role::Member,
-            space: id,
-        },
-        Tuple {
-            user: &user,
-            role: Role::Editor,
-            space: id,
-        },
-    ];
-    persist_space(&s, &space, &tuples).await?;
+    let space = spaces::create_personal_space(&s.pool, &s.fga, &user, req.organization_id).await?;
     Ok((StatusCode::CREATED, Json(space)))
-}
-
-/// Row and initial roles land together: the row commits only after OpenFGA accepted the
-/// tuples. A failed commit leaves roles on a space id that never existed, which grant nothing.
-pub async fn persist_space_with(
-    pool: &PgPool,
-    fga: &Fga,
-    space: &Space,
-    tuples: &[Tuple<'_>],
-) -> AppResult<()> {
-    let mut tx = pool.begin().await?;
-    db::insert_space(&mut tx, space).await?;
-    fga.write(tuples, &[]).await?;
-    tx.commit().await?;
-    Ok(())
-}
-
-async fn persist_space(s: &AppState, space: &Space, tuples: &[Tuple<'_>]) -> AppResult<()> {
-    persist_space_with(&s.pool, &s.fga, space, tuples).await
 }
 
 fn parse_role(role: &str) -> AppResult<Role> {
@@ -301,31 +247,7 @@ async fn grant(
     CurrentUser { uid: user, .. }: CurrentUser,
     Path((id, role, target)): Path<(Uuid, String, String)>,
 ) -> AppResult<StatusCode> {
-    let role = parse_role(&role)?;
-    let space = db::space(&s.pool, id).await?;
-    if space.personal_owner.is_some() {
-        return Err(AppError::Conflict(
-            "a personal space has a fixed single member".into(),
-        ));
-    }
-    require(&s.fga, &user, Permission::Manage, id).await?;
-    if let Some(parent) = space.parent_id
-        && !s.fga.check(&target, Permission::Read, parent).await?
-    {
-        return Err(AppError::Conflict(
-            "the user must first be able to read the parent space".into(),
-        ));
-    }
-    s.fga
-        .write(
-            &[Tuple {
-                user: &target,
-                role,
-                space: id,
-            }],
-            &[],
-        )
-        .await?;
+    spaces::grant(&s.pool, &s.fga, &user, id, parse_role(&role)?, &target).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -334,37 +256,7 @@ async fn revoke(
     CurrentUser { uid: user, .. }: CurrentUser,
     Path((id, role, target)): Path<(Uuid, String, String)>,
 ) -> AppResult<StatusCode> {
-    let role = parse_role(&role)?;
-    let space = db::space(&s.pool, id).await?;
-    if space.personal_owner.is_some() {
-        return Err(AppError::Conflict(
-            "a personal space has a fixed single member".into(),
-        ));
-    }
-    require(&s.fga, &user, Permission::Manage, id).await?;
-    let held = s.fga.roles_of(&target).await?;
-    let on_space: Vec<Role> = held
-        .iter()
-        .filter(|(s, _)| *s == id)
-        .map(|(_, r)| *r)
-        .collect();
-    let children = db::child_space_ids(&s.pool, id).await?;
-    let in_child = held.iter().any(|(s, _)| children.contains(s));
-    if domain::revocation_blocked(role, &on_space, in_child) {
-        return Err(AppError::Conflict(
-            "remove the user from the child spaces first".into(),
-        ));
-    }
-    s.fga
-        .write(
-            &[],
-            &[Tuple {
-                user: &target,
-                role,
-                space: id,
-            }],
-        )
-        .await?;
+    spaces::revoke(&s.pool, &s.fga, &user, id, parse_role(&role)?, &target).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -395,7 +287,7 @@ struct CreateFolder {
 async fn create_folder(
     State(s): State<AppState>,
     CurrentUser { uid: user, .. }: CurrentUser,
-    Json(req): Json<CreateFolder>,
+    ApiJson(req): ApiJson<CreateFolder>,
 ) -> AppResult<(StatusCode, Json<Folder>)> {
     require(&s.fga, &user, Permission::Write, req.space_id).await?;
     let parent = match req.parent_id {
@@ -428,7 +320,7 @@ async fn rename_folder(
     State(s): State<AppState>,
     CurrentUser { uid: user, .. }: CurrentUser,
     Path(id): Path<Uuid>,
-    Json(req): Json<Rename>,
+    ApiJson(req): ApiJson<Rename>,
 ) -> AppResult<StatusCode> {
     let folder = db::folder(&s.pool, id).await?;
     require(&s.fga, &user, Permission::Write, folder.space_id).await?;
@@ -452,7 +344,9 @@ async fn delete_folder(
 #[derive(Deserialize)]
 struct DocumentQuery {
     folder_id: Option<Uuid>,
-    after: Option<Uuid>,
+    /// Cursor: the `name` and `id` of the last document of the previous page.
+    after_name: Option<String>,
+    after_id: Option<Uuid>,
     limit: Option<i64>,
 }
 
@@ -464,8 +358,17 @@ async fn list_documents(
 ) -> AppResult<Json<Vec<Document>>> {
     require(&s.fga, &user, Permission::Read, space).await?;
     let limit = q.limit.unwrap_or(50).clamp(1, 200);
+    let after = match (q.after_name.as_deref(), q.after_id) {
+        (Some(name), Some(id)) => Some((name, id)),
+        (None, None) => None,
+        _ => {
+            return Err(AppError::Unprocessable(
+                "after_name and after_id go together".into(),
+            ));
+        }
+    };
     Ok(Json(
-        db::documents(&s.pool, space, q.folder_id, q.after, limit).await?,
+        db::documents(&s.pool, space, q.folder_id, after, limit).await?,
     ))
 }
 
@@ -490,7 +393,7 @@ struct CreatedDocument {
 async fn create_document(
     State(s): State<AppState>,
     CurrentUser { uid: user, .. }: CurrentUser,
-    Json(req): Json<CreateDocument>,
+    ApiJson(req): ApiJson<CreateDocument>,
 ) -> AppResult<(StatusCode, Json<CreatedDocument>)> {
     require(&s.fga, &user, Permission::Write, req.space_id).await?;
     let document = Document {
@@ -531,7 +434,7 @@ async fn rename_document(
     State(s): State<AppState>,
     CurrentUser { uid: user, .. }: CurrentUser,
     Path(id): Path<Uuid>,
-    Json(req): Json<Rename>,
+    ApiJson(req): ApiJson<Rename>,
 ) -> AppResult<StatusCode> {
     let document = db::document(&s.pool, id).await?;
     require(&s.fga, &user, Permission::Write, document.space_id).await?;
@@ -611,7 +514,7 @@ struct Allowed {
 async fn authorize_document(
     State(s): State<AppState>,
     CurrentUser { uid: user, .. }: CurrentUser,
-    Json(req): Json<AuthorizeDocument>,
+    ApiJson(req): ApiJson<AuthorizeDocument>,
 ) -> AppResult<Json<Allowed>> {
     let document = db::document(&s.pool, req.document_id).await?;
     let allowed = s
@@ -636,7 +539,7 @@ struct Scope {
 async fn authorize_scope(
     State(s): State<AppState>,
     CurrentUser { uid: user, .. }: CurrentUser,
-    Json(req): Json<AuthorizeScope>,
+    ApiJson(req): ApiJson<AuthorizeScope>,
 ) -> AppResult<Json<Scope>> {
     let space = db::space(&s.pool, req.space_id).await?;
     require(&s.fga, &user, Permission::Read, space.id).await?;

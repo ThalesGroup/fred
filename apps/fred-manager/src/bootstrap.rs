@@ -6,7 +6,7 @@ use sqlx::PgPool;
 
 use crate::{error::AppError, fga::Fga};
 
-const MIN_TOKEN_LENGTH: usize = 16;
+pub const MIN_TOKEN_LENGTH: usize = 16;
 /// `advisory_lock_key("fred-manager.platform_bootstrap")`, as fred-core derives it.
 const LOCK_KEY: i64 = -1609067376650834247;
 
@@ -35,27 +35,30 @@ pub fn same_secret(a: &str, b: &str) -> bool {
     a.len() == b.len() && a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
 }
 
-/// Grants platform admin to `uid`, the caller's own subject. The tuple is written before
-/// the marker, under a transaction-scoped advisory lock: a failure in between leaves a
-/// retryable state, never a burnt bootstrap with no admin.
+/// Grants platform admin to `uid`, the caller's own subject. Unlike the control-plane,
+/// the marker naming the caller commits before the OpenFGA write: a failure in between
+/// can only be finished by that same caller retrying, never by a second secret holder.
 pub async fn grant_root(pool: &PgPool, fga: &Fga, uid: &str) -> Result<(), AppError> {
     let mut tx = pool.begin().await?;
     sqlx::query("select pg_advisory_xact_lock($1)")
         .bind(LOCK_KEY)
         .execute(&mut *tx)
         .await?;
-    let done: bool = sqlx::query_scalar("select exists(select 1 from platform_bootstrap)")
-        .fetch_one(&mut *tx)
+    let owner: Option<String> = sqlx::query_scalar("select completed_by from platform_bootstrap")
+        .fetch_optional(&mut *tx)
         .await?;
-    if done {
-        return Err(AppError::Conflict(COMPLETED.into()));
+    match owner {
+        None => {
+            sqlx::query("insert into platform_bootstrap (completed_by) values ($1)")
+                .bind(uid)
+                .execute(&mut *tx)
+                .await?;
+            tx.commit().await?;
+        }
+        Some(owner) if owner == uid && !fga.is_platform_admin(uid).await? => {}
+        Some(_) => return Err(AppError::Conflict(COMPLETED.into())),
     }
     fga.grant_platform_admin(uid).await?;
-    sqlx::query("insert into platform_bootstrap (completed_by) values ($1)")
-        .bind(uid)
-        .execute(&mut *tx)
-        .await?;
-    tx.commit().await?;
     Ok(())
 }
 

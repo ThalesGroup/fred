@@ -25,7 +25,10 @@ use serde_json::{Map, Value, json};
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
-const JWKS_LIFESPAN: Duration = Duration::from_secs(300); // PyJWKClient default
+// PyJWKClient defaults: the key set lives five minutes, and an unknown kid forces at
+// most one refetch every thirty seconds.
+const JWKS_LIFESPAN: Duration = Duration::from_secs(300);
+const JWKS_COOLDOWN: Duration = Duration::from_secs(30);
 const LOCAL_DEV_CLIENT_ID: &str = "local-dev";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -164,10 +167,16 @@ impl Jwks {
     async fn key(&self, kid: &str) -> Result<DecodingKey> {
         {
             let (fetched, keys) = &*self.cache.read().await;
-            let fresh = fetched.is_some_and(|t| t.elapsed() < JWKS_LIFESPAN);
-            if let (true, Some(k)) = (fresh, keys.get(kid)) {
-                return Ok(k.clone());
+            if let Lookup::Use = lookup(fetched.map(|t| t.elapsed()), keys.contains_key(kid)) {
+                return Ok(keys[kid].clone());
             }
+        }
+        // One fetch at a time: concurrent misses wait here and reuse its result.
+        let mut cache = self.cache.write().await;
+        match lookup(cache.0.map(|t| t.elapsed()), cache.1.contains_key(kid)) {
+            Lookup::Use => return Ok(cache.1[kid].clone()),
+            Lookup::Refuse => bail!("unknown kid within the refetch cooldown"),
+            Lookup::Fetch => {}
         }
         let set: JwkSet = self
             .http
@@ -177,10 +186,24 @@ impl Jwks {
             .error_for_status()?
             .json()
             .await?;
-        let keys = signing_keys(&set);
-        let found = keys.get(kid).cloned();
-        *self.cache.write().await = (Some(Instant::now()), keys);
-        found.context("no signing key for kid")
+        *cache = (Some(Instant::now()), signing_keys(&set));
+        cache.1.get(kid).cloned().context("no signing key for kid")
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum Lookup {
+    Use,
+    Fetch,
+    Refuse,
+}
+
+/// `age` is the time since the last fetch, if any.
+fn lookup(age: Option<Duration>, known: bool) -> Lookup {
+    match age {
+        Some(age) if age < JWKS_LIFESPAN && known => Lookup::Use,
+        Some(age) if age < JWKS_COOLDOWN => Lookup::Refuse,
+        _ => Lookup::Fetch,
     }
 }
 
@@ -324,17 +347,12 @@ impl Verifier {
             }
         };
 
-        if let (Some(iat), Some(exp)) = (number(&payload, "iat"), number(&payload, "exp")) {
-            let lifetime = exp - iat;
-            if lifetime < 0.0 {
-                tracing::warn!("[AUTH] JWT has negative lifetime");
-                return Err(AuthError::NegativeLifetime);
-            }
-            if lifetime > s.max_token_lifetime_seconds {
-                tracing::warn!("[AUTH] JWT lifetime exceeds policy ceiling");
-                return Err(AuthError::LifetimeTooLong);
-            }
-        }
+        check_times(
+            &payload,
+            now_seconds(),
+            s.clock_skew_seconds,
+            s.max_token_lifetime_seconds,
+        )?;
 
         let roles_path = s.roles_claim.clone().unwrap_or_else(|| {
             vec![
@@ -457,8 +475,43 @@ fn string(payload: &Map<String, Value>, key: &str) -> Option<String> {
     payload.get(key).and_then(Value::as_str).map(String::from)
 }
 
-fn number(payload: &Map<String, Value>, key: &str) -> Option<f64> {
-    payload.get(key).and_then(Value::as_f64)
+fn now_seconds() -> f64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs_f64())
+        .unwrap_or(0.0)
+}
+
+/// PyJWT refuses a non-integer or future `iat`; fred-core then caps `exp - iat`.
+/// Stricter than fred-core on one point: `iat` is required, so the ceiling always applies.
+fn check_times(
+    payload: &Map<String, Value>,
+    now: f64,
+    leeway: u64,
+    max_lifetime: f64,
+) -> Result<(), AuthError> {
+    let Some(iat) = payload.get("iat").and_then(Value::as_i64) else {
+        tracing::warn!("[AUTH] JWT missing or non-integer iat");
+        return Err(AuthError::Invalid);
+    };
+    let iat = iat as f64;
+    if iat > now + leeway as f64 {
+        tracing::warn!("[AUTH] JWT issued in the future");
+        return Err(AuthError::Invalid);
+    }
+    let exp = payload
+        .get("exp")
+        .and_then(Value::as_f64)
+        .ok_or(AuthError::Invalid)?;
+    if exp - iat < 0.0 {
+        tracing::warn!("[AUTH] JWT has negative lifetime");
+        return Err(AuthError::NegativeLifetime);
+    }
+    if exp - iat > max_lifetime {
+        tracing::warn!("[AUTH] JWT lifetime exceeds policy ceiling");
+        return Err(AuthError::LifetimeTooLong);
+    }
+    Ok(())
 }
 
 /// `OAuth2PasswordBearer(auto_error=False)`: only `Authorization: Bearer <token>`.
@@ -622,11 +675,51 @@ mod tests {
             decode(settings(), overlong).await.unwrap_err(),
             AuthError::LifetimeTooLong
         );
-        let negative = bob(json!({ "iat": now() + 600 }));
+        // PyJWT refuses a future iat before any lifetime check.
+        let future = bob(json!({ "iat": now() + 600 }));
         assert_eq!(
-            decode(settings(), negative).await.unwrap_err(),
-            AuthError::NegativeLifetime
+            decode(settings(), future).await.unwrap_err(),
+            AuthError::Invalid
         );
+    }
+
+    #[tokio::test]
+    async fn lifetime_ceiling_cannot_be_skipped() {
+        let mut no_iat = bob(json!({ "exp": now() + 365 * 86400 }));
+        no_iat.as_object_mut().unwrap().remove("iat");
+        assert_eq!(
+            decode(settings(), no_iat).await.unwrap_err(),
+            AuthError::Invalid
+        );
+        let text_iat = bob(json!({ "iat": "x" }));
+        assert_eq!(
+            decode(settings(), text_iat).await.unwrap_err(),
+            AuthError::Invalid
+        );
+        let fractional_iat = bob(json!({ "iat": now() as f64 + 0.5 }));
+        assert_eq!(
+            decode(settings(), fractional_iat).await.unwrap_err(),
+            AuthError::Invalid
+        );
+    }
+
+    #[test]
+    fn negative_lifetime_is_refused() {
+        let payload = json!({ "iat": 1000, "exp": 900 });
+        let r = check_times(payload.as_object().unwrap(), 1000.0, 0, 3600.0);
+        assert_eq!(r.unwrap_err(), AuthError::NegativeLifetime);
+    }
+
+    #[test]
+    fn jwks_refetch_rules() {
+        let s = Duration::from_secs;
+        assert_eq!(lookup(None, false), Lookup::Fetch);
+        assert_eq!(lookup(Some(s(10)), true), Lookup::Use);
+        // An unknown kid refetches at most once per cooldown.
+        assert_eq!(lookup(Some(s(10)), false), Lookup::Refuse);
+        assert_eq!(lookup(Some(s(31)), false), Lookup::Fetch);
+        // An expired set is refetched even for a known kid.
+        assert_eq!(lookup(Some(s(301)), true), Lookup::Fetch);
     }
 
     #[tokio::test]
