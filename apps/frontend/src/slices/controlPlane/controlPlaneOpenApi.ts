@@ -96,6 +96,7 @@ const injectedRtkApi = api.injectEndpoints({
           offset: queryArg.offset,
           limit: queryArg.limit,
           query: queryArg.query,
+          exceptions_only: queryArg.exceptionsOnly,
         },
       }),
     }),
@@ -2054,6 +2055,8 @@ export type ListPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGetApiA
   offset?: number;
   limit?: number;
   query?: string;
+  /** Only users holding an individual exception. */
+  exceptionsOnly?: boolean;
 };
 export type GrantPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersPostApiResponse = unknown;
 export type GrantPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersPostApiArg = {
