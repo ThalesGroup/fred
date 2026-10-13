@@ -12,8 +12,6 @@ export PROTOC ?= $(HOME)/bin/tools/protoc/bin/protoc
 # Needed env variable to start app
 ROOT_DIR := $(realpath $(CURDIR))
 export ENV_FILE ?= $(ROOT_DIR)/config/.env
-export LOG_LEVEL ?= info
-export RUST_LOG ?= $(LOG_LEVEL)
 
 # Corporate SSL inspection (e.g. Zscaler) — point TLS clients to the system CA bundle.
 export SSL_CERT_FILE ?= $(shell test -f /etc/ssl/certs/ca-certificates.crt && echo /etc/ssl/certs/ca-certificates.crt)

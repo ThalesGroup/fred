@@ -86,6 +86,24 @@ may be skipped or repeated.
   enforces even with `--skip-schema-validation`. It goes away when fred-manager joins
   the chart and its schema.
 
+## Logging
+
+Same stdout output as the Python APIs (fred-core `logs/processors.py`). `app.log_format`
+selects `json`, one object per line with `severity`, `message`, `timestamp`
+(`seconds`/`nanos`), `logger`, `service` (`fred-manager`), `service_role` (`api`),
+`category` and `logging.googleapis.com/sourceLocation`, or readable `text` without
+terminal-width wrapping or colors when redirected. `app.log_level` sets the level.
+Local configuration selects text; k3d selects JSON, as the chart reference values do.
+
+Event and request-context fields are top-level and never replace core fields; fields
+named like credentials or content (`token`, `email`, `body`, ...) are dropped.
+Dependencies reach stdout from WARNING only, with the fixed message `Dependency
+diagnostic`. Every request gets `X-Request-ID` and `X-Correlation-ID` headers, its
+lines carry `request_id`, `correlation_id` and, once authenticated, `user_id`, and it
+ends with one event on logger `http`: method, route template, status, duration and
+outcome, silent for successful health probes. Rust has no function names at runtime,
+so `sourceLocation.function` holds the module path, and there is no `task_name`.
+
 ## Root platform admin
 
 Same contract and same commands as the control-plane's root bootstrap. A fresh

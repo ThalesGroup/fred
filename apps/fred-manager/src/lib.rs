@@ -24,4 +24,5 @@ pub mod domain;
 pub mod error;
 pub mod fga;
 pub mod ingestion;
+pub mod logging;
 pub mod spaces;

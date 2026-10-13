@@ -547,7 +547,10 @@ where
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         let auth: Arc<Authenticator> = axum::extract::FromRef::from_ref(state);
-        auth.authenticate(bearer(parts)).await
+        let user = auth.authenticate(bearer(parts)).await?;
+        // As fred-core's bind_operation_context: every later line of the request names the user.
+        tracing::Span::current().record("user_id", user.uid.as_str());
+        Ok(user)
     }
 }
 

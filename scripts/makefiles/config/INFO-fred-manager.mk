@@ -11,7 +11,3 @@ DOCKER_CONTEXT      ?= .
 IMAGE_NAME          ?= fred-manager
 IMAGE_TAG           ?= $(VERSION)
 IMAGE_FULL          ?= $(REGISTRY_URL)/$(REGISTRY_NAMESPACE)/$(IMAGE_NAME):$(IMAGE_TAG)
-
-# Runtime
-PORT                ?= 8400
-LOG_LEVEL           ?= info

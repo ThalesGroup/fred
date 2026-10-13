@@ -14,10 +14,12 @@
 
 //! fred-manager command line: serve the API, or create an organization.
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use sqlx::postgres::PgPoolOptions;
 
-use fred_manager::{api, auth, config::Configuration as Config, fga::Fga, ingestion, spaces};
+use fred_manager::{
+    api, auth, config::Configuration as Config, fga::Fga, ingestion, logging, spaces,
+};
 
 const USAGE: &str = "usage: fred-manager [serve | create-org <name> <admin-user>]";
 
@@ -26,9 +28,9 @@ async fn main() -> Result<()> {
     // Same rule as fred-pod: ENV_FILE, default ./config/.env, never overriding the process.
     let env_file = std::env::var("ENV_FILE").unwrap_or_else(|_| "./config/.env".into());
     let env_loaded = dotenvy::from_path(&env_file).is_ok();
-    tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .init();
+    let (config_file, config) = Config::load()?;
+    // Startup events wait for the configured format, as fred-pod buffers them.
+    logging::init(&config.app.log_level, config.app.log_format)?;
     if env_loaded {
         tracing::info!(env_file, "Environment configuration loaded");
     } else {
@@ -37,10 +39,9 @@ async fn main() -> Result<()> {
             "Environment file unavailable; using process environment"
         );
     }
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    let (config_file, config) = Config::load()?;
     tracing::info!(config_file, "Configuration loaded");
-    match args
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let outcome = match args
         .iter()
         .map(String::as_str)
         .collect::<Vec<_>>()
@@ -48,8 +49,14 @@ async fn main() -> Result<()> {
     {
         [] | ["serve"] => serve(config).await,
         ["create-org", name, admin] => create_org(config, name, admin).await,
-        _ => bail!(USAGE),
+        _ => Err(anyhow::anyhow!(USAGE)),
+    };
+    // Once logging runs, a fatal error is one more structured event, not stray stderr.
+    if let Err(error) = outcome {
+        tracing::error!(error = format!("{error:#}"), "fred-manager stopped");
+        std::process::exit(1);
     }
+    Ok(())
 }
 
 async fn pool(config: &Config) -> Result<sqlx::PgPool> {

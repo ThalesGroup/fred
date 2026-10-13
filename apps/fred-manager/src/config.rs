@@ -23,7 +23,10 @@ use anyhow::{Context, Result, bail};
 use serde::Deserialize;
 use sqlx::postgres::PgConnectOptions;
 
-use crate::auth::{Provider, SecuritySettings, UserClaims};
+use crate::{
+    auth::{Provider, SecuritySettings, UserClaims},
+    logging::LogFormat,
+};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Configuration {
@@ -39,6 +42,11 @@ pub struct AppConfig {
     #[serde(default = "default_address")]
     pub address: String,
     pub port: u16,
+    #[serde(default = "default_log_level")]
+    pub log_level: String,
+    /// `json` (one object per stdout line) or `text`, as the Python APIs' `app.log_format`.
+    #[serde(default)]
+    pub log_format: LogFormat,
     /// Root-bootstrap secret, read from this environment variable.
     #[serde(default)]
     pub bootstrap_token_env_var: Option<String>,
@@ -134,6 +142,9 @@ pub struct TemporalConfig {
 
 fn yes() -> bool {
     true
+}
+fn default_log_level() -> String {
+    "info".into()
 }
 fn default_address() -> String {
     "0.0.0.0".into()

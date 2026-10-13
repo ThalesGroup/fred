@@ -834,6 +834,7 @@ dependencies = [
  "temporalio-common",
  "thiserror",
  "tokio",
+ "tower",
  "tower-http 0.7.0",
  "tracing",
  "tracing-subscriber",

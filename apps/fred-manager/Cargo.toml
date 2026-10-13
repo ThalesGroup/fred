@@ -20,12 +20,13 @@ thiserror = "2.0.21"
 tokio = { version = "1.53.2", features = ["full"] }
 tower-http = { version = "=0.7.0", features = ["cors"] }
 tracing = "0.1.44"
-tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+tracing-subscriber = "0.3.23"
 uuid = { version = "1.28.0", features = ["v4", "serde", "v5"] }
 
 [dev-dependencies]
 base64 = "0.23.1"
 rsa = "=0.9.10"
+tower = { version = "0.5", features = ["util"] }
 
 # Test-only RSA key generation is unusably slow unoptimized.
 [profile.dev.package.rsa]

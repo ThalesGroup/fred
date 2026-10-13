@@ -35,7 +35,7 @@ use crate::{
     error::{ApiJson, AppError, AppResult},
     fga::Fga,
     ingestion::{DeleteDocument, IngestDocument, Ingestion, Submitted},
-    spaces,
+    logging, spaces,
 };
 
 #[derive(Clone)]
@@ -70,7 +70,11 @@ pub fn router(state: AppState, base_url: &str, authorized_origins: &[String]) ->
             Method::DELETE,
             Method::OPTIONS,
         ])
-        .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION]);
+        .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION])
+        .expose_headers([
+            header::HeaderName::from_static("x-request-id"),
+            header::HeaderName::from_static("x-correlation-id"),
+        ]);
     let api = Router::new()
         .route(
             "/healthz",
@@ -102,8 +106,13 @@ pub fn router(state: AppState, base_url: &str, authorized_origins: &[String]) ->
         .route("/documents/{id}/ingest", post(ingest_document))
         .route("/authorize/document", post(authorize_document))
         .route("/authorize/scope", post(authorize_scope))
+        .route_layer(axum::middleware::from_fn(logging::expose_route))
         .with_state(state);
-    Router::new().nest(base_url, api).layer(cors)
+    // Request logging is outermost, as in fred-core: it also sees CORS and 404 answers.
+    Router::new()
+        .nest(base_url, api)
+        .layer(cors)
+        .layer(axum::middleware::from_fn(logging::request_logging))
 }
 
 async fn require(fga: &Fga, user: &str, permission: Permission, space: Uuid) -> AppResult<()> {
