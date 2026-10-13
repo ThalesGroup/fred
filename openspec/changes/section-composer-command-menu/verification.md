@@ -215,6 +215,32 @@ real RTK Query `refetch()` joining a request in flight and retrying a failed
 one (the tests stand in for it with a promise), and the fr and en wording of
 the two new strings in place.
 
+## Owner check (task 6.4)
+
+Done by the owner on 2026-10-13 in the running app, in Firefox: the whole
+commands feature (the menu and its sections, tokens and badges, the prompt
+preview, Enter on a row, search, the empty and error lines, the stale-command
+error) and the four scenarios of "Independent review fixes" above. Result as
+reported by the owner: all good. The confirmation was given for the feature as
+a whole, not point by point against the list of task 6.4.
+
+Not verified:
+
+- Chrome was not confirmed by the owner. The only Chrome evidence is the
+  headless rendered samples described above.
+- The sections above that say "nothing was looked at in a browser" were
+  written before this check; they stand for what the assistant saw, not for
+  the owner's check.
+
+Accepted as is by the owner:
+
+- Cosmetic: the caret can look slightly off right before a token that is the
+  first element of the field.
+- To be watched if it is ever met in real use: when a command catalog is down
+  and the retry on submit also fails, a message holding a hand-typed word
+  shaped like `/name` is held back with the "could not be read" toast, even
+  when that word was ordinary text. No change is planned.
+
 ## Divergence from the plan
 
 - The spec delta uses REMOVED plus ADDED instead of RENAMED plus MODIFIED, to

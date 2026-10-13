@@ -298,17 +298,43 @@ No pull request is open yet; these go in its description when it is.
 
 ### Owner check (task 7.5)
 
-- [ ] Two and three prompts picked from both sections
-- [ ] The same prompt twice
-- [ ] Prompts mixed with skills
-- [ ] Typed names
-- [ ] Each composer preview
-- [ ] Send, badges, each panel
-- [ ] Reload
-- [ ] Recall
-- [ ] Copy
-- [ ] A deleted prompt among several
-- [ ] The limit
-- [ ] An old conversation
-- [ ] A new conversation's title
-- [ ] Firefox and Chrome, fr and en
+Done by the owner on 2026-10-13 in the running app, in Firefox: the whole
+feature, including several prompts per message, reload, recall, the
+stale-command error and the four scenarios of "Independent review fixes".
+Result as reported by the owner: all good. The confirmation was given for the
+feature as a whole; the points below are ticked on that basis, not from a
+point-by-point report.
+
+- [x] Two and three prompts picked from both sections
+- [x] The same prompt twice
+- [x] Prompts mixed with skills
+- [x] Typed names
+- [x] Each composer preview
+- [x] Send, badges, each panel
+- [x] Reload
+- [x] Recall
+- [x] Copy
+- [x] A deleted prompt among several
+- [x] The limit
+- [x] An old conversation
+- [x] A new conversation's title
+- [x] Firefox
+- [ ] Chrome: not confirmed by the owner
+
+Not verified: Chrome; whether both fr and en were read in place was not
+reported. "Not verified" above ("nothing was looked at in a browser", "no turn
+was sent to a running runtime") was written before this check and stands for
+the assistant's own evidence.
+
+Seen on the dev stack: a message with several prompts sent through a runtime
+that does not know the list keeps only its first badge after a reload, with
+no error.
+
+Accepted as is by the owner:
+
+- Cosmetic: the caret can look slightly off right before a token that is the
+  first element of the field.
+- To be watched if it is ever met in real use: when a command catalog is down
+  and the retry on submit also fails, a message holding a hand-typed word
+  shaped like `/name` is held back with the "could not be read" toast, even
+  when that word was ordinary text. No change is planned.
