@@ -5238,11 +5238,11 @@ typed token still submits as ordinary text and `Tab` still moves focus.
 
 ### Inline skill invocation
 
-A completed `/<name>` stays at its invocation position within the editable text. The full name with its leading slash (`/name`, for prompts and platform skills alike, in the menu, the composer and sent messages) and its icon form a small clickable container: `--secondary-container` fill with `--on-secondary-container` icon and name, for a platform skill and for a prompt (team or personal) alike, so that every command has one colour and the two differ by their icon only; `--radius-xs`, `--spacing-2xs` horizontal padding and no vertical padding, so a line holding one is exactly as tall as a plain line. No border, removal cross or separate row. Chat uses a CodeMirror plain-text document with an inline replacement decoration; ordinary textarea consumers are unchanged. Wrapped lines and explicit newlines start at the normal text inset, and the label scrolls with its line. A token is one block (a CodeMirror atomic range): Left/Right and a selection cross it in one step, Backspace right after it or Delete right before it removes the whole `/name` together with the space that would otherwise be left doubled or leading, and undo brings it back. The command menu does not reopen on that deletion, and it stays closed whenever the caret sits right after a rendered token, prompt or skill, picked or typed by hand, even at the very end of the draft: the text under a token is no longer a command being typed. A new `/` further on opens it for that new command only. A programmatic edit that breaks the name still drops recognition while preserving surrounding text. A skill can be sent alone. Its advisory argument hint appears after a bare selected invocation without becoming document content. The placeholder is not part of the editable line: it is an `aria-hidden` element sharing the editor's grid cell, under it, with the same inset, font and line height, shown while the document is empty (`aria-placeholder` carries it for assistive technology). The empty line then holds only its line break, so the native caret is drawn at its normal height with nothing against it; a long placeholder still wraps and sizes the field.
+A completed `/<name>` stays at its invocation position within the editable text. The full name with its leading slash (`/name`, for prompts and platform skills alike, in the menu, the composer and sent messages) and its icon form a small clickable container: `--secondary-container` fill with `--on-secondary-container` icon and name, for a platform skill and for a prompt (team or personal) alike, so that every command has one colour and the two differ by their icon only; `--radius-xs`, `--spacing-2xs` horizontal padding and no vertical padding, so a line holding one is exactly as tall as a plain line. No border, removal cross or separate row. Chat uses a CodeMirror plain-text document with an inline replacement decoration; ordinary textarea consumers are unchanged. Wrapped lines and explicit newlines start at the normal text inset, and the label scrolls with its line. A token is one block (a CodeMirror atomic range): Left/Right and a selection cross it in one step, Backspace right after it or Delete right before it removes the whole `/name` together with the space that would otherwise be left doubled or leading, and undo brings it back. The command menu does not reopen on that deletion, and it stays closed whenever the caret sits right after a rendered token, prompt or skill, picked or typed by hand, even at the very end of the draft: the text under a token is no longer a command being typed. A new `/` further on opens it for that new command only. A programmatic edit that breaks the name still drops recognition while preserving surrounding text. A message can hold several prompt tokens, up to 16, the same command more than once included; each is its own block with its own source hint, and removing or editing one leaves the other prompt and skill tokens recognised. A skill can be sent alone. Its advisory argument hint appears after a bare selected invocation without becoming document content. The placeholder is not part of the editable line: it is an `aria-hidden` element sharing the editor's grid cell, under it, with the same inset, font and line height, shown while the document is empty (`aria-placeholder` carries it for assistive technology). The empty line then holds only its line break, so the native caret is drawn at its normal height with nothing against it; a long placeholder still wraps and sizes the field.
 
-Skill suggestions use the command range at the caret, including before, after or within existing text. Completion replaces only that range and preserves its position. An exact catalog name followed by whitespace also imports on typing or paste. Neither action sends. Available prompt commands also complete inline without erasing surrounding text, before or after selected skills in every managed execution family. A complete delimited skill name takes precedence, while choosing the prompt entry explicitly preserves prompt dispatch.
+Skill suggestions use the command range at the caret, including before, after or within existing text. Completion replaces only that range and preserves its position. An exact catalog name followed by whitespace also imports on typing or paste. Neither action sends. Available prompt commands also complete inline without erasing surrounding text, before or after selected skills in every managed execution family, and the menu keeps offering them, from the team and from the personal space, when the message already holds one or more prompt commands. A complete delimited skill name takes precedence, while choosing the prompt entry explicitly preserves prompt dispatch.
 
-Sent attributed user messages render the same inline token at its stored position. Full copy, native selection-copy and edit use `/name`. Older request-only and `/skill name` turns normalize to this canonical form for display/copy/edit without a backend schema change. Multiple skills can coexist with one available prompt in either selection order. Draft and history show the same prompt and skill containers. The user bubble is itself `--secondary-container`, the fill of every container, so sent containers add an inset 1px `--secondary` hairline (a shadow, not a border: no size change). Each occurrence remains independently editable; repeated names load once. A catalog refresh invalidating a completed selection fails submission rather than dropping it. Canonical prompt draft text and its selected occurrence preserve mixed history, copying and editing.
+Sent attributed user messages render the same inline token at its stored position. Full copy, native selection-copy and edit use `/name`. Older request-only and `/skill name` turns normalize to this canonical form for display/copy/edit without a backend schema change. Several skills and several prompts can coexist in any selection order. Draft and history show the same prompt and skill containers. The user bubble is itself `--secondary-container`, the fill of every container, so sent containers add an inset 1px `--secondary` hairline (a shadow, not a border: no size change). Each occurrence remains independently editable; repeated names load once. A catalog refresh invalidating a completed selection fails submission rather than dropping it. Canonical prompt draft text and its selected occurrence preserve mixed history, copying and editing.
 Agent-selected skills appear in the reasoning trace rather than labeling the user
 message. The inline icon/name is a keyboard-accessible button that opens the
 existing exclusive right-hand chat panel; activating the same skill again closes
@@ -5298,28 +5298,35 @@ happens on that ordinary submit only, so every way of picking a row reaches the
 same send, with the same pinned prompt and the same turn descriptor. A token no
 prompt holds is sent as typed — the user may genuinely have meant to write it.
 
-When a command cannot run, the toast says which case it is. If its prompt was
-deleted or renamed, or the token was picked for another agent or team, it asks
-the user to remove the command and choose it again. "Try again in a moment" is
-kept for a read that failed or a catalog that has not answered yet.
+When a command cannot run, the toast names it (`/command`) and says which case
+it is. If its prompt was deleted or renamed, or the token was picked for
+another agent or team, it asks the user to remove the command and choose it
+again. "Try again in a moment" is kept for a read that failed or a catalog that
+has not answered yet. With several prompt commands the message is sent whole or
+not at all: one command that cannot run holds everything back, the draft is
+kept, and the toast names the first such command of the line. A message with
+more than 16 prompt commands is refused with a toast stating the limit.
 
 What goes on the wire is the **prompt's text**, never the command: the text does
 not pass through the composer and the user never sees it there. In ReAct, text
 before and after the token stays on its respective side of the expanded prompt,
-including other selected skills. A single prompt and several skills share the
-turn; all skill names travel together in its runtime context.
+including other selected skills. Several prompts and several skills share the
+turn: each prompt's text takes the place of its own command, in the order of
+the line, each prompt is read once even when its command is repeated, and all
+skill names travel together in the turn's runtime context. The length limit
+applies to the assembled text.
 
 The turn itself renders as its command rather than as the assembled text
 (`UserMessage` + `CommandTurn`), which keeps a transcript of long prompts
-readable. Sent prompt tokens use the composer's prompt container and
+readable, with one badge per prompt command at its position in the typed line. Sent prompt tokens use the composer's prompt container and
 decorative `edit_note` icon, with the same compact inline presentation as skill
-badges; keyboard focus draws a `--primary` outline around the container. The panel a sent prompt opens (`CommandPromptPanel`) stacks its header: the prompt's name on top (`--on-surface`, label-large), its `/command` below (`--on-surface-retreat`, body-medium), then the text that was sent; no description is shown. The composer's prompt token opens the same panel before anything is sent: same header, then the prompt's current text read on opening, with a short line while it loads or when it cannot be read (deleted, or no longer accessible); activating the token again closes it. Legacy appended text keeps the bubble's text colour. Hover and press tint
+badges; keyboard focus draws a `--primary` outline around the container. The panel a sent prompt opens (`CommandPromptPanel`) stacks its header: the prompt's name on top (`--on-surface`, label-large), its `/command` below (`--on-surface-retreat`, body-medium), then the text that was sent; no description is shown. A badge opens the panel on its own prompt alone: that prompt's name, its `/command`, and the part of the sent text that came from it, without the user's own words or another prompt's text. A turn stored before prompts were listed one by one, or whose list does not fit its stored text, shows a single badge and the whole sent text, as before. Each prompt token of the composer opens the same panel before anything is sent: same header, then that prompt's current text read on opening, with a short line while it loads or when it cannot be read (deleted, or no longer accessible); activating the same token again closes it, activating another one replaces the preview. Legacy appended text keeps the bubble's text colour. Hover and press tint
 the badge with the secondary container state layers, like a tonal button (no underline), for prompt and skill badges alike and for the clickable composer token; keyboard focus is visible. The slash is display only: stored text, recognition, offsets, `data-skill-name` and accessible labels keep the bare name, and a selection-copy never adds a second slash. Selection-copy omits decorative glyph
 names and preserves the command and skill slashes.
 The command and the text typed after it are laid out as one inline
 sentence, not as a flex row: they are one string and have to reflow as one when
 the bubble narrows (opening a side panel), where flex items would each wrap on
-their own and read as two unrelated texts. A control on that turn opens the text that was actually sent, read
+their own and read as two unrelated texts. Each badge on that turn opens the text that was actually sent, read
 from the turn's own stored copy: the prompt behind it may since have been
 edited or deleted, so it cannot be re-fetched by id.
 
@@ -5330,7 +5337,7 @@ colour) is what marks it actionable. `--radius-xs`, well inside the bubble's
 `--radius-m`, so it reads as nested rather than as a second bubble.
 
 A command-launched conversation takes its **title from what was run** — the
-prompt's name, plus any text typed after the command, falling back to
+name of the first prompt of the line, plus the user's own text, falling back to
 `/<command>`. Not the composer's contents, which may hold only the partial
 query `Enter` matched, and not the prompt's body, which would name every run of
 one command identically. Nothing retitles a session afterwards.
@@ -5342,7 +5349,9 @@ conversation; further presses go back, ArrowDown goes forward, and ArrowDown
 past the newest empties the composer. Browsing lasts only while the recalled
 line is untouched: any edit hands the arrows back to the caret, so a draft is
 never replaced. The list is the thread itself, never browser storage, and a
-command turn comes back as the typed `/command` line, not the prompt it ran.
+command turn comes back as the typed `/command` line, not the prompt it ran,
+with every prompt command restored as a token bound to the prompt it was sent
+with.
 
 The command menu answers typing, not a recall: a recalled `/command` keeps it
 shut (its query starts out dismissed, as after `Esc`), and the first edit

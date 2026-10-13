@@ -75,19 +75,30 @@ pouvez compléter votre message.
 La commande ajoutée s'affiche comme une petite étiquette dans votre message.
 Cliquez dessus pour relire le texte du prompt avant d'envoyer.
 
-Vous pouvez placer une commande de prompt et plusieurs skills plateforme
-n'importe où dans un message, dans l'ordre que vous voulez. Le texte écrit
-avant et après est conservé. À l'envoi, le texte du prompt prend la place de sa
-commande et tous les skills choisis sont demandés ensemble.
+Vous pouvez placer plusieurs commandes de prompt et plusieurs skills
+plateforme n'importe où dans un message, dans l'ordre que vous voulez ; la
+liste continue de proposer vos commandes après la première. Le texte écrit
+avant, entre et après est conservé. À l'envoi, le texte de chaque prompt prend
+la place de sa propre commande et tous les skills choisis sont demandés
+ensemble. Chaque commande a sa propre étiquette, et vous pouvez utiliser la
+même commande plusieurs fois.
 
-Par exemple, `Avant /resume après /verify-answer` conserve « Avant » devant le
-prompt de résumé et « après /verify-answer » derrière.
+Par exemple, `D'abord /resume puis /ton merci /verify-answer` envoie
+« D'abord », le prompt de résumé, « puis », le prompt de ton et
+« merci /verify-answer », dans cet ordre.
+
+Un message peut contenir jusqu'à 16 commandes de prompt. Si l'une d'elles
+n'est plus utilisable, par exemple parce que son prompt a été supprimé, rien
+n'est envoyé : un message vous indique quelle commande retirer ou choisir à
+nouveau, et ce que vous avez écrit reste dans le champ.
 
 ## Ce que voit la conversation
 
-Votre message s'affiche comme la commande lancée, pas comme le texte complet du
-prompt : la conversation reste lisible. Un bouton sur ce message ouvre le texte
-réellement envoyé, si vous voulez le vérifier.
+Votre message s'affiche tel que vous l'avez tapé, avec une étiquette pour
+chaque commande à la place du texte complet des prompts : la conversation
+reste lisible. Cliquez sur une étiquette pour ouvrir le texte réellement
+envoyé pour cette commande, si vous voulez le vérifier. Copier le message
+redonne la ligne que vous avez tapée.
 
 Pour adapter un prompt avant de l'envoyer, passez plutôt par la bibliothèque —
 voir [Les prompts](/help/fr/features/prompts) et

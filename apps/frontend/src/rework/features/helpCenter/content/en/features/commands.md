@@ -69,19 +69,28 @@ first adds it, the second sends. In between, you can complete your message.
 The added command shows as a small label in your message. Click it to read the
 prompt's text again before sending.
 
-You can place one prompt command and several platform skills anywhere in a
-message, in the order you like. The text written before and after is kept. On
-send, the prompt's text takes the place of its command and all the chosen
-skills are requested together.
+You can place several prompt commands and several platform skills anywhere in
+a message, in the order you like; the list keeps offering your commands after
+the first one. The text written before, between and after is kept. On send,
+each prompt's text takes the place of its own command and all the chosen
+skills are requested together. Each command has its own label, and you can use
+the same command more than once.
 
-For example, `Before /summary after /verify-answer` keeps “Before” ahead of the
-summary prompt, and “after /verify-answer” behind it.
+For example, `First /summary then /tone please /verify-answer` sends “First”,
+the summary prompt, “then”, the tone prompt, and “please /verify-answer”, in
+that order.
+
+A message can hold up to 16 prompt commands. If one of them can no longer be
+used, for example because its prompt was deleted, nothing is sent: a message
+tells you which command to remove or choose again, and what you wrote stays in
+the field.
 
 ## What the conversation shows
 
-Your message appears as the command you ran, not as the prompt's full text, so
-the conversation stays readable. A button on that message opens the text that
-was actually sent, if you want to check it.
+Your message appears as you typed it, with a label for each command instead of
+the prompts' full text, so the conversation stays readable. Click a label to
+open the text that was actually sent for that command, if you want to check
+it. Copying the message gives the line you typed.
 
 To adapt a prompt before sending it, go through the library instead — see
 [Prompts](/help/en/features/prompts) and
