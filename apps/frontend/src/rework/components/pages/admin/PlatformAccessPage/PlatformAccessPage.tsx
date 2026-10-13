@@ -308,7 +308,7 @@ export default function PlatformAccessPage() {
                     },
                     {
                       label: t("rework.platformAccess.exception"),
-                      size: "9rem",
+                      size: "10rem",
                       cellRenderer: (user) => {
                         const hasIndividual = user.sources.some(
                           (source) => source.kind === "manual" || source.kind === "t0",
