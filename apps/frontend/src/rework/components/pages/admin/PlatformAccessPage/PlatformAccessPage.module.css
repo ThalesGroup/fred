@@ -153,6 +153,21 @@
 .linkToolbar > button {
   margin-inline-start: auto;
 }
+.linkSuspendedNotice {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
+  margin: 0 0 var(--spacing-m);
+  border-left: 4px solid var(--warning);
+  border-radius: var(--radius-ms);
+  background: var(--warning-container);
+  padding: var(--spacing-s) var(--spacing-m);
+  color: var(--on-warning-container);
+  font: var(--font-body-medium);
+}
+.dialogBody .linkUrlInput {
+  font-family: var(--font-family-mono, monospace);
+}
 .linkControls {
   display: flex;
   flex-wrap: wrap;
@@ -165,14 +180,31 @@
   max-width: 100%;
 }
 .linkTable {
-  height: 26rem;
   min-height: 0;
   max-height: 45dvh;
 }
+.linkActions {
+  min-width: max-content;
+}
+.linkActions > button:last-child,
+.linkActions > button:last-child:hover:not(:disabled) {
+  color: var(--error);
+}
 /* Rows use display: contents; dim cell content without fading their backgrounds. */
-.suspendedLink > * > * {
+.suspendedLink > * > *,
+.deletedJoiner > * > * {
   opacity: 0.6;
   filter: grayscale(1);
+}
+.joinerUsername {
+  display: flex;
+  gap: var(--spacing-2xs);
+  min-width: 0;
+}
+.joinerUsernameText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 @media (max-width: 600px) {
   .linkCreation {
