@@ -54,8 +54,12 @@ export default function CommandPromptPanel({
         <p className={styles.text} role="status">
           {t(status === "loading" ? "chatbot.commandTurn.previewLoading" : "chatbot.commandTurn.previewError")}
         </p>
-      ) : (
+      ) : text.trim() ? (
         <p className={styles.text}>{text}</p>
+      ) : (
+        <p className={styles.text} role="status">
+          {t("chatbot.commandTurn.previewEmpty")}
+        </p>
       )}
     </ChatSidePanel>
   );
