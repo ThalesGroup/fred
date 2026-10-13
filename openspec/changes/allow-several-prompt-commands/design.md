@@ -218,9 +218,9 @@ cd apps/frontend && npx --no-install @rtk-query/codegen-openapi src/slices/runti
 ```
 
 These are the two steps of `make update-runtime-api`. They rewrite
-`libs/fred-runtime/openapi.json` and
-`apps/frontend/src/slices/runtime/runtimeOpenApi.ts`; neither is edited by
-hand. `controlPlaneOpenApi.ts` is not regenerated: the control plane exposes
+`libs/fred-runtime/openapi.json`, which is ignored by git like every
+`openapi.json`, and `apps/frontend/src/slices/runtime/runtimeOpenApi.ts`,
+which is the only generated file committed; neither is edited by hand. `controlPlaneOpenApi.ts` is not regenerated: the control plane exposes
 neither model. CI's OpenAPI drift job runs for the runtime, control-plane and
 knowledge-flow clients whenever fred-core changes, so the task list checks
 that the other two specs come out unchanged.
@@ -280,11 +280,12 @@ that the other two specs come out unchanged.
   constant next to the two helpers, with a comment naming the contract
   constant it mirrors.
 
-### 9. Pending owner confirmation
+### 9. Owner decisions
 
-Each default is one requirement in the delta spec and one place in the code.
+The owner confirmed the three defaults as written (2026-10-13). Each is one
+requirement in the delta spec and one place in the code.
 
-| Point | Default (pending owner confirmation) | If the answer changes |
+| Point | Decision | If the answer changes later |
 | --- | --- | --- |
 | (a) Same command twice in one message | allowed; each occurrence expands, the prompt is read once | refuse on submit: one check in `submit`, one locale key, replace the requirement "The same prompt command may appear more than once in a message" |
 | (b) Which prompt names the conversation | the first one, then the user's own text, as today | change the title source in `useManagedChat.ts` (one expression) and the requirement "The first prompt command names the conversation" |
@@ -330,15 +331,15 @@ npx --no-install vitest run <touched test files>
 ```
 
 Checks that are `make` targets elsewhere, as direct commands (`uv` is not on
-the `PATH` here, so the project's own interpreter is used; read from the
-Makefiles, to be confirmed on first use):
+the `PATH` here, so the project's own interpreter is used; all three were run for the contract
+part, see verification.md):
 
 ```bash
 # unchanged-spec check for the two other generated clients
 cd apps/control-plane-backend && .venv/bin/python ../../scripts/generate_openapi.py control_plane_backend
 cd apps/knowledge-flow-backend && .venv/bin/python ../../scripts/generate_openapi.py knowledge_flow_backend
 # migration note check, from the repository root
-libs/fred-pod/.venv/bin/python scripts/migration_guides.py check-pr --base origin/swift --worktree
+apps/control-plane-backend/.venv/bin/python scripts/migration_guides.py check-pr --base origin/swift --worktree
 ```
 
 ### 12. Documentation, migration note, performance review
@@ -369,6 +370,18 @@ libs/fred-pod/.venv/bin/python scripts/migration_guides.py check-pr --base origi
   of at most 16 small models, no I/O, no LLM or tool call site touched. On the
   client, the send now waits for up to 16 parallel prompt reads instead of
   one.
+
+### 13. What building the contract part showed
+
+- `agent_app.py` needed no change: `_turn_command` validates the whole
+  descriptor, so the list is stored when valid and the descriptor is dropped
+  when the list is not.
+- The fred-core constant is `MAX_COMMAND_PROMPTS`, next to the model; fred-sdk
+  has `MAX_TURN_PROMPTS`. A fred-runtime test holds them together.
+- The list never reaches the agent: the `RuntimeContext` the pod rebuilds for
+  the run does not copy `command`.
+- The control-plane and knowledge-flow clients come out byte for byte the same
+  after regeneration.
 
 ## Risks / Trade-offs
 

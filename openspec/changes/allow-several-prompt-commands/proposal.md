@@ -30,9 +30,9 @@ Not **BREAKING**: the list is additive and optional on every hop. One
 deployment order avoids a cosmetic degradation (see design.md, "Mixed
 versions").
 
-Three points wait for the owner; each has a default written as its own
-requirement so that changing it is a small edit (design.md, "Pending owner
-confirmation").
+Three points were decided by the owner as proposed (design.md, "Owner
+decisions"); each is its own requirement so that changing it later is a small
+edit.
 
 ## Capabilities
 
@@ -45,7 +45,7 @@ None.
 - `platform-agent-skills`: requirements are added for several prompt commands
   in one message (menu, tokens, expansion on send, the descriptor list, the
   sent badges and their panel, recall, hand-typed names, compatibility with
-  single-prompt turns) and for the three defaults pending confirmation. No
+  single-prompt turns) and for the three owner decisions. No
   existing requirement of the main spec is modified; the sentences of the
   in-flight `section-composer-command-menu` delta that this change supersedes
   are listed in design.md.
