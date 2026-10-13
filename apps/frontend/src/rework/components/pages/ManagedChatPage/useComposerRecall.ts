@@ -14,7 +14,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import type { CommandKeyEvent } from "@shared/molecules/RichInputField/RichInputField";
-import { skillInvocationsText } from "@rework/utils/skillInvocation";
+import { skillInvocationsText, usablePromptList } from "@rework/utils/skillInvocation";
 import type { ThreadMessage } from "@rework/types/thread";
 
 /** The line the person typed: a command turn stores the expanded prompt as its text. */
@@ -34,10 +34,13 @@ function recallTurnsOf(messages: ThreadMessage[]): { line: string; message: Thre
     const message = messages[i];
     if (message.role !== "user") continue;
     const line = recallLineOf(message);
+    // Every listed prompt counts: the same line may have run other prompts.
     const identity = JSON.stringify([
       line,
       message.command?.prompt_id ?? null,
       message.command?.draft_command_offset ?? null,
+      usablePromptList(message.command, message.text)?.map((entry) => [entry.prompt_id ?? null, entry.draft_offset]) ??
+        null,
       message.skillNames ?? (message.skillName ? [message.skillName] : []),
     ]);
     if (!line || identity === previousIdentity) continue;

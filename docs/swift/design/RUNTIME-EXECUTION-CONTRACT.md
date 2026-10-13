@@ -1988,7 +1988,7 @@ config) and 4 (composer control) are phase 2 and not implemented here.
 Levels 3-4 of REASON-01 (per-agent and per-question reasoning), plus its three
 tool-loop-safety preconditions. Builds on §8.29 (levels 1-2); read that first.
 
-**2026-10-09 — superseded in part by §8.112.** Level 3 (the agent offer,
+**2026-10-09 — superseded in part by §8.113.** Level 3 (the agent offer,
 `AgentTuning.reasoning_enabled`) is removed: the platform activation alone is
 the ceiling. The tri-state below is redefined: only `True` reasons, `None`
 no longer defers to the ceiling.
@@ -2113,7 +2113,7 @@ model — see §C.9 and the note below.
 ### 8.32 ✅ `RuntimeContext` gains team routing policy fields (TEAM-05, #2118, 2026-07-27)
 
 **2026-10-09 — `agent_profile_overrides` and `resolve_team_override` removed
-(§8.112).** The user's choice (`chat_profile_id`) and the instance
+(§8.113).** The user's choice (`chat_profile_id`) and the instance
 recommendation now sit between the pod override and the team default;
 `chat_default_profile_id` below is unchanged.
 
@@ -6519,6 +6519,9 @@ than failing the turn. `prompt_id` is attribution, never resolved at display
 time — a prompt is overwritten on edit and can be deleted, so the turn's own
 text is the record of what was sent.
 
+A turn can hold several prompt commands since 8.112, which adds a list to this
+descriptor and leaves the fields above describing the first one.
+
 ### 8.99 Agent-initiated human questions
 
 An interactive ReAct or Deep turn exposes the platform `ask_user` tool only when
@@ -6904,7 +6907,49 @@ provider may bill it). The log line adds the same fields and `reasoning`
 Never the description or any drafted text. Acceptance:
 `openspec/changes/add-agent-creation-assistant/`.
 
-### 8.112 Per-conversation model choice, instance recommendation and model-led reasoning (2026-10-09, #3029)
+### 8.112 Several prompt commands on a user turn (2026-10-13)
+
+Additive. `TurnCommand` (the `command` of `RuntimeContext`) and the stored
+`CommandDescriptor` (`ChatMetadata.command`) gain an optional `prompts` list:
+one entry per prompt command occurrence of the turn, in the order of the typed
+line, 1 to 16 entries (`TurnCommandPrompt` / `CommandPromptDescriptor`).
+
+| Field | Meaning |
+| --- | --- |
+| `command` | the command, without its slash (required, not empty) |
+| `prompt_id`, `prompt_name` | attribution, optional, never resolved at display time |
+| `draft_offset` | index of the command's `/` in `draft_text` (>= 0) |
+| `text_offset`, `text_length` | where that prompt's text sits in the turn's stored text (>= 0, >= 1) |
+
+The three positions are the client's string indices (UTF-16 code units), like
+`draft_command_offset`. The runtime stores and serves them and never compares
+them to the text: a Python length counts code points and would disagree on any
+character outside the basic plane. A reader checks that a list fits its turn
+before using it, and otherwise falls back to the single fields.
+
+The single fields of 8.98 are unchanged and describe the first entry
+(`command`, `prompt_id`, `prompt_name`, `draft_command_offset`);
+`appended_text` is the user's own text and `draft_text` the typed line. The
+list points into the stored text and copies none of it, so the turn's own text
+stays the record of what was sent, and the agent still receives nothing about
+commands.
+
+A request whose list is empty, longer than 16 or malformed is refused as
+invalid (422), like any other invalid request field. On the internal context
+path a malformed list drops the whole descriptor and the turn is stored as
+plain text, as in 8.98. No schema change: the descriptor is JSON in
+`session_history.metadata_json`.
+
+Mixed versions. No model on the path forbids unknown keys, so nothing is
+rejected. A pod whose fred-sdk predates the list ignores it: the turn runs on
+the full assembled text and is stored with the single fields only, so a client
+renders its first prompt command and shows the others as the `/name` the user
+typed. A pod rolled back after such rows were written keeps serving their
+list. Deploy runtime pods before the web client to avoid that rendering for
+the turns sent in between. Acceptance:
+`openspec/specs/platform-agent-skills/spec.md`.
+
+### 8.113 Per-conversation model choice, instance recommendation and model-led reasoning (2026-10-09, #3029)
 
 Supersedes the team per-agent level of §8.32 and the agent gate and tri-state
 of §8.30. OpenSpec change `chat-model-and-reasoning-picker`; product side in

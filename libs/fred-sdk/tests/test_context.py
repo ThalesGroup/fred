@@ -53,6 +53,7 @@ from fred_sdk.contracts.context import (
     PortableContext,
     PortableEnvironment,
     RuntimeContext,
+    TurnCommand,
     resolve_effective_chat_profile,
 )
 from fred_sdk.contracts.models import AgentTuning
@@ -671,3 +672,78 @@ def test_runtime_context_resolves_legacy_and_multiple_skills(payload, names):
 def test_runtime_context_rejects_ambiguous_or_malformed_skills(payload):
     with pytest.raises(ValidationError):
         RuntimeContext.model_validate(payload)
+
+
+def _turn_prompt(index: int = 0, **overrides: Any) -> dict[str, Any]:
+    return {
+        "command": f"cmd{index}",
+        "prompt_id": f"p-{index}",
+        "prompt_name": f"Prompt {index}",
+        "draft_offset": index * 10,
+        "text_offset": index * 50,
+        "text_length": 40,
+        **overrides,
+    }
+
+
+def test_turn_command_without_prompts_validates_as_before() -> None:
+    command = TurnCommand.model_validate({"command": "summary"})
+
+    assert command.prompts is None
+    assert "prompts" not in command.model_dump(exclude_none=True)
+
+
+@pytest.mark.parametrize("count", [1, 16])
+def test_turn_command_lists_its_prompts_and_dumps_them(count: int) -> None:
+    prompts = [_turn_prompt(index) for index in range(count)]
+    context = RuntimeContext.model_validate(
+        {"command": {"command": "cmd0", "prompt_id": "p-0", "prompts": prompts}}
+    )
+
+    dumped = context.model_dump(exclude_none=True)["command"]["prompts"]
+
+    assert dumped == prompts
+
+
+@pytest.mark.parametrize(
+    "prompts",
+    [
+        [],
+        [_turn_prompt(index) for index in range(17)],
+        [_turn_prompt(draft_offset=-1)],
+        [_turn_prompt(text_offset=-1)],
+        [_turn_prompt(text_length=0)],
+        [_turn_prompt(command="")],
+        [{"command": "summary"}],
+        {"command": "summary"},
+    ],
+)
+def test_turn_command_rejects_a_malformed_prompts_list(prompts: Any) -> None:
+    with pytest.raises(ValidationError):
+        RuntimeContext.model_validate(
+            {"command": {"command": "summary", "prompts": prompts}}
+        )
+
+
+def test_turn_command_prompt_ignores_an_unknown_key() -> None:
+    command = TurnCommand.model_validate(
+        {"command": "summary", "prompts": [_turn_prompt(later_field="x")]}
+    )
+
+    assert command.prompts is not None
+    assert "later_field" not in command.prompts[0].model_dump()
+
+
+def test_turn_command_offsets_are_not_measured_against_any_text() -> None:
+    """Offsets are the client's UTF-16 indices; nothing here knows the text."""
+
+    command = TurnCommand.model_validate(
+        {
+            "command": "summary",
+            "draft_text": "/summary",
+            "prompts": [_turn_prompt(text_offset=10_000, text_length=10_000)],
+        }
+    )
+
+    assert command.prompts is not None
+    assert command.prompts[0].text_offset == 10_000

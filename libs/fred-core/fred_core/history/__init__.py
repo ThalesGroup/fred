@@ -42,6 +42,7 @@ from fred_core.history.history_schema import (
     ChatTokenUsage,
     CodePart,
     CommandDescriptor,
+    CommandPromptDescriptor,
     ImageUrlPart,
     MessagePart,
     Role,
@@ -81,5 +82,6 @@ __all__ = [
     "make_tool_call",
     "make_tool_result",
     "CommandDescriptor",
+    "CommandPromptDescriptor",
     "make_user_text",
 ]

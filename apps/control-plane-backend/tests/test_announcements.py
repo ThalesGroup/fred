@@ -1201,6 +1201,7 @@ async def test_user_deletion_removes_patch_note_dismissals(
         return "synthetic-root"
 
     monkeypatch.setattr(users_api, "remove_user_avatar", _nothing)
+    monkeypatch.setattr(users_api, "_mark_user_join_history_deleted", _nothing)
     container = SimpleNamespace(
         get_rebac_engine=lambda: SimpleNamespace(
             requires_active_accounts=False, check_user_permission_or_raise=_nothing

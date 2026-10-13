@@ -35,6 +35,7 @@
 import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { assemblePromptTurn } from "@rework/utils/skillInvocation";
 import type { EffectiveChatModel } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 
 declare global {
@@ -710,6 +711,52 @@ describe("useManagedChat — session write reliability", () => {
     expect(sendMock).not.toHaveBeenCalled();
     expect(registerSessionCalls).toHaveLength(0);
     expect(showErrorMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("measures the assembled text of a turn with several prompt commands, not the typed line", async () => {
+    chatSseMaxChatInputChars = 40;
+    mount();
+    const draft = "/summary and /tone";
+    act(() => {
+      latest.setInput(draft);
+    });
+    rerender();
+    const run = assemblePromptTurn(draft, [
+      { command: "summary", promptId: "p-1", promptName: "Summary", from: 0, to: 8, text: "x".repeat(20) },
+      { command: "tone", promptId: "p-2", promptName: "Tone", from: 13, to: 18, text: "y".repeat(20) },
+    ]);
+    expect(draft.length).toBeLessThan(40);
+    expect(run.text.length).toBeGreaterThan(40);
+
+    await act(async () => {
+      await latest.runCommand(run);
+    });
+
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(registerSessionCalls).toHaveLength(0);
+    expect(showErrorMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("titles a session started with several prompt commands from the first one and the user's own text", async () => {
+    mount();
+    const draft = "/summary /tone the Q3 report";
+    act(() => {
+      latest.setInput(draft);
+    });
+    rerender();
+
+    await act(async () => {
+      await latest.runCommand(
+        assemblePromptTurn(draft, [
+          { command: "summary", promptId: "p-1", promptName: "Weekly review", from: 0, to: 8, text: "Summarise." },
+          { command: "tone", promptId: "p-2", promptName: "Formal", from: 9, to: 14, text: "Be formal." },
+        ]),
+      );
+    });
+
+    const created = registerSessionCalls[0] as { createSessionRequest: { title: string } };
+    expect(created.createSessionRequest.title).toBe("Weekly review — the Q3 report");
+    expect(sendMock.mock.calls[0][0]).toBe("Summarise.\n\nBe formal.\n\nthe Q3 report");
   });
 
   it("restores the complete ordinary draft after a backend length rejection", async () => {

@@ -1028,6 +1028,59 @@ def test_a_session_id_naming_a_graph_thread_is_refused_everywhere(
         assert openai.status_code == 422, openai.text
 
 
+def test_a_turn_listing_more_prompt_commands_than_the_limit_is_refused(
+    monkeypatch, tmp_path
+) -> None:
+    """The execute endpoint answers 422 and the model is never called."""
+
+    from fred_sdk.contracts.context import MAX_TURN_PROMPTS
+
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="Hello.")])
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+    definition = _EchoAgent()
+    registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
+    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+
+    def command(count: int) -> dict[str, object]:
+        return {
+            "command": "cmd0",
+            "draft_text": " ".join(f"/cmd{index}" for index in range(count)),
+            "draft_command_offset": 0,
+            "prompts": [
+                {
+                    "command": f"cmd{index}",
+                    "prompt_id": f"p-{index}",
+                    "draft_offset": index * 6,
+                    "text_offset": index * 3,
+                    "text_length": 1,
+                }
+                for index in range(count)
+            ],
+        }
+
+    def execute(client: TestClient, count: int):
+        return client.post(
+            "/pod/v1/agents/execute",
+            json={
+                "agent_id": definition.agent_id,
+                "input": "\n\n".join("x" for _ in range(count)),
+                "session_id": f"session-prompts-{count}",
+                "runtime_context": {"user_id": "bob", "command": command(count)},
+            },
+        )
+
+    with TestClient(app) as client:
+        refused = execute(client, MAX_TURN_PROMPTS + 1)
+        assert refused.status_code == 422, refused.text
+        assert "prompts" in refused.text
+        accepted = execute(client, MAX_TURN_PROMPTS)
+        assert accepted.status_code == 200, accepted.text
+
+
 def test_delete_session_filesystem_purges_both_runtime_namespaces(
     monkeypatch, tmp_path
 ) -> None:

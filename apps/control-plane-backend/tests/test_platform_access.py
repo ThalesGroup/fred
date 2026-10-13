@@ -18,6 +18,7 @@ from fred_core.security.platform_access.access_control import (
     get_platform_access,
 )
 from fred_core.security.platform_access.models import (
+    PlatformAccessLinkJoinerRow,
     PlatformAccessLinkRow,
     PlatformAccessSettingsRow,
     PlatformAccessUserRow,
@@ -28,7 +29,11 @@ from fred_core.security.platform_access.rules import (
 )
 from fred_core.security.platform_access.store import PlatformAccessStore
 from fred_core.security.rebac.noop_engine import NoopRebacEngine
-from fred_core.security.rebac.rebac_engine import RebacReference, RelationType
+from fred_core.security.rebac.rebac_engine import (
+    OrganizationPermission,
+    RebacReference,
+    RelationType,
+)
 from fred_core.teams.team_metatada_models import TeamMetadataRow
 from fred_core.users.user_models import UserRow
 from fred_pod.security.platform_access import (
@@ -40,7 +45,7 @@ from fred_pod.security.structure import (
     Principal,
 )
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import Table
+from sqlalchemy import Table, event
 from sqlalchemy.ext.asyncio import create_async_engine
 
 
@@ -49,6 +54,7 @@ class MembershipEngine(NoopRebacEngine):
         super().__init__()
         self.members: dict[str, set[str]] = {}
         self.admin = True
+        self.admins: set[str] = set()
         self.writes = []
         self.write_failure = False
 
@@ -59,6 +65,8 @@ class MembershipEngine(NoopRebacEngine):
         ]
 
     async def _has_permission_raw(self, subject, permission, resource, **kwargs):
+        if permission == OrganizationPermission.CAN_MANAGE_PLATFORM:
+            return subject.id in self.admins
         return resource.id in self.members.get(subject.id, set())
 
     async def check_user_permission_or_raise(self, *args, **kwargs):
@@ -76,11 +84,19 @@ class MembershipEngine(NoopRebacEngine):
 @pytest_asyncio.fixture
 async def access(tmp_path):
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'admission.sqlite'}")
+
+    @event.listens_for(engine.sync_engine, "connect")
+    def enforce_foreign_keys(connection, _record):
+        cursor = connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
     async with engine.begin() as connection:
         for model in (
             UserRow,
             TeamMetadataRow,
             PlatformAccessLinkRow,
+            PlatformAccessLinkJoinerRow,
             PlatformAccessSettingsRow,
             PlatformAccessUserRow,
         ):
@@ -142,6 +158,35 @@ async def test_t0_once_and_deleted_entries_never_return(access):
 
 
 @pytest.mark.asyncio
+async def test_t0_audit_reports_actual_import_once(access, monkeypatch):
+    actor, candidate, matching = user(), user(), user("accepted")
+    for person in (actor, candidate, matching):
+        await access.observe(person)
+    events: list[tuple[str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        api, "emit_audit_log", lambda name, **fields: events.append((name, fields))
+    )
+    app = FastAPI()
+    app.include_router(api.router)
+    app.dependency_overrides[get_platform_access] = lambda: access
+    app.dependency_overrides[api.get_current_user] = lambda: actor
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        first = await client.post("/admin/platform/access/t0-import")
+        later = user()
+        await access.observe(later)
+        retry = await client.post("/admin/platform/access/t0-import")
+    assert first.status_code == retry.status_code == 200
+    assert len(events) == 1
+    assert events[0][0] == "platform.access.t0.imported"
+    assert events[0][1]["actor_uid"] == actor.uid
+    assert events[0][1]["candidates"] == 2
+    assert events[0][1]["matching"] == 1
+    assert events[0][1]["imported_count"] == 2
+
+
+@pytest.mark.asyncio
 async def test_filter_and_exception_mutations_preserve_acting_admin(access):
     actor = user()
     await access.observe(actor)
@@ -155,6 +200,49 @@ async def test_filter_and_exception_mutations_preserve_acting_admin(access):
     assert await access.admitted(actor)
     await service.set_filtering(access, actor, False)
     await service.set_user(access, actor, UUID(actor.uid), False)
+
+
+@pytest.mark.asyncio
+async def test_disabling_filtering_preserves_configuration_for_reactivation(access):
+    actor, outsider = user(), user()
+    await access.observe(actor)
+    await service.set_user(access, actor, UUID(actor.uid), True)
+    await service.set_team(access, actor, "demo", True, True)
+    token = await service.generate_link(access, "demo", actor)
+    original = await access.state()
+    await service.set_filtering(access, actor, True)
+    assert not await access.admitted(outsider)
+
+    disabled = await service.set_filtering(access, actor, False)
+    assert await access.admitted(outsider)
+    assert disabled.policy == access.policy(original)
+    assert disabled.revision == original.revision
+    assert await access.store.exception(UUID(actor.uid)) is not None
+    assert (await access.store.teams())[0].platform_access_free
+    assert (await service.list_links(access, "demo", 0, 25)).total == 1
+    assert (
+        await service.preview_link(access, outsider, token, None)
+    ).team_name == "Demonstration"
+
+    await service.set_filtering(access, actor, True)
+    assert not await access.admitted(outsider)
+
+
+@pytest.mark.asyncio
+async def test_live_platform_admin_is_admitted_and_visible_in_preview(access):
+    actor = user()
+    await access.observe(actor)
+    access.rebac.admins.add(actor.uid)
+    await service.set_filtering(access, actor, True)
+    assert await access.admitted(actor)
+    assert await access.admitted(cast(Principal, SimpleNamespace(uid=actor.uid)))
+    preview = await service.activation_preview(access)
+    entry = next(item for item in preview.users if item.user_id == actor.uid)
+    assert entry.outcome == "allowed"
+    assert any(source.kind == "admin" for source in entry.sources)
+    access.rebac.admins.remove(actor.uid)
+    assert not await access.admitted(actor)
+    assert not await access.admitted(cast(Principal, SimpleNamespace(uid=actor.uid)))
 
 
 @pytest.mark.asyncio
@@ -228,6 +316,8 @@ async def test_failed_membership_write_can_retry_without_granting_admin(access):
     access.rebac.write_failure = True
     with pytest.raises(HTTPException) as unavailable:
         await service.enroll(access, newcomer, token, None)
+    link_id = (await service.list_links(access, "demo", 0, 25)).items[0].id
+    assert (await service.list_link_joiners(access, "demo", link_id, 0, 25)).total == 0
     assert unavailable.value.status_code == 503
     access.rebac.write_failure = False
     await service.enroll(access, newcomer, token, None)
@@ -769,25 +859,6 @@ async def test_pg_live_policy_and_free_journey_with_cached_human_facts(pg_access
 
 
 @pytest.mark.asyncio
-async def test_legacy_gate_blocks_activation_and_active_readers(access, monkeypatch):
-    from fred_core.security.whitelist_access_control import access_control as legacy
-
-    monkeypatch.setattr(legacy, "is_whitelist_active", lambda: True)
-    actor = user("accepted")
-    assert await access.admitted(actor)
-    with pytest.raises(HTTPException) as conflict:
-        await service.set_filtering(access, actor, True)
-    assert conflict.value.detail == "platform_access_legacy_gate_conflict"
-    assert not (await access.state()).filtering_enabled
-    async with access.store.mutation() as session:
-        state = await access.store.settings(session)
-        state.filtering_enabled = True
-    with pytest.raises(HTTPException) as unavailable:
-        await access.admitted(actor)
-    assert unavailable.value.status_code == 503
-
-
-@pytest.mark.asyncio
 async def test_bulk_grants_are_atomic_preserve_provenance_and_revoke_independently(
     access,
 ):
@@ -814,10 +885,18 @@ async def test_bulk_grants_are_atomic_preserve_provenance_and_revoke_independent
 
 
 @pytest.mark.asyncio
-async def test_bulk_endpoint_bounds_unknown_users_and_fresh_admin_permission(access):
+async def test_bulk_endpoint_bounds_unknown_users_and_fresh_admin_permission(
+    access, monkeypatch
+):
     from unittest.mock import AsyncMock
 
     actor, first, second = user("accepted"), user(), user()
+    events: list[tuple[str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        api,
+        "emit_audit_log",
+        lambda name, **fields: events.append((name, fields)),
+    )
     await access.observe(first)
     await access.observe(second)
     gate = AsyncMock()
@@ -840,11 +919,24 @@ async def test_bulk_endpoint_bounds_unknown_users_and_fresh_admin_permission(acc
         )
         assert response.status_code == 404
         assert await access.store.exception(UUID(first.uid)) is None
+        assert events == []
+        async with access.store.mutation() as session:
+            await access.state(session)
+            await access.store.add_exception(UUID(first.uid), actor.uid, "t0", session)
         response = await client.post(
             "/admin/platform/access/users",
             json={"user_ids": [first.uid] * 101 + [second.uid]},
         )
         assert response.status_code == 204
+        summary = [
+            fields for name, fields in events if name == "platform.access.users.granted"
+        ]
+        assert len(summary) == 1
+        assert summary[0] == {
+            "actor_uid": actor.uid,
+            "count": 2,
+            "granted_count": 1,
+        }
         assert (
             gate.call_args.kwargs["consistency_token"]
             == access.rebac.HIGHER_CONSISTENCY
@@ -857,6 +949,7 @@ async def test_bulk_endpoint_bounds_unknown_users_and_fresh_admin_permission(acc
         )
         assert response.status_code == 403
         assert await access.store.exception(UUID(third.uid)) is None
+        assert len(events) == 1
 
 
 @pytest.mark.asyncio
@@ -1141,6 +1234,115 @@ async def test_free_link_history_openings_recovery_expiry_and_individual_revocat
         await service.reveal_link(access, "other-team", first.id)
 
 
+@pytest.mark.asyncio
+async def test_free_link_joiners_follow_successful_enrollment_and_cleanup(
+    access, monkeypatch
+):
+    events: list[tuple[str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        service, "emit_audit_log", lambda name, **fields: events.append((name, fields))
+    )
+    actor = user("accepted")
+    first = user().model_copy(
+        update={"username": "first", "first_name": "First", "last_name": "Joiner"}
+    )
+    second = user().model_copy(
+        update={"username": "second", "first_name": "Second", "last_name": "Joiner"}
+    )
+    await service.set_team(access, actor, "demo", False, True)
+    first_token = await service.generate_link(access, "demo", actor)
+    first_id = (await service.list_links(access, "demo", 0, 25)).items[0].id
+    second_token = await service.generate_link(access, "demo", actor)
+    second_id = (await service.list_links(access, "demo", 0, 25)).items[0].id
+
+    await service.preview_link(access, first, first_token, None)
+    await service.record_opening(access, first_token)
+    assert (await service.list_link_joiners(access, "demo", first_id, 0, 25)).total == 0
+    await service.enroll(access, first, first_token, None)
+    await service.enroll(access, first, first_token, None)
+    await service.enroll(access, second, first_token, None)
+    already_member = user()
+    access.rebac.members[already_member.uid] = {"demo"}
+    await service.enroll(access, already_member, first_token, None)
+    assert events == [
+        (
+            "platform.access.free.enrolled",
+            {"actor_uid": person.uid, "team_id": "demo", "link_id": str(first_id)},
+        )
+        for person in (first, second)
+    ]
+    first_page = await service.list_link_joiners(access, "demo", first_id, 0, 1)
+    assert first_page.total == 2 and len(first_page.items) == 1
+    assert (await service.list_link_joiners(access, "demo", first_id, 1, 1)).items[
+        0
+    ].user_id != first_page.items[0].user_id
+    assert (
+        await service.list_link_joiners(access, "demo", second_id, 0, 25)
+    ).total == 0
+    assert (await service.list_links(access, "demo", 0, 25)).items[1].opening_count == 1
+
+    access.rebac.members[first.uid].remove("demo")
+    await service.enroll(access, first, second_token, None)
+    assert events[-1] == (
+        "platform.access.free.enrolled",
+        {"actor_uid": first.uid, "team_id": "demo", "link_id": str(second_id)},
+    )
+    assert (await service.list_link_joiners(access, "demo", second_id, 0, 25)).items[
+        0
+    ].username == "first"
+    async with access.store.mutation() as session:
+        row = await session.get(UserRow, UUID(first.uid))
+        row.last_name = "Updated"
+    assert any(
+        item.last_name == "Updated"
+        for item in (
+            await service.list_link_joiners(access, "demo", first_id, 0, 25)
+        ).items
+    )
+
+    await service.revoke_link(access, "demo", first_id)
+    await service.set_team(access, actor, "demo", False, False)
+    assert (await service.list_link_joiners(access, "demo", first_id, 0, 25)).total == 2
+    assert await service.delete_inactive_links(access, "demo") == 1
+    with pytest.raises(HTTPException) as removed:
+        await service.list_link_joiners(access, "demo", first_id, 0, 25)
+    assert removed.value.status_code == 404
+    assert (
+        await service.list_link_joiners(access, "demo", second_id, 0, 25)
+    ).total == 1
+    await service.mark_user_join_history_deleted(access.store, first.uid)
+    deleted_joiner = (
+        await service.list_link_joiners(access, "demo", second_id, 0, 25)
+    ).items[0]
+    assert deleted_joiner.deleted
+    assert (
+        deleted_joiner.username,
+        deleted_joiner.first_name,
+        deleted_joiner.last_name,
+    ) == (
+        "first",
+        "First",
+        "Updated",
+    )
+    async with access.store.mutation() as session:
+        user_row = await session.get(UserRow, UUID(first.uid))
+        assert user_row is not None
+        await session.delete(user_row)
+    assert (await service.list_link_joiners(access, "demo", second_id, 0, 25)).items[
+        0
+    ] == deleted_joiner
+    await service.mark_user_join_history_deleted(
+        access.store, second.uid, table_may_be_missing=True
+    )
+    async with access.store.engine.begin() as connection:
+        await connection.run_sync(
+            cast(Table, PlatformAccessLinkJoinerRow.__table__).drop
+        )
+    await service.mark_user_join_history_deleted(
+        access.store, first.uid, table_may_be_missing=True
+    )
+
+
 def test_link_creation_rejects_past_naive_expiry_and_oversized_note():
     from datetime import datetime, timedelta, timezone
 
@@ -1160,8 +1362,12 @@ def test_link_creation_rejects_past_naive_expiry_and_oversized_note():
 
 
 @pytest.mark.asyncio
-async def test_link_admin_history_and_tokens_are_guarded(access):
+async def test_link_admin_history_and_tokens_are_guarded(access, monkeypatch):
     actor = user("accepted")
+    events: list[tuple[str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        api, "emit_audit_log", lambda name, **fields: events.append((name, fields))
+    )
     await access.observe(actor)
     await service.set_team(access, actor, "demo", False, True)
     token = await service.generate_link(access, "demo", actor)
@@ -1177,6 +1383,10 @@ async def test_link_admin_history_and_tokens_are_guarded(access):
         for method, path in (
             ("GET", "/admin/platform/access/teams/demo/enrollment-links"),
             (
+                "GET",
+                f"/admin/platform/access/teams/demo/enrollment-links/{link_id}/joiners",
+            ),
+            (
                 "POST",
                 f"/admin/platform/access/teams/demo/enrollment-links/{link_id}/reveal",
             ),
@@ -1185,8 +1395,31 @@ async def test_link_admin_history_and_tokens_are_guarded(access):
         ):
             assert (await client.request(method, path)).status_code == 403
         access.rebac.admin = True
+        created = await client.post(
+            "/admin/platform/access/teams/demo/enrollment-link", json={}
+        )
+        assert created.status_code == 200
+        created_id = next(
+            item.id
+            for item in (await service.list_links(access, "demo", 0, 25)).items
+            if item.id != link_id
+        )
+        assert (
+            "platform.access.link.created",
+            {"actor_uid": actor.uid, "team_id": "demo", "link_id": str(created_id)},
+        ) in events
+        assert created.json()["token"] not in str(events)
         history = await client.get("/admin/platform/access/teams/demo/enrollment-links")
         assert token not in history.text
+        await service.enroll(
+            access, user().model_copy(update={"username": "link-guest"}), token, None
+        )
+        joiners = await client.get(
+            f"/admin/platform/access/teams/demo/enrollment-links/{link_id}/joiners"
+        )
+        assert joiners.status_code == 200
+        assert joiners.json()["items"][0]["username"] == "link-guest"
+        assert token not in joiners.text
         revealed = await client.post(
             f"/admin/platform/access/teams/demo/enrollment-links/{link_id}/reveal"
         )

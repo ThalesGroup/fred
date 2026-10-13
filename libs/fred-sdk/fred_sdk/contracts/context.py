@@ -402,6 +402,25 @@ class ModelBinding(FrozenModel):
         return self
 
 
+# Bounds the stored descriptor and the prompt reads a client makes on send.
+MAX_TURN_PROMPTS = 16
+
+
+class TurnCommandPrompt(BaseModel):
+    """One prompt command of a user turn, and where its text sits.
+
+    Offsets are the client's string indices (UTF-16 code units), not Python
+    code points: they are stored and served back, never compared to the text.
+    """
+
+    command: str = Field(min_length=1)
+    prompt_id: Optional[str] = None
+    prompt_name: Optional[str] = None
+    draft_offset: int = Field(ge=0)
+    text_offset: int = Field(ge=0)
+    text_length: int = Field(ge=1)
+
+
 class TurnCommand(BaseModel):
     """The prompt command a user turn was launched from.
 
@@ -416,6 +435,11 @@ class TurnCommand(BaseModel):
     prompt_name: Optional[str] = None
     draft_text: Optional[str] = None
     draft_command_offset: Optional[int] = Field(default=None, ge=0)
+    # Every prompt command of the turn, in the order of the typed line. The
+    # single fields above keep describing the first one for older readers.
+    prompts: Optional[list[TurnCommandPrompt]] = Field(
+        default=None, min_length=1, max_length=MAX_TURN_PROMPTS
+    )
 
 
 class RuntimeContext(BaseModel):

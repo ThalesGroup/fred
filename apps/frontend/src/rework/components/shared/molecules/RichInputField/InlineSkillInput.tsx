@@ -5,8 +5,8 @@ import { useLayoutEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Annotation, Compartment, EditorState, StateEffect, StateField, Transaction, Prec } from "@codemirror/state";
 import { defaultKeymap, history, historyKeymap, invertedEffects } from "@codemirror/commands";
-import { Decoration, EditorView, keymap, placeholder, WidgetType } from "@codemirror/view";
-import type { CommandChoice, CommandKeyEvent, CommandTriggerBinding } from "./RichInputField";
+import { Decoration, EditorView, keymap, WidgetType } from "@codemirror/view";
+import type { CommandChoice, CommandKeyEvent, CommandTriggerBinding, DraftEdit } from "./RichInputField";
 import badgeStyles from "../SkillBadge/SkillBadge.module.css";
 import iconStyles from "../../atoms/Icon/Icon.module.scss";
 import styles from "./InlineSkillInput.module.css";
@@ -15,9 +15,18 @@ export interface InlinePromptToken {
   from: number;
   to: number;
   name: string;
+  /** The prompt behind the token and the library it was picked from. */
+  promptId: string;
+  promptTeamId: string;
   description?: string | null;
   source?: "personal" | "team";
+  /** Name of the conversation's team, for the hover hint of a team prompt. */
+  teamName?: string;
 }
+
+/** What an activated prompt token hands to its opener. No position: a widget
+ *  outlives the edits made before it. */
+export type InlinePromptTarget = Pick<InlinePromptToken, "promptId" | "promptTeamId" | "name"> & { command: string };
 
 export interface InlineSkillToken {
   from: number;
@@ -47,6 +56,7 @@ class SkillWidget extends WidgetType {
     const button = document.createElement("button");
     button.type = "button";
     button.className = `${badgeStyles.badge} ${badgeStyles.action}`;
+    button.dataset.kind = "skill";
     button.title = this.hint;
     button.setAttribute("aria-label", this.label);
     const icon = document.createElement("span");
@@ -56,13 +66,11 @@ class SkillWidget extends WidgetType {
     icon.setAttribute("aria-hidden", "true");
     const name = document.createElement("span");
     name.className = badgeStyles.name;
-    name.textContent = this.token.name;
+    name.textContent = `/${this.token.name}`;
     button.append(icon, name);
     button.onclick = () => this.token.onOpen(this.token.name);
     return button;
   }
-  // The widget is deliberately not an atomic range. Deleting or editing one
-  // underlying character makes the name incomplete and removes its import.
   ignoreEvent() {
     return true;
   }
@@ -70,33 +78,71 @@ class SkillWidget extends WidgetType {
 
 class PromptWidget extends WidgetType {
   constructor(
-    readonly command: string,
+    readonly target: InlinePromptTarget,
     readonly hint: string,
+    readonly label: string,
+    readonly onOpen?: (target: InlinePromptTarget) => void,
   ) {
     super();
   }
+  // The opener is one callback for every token, so a keystroke rebuilds none.
   eq(other: PromptWidget) {
-    return this.command === other.command && this.hint === other.hint;
+    return (
+      this.target.command === other.target.command &&
+      this.target.promptId === other.target.promptId &&
+      this.target.promptTeamId === other.target.promptTeamId &&
+      this.hint === other.hint &&
+      this.label === other.label &&
+      this.onOpen === other.onOpen
+    );
   }
   toDOM() {
-    const token = document.createElement("span");
-    token.className = `${badgeStyles.badge} ${styles.promptToken}`;
+    // A button when it can open its preview, like the skill token.
+    const token = document.createElement(this.onOpen ? "button" : "span");
+    token.className = badgeStyles.badge;
+    token.dataset.kind = "prompt";
     token.title = this.hint;
-    token.setAttribute("role", "group");
-    token.setAttribute("aria-label", this.hint);
+    if (token instanceof HTMLButtonElement) {
+      token.type = "button";
+      token.classList.add(badgeStyles.action);
+      token.setAttribute("aria-label", this.label);
+      token.onclick = () => this.onOpen?.(this.target);
+    } else {
+      token.setAttribute("role", "group");
+      token.setAttribute("aria-label", this.hint);
+    }
     const icon = document.createElement("span");
     icon.className = `material-symbols-outlined ${iconStyles.icon}`;
     icon.textContent = "edit_note";
     icon.setAttribute("aria-hidden", "true");
     const name = document.createElement("span");
     name.className = badgeStyles.name;
-    name.textContent = this.command.slice(1);
+    name.textContent = `/${this.target.command}`;
     token.append(icon, name);
     return token;
   }
   ignoreEvent() {
-    return false;
+    return Boolean(this.onOpen);
   }
+}
+
+type TokenRange = { from: number; to: number };
+
+// Removes the token the caret touches as one block. The space after it goes
+// too when one already precedes it, so no double or leading space is left.
+function deleteToken(view: EditorView, tokens: readonly TokenRange[], forward: boolean): boolean {
+  const { main } = view.state.selection;
+  const token = main.empty && tokens.find((range) => (forward ? range.from : range.to) === main.head);
+  if (!token || view.state.sliceDoc(token.from, token.from + 1) !== "/") return false;
+  const before = token.from === 0 ? "\n" : view.state.sliceDoc(token.from - 1, token.from);
+  const spaceAfter = view.state.sliceDoc(token.to, token.to + 1) === " " && /\s/.test(before);
+  view.dispatch({
+    changes: { from: token.from, to: token.to + (spaceAfter ? 1 : 0) },
+    selection: { anchor: token.from },
+    userEvent: forward ? "delete.forward" : "delete.backward",
+    scrollIntoView: true,
+  });
+  return true;
 }
 
 const rememberChoices = StateEffect.define<readonly CommandChoice[]>({
@@ -117,7 +163,10 @@ interface Props {
   value: string;
   onChange: (value: string) => void;
   tokens: InlineSkillToken[];
-  promptToken?: InlinePromptToken | null;
+  promptTokens?: readonly InlinePromptToken[];
+  /** Opens a prompt token's preview; without it the tokens are not clickable.
+   *  Keep one identity across renders. */
+  onOpenPrompt?: (target: InlinePromptTarget) => void;
   placeholder?: string;
   disabled: boolean;
   maxHeight: number;
@@ -136,6 +185,7 @@ export function InlineSkillInput(props: Props) {
   const propsRef = useRef(props);
   propsRef.current = props;
   const configuration = useRef(new Compartment());
+  const tokenRangesRef = useRef<readonly TokenRange[]>([]);
 
   useLayoutEffect(() => {
     if (!hostRef.current) return;
@@ -149,7 +199,12 @@ export function InlineSkillInput(props: Props) {
           invertedEffects.of((transaction) =>
             transaction.docChanged ? [rememberChoices.of(transaction.startState.field(choiceHistory))] : [],
           ),
-          keymap.of([...defaultKeymap, ...historyKeymap]),
+          keymap.of([
+            { key: "Backspace", run: (view) => deleteToken(view, tokenRangesRef.current, false) },
+            { key: "Delete", run: (view) => deleteToken(view, tokenRangesRef.current, true) },
+            ...defaultKeymap,
+            ...historyKeymap,
+          ]),
           EditorView.lineWrapping,
           configuration.current.of([]),
           Prec.highest(
@@ -191,6 +246,11 @@ export function InlineSkillInput(props: Props) {
             if (update.docChanged && !update.transactions.some((tr) => tr.annotation(externalSync))) {
               if (update.transactions.some((tr) => tr.isUserEvent("undo") || tr.isUserEvent("redo")))
                 propsRef.current.commandTrigger?.onChoicesRestore?.(update.state.field(choiceHistory));
+              const edits: DraftEdit[] = [];
+              update.changes.iterChanges((from, to, _fromB, _toB, inserted) =>
+                edits.push({ from, to, insert: inserted.length }),
+              );
+              propsRef.current.commandTrigger?.onDraftEdit?.(edits);
               propsRef.current.onChange(update.state.doc.toString());
             }
             if (update.docChanged || update.selectionSet)
@@ -217,11 +277,19 @@ export function InlineSkillInput(props: Props) {
   )
     callbacksRef.current = props.tokens.map((token) => token.onOpen);
   const tokenCallbacks = callbacksRef.current;
-  const promptFrom = props.promptToken?.from;
-  const promptTo = props.promptToken?.to;
-  const promptName = props.promptToken?.name;
-  const promptDescription = props.promptToken?.description;
-  const promptSource = props.promptToken?.source;
+  const promptKey = JSON.stringify(
+    (props.promptTokens ?? []).map((token) => [
+      token.from,
+      token.to,
+      token.name,
+      token.promptId,
+      token.promptTeamId,
+      token.description,
+      token.source,
+      token.teamName,
+    ]),
+  );
+  const onOpenPrompt = props.onOpenPrompt;
   const hasTrigger = Boolean(props.commandTrigger);
   const triggerOpen = props.commandTrigger?.open;
   const triggerListboxId = props.commandTrigger?.listboxId;
@@ -239,24 +307,40 @@ export function InlineSkillInput(props: Props) {
         annotations: externalSync.of(true),
       });
     }
+    // Tokens are atomic: the caret, a selection and a deletion take one as a
+    // whole instead of stepping through the `/name` hidden under it.
+    const promptTokens = props.promptTokens ?? [];
+    tokenRangesRef.current = [...promptTokens, ...props.tokens].map(({ from, to }) => ({ from, to }));
+    const atomic = Decoration.set(
+      tokenRangesRef.current.map(({ from, to }) => Decoration.mark({}).range(from, to)),
+      true,
+    );
     const decorations = Decoration.set(
       [
-        ...(promptFrom !== undefined && promptTo !== undefined && promptName !== undefined
-          ? [
-              Decoration.replace({
-                widget: new PromptWidget(
-                  props.value.slice(promptFrom, promptTo),
-                  [
-                    promptName,
-                    promptSource ? t(`chatbot.commandMenu.sources.${promptSource}`) : "",
-                    promptDescription?.trim(),
-                  ]
-                    .filter(Boolean)
-                    .join("\n"),
-                ),
-              }).range(promptFrom, promptTo),
-            ]
-          : []),
+        ...promptTokens.map((token) => {
+          const command = props.value.slice(token.from + 1, token.to);
+          return Decoration.replace({
+            widget: new PromptWidget(
+              { promptId: token.promptId, promptTeamId: token.promptTeamId, name: token.name, command },
+              // The source reads like the heading of its section in the menu.
+              [
+                token.name,
+                token.source === "personal"
+                  ? t("chatbot.commandMenu.sections.personal")
+                  : token.source === "team"
+                    ? token.teamName
+                      ? t("chatbot.commandMenu.sections.team", { name: token.teamName })
+                      : t("chatbot.commandMenu.sections.teamFallback")
+                    : "",
+                token.description?.trim(),
+              ]
+                .filter(Boolean)
+                .join("\n"),
+              t("chatbot.commandTurn.open", { command }),
+              onOpenPrompt,
+            ),
+          }).range(token.from, token.to);
+        }),
         ...props.tokens.flatMap((token) => [
           Decoration.replace({
             widget: new SkillWidget(
@@ -280,9 +364,10 @@ export function InlineSkillInput(props: Props) {
           EditorView.editable.of(!props.disabled),
           EditorState.readOnly.of(props.disabled),
           EditorView.decorations.of(decorations),
-          props.placeholder ? placeholder(props.placeholder) : [],
+          EditorView.atomicRanges.of(() => atomic),
           EditorView.contentAttributes.of({
             spellcheck: "true",
+            ...(props.placeholder ? { "aria-placeholder": props.placeholder } : {}),
             "aria-label": t("chatbot.composerPlaceholder"),
             "aria-invalid": String(props.invalid),
             ...(props.describedBy ? { "aria-describedby": props.describedBy } : {}),
@@ -304,11 +389,8 @@ export function InlineSkillInput(props: Props) {
     tokenKey,
     choicesKey,
     tokenCallbacks,
-    promptFrom,
-    promptTo,
-    promptName,
-    promptDescription,
-    promptSource,
+    promptKey,
+    onOpenPrompt,
     props.placeholder,
     props.disabled,
     props.invalid,
@@ -343,13 +425,22 @@ export function InlineSkillInput(props: Props) {
     if (!props.disabled) viewRef.current?.focus();
   }, [props.disabled]);
 
+  // The placeholder lives outside the editable line, which then holds nothing
+  // the native caret could be drawn against or sized from.
   return (
-    <div
-      ref={hostRef}
-      className={styles.editor}
-      aria-disabled={props.disabled}
-      style={{ maxHeight: props.maxHeight }}
-    />
+    <div className={styles.field}>
+      {props.placeholder && props.value === "" && (
+        <span className={styles.placeholder} aria-hidden="true">
+          {props.placeholder}
+        </span>
+      )}
+      <div
+        ref={hostRef}
+        className={styles.editor}
+        aria-disabled={props.disabled}
+        style={{ maxHeight: props.maxHeight }}
+      />
+    </div>
   );
 }
 

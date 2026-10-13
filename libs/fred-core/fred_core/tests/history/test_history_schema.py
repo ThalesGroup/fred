@@ -128,3 +128,69 @@ def test_a_command_run_with_nothing_appended_has_empty_appended_text() -> None:
     descriptor = CommandDescriptor(command="summary")
 
     assert descriptor.appended_text == ""
+
+
+def _command_prompt(index: int = 0, **overrides: object) -> dict[str, object]:
+    return {
+        "command": f"cmd{index}",
+        "prompt_id": f"p-{index}",
+        "prompt_name": f"Prompt {index}",
+        "draft_offset": index * 10,
+        "text_offset": index * 50,
+        "text_length": 40,
+        **overrides,
+    }
+
+
+def test_a_descriptor_listing_two_prompts_round_trips() -> None:
+    prompts = [_command_prompt(0), _command_prompt(1)]
+    metadata = ChatMetadata.model_validate(
+        {"command": {"command": "cmd0", "prompt_id": "p-0", "prompts": prompts}}
+    )
+
+    revived = ChatMetadata.model_validate(metadata.model_dump(mode="json"))
+
+    assert revived.command is not None
+    assert revived.command.prompts is not None
+    assert [entry.model_dump() for entry in revived.command.prompts] == prompts
+    # The single fields still name the first prompt for older readers.
+    assert revived.command.command == "cmd0"
+    assert revived.command.prompt_id == "p-0"
+
+
+def test_a_descriptor_without_a_prompts_list_is_unchanged() -> None:
+    descriptor = CommandDescriptor.model_validate(
+        {"command": "summary", "appended_text": "33 lignes"}
+    )
+
+    assert descriptor.prompts is None
+    assert descriptor.model_dump(exclude_none=True) == {
+        "command": "summary",
+        "appended_text": "33 lignes",
+    }
+
+
+def test_an_unknown_key_in_a_prompt_entry_is_kept() -> None:
+    descriptor = CommandDescriptor.model_validate(
+        {"command": "summary", "prompts": [_command_prompt(later_field="x")]}
+    )
+
+    assert descriptor.prompts is not None
+    assert descriptor.prompts[0].model_dump()["later_field"] == "x"
+
+
+def test_a_prompts_list_is_bounded() -> None:
+    import pytest
+    from pydantic import ValidationError
+
+    CommandDescriptor.model_validate(
+        {"command": "cmd0", "prompts": [_command_prompt(i) for i in range(16)]}
+    )
+    for prompts in (
+        [],
+        [_command_prompt(i) for i in range(17)],
+        [_command_prompt(text_length=0)],
+        [_command_prompt(draft_offset=-1)],
+    ):
+        with pytest.raises(ValidationError):
+            CommandDescriptor.model_validate({"command": "cmd0", "prompts": prompts})

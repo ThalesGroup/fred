@@ -66,8 +66,9 @@ Rather than retyping a recurring request, insert a saved prompt into the input
 field, then edit it before sending. It is a shortcut for that message, not a
 lasting setting of the conversation.
 
-A prompt carrying a command runs shorter still: type `/` in an empty field —
-see [Commands](/help/en/features/commands).
+A prompt carrying a command runs shorter still: type `/` in the input field,
+even when it already contains text: see
+[Commands](/help/en/features/commands).
 
 ## Reusing a sent message
 
