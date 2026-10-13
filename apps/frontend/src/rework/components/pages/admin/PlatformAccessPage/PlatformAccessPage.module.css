@@ -448,11 +448,26 @@
   max-height: inherit;
 }
 
-.accessSources {
+/* Title and its description read as one group above the controls. */
+.sectionHeader {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--spacing-xs);
+  flex-direction: column;
+  gap: var(--spacing-3xs);
   min-width: 0;
+}
+.otherAccess {
+  display: inline-flex;
+  cursor: default;
+  border-radius: var(--radius-s);
+}
+.otherAccessPanel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+  padding: var(--spacing-xs) var(--spacing-s);
+  max-width: 20rem;
+  color: var(--on-surface);
+  font: var(--font-body-small);
 }
 
 .screenReaderOnly {

@@ -3624,15 +3624,11 @@
       "infoLabel": "What a copy does"
     },
     "platformAccess": {
-      "whitelistTabs": {
-        "label": "Whitelist sections",
-        "users": "Users",
-        "teams": "Teams"
-      },
       "tabs": {
         "label": "Platform access sections",
         "rules": "Rules",
-        "users": "Whitelist"
+        "users": "Users",
+        "teams": "Teams"
       },
       "title": "Platform access",
       "description": "Choose who can use the platform: a rule on the account, individual access and authorized teams.",
@@ -3647,7 +3643,6 @@
       "team": "Team",
       "allowTeam": "Allow team",
       "free": "Link access",
-      "teamHint": "All current members of an authorized team can access the platform.",
       "freeHint": "Link access admits team members to the platform. Disabling it suspends invitation links and withdraws this access source.",
       "link": "Invitations",
       "createLink": "Create link",
@@ -3677,12 +3672,6 @@
         "failedTitle": "The team could not be joined right now"
       },
       "loading": "Loading...",
-      "source": {
-        "admin": "Platform administrator",
-        "attribute": "Rule",
-        "team": "Authorized team",
-        "free": "Link access"
-      },
       "actorLockout": "This change would remove your own last access to the platform.",
       "rule": {
         "combination": "Conditions to meet",
@@ -3850,20 +3839,19 @@
         "blocked": "Blocked",
         "email": "Email"
       },
-      "whitelistHint": "Users and teams added here always have access, whatever the rule says.",
       "filteringOn": "Filtering on",
       "filteringOff": "Filtering off",
       "clearSearch": "Clear search",
       "noUsers": "No whitelisted user matches this search.",
       "teamAllowed": "Allowed",
-      "grantedSelected_one": "Individual access granted to {{count}} user.",
-      "grantedSelected_other": "Individual access granted to {{count}} users.",
-      "revokedUser": "Individual access removed from {{user}}.",
+      "grantedSelected_one": "{{count}} user added to the whitelist.",
+      "grantedSelected_other": "{{count}} users added to the whitelist.",
+      "revokedUser": "{{user}} removed from the whitelist.",
       "addUsers": "Add users",
-      "emptyWhitelist": "Nobody has individual access yet. Use “Add users” to grant some.",
+      "emptyWhitelist": "The whitelist has no user yet. Use “Add users” to add some.",
       "addDialog": {
         "title": "Add users",
-        "subtitle": "People added here get individual access: they can use the platform whatever the rule says.",
+        "subtitle": "People added to the whitelist can use the platform whatever the rule says.",
         "searchPlaceholder": "Enter a username, a name or an email",
         "pendingListHeader": "Users to add to the whitelist",
         "pendingListEmpty": "No user selected yet",
@@ -3872,18 +3860,29 @@
         "searching": "Searching...",
         "noMatch": "No user matches this search.",
         "searchFailed": "The search could not be completed. Try again.",
-        "alreadyGranted": "Already has individual access",
+        "alreadyGranted": "Already on the whitelist",
         "more_one": "{{count}} more result. Refine the search to see it.",
         "more_other": "{{count}} more results. Refine the search to see them."
       },
       "addedOn": "Added on",
-      "otherSources": "Other access",
       "origin": {
         "label": "Origin",
         "manual": "Manual",
         "t0": "Initial import"
       },
-      "whitelistedUsers": "Whitelisted users"
+      "whitelistedUsers": "Whitelisted users",
+      "whitelistedUsersHint": "Users added here can always access the platform, whatever the rule says.",
+      "whitelistedTeams": "Whitelisted teams",
+      "whitelistedTeamsHint": "All current members of a team authorized here can access the platform, whatever the rule says.",
+      "otherAccess": {
+        "label": "Other access",
+        "attribute": "Rule",
+        "admin": "Platform administrator",
+        "team_one": "Authorized team: {{teams}}",
+        "team_other": "Authorized teams: {{teams}}",
+        "free_one": "Link access: {{teams}}",
+        "free_other": "Link access: {{teams}}"
+      }
     }
   },
   "runtime": {

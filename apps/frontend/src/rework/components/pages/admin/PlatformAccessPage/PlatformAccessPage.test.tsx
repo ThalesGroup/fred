@@ -44,7 +44,13 @@ const state = vi.hoisted(() => ({
   importT0: vi.fn(() => ({ unwrap: async () => undefined })),
   setTeam: vi.fn(() => ({ unwrap: async () => undefined })),
 }));
-vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }) }));
+// Keys only, plus the team names a string is given so grouped lines can be told apart.
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({
+    t: (key: string, options?: { teams?: string }) => (options?.teams ? `${key}[${options.teams}]` : key),
+    i18n: { language: "en" },
+  }),
+}));
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
   useToast: () => ({ showError: vi.fn(), showSuccess: state.success }),
 }));
@@ -187,16 +193,10 @@ const openTab = (tab: string) =>
       .find((node) => node.textContent === `rework.platformAccess.tabs.${tab}`)!
       .click(),
   );
-const openWhitelistTab = (tab: string) =>
-  act(() =>
-    [...host.querySelectorAll<HTMLButtonElement>('[role="tab"]')]
-      .find((node) => node.textContent === `rework.platformAccess.whitelistTabs.${tab}`)!
-      .click(),
-  );
 const visiblePanels = () =>
   [...host.querySelectorAll<HTMLElement>('[role="tabpanel"]')].filter((p) => !p.closest("[hidden]"));
 const search = (value: string) => {
-  const input = host.querySelector<HTMLInputElement>('[id$="-whitelist-users-panel"] input[type="text"]')!;
+  const input = host.querySelector<HTMLInputElement>('[id$="-users-panel"] input[type="text"]')!;
   act(() => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
     input.dispatchEvent(new Event("input", { bubbles: true }));
@@ -204,7 +204,7 @@ const search = (value: string) => {
   act(() => vi.advanceTimersByTime(300));
 };
 const type = (value: string) => {
-  const input = host.querySelector<HTMLInputElement>('[id$="-whitelist-users-panel"] input[type="text"]')!;
+  const input = host.querySelector<HTMLInputElement>('[id$="-users-panel"] input[type="text"]')!;
   act(() => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
     input.dispatchEvent(new Event("input", { bubbles: true }));
@@ -233,9 +233,9 @@ it("lists individual exceptions without a search and requests them only while th
   ]);
   expect(host.textContent).toContain("Alice");
   expect(host.textContent).not.toContain("Previous search");
-  openWhitelistTab("teams");
+  openTab("teams");
   expect(state.searchUsers.mock.lastCall?.[1]).toEqual({ skip: true });
-  openWhitelistTab("users");
+  openTab("users");
   expect(state.searchUsers.mock.lastCall?.[1]).toEqual({ skip: false });
   openTab("rules");
   expect(state.searchUsers.mock.lastCall?.[1]).toEqual({ skip: true });
@@ -260,7 +260,7 @@ it("waits for a pause in typing, trims the search and restarts at the first page
 it("tells an empty whitelist apart from a search without match", () => {
   state.users = [];
   render("");
-  const panel = host.querySelector<HTMLElement>('[id$="-whitelist-users-panel"]')!;
+  const panel = host.querySelector<HTMLElement>('[id$="-users-panel"]')!;
   expect(panel.textContent).toContain("rework.platformAccess.emptyWhitelist");
   expect(addUsersButton().disabled).toBe(false);
   expect(panel.querySelector('input[type="text"]')).not.toBeNull();
@@ -271,14 +271,13 @@ it("tells an empty whitelist apart from a search without match", () => {
 
 it("offers removal only, without row selection or a bulk bar", () => {
   render("");
-  const panel = host.querySelector<HTMLElement>('[id$="-whitelist-users-panel"]')!;
+  const panel = host.querySelector<HTMLElement>('[id$="-users-panel"]')!;
   expect(panel.querySelector('input[type="checkbox"]')).toBeNull();
   expect(pageButton("rework.platformAccess.remove")).toBeDefined();
-  expect(host.textContent).toContain("rework.platformAccess.source.free: Demo");
   expect(host.textContent).not.toContain("alice@example.org");
 });
 
-it("shows when and how each individual access was added, and only the other sources as chips", () => {
+it("shows when and how each individual access was added, and one chip detailing the other access", () => {
   state.users = [
     {
       user_id: "manual",
@@ -289,7 +288,17 @@ it("shows when and how each individual access was added, and only the other sour
         { kind: "manual", granted_at: "2026-03-04T10:20:30Z" },
         { kind: "team", team_id: "demo", team_name: "Demo" },
         { kind: "free", team_id: "open", team_name: "Open" },
+        { kind: "team", team_id: "labs", team_name: "Labs" },
         { kind: "admin" },
+      ],
+    },
+    {
+      user_id: "linked",
+      username: "Chloe",
+      email: null,
+      sources: [
+        { kind: "manual", granted_at: "2026-02-02T09:00:00Z" },
+        { kind: "free", team_id: "open", team_name: "Open" },
       ],
     },
     {
@@ -300,7 +309,7 @@ it("shows when and how each individual access was added, and only the other sour
     },
   ];
   render("");
-  const panel = host.querySelector<HTMLElement>('[id$="-whitelist-users-panel"]')!;
+  const panel = host.querySelector<HTMLElement>('[id$="-users-panel"]')!;
   const headers = [...panel.querySelectorAll(`[class*="datatable-header"] > [class*="datatable-cell"]`)].map(
     (node) => node.textContent,
   );
@@ -310,33 +319,52 @@ it("shows when and how each individual access was added, and only the other sour
     "rework.teamSettings.members.table.lastName",
     "rework.platformAccess.addedOn",
     "rework.platformAccess.origin.label",
-    "rework.platformAccess.otherSources",
+    "rework.platformAccess.otherAccess.label",
     "rework.platformAccess.exception",
   ]);
-  const cells = (name: string) =>
-    [
-      ...[...panel.querySelectorAll(`[class*="datatable-row"]`)]
-        .find((row) => row.textContent?.includes(name))!
-        .querySelectorAll(`:scope > [class*="datatable-cell"]`),
-    ].map((cell) => cell.textContent);
+  const row = (name: string) =>
+    [...panel.querySelectorAll<HTMLElement>(`[class*="datatable-row"]`)].find((node) =>
+      node.textContent?.includes(name),
+    )!;
+  const cells = (name: string) => [...row(name).querySelectorAll<HTMLElement>(`:scope > [class*="datatable-cell"]`)];
   const [, , , aliceDate, aliceOrigin, aliceOthers] = cells("Alice");
-  expect(aliceDate).toBe(new Date("2026-03-04T10:20:30Z").toLocaleString("en"));
-  expect(aliceOrigin).toBe("rework.platformAccess.origin.manual");
-  expect(aliceOthers).toBe(
-    [
-      "rework.platformAccess.source.attribute",
-      "rework.platformAccess.source.team: Demo",
-      "rework.platformAccess.source.free: Open",
-      "rework.platformAccess.source.admin",
-    ].join(""),
+  expect(aliceDate.textContent).toBe(new Date("2026-03-04T10:20:30Z").toLocaleString("en"));
+  expect(aliceOrigin.textContent).toBe("rework.platformAccess.origin.manual");
+  // One chip whatever the number of other sources, focusable, named with the whole list.
+  expect(aliceOthers.textContent).toBe("rework.platformAccess.otherAccess.label");
+  const trigger = aliceOthers.querySelector<HTMLElement>('[role="note"]')!;
+  expect(trigger.tabIndex).toBe(0);
+  const grouped = [
+    "rework.platformAccess.otherAccess.attribute",
+    "rework.platformAccess.otherAccess.admin",
+    "rework.platformAccess.otherAccess.team[Demo, Labs]",
+    "rework.platformAccess.otherAccess.free[Open]",
+  ];
+  expect(trigger.getAttribute("aria-label")).toBe(`rework.platformAccess.otherAccess.label : ${grouped.join(" ; ")}`);
+  expect(document.querySelector('[role="tooltip"]')).toBeNull();
+  act(() => {
+    trigger.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+  });
+  const tooltip = document.querySelector<HTMLElement>('[role="tooltip"]')!;
+  expect([...tooltip.querySelectorAll(":scope > span > span")].map((line) => line.textContent)).toEqual(grouped);
+  expect(trigger.getAttribute("aria-describedby")).toBe(tooltip.id);
+  act(() => {
+    trigger.dispatchEvent(new MouseEvent("mouseout", { bubbles: true }));
+  });
+
+  // Only the groups that apply are listed.
+  const chloe = cells("Chloe")[5].querySelector<HTMLElement>('[role="note"]')!;
+  expect(chloe.getAttribute("aria-label")).toBe(
+    "rework.platformAccess.otherAccess.label : rework.platformAccess.otherAccess.free[Open]",
   );
+
   const [, , , bobDate, bobOrigin, bobOthers] = cells("Bob");
-  expect(bobDate).toBe(new Date("2025-12-31T08:00:00Z").toLocaleString("en"));
-  expect(bobOrigin).toBe("rework.platformAccess.origin.t0");
-  // Nothing else grants access: the cell shows the table's empty marker.
-  expect(bobOthers).toBe("-");
-  expect(panel.textContent).not.toContain("rework.platformAccess.source.manual");
-  expect(panel.textContent).not.toContain("rework.platformAccess.source.t0");
+  expect(bobDate.textContent).toBe(new Date("2025-12-31T08:00:00Z").toLocaleString("en"));
+  expect(bobOrigin.textContent).toBe("rework.platformAccess.origin.t0");
+  // Nothing else grants access: the cell is empty, without chip or marker.
+  expect(bobOthers.textContent).toBe("");
+  expect(bobOthers.querySelector('[role="note"]')).toBeNull();
+  expect(panel.querySelectorAll('[role="note"]')).toHaveLength(2);
 });
 
 it("confirms a removal and stays silent on failure", async () => {
@@ -448,63 +476,65 @@ it("states next to the title whether filtering is on", () => {
   expect(title()).toContain("rework.platformAccess.filteringOn");
 });
 
-it("titles the whitelisted users block one level under the page title's sections", () => {
+it("titles each whitelist tab and describes it above its controls", () => {
   render();
   expect(host.querySelectorAll("h2")).toHaveLength(0);
-  const panel = host.querySelector<HTMLElement>('[id$="-whitelist-users-panel"]')!;
-  const headings = [...panel.querySelectorAll("h3")];
-  expect(headings.map((node) => node.textContent)).toEqual(["rework.platformAccess.whitelistedUsers"]);
-  // The title heads the whole block: it comes before the search, the import and the add button.
-  expect(panel.firstElementChild).toBe(headings[0]);
-  expect(host.querySelector('[id$="-users-panel"]')?.textContent).toContain("rework.platformAccess.whitelistHint");
+  for (const [tab, title, hint] of [
+    ["users", "rework.platformAccess.whitelistedUsers", "rework.platformAccess.whitelistedUsersHint"],
+    ["teams", "rework.platformAccess.whitelistedTeams", "rework.platformAccess.whitelistedTeamsHint"],
+  ]) {
+    const panel = host.querySelector<HTMLElement>(`[id$="-${tab}-panel"]`)!;
+    expect([...panel.querySelectorAll("h3")].map((node) => node.textContent)).toEqual([title]);
+    // Title then description head the block, before any control.
+    const header = panel.firstElementChild!;
+    expect([...header.children].map((node) => [node.tagName, node.textContent])).toEqual([
+      ["H3", title],
+      ["P", hint],
+    ]);
+    expect(header.querySelector("input, button")).toBeNull();
+  }
 });
 
-it("exposes only the selected panel and supports keyboard section navigation", () => {
+it("offers one level of three tabs, exposes only the selected panel and follows the keyboard", () => {
   act(() => root.render(<PlatformAccessPage />));
-  const tabs = [
-    ...host
-      .querySelectorAll<HTMLButtonElement>('[role="tablist"]')[0]
-      .querySelectorAll<HTMLButtonElement>('[role="tab"]'),
-  ];
-  const panels = [...host.querySelectorAll<HTMLDivElement>('[role="tabpanel"]')].filter(
-    (p) => !p.id.includes("-whitelist-"),
-  );
-  expect(tabs).toHaveLength(2);
-  expect(visiblePanels()).toEqual([panels[0]]);
-  expect(panels[0].getAttribute("aria-labelledby")).toBe(tabs[0].id);
-  expect(tabs[0].getAttribute("aria-controls")).toBe(panels[0].id);
-  act(() => tabs[0].dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })));
-  expect(document.activeElement).toBe(tabs[1]);
-  expect(tabs[1].getAttribute("aria-selected")).toBe("true");
-  expect(visiblePanels().map((p) => p.id)).toEqual([
-    panels[1].id,
-    `${panels[1].id.replace("-users-panel", "")}-whitelist-users-panel`,
+  expect(host.querySelectorAll('[role="tablist"]')).toHaveLength(1);
+  const tabs = [...host.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
+  expect(tabs.map((tab) => tab.textContent)).toEqual([
+    "rework.platformAccess.tabs.rules",
+    "rework.platformAccess.tabs.users",
+    "rework.platformAccess.tabs.teams",
   ]);
-  expect(
-    [...host.querySelectorAll("button")].find((node) => node.textContent === "rework.platformAccess.activation.enable"),
-  ).toBeDefined();
+  const panels = [...host.querySelectorAll<HTMLDivElement>('[role="tabpanel"]')];
+  expect(panels).toHaveLength(3);
+  panels.forEach((panel, index) => {
+    expect(panel.getAttribute("aria-labelledby")).toBe(tabs[index].id);
+    expect(tabs[index].getAttribute("aria-controls")).toBe(panel.id);
+  });
+  expect(visiblePanels()).toEqual([panels[0]]);
+  const enable = () =>
+    [...host.querySelectorAll("button")].find((node) => node.textContent === "rework.platformAccess.activation.enable");
+  for (const index of [1, 2]) {
+    act(() => tabs[index - 1].dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })));
+    expect(document.activeElement).toBe(tabs[index]);
+    expect(tabs[index].getAttribute("aria-selected")).toBe("true");
+    expect(visiblePanels()).toEqual([panels[index]]);
+    // The filtering action of the page header stays available on every tab.
+    expect(enable()).toBeDefined();
+  }
 });
 
-it("separates user and team whitelist controls with keyboard-accessible sub-tabs", () => {
+it("keeps user controls in Users and team authorization in Teams", () => {
   render();
-  const userPanel = host.querySelector<HTMLElement>('[id$="-whitelist-users-panel"]')!;
-  const teamPanel = host.querySelector<HTMLElement>('[id$="-whitelist-teams-panel"]')!;
+  const userPanel = host.querySelector<HTMLElement>('[id$="-users-panel"]')!;
+  const teamPanel = host.querySelector<HTMLElement>('[id$="-teams-panel"]')!;
   expect(userPanel.textContent).toContain("rework.platformAccess.remove");
   expect(userPanel.textContent).toContain("rework.platformAccess.addUsers");
   expect(userPanel.textContent).toContain("rework.platformAccess.t0Import");
   expect(userPanel.hidden).toBe(false);
   expect(teamPanel.hidden).toBe(true);
-  const tabs = [
-    ...host
-      .querySelectorAll<HTMLButtonElement>('[role="tablist"]')[1]
-      .querySelectorAll<HTMLButtonElement>('[role="tab"]'),
-  ];
-  act(() => tabs[0].dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })));
-  expect(document.activeElement).toBe(tabs[1]);
+  openTab("teams");
   expect(userPanel.hidden).toBe(true);
   expect(teamPanel.hidden).toBe(false);
-  expect(teamPanel.getAttribute("aria-labelledby")).toBe(tabs[1].id);
-  expect(tabs[1].getAttribute("aria-controls")).toBe(teamPanel.id);
   expect(teamPanel.querySelector('input[aria-label="rework.platformAccess.allowTeam Demo"]')).not.toBeNull();
   expect(teamPanel.textContent).not.toContain("rework.platformAccess.links.manage");
   expect(teamPanel.textContent).not.toContain("rework.platformAccess.freeHint");
@@ -512,7 +542,7 @@ it("separates user and team whitelist controls with keyboard-accessible sub-tabs
 
 it("whitelists a whole team while retaining its independent Free enrollment flag", async () => {
   render();
-  openWhitelistTab("teams");
+  openTab("teams");
   const toggle = host.querySelector<HTMLInputElement>('input[aria-label="rework.platformAccess.allowTeam Demo"]')!;
   await act(async () => toggle.click());
   expect(state.setTeam).toHaveBeenCalledWith({
@@ -532,8 +562,8 @@ it("preserves the rule draft, the search and the page across tabs without mutati
   openTab("rules");
   expect(host.querySelector('[role="tabpanel"]:not([hidden])')?.textContent).toContain("Unsaved rule");
   openTab("users");
-  openWhitelistTab("teams");
-  openWhitelistTab("users");
+  openTab("teams");
+  openTab("users");
   expect(state.searchUsers.mock.lastCall).toEqual([
     { offset: 20, limit: 20, query: "Al", exceptionsOnly: true },
     { skip: false },
@@ -556,7 +586,7 @@ it("reduces the completed import to a discreet status without an import action",
 it("says so when a search matches no user and shows progress while searching", () => {
   state.users = [];
   render();
-  const panel = host.querySelector<HTMLElement>('[id$="-whitelist-users-panel"]')!;
+  const panel = host.querySelector<HTMLElement>('[id$="-users-panel"]')!;
   expect(panel.textContent).toContain("rework.platformAccess.noUsers");
   expect(panel.querySelector('input[type="checkbox"]')).toBeNull();
   state.usersFetching = true;
@@ -583,7 +613,7 @@ it("requires configuration and confirmation across all tabs before activating", 
     openTab(tab);
     expect(action().disabled).toBe(false);
   }
-  openWhitelistTab("teams");
+  openTab("teams");
   expect(action().disabled).toBe(false);
   act(() => action().click());
   expect(state.filter).not.toHaveBeenCalled();
@@ -597,8 +627,8 @@ it("requires configuration and confirmation across all tabs before activating", 
       .click(),
   );
   expect(state.filter).not.toHaveBeenCalled();
-  expect(visiblePanels().some((p) => p.id.endsWith("-whitelist-users-panel"))).toBe(true);
-  expect(visiblePanels().some((p) => p.id.endsWith("-whitelist-teams-panel"))).toBe(false);
+  expect(visiblePanels().some((p) => p.id.endsWith("-users-panel"))).toBe(true);
+  expect(visiblePanels().some((p) => p.id.endsWith("-teams-panel"))).toBe(false);
   act(() => action().click());
   await act(async () =>
     [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')]
