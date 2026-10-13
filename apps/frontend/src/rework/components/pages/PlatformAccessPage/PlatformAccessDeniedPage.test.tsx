@@ -56,7 +56,9 @@ it("greets the person, shows their account and the two steps", () => {
   render();
   const headings = host.querySelectorAll("h1");
   expect(headings).toHaveLength(1);
-  expect(headings[0].textContent).toBe("rework.platformAccess.denied.titleNamed Camille");
+  expect(headings[0].textContent).toBe(
+    "rework.platformAccess.denied.greetingNamed Camille rework.platformAccess.denied.title",
+  );
   expect(host.querySelector("section")?.getAttribute("aria-labelledby")).toBe(headings[0].id);
   expect(host.textContent).toContain("Acme Assistant");
   expect(host.textContent).toContain("Camille Durand");
@@ -71,7 +73,9 @@ it("greets the person, shows their account and the two steps", () => {
 it("falls back to a greeting without a name", () => {
   state.givenName = null;
   render();
-  expect(host.querySelector("h1")?.textContent).toBe("rework.platformAccess.denied.title");
+  expect(host.querySelector("h1")?.textContent).toBe(
+    "rework.platformAccess.denied.greeting rework.platformAccess.denied.title",
+  );
   expect(host.textContent).toContain("Camille Durand");
 });
 

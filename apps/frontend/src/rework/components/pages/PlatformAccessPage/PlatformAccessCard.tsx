@@ -7,11 +7,14 @@ import styles from "./PlatformAccessCard.module.css";
 
 // One card for every screen a person meets before being admitted.
 export default function PlatformAccessCard({
+  lead,
   title,
   children,
   footerStart,
   actions,
 }: {
+  /** Greeting shown larger, on its own line above the title. */
+  lead?: string;
   title: string;
   children?: ReactNode;
   /** Discreet links at the footer's left. */
@@ -27,6 +30,7 @@ export default function PlatformAccessCard({
         <header className={styles.header}>
           {siteDisplayName && <p className={styles.brand}>{siteDisplayName}</p>}
           <h1 id={titleId} className={styles.title}>
+            {lead && <span className={styles.lead}>{lead} </span>}
             {title}
           </h1>
         </header>

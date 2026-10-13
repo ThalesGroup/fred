@@ -18,11 +18,12 @@ export default function PlatformAccessDeniedPage() {
   const accountName = fullName || email;
   return (
     <PlatformAccessCard
-      title={
+      lead={
         firstName
-          ? t("rework.platformAccess.denied.titleNamed", { firstName })
-          : t("rework.platformAccess.denied.title")
+          ? t("rework.platformAccess.denied.greetingNamed", { firstName })
+          : t("rework.platformAccess.denied.greeting")
       }
+      title={t("rework.platformAccess.denied.title")}
       footerStart={<SignOutLink />}
       actions={
         <>

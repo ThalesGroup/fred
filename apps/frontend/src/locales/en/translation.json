@@ -3623,8 +3623,9 @@
       "copyLink": "Invitation URL",
       "failed": "The operation could not be completed. Check your access and try again.",
       "denied": {
-        "titleNamed": "Hello {{firstName}},\nyour access is not open yet",
-        "title": "Hello,\nyour access is not open yet",
+        "greetingNamed": "Hello {{firstName}},",
+        "greeting": "Hello,",
+        "title": "your access is not open yet",
         "stepRequestWithEmail": "Ask support for access, giving the address above.",
         "stepRequest": "Ask support for access.",
         "stepReturn": "Once it is open, come back here and check your access.",

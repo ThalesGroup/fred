@@ -42,8 +42,11 @@
 .title {
   margin: 0;
   font: var(--font-title-medium-emphasized);
-  /* Titles may carry a line break from the translation. */
-  white-space: pre-line;
+}
+
+.lead {
+  display: block;
+  font: var(--font-title-large);
 }
 
 .content p {
