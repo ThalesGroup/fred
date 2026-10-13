@@ -43,7 +43,3 @@
   margin-inline-start: var(--spacing-xs);
   pointer-events: none;
 }
-
-.promptToken {
-  color: var(--info);
-}

@@ -15,7 +15,7 @@
  */
 
 /* Keep legacy appended text in the bubble's colour and inline flow.
-   Only the prompt token shares the composer's blue treatment. */
+   Only the prompt token takes the container the composer gives it. */
 .command {
   display: inline-block;
   cursor: pointer;
@@ -34,7 +34,7 @@
 }
 
 .command:focus-visible {
-  outline: 2px solid var(--info);
+  outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
 
@@ -42,23 +42,8 @@
   cursor: default;
 }
 
-.slug {
-  display: inline-flex;
-  align-items: baseline;
-  vertical-align: baseline;
-  gap: var(--spacing-2xs);
-  max-width: 100%;
-  color: var(--info);
-}
-
 .slug > :first-child {
-  align-self: center;
   user-select: none;
-}
-
-.slug > :last-child {
-  min-width: 0;
-  overflow-wrap: anywhere;
 }
 
 .appended {

@@ -15,6 +15,7 @@
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
 import type { CommandDescriptor } from "../../../../../slices/runtime/runtimeOpenApi";
+import badgeStyles from "../SkillBadge/SkillBadge.module.css";
 import styles from "./CommandTurn.module.css";
 
 interface CommandTurnProps {
@@ -43,9 +44,9 @@ export function CommandTurn({ command, onOpen, inline = false }: CommandTurnProp
           : t("chatbot.commandTurn.open", { command: command.command })
       }
     >
-      <span className={styles.slug}>
+      <span className={`${badgeStyles.badge} ${styles.slug}`} data-kind="prompt" data-surface="bubble">
         <Icon category="outlined" type="edit_note" />
-        <span>/{command.command}</span>
+        <span className={badgeStyles.name}>/{command.command}</span>
       </span>
       {appended && <span className={styles.appended}> {appended}</span>}
     </button>

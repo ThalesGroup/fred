@@ -124,6 +124,9 @@ describe("UserTurn copy affordance (#2359)", () => {
       expect(body.textContent).toBe(`edit_note/${command} Before mermaid middle verify-answer after`);
       expect(container.textContent).not.toContain("PRIVATE EXPANDED PROMPT");
       expect(body.querySelectorAll("[data-skill-name]")).toHaveLength(2);
+      expect(
+        Array.from(body.querySelectorAll<HTMLElement>("[data-surface=bubble]")).map((badge) => badge.dataset.kind),
+      ).toEqual(["prompt", "skill", "skill"]);
       await click(body.querySelector("button[class*=command]") as HTMLButtonElement);
       expect(onOpenCommand).toHaveBeenCalledWith({
         text: "PRIVATE EXPANDED PROMPT Before /mermaid middle /verify-answer after",

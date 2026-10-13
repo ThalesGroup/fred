@@ -47,6 +47,7 @@ class SkillWidget extends WidgetType {
     const button = document.createElement("button");
     button.type = "button";
     button.className = `${badgeStyles.badge} ${badgeStyles.action}`;
+    button.dataset.kind = "skill";
     button.title = this.hint;
     button.setAttribute("aria-label", this.label);
     const icon = document.createElement("span");
@@ -80,7 +81,8 @@ class PromptWidget extends WidgetType {
   }
   toDOM() {
     const token = document.createElement("span");
-    token.className = `${badgeStyles.badge} ${styles.promptToken}`;
+    token.className = badgeStyles.badge;
+    token.dataset.kind = "prompt";
     token.title = this.hint;
     token.setAttribute("role", "group");
     token.setAttribute("aria-label", this.hint);

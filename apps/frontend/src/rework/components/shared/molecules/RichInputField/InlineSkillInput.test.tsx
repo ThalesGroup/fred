@@ -83,6 +83,9 @@ it("keeps canonical text in the editor while placing the clickable token between
   expect(container.querySelector(".cm-line")?.textContent).toBe("Before meeting-minutes after");
   const badge = container.querySelector<HTMLButtonElement>('[aria-label="chatbot.skills.open"]')!;
   expect(badge.title).toBe("chatbot.skills.platformProvided\nMeeting minutes");
+  // A skill container; the hairline is for sent messages only.
+  expect(badge.dataset).toMatchObject({ kind: "skill" });
+  expect(badge.dataset.surface).toBeUndefined();
   act(() => badge.click());
   expect(onOpen).toHaveBeenCalledWith("meeting-minutes");
   expect(onSend).not.toHaveBeenCalled();
@@ -206,12 +209,14 @@ it("keeps a prompt command copyable, editable and undoable beneath its visual", 
     deleteCharBackward(editor());
   });
   expect(editor().state.doc.toString()).toBe("/hell Notes");
-  expect(container.querySelector("[class*=promptToken]")).toBeNull();
+  expect(container.querySelector("[data-kind=prompt]")).toBeNull();
   act(() => {
     undo(editor());
   });
   expect(editor().state.doc.toString()).toBe("/hello Notes");
-  expect(container.querySelector("[class*=promptToken]")).not.toBeNull();
+  const prompt = container.querySelector<HTMLElement>("[data-kind=prompt]")!;
+  expect(prompt.className).toMatch(/badge/);
+  expect(prompt.dataset.surface).toBeUndefined();
   const dispatch = vi.spyOn(editor(), "dispatch");
   act(() => root.render(<Host prompt />));
   expect(dispatch).not.toHaveBeenCalled();

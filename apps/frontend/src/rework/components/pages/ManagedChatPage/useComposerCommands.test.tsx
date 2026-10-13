@@ -950,7 +950,7 @@ describe("platform skills", () => {
       expect(cm().state.doc.toString()).toBe(`${prefix}/summary `);
       const append = "Before /meeting-minutes middle /review after";
       act(() => cm().dispatch({ changes: { from: cm().state.doc.length, insert: append } }));
-      const prompt = container.querySelector<HTMLElement>("[class*=promptToken]");
+      const prompt = container.querySelector<HTMLElement>("[data-kind=prompt]");
       expect(prompt?.textContent).toBe("edit_notesummary");
       expect(prompt?.title).toContain("Résumé");
       expect(container.querySelectorAll('[aria-label="chatbot.skills.open"]')).toHaveLength(2);
@@ -966,7 +966,7 @@ describe("platform skills", () => {
         skills: [{ name: "meeting-minutes" }, { name: "review" }],
       });
       cmType("Before /summary after");
-      expect(container.querySelector("[class*=promptToken]")).not.toBeNull();
+      expect(container.querySelector("[data-kind=prompt]")).not.toBeNull();
     },
   );
 
@@ -981,7 +981,7 @@ describe("platform skills", () => {
         cmType(`${before} /su`);
         expect(labels()).toEqual(["/summary"]);
         cmPress("Tab");
-        expect(container.querySelector("[class*=promptToken]")?.textContent).toBe("edit_notesummary");
+        expect(container.querySelector("[data-kind=prompt]")?.textContent).toBe("edit_notesummary");
         for (const insert of promptFirst ? ["middle /rev", "after /meet"] : ["after /meet"]) {
           act(() => {
             const end = cm().state.doc.length;
@@ -990,7 +990,7 @@ describe("platform skills", () => {
           cmPress("Tab");
         }
         expect(container.querySelectorAll('[aria-label="chatbot.skills.open"]')).toHaveLength(2);
-        expect(container.querySelector("[class*=promptToken]")).not.toBeNull();
+        expect(container.querySelector("[data-kind=prompt]")).not.toBeNull();
         const draft = cm().state.doc.toString();
         const after = promptFirst ? "middle /review after /meeting-minutes" : "after /meeting-minutes";
         await act(async () => renders[renders.length - 1].submit());
@@ -1178,13 +1178,13 @@ describe("personal and team prompt commands", () => {
     const view = EditorView.findFromDOM(container.querySelector(".cm-content")!)!;
     act(() => view.contentDOM.focus());
     act(() => view.dispatch({ changes: { from: 0, insert: "/su" }, selection: { anchor: 3 } }));
-    expect(container.querySelector("[class*=promptToken]")).toBeNull();
+    expect(container.querySelector("[data-kind=prompt]")).toBeNull();
     if (source === "personal")
       act(() => view.contentDOM.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })));
     act(() =>
       view.contentDOM.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true })),
     );
-    const token = container.querySelector<HTMLElement>("[class*=promptToken]")!;
+    const token = container.querySelector<HTMLElement>("[data-kind=prompt]")!;
     expect(token).not.toBeNull();
     expect(token.textContent).toBe("edit_notesummary");
     expect(token.title).toContain(`chatbot.commandMenu.sources.${source}`);
