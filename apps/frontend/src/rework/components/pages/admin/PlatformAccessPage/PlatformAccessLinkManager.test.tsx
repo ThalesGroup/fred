@@ -123,9 +123,10 @@ const render = (free = true) =>
 const button = (key: string) =>
   [...document.querySelectorAll<HTMLButtonElement>("button")].find(
     (node) =>
-      node.getAttribute("aria-label") === `rework.platformAccess.${key}` ||
-      (key === "links.copyUrl" && node.getAttribute("aria-label") === "rework.platformAccess.links.copied") ||
-      node.textContent?.trim() === `rework.platformAccess.${key}`,
+      !node.closest("[inert]") &&
+      (node.getAttribute("aria-label") === `rework.platformAccess.${key}` ||
+        (key === "links.copyUrl" && node.getAttribute("aria-label") === "rework.platformAccess.links.copied") ||
+        node.textContent?.trim() === `rework.platformAccess.${key}`),
   )!;
 const frontDialog = () => {
   const dialogs = document.querySelectorAll<HTMLElement>('[role="dialog"]');
@@ -135,6 +136,7 @@ const frontConfirmButton = () => {
   const buttons = frontDialog().querySelectorAll<HTMLButtonElement>("button");
   return buttons[buttons.length - 1]!;
 };
+const collapsedExpiry = () => frontDialog().querySelector<HTMLButtonElement>('button[aria-expanded="false"]')!;
 const input = (key: string) =>
   [...document.querySelectorAll<HTMLInputElement>("input")].find(
     (node) => node.labels?.[0]?.textContent === `rework.platformAccess.${key}`,
@@ -367,11 +369,7 @@ it("rejects a past local expiry before requesting a link and preserves the note"
   render();
   act(() => button("createLink").click());
   change(input("links.note"), "Future demo");
-  act(() =>
-    [...document.querySelectorAll<HTMLButtonElement>("button")]
-      .find((node) => node.getAttribute("aria-expanded") === "false")!
-      .click(),
-  );
+  act(() => collapsedExpiry().click());
   change(input("links.expiryDate"), "2020-01-01T12:00");
   expect(
     [...document.querySelectorAll<HTMLButtonElement>("button")].find(
@@ -400,11 +398,7 @@ it("shows history first and returns without generation when creation is canceled
   render();
   expect(input("links.note")).toBeUndefined();
   act(() => button("createLink").click());
-  act(() =>
-    [...document.querySelectorAll<HTMLButtonElement>("button")]
-      .find((node) => node.getAttribute("aria-expanded") === "false")!
-      .click(),
-  );
+  act(() => collapsedExpiry().click());
   expect(input("links.expiryDate").lang).toBe("en-GB");
   act(() => input("links.expiryDate").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
   expect(input("links.expiryDate")).toBeUndefined();
@@ -417,6 +411,28 @@ it("shows history first and returns without generation when creation is canceled
   );
   expect(document.body.textContent).toContain("Workshop");
   expect(hooks.generate).not.toHaveBeenCalled();
+});
+it("keeps the links and create dialog mounted while showing a generated URL", async () => {
+  render();
+  const linksDialog = frontDialog();
+  const createTrigger = button("createLink");
+  act(() => {
+    createTrigger.focus();
+    createTrigger.click();
+  });
+  expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(2);
+  expect(document.querySelector('[inert] [role="dialog"]')).toBe(linksDialog);
+  const createDialog = frontDialog();
+  const createWidth = createDialog.style.width;
+  await act(async () => button("createLink").click());
+  expect(frontDialog()).toBe(createDialog);
+  expect(frontDialog().style.width).toBe(createWidth);
+  expect(document.querySelector('[inert] [role="dialog"]')).toBe(linksDialog);
+  expect(document.activeElement).toBe(input("copyLink"));
+  act(() => frontConfirmButton().click());
+  expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+  expect(frontDialog()).toBe(linksDialog);
+  expect(document.activeElement).toBe(createTrigger);
 });
 it("retains an existing recovered URL when clipboard access fails without generating", async () => {
   vi.mocked(navigator.clipboard.writeText).mockRejectedValue(new Error("permission"));
@@ -435,11 +451,7 @@ it("retains an existing recovered URL when clipboard access fails without genera
 it("applies a custom future expiration before creation and converts local time to UTC", async () => {
   render();
   act(() => button("createLink").click());
-  act(() =>
-    [...document.querySelectorAll<HTMLButtonElement>("button")]
-      .find((node) => node.getAttribute("aria-expanded") === "false")!
-      .click(),
-  );
+  act(() => collapsedExpiry().click());
   change(input("links.expiryDate"), "2099-01-01T12:34");
   expect(button("createLink").disabled).toBe(true);
   act(() =>
@@ -457,29 +469,20 @@ it("applies a custom future expiration before creation and converts local time t
 it("uses future duration shortcuts and can remove expiration without closing creation", () => {
   render();
   act(() => button("createLink").click());
-  const open = () =>
-    act(() =>
-      [...document.querySelectorAll<HTMLButtonElement>("button")]
-        .find((node) => node.getAttribute("aria-expanded") === "false")!
-        .click(),
-    );
+  const open = () => act(() => collapsedExpiry().click());
   open();
   act(() => button("links.expiryPresets.days7").click());
   open();
   expect(new Date(input("links.expiryDate").value).getTime()).toBeGreaterThan(Date.now() + 6 * 86400000);
   act(() => button("links.never").click());
-  expect(document.querySelector('[aria-expanded="false"]')?.textContent).toContain("rework.platformAccess.links.never");
+  expect(collapsedExpiry().textContent).toContain("rework.platformAccess.links.never");
   expect(button("createLink").disabled).toBe(false);
 });
 
 it("consumes Escape before the parent dialog even when focus has returned to the note", () => {
   render();
   act(() => button("createLink").click());
-  act(() =>
-    [...document.querySelectorAll<HTMLButtonElement>("button")]
-      .find((node) => node.getAttribute("aria-expanded") === "false")!
-      .click(),
-  );
+  act(() => collapsedExpiry().click());
   act(() => {
     input("links.note").focus();
     input("links.note").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));

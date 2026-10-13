@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
 import PlatformAccessExpirationPicker from "./PlatformAccessExpirationPicker";
@@ -64,6 +64,8 @@ export default function PlatformAccessLinkManager({
   const [expiry, setExpiry] = useState("");
   const [choosingExpiry, setChoosingExpiry] = useState(false);
   const [url, setUrl] = useState<string>();
+  const outputInputRef = useRef<HTMLInputElement>(null);
+  const returnFocusRef = useRef<{ trigger: HTMLElement | null; dialog: HTMLElement | null } | null>(null);
   const [confirmRevoke, setConfirmRevoke] = useState<string>();
   const [failed, setFailed] = useState(false);
   const busy = generating.isLoading || revoking.isLoading || deleting.isLoading;
@@ -81,6 +83,9 @@ export default function PlatformAccessLinkManager({
     }
   };
   const linkUrl = (token: string) => new URL(platformPath(`join-free/${token}`), window.location.origin).toString();
+  const rememberFocus = (trigger: HTMLElement) => {
+    returnFocusRef.current = { trigger, dialog: trigger.closest<HTMLElement>('[role="dialog"]') };
+  };
   const copyConfirmed = (linkId?: string) => copied && copyStatus === "copied" && copiedLinkId === linkId;
   const copyAction = (onClick: () => void, disabled: boolean, linkId?: string) => (
     <ActionBar
@@ -148,11 +153,23 @@ export default function PlatformAccessLinkManager({
   };
   const expiredInput =
     expiry !== "" && (!Number.isFinite(new Date(expiry).getTime()) || new Date(expiry).getTime() <= Date.now());
+  useLayoutEffect(() => {
+    if (view === "output") outputInputRef.current?.focus();
+  }, [view]);
+  useLayoutEffect(() => {
+    if (view !== "list" || confirmCleanup || confirmRevoke || joinersLink) return;
+    const previous = returnFocusRef.current;
+    if (!previous) return;
+    returnFocusRef.current = null;
+    const trigger = previous.trigger?.isConnected && !previous.trigger.matches(":disabled") ? previous.trigger : null;
+    const fallback = previous.dialog?.querySelector<HTMLElement>("button:not([disabled])");
+    (trigger ?? fallback)?.focus();
+  }, [view, confirmCleanup, confirmRevoke, joinersLink]);
   return (
     <>
       <Dialog
-        open={view === "list"}
-        inactive={confirmCleanup || !!confirmRevoke || !!joinersLink}
+        open
+        inactive={view !== "list" || confirmCleanup || !!confirmRevoke || !!joinersLink}
         title={t("rework.platformAccess.links.title", { team: team.name || team.team_id })}
         maxWidth={1100}
         hideCancel
@@ -174,7 +191,8 @@ export default function PlatformAccessLinkManager({
               variant="filled"
               size="medium"
               disabled={busy || !team.free}
-              onClick={() => {
+              onClick={(event) => {
+                rememberFocus(event.currentTarget);
                 setFailed(false);
                 setCopyStatus(undefined);
                 setView("create");
@@ -209,7 +227,8 @@ export default function PlatformAccessLinkManager({
               variant="outlined"
               size="medium"
               disabled={busy || links.isFetching || links.isError || !inactiveCount}
-              onClick={() => {
+              onClick={(event) => {
+                rememberFocus(event.currentTarget);
                 setFailed(false);
                 setConfirmCleanup(true);
               }}
@@ -292,19 +311,22 @@ export default function PlatformAccessLinkManager({
                               : "rework.platformAccess.links.copyUrl",
                           ),
                           disabled: busy || links.isFetching || !link.recoverable,
-                          onClick: () =>
+                          onClick: (event) => {
+                            rememberFocus(event.currentTarget);
                             void run(async () => {
                               const result = await reveal({ teamId: team.team_id, linkId: link.id }).unwrap();
                               setCreated(false);
                               await copy(linkUrl(result.token), link.id);
-                            }),
+                            });
+                          },
                         },
                         {
                           id: "joiners",
                           icon: "group",
                           label: t("rework.platformAccess.links.joiners"),
                           disabled: busy || links.isFetching,
-                          onClick: () => {
+                          onClick: (event) => {
+                            rememberFocus(event.currentTarget);
                             setJoinersOffset(0);
                             setJoinersLink(link);
                           },
@@ -314,7 +336,10 @@ export default function PlatformAccessLinkManager({
                           icon: "block",
                           label: t("rework.platformAccess.links.revoke"),
                           disabled: busy || links.isFetching || link.status === "revoked",
-                          onClick: () => setConfirmRevoke(link.id),
+                          onClick: (event) => {
+                            rememberFocus(event.currentTarget);
+                            setConfirmRevoke(link.id);
+                          },
                         },
                       ]}
                     />
@@ -421,61 +446,57 @@ export default function PlatformAccessLinkManager({
           </div>
         </Dialog>
       )}
-      {view === "create" && (
+      {(view === "create" || (view === "output" && url)) && (
         <Dialog
           open
-          title={t("rework.platformAccess.createLink")}
-          maxWidth={600}
-          confirmLabel={t("rework.platformAccess.createLink")}
-          confirmDisabled={busy || !team.free || expiredInput || choosingExpiry}
-          onCancel={back}
-          onConfirm={() => void create()}
-        >
-          <div className={`${styles.dialogBody} ${styles.linkCreation}`}>
-            <TextInput
-              label={t("rework.platformAccess.links.note")}
-              value={note}
-              maxLength={512}
-              disabled={busy || !team.free}
-              onChange={(event) => setNote(event.target.value)}
-            />
-            <PlatformAccessExpirationPicker
-              value={expiry}
-              disabled={busy || !team.free}
-              onChange={setExpiry}
-              onOpenChange={setChoosingExpiry}
-            />
-            {expiredInput && (
-              <p id="link-expiry-error" role="alert">
-                {t("rework.platformAccess.links.futureExpiry")}
-              </p>
-            )}
-            {failed && <p role="alert">{t("rework.platformAccess.failed")}</p>}
-          </div>
-        </Dialog>
-      )}
-      {view === "output" && url && (
-        <Dialog
-          open
-          title={t(created ? "rework.platformAccess.links.createdSuccess" : "rework.platformAccess.links.copyUrl")}
+          title={
+            view === "create"
+              ? t("rework.platformAccess.createLink")
+              : t(created ? "rework.platformAccess.links.createdSuccess" : "rework.platformAccess.links.copyUrl")
+          }
           maxWidth={700}
-          confirmLabel={t("common.close")}
-          confirmDisabled={busy}
-          hideCancel
+          confirmLabel={t(view === "create" ? "rework.platformAccess.createLink" : "common.close")}
+          confirmDisabled={view === "create" ? busy || !team.free || expiredInput || choosingExpiry : busy}
+          hideCancel={view === "output"}
           onCancel={back}
-          onConfirm={back}
+          onConfirm={view === "create" ? () => void create() : back}
         >
-          <div className={styles.dialogBody}>
-            <TextInput
-              label={t("rework.platformAccess.copyLink")}
-              value={url}
-              readOnly
-              onFocus={(event) => event.target.select()}
-            />
-            {copyAction(() => void copy(url), busy)}
-            {copyStatus === "failed" && <p role="alert">{t("rework.platformAccess.links.copyFailed")}</p>}
-            {copyAnnouncement}
-          </div>
+          {view === "create" ? (
+            <div className={`${styles.dialogBody} ${styles.linkCreation}`}>
+              <TextInput
+                label={t("rework.platformAccess.links.note")}
+                value={note}
+                maxLength={512}
+                disabled={busy || !team.free}
+                onChange={(event) => setNote(event.target.value)}
+              />
+              <PlatformAccessExpirationPicker
+                value={expiry}
+                disabled={busy || !team.free}
+                onChange={setExpiry}
+                onOpenChange={setChoosingExpiry}
+              />
+              {expiredInput && (
+                <p id="link-expiry-error" role="alert">
+                  {t("rework.platformAccess.links.futureExpiry")}
+                </p>
+              )}
+              {failed && <p role="alert">{t("rework.platformAccess.failed")}</p>}
+            </div>
+          ) : url ? (
+            <div className={styles.dialogBody}>
+              <TextInput
+                ref={outputInputRef}
+                label={t("rework.platformAccess.copyLink")}
+                value={url}
+                readOnly
+                onFocus={(event) => event.target.select()}
+              />
+              {copyAction(() => void copy(url), busy)}
+              {copyStatus === "failed" && <p role="alert">{t("rework.platformAccess.links.copyFailed")}</p>}
+              {copyAnnouncement}
+            </div>
+          ) : null}
         </Dialog>
       )}
       {confirmRevoke && (
