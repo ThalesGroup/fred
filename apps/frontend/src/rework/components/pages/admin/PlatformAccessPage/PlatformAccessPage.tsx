@@ -277,7 +277,7 @@ export default function PlatformAccessPage() {
                   columns={[
                     {
                       label: t("rework.teamSettings.members.table.identifiant"),
-                      size: "2fr",
+                      size: "1fr",
                       cellRenderer: (user) => user.username || user.email || "-",
                     },
                     {
