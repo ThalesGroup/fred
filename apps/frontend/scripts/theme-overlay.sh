@@ -71,14 +71,12 @@ copy_theme_images() (
 # recreates them and nginx would follow one out of the overlay.
 install_theme() {
     [ -n "${FRONTEND_THEME_URL}" ] || return 0
-    if [ -n "$FRONTEND_THEME_URL" ]; then
-        for dependency in curl unzip jq; do
-            if ! command -v "$dependency" >/dev/null 2>&1; then
-                theme_failure "$dependency is required; install it before starting the frontend"
-                return 0
-            fi
-        done
-    fi
+    for dependency in curl unzip jq; do
+        if ! command -v "$dependency" >/dev/null 2>&1; then
+            theme_failure "$dependency is required; install it before starting the frontend"
+            return 0
+        fi
+    done
 
     # A presigned URL carries its credential in the query string: never log it.
     theme_source=$(printf '%s' "${FRONTEND_THEME_URL%%\?*}" | sed 's#://[^/@]*@#://[redacted]@#')
@@ -98,8 +96,9 @@ install_theme() {
     # a stalling store boots the stock assets instead of crashlooping. Anything
     # slower than that needs the startupProbe from the example values.
     if ! curl "$@" -fsSL --connect-timeout 3 --max-time 6 --retry 2 --retry-connrefused --retry-max-time 10 \
-        --max-filesize 64m -o "${archive}" "${FRONTEND_THEME_URL}" 2>/dev/null; then
-        theme_failure "cannot download ${theme_source}"
+        --max-filesize 64m -o "${archive}" "${FRONTEND_THEME_URL}" 2>"${work}/curl.err"; then
+        # curl's -S message names the status or host, never the query string.
+        theme_failure "cannot download ${theme_source}: $(tail -n 1 "${work}/curl.err")"
         return 0
     fi
     # unzip relocates entries with .. or absolute paths and says so (busybox or

@@ -84,8 +84,9 @@ targets the theme by its `id` **and** its base, with no `html` prefix:
 ```
 
 The base in the selector makes your rules win over the shipped theme; leaving
-out `html` lets the administration previews show them. A rule without
-`[data-theme]` applies to both modes, for instance for the font:
+out `html` lets the administration previews show them. Colors always
+need all three attributes, even to adjust Pebble, Cobalt or Cloud themselves. A
+rule without `[data-theme]` applies to both modes, for instance for the font:
 
 ```css
 @font-face {

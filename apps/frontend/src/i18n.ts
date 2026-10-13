@@ -39,18 +39,35 @@ i18n
 
 export default i18n;
 
-/** Apply optional deployment labels before any React content is rendered. */
+/** Keep only string labels whose shipped key is a string: anything else cannot rename text. */
+function shippedLabels(overrides: unknown, shipped: unknown): Record<string, unknown> {
+  const labels: Record<string, unknown> = {};
+  if (!overrides || typeof overrides !== "object" || !shipped || typeof shipped !== "object") return labels;
+  for (const [key, value] of Object.entries(overrides)) {
+    if (!Object.prototype.hasOwnProperty.call(shipped, key)) continue;
+    const current = (shipped as Record<string, unknown>)[key];
+    if (typeof current === "string" && typeof value === "string") labels[key] = value;
+    else if (current && typeof current === "object") {
+      const nested = shippedLabels(value, current);
+      if (Object.keys(nested).length) labels[key] = nested;
+    }
+  }
+  return labels;
+}
+
+/** Apply optional deployment labels before render; a broken file leaves the shipped text. */
 export async function loadThemeTranslations(): Promise<void> {
   await Promise.all(
     ["en", "fr"].map(async (language) => {
-      const response = await fetch(`/theme-translations/${language}.json`, { cache: "no-cache" });
-      if (response.status === 404) return;
-      if (!response.ok) throw new Error(`Cannot load theme translations for ${language}: ${response.status}`);
-      const overrides: unknown = await response.json();
-      if (!overrides || typeof overrides !== "object" || Array.isArray(overrides)) {
-        throw new Error(`Invalid theme translations for ${language}`);
+      try {
+        const response = await fetch(`/theme-translations/${language}.json`, { cache: "no-cache" });
+        if (response.status === 404) return;
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const labels = shippedLabels(await response.json(), i18n.getResourceBundle(language, "translation"));
+        i18n.addResourceBundle(language, "translation", labels, true, true);
+      } catch (error) {
+        console.warn(`Theme translations for ${language} ignored:`, error);
       }
-      i18n.addResourceBundle(language, "translation", overrides, true, true);
     }),
   );
 }

@@ -308,7 +308,11 @@ light one.
 Add only the differences in `theme-custom.css`, using selectors such as
 `[data-ui-theme="acme"][data-ui-base-theme="pebble"][data-theme="light"]`
 and the matching `dark` selector. Include the base attribute so the ZIP rule
-wins over the shipped CSS, which loads later. Do not prefix these selectors
+wins over the shipped CSS, which loads later. Color tokens always need all
+three attributes, even to adjust a shipped theme
+(`[data-ui-theme="cobalt"][data-ui-base-theme="cobalt"][data-theme="dark"]`);
+only mode-independent rules such as fonts can omit `[data-theme]`. A flat ZIP
+holding a root `themes/` or `shared/` directory is read as a structured one. Do not prefix these selectors
 with `html`: the admin previews also
 need to match them. ZIP themes appear in the profile picker and the admin theme settings,
 where an admin can choose a default or hide a theme. Images and fonts placed in

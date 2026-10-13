@@ -30,7 +30,7 @@ Deploy the new frontend image. To activate overrides, upload a ZIP with the opti
 
 Open the frontend in a fresh browser session and verify the browser tab name, selected image names, translated UI labels and light/dark theme CSS. Check that the theme CSS, properties and translation URLs serve the ZIP content. The frontend container logs `Theme installed from ...` when the ZIP is accepted.
 
-Frontends older than this version reject catalog entries carrying the tab keys: upgrade the frontend before uploading such a ZIP.
+Older frontends ignore `theme-catalog.json`, CSS, properties and translations, and refuse a ZIP using `themes/` or `shared/` (stock assets are served, or the pod stops when `FRONTEND_THEME_REQUIRED=true`): upgrade the frontend before uploading such a ZIP. Rolling back means reverting to a flat ZIP holding only `images/`, `contrib/` and Markdown.
 
 ## Rollback
 

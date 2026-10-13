@@ -54,70 +54,10 @@ if ! command -v zip >/dev/null 2>&1; then
     exit 2
 fi
 
-# The container installs these surfaces and logs everything else as
-# ignored; say so here instead, while the author can still fix the layout.
 if [ -d "${source_directory}/themes" ] || [ -d "${source_directory}/shared" ]; then
-    if ! command -v jq >/dev/null 2>&1 ||
-        ! jq -e '.themes | type == "array"' "${source_directory}/theme-catalog.json" >/dev/null 2>&1; then
-        echo "Structured themes need jq and a valid root theme-catalog.json" >&2
-        exit 2
-    fi
-    for theme_dir in "${source_directory}/themes"/*; do
-        [ -e "${theme_dir}" ] || continue
-        theme_id=$(basename "${theme_dir}")
-        if [ ! -d "${theme_dir}" ] ||
-            ! jq -e --arg id "${theme_id}" '.themes | any(.id == $id)' "${source_directory}/theme-catalog.json" >/dev/null 2>&1; then
-            echo "Undeclared theme directory: ${theme_id}" >&2
-            exit 2
-        fi
-        theme_ignored=$(find "${theme_dir}" -mindepth 1 -maxdepth 1 \
-            ! -name theme-custom.css ! -name images -printf '%f\n' 2>/dev/null || true)
-        if [ -n "${theme_ignored}" ]; then
-            echo "Unsupported entry in themes/${theme_id}: ${theme_ignored}" >&2
-            exit 2
-        fi
-        if { [ -e "${theme_dir}/theme-custom.css" ] && [ ! -f "${theme_dir}/theme-custom.css" ]; } ||
-            { [ -e "${theme_dir}/images" ] && [ ! -d "${theme_dir}/images" ]; }; then
-            echo "Invalid CSS or images entry in themes/${theme_id}" >&2
-            exit 2
-        fi
-    done
-    if [ -d "${source_directory}/shared" ]; then
-        for shared_entry in "${source_directory}/shared"/*; do
-            [ -e "${shared_entry}" ] || continue
-            shared_name=$(basename "${shared_entry}")
-            case "${shared_name}" in
-                images | contrib | theme-translations)
-                    [ -d "${shared_entry}" ] || { echo "Invalid shared directory: ${shared_name}" >&2; exit 2; } ;;
-                theme-properties.json | *.md)
-                    [ -f "${shared_entry}" ] || { echo "Invalid shared file: ${shared_name}" >&2; exit 2; } ;;
-                *) echo "Unsupported shared entry: ${shared_name}" >&2; exit 2 ;;
-            esac
-        done
-    fi
-    image_paths=$(find "${source_directory}/themes" "${source_directory}/shared/images" \
-        -type f -path '*/images/*' -print 2>/dev/null | awk -F '/images/' '{print $NF}' | sort)
-    image_conflicts=$(printf '%s\n' "${image_paths}" | awk '
-        previous == $0 || (previous != "" && index($0, previous "/") == 1) { print $0 }
-        { previous = $0 }
-    ')
-    if [ -n "${image_conflicts}" ]; then
-        echo "Image path conflict across theme folders: ${image_conflicts}" >&2
-        exit 2
-    fi
-    ignored=$(find "${source_directory}" -mindepth 1 -maxdepth 1 \
-        ! -name themes ! -name shared ! -name theme-catalog.json -printf '%f\n' 2>/dev/null || true)
     document_directory="${source_directory}/shared"
 else
-    ignored=$(find "${source_directory}" -mindepth 1 -maxdepth 1 \
-        ! -name images ! -name contrib ! -name theme-translations ! -name '*.md' ! -name theme-custom.css \
-        ! -name theme-properties.json ! -name theme-catalog.json -printf '%f\n' 2>/dev/null || true)
     document_directory="${source_directory}"
-fi
-if [ -n "${ignored}" ]; then
-    echo "Unsupported theme entries:" >&2
-    printf '  %s\n' ${ignored} >&2
-    exit 2
 fi
 
 # The app tries <name>.<lang>.md before <name>.md, and the stock image ships
@@ -134,4 +74,12 @@ done
 output_path=$(cd "$(dirname "${output}")" && pwd)/$(basename "${output}")
 rm -f "${output_path}"
 (cd "${source_directory}" && zip -qr "${output_path}" .)
+# Validate with the installer the container runs, so both can never disagree.
+check_directory=$(mktemp -d)
+if ! FRONTEND_THEME_URL="file://${output_path}" FRONTEND_THEME_REQUIRED=true FRONTEND_THEME_S3_ACCESS_KEY= \
+    FRONTEND_THEME_S3_SECRET_KEY= sh "$(dirname "$0")/theme-overlay.sh" "${check_directory}" >/dev/null; then
+    rm -rf "${check_directory}" "${output_path}"
+    exit 2
+fi
+rm -rf "${check_directory}"
 echo "Theme archive: ${output_path} ($(find "${source_directory}" -type f | wc -l | tr -d ' ') files)"

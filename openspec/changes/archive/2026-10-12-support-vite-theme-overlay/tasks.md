@@ -11,7 +11,7 @@
 
 ## 3. Integration and review
 
-- [x] 3.1 Verify the Paris Aeroport ZIP through localhost Vite against local SeaweedFS, including catalog, font, logo and translations; verify restart activation and disabling the URL restore expected behavior.
+- [x] 3.1 Verify a personal deployment ZIP through localhost Vite against local SeaweedFS, including catalog, font, logo and translations; verify restart activation and disabling the URL restore expected behavior.
 - [x] 3.2 Review the full branch against Swift and obtain an independent read-only review; record findings, dispositions and focused verification in this task file or the existing PR.
 
 ## Workflow follow-up
@@ -25,7 +25,7 @@
   quoted dotenv/shell precedence, restart activation and cleanup.
 - `FRONTEND_IMAGE=fred-frontend:theme-overlay-smoke sh apps/frontend/tests/theme-container-smoke.sh`: passed. The local runtime test image overlays the current entrypoint, shared installer and public files onto the existing frontend image; no full production rebuild was performed.
 - Frontend `tsc --noEmit`, targeted Prettier and `git diff --check`: passed.
-- Real Vite on localhost:5174 downloaded the Paris Aeroport ZIP from local Docker
+- Real Vite on localhost:5174 downloaded a personal deployment ZIP from local Docker
   SeaweedFS; catalog, properties, CSS, SVG logo, TTF MIME and French label verified
   over HTTP. Disabling the URL restored stock catalog/properties. Test server
   stopped; ignored `config/.env` prepared for the developer's frontend task.

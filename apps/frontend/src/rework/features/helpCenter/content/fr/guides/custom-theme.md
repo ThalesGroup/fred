@@ -86,8 +86,9 @@ Chaque règle cible le thème par son `id` **et** sa base, sans préfixe `html` 
 
 La base dans le sélecteur fait passer vos règles avant celles du thème livré ;
 l'absence de `html` permet aux aperçus de l'administration de les afficher.
-Une règle sans `[data-theme]` s'applique aux deux modes, par exemple pour la
-police :
+Les couleurs demandent toujours les trois attributs, même pour retoucher Pebble,
+Cobalt ou Cloud eux-mêmes. Une règle sans `[data-theme]` s'applique aux deux
+modes, par exemple pour la police :
 
 ```css
 @font-face {

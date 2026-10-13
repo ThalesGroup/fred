@@ -30,3 +30,26 @@ it("loads branding from the deployment theme without accepting auth or feature o
   expect(getConfig().user_auth.enabled).toBe(false);
   expect(getConfig().feature_flags.chat).toBe(true);
 });
+
+it("starts with stock branding when optional theme files are unavailable or malformed", async () => {
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) => {
+      if (url === "/theme-properties.json") return { ok: false, status: 503, json: async () => ({}) };
+      return {
+        ok: true,
+        status: 200,
+        json: async () => {
+          if (url === "/config.json") return { properties: { siteTitle: "Stock" } };
+          if (url === "/theme-catalog.json") return { themes: "not-a-list" };
+          return { user_auth: { enabled: false }, root_bootstrap_required: false };
+        },
+      };
+    }),
+  );
+
+  await loadConfig();
+
+  expect(getProperty("siteTitle")).toBe("Stock");
+});

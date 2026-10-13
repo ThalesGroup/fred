@@ -47,8 +47,8 @@ After receiving platform settings, the frontend SHALL recompute offered themes a
 
 #### Scenario: Only one custom theme is offered
 
-- **WHEN** the refreshed settings hide all built-in themes and offer only Paris Aéroport
-- **THEN** Paris Aéroport remains active and the user has no picker offering hidden built-in themes
+- **WHEN** the refreshed settings hide all built-in themes and offer only the `acme` custom theme
+- **THEN** `acme` remains active and the user has no picker offering hidden built-in themes
 
 #### Scenario: Settings refresh fails
 

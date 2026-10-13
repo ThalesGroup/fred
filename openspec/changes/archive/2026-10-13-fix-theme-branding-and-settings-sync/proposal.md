@@ -9,7 +9,7 @@ Theme branding is global, so a custom theme cannot update the browser tab withou
 - Add optional theme-local browser tab title and light/dark SVG favicon names to the ZIP catalog, preserving existing archives and global defaults.
 - Clearly identify the default theme using a visible badge and tile border; separate availability controls and light/dark previews, including narrow screens.
 - Keep user theme resolution and offered choices synchronized with the public admin settings after a successful save and on return to the application.
-- Update the personal Paris Aéroport ZIP and verify it on localhost:5173; keep its assets outside the PR.
+- Update a personal deployment ZIP and verify it on localhost:5173; keep its assets outside the PR.
 - Organize new theme archives with `theme-catalog.json` at the root, one `themes/<id>/` directory per custom theme, and `shared/` for content that applies to every theme. Keep existing flat archives installable.
 
 ## Capabilities

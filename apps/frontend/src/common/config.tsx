@@ -135,6 +135,14 @@ async function loadThemeCatalog(): Promise<void> {
   setCustomUiThemes(themes);
 }
 
+// Theme files are cosmetic: a broken one must leave the stock look, never block startup.
+const ignoreThemeFile =
+  <T,>(fallback: T) =>
+  (error: unknown): T => {
+    console.warn("Theme file ignored, using stock values:", error);
+    return fallback;
+  };
+
 let config: AppConfig | null = null;
 
 /**
@@ -162,7 +170,14 @@ export const loadConfig = async () => {
   const base = (await res.json()) as RawAppConfig;
 
   const [{ user_auth, gcu_version, root_bootstrap_required, ui_themes, platform_access_enabled }, themeProperties] =
-    await Promise.all([loadPublicConfig(), loadThemeProperties(), loadThemeCatalog()]);
+    await Promise.all([
+      loadPublicConfig(),
+      loadThemeProperties().catch(ignoreThemeFile({})),
+      loadThemeCatalog().catch((error: unknown) => {
+        setCustomUiThemes([]);
+        ignoreThemeFile(undefined)(error);
+      }),
+    ]);
 
   config = {
     frontend_basename: base.frontend_basename ?? "/",

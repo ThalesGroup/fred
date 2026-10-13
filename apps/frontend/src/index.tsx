@@ -65,8 +65,7 @@ window.addEventListener(
 const startApp = async () => {
   console.info("Starting Fred UI...");
   try {
-    await loadConfig(); // <-- await config loading FIRST
-    await loadThemeTranslations();
+    await Promise.all([loadConfig(), loadThemeTranslations()]);
     // theme-boot.js used the cached platform settings; apply the fresh ones before anything renders.
     applyResolvedTheme(getPlatformUiThemes());
     console.info("Configuration loaded successfully");

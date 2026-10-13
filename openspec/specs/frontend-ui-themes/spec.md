@@ -202,14 +202,14 @@ The theme archive SHALL accept `theme-catalog.json` at its root, custom theme CS
 
 Custom catalog entries SHALL support optional `tabTitle`, `faviconName` and `faviconNameDark`. The active theme SHALL determine the browser title and mode-appropriate SVG favicon. Omitted values SHALL use global branding; an omitted dark icon SHALL reuse a supplied light icon. Switching to another theme SHALL remove the previous theme's tab overrides.
 
-#### Scenario: Paris theme selected
+#### Scenario: Custom theme selected
 
 - **WHEN** the user selects a theme declaring a tab title and light/dark favicon names
 - **THEN** the tab shows that title and the favicon matching the current mode
 
 #### Scenario: Return to a built-in theme
 
-- **WHEN** the user switches from Paris Aéroport to Pebble
+- **WHEN** the user switches from the `acme` custom theme to Pebble
 - **THEN** the tab restores the global Fred title and mode-appropriate icon
 
 #### Scenario: Existing ZIP and single icon

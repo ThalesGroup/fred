@@ -364,12 +364,18 @@ cat <<'EOF'
         try_files $uri =404;
     }
 
+    # try_files drops the calling location's headers on the internal redirect.
+    location @stock_nocache {
+        add_header Cache-Control "no-cache";
+        try_files $uri =404;
+    }
+
     location = /theme-properties.json {
         add_header Cache-Control "no-cache";
 EOF
 printf '        root %s;\n' "${FRONTEND_THEME_DIR}"
 cat <<'EOF'
-        try_files $uri @stock;
+        try_files $uri @stock_nocache;
     }
 
     location = /theme-catalog.json {
@@ -377,7 +383,7 @@ cat <<'EOF'
 EOF
 printf '        root %s;\n' "${FRONTEND_THEME_DIR}"
 cat <<'EOF'
-        try_files $uri @stock;
+        try_files $uri @stock_nocache;
     }
 
     location = /theme-custom.css {
@@ -385,7 +391,7 @@ cat <<'EOF'
 EOF
 printf '        root %s;\n' "${FRONTEND_THEME_DIR}"
 cat <<'EOF'
-        try_files $uri @stock;
+        try_files $uri @stock_nocache;
     }
 
     location ~ "^/theme-translations/(en|fr)\.json$" {
@@ -393,7 +399,7 @@ cat <<'EOF'
 EOF
 printf '        root %s;\n' "${FRONTEND_THEME_DIR}"
 cat <<'EOF'
-        try_files $uri @stock;
+        try_files $uri @stock_nocache;
     }
 
     # Applies the stored UI theme before the first paint; must never be stale,
