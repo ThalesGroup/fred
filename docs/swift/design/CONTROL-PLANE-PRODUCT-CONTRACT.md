@@ -4552,7 +4552,7 @@ team's publications are serialized (row lock plus a per-team advisory lock).
   `marketplace_quota_reached`). For a template without free selection the
   selection is its included defaults usable by the team, whatever is stored
   (older saves kept `[]`); Copy to… resolves it the same way. Each
-  selected capability goes through the pod's `export-config` (runtime §8.112)
+  selected capability goes through the pod's `export-config` (runtime §8.113)
   with the caller's token; any failure keeps the previous snapshot: 422
   `marketplace_capability_not_exportable` (with `capability_id`) or 503
   `marketplace_runtime_unavailable`. Audit `agent.published`. Values of a

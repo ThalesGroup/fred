@@ -78,7 +78,7 @@ Second independent review, base `74b2d8129`, head `e3f023ea5`. Manual browser ch
 | M2 first publication racing a deactivation or suspension | fixed `c1d8c5e3f`: `save_publication` share-locks the agent row, agent before entry |
 | L1 import skipped the template visibility check | fixed `1b123c5e0`: 409 `marketplace_template_not_public` for non-admins on import and import targets |
 | L2 listing validated every snapshot to read `role` | fixed `8ebf66143`: column subset, `role` by SQL JSON path |
-| L3 stale runtime contract reference (§8.106) | fixed `400e86993`: §8.112 |
+| L3 stale runtime contract reference (§8.106) | fixed `400e86993`: §8.112, renumbered §8.113 after the swift merge |
 | L4 issue body out of date | update the #3044 body at push time |
 | L5 private team kept published entries if the ReBAC revoke failed | fixed `a8b178e48`: entries removed before the revoke |
 | L6 tasks and verification | this section; 5.1 done, 5.2 open until the PR |
