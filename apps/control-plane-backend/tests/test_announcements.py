@@ -34,7 +34,11 @@ from typing import cast
 
 import pytest
 import pytest_asyncio
-from control_plane_backend.announcements.schemas import AnnouncementWriteRequest
+from control_plane_backend.announcements.schemas import (
+    AnnouncementWriteRequest,
+    PatchNoteAnnounceRequest,
+    PatchNoteOrderRequest,
+)
 from control_plane_backend.announcements.service import (
     announce_patch_notes,
     create_announcement,
@@ -54,6 +58,10 @@ from control_plane_backend.announcements.service import (
 from control_plane_backend.announcements.store import (
     AnnouncementStore,
     StoredExposure,
+)
+from control_plane_backend.models.announcement_models import (
+    MAX_PATCH_NOTE_IDS,
+    MAX_PATCH_NOTES_PER_ANNOUNCEMENT,
 )
 from control_plane_backend.models.base import utcnow
 from control_plane_backend.product.dependencies import ProductServiceDependencies
@@ -392,7 +400,7 @@ async def test_every_admin_operation_asks_for_can_manage_platform(
         user=_user(), request=_patch_note(enabled=True), deps=deps
     )
     await set_patch_note_order(user=_user(), ordered_ids=[note.id], deps=deps)
-    announced = await announce_patch_notes(user=_user(), deps=deps)
+    announced = await _announce(user=_user(), deps=deps)
     await get_patch_note_announcement(user=_user(), deps=deps)
     await get_patch_note_package(user=_user(), announcement_id=announced.id, deps=deps)
     await list_exposure_history(user=_user(), deps=deps)
@@ -414,7 +422,7 @@ async def test_non_administrator_is_refused_every_mutation(
         for _ in range(2)
     ]
     order_before = [n.id for n in await _patch_notes(admin)]
-    announced = await announce_patch_notes(user=_user(), deps=admin)
+    announced = await _announce(user=_user(), deps=admin)
     deps = _deps(store, _nobody())
 
     for call in (
@@ -422,7 +430,7 @@ async def test_non_administrator_is_refused_every_mutation(
         lambda: set_patch_note_order(
             user=_user("mallory"), ordered_ids=[notes[0].id, notes[1].id], deps=deps
         ),
-        lambda: announce_patch_notes(user=_user("mallory"), deps=deps),
+        lambda: _announce(user=_user("mallory"), deps=deps),
         lambda: withdraw_patch_note_announcement(user=_user("mallory"), deps=deps),
         lambda: get_patch_note_announcement(user=_user("mallory"), deps=deps),
         lambda: get_patch_note_package(
@@ -521,7 +529,7 @@ async def test_admin_mutations_emit_audit_records(
             user=_user(), request=_patch_note(enabled=True), deps=deps
         )
         await set_patch_note_order(user=_user(), ordered_ids=[note.id], deps=deps)
-        await announce_patch_notes(user=_user(), deps=deps)
+        await _announce(user=_user(), deps=deps)
         await withdraw_patch_note_announcement(user=_user(), deps=deps)
 
     events = [
@@ -731,6 +739,14 @@ async def _titled(deps: ProductServiceDependencies, title: str, *, enabled: bool
             title={"en": title}, description_long={"en": f"# {title}"}, enabled=enabled
         ),
         deps=deps,
+    )
+
+
+async def _announce(*, user: KeycloakUser, deps: ProductServiceDependencies):
+    """Announce what an administrator who just confirmed the list would send."""
+    included = await deps.get_announcement_store().list_included_patch_notes()
+    return await announce_patch_notes(
+        user=user, expected_ids=[note.id for note in included], deps=deps
     )
 
 
@@ -1050,7 +1066,7 @@ async def test_announcing_freezes_the_included_notes_in_order(
         deps=admin,
     )
 
-    announced = await announce_patch_notes(user=_user("alice"), deps=admin)
+    announced = await _announce(user=_user("alice"), deps=admin)
 
     rebac = _nobody()
     history = await _read(_deps(store, rebac), "bob")
@@ -1074,7 +1090,7 @@ async def test_the_working_area_never_reaches_users(store: AnnouncementStore) ->
     deps = _deps(store, _platform_admin())
     a = await _titled(deps, "A", enabled=True)
     b = await _titled(deps, "B", enabled=True)
-    announced = await announce_patch_notes(user=_user(), deps=deps)
+    announced = await _announce(user=_user(), deps=deps)
     await mark_patch_note_announcement_seen(
         user=_user("alice"), announcement_id=announced.id, deps=deps
     )
@@ -1106,7 +1122,7 @@ async def test_hiding_every_patch_note_withdraws_nothing(
 ) -> None:
     deps = _deps(store, _platform_admin())
     note = await _titled(deps, "A", enabled=True)
-    announced = await announce_patch_notes(user=_user(), deps=deps)
+    announced = await _announce(user=_user(), deps=deps)
 
     await set_announcement_enabled(
         user=_user(), announcement_id=note.id, enabled=False, deps=deps
@@ -1124,10 +1140,66 @@ async def test_announcing_with_nothing_included_is_refused(
     await _titled(deps, "A", enabled=False)
 
     with pytest.raises(HTTPException) as exc:
-        await announce_patch_notes(user=_user(), deps=deps)
+        await _announce(user=_user(), deps=deps)
 
     assert exc.value.status_code == 409
     assert await _history(deps) == []
+
+
+@pytest.mark.asyncio
+async def test_announcing_freezes_only_the_confirmed_list(
+    store: AnnouncementStore,
+) -> None:
+    deps = _deps(store, _platform_admin())
+    first = await _titled(deps, "A", enabled=True)
+    second = await _titled(deps, "B", enabled=True)
+
+    # Another administrator's change since the confirmation: order, then content.
+    for confirmed in ([first.id, second.id], [second.id], [second.id, first.id, "x"]):
+        with pytest.raises(HTTPException) as exc:
+            await announce_patch_notes(user=_user(), expected_ids=confirmed, deps=deps)
+        assert exc.value.status_code == 409
+        assert "changed" in exc.value.detail
+    assert await _history(deps) == []
+
+    await announce_patch_notes(
+        user=_user(), expected_ids=[second.id, first.id], deps=deps
+    )
+    assert await _titles(deps) == ["B", "A"]
+
+
+@pytest.mark.asyncio
+async def test_an_announcement_holds_a_bounded_number_of_patch_notes(
+    store: AnnouncementStore,
+) -> None:
+    deps = _deps(store, _platform_admin())
+    notes = [
+        await _titled(deps, f"N{index}", enabled=True)
+        for index in range(MAX_PATCH_NOTES_PER_ANNOUNCEMENT + 1)
+    ]
+
+    with pytest.raises(HTTPException) as exc:
+        await _announce(user=_user(), deps=deps)
+    assert exc.value.status_code == 409
+    assert str(MAX_PATCH_NOTES_PER_ANNOUNCEMENT) in exc.value.detail
+    assert await _history(deps) == []
+
+    await set_announcement_enabled(
+        user=_user(), announcement_id=notes[0].id, enabled=False, deps=deps
+    )
+    await _announce(user=_user(), deps=deps)
+    assert len(await _titles(deps)) == MAX_PATCH_NOTES_PER_ANNOUNCEMENT
+
+
+def test_patch_note_id_lists_are_bounded() -> None:
+    too_many = [str(index) for index in range(MAX_PATCH_NOTE_IDS + 1)]
+
+    for request in (PatchNoteOrderRequest, PatchNoteAnnounceRequest):
+        request(ids=too_many[:-1])
+        with pytest.raises(ValidationError):
+            request(ids=too_many)
+    with pytest.raises(ValidationError):
+        PatchNoteAnnounceRequest(ids=[])
 
 
 @pytest.mark.asyncio
@@ -1136,7 +1208,7 @@ async def test_announcing_again_replaces_the_package_for_everyone(
 ) -> None:
     deps = _deps(store, _platform_admin())
     a = await _titled(deps, "A", enabled=True)
-    first = await announce_patch_notes(user=_user("alice"), deps=deps)
+    first = await _announce(user=_user("alice"), deps=deps)
     await mark_patch_note_announcement_seen(
         user=_user("alice"), announcement_id=first.id, deps=deps
     )
@@ -1148,7 +1220,7 @@ async def test_announcing_again_replaces_the_package_for_everyone(
     )
     await _titled(deps, "B", enabled=True)
 
-    second = await announce_patch_notes(user=_user("bob"), deps=deps)
+    second = await _announce(user=_user("bob"), deps=deps)
 
     history = await _read(deps, "alice")
     assert [n.title["en"] for n in history.patch_notes] == ["B", "A"]
@@ -1168,10 +1240,10 @@ async def test_announcing_again_replaces_the_package_for_everyone(
 async def test_a_history_line_keeps_its_package(store: AnnouncementStore) -> None:
     deps = _deps(store, _platform_admin())
     a = await _titled(deps, "A", enabled=True)
-    first = await announce_patch_notes(user=_user(), deps=deps)
+    first = await _announce(user=_user(), deps=deps)
     await delete_announcement(user=_user(), announcement_id=a.id, deps=deps)
     await _titled(deps, "B", enabled=True)
-    await announce_patch_notes(user=_user(), deps=deps)
+    await _announce(user=_user(), deps=deps)
     banner = await create_announcement(
         user=_user(), request=_write(enabled=True), deps=deps
     )
@@ -1197,7 +1269,7 @@ async def test_a_history_line_keeps_its_package(store: AnnouncementStore) -> Non
 async def test_withdrawing_leaves_nothing_to_read(store: AnnouncementStore) -> None:
     deps = _deps(store, _platform_admin())
     note = await _titled(deps, "A", enabled=True)
-    announced = await announce_patch_notes(user=_user(), deps=deps)
+    announced = await _announce(user=_user(), deps=deps)
     await mark_patch_note_announcement_seen(
         user=_user("alice"), announcement_id=announced.id, deps=deps
     )
@@ -1220,7 +1292,7 @@ async def test_withdrawing_leaves_nothing_to_read(store: AnnouncementStore) -> N
         await withdraw_patch_note_announcement(user=_user(), deps=deps)
     assert exc.value.status_code == 404
 
-    again = await announce_patch_notes(user=_user(), deps=deps)
+    again = await _announce(user=_user(), deps=deps)
     assert await _pending(deps, "alice") == again.id
     assert await _titles(deps, "bob") == ["A"]
 
@@ -1231,7 +1303,7 @@ async def test_seen_is_per_user_idempotent_and_asks_no_permission(
 ) -> None:
     admin = _deps(store, _platform_admin())
     await _titled(admin, "A", enabled=True)
-    announced = await announce_patch_notes(user=_user(), deps=admin)
+    announced = await _announce(user=_user(), deps=admin)
     rebac = _nobody()
     deps = _deps(store, rebac)
 
@@ -1252,8 +1324,8 @@ async def test_an_announcement_made_meanwhile_stays_pending(
 ) -> None:
     deps = _deps(store, _platform_admin())
     await _titled(deps, "A", enabled=True)
-    shown = await announce_patch_notes(user=_user(), deps=deps)
-    newer = await announce_patch_notes(user=_user(), deps=deps)
+    shown = await _announce(user=_user(), deps=deps)
+    newer = await _announce(user=_user(), deps=deps)
 
     # Alice closes the dialog that opened for the first one.
     await mark_patch_note_announcement_seen(
@@ -1269,8 +1341,8 @@ async def test_a_late_record_does_not_move_a_user_back(
 ) -> None:
     deps = _deps(store, _platform_admin())
     await _titled(deps, "A", enabled=True)
-    older = await announce_patch_notes(user=_user(), deps=deps)
-    newer = await announce_patch_notes(user=_user(), deps=deps)
+    older = await _announce(user=_user(), deps=deps)
+    newer = await _announce(user=_user(), deps=deps)
     await mark_patch_note_announcement_seen(
         user=_user("alice"), announcement_id=newer.id, deps=deps
     )
@@ -1354,7 +1426,7 @@ async def test_user_deletion_removes_what_the_user_has_seen(
 
     admin = _deps(store, _platform_admin())
     await _titled(admin, "A", enabled=True)
-    announced = await announce_patch_notes(user=_user(), deps=admin)
+    announced = await _announce(user=_user(), deps=admin)
     for uid in ("alice", "bob"):
         await mark_patch_note_announcement_seen(
             user=_user(uid), announcement_id=announced.id, deps=admin
@@ -1426,7 +1498,7 @@ async def test_patch_note_routes_reject_an_unauthenticated_caller(
             await client.get(f"{admin}/activation-history"),
             await client.put(f"{admin}/patch-notes/order", json={"ids": []}),
             await client.get(f"{admin}/patch-notes/announcement"),
-            await client.post(f"{admin}/patch-notes/announcement"),
+            await client.post(f"{admin}/patch-notes/announcement", json={"ids": ["x"]}),
             await client.delete(f"{admin}/patch-notes/announcement"),
             await client.get(f"{admin}/patch-notes/announcements/x"),
         ]

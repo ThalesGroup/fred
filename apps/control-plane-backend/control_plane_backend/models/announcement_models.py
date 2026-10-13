@@ -35,6 +35,13 @@ MAX_DESCRIPTION_LONG_CHARS = 20_000
 #: Longest a title may be, per locale.
 MAX_TITLE_CHARS = 200
 
+#: Most patch notes one announcement may freeze: past this the users' dialog
+#: stops being something anyone reads to the end.
+MAX_PATCH_NOTES_PER_ANNOUNCEMENT = 10
+
+#: Most ids a patch-note id list may carry; far above any real working list.
+MAX_PATCH_NOTE_IDS = 1000
+
 
 class AnnouncementRow(Base):
     """ORM model for the ``platform_announcement`` table.

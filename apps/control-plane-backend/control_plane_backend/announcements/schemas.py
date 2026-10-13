@@ -22,6 +22,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from control_plane_backend.models.announcement_models import (
     MAX_DESCRIPTION_LONG_CHARS,
     MAX_DESCRIPTION_SHORT_CHARS,
+    MAX_PATCH_NOTE_IDS,
+    MAX_PATCH_NOTES_PER_ANNOUNCEMENT,
     MAX_TITLE_CHARS,
 )
 
@@ -234,7 +236,25 @@ class PatchNoteOrderRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     ids: list[str] = Field(
-        description="Every patch note's id, exactly once; anything else is refused."
+        max_length=MAX_PATCH_NOTE_IDS,
+        description="Every patch note's id, exactly once; anything else is refused.",
+    )
+
+
+class PatchNoteAnnounceRequest(BaseModel):
+    """What the administrator confirmed: the included patch notes, top first."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ids: list[str] = Field(
+        min_length=1,
+        max_length=MAX_PATCH_NOTE_IDS,
+        description=(
+            "The ids of the included patch notes, in order, as the "
+            "confirmation listed them. Refused with `409` unless they are "
+            "exactly the currently included ones, in that order, and at most "
+            f"{MAX_PATCH_NOTES_PER_ANNOUNCEMENT}."
+        ),
     )
 
 

@@ -25,6 +25,7 @@ from control_plane_backend.announcements.schemas import (
     AnnouncementExposure,
     AnnouncementWriteRequest,
     PatchNoteAnnouncement,
+    PatchNoteAnnounceRequest,
     PatchNoteHistory,
     PatchNoteOrderRequest,
     PatchNoteSnapshot,
@@ -130,13 +131,17 @@ async def get_patch_note_announcement(
     summary="Announce the included patch notes to every user (admin).",
 )
 async def announce_patch_notes(
+    request: PatchNoteAnnounceRequest,
     deps: ProductDependencies,
     user: KeycloakUser = Depends(get_current_user),
 ) -> PatchNoteAnnouncement:
     """Freezes the included patch notes as the package users read. Answers
-    `409` when no patch note is included."""
+    `409` when they are not exactly the confirmed `ids` in order, or are more
+    than an announcement may hold."""
 
-    return await service.announce_patch_notes(user=user, deps=deps)
+    return await service.announce_patch_notes(
+        user=user, expected_ids=request.ids, deps=deps
+    )
 
 
 @router.delete(

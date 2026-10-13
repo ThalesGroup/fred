@@ -33,6 +33,9 @@ from control_plane_backend.announcements.store import (
     StoredAnnouncement,
     StoredExposure,
 )
+from control_plane_backend.models.announcement_models import (
+    MAX_PATCH_NOTES_PER_ANNOUNCEMENT,
+)
 from control_plane_backend.models.base import utcnow
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 
@@ -42,6 +45,13 @@ EXPOSURE_HISTORY_LIMIT = 100
 _NOT_FOUND = "announcement not found"
 _STALE_ORDER = "the patch notes changed meanwhile; reload and retry"
 _NOTHING_INCLUDED = "no patch note is included; nothing to announce"
+_TOO_MANY_INCLUDED = (
+    f"an announcement holds at most {MAX_PATCH_NOTES_PER_ANNOUNCEMENT} patch "
+    "notes; leave some out and retry"
+)
+_SELECTION_CHANGED = (
+    "the included patch notes changed since the confirmation; reload and retry"
+)
 _NO_ANNOUNCEMENT = "no announcement is in effect"
 
 
@@ -362,9 +372,16 @@ async def set_patch_note_order(
 
 
 async def announce_patch_notes(
-    *, user: KeycloakUser, deps: ProductServiceDependencies
+    *,
+    user: KeycloakUser,
+    expected_ids: list[str],
+    deps: ProductServiceDependencies,
 ) -> PatchNoteAnnouncement:
-    """Freeze the included patch notes as a package: every user gets the dialog once."""
+    """Freeze the included patch notes as a package: every user gets the dialog once.
+
+    Refused unless they are exactly `expected_ids`, in order: what the
+    administrator confirmed is what gets frozen.
+    """
 
     await _require_manage_platform(deps, user)
     store = deps.get_announcement_store()
@@ -373,6 +390,14 @@ async def announce_patch_notes(
         if not included:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT, detail=_NOTHING_INCLUDED
+            )
+        if len(included) > MAX_PATCH_NOTES_PER_ANNOUNCEMENT:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail=_TOO_MANY_INCLUDED
+            )
+        if [note.id for note in included] != expected_ids:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail=_SELECTION_CHANGED
             )
         now = utcnow()
         exposure = StoredExposure(
