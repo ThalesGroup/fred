@@ -34,6 +34,13 @@ def test_fast_plain_text_processor_reads_markdown(tmp_path: Path) -> None:
     assert "# Sprint notes" in result.text
 
 
+def test_fast_plain_text_processor_keeps_cp1252_accents(tmp_path: Path) -> None:
+    file_path = tmp_path / "cr.txt"
+    file_path.write_bytes("Réunion du comité : budget validé.".encode("cp1252"))
+
+    assert FastPlainTextProcessor().extract(file_path).text == "Réunion du comité : budget validé."
+
+
 def test_fast_spreadsheet_processor_reads_xlsx_preview(tmp_path: Path) -> None:
     file_path = tmp_path / "budget.xlsx"
     pd.DataFrame([{"city": "Paris", "amount": 10}, {"city": "Lyon", "amount": 20}]).to_excel(file_path, index=False, sheet_name="Sheet1")
