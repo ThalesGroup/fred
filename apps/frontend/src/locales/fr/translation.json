@@ -3634,10 +3634,16 @@
       "support": "Contacter le support",
       "retry": "Réessayer",
       "signOut": "Se déconnecter",
-      "joinTitle": "Rejoindre une équipe",
-      "joinTeam": "Vous pouvez rejoindre l'équipe {{team}}.",
-      "join": "Rejoindre cette équipe",
-      "invalidLink": "Ce lien ne peut pas être utilisé. Il est peut-être expiré, révoqué ou suspendu, ou le service est indisponible.",
+      "join": {
+        "title": "Vous avez été invité à rejoindre une équipe",
+        "action": "Rejoindre l'équipe",
+        "checking": "Vérification de votre invitation…",
+        "invalidTitle": "Ce lien d'invitation n'est plus valide",
+        "invalidMessage": "Demandez un nouveau lien à la personne qui vous a invité.",
+        "uncheckedTitle": "Impossible de vérifier ce lien pour le moment",
+        "uncheckedMessage": "Un problème technique empêche de vérifier votre invitation. Réessayez dans un instant.",
+        "failedTitle": "Impossible de rejoindre l'équipe pour le moment"
+      },
       "loading": "Chargement...",
       "source": {
         "admin": "Administrateur plateforme",

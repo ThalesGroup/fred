@@ -3634,10 +3634,16 @@
       "support": "Contact support",
       "retry": "Try again",
       "signOut": "Sign out",
-      "joinTitle": "Join a team",
-      "joinTeam": "You can join the team {{team}}.",
-      "join": "Join this team",
-      "invalidLink": "This link cannot be used. It may be expired, revoked or suspended, or the service is unavailable.",
+      "join": {
+        "title": "You have been invited to join a team",
+        "action": "Join the team",
+        "checking": "Checking your invitation…",
+        "invalidTitle": "This invitation link is no longer valid",
+        "invalidMessage": "Ask the person who invited you for a new link.",
+        "uncheckedTitle": "This link could not be checked right now",
+        "uncheckedMessage": "A technical problem is preventing us from checking your invitation. Try again in a moment.",
+        "failedTitle": "The team could not be joined right now"
+      },
       "loading": "Loading...",
       "source": {
         "admin": "Platform administrator",
