@@ -27,10 +27,19 @@
 - [x] 5.2 Update the Help Center pages `rework/features/helpCenter/content/fr/features/commands.md` and `en/features/commands.md` ("Lancer une commande" / "Run a command" and the paragraph on mixing prompts and skills): sections instead of labels, personal commands with every agent, no "Deep agents retain their current behavior"; verify fr and en say the same thing in non-technical wording
 - [x] 5.3 Add `docs/swift/ops/migrations/3073-composer-command-menu-sections.md` from the template (impact none, configuration none); verify its front matter matches `MIGRATION-NOTE-TEMPLATE.md`
 
+## 7. Menu rows, token containers and caret
+
+- [x] 7.1 Menu rows: no argument hint and no gap, one-line description with the full text in `title`, heading band, prompt tiles in the primary container, arrow keys clamped at both ends; verify with `useComposerCommands.test.tsx`
+- [x] 7.2 In `SkillBadge.module.css`, make `.badge` a container (secondary pair, `--radius-xs`, horizontal `--spacing-2xs` padding) with `data-kind="prompt"` (primary pair) and `data-surface="bubble"` (inset `--outline-variant` hairline) variants; verify no new custom property (diff review) and a 24px line with and without a token in a rendered sample
+- [x] 7.3 Set `data-kind` on `SkillWidget` and `PromptWidget` in `InlineSkillInput.tsx` and delete `.promptToken`; verify with `InlineSkillInput.test.tsx`
+- [x] 7.4 Set `data-kind` and `data-surface` in `SkillBadge.tsx` and make `CommandTurn` reuse the shared container; verify with `UserTurn.test.tsx`
+- [x] 7.5 In `InlineSkillInput.module.css`, paint the placeholder and the argument hint one layer below the editor content; verify in a rendered sample that the caret is in front and nothing moves
+- [x] 7.6 Update `COMPONENT-UX.md` (composer token, sent badges, caret) and this change's artifacts; verify `openspec validate section-composer-command-menu --strict`
+
 ## 6. Verification
 
 - [x] 6.1 From `apps/frontend`, run `npx tsc --noEmit -p .`; verify it exits 0
 - [x] 6.2 From `apps/frontend`, run `npx eslint` and `npx prettier --check` on the touched files; verify both exit 0
 - [x] 6.3 From `apps/frontend`, run `npx vitest run` on `useComposerCommands.test.tsx`, `CommandMenu.test.tsx`, `ManagedChatPage.test.tsx` and `InlineSkillInput.test.tsx`; verify all pass, then clean the vitest cache directories left in `/tmp`
-- [ ] 6.4 Owner check in the app: team chat with a ReAct agent and with a Deep agent (three sections, team name in the header, long name truncated, filtering hides a section, arrows cross sections, both `/summary` rows, typed `/summary` runs the team's), personal-space chat (single personal section), fr and en, light and dark theme, and the inline token hover hint
+- [ ] 6.4 Owner check in the app, in Firefox and Chrome: caret in the empty composer and next to a skill's argument hint, token containers in the composer and in sent messages (three themes, light and dark), and team chat with a ReAct agent and with a Deep agent (three sections, team name in the header, long name truncated, filtering hides a section, arrows cross sections, both `/summary` rows, typed `/summary` runs the team's), personal-space chat (single personal section), fr and en, light and dark theme, and the inline token hover hint
 - [ ] 6.5 Record the verification evidence in this change, then archive it once merged; verify `openspec validate --specs --strict` passes after the archive

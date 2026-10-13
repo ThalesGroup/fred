@@ -5166,8 +5166,8 @@ one, once the team's command catalog has resolved. An invalidated completed
 prompt requires command editing or reselection rather than dispatching a homonym.
 Explicit personal selections are usable while team discovery is pending.
 In the managed-chat composer, a completed recognized prompt command uses the same
-inline icon-and-name treatment as platform skills, with a distinct blue prompt
-icon and no visible slash. Its hover hint gives the full
+inline icon-and-name container as platform skills, in the prompt colours
+(`--primary-container` / `--on-primary-container`) and with no visible slash. Its hover hint gives the full
 prompt title, personal/team source and description. The document retains
 `/command` for editing, copying and undo; the visual follows the exact prompt
 selected for submission, including homonyms. Incomplete, removed or invalidated
@@ -5223,11 +5223,11 @@ typed token still submits as ordinary text and `Tab` still moves focus.
 
 ### Inline skill invocation
 
-A completed `/<name>` stays at its invocation position within the editable text. The full name (without a visible slash) and platform icon form a discreet clickable label without a filled pill, border, removal cross or separate row. Chat uses a CodeMirror plain-text document with an inline replacement decoration; ordinary textarea consumers are unchanged. Wrapped lines and explicit newlines start at the normal text inset, and the label scrolls with its line. Editing any invocation character removes recognition while preserving surrounding text. A skill can be sent alone. Its advisory argument hint appears after a bare selected invocation without becoming document content.
+A completed `/<name>` stays at its invocation position within the editable text. The full name (without a visible slash) and platform icon form a small clickable container: `--secondary-container` fill with `--on-secondary-container` icon and name for a platform skill, `--primary-container` / `--on-primary-container` for a prompt (team or personal alike), `--radius-xs`, `--spacing-2xs` horizontal padding and no vertical padding, so a line holding one is exactly as tall as a plain line. No border, removal cross or separate row. Chat uses a CodeMirror plain-text document with an inline replacement decoration; ordinary textarea consumers are unchanged. Wrapped lines and explicit newlines start at the normal text inset, and the label scrolls with its line. Editing any invocation character removes recognition while preserving surrounding text. A skill can be sent alone. Its advisory argument hint appears after a bare selected invocation without becoming document content. In the empty field the native caret sits on the first glyph of the placeholder (and of that hint), so both are painted one layer below the editor content: the caret is always drawn in front, the text does not move and the field keeps its one-line height.
 
 Skill suggestions use the command range at the caret, including before, after or within existing text. Completion replaces only that range and preserves its position. An exact catalog name followed by whitespace also imports on typing or paste. Neither action sends. Available prompt commands also complete inline without erasing surrounding text, before or after selected skills in every managed execution family. ReAct alone adds the caller's separate personal library to a team chat. A complete delimited skill name takes precedence, while choosing the prompt entry explicitly preserves prompt dispatch.
 
-Sent attributed user messages render the same inline token at its stored position. Full copy, native selection-copy and edit use `/name`. Older request-only and `/skill name` turns normalize to this canonical form for display/copy/edit without a backend schema change. Multiple skills can coexist with one available prompt in either selection order. Draft and history retain the blue prompt icon/name and purple skill badges. Each occurrence remains independently editable; repeated names load once. A catalog refresh invalidating a completed selection fails submission rather than dropping it. Canonical prompt draft text and its selected occurrence preserve mixed history, copying and editing.
+Sent attributed user messages render the same inline token at its stored position. Full copy, native selection-copy and edit use `/name`. Older request-only and `/skill name` turns normalize to this canonical form for display/copy/edit without a backend schema change. Multiple skills can coexist with one available prompt in either selection order. Draft and history show the same prompt and skill containers. The user bubble is itself `--secondary-container`, and in the Pebble light theme both container fills equal it, so sent containers add an inset `--outline-variant` hairline (a shadow, not a border: no size change). Each occurrence remains independently editable; repeated names load once. A catalog refresh invalidating a completed selection fails submission rather than dropping it. Canonical prompt draft text and its selected occurrence preserve mixed history, copying and editing.
 Agent-selected skills appear in the reasoning trace rather than labeling the user
 message. The inline icon/name is a keyboard-accessible button that opens the
 existing exclusive right-hand chat panel; activating the same skill again closes
@@ -5289,9 +5289,9 @@ turn; all skill names travel together in its runtime context.
 
 The turn itself renders as its command rather than as the assembled text
 (`UserMessage` + `CommandTurn`), which keeps a transcript of long prompts
-readable. Sent prompt tokens retain the composer's blue `--info` colour and
+readable. Sent prompt tokens use the composer's prompt container and
 decorative `edit_note` icon, with the same compact inline presentation as skill
-badges. Legacy appended text keeps the bubble's text colour. Hover underlines
+badges; keyboard focus draws a `--primary` outline around the container. Legacy appended text keeps the bubble's text colour. Hover underlines
 the prompt; keyboard focus is visible. Selection-copy omits decorative glyph
 names and preserves the command and skill slashes.
 The command and the text typed after it are laid out as one inline

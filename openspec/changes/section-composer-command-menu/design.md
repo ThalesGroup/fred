@@ -115,11 +115,63 @@ MODIFIED: `openspec validate --strict` refuses a MODIFIED requirement that
 drops a scenario of the main spec, which would have kept two scenario names
 that no longer describe the behaviour. Every scenario is carried over.
 
+### Menu rows (added after the first owner check)
+
+Rows lost their inner gap and the skill argument hint; the description is one
+line with an ellipsis and the row's `title` gives it in full (it replaced the
+"provided by the platform" hint, which the section heading now says). Headings
+sit on a `--surface-container-high` band with `--radius-xs` in
+`--on-surface-retreat`; prompt tiles use `--primary-container`. The arrow keys
+clamp at both ends instead of wrapping.
+
+### Token containers
+
+One stylesheet, `SkillBadge.module.css`, already dressed the composer widgets
+and the sent skill badge. `.badge` becomes the container (secondary pair,
+`--radius-xs`, horizontal `--spacing-2xs` padding only) and two data attributes
+set by the components pick the variant: `data-kind="prompt"` switches to the
+primary pair, `data-surface="bubble"` adds an inset `--outline-variant`
+hairline. No custom property is added. `CommandTurn` (the sent prompt) drops
+its own `--info` slug styles and reuses `.badge`. The composer-only
+`.promptToken` class is deleted.
+
+The hairline exists because the user bubble is `--secondary-container`: a
+skill container would be invisible on it, and in Pebble light
+`--primary-container` has the same value, so the prompt one would be too. It is
+a `box-shadow`, so the container's box and the line height do not change.
+Alternative: a different fill inside the bubble. Rejected: it would break
+"same colours in the composer and in the message".
+
+### Caret in the empty composer
+
+In an empty document CodeMirror renders
+`<img.cm-widgetBuffer><span.cm-placeholder contenteditable=false>` and the
+selection sits before both, so the native caret is drawn at the exact left
+edge of the placeholder, on its first glyph. The placeholder is an
+`inline-block` painted in content order, after the position the caret belongs
+to, so an engine that paints the caret with that position draws the glyph over
+it. The placeholder and the argument hint now have
+`position: relative; z-index: -1`: `.cm-scroller` is a stacking context
+(`z-index: 0` in CodeMirror's base theme), so they paint below the line's
+content and caret, above the field background. No box moves.
+Alternative: CodeMirror's drawn selection layer. Rejected: a larger change for
+the same result, and it restyles selection.
+
 ## Risks / Trade-offs
 
 - [Removing the gate also removes the page's agent-templates request, whose
   only reader was the gate] → one request less per chat page; nothing else in
   `ManagedChatPage.tsx` uses it.
+- [The caret fix could only be looked at in headless Chrome, where the caret
+  was already in front; Firefox does not paint the caret in a headless capture]
+  → the fix rests on paint order, which is engine independent; the owner check
+  covers Firefox.
+- [Tokens are replace decorations but not atomic ranges: an arrow key steps
+  through the hidden `/name` one character at a time and Backspace after a
+  token removes one hidden character, turning it back into raw text] →
+  observed, reported to the owner, deliberately not changed here.
+- [A token keeps its full colours in a disabled composer] → unchanged from
+  before (it kept `--primary`); left for the owner check.
 - [The inline prompt token's hover hint shows the source only when `source` is
   set, which today means ReAct only] → with the gate gone it shows for every
   agent kind. This follows from offering both libraries everywhere and is

@@ -26,7 +26,15 @@ Tracked in GitHub issue #3073.
 - The per-row source label is removed from the menu rows; the headers replace
   it. The hover hint of an inline prompt token in the composer keeps its
   source wording.
-- Keyboard navigation stays one continuous list across sections.
+- Keyboard navigation stays one continuous list across sections and stops at
+  the first and last row instead of wrapping.
+- Menu rows are tighter: name above a one-line description cut with an
+  ellipsis (full text on hover), no argument hint in the menu, section headings
+  on a filled band, prompt icons on a primary container tile.
+- Inline tokens in the composer and badges in sent messages become small
+  containers: primary container for prompts (team or personal), secondary
+  container for platform skills, with the line height unchanged.
+- In the empty composer the caret is always drawn in front of the placeholder.
 
 No **BREAKING** change. Frontend only: no API, data, configuration or migration
 change, and no new CSS custom property.
@@ -42,8 +50,10 @@ None.
 - `platform-agent-skills`: the requirement "ReAct slash commands combine
   platform skills and two prompt libraries" is replaced by one without the
   ReAct condition (personal commands for every agent kind, sources shown by
-  section instead of per-row labels), and a requirement is added for the
-  sectioned menu.
+  section instead of per-row labels); requirements are added for the sectioned
+  menu, the token containers and the caret; "Web users can require a skill for
+  their request" is modified where it described the token as unfilled and the
+  argument hint as shown in the suggestions.
 
 ## Impact
 
@@ -56,8 +66,11 @@ None.
   no ReAct gate, team name passed to the menu.
 - `apps/frontend/src/locales/{fr,en}/translation.json`: four keys added, three
   removed (see design.md).
+- `shared/molecules/SkillBadge/` (stylesheet shared by composer tokens and sent
+  badges), `shared/molecules/CommandTurn/`, and
+  `shared/molecules/RichInputField/InlineSkillInput.tsx` + `.module.css`.
 - Tests: `useComposerCommands.test.tsx`, `ManagedChatPage.test.tsx`, new
-  `CommandMenu.test.tsx`.
+  `CommandMenu.test.tsx`, `InlineSkillInput.test.tsx`, `UserTurn.test.tsx`.
 - Docs: `docs/swift/ux/COMPONENT-UX.md` (`CommandMenu`), Help Center
   `features/commands.md` (fr and en), migration note
   `docs/swift/ops/migrations/3073-composer-command-menu-sections.md` (impact
