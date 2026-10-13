@@ -3623,8 +3623,8 @@
       "copyLink": "URL d'invitation",
       "failed": "L'opération n'a pas abouti. Vérifiez votre accès et réessayez.",
       "denied": {
-        "titleNamed": "Bonjour {{firstName}}, votre accès n'est pas encore ouvert",
-        "title": "Bonjour, votre accès n'est pas encore ouvert",
+        "titleNamed": "Bonjour {{firstName}},\nvotre accès n'est pas encore ouvert",
+        "title": "Bonjour,\nvotre accès n'est pas encore ouvert",
         "stepRequestWithEmail": "Demandez un accès au support, en indiquant l'adresse ci-dessus.",
         "stepRequest": "Demandez un accès au support.",
         "stepReturn": "Quand il est ouvert, revenez ici et vérifiez votre accès.",
