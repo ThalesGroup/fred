@@ -499,8 +499,14 @@ async def _noop() -> None:
 
 @pytest.mark.asyncio
 async def test_account_deletion_removes_the_picture_before_the_identity(
-    user_store: _FakeUserStore, content_store: _FakeContentStore
+    user_store: _FakeUserStore,
+    content_store: _FakeContentStore,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    async def no_join_history(*_args, **_kwargs) -> None:
+        return None
+
+    monkeypatch.setattr(users_api, "_mark_user_join_history_deleted", no_join_history)
     person = str(uuid4())
     user_store.keys[person] = "users/p/avatar.png"
     calls: list[str] = []
@@ -523,8 +529,14 @@ async def test_account_deletion_removes_the_picture_before_the_identity(
 
 @pytest.mark.asyncio
 async def test_account_deletion_without_picture_makes_no_store_call(
-    user_store: _FakeUserStore, content_store: _FakeContentStore
+    user_store: _FakeUserStore,
+    content_store: _FakeContentStore,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    async def no_join_history(*_args, **_kwargs) -> None:
+        return None
+
+    monkeypatch.setattr(users_api, "_mark_user_join_history_deleted", no_join_history)
     calls: list[str] = []
 
     async with AsyncClient(

@@ -33,6 +33,7 @@ async def history(access, monkeypatch):
     rows = []
     async with access.store.mutation() as session:
         session.add(TeamMetadataRow(id="other", name="Other"))
+        await session.flush()
         for index in range(33):
             token = f"{index:043d}"
             row = PlatformAccessLinkRow(

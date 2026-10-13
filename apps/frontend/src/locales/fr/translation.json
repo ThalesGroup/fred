@@ -641,10 +641,6 @@
       "arguments": "Arguments :"
     }
   },
-  "comingSoon": {
-    "description": "La plateforme \n d'innovation au service de votre quotidien : gagnez en clarté et en pertinence décisionnelle. Un nouveau service conçu pour vous épauler chaque jour et répondre à vos enjeux métiers et opérationnels.",
-    "title": "{{siteDisplayName}} arrive très bientôt."
-  },
   "common": {
     "cancel": "Annuler",
     "close": "Fermer",
@@ -3659,13 +3655,14 @@
       "invalidLink": "Ce lien ne peut pas être utilisé. Il est peut-être expiré, révoqué ou suspendu, ou le service est indisponible.",
       "loading": "Chargement...",
       "source": {
+        "admin": "Administrateur plateforme",
         "attribute": "Attribut d'identité",
         "manual": "Exception manuelle",
         "t0": "Import initial",
         "team": "Équipe autorisée",
         "free": "Accès par lien"
       },
-      "actorLockout": "Accordez-vous d'abord une autre source d'accès avant d'activer le filtrage ou de retirer votre dernière autorisation.",
+      "actorLockout": "Ce changement retirerait votre dernière source d'accès.",
       "rule": {
         "title": "Règle d'accès",
         "hint": "Les exceptions individuelles et les équipes autorisées permettent toujours l'accès.",
@@ -3751,7 +3748,8 @@
       "links": {
         "manage": "Gérer les liens",
         "title": "Invitations pour {{team}}",
-        "hint": "Partagez les liens manuellement. Les accès comptent les ouvertures après connexion.",
+        "hint": "Partagez les liens manuellement. Les accès comptent les ouvertures après connexion; les utilisateurs inscrits sont ceux qui ont rejoint l'équipe.",
+        "suspendedHint": "L'accès par lien est désactivé pour cette équipe. Les liens d'invitation encore valides sont suspendus jusqu'à sa réactivation.",
         "note": "Note (facultative)",
         "expiry": "Expiration (facultative)",
         "expiryDate": "Date d'expiration",
@@ -3762,10 +3760,16 @@
         },
         "futureExpiry": "Choisissez une date et une heure futures.",
         "never": "Sans expiration",
-        "untitled": "Sans note",
         "created": "Création",
         "statusLabel": "Statut",
         "openings": "Accès",
+        "joiners": "Utilisateurs inscrits",
+        "deletedUser": "Supprimé",
+        "joinersTitle": "Inscrits via {{note}}",
+        "joinedAt": "Date d'inscription",
+        "noJoiners": "Aucune inscription enregistrée depuis le début du suivi.",
+        "username": "Identifiant",
+        "joinersFailed": "Impossible de charger les personnes inscrites via ce lien.",
         "actions": "Actions",
         "revoke": "Révoquer",
         "revokeTitle": "Révoquer cette invitation ?",

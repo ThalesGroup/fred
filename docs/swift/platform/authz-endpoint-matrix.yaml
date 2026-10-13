@@ -98,6 +98,11 @@ operations:
     review_status: approved
     required_permission: can_manage_platform
   - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/platform/access/teams/{team_id}/enrollment-links/{link_id}/joiners
+    review_status: approved
+    required_permission: can_manage_platform
+  - service: control-plane
     method: POST
     path: /control-plane/v1/admin/platform/access/teams/{team_id}/enrollment-links/{link_id}/reveal
     review_status: approved

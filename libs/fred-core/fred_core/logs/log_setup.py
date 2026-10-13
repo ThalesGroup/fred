@@ -199,7 +199,7 @@ _SENSITIVE_QUERY_PARAM_RE = re.compile(
 
 def _sanitize_sensitive_query_params(value: str) -> str:
     value = re.sub(
-        r"((?:/platform-access/free/|/join-free/))[^/?\s\"]+", r"\1<redacted>", value
+        r"((?:/platform-access/free/|/join/))[^/?\s\"]+", r"\1<redacted>", value
     )
     return _SENSITIVE_QUERY_PARAM_RE.sub(r"\1<redacted>", value)
 
@@ -435,6 +435,6 @@ def log_setup(
     audit_handler = logging.StreamHandler(sys.stdout)
     audit_handler.setFormatter(CompactJsonFormatter(service_name))
     audit_logger.addHandler(audit_handler)
-    audit_logger.setLevel(log_level.upper())
+    audit_logger.setLevel(logging.INFO)
     audit_logger.propagate = False
     flush_startup_logs()
