@@ -3,7 +3,14 @@
 
 import { describe, expect, it } from "vitest";
 import type { CommandDescriptor } from "../../slices/runtime/runtimeOpenApi";
-import { assemblePromptTurn, MAX_TURN_PROMPTS, usablePromptList, type ResolvedPromptCommand } from "./skillInvocation";
+import {
+  assemblePromptTurn,
+  findCommandWords,
+  isCommandTokenAt,
+  MAX_TURN_PROMPTS,
+  usablePromptList,
+  type ResolvedPromptCommand,
+} from "./skillInvocation";
 
 const prompt = (
   draft: string,
@@ -129,6 +136,44 @@ describe("assemblePromptTurn", () => {
   });
 });
 
+describe("assemblePromptTurn with line breaks", () => {
+  it("keeps the line breaks of a prompt as stored, and its slice still reads back", () => {
+    const draft = "Avant\r\n/summary ensuite";
+    const body = "Ligne un.\r\n\r\nLigne deux.";
+    const { text, command } = assemblePromptTurn(draft, [prompt(draft, "summary", `${body}\r\n`)]);
+    const [entry] = command.prompts!;
+
+    expect(text).toBe(`Avant\n\n${body}\n\nensuite`);
+    expect(entry.draft_offset).toBe(7);
+    expect(text.slice(entry.text_offset, entry.text_offset + entry.text_length)).toBe(body);
+    expect(usablePromptList(command, text)).toHaveLength(1);
+  });
+});
+
+describe("command words", () => {
+  it("finds every delimited /name, and nothing inside a path or a word", () => {
+    const value = "/one see /etc/hosts a/b\n/two\t/three-3 /Four /five";
+    expect(findCommandWords(value).map((word) => [word.name, value.slice(word.from, word.to)])).toEqual([
+      ["one", "/one"],
+      ["two", "/two"],
+      ["three-3", "/three-3"],
+      ["five", "/five"],
+    ]);
+  });
+
+  it.each([
+    ["/sum", 0, true],
+    ["a /sum b", 2, true],
+    ["a\n/sum\tb", 2, true],
+    ["/summary", 0, false],
+    ["x/sum", 1, false],
+    ["a /sum. b", 2, false],
+    ["a /su b", 2, false],
+  ])("reads %j at %i as a token of /sum: %s", (value, from, expected) => {
+    expect(isCommandTokenAt(value, from, "sum")).toBe(expected);
+  });
+});
+
 describe("usablePromptList", () => {
   const draft = "First /summary then /tone please";
   const sent = assemblePromptTurn(draft, [
@@ -158,6 +203,8 @@ describe("usablePromptList", () => {
     ["a command that is not at its position in the line", [first, { ...second, draft_offset: 21 }]],
     ["a command that is not the one typed there", [first, { ...second, command: "ton" }]],
     ["an entry without a command", [first, { ...second, command: "" }]],
+    ["holding an entry that is null", [first, null]],
+    ["holding an entry that is not an object", [first, "tone"]],
   ])("refuses a list that is %s", (_label, prompts) => {
     expect(usablePromptList(withList(prompts), sent.text)).toBeNull();
   });
@@ -169,6 +216,11 @@ describe("usablePromptList", () => {
       Array.from({ length: MAX_TURN_PROMPTS + 1 }, (_, index) => prompt(line, "summary", "S.", index)),
     );
     expect(usablePromptList(many.command, many.text)).toBeNull();
+  });
+
+  it("refuses a list whose command has a character glued to it in the typed line", () => {
+    for (const glued of ["First /summaryx then /tone please", "First x/summary then /tone please"])
+      expect(usablePromptList(withList([first, second], { draft_text: glued }), sent.text)).toBeNull();
   });
 
   it("refuses a list when the typed line was not stored", () => {
