@@ -31,11 +31,11 @@ The response shape does not change.
 
 ## Validation
 
-As a platform administrator, open Platform access > Whitelist > Users: the table lists only people holding an individual access, the most recently added first, each with the date it was added, its origin and the person's other access sources. Use "Add users" to search for a person who is not listed, add them, and check that they appear in the table.
+As a platform administrator, open Platform access > Users: the table lists only people holding an individual access, the most recently added first, each with the date it was added, its origin and the person's other access sources. Use "Add users" to search for a person who is not listed, add them, and check that they appear in the table.
 
 ## Rollback
 
-Use the normal rollback procedure; this change introduces no data migration. Roll the frontend back together with the control-plane backend: a frontend from this release talking to an older backend would have its filter ignored and would list every known user in the whitelist tab.
+Use the normal rollback procedure; this change introduces no data migration. Roll the frontend back together with the control-plane backend: a frontend from this release talking to an older backend would have its filter ignored and would list every known user in the Users tab.
 
 ## Limitations
 
