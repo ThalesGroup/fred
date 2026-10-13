@@ -18,7 +18,12 @@ import IconButton from "@shared/atoms/IconButton/IconButton";
 import { CharacterLimitNotice } from "@shared/atoms/CharacterLimitNotice/CharacterLimitNotice";
 import { appendVoiceTranscript, audioFileExtensionForMimeType } from "./voiceInputUtils";
 import styles from "./RichInputField.module.css";
-import { InlineSkillInput, type InlineSkillToken, type InlinePromptToken } from "./InlineSkillInput";
+import {
+  InlineSkillInput,
+  type InlineSkillToken,
+  type InlinePromptTarget,
+  type InlinePromptToken,
+} from "./InlineSkillInput";
 
 export type CommandKeyEvent = Pick<KeyboardEvent, "key" | "shiftKey" | "preventDefault"> & {
   ctrlKey?: boolean;
@@ -37,12 +42,19 @@ export type CommandChoice = { name: string; from: number; to: number; scope: num
   | { kind: "prompt"; promptId: string; promptTeamId: string }
 );
 
+/** One replaced span of the draft, in the positions of the text before the
+ *  edit: `insert` characters took the place of `from`..`to`. */
+export type DraftEdit = { from: number; to: number; insert: number };
+
 /** The host's side of the command trigger — see `commandTrigger`. */
 export interface CommandTriggerBinding {
   /** The active command at the caret, with its replaceable range. */
   onQueryChange: (query: string | null, range?: { start: number; end: number }) => void;
   selectionRequest?: { id: number; caret: number };
   onDraftReplace?: () => void;
+  /** What the editor is about to report through `onChange`, as exact spans:
+   *  the host then moves its choices without guessing from the two texts. */
+  onDraftEdit?: (edits: readonly DraftEdit[]) => void;
   choices?: readonly CommandChoice[];
   onChoicesRestore?: (choices: readonly CommandChoice[]) => void;
   /** Additional command names eligible for completion inside existing text. */
@@ -71,8 +83,9 @@ export function commandQueryOf(
   const match =
     /^\/(skill [a-z0-9-]*|\S*)$/.exec(value) ?? /(?:^|\s)\/(skill(?: [a-z0-9-]*)?|skil|ski|sk|s|)$/.exec(beforeCaret);
   if (match) return match[1];
-  const named = /(?:^|\s)\/([a-z0-9_-]+)$/.exec(beforeCaret);
-  return named && inlineCommandNames.some((name) => name.startsWith(named[1])) ? named[1] : null;
+  // Same match as the menu's filter: anywhere inside a name, whatever the case.
+  const named = /(?:^|\s)\/([a-z0-9_-]+)$/i.exec(beforeCaret)?.[1];
+  return named !== undefined && inlineCommandNames.some((name) => name.includes(named.toLowerCase())) ? named : null;
 }
 
 interface RichInputFieldProps {
@@ -98,7 +111,11 @@ interface RichInputFieldProps {
   /** Rendered above the textarea — typically attachment chips that should stay close to the cursor. */
   aboveTextSlot?: ReactNode;
   /** Opt-in plain-text editor with inline skill and prompt visuals. */
-  inlineSkills?: { tokens: InlineSkillToken[]; promptToken?: InlinePromptToken | null };
+  inlineSkills?: {
+    tokens: InlineSkillToken[];
+    promptTokens?: readonly InlinePromptToken[];
+    onOpenPrompt?: (target: InlinePromptTarget) => void;
+  };
   /** Rendered floating just above the field — the command menu. */
   aboveFieldSlot?: ReactNode;
   /**
@@ -299,12 +316,9 @@ export function RichInputField({
   const handleKeyDown = useCallback(
     (e: CommandKeyEvent) => {
       // The menu owns Enter, Tab, the arrows and Esc while it is open, and says
-      // so by returning true — it has already called preventDefault. Enter is
-      // withheld while sending is blocked: running a command IS sending, so it
-      // must obey the same gate as the send button, and the menu has no reason
-      // to know about uploads or an over-limit draft.
-      const sendBlocked = disabled || sendDisabled;
-      if (!(e.key === "Enter" && sendBlocked) && commandTrigger?.onKeyDown(e)) return;
+      // so by returning true: it has already called preventDefault. Enter on a
+      // row only inserts it, so the menu gets the key whatever the send state.
+      if (commandTrigger?.onKeyDown(e)) return;
       if (onRecallKeyDown?.(e)) return;
       if (e.key === "Enter" && !e.shiftKey && !disabled && !sendDisabled && !e.nativeEvent.isComposing) {
         e.preventDefault();
@@ -481,7 +495,8 @@ export function RichInputField({
               value={value}
               onChange={onChange}
               tokens={inlineSkills.tokens}
-              promptToken={inlineSkills.promptToken}
+              promptTokens={inlineSkills.promptTokens}
+              onOpenPrompt={inlineSkills.onOpenPrompt}
               placeholder={placeholder}
               disabled={disabled}
               maxHeight={maxHeight}

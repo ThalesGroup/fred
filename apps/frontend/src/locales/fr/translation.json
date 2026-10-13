@@ -395,20 +395,27 @@
     "commandTurn": {
       "open": "Ouvrir le prompt de la commande /{{command}}",
       "openWithText": "Ouvrir le prompt de la commande /{{command}}, suivie de « {{appended}} »",
-      "panelTitle": "Prompt de la commande"
+      "panelTitle": "Prompt de la commande",
+      "previewLoading": "Chargement du prompt…",
+      "previewEmpty": "Ce prompt est vide.",
+      "previewError": "Ce prompt ne peut pas être affiché. Il a peut-être été supprimé, ou vous n'y avez plus accès."
     },
     "commandMenu": {
-      "sources": {
-        "platform": "Skill plateforme",
-        "personal": "Prompt personnel",
-        "team": "Prompt d’équipe"
-      },
       "ariaLabel": "Commandes disponibles",
-      "promptsSection": "Prompts de la bibliothèque",
-      "noneInTeam": "Aucune commande dans cette équipe. Un éditeur peut en attribuer une à un prompt depuis la page Prompts.",
+      "sections": {
+        "team": "Équipe « {{name}} »",
+        "teamFallback": "Équipe",
+        "personal": "Espace personnel",
+        "platform": "Skills plateforme"
+      },
+      "loading": "Chargement des commandes…",
+      "error": "Les commandes n'ont pas pu être chargées. Tapez / à nouveau pour réessayer.",
+      "none": "Aucune commande pour l'instant. Ajoutez-en une à l'un de vos prompts personnels depuis la page Prompts. Dans une équipe, un éditeur peut aussi en ajouter une à un prompt de l'équipe.",
       "noMatch": "Aucune commande ne correspond.",
       "runErrorSummary": "Commande impossible à lancer",
-      "runErrorDetail": "Le prompt de cette commande n'a pas pu être lu. Réessayez dans un instant."
+      "runErrorDetail": "Le prompt de la commande /{{command}} n'a pas pu être lu. Réessayez dans un instant.",
+      "runErrorStale": "La commande /{{command}} n'est plus disponible : son prompt a été supprimé ou renommé, ou elle vient d'un autre agent ou d'une autre équipe. Retirez-la de votre message et choisissez-la à nouveau.",
+      "runErrorTooMany": "Un message peut contenir au plus {{limit}} commandes de prompt. Retirez-en quelques-unes, puis envoyez à nouveau."
     },
     "composerPlaceholder": "Posez votre question, ou tapez / pour une commande",
     "newConversation": "Nouvelle conversation",
@@ -623,7 +630,6 @@
       "badge": "Skill : {{name}}",
       "platformProvided": "Skill fourni par la plateforme",
       "requestPlaceholder": "Votre demande (facultative)",
-      "menuTitle": "Skills",
       "usage": "Utilisez /<nom-du-skill> [demande]. Sélectionnez un skill ; la demande est facultative.",
       "errorTitle": "Le skill ne peut pas être utilisé",
       "unavailable": "Le contenu de ce skill est indisponible.",
@@ -3009,7 +3015,7 @@
         "firstCreate": "Créer un prompt",
         "form": {
           "command": "Commande",
-          "commandConflict": "Label de commande déjà pris par un autre prompt d'équipe",
+          "commandConflict": "Cette commande est déjà utilisée par un autre prompt",
           "commandHelp": "Raccourcis de lancement dans le chat",
           "description": "Description",
           "name": "Nom",
@@ -3021,6 +3027,19 @@
         "modalEdit": "Modifier le prompt",
         "noPrompt": "Créez votre premier prompt pour commencer.",
         "searchPlaceholder": "Rechercher des prompts...",
+        "toasts": {
+          "created": "Prompt créé",
+          "updated": "Prompt modifié",
+          "saveFailed": "Échec de l'enregistrement du prompt",
+          "deleted": "Prompt supprimé",
+          "deleteFailed": "Échec de la suppression du prompt"
+        },
+        "deleteDialog": {
+          "title": "Supprimer le prompt ?",
+          "message": "« {{name}} » sera définitivement supprimé. Cette action est irréversible.",
+          "confirm": "Supprimer"
+        },
+        "missingTeam": "Identifiant d'équipe manquant dans l'URL.",
         "title": "Prompts de l'équipe",
         "view": {
           "closeAria": "Fermer",

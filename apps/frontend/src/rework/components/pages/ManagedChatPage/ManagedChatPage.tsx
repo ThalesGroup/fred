@@ -20,6 +20,7 @@ import { ConversationThread } from "./ConversationThread/ConversationThread";
 import { ConversationOutlineRail } from "@shared/molecules/ConversationOutlineRail/ConversationOutlineRail";
 import { sameTurnIds, toOutlinePreview, toTurnIds } from "@shared/molecules/ConversationOutlineRail/outlineItems";
 import { RichInputField } from "@shared/molecules/RichInputField/RichInputField";
+import type { InlinePromptTarget } from "@shared/molecules/RichInputField/InlineSkillInput";
 import { SessionTitleEditor } from "@shared/molecules/SessionTitleEditor/SessionTitleEditor";
 import SkillDetailPanel from "@shared/molecules/SkillDetailPanel/SkillDetailPanel";
 import CommandPromptPanel from "@shared/molecules/CommandPromptPanel/CommandPromptPanel";
@@ -39,6 +40,7 @@ import {
   traceEntryKey,
   type TraceEntry,
 } from "../../../utils/traceUtils";
+import { MAX_TURN_PROMPTS, usablePromptList } from "@rework/utils/skillInvocation";
 import { isAgentTodoSnapshotSettled, latestAgentTodoSnapshot, presentAgentTodos } from "../../../utils/agentTodo";
 import { ComposerActionsMenu } from "@shared/molecules/ComposerActionsMenu/ComposerActionsMenu";
 import { UploadWarningAckDialog } from "@shared/molecules/UploadWarningAckDialog/UploadWarningAckDialog";
@@ -69,7 +71,6 @@ import {
 } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import {
   useGetAgentInstanceSkillDetailQuery,
-  useGetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetQuery,
   useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery,
   type ContextPromptSummary,
   type ManagedAgentInstanceSummary,
@@ -144,6 +145,8 @@ type ActivePushDrawer =
   // Carries the turn's own stored text: the prompt is overwritten on edit
   // and gone once deleted, so it cannot be re-fetched by id.
   | { kind: "command-prompt"; text: string; command: string | null; promptName: string | null }
+  // A composer token: nothing is sent yet, so the prompt is read as it is now.
+  | { kind: "prompt-preview"; promptId: string; promptTeamId: string; command: string; promptName: string }
   | null;
 
 export default function ManagedChatPage() {
@@ -170,6 +173,9 @@ export default function ManagedChatPage() {
     [],
   );
   const previewSkillName = activePushDrawer?.kind === "skill" ? activePushDrawer.name : null;
+  const promptPreviewDrawer = activePushDrawer?.kind === "prompt-preview" ? activePushDrawer : null;
+  const previewPromptIdRef = useRef<string | null>(null);
+  previewPromptIdRef.current = promptPreviewDrawer?.promptId ?? null;
   const skillPreview = useGetAgentInstanceSkillDetailQuery(
     { teamId, agentInstanceId, skillName: previewSkillName ?? "" },
     { skip: !previewSkillName, refetchOnMountOrArgChange: true },
@@ -177,7 +183,9 @@ export default function ManagedChatPage() {
   const previewScope = useRef({ teamId, agentInstanceId });
   useEffect(() => {
     if (previewScope.current.teamId !== teamId || previewScope.current.agentInstanceId !== agentInstanceId) {
-      setActivePushDrawer((drawer) => (drawer?.kind === "skill" || drawer?.kind === "skill-file" ? null : drawer));
+      setActivePushDrawer((drawer) =>
+        drawer?.kind === "skill" || drawer?.kind === "skill-file" || drawer?.kind === "prompt-preview" ? null : drawer,
+      );
       previewScope.current = { teamId, agentInstanceId };
     }
   }, [teamId, agentInstanceId]);
@@ -219,12 +227,6 @@ export default function ManagedChatPage() {
   const isAdmin = isPersonalTeam || canAdministerAdmins;
 
   const chat = useManagedChat({ teamId, agentInstanceId });
-  const { currentData: agentTemplates } = useGetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetQuery({
-    teamId,
-  });
-  const agentCategory = agentTemplates?.find(
-    (template) => template.template_id === chat.agentInstance?.template_id,
-  )?.category;
 
   // Opening a push drawer is a statement about ONE conversation, so switching
   // conversations closes it: the panels (capability, attachments, document
@@ -622,7 +624,6 @@ export default function ManagedChatPage() {
   const commands = useComposerCommands({
     teamId,
     agentInstanceId,
-    includePersonalCommands: agentCategory === "react",
     personalTeamId: activeTeam?.id,
     onRunSkill: (run) => void chat.runSkill(run),
     onSkillError: (reason) =>
@@ -634,12 +635,37 @@ export default function ManagedChatPage() {
     setInput: chat.setInput,
     onRunCommand: (run) => void chat.runCommand(run),
     onSend: () => void chat.handleSend(),
-    onResolveError: () =>
+    onResolveError: (reason, command) =>
       showError({
         summary: t("chatbot.commandMenu.runErrorSummary"),
-        detail: t("chatbot.commandMenu.runErrorDetail"),
+        detail:
+          reason === "tooMany"
+            ? t("chatbot.commandMenu.runErrorTooMany", { limit: MAX_TURN_PROMPTS })
+            : t(reason === "stale" ? "chatbot.commandMenu.runErrorStale" : "chatbot.commandMenu.runErrorDetail", {
+                command,
+              }),
       }),
   });
+
+  // A composer prompt token opens its own prompt; a second click closes it.
+  const [fetchPromptPreview, promptPreview] = useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery();
+  // One identity for every token and across keystrokes, so no token is
+  // rebuilt as the user types: the activated token says which prompt it is.
+  const openPromptPreview = useCallback(
+    ({ promptId, promptTeamId, command, name }: InlinePromptTarget) => {
+      const open = previewPromptIdRef.current === promptId;
+      setActivePushDrawer(open ? null : { kind: "prompt-preview", promptId, promptTeamId, command, promptName: name });
+      if (!open) void fetchPromptPreview({ teamId: promptTeamId, promptId });
+    },
+    [fetchPromptPreview],
+  );
+  const promptPreviewStatus = !promptPreviewDrawer
+    ? undefined
+    : promptPreview.isFetching
+      ? ("loading" as const)
+      : promptPreview.isError || promptPreview.originalArgs?.promptId !== promptPreviewDrawer.promptId
+        ? ("error" as const)
+        : undefined;
 
   // Arrow keys bring back the messages sent in this conversation. A recalled
   // line keeps the command menu shut until the person edits it.
@@ -678,7 +704,9 @@ export default function ManagedChatPage() {
       })}
       commandTrigger={commands.trigger}
       onRecallKeyDown={recallKeyDown}
-      aboveFieldSlot={!chat.executionDisabled && commands.menu ? <CommandMenu {...commands.menu} /> : undefined}
+      aboveFieldSlot={
+        !chat.executionDisabled && commands.menu ? <CommandMenu {...commands.menu} teamName={team?.name} /> : undefined
+      }
       disabled={composerControlsDisabled}
       sendDisabled={composerControlsDisabled || chat.attachmentsUploading || chat.inputTooLong}
       characterCount={chat.inputCharacterCount}
@@ -690,7 +718,8 @@ export default function ManagedChatPage() {
       focusEndRequestId={focusEndRequestId}
       showSendButton
       inlineSkills={{
-        promptToken: commands.selectedPrompt,
+        promptTokens: commands.selectedPrompts.map((prompt) => ({ ...prompt, teamName: team?.name })),
+        onOpenPrompt: openPromptPreview,
         tokens: commands.selectedSkills.map((token) => ({
           ...token,
           description: commands.skillDescriptions.get(token.name),
@@ -750,12 +779,16 @@ export default function ManagedChatPage() {
   // already readable in the trace drawer — the raw message dump for admins only.
   // Stable identity: an inline arrow here would defeat ConversationThread's
   // memo and re-render the whole transcript on every composer keystroke.
-  const openCommandPrompt = useCallback((turn: { text: string; command: CommandDescriptor }) => {
+  const openCommandPrompt = useCallback((turn: { text: string; command: CommandDescriptor; promptIndex?: number }) => {
+    // A listed prompt shows its own part of the stored text; a turn without
+    // a usable list shows the whole text under its single command.
+    const entry =
+      turn.promptIndex === undefined ? undefined : usablePromptList(turn.command, turn.text)?.[turn.promptIndex];
     setActivePushDrawer({
       kind: "command-prompt",
-      text: turn.text,
-      command: turn.command.command,
-      promptName: turn.command.prompt_name ?? null,
+      text: entry ? turn.text.slice(entry.text_offset, entry.text_offset + entry.text_length) : turn.text,
+      command: (entry ?? turn.command).command,
+      promptName: (entry ?? turn.command).prompt_name ?? null,
     });
   }, []);
 
@@ -989,11 +1022,26 @@ export default function ManagedChatPage() {
           />
 
           <CommandPromptPanel
-            open={activePushDrawer?.kind === "command-prompt"}
-            onClose={() => setActivePushDrawer((v) => (v?.kind === "command-prompt" ? null : v))}
-            text={activePushDrawer?.kind === "command-prompt" ? activePushDrawer.text : ""}
-            command={activePushDrawer?.kind === "command-prompt" ? activePushDrawer.command : null}
-            promptName={activePushDrawer?.kind === "command-prompt" ? activePushDrawer.promptName : null}
+            open={activePushDrawer?.kind === "command-prompt" || promptPreviewDrawer !== null}
+            onClose={() =>
+              setActivePushDrawer((v) => (v?.kind === "command-prompt" || v?.kind === "prompt-preview" ? null : v))
+            }
+            text={
+              activePushDrawer?.kind === "command-prompt"
+                ? activePushDrawer.text
+                : (promptPreview.currentData?.text ?? "")
+            }
+            command={
+              activePushDrawer?.kind === "command-prompt"
+                ? activePushDrawer.command
+                : (promptPreviewDrawer?.command ?? null)
+            }
+            promptName={
+              activePushDrawer?.kind === "command-prompt"
+                ? activePushDrawer.promptName
+                : (promptPreviewDrawer?.promptName ?? null)
+            }
+            status={promptPreviewStatus}
           />
 
           <FullReasoningPanel

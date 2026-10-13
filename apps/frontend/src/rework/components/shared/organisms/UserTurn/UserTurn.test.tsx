@@ -22,7 +22,7 @@
 import { act, useRef, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { selectedSkillText } from "@rework/utils/skillInvocation";
+import { assemblePromptTurn, selectedSkillText } from "@rework/utils/skillInvocation";
 import { useAssistantCopyInterception } from "@hooks/useAssistantCopyInterception";
 import { UserTurn } from "./UserTurn";
 
@@ -121,9 +121,12 @@ describe("UserTurn copy affordance (#2359)", () => {
         />,
       );
       const body = container.querySelector("[data-skill-message]")!;
-      expect(body.textContent).toBe(`edit_note/${command} Before mermaid middle verify-answer after`);
+      expect(body.textContent).toBe(`edit_note/${command} Before /mermaid middle /verify-answer after`);
       expect(container.textContent).not.toContain("PRIVATE EXPANDED PROMPT");
       expect(body.querySelectorAll("[data-skill-name]")).toHaveLength(2);
+      expect(
+        Array.from(body.querySelectorAll<HTMLElement>("[data-surface=bubble]")).map((badge) => badge.dataset.kind),
+      ).toEqual(["prompt", "skill", "skill"]);
       await click(body.querySelector("button[class*=command]") as HTMLButtonElement);
       expect(onOpenCommand).toHaveBeenCalledWith({
         text: "PRIVATE EXPANDED PROMPT Before /mermaid middle /verify-answer after",
@@ -143,7 +146,7 @@ describe("UserTurn copy affordance (#2359)", () => {
   it("renders a skill badge with the request and copies a reusable invocation", async () => {
     render(<UserTurn text={"Notes\nAction"} skillName="meeting-minutes" />);
     expect(container.querySelector('[role="group"]')?.textContent).toContain("meeting-minutes");
-    expect(container.querySelector("[class*=skillTurn]")?.textContent).toBe("meeting-minutes Notes\nAction");
+    expect(container.querySelector("[class*=skillTurn]")?.textContent).toBe("/meeting-minutes Notes\nAction");
     expect(container.querySelector('[aria-label="chatbot.skills.remove"]')).toBeNull();
     await click(copyButton());
     expect(writeText).toHaveBeenCalledWith("/meeting-minutes Notes\nAction");
@@ -162,14 +165,14 @@ describe("UserTurn copy affordance (#2359)", () => {
     const onEdit = vi.fn();
     render(<UserTurn text={"Before /meeting-minutes after\nAction"} skillName="meeting-minutes" onEdit={onEdit} />);
     const body = container.querySelector("[class*=skillTurn]")!;
-    expect(body.textContent).toBe("Before meeting-minutes after\nAction");
+    expect(body.textContent).toBe("Before /meeting-minutes after\nAction");
     expect(body.firstChild?.textContent).toBe("Before ");
     const selection = document.getSelection()!;
     const range = document.createRange();
     range.selectNodeContents(body.querySelector('[role="group"]')!);
     selection.removeAllRanges();
     selection.addRange(range);
-    expect(selection.toString()).toBe("meeting-minutes");
+    expect(selection.toString()).toBe("/meeting-minutes");
     expect(selectedSkillText(range, container)).toBe("/meeting-minutes");
     const setData = vi.fn();
     const copy = new Event("copy", { bubbles: true, cancelable: true });
@@ -179,11 +182,10 @@ describe("UserTurn copy affordance (#2359)", () => {
     expect(setData).toHaveBeenCalledWith("text/plain", "/meeting-minutes");
     range.selectNodeContents(body);
     expect(selectedSkillText(range, container)).toBe("Before /meeting-minutes after\nAction");
-    const name = body.querySelector("[data-skill-name]")!.firstChild!;
-    range.setStart(name, 0);
-    range.setEnd(name, name.textContent!.length);
+    // The slash is part of the badge's text: it is never added a second time.
+    range.selectNodeContents(body.querySelector("[data-skill-name]")!);
     expect(selectedSkillText(range, container)).toBe("/meeting-minutes");
-    range.setEnd(name, 6);
+    range.selectNodeContents(body.firstChild!);
     expect(selectedSkillText(range, container)).toBeNull();
     // A selection extending into another message uses native serialization.
     range.selectNodeContents(container);
@@ -213,7 +215,7 @@ describe("UserTurn copy affordance (#2359)", () => {
         />,
       );
       const body = container.querySelector("[data-skill-message]")!;
-      expect(body.textContent).toBe(`Before review middle edit_note/${command} after mermaid Notes`);
+      expect(body.textContent).toBe(`Before /review middle edit_note/${command} after /mermaid Notes`);
       expect(body.querySelectorAll("[data-skill-name]")).toHaveLength(2);
       const prompt = body.querySelector("button[class*=command]") as HTMLButtonElement;
       await click(prompt);
@@ -234,6 +236,88 @@ describe("UserTurn copy affordance (#2359)", () => {
       expect(onEdit).toHaveBeenCalledWith(draft);
     },
   );
+
+  describe("a turn listing several prompt commands", () => {
+    const draft = "First /summary then /tone please /verify-answer";
+    const sent = assemblePromptTurn(draft, [
+      { command: "summary", promptId: "p-s", promptName: "Summary", from: 6, to: 14, text: "Summarise the document." },
+      { command: "tone", promptId: "p-t", promptName: "Tone", from: 20, to: 25, text: "Use a formal tone." },
+    ]);
+    const promptBadges = () =>
+      Array.from(container.querySelectorAll<HTMLButtonElement>("[data-skill-message] button[class*=command]"));
+
+    it("shows one badge per prompt at its position, with the skill badge, and never the prompt text", () => {
+      render(<UserTurn text={sent.text} command={sent.command} skillNames={["verify-answer"]} />);
+      const body = container.querySelector("[data-skill-message]")!;
+      expect(body.textContent).toBe("First edit_note/summary then edit_note/tone please /verify-answer");
+      expect(
+        Array.from(body.querySelectorAll<HTMLElement>("[data-surface=bubble]")).map((badge) => badge.dataset.kind),
+      ).toEqual(["prompt", "prompt", "skill"]);
+      expect(promptBadges().map((badge) => badge.getAttribute("aria-label"))).toEqual([
+        "chatbot.commandTurn.open",
+        "chatbot.commandTurn.open",
+      ]);
+      expect(container.textContent).not.toContain("Summarise the document.");
+      expect(container.textContent).not.toContain("Use a formal tone.");
+    });
+
+    it("opens each badge with its own place in the list", async () => {
+      const onOpenCommand = vi.fn();
+      render(<UserTurn text={sent.text} command={sent.command} onOpenCommand={onOpenCommand} />);
+      await click(promptBadges()[1]);
+      expect(onOpenCommand).toHaveBeenLastCalledWith({ text: sent.text, command: sent.command, promptIndex: 1 });
+      await click(promptBadges()[0]);
+      expect(onOpenCommand).toHaveBeenLastCalledWith({ text: sent.text, command: sent.command, promptIndex: 0 });
+    });
+
+    it("copies and edits the typed line", async () => {
+      const onEdit = vi.fn();
+      render(<UserTurn text={sent.text} command={sent.command} skillNames={["verify-answer"]} onEdit={onEdit} />);
+      await click(copyButton());
+      expect(writeText).toHaveBeenCalledWith(draft);
+      await click(buttons()[0]);
+      expect(onEdit).toHaveBeenCalledWith(draft);
+      const range = document.createRange();
+      range.selectNodeContents(container.querySelector("[data-skill-message]")!);
+      expect(selectedSkillText(range, container)).toBe(draft);
+    });
+
+    it("shows the same command twice as two badges", () => {
+      const line = "/summary of A, /summary of B";
+      const twice = assemblePromptTurn(line, [
+        { command: "summary", promptId: "p-s", promptName: "Summary", from: 0, to: 8, text: "Summarise." },
+        { command: "summary", promptId: "p-s", promptName: "Summary", from: 15, to: 23, text: "Summarise." },
+      ]);
+      render(<UserTurn text={twice.text} command={twice.command} />);
+      expect(container.querySelector("[data-skill-message]")!.textContent).toBe(
+        "edit_note/summary of A, edit_note/summary of B",
+      );
+    });
+
+    it("renders from the single fields when the list does not fit the stored text", async () => {
+      const onOpenCommand = vi.fn();
+      const command = {
+        ...sent.command,
+        prompts: sent.command.prompts!.map((entry) => ({ ...entry, text_offset: entry.text_offset + 500 })),
+      };
+      render(<UserTurn text={sent.text} command={command} onOpenCommand={onOpenCommand} />);
+      expect(container.querySelector("[data-skill-message]")!.textContent).toBe(
+        "First edit_note/summary then /tone please /verify-answer",
+      );
+      expect(promptBadges()).toHaveLength(1);
+      await click(promptBadges()[0]);
+      expect(onOpenCommand).toHaveBeenCalledWith({ text: sent.text, command });
+      expect(onOpenCommand.mock.calls[0][0].promptIndex).toBeUndefined();
+    });
+
+    it("renders a turn stored with the single fields only as one badge", () => {
+      const { prompts: _prompts, ...single } = sent.command;
+      render(<UserTurn text={sent.text} command={single} />);
+      expect(container.querySelector("[data-skill-message]")!.textContent).toBe(
+        "First edit_note/summary then /tone please /verify-answer",
+      );
+    });
+  });
 
   it("leaves an unattributed skill mention as ordinary text", () => {
     render(<UserTurn text="/skill verify-answer" />);
@@ -257,7 +341,7 @@ describe("UserTurn copy affordance (#2359)", () => {
     await click(container.querySelector<HTMLButtonElement>('[aria-label="chatbot.skills.open"]')!);
     expect(onOpenSkill).toHaveBeenCalledOnce();
     expect(onOpenSkill).toHaveBeenCalledWith("meeting-minutes");
-    expect(container.querySelector("[class*=skillTurn]")?.textContent).toBe("meeting-minutes Notes");
+    expect(container.querySelector("[class*=skillTurn]")?.textContent).toBe("/meeting-minutes Notes");
     expect(writeText).not.toHaveBeenCalled();
   });
 

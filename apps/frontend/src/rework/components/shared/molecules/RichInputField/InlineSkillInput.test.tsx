@@ -3,7 +3,7 @@
 import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { EditorView } from "@codemirror/view";
-import { deleteCharBackward, undo } from "@codemirror/commands";
+import { cursorCharLeft, cursorCharRight, selectCharLeft, undo } from "@codemirror/commands";
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
 import { usePastedFiles } from "@rework/components/pages/ManagedChatPage/usePastedFiles";
 import { RichInputField } from "./RichInputField";
@@ -24,13 +24,32 @@ let root: Root;
 let container: HTMLDivElement;
 const onSend = vi.fn();
 const onOpen = vi.fn();
+const onOpenPrompt = vi.fn();
 const onChange = vi.fn();
 const onFiles = vi.fn();
 const recallKey = vi.fn<(event: import("./RichInputField").CommandKeyEvent) => boolean>(() => false);
+const onDraftEdit = vi.fn();
 const claimKey = vi.fn<(event: import("./RichInputField").CommandKeyEvent) => boolean>(() => false);
-function Host({ disabled = false, prompt = false }: { disabled?: boolean; prompt?: boolean }) {
+function Host({
+  disabled = false,
+  prompt = false,
+  source = "personal",
+  teamName,
+  inert = false,
+  twoPrompts = false,
+}: {
+  disabled?: boolean;
+  prompt?: boolean;
+  source?: "personal" | "team";
+  teamName?: string;
+  inert?: boolean;
+  twoPrompts?: boolean;
+}) {
   usePastedFiles({ enabled: !disabled, onFiles });
-  const [value, setValue] = useState(prompt ? "/hello Notes" : "Before /meeting-minutes after\nAction");
+  const [value, setValue] = useState(
+    twoPrompts ? "/hello then /bye Notes" : prompt ? "/hello Notes" : "Before /meeting-minutes after\nAction",
+  );
+  const bye = value.indexOf("/bye ");
   const token = findSkillInvocation(value, ["meeting-minutes"], true);
   return (
     <RichInputField
@@ -46,15 +65,43 @@ function Host({ disabled = false, prompt = false }: { disabled?: boolean; prompt
       placeholder="[notes]"
       inlineSkills={{
         tokens: token ? [{ ...token, description: "Meeting minutes", onOpen }] : [],
-        promptToken:
-          prompt && value.startsWith("/hello ")
-            ? { from: 0, to: 6, name: "Hello", description: "Say hello", source: "personal" }
-            : null,
+        promptTokens: [
+          ...((prompt || twoPrompts) && value.startsWith("/hello ")
+            ? [
+                {
+                  from: 0,
+                  to: 6,
+                  name: "Hello",
+                  promptId: "p-hello",
+                  promptTeamId: "personal-1",
+                  description: "Say hello",
+                  source,
+                  teamName,
+                },
+              ]
+            : []),
+          ...(twoPrompts && bye >= 0
+            ? [
+                {
+                  from: bye,
+                  to: bye + 4,
+                  name: "Goodbye",
+                  promptId: "p-bye",
+                  promptTeamId: "team-1",
+                  description: "Say goodbye",
+                  source: "team" as const,
+                  teamName: "Finance",
+                },
+              ]
+            : []),
+        ],
+        onOpenPrompt: inert ? undefined : onOpenPrompt,
       }}
       commandTrigger={{
         onQueryChange: vi.fn(),
         onFocusChange: vi.fn(),
         onKeyDown: claimKey,
+        onDraftEdit,
         listboxId: "commands",
         open: false,
         activeDescendantId: null,
@@ -80,25 +127,75 @@ afterEach(() => {
 it("keeps canonical text in the editor while placing the clickable token between surrounding words", () => {
   expect(editor().state.doc.toString()).toBe("Before /meeting-minutes after\nAction");
   expect(editor().contentDOM.getAttribute("aria-label")).toBe("chatbot.composerPlaceholder");
-  expect(container.querySelector(".cm-line")?.textContent).toBe("Before meeting-minutes after");
+  expect(container.querySelector(".cm-line")?.textContent).toBe("Before /meeting-minutes after");
   const badge = container.querySelector<HTMLButtonElement>('[aria-label="chatbot.skills.open"]')!;
   expect(badge.title).toBe("chatbot.skills.platformProvided\nMeeting minutes");
+  // A skill container; the hairline is for sent messages only.
+  expect(badge.dataset).toMatchObject({ kind: "skill" });
+  expect(badge.dataset.surface).toBeUndefined();
   act(() => badge.click());
   expect(onOpen).toHaveBeenCalledWith("meeting-minutes");
   expect(onSend).not.toHaveBeenCalled();
   expect(onChange).not.toHaveBeenCalled();
 });
-it("deleting a character removes the import and undo restores it with the request intact", () => {
+const TOKEN = { from: "Before ".length, to: "Before /meeting-minutes".length };
+const pressKey = (key: string) =>
   act(() => {
-    editor().dispatch({ selection: { anchor: "Before /meeting-minutes".length } });
-    deleteCharBackward(editor());
+    editor().contentDOM.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
   });
-  expect(editor().state.doc.toString()).toBe("Before /meeting-minute after\nAction");
+it.each([
+  ["Backspace", TOKEN.to],
+  ["Delete", TOKEN.from],
+])("%s next to a token removes it whole, and undo restores it with the request intact", (key, caret) => {
+  act(() => editor().dispatch({ selection: { anchor: caret } }));
+  pressKey(key);
+  // The token goes with one of the two spaces around it: no double space.
+  expect(editor().state.doc.toString()).toBe("Before after\nAction");
+  expect(editor().state.selection.main.head).toBe(TOKEN.from);
   expect(container.querySelector('[aria-label="chatbot.skills.open"]')).toBeNull();
   expect(editor().contentDOM.getAttribute("aria-label")).toBe("chatbot.composerPlaceholder");
   act(() => {
     undo(editor());
   });
+  expect(editor().state.doc.toString()).toBe("Before /meeting-minutes after\nAction");
+  expect(container.querySelector('[aria-label="chatbot.skills.open"]')).not.toBeNull();
+});
+it("reports each edit as the exact span it replaced, before the new text", () => {
+  // Removing "Before " and typing over "after": two spans in one transaction.
+  act(() =>
+    editor().dispatch({
+      changes: [
+        { from: 0, to: 7 },
+        { from: 24, to: 29, insert: "now" },
+      ],
+    }),
+  );
+  expect(onDraftEdit).toHaveBeenCalledExactlyOnceWith([
+    { from: 0, to: 7, insert: 0 },
+    { from: 24, to: 29, insert: 3 },
+  ]);
+  expect(onChange).toHaveBeenCalledExactlyOnceWith("/meeting-minutes now\nAction");
+  expect(onDraftEdit.mock.invocationCallOrder[0]).toBeLessThan(onChange.mock.invocationCallOrder[0]);
+});
+it("moves the caret and extends a selection over a token in one step", () => {
+  const head = () => editor().state.selection.main.head;
+  act(() => editor().dispatch({ selection: { anchor: TOKEN.to } }));
+  act(() => {
+    cursorCharLeft(editor());
+  });
+  expect(head()).toBe(TOKEN.from);
+  act(() => {
+    cursorCharRight(editor());
+  });
+  expect(head()).toBe(TOKEN.to);
+  act(() => {
+    selectCharLeft(editor());
+  });
+  expect(editor().state.selection.main).toMatchObject({ from: TOKEN.from, to: TOKEN.to });
+  // Backspace away from a token still removes a single character.
+  act(() => editor().dispatch({ selection: { anchor: "Before".length } }));
+  pressKey("Backspace");
+  expect(editor().state.doc.toString()).toBe("Befor /meeting-minutes after\nAction");
   expect(container.querySelector('[aria-label="chatbot.skills.open"]')).not.toBeNull();
 });
 it("lets the completion handler consume Enter before the editor inserts a newline or sends", () => {
@@ -201,21 +298,115 @@ it("keeps a prompt command copyable, editable and undoable beneath its visual", 
     editor().contentDOM.dispatchEvent(event);
   });
   expect(setData).toHaveBeenCalledWith("text/plain", "/hello");
-  act(() => {
-    editor().dispatch({ selection: { anchor: 6 } });
-    deleteCharBackward(editor());
-  });
-  expect(editor().state.doc.toString()).toBe("/hell Notes");
-  expect(container.querySelector("[class*=promptToken]")).toBeNull();
+  act(() => editor().dispatch({ selection: { anchor: 6 } }));
+  pressKey("Backspace");
+  expect(editor().state.doc.toString()).toBe("Notes");
+  expect(container.querySelector("[data-kind=prompt]")).toBeNull();
   act(() => {
     undo(editor());
   });
   expect(editor().state.doc.toString()).toBe("/hello Notes");
-  expect(container.querySelector("[class*=promptToken]")).not.toBeNull();
+  const prompt = container.querySelector<HTMLElement>("[data-kind=prompt]")!;
+  expect(prompt.className).toMatch(/badge/);
+  expect(prompt.dataset.surface).toBeUndefined();
   const dispatch = vi.spyOn(editor(), "dispatch");
   act(() => root.render(<Host prompt />));
   expect(dispatch).not.toHaveBeenCalled();
   dispatch.mockRestore();
+});
+
+it("opens the prompt preview from its token, which stays one block and sends nothing", () => {
+  const mount = (props: Parameters<typeof Host>[0]) =>
+    act(() => {
+      root.unmount();
+      root = createRoot(container);
+      root.render(<Host prompt {...props} />);
+    });
+  const token = () => container.querySelector<HTMLElement>("[data-kind=prompt]")!;
+  mount({});
+  expect(token().tagName).toBe("BUTTON");
+  expect((token() as HTMLButtonElement).type).toBe("button");
+  expect(token().className).toMatch(/action/);
+  expect(token().getAttribute("aria-label")).toBe("chatbot.commandTurn.open");
+  // The hover hint names the source like the menu's section headings.
+  expect(token().title).toBe("Hello\nchatbot.commandMenu.sections.personal\nSay hello");
+  act(() => token().click());
+  expect(onOpenPrompt).toHaveBeenCalledExactlyOnceWith({
+    promptId: "p-hello",
+    promptTeamId: "personal-1",
+    name: "Hello",
+    command: "hello",
+  });
+  expect(onSend).not.toHaveBeenCalled();
+  expect(onChange).not.toHaveBeenCalled();
+  act(() => editor().dispatch({ selection: { anchor: 6 } }));
+  act(() => {
+    cursorCharLeft(editor());
+  });
+  expect(editor().state.selection.main.head).toBe(0);
+
+  mount({ source: "team", teamName: "Finance" });
+  expect(token().title.split("\n")[1]).toBe("chatbot.commandMenu.sections.team");
+  mount({ source: "team" });
+  expect(token().title.split("\n")[1]).toBe("chatbot.commandMenu.sections.teamFallback");
+
+  // Without a preview to open the token is not a control.
+  mount({ inert: true });
+  expect(token().tagName).toBe("SPAN");
+  expect(token().getAttribute("role")).toBe("group");
+});
+
+it("shows two prompt tokens, each one block with its own hint, label and preview", () => {
+  act(() => {
+    root.unmount();
+    root = createRoot(container);
+    root.render(<Host twoPrompts />);
+  });
+  const tokens = () => Array.from(container.querySelectorAll<HTMLButtonElement>("[data-kind=prompt]"));
+  expect(tokens().map((token) => token.textContent)).toEqual(["edit_note/hello", "edit_note/bye"]);
+  expect(tokens().map((token) => token.title)).toEqual([
+    "Hello\nchatbot.commandMenu.sections.personal\nSay hello",
+    "Goodbye\nchatbot.commandMenu.sections.team\nSay goodbye",
+  ]);
+  expect(tokens().map((token) => token.getAttribute("aria-label"))).toEqual([
+    "chatbot.commandTurn.open",
+    "chatbot.commandTurn.open",
+  ]);
+
+  act(() => tokens()[1].click());
+  expect(onOpenPrompt).toHaveBeenLastCalledWith({
+    promptId: "p-bye",
+    promptTeamId: "team-1",
+    name: "Goodbye",
+    command: "bye",
+  });
+  act(() => tokens()[0].click());
+  expect(onOpenPrompt).toHaveBeenLastCalledWith(expect.objectContaining({ promptId: "p-hello" }));
+  expect(onSend).not.toHaveBeenCalled();
+  expect(onChange).not.toHaveBeenCalled();
+
+  // The caret crosses each token in one step.
+  act(() => editor().dispatch({ selection: { anchor: 16 } }));
+  act(() => {
+    cursorCharLeft(editor());
+  });
+  expect(editor().state.selection.main.head).toBe(12);
+
+  // Typing after the tokens, or before the second one, rebuilds neither.
+  const [hello, goodbye] = tokens();
+  act(() => editor().dispatch({ changes: { from: editor().state.doc.length, insert: " more" } }));
+  act(() => editor().dispatch({ changes: { from: 7, insert: "and " } }));
+  expect(editor().state.doc.toString()).toBe("/hello and then /bye Notes more");
+  expect(tokens()[0]).toBe(hello);
+  expect(tokens()[1]).toBe(goodbye);
+  act(() => tokens()[1].click());
+  expect(onOpenPrompt).toHaveBeenLastCalledWith(expect.objectContaining({ promptId: "p-bye", command: "bye" }));
+
+  // One Backspace removes the second token whole and leaves the first.
+  act(() => editor().dispatch({ selection: { anchor: 20 } }));
+  pressKey("Backspace");
+  expect(editor().state.doc.toString()).toBe("/hello and then Notes more");
+  expect(tokens().map((token) => token.textContent)).toEqual(["edit_note/hello"]);
 });
 
 it("routes modified arrow keys to recall and lets a consumed recall stop the editor", () => {
@@ -242,4 +433,18 @@ it("routes modified arrow keys to recall and lets a consumed recall stop the edi
   expect(event.defaultPrevented).toBe(true);
   expect(editor().state.doc.toString()).toBe("Before /meeting-minutes after\nAction");
   expect(onSend).not.toHaveBeenCalled();
+});
+
+it("shows the placeholder outside the editable line while the field is empty", () => {
+  act(() => editor().dispatch({ changes: { from: 0, to: editor().state.doc.length } }));
+  const line = container.querySelector(".cm-line")!;
+  expect(line.textContent).toBe("");
+  expect(line.querySelector("img, span")).toBeNull();
+  const placeholder = container.querySelector<HTMLElement>("[class*=placeholder]")!;
+  expect(placeholder.textContent).toBe("[notes]");
+  expect(placeholder.getAttribute("aria-hidden")).toBe("true");
+  expect(editor().contentDOM.contains(placeholder)).toBe(false);
+  expect(editor().contentDOM.getAttribute("aria-placeholder")).toBe("[notes]");
+  act(() => editor().dispatch({ changes: { from: 0, insert: "a" } }));
+  expect(container.querySelector("[class*=placeholder]")).toBeNull();
 });

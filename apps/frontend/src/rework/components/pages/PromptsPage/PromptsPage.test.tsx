@@ -50,12 +50,19 @@ vi.mock("../../../../hooks/useSelectedTeam.ts", () => ({
 // can still reach that pencil.
 vi.mock("@hooks/useTeamCapabilities.ts", () => ({ useTeamCapabilities: () => ({ canUpdateResources: true }) }));
 vi.mock("@core/hooks/usePromptFavoriteToggle.ts", () => ({ usePromptFavoriteToggle: () => vi.fn() }));
+// The dialog itself is not rendered: the test reads what the page asked for
+// and confirms by calling `onConfirm` directly.
+type ConfirmationOptions = { title: string; message: string; confirmButtonLabel?: string; onConfirm: () => unknown };
+const confirmation = vi.hoisted(() => ({ last: null as ConfirmationOptions | null }));
 vi.mock("@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider", () => ({
-  useConfirmationDialog: () => ({ showConfirmationDialog: () => {} }),
+  useConfirmationDialog: () => ({
+    showConfirmationDialog: (options: ConfirmationOptions) => {
+      confirmation.last = options;
+    },
+  }),
 }));
-vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
-  useToast: () => ({ showError: () => {}, showSuccess: () => {} }),
-}));
+const toast = vi.hoisted(() => ({ showError: vi.fn(), showSuccess: vi.fn() }));
+vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => toast }));
 
 const PROMPT_SUMMARY = {
   id: "prompt-1",
@@ -102,6 +109,7 @@ const PROMPT_B_DETAIL = {
 let promptBReady = false;
 const createCalls: unknown[] = [];
 let createRejectsWith: unknown = null;
+let deleteRejectsWith: unknown = null;
 
 vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
   useGetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetQuery: () => ({
@@ -157,7 +165,12 @@ vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
     { isLoading: false },
   ],
   useDeleteTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdDeleteMutation: () => [
-    async () => ({ unwrap: async () => undefined }),
+    () => ({
+      unwrap: async () => {
+        if (deleteRejectsWith) throw deleteRejectsWith;
+        return undefined;
+      },
+    }),
   ],
   usePostPublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPublishPostMutation: () => [
     async () => ({ unwrap: async () => undefined }),
@@ -536,6 +549,28 @@ describe("PromptsPage command field", () => {
     });
     expect(createCalls).toHaveLength(1);
     expect((createCalls[0] as { createPromptRequest: { command: string } }).createPromptRequest.command).toBe("weekly");
+    expect(toast.showSuccess).toHaveBeenLastCalledWith({ summary: "rework.teams.prompts.toasts.created" });
+  });
+
+  it("reports a failed save with a translated toast", async () => {
+    createRejectsWith = { data: { detail: "boom" } };
+    openCreateForm();
+    typeInto(fieldByLabel("form.name")!, "Weekly");
+    const editor = document.querySelector('[role="dialog"] .cm-editor');
+    act(() => {
+      const view = EditorView.findFromDOM(editor as HTMLElement);
+      view?.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: "body" } });
+    });
+    const save = Array.from(document.querySelectorAll('[role="dialog"] button')).find(
+      (b) => b.textContent?.trim() === "rework.create",
+    );
+    await act(async () => {
+      save?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
+    expect(toast.showError).toHaveBeenLastCalledWith({
+      summary: "rework.teams.prompts.toasts.saveFailed",
+      detail: "boom",
+    });
   });
 
   it("marks the command field, not a toast, when the backend reports a command conflict", async () => {
@@ -560,5 +595,68 @@ describe("PromptsPage command field", () => {
     expect(document.querySelector('[role="dialog"]')).not.toBeNull();
     const dialogText = document.querySelector('[role="dialog"]')?.textContent ?? "";
     expect(dialogText).toContain("form.commandConflict");
+  });
+});
+
+describe("PromptsPage delete", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  const askToDelete = () => {
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() => {
+      root.render(<PromptsPage />);
+    });
+    const card = container.querySelectorAll('[role="button"]')[0] as HTMLElement;
+    const moreButton = Array.from(card.querySelectorAll("button")).find((b) => b.textContent?.includes("more_vert"));
+    act(() => {
+      moreButton?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
+    const deleteItem = Array.from(document.querySelectorAll("li")).find((el) =>
+      el.textContent?.includes("card.menu.delete"),
+    );
+    act(() => {
+      deleteItem?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
+  };
+
+  afterEach(() => {
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+    confirmation.last = null;
+    deleteRejectsWith = null;
+  });
+
+  it("asks for confirmation with translated wording", () => {
+    askToDelete();
+    expect(confirmation.last).toMatchObject({
+      title: "rework.teams.prompts.deleteDialog.title",
+      message: "rework.teams.prompts.deleteDialog.message",
+      confirmButtonLabel: "rework.teams.prompts.deleteDialog.confirm",
+    });
+  });
+
+  it("reports a deletion with a translated toast", async () => {
+    askToDelete();
+    await act(async () => {
+      await confirmation.last?.onConfirm();
+    });
+    expect(toast.showSuccess).toHaveBeenLastCalledWith({ summary: "rework.teams.prompts.toasts.deleted" });
+  });
+
+  it("reports a failed deletion with a translated toast", async () => {
+    deleteRejectsWith = { data: { detail: "boom" } };
+    askToDelete();
+    await act(async () => {
+      await confirmation.last?.onConfirm();
+    });
+    expect(toast.showError).toHaveBeenLastCalledWith({
+      summary: "rework.teams.prompts.toasts.deleteFailed",
+      detail: "boom",
+    });
   });
 });
