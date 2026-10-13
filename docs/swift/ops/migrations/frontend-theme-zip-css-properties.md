@@ -20,6 +20,8 @@ The existing SeaweedFS object may now include `theme-custom.css`, `theme-propert
 
 The ZIP may also include `theme-catalog.json` to declare several additional selectable themes. Each entry has a unique `id`, display `label`, and `base` (`pebble`, `cobalt`, or `cloud`). For light and dark overrides, use `[data-ui-theme="<id>"][data-ui-base-theme="<base>"][data-theme="light"]` and its dark counterpart. The base attribute gives ZIP CSS priority over shipped CSS while letting admin previews match. An entry may also set `tabTitle`, `faviconName` and `faviconNameDark` (SVG basenames under `images/`) so the browser tab follows the active theme; omitted values keep the global branding. The new choices appear after frontend pods restart and browsers reload; existing platform defaults and hidden-theme settings can select them. Admin changes to the default or hidden themes now reach connected browsers after the save, on window focus or within a minute.
 
+New ZIPs may keep `theme-catalog.json` at the root, place each theme's CSS and images in `themes/<id>/`, and put global properties, translations, legal Markdown and images in `shared/`. Image paths remain `/images/...` after installation, so image names must be unique across folders. Existing flat ZIPs remain supported. See the frontend README for the complete layout.
+
 ## Upgrade
 
 Deploy the new frontend image. To activate overrides, upload a ZIP with the optional files to the object configured by `FRONTEND_THEME_URL`, then restart the frontend pods. Existing ZIPs containing only images and Markdown continue to work.

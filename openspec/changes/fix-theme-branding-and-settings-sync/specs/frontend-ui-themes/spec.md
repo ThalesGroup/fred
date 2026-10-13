@@ -1,5 +1,25 @@
 ## ADDED Requirements
 
+### Requirement: Theme archives separate custom and shared content
+
+The theme archive SHALL accept `theme-catalog.json` at its root, custom theme CSS and images under `themes/<id>/`, and global branding, translations, legal content and images under `shared/`. Each theme directory SHALL correspond to a declared catalog id. The installed files SHALL retain the frontend's existing public URLs. Existing flat archives SHALL remain installable. The archive builder SHALL produce the same structured format from the example source.
+
+#### Scenario: Install two custom themes
+
+- **WHEN** an archive declares two themes and supplies a directory for each, plus optional shared content
+- **THEN** both themes and their CSS and images are available through the existing frontend URLs
+- **AND** shared content applies to all themes
+
+#### Scenario: Existing flat archive
+
+- **WHEN** an existing flat archive is installed
+- **THEN** its supported content remains available at the same URLs
+
+#### Scenario: Conflicting or undeclared theme content
+
+- **WHEN** theme directories contain conflicting image names or a directory has no matching catalog entry
+- **THEN** installation fails with a useful error instead of selecting content by archive order
+
 ### Requirement: Custom themes carry isolated browser tab branding
 
 Custom catalog entries SHALL support optional `tabTitle`, `faviconName` and `faviconNameDark`. The active theme SHALL determine the browser title and mode-appropriate SVG favicon. Omitted values SHALL use global branding; an omitted dark icon SHALL reuse a supplied light icon. Switching to another theme SHALL remove the previous theme's tab overrides.

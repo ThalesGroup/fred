@@ -20,15 +20,20 @@ l'application installe avec le frontend.
 
 ```
 theme.zip
-├── theme-catalog.json          les thèmes à ajouter
-├── theme-custom.css            leurs couleurs, polices et formes
-└── images/                     logos, favicons, polices, illustrations
-    ├── fonts/
-    └── icons/
+|-- theme-catalog.json          les thèmes à ajouter
+|-- themes/
+|   `-- acme/
+|       |-- theme-custom.css    couleurs, polices et formes d'Acme
+|       `-- images/             icônes et illustrations d'Acme
+`-- shared/                     contenu commun à tous les thèmes
+    |-- images/                 logos et polices communs
+    |-- theme-properties.json
+    `-- theme-translations/
 ```
 
 Un ZIP fait à partir d'un dossier (`zip -r theme.zip mon-theme/`) est accepté :
-le dossier englobant est ignoré.
+le dossier englobant est ignoré. Les anciens ZIP plats restent compatibles.
+Les noms d'images doivent être uniques entre les dossiers de thème et `shared/images/`.
 
 ## 1. Déclarer le thème
 
@@ -64,7 +69,7 @@ revenant à un autre thème, l'onglet reprend aussi les siens.
 
 ## 2. Couleurs, polices et formes
 
-`theme-custom.css` ne contient que les différences avec le thème de base.
+`themes/<id>/theme-custom.css` ne contient que les différences avec le thème de base.
 Chaque règle cible le thème par son `id` **et** sa base, sans préfixe `html` :
 
 ```css
@@ -97,7 +102,7 @@ police :
 
 ## 3. Images propres au thème
 
-Les fichiers de `images/` sont servis à tous, mais seul le CSS de votre thème
+Les fichiers de `themes/<id>/images/` sont servis depuis `/images/` à tous, mais seul le CSS de votre thème
 les utilise. Pour le fond du chat ou l'avatar de l'agent d'accueil, ciblez
 `[data-chat-main]`, `[data-chat-welcome-agent]` ou `[data-chat-agent-icon]`
 sous `html[data-ui-theme="<id>"]` : les autres thèmes n'en voient rien.
@@ -110,9 +115,9 @@ nouveau fichier un **nouveau nom** plutôt que d'écraser l'ancien.
 Deux fichiers optionnels de l'archive s'appliquent à **tous** les thèmes, y
 compris Pebble, Cobalt et Cloud :
 
-- `theme-properties.json` : nom du site, logos, surnoms des agents, avatars par
+- `shared/theme-properties.json` : nom du site, logos, surnoms des agents, avatars par
   défaut, lien du support ;
-- `theme-translations/fr.json` et `en.json` : les textes de l'interface.
+- `shared/theme-translations/fr.json` et `en.json` : les textes de l'interface.
 
 Pour un thème qui ne déborde pas sur les autres, laissez-les absents ou neutres,
 et portez l'identité du thème par le catalogue et le CSS.

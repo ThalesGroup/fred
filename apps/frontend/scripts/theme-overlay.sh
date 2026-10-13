@@ -45,6 +45,26 @@ curl_config_value() {
     printf '%s' "$1" | sed 's/[\\"]/\\&/g'
 }
 
+copy_theme_images() (
+    source_dir=$1
+    target_dir=$2
+    mkdir -p "${target_dir}" || return 1
+    for asset in "${source_dir}"/*; do
+        [ -e "${asset}" ] || continue
+        asset_name=$(basename "${asset}")
+        if [ -d "${asset}" ]; then
+            [ ! -f "${target_dir}/${asset_name}" ] || return 1
+            copy_theme_images "${asset}" "${target_dir}/${asset_name}" || return 1
+        else
+            if [ -e "${target_dir}/${asset_name}" ]; then
+                echo "Image name conflict: ${asset_name}" >&2
+                return 1
+            fi
+            cp "${asset}" "${target_dir}/" || return 1
+        fi
+    done
+)
+
 # Fetch FRONTEND_THEME_URL and copy its served surfaces into the overlay
 # directory. nginx only starts once this returns, so the fetch is bounded to
 # stay inside the default liveness window. Symlinks are dropped: unzip
@@ -111,9 +131,65 @@ install_theme() {
     set -- "${root}"/*
     if [ $# -eq 1 ] && [ -d "$1" ]; then
         case "$(basename "$1")" in
-            images | contrib | theme-translations) ;;
+            images | contrib | theme-translations | themes | shared) ;;
             *) root=$1 ;;
         esac
+    fi
+    if [ -d "${root}/themes" ] || [ -d "${root}/shared" ]; then
+        if [ ! -f "${root}/theme-catalog.json" ] ||
+            ! jq -e '.themes | type == "array"' "${root}/theme-catalog.json" >/dev/null 2>&1; then
+            theme_failure "structured archive needs a valid root theme-catalog.json"
+            return 0
+        fi
+        assembled="${work}/assembled"
+        mkdir "${assembled}" || { theme_failure "cannot assemble theme directories"; return 0; }
+        cp "${root}/theme-catalog.json" "${assembled}/" || { theme_failure "cannot read theme-catalog.json"; return 0; }
+        for entry in "${root}"/*; do
+            [ -e "${entry}" ] || continue
+            case "$(basename "${entry}")" in
+                theme-catalog.json | themes | shared) ;;
+                *) theme_failure "unexpected root entry in structured archive: $(basename "${entry}")"; return 0 ;;
+            esac
+        done
+        if [ -d "${root}/shared" ]; then
+            for entry in "${root}/shared"/*; do
+                [ -e "${entry}" ] || continue
+                name=$(basename "${entry}")
+                case "${name}" in
+                    images | contrib | theme-translations | theme-properties.json | *.md) ;;
+                    *) theme_failure "unsupported shared entry: ${name}"; return 0 ;;
+                esac
+                cp -R "${entry}" "${assembled}/" || { theme_failure "cannot read shared/${name}"; return 0; }
+            done
+        fi
+        if [ -d "${root}/themes" ]; then
+            for theme_dir in "${root}/themes"/*; do
+                [ -e "${theme_dir}" ] || continue
+                theme_id=$(basename "${theme_dir}")
+                if [ ! -d "${theme_dir}" ] ||
+                    ! jq -e --arg id "${theme_id}" '.themes | any(.id == $id)' "${root}/theme-catalog.json" >/dev/null 2>&1; then
+                    theme_failure "undeclared theme directory: ${theme_id}"
+                    return 0
+                fi
+                for entry in "${theme_dir}"/*; do
+                    [ -e "${entry}" ] || continue
+                    name=$(basename "${entry}")
+                    case "${name}" in
+                        theme-custom.css)
+                            [ -f "${entry}" ] || { theme_failure "invalid CSS in themes/${theme_id}"; return 0; }
+                            cat "${entry}" >> "${assembled}/theme-custom.css" || { theme_failure "cannot read CSS in themes/${theme_id}"; return 0; }
+                            printf '\n' >> "${assembled}/theme-custom.css"
+                            ;;
+                        images)
+                            [ -d "${entry}" ] || { theme_failure "invalid images in themes/${theme_id}"; return 0; }
+                            copy_theme_images "${entry}" "${assembled}/images" || { theme_failure "image name conflict or unreadable image in themes/${theme_id}"; return 0; }
+                            ;;
+                        *) theme_failure "unsupported entry in themes/${theme_id}: ${name}"; return 0 ;;
+                    esac
+                done
+            done
+        fi
+        root="${assembled}"
     fi
     # Assembled aside, then swapped in one go: a copy that fails halfway would
     # otherwise leave the overlay mixing two brands.

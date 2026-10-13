@@ -99,7 +99,10 @@ describe("UiSettingsPage", () => {
     const previews = Array.from(tile("Acme").querySelectorAll('[data-ui-theme="acme"][data-theme]'));
     expect(previews.map((element) => element.getAttribute("data-ui-base-theme"))).toEqual(["pebble", "pebble"]);
     expect(previews.map((element) => element.getAttribute("data-theme"))).toEqual(["light", "dark"]);
-    const exampleCss = readFileSync(path.resolve(__dirname, "../../../../../../theme/theme-custom.css"), "utf8");
+    const exampleCss = readFileSync(
+      path.resolve(__dirname, "../../../../../../theme/themes/acme/theme-custom.css"),
+      "utf8",
+    );
     const shippedCss = readFileSync(path.resolve(__dirname, "../../../../../styles/themes/pebble.css"), "utf8");
     const customStyle = document.createElement("style");
     const shippedStyle = document.createElement("style");

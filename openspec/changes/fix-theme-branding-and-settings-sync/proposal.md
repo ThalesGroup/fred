@@ -10,6 +10,7 @@ Theme branding is global, so a custom theme cannot update the browser tab withou
 - Clearly identify the default theme using a visible badge and tile border; separate availability controls and light/dark previews, including narrow screens.
 - Keep user theme resolution and offered choices synchronized with the public admin settings after a successful save and on return to the application.
 - Update the personal Paris Aéroport ZIP and verify it on localhost:5173; keep its assets outside the PR.
+- Organize new theme archives with `theme-catalog.json` at the root, one `themes/<id>/` directory per custom theme, and `shared/` for content that applies to every theme. Keep existing flat archives installable.
 
 ## Capabilities
 
@@ -24,4 +25,4 @@ None.
 
 ## Impact
 
-Frontend catalog validation, shared ZIP installer, browser tab effect, application theme provider, existing generated public-config query and invalidation, admin page/CSS, tests and existing theme documentation. No backend contract or migration, editor or new storage loading mechanism. Reuse branch feat/ui-theme-customization, issue #3027 and draft PR #3028.
+Frontend catalog validation, shared ZIP installer and archive builder, browser tab effect, application theme provider, existing generated public-config query and invalidation, admin page/CSS, tests and existing theme documentation. No backend contract or migration, editor or new storage loading mechanism. Reuse branch feat/ui-theme-customization, issue #3027 and draft PR #3028.

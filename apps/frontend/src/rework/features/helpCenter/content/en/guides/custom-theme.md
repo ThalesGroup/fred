@@ -19,15 +19,20 @@ archive that the team deploying the application installs with the frontend.
 
 ```
 theme.zip
-├── theme-catalog.json          the themes to add
-├── theme-custom.css            their colors, fonts and shapes
-└── images/                     logos, favicons, fonts, illustrations
-    ├── fonts/
-    └── icons/
+|-- theme-catalog.json          the themes to add
+|-- themes/
+|   `-- acme/
+|       |-- theme-custom.css    Acme colors, fonts and shapes
+|       `-- images/             Acme icons and illustrations
+`-- shared/                     content used by every theme
+    |-- images/                 shared logos and fonts
+    |-- theme-properties.json
+    `-- theme-translations/
 ```
 
 A ZIP made from a folder (`zip -r theme.zip my-theme/`) is accepted: the
-wrapper folder is skipped.
+wrapper folder is skipped. Older flat ZIPs still work. Image names must be
+unique across theme folders and `shared/images/`.
 
 ## 1. Declare the theme
 
@@ -63,7 +68,7 @@ another theme also gives the tab its own back.
 
 ## 2. Colors, fonts and shapes
 
-`theme-custom.css` holds only the differences from the base theme. Each rule
+`themes/<id>/theme-custom.css` holds only the differences from the base theme. Each rule
 targets the theme by its `id` **and** its base, with no `html` prefix:
 
 ```css
@@ -95,7 +100,7 @@ out `html` lets the administration previews show them. A rule without
 
 ## 3. Theme-specific images
 
-Files in `images/` are served to everyone, but only your theme's CSS uses them.
+Files in `themes/<id>/images/` are served at `/images/` to everyone, but only your theme's CSS uses them.
 For the chat background or the welcome agent's avatar, target
 `[data-chat-main]`, `[data-chat-welcome-agent]` or `[data-chat-agent-icon]`
 under `html[data-ui-theme="<id>"]`: other themes see none of it.
@@ -108,9 +113,9 @@ than overwriting the old one.
 Two optional files in the archive apply to **all** themes, Pebble, Cobalt and
 Cloud included:
 
-- `theme-properties.json`: site name, logos, agent nicknames, default avatars,
+- `shared/theme-properties.json`: site name, logos, agent nicknames, default avatars,
   support link;
-- `theme-translations/en.json` and `fr.json`: the interface texts.
+- `shared/theme-translations/en.json` and `fr.json`: the interface texts.
 
 For a theme that does not spill over the others, leave them out or neutral,
 and carry the theme's identity through the catalog and the CSS.

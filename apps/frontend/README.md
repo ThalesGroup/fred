@@ -119,18 +119,18 @@ make run FRONTEND_BACKEND_MODE=standalone
 
 ```text
 index.tsx
-└── loadConfig() (async)
-    └── Keycloak login
-        └── render <FredUi />
-              └── ApplicationContextProvider
-                   └── AppWithTheme (sets [data-theme] light/dark/system on <html>)
-                        └── AuthProvider
-                             └── GcuGuard → BootstrapGuard
-                                  ├── ConfirmationDialogProvider + ToastProvider
-                                  └── RouterProvider (createBrowserRouter)
-                                       └── LayoutWithSidebar
-                                             ├── SideBar (toggle + cluster + theme)
-                                             └── Outlet (all pages go here)
+`-- loadConfig() (async)
+    `-- Keycloak login
+        `-- render <FredUi />
+              `-- ApplicationContextProvider
+                   `-- AppWithTheme (sets [data-theme] light/dark/system on <html>)
+                        `-- AuthProvider
+                             `-- GcuGuard → BootstrapGuard
+                                  |-- ConfirmationDialogProvider + ToastProvider
+                                  `-- RouterProvider (createBrowserRouter)
+                                       `-- LayoutWithSidebar
+                                             |-- SideBar (toggle + cluster + theme)
+                                             `-- Outlet (all pages go here)
 ```
 
 ### Component Responsibilities
@@ -243,21 +243,29 @@ files.
 
 ```
 acme-theme-1.0.zip
-├── images/acme-logo.svg             # new name, referenced from properties: logoName: "acme-logo"
-├── images/icons/customAgent.svg     # agent icon silhouette (rendered as a CSS mask)
-├── images/default-team-avatar.png   # same name as a stock file: shadows it
-├── theme-custom.css                 # theme token overrides and other CSS
-├── theme-catalog.json               # optional additional selectable themes
-├── theme-properties.json            # branding labels and image names
-├── theme-translations/en.json        # English UI label overrides
-├── theme-translations/fr.json        # French UI label overrides
-├── gcu.md  gcu.fr.md  gdpr.md  gdpr.fr.md
-├── team-admin-charter.md  team-admin-charter.fr.md   # shown to team admins, see TERMS_OF_USE.md
-├── release.md
-└── contrib/<brand>/...              # optional, the releaseBrand cascade still applies
+|-- theme-catalog.json               # selectable themes
+|-- themes/
+|   |-- acme/
+|   |   |-- theme-custom.css          # CSS scoped to acme
+|   |   `-- images/acme-logo.svg      # unique image name across the ZIP
+|   `-- partner/
+|       |-- theme-custom.css
+|       `-- images/partner-logo.svg
+`-- shared/
+    |-- images/icons/customAgent.svg  # image available to every theme
+    |-- theme-properties.json         # global branding labels and image names
+    |-- theme-translations/en.json    # global English UI label overrides
+    |-- theme-translations/fr.json    # global French UI label overrides
+    |-- gcu.md  gcu.fr.md  gdpr.md  gdpr.fr.md
+    |-- team-admin-charter.md  team-admin-charter.fr.md
+    |-- release.md
+    `-- contrib/<brand>/...           # optional releaseBrand content
 ```
 
-Only `/images/**`, `/contrib/**`, root `*.md`, `theme-custom.css`,
+The installer assembles theme folders into the same public URLs as before.
+Image paths in CSS and catalog metadata still refer to `/images/`; image names
+must be unique across theme folders and `shared/images/`. Existing flat ZIPs
+remain supported. Only `/images/**`, `/contrib/**`, root `*.md`, `theme-custom.css`,
 `theme-catalog.json`, `theme-properties.json` and `theme-translations/{en,fr}.json` can be overridden;
 `index.html`, `config.json` and the bundle never are. Translation JSON can
 override UI message keys; omitted keys keep the shipped text. Use CSS selectors such as

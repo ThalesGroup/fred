@@ -12,6 +12,8 @@
 
 ## 3. Local integration and review
 
+- [x] 3.0 Implement structured theme ZIP assembly and archive-builder validation while retaining flat ZIP support; move the example into `themes/acme/` and `shared/`, update the English/French guides and README, and verify multi-theme assembly, image collisions, invalid folders and legacy archives.
+
 - [ ] 3.1 Add metadata to the personal Paris ZIP outside Git, retain neutral global translations, upload it to local SeaweedFS and restart Vite; verify localhost:5173 serves the updated archive and the tab/theme transitions during local validation.
 - [ ] 3.2 Run affected tests, TypeScript and formatting checks; apply author review and independent read-only review to the updated PR delta, record findings and limitations in PR #3028, and verify only authorized files are committed and pushed.
 
@@ -19,6 +21,7 @@
 
 - 1.x/2.1: `make code-quality` green; `make test` green except `PlatformAccessPage` "grants more than 100 selections", which also exceeds its 5 s timeout on `swift` under coverage (pre-existing, unrelated).
 - The provider now imports the generated API slice, so tests mocking `controlPlaneOpenApi` must keep the real module (`importOriginal`).
+- Structured ZIP verification: 14 overlay Node tests and 11 admin tests pass; the bundled example installs and serves its expected files; TypeScript, changed-file ESLint/Prettier, shell syntax, `git diff --check`, and strict OpenSpec validation pass. Independent review found a builder/installer validation mismatch; the builder now rejects unsupported shared entries and image path conflicts. Root `make code-quality` cannot start because `uv` is unavailable in this environment.
 - 2.2 is open until light/dark rendering is inspected at narrow width; 3.1 is open while the personal ZIP is being edited.
 
 ## Workflow follow-up

@@ -28,6 +28,21 @@ with zipfile.ZipFile(root+'/valid.zip','w') as z:
     z.writestr('brand/images/logo.svg','<svg>Paris</svg>')
     z.writestr('brand/images/font.ttf','font-bytes')
     z.writestr('brand/index.html','untrusted shell')
+with zipfile.ZipFile(root+'/structured.zip','w') as z:
+    z.writestr('theme-catalog.json',json.dumps({'themes':[{'id':'acme','label':'Acme','base':'pebble'},{'id':'partner','label':'Partner','base':'cloud'}]}))
+    z.writestr('themes/acme/theme-custom.css','[data-ui-theme="acme"] { --primary: red; }')
+    z.writestr('themes/partner/theme-custom.css','[data-ui-theme="partner"] { --primary: blue; }')
+    z.writestr('themes/acme/images/icons/acme.svg','<svg>Acme</svg>')
+    z.writestr('themes/partner/images/icons/partner.svg','<svg>Partner</svg>')
+    z.writestr('shared/theme-properties.json',json.dumps({'siteTitle':'Shared title'}))
+    z.writestr('shared/theme-translations/fr.json',json.dumps({'rework':{'home':{'greeting':'Bonjour'}}}))
+with zipfile.ZipFile(root+'/conflict.zip','w') as z:
+    z.writestr('theme-catalog.json',json.dumps({'themes':[{'id':'acme','label':'Acme','base':'pebble'},{'id':'partner','label':'Partner','base':'cloud'}]}))
+    z.writestr('themes/acme/images/logo.svg','Acme')
+    z.writestr('themes/partner/images/logo.svg','Partner')
+with zipfile.ZipFile(root+'/undeclared.zip','w') as z:
+    z.writestr('theme-catalog.json',json.dumps({'themes':[{'id':'acme','label':'Acme','base':'pebble'}]}))
+    z.writestr('themes/other/theme-custom.css','invalid')
 with zipfile.ZipFile(root+'/invalid.zip','w') as z:
     z.writestr('theme-properties.json',json.dumps({'user_auth':'forbidden'}))
 with zipfile.ZipFile(root+'/blank-label.zip','w') as z:
@@ -91,6 +106,33 @@ async function start(environment) {
 }
 
 const archiveUrl = (name) => pathToFileURL(path.join(fixtures, name)).href;
+
+test("structured ZIP assembles separate themes and shared content", async () => {
+  const app = await start({ FRONTEND_THEME_URL: archiveUrl("structured.zip") });
+  try {
+    const css = await (await fetch(`${app.url}/theme-custom.css`)).text();
+    assert.match(css, /ui-theme="acme"/);
+    assert.match(css, /ui-theme="partner"/);
+    assert.equal(await (await fetch(`${app.url}/images/icons/acme.svg`)).text(), "<svg>Acme</svg>");
+    assert.equal(await (await fetch(`${app.url}/images/icons/partner.svg`)).text(), "<svg>Partner</svg>");
+    assert.equal((await (await fetch(`${app.url}/theme-properties.json`)).json()).siteTitle, "Shared title");
+    assert.equal((await (await fetch(`${app.url}/theme-translations/fr.json`)).json()).rework.home.greeting, "Bonjour");
+  } finally {
+    await app.close();
+  }
+});
+
+for (const name of ["conflict.zip", "undeclared.zip"]) {
+  test(`structured ZIP rejects ${name}`, async () => {
+    const app = await start({ FRONTEND_THEME_URL: archiveUrl(name) });
+    try {
+      assert.equal(await (await fetch(`${app.url}/theme-catalog.json`)).text(), "stock");
+      assert.match(app.messages.join("\n"), /Theme skipped/);
+    } finally {
+      await app.close();
+    }
+  });
+}
 
 test("valid wrapped ZIP overlays files, sets MIME and falls back for missing/protected files", async () => {
   const app = await start({ FRONTEND_THEME_URL: archiveUrl("valid.zip") });
