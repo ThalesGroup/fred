@@ -14,6 +14,7 @@ import PageHeader from "@shared/molecules/PageHeader/PageHeader";
 import SearchInput from "@shared/molecules/SearchInput/SearchInput";
 import DataTable from "@shared/molecules/DataTable/LocalizedDataTable";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
+import { stripDiacritics } from "@rework/utils/stripDiacritics";
 import { getConfig } from "../../../../../common/config";
 import {
   usePlatformAccessStateQuery,
@@ -33,6 +34,8 @@ import PlatformAccessRuleEditor from "./PlatformAccessRuleEditor";
 import styles from "./PlatformAccessPage.module.css";
 
 const tabs = ["rules", "users", "teams"] as const;
+// Searches on this page ignore accents and case, like the server-side user search.
+const foldForSearch = (text: string) => stripDiacritics(text).toLocaleLowerCase();
 const isIndividual = (source: AdmissionSource) => source.kind === "manual" || source.kind === "t0";
 const individualSource = (user: PlatformAccessUser) => user.sources.find(isIndividual);
 // One line per kind of access other than the individual one; teams of a kind share a line.
@@ -95,10 +98,8 @@ export default function PlatformAccessPage() {
   const t0 = usePlatformAccessT0Query(undefined, { skip: !enabled });
   const teams = usePlatformAccessTeamsQuery(undefined, { skip: !enabled });
   // Teams arrive in one response, so the search only narrows what is already loaded.
-  const teamNeedle = teamQuery.trim().toLocaleLowerCase();
-  const teamRows = (teams.data ?? []).filter((team) =>
-    (team.name || team.team_id).toLocaleLowerCase().includes(teamNeedle),
-  );
+  const teamNeedle = foldForSearch(teamQuery.trim());
+  const teamRows = (teams.data ?? []).filter((team) => foldForSearch(team.name || team.team_id).includes(teamNeedle));
   const [filter] = useSetPlatformFilteringMutation();
   const [grantUsers] = useGrantPlatformUsersMutation();
   const [revoke] = useRevokePlatformUserMutation();

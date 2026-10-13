@@ -5,6 +5,7 @@ import { createRoot, Root } from "react-dom/client";
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import type {
   PlatformAccessActivationUser,
+  PlatformAccessTeam,
   PlatformAccessUser,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 const state = vi.hoisted(() => ({
@@ -17,6 +18,7 @@ const state = vi.hoisted(() => ({
     },
   ] as PlatformAccessUser[],
   searchUsers: vi.fn(),
+  teams: [{ team_id: "demo", name: "Demo", allowed: false, free: true }] as PlatformAccessTeam[],
   picked: ["first", "second"] as string[],
   usersTotal: undefined as number | undefined,
   success: vi.fn(),
@@ -100,9 +102,7 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
       ? undefined
       : { candidates: 1, matching: 0, completed_at: state.completed ? "2026-01-01" : null },
   }),
-  usePlatformAccessTeamsQuery: () => ({
-    data: [{ team_id: "demo", name: "Demo", allowed: false, free: true, has_enrollment_link: true }],
-  }),
+  usePlatformAccessTeamsQuery: () => ({ data: state.teams }),
   useSetPlatformFilteringMutation: () => [state.filter],
   useGrantPlatformUsersMutation: () => [state.bulk],
   useRevokePlatformUserMutation: () => [state.revoke],
@@ -151,6 +151,7 @@ import styles from "./PlatformAccessPage.module.css";
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 let host: HTMLDivElement, root: Root;
 beforeEach(() => {
+  state.teams = [{ team_id: "demo", name: "Demo", allowed: false, free: true }];
   state.picked = ["first", "second"];
   state.users = [
     {
@@ -538,6 +539,47 @@ it("keeps user controls in Users and team authorization in Teams", () => {
   expect(teamPanel.querySelector('input[aria-label="rework.platformAccess.allowTeam Demo"]')).not.toBeNull();
   expect(teamPanel.textContent).not.toContain("rework.platformAccess.links.manage");
   expect(teamPanel.textContent).not.toContain("rework.platformAccess.freeHint");
+});
+
+it("narrows the teams table ignoring accents and case, says when nothing matches, and clears", () => {
+  state.teams = [
+    { team_id: "t1", name: "Équipe Démos", allowed: false, free: false },
+    { team_id: "t2", name: "Innovation", allowed: true, free: false },
+    { team_id: "t3", name: "Qualite", allowed: false, free: false },
+    { team_id: "sans-nom", name: null, allowed: false, free: false },
+  ];
+  act(() => root.render(<PlatformAccessPage />));
+  openTab("teams");
+  const panel = host.querySelector<HTMLElement>('[id$="-teams-panel"]')!;
+  const input = panel.querySelector<HTMLInputElement>('input[type="text"]')!;
+  const searchTeams = (value: string) =>
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  const listed = () =>
+    [...panel.querySelectorAll(`[class*="datatable-row"]`)].map(
+      (row) => row.querySelector(`[class*="datatable-cell"]`)!.textContent,
+    );
+  expect(listed()).toEqual(["Équipe Démos", "Innovation", "Qualite", "sans-nom"]);
+  // Accent missing from the query, present in the query only, and a different case.
+  searchTeams("equipe demos");
+  expect(listed()).toEqual(["Équipe Démos"]);
+  searchTeams("  QUALITÉ ");
+  expect(listed()).toEqual(["Qualite"]);
+  searchTeams("ÎNNOV");
+  expect(listed()).toEqual(["Innovation"]);
+  searchTeams("SANS");
+  expect(listed()).toEqual(["sans-nom"]);
+  expect(panel.textContent).not.toContain("rework.platformAccess.noTeams");
+  searchTeams("zzz");
+  expect(listed()).toEqual([]);
+  expect(panel.textContent).toContain("rework.platformAccess.noTeams");
+  act(() => panel.querySelector<HTMLButtonElement>('button[aria-label="rework.platformAccess.clearSearch"]')!.click());
+  expect(input.value).toBe("");
+  expect(listed()).toHaveLength(4);
+  expect(panel.textContent).not.toContain("rework.platformAccess.noTeams");
+  expect(state.setTeam).not.toHaveBeenCalled();
 });
 
 it("whitelists a whole team while retaining its independent Free enrollment flag", async () => {
