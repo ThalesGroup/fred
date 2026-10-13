@@ -3640,7 +3640,6 @@
       },
       "actorLockout": "This change would remove your last admission source.",
       "rule": {
-        "title": "Admission rule",
         "combination": "Combine conditions",
         "all": "All conditions (AND)",
         "any": "At least one condition (OR)",
@@ -3692,8 +3691,7 @@
         "invalidCondition": "Invalid condition. Check its keys and value.",
         "empty": "No conditions yet. Add a condition to choose a field from your account.",
         "saving": "Saving...",
-        "unsaved": "Unsaved changes",
-        "saveHint": "Rule changes apply after saving, when filtering is active."
+        "unsaved": "Unsaved changes"
       },
       "picker": {
         "choose": "Choose an account field",

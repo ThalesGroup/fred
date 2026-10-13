@@ -3640,7 +3640,6 @@
       },
       "actorLockout": "Ce changement retirerait votre dernière source d'accès.",
       "rule": {
-        "title": "Règle d'accès",
         "combination": "Combiner les conditions",
         "all": "Toutes les conditions (ET)",
         "any": "Au moins une condition (OU)",
@@ -3692,8 +3691,7 @@
         "invalidCondition": "Condition invalide. Vérifiez ses clés et sa valeur.",
         "empty": "Aucune condition. Ajoutez une condition pour choisir un champ de votre compte.",
         "saving": "Enregistrement...",
-        "unsaved": "Modifications non enregistrées",
-        "saveHint": "Les modifications de la règle s'appliquent après enregistrement, lorsque le filtrage est actif."
+        "unsaved": "Modifications non enregistrées"
       },
       "picker": {
         "choose": "Choisir un champ de mon compte",

@@ -68,10 +68,6 @@
 .ruleEditor {
   container-type: inline-size;
 }
-.section > h2 {
-  margin: 0;
-  font: var(--font-title-medium);
-}
 .ruleEditor > p,
 .condition > p {
   margin: 0;
@@ -217,16 +213,11 @@
   }
 }
 
-.ruleHeader {
+.saveGroup {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
   align-items: center;
   gap: var(--spacing-s);
-}
-.ruleHeader h2 {
-  margin: 0;
-  font: var(--font-title-medium);
+  margin-inline-start: auto;
 }
 .accountField {
   display: flex;
@@ -235,8 +226,9 @@
   min-width: 0;
 }
 .accountField > span {
+  padding-left: var(--spacing-xs);
   color: var(--on-surface-retreat);
-  font: var(--font-body-medium);
+  font: var(--font-label-large);
 }
 .fieldChoice {
   display: flex;

@@ -31,6 +31,7 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
   useSavePlatformPolicyMutation: () => [hooks.save],
 }));
 import PlatformAccessRuleEditor from "./PlatformAccessRuleEditor";
+import styles from "./PlatformAccessPage.module.css";
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 let host: HTMLDivElement, root: Root, state: PlatformAccessState;
 const reload = vi.fn();
@@ -229,17 +230,54 @@ it("changes combination without saving and identifies each removable condition",
   act(() => button("addCondition").click());
   confirmField();
   valuePrompt(true);
-  const removal = host.querySelector<HTMLButtonElement>(
-    'button[aria-label="rework.platformAccess.rule.removeConditionNumber 2"]',
-  )!;
-  expect(removal).not.toBeNull();
-  act(() => removal.click());
+  expect(host.querySelector('button[aria-label="rework.platformAccess.rule.removeConditionNumber 2"]')).not.toBeNull();
+  expect(host.querySelector('[role="radiogroup"]')?.getAttribute("aria-label")).toBe(
+    "rework.platformAccess.rule.combination",
+  );
   act(() => button("any").click());
-  expect(button("any").getAttribute("aria-pressed")).toBe("true");
-  expect(button("all").getAttribute("aria-pressed")).toBe("false");
+  expect(button("any").getAttribute("aria-checked")).toBe("true");
+  expect(button("all").getAttribute("aria-checked")).toBe("false");
   await act(async () => button("test").click());
   expect(hooks.preview.mock.calls[0][0].platformAccessPolicy.combination).toBe("any");
   expect(hooks.save).not.toHaveBeenCalled();
+});
+
+it("offers the combination choice only when several conditions exist", () => {
+  render();
+  expect(host.querySelector('[role="radiogroup"]')).toBeNull();
+  act(() => button("addCondition").click());
+  confirmField();
+  valuePrompt(true);
+  expect(host.querySelector('[role="radiogroup"]')).not.toBeNull();
+  act(() =>
+    host
+      .querySelector<HTMLButtonElement>('button[aria-label="rework.platformAccess.rule.removeConditionNumber 2"]')!
+      .click(),
+  );
+  expect(host.querySelector('[role="radiogroup"]')).toBeNull();
+});
+
+it("groups test, discard and save in one row with the save state beside the button", async () => {
+  render();
+  const actions = button("save").closest(`.${styles.ruleActions}`)!;
+  expect(actions.contains(button("test"))).toBe(true);
+  const status = actions.querySelector('[role="status"]')!;
+  expect(status.textContent).toBe("");
+  change(input("value"), "draft");
+  expect(actions.contains(button("reload"))).toBe(true);
+  expect(status.textContent).toBe("rework.platformAccess.rule.unsaved");
+  await act(async () => button("save").click());
+  expect(status.textContent).toBe("rework.platformAccess.rule.saved");
+  expect(host.textContent?.split("rework.platformAccess.rule.saved")).toHaveLength(2);
+});
+
+it("labels the case switch with its visible text", () => {
+  render();
+  const toggle = host.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+  const label = host.querySelector<HTMLLabelElement>(`label[for="${toggle.id}"]`)!;
+  expect(label.textContent).toBe("rework.platformAccess.rule.caseSensitive");
+  act(() => label.click());
+  expect(toggle.checked).toBe(true);
 });
 
 it("shows the operand counter only near its unchanged limit", () => {

@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { normalizeApiError } from "@core/errors/normalizeApiError";
 import Button from "@shared/atoms/Button/Button";
+import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup";
 import Icon from "@shared/atoms/Icon/Icon";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import Switch from "@shared/atoms/Switch/Switch";
@@ -35,6 +36,7 @@ const copyPolicy = (policy: PlatformAccessPolicy | null): PlatformAccessPolicy =
     ? { ...policy, conditions: policy.conditions.map((condition) => ({ ...condition, claim: [...condition.claim] })) }
     : { combination: "all", conditions: [] };
 const operators: PlatformAccessCondition["operator"][] = ["contains", "not_contains", "equals", "not_equals", "regex"];
+const combinations = ["all", "any"] as const;
 
 export default function PlatformAccessRuleEditor({
   state,
@@ -46,6 +48,7 @@ export default function PlatformAccessRuleEditor({
   reload: () => Promise<PlatformAccessState | undefined>;
 }) {
   const { t } = useTranslation();
+  const fieldId = useId();
   const [preview] = usePreviewPlatformPolicyMutation();
   const [save] = useSavePlatformPolicyMutation();
   const generation = useRef(0);
@@ -184,27 +187,6 @@ export default function PlatformAccessRuleEditor({
 
   return (
     <section className={`${styles.section} ${styles.ruleEditor}`}>
-      <div className={styles.ruleHeader}>
-        <h2>{t("rework.platformAccess.rule.title")}</h2>
-        <Button
-          color="primary"
-          variant="filled"
-          size="small"
-          disabled={locked || !valid || !dirty || conflict}
-          onClick={() => void persist()}
-        >
-          {t(saving ? "rework.platformAccess.rule.saving" : "rework.platformAccess.rule.save")}
-        </Button>
-      </div>
-      <p className={styles.hint} role="status">
-        {t(
-          dirty
-            ? "rework.platformAccess.rule.unsaved"
-            : saved
-              ? "rework.platformAccess.rule.saved"
-              : "rework.platformAccess.rule.saveHint",
-        )}
-      </p>
       <Select
         label={t("rework.platformAccess.rule.mode")}
         size="small"
@@ -217,22 +199,23 @@ export default function PlatformAccessRuleEditor({
         }))}
         onChange={(mode) => edit({ ...draft, mode: mode === "block" ? "block" : "allow" })}
       />
-      <div className={styles.row} role="group" aria-label={t("rework.platformAccess.rule.combination")}>
-        <span>{t("rework.platformAccess.rule.combination")}</span>
-        {(["all", "any"] as const).map((combination) => (
-          <Button
-            key={combination}
-            color="primary"
-            variant={(draft.combination ?? "all") === combination ? "filled" : "outlined"}
+      {draft.conditions.length > 1 && (
+        <div className={styles.row}>
+          <span>{t("rework.platformAccess.rule.combination")}</span>
+          <ButtonGroup
             size="small"
-            disabled={locked}
-            aria-pressed={(draft.combination ?? "all") === combination}
-            onClick={() => edit({ ...draft, combination })}
-          >
-            {t(`rework.platformAccess.rule.${combination}`)}
-          </Button>
-        ))}
-      </div>
+            color="secondary"
+            variant="radio"
+            aria-label={t("rework.platformAccess.rule.combination")}
+            selectedIndex={combinations.indexOf(draft.combination ?? "all")}
+            onSelectedIndexChange={(index) => edit({ ...draft, combination: combinations[index] })}
+            items={combinations.map((combination) => ({
+              label: t(`rework.platformAccess.rule.${combination}`),
+              disabled: locked,
+            }))}
+          />
+        </div>
+      )}
       {draft.conditions.map((condition, index) => {
         const selectedField = condition.claim.some(Boolean)
           ? condition.claim.length === 1
@@ -308,13 +291,14 @@ export default function PlatformAccessRuleEditor({
             {condition.operator === "regex" && <p>{t("rework.platformAccess.rule.regexHint")}</p>}
             <div className={styles.row}>
               <Switch
+                id={`${fieldId}-case-${index}`}
                 size="small"
                 checked={condition.case_sensitive ?? false}
                 disabled={locked}
                 aria-label={t("rework.platformAccess.rule.caseSensitiveCondition", { number: index + 1 })}
                 onChange={(event) => updateCondition(index, { case_sensitive: event.target.checked })}
               />
-              <span>{t("rework.platformAccess.rule.caseSensitive")}</span>
+              <label htmlFor={`${fieldId}-case-${index}`}>{t("rework.platformAccess.rule.caseSensitive")}</label>
             </div>
             {result && <p>{t(`rework.platformAccess.rule.result.${result.conditions[index]}`)}</p>}
           </fieldset>
@@ -347,7 +331,35 @@ export default function PlatformAccessRuleEditor({
             {t("rework.platformAccess.rule.reload")}
           </Button>
         )}
+        <div className={styles.saveGroup}>
+          <span className={styles.hint} role="status">
+            {dirty ? t("rework.platformAccess.rule.unsaved") : saved ? t("rework.platformAccess.rule.saved") : ""}
+          </span>
+          <Button
+            color="primary"
+            variant="filled"
+            size="small"
+            disabled={locked || !valid || !dirty || conflict}
+            onClick={() => void persist()}
+          >
+            {t(saving ? "rework.platformAccess.rule.saving" : "rework.platformAccess.rule.save")}
+          </Button>
+        </div>
       </div>
+      {feedback && !saved && <p role="status">{feedback}</p>}
+      {result && (
+        <div className={styles.testResult} data-outcome={result.admitted ? "allowed" : "denied"} role="status">
+          <h3>
+            {t(result.admitted ? "rework.platformAccess.rule.testAllowed" : "rework.platformAccess.rule.testDenied")}
+          </h3>
+          <p>
+            {t(
+              result.matched ? "rework.platformAccess.rule.ruleMatches" : "rework.platformAccess.rule.ruleDoesNotMatch",
+            )}
+          </p>
+          <p>{t(result.admitted ? "rework.platformAccess.rule.admitted" : "rework.platformAccess.rule.denied")}</p>
+        </div>
+      )}
       {picking !== undefined && (
         <PlatformAccessClaimPicker
           onClose={() => setPicking(undefined)}
@@ -370,20 +382,6 @@ export default function PlatformAccessRuleEditor({
             setSelection(undefined);
           }}
         />
-      )}
-      {feedback && <p role="status">{feedback}</p>}
-      {result && (
-        <div className={styles.testResult} data-outcome={result.admitted ? "allowed" : "denied"} role="status">
-          <h3>
-            {t(result.admitted ? "rework.platformAccess.rule.testAllowed" : "rework.platformAccess.rule.testDenied")}
-          </h3>
-          <p>
-            {t(
-              result.matched ? "rework.platformAccess.rule.ruleMatches" : "rework.platformAccess.rule.ruleDoesNotMatch",
-            )}
-          </p>
-          <p>{t(result.admitted ? "rework.platformAccess.rule.admitted" : "rework.platformAccess.rule.denied")}</p>
-        </div>
       )}
     </section>
   );
