@@ -331,16 +331,16 @@
 .tokenExample {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-m);
+  gap: var(--spacing-xs);
   margin: 0;
   border: 1px solid var(--outline-muted);
-  border-radius: var(--radius-ms);
+  border-radius: var(--radius-s);
   background: var(--surface-container);
-  padding: var(--spacing-m);
+  padding: var(--spacing-s);
   min-width: 0;
 }
 .tokenExample dt {
-  margin-bottom: var(--spacing-xs);
+  margin-bottom: var(--spacing-2xs);
   color: var(--on-surface-retreat);
 }
 .tokenExample dd {
