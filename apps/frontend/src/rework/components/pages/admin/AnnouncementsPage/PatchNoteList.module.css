@@ -97,6 +97,7 @@
   display: flex;
   flex: 1;
   flex-direction: column;
+  margin-left: var(--spacing-xs);
   min-width: 0;
 }
 
@@ -111,6 +112,10 @@
 .status {
   color: var(--on-surface-retreat);
   font: var(--font-body-small);
+}
+
+.status[data-visible] {
+  color: var(--primary);
 }
 
 .controls {

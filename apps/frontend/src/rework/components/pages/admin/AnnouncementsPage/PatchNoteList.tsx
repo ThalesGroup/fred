@@ -83,7 +83,7 @@ function PatchNoteCard({ note, pending, state, handle, onPreview, onToggle, onEd
       <RowSwitch announcement={note} pending={pending} onToggle={(enabled) => onToggle(note, enabled)} />
       <div className={styles.text}>
         <span className={styles.title}>{title}</span>
-        <span className={styles.status}>
+        <span className={styles.status} data-visible={note.enabled || undefined}>
           {note.enabled
             ? t("rework.announcements.patchNote.row.statusVisible")
             : t("rework.announcements.patchNote.row.statusHidden")}

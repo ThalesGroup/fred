@@ -16,15 +16,15 @@
 
 /* "What's new" dialog, see PatchNoteDialog.tsx; the body's typography is
    PatchNoteBody's. Fluid width: the Dialog molecule owns the outer size. */
+/* A fixed surface height: notes differ in length, and the dialog must not
+   resize while the user steps through the history. Dialog caps it to the viewport. */
+.dialog {
+  height: 46rem;
+}
+
 .body {
   padding-bottom: var(--spacing-l);
   width: 100%;
-}
-
-/* Notes differ in length: a floor keeps the arrows from jumping under the
-   pointer while the user steps through the history. */
-.body[data-navigable] {
-  min-height: min(28rem, 50dvh);
 }
 
 .navigation {

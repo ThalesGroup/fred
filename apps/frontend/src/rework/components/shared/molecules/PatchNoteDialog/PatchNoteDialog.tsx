@@ -81,6 +81,8 @@ export function PatchNoteDialog({ open, notes, onClose }: PatchNoteDialogProps) 
       hideCancel
       maxWidth={720}
       dividers
+      dense
+      className={styles.dialog}
       // On the dialog, not on a link or copy button inside the note: the note
       // opens at its top and a screen reader starts from its title.
       initialFocus="dialog"
@@ -93,7 +95,7 @@ export function PatchNoteDialog({ open, notes, onClose }: PatchNoteDialogProps) 
           >
             <IconButton
               variant="icon"
-              size="medium"
+              size="small"
               icon={{ category: "outlined", type: "chevron_left" }}
               aria-label={t("rework.announcements.patchNote.dialog.newer")}
               disabled={index === 0}
@@ -104,7 +106,7 @@ export function PatchNoteDialog({ open, notes, onClose }: PatchNoteDialogProps) 
             </span>
             <IconButton
               variant="icon"
-              size="medium"
+              size="small"
               icon={{ category: "outlined", type: "chevron_right" }}
               aria-label={t("rework.announcements.patchNote.dialog.older")}
               disabled={index === notes.length - 1}
@@ -114,7 +116,7 @@ export function PatchNoteDialog({ open, notes, onClose }: PatchNoteDialogProps) 
         )
       }
     >
-      <div ref={bodyRef} className={styles.body} data-navigable={notes.length > 1 || undefined}>
+      <div ref={bodyRef} className={styles.body}>
         <PatchNoteBody markdown={note.markdown} />
       </div>
     </Dialog>
