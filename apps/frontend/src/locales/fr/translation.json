@@ -3877,6 +3877,7 @@
       "whitelistedTeams": "Équipes de la liste blanche",
       "whitelistedTeamsHint": "Tous les membres actuels d'une équipe autorisée ici ont accès à la plateforme, quelle que soit la règle.",
       "otherAccess": {
+        "unnamedTeam": "équipe sans nom",
         "label": "Autres accès",
         "attribute": "Règle",
         "admin": "Administrateur de la plateforme",

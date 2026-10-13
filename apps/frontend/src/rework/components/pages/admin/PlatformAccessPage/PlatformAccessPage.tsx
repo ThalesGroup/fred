@@ -42,7 +42,10 @@ const individualSource = (user: PlatformAccessUser) => user.sources.find(isIndiv
 function otherAccessLines(user: PlatformAccessUser, t: TFunction): string[] {
   const kinds = new Set(user.sources.map((source) => source.kind));
   const teams = (kind: AdmissionSource["kind"]) =>
-    user.sources.filter((source) => source.kind === kind).map((source) => source.team_name || source.team_id || "");
+    user.sources
+      .filter((source) => source.kind === kind)
+      // A team without a name is never shown by its identifier.
+      .map((source) => source.team_name || t("rework.platformAccess.otherAccess.unnamedTeam"));
   return [
     ...(kinds.has("attribute") ? [t("rework.platformAccess.otherAccess.attribute")] : []),
     ...(kinds.has("admin") ? [t("rework.platformAccess.otherAccess.admin")] : []),

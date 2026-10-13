@@ -325,7 +325,7 @@ it("shows when and how each individual access was added, and one chip detailing 
       email: null,
       sources: [
         { kind: "manual", granted_at: "2026-02-02T09:00:00Z" },
-        { kind: "free", team_id: "open", team_name: "Open" },
+        { kind: "free", team_id: "open-uid", team_name: null },
       ],
     },
     {
@@ -383,12 +383,16 @@ it("shows when and how each individual access was added, and one chip detailing 
     trigger.dispatchEvent(new MouseEvent("mouseout", { bubbles: true }));
   });
 
-  // Only the groups that apply are listed.
+  // Only the groups that apply are listed, and a team without a name never shows its identifier.
   const chloe = cells("Chloe")[5].querySelector<HTMLElement>('[role="note"]')!;
   expect(chloe.getAttribute("aria-label")).toBe("rework.platformAccess.otherAccess.summary");
   expect(state.translated).toHaveBeenCalledWith("rework.platformAccess.otherAccess.summary", {
-    details: "rework.platformAccess.otherAccess.free[Open]",
+    details: "rework.platformAccess.otherAccess.free[rework.platformAccess.otherAccess.unnamedTeam]",
   });
+  expect(state.translated).not.toHaveBeenCalledWith(
+    "rework.platformAccess.otherAccess.summary",
+    expect.objectContaining({ details: expect.stringContaining("open-uid") }),
+  );
 
   const [, , , bobDate, bobOrigin, bobOthers] = cells("Bob");
   expect(bobDate.textContent).toBe(new Date("2025-12-31T08:00:00Z").toLocaleString("en"));

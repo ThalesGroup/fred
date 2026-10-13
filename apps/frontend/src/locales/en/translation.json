@@ -3877,6 +3877,7 @@
       "whitelistedTeams": "Whitelisted teams",
       "whitelistedTeamsHint": "All current members of a team authorized here can access the platform, whatever the rule says.",
       "otherAccess": {
+        "unnamedTeam": "unnamed team",
         "label": "Other access",
         "attribute": "Rule",
         "admin": "Platform administrator",
