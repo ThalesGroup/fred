@@ -670,7 +670,7 @@ describe("platform skills", () => {
     expect(onRunSkill).not.toHaveBeenCalled();
     expect(onSkillError).toHaveBeenCalledWith("unavailable");
   });
-  it.each([1, 2])("restores an explicit prompt homonym through grouped undo/redo (%s deletions)", async (deletions) => {
+  it("restores an explicit prompt homonym through undo/redo of its whole deletion", async () => {
     listResult = {
       data: [{ prompt_id: "p-review", command: "review", name: "Prompt review", description: "Prompt", emoji: null }],
     };
@@ -679,10 +679,9 @@ describe("platform skills", () => {
     cmType("/rev");
     cmPress("Tab");
     act(() => cm().dispatch({ selection: { anchor: 7 } }));
-    for (let index = 0; index < deletions; index++)
-      act(() => {
-        deleteCharBackward(cm());
-      });
+    cmPress("Backspace");
+    expect(cm().state.doc.toString()).toBe("");
+    expect(renders[renders.length - 1].menu).toBeNull();
     expect(selected()).toBeNull();
     act(() => {
       undo(cm());
@@ -695,12 +694,28 @@ describe("platform skills", () => {
     act(() => {
       redo(cm());
     });
-    expect(cm().state.doc.toString()).toBe(deletions === 1 ? "/revie " : "/revi ");
+    expect(cm().state.doc.toString()).toBe("");
     act(() => {
       undo(cm());
     });
     await act(async () => renders[renders.length - 1]!.submit());
     expect(onRunCommand.mock.calls[1][0].command.prompt_id).toBe("p-review");
+  });
+  it("deletes one of two adjacent tokens without touching the other", () => {
+    activateSkills(true);
+    cmType("/review /meeting-minutes notes");
+    const names = () => renders[renders.length - 1].selectedSkills.map((token) => token.name);
+    expect(names()).toEqual(["review", "meeting-minutes"]);
+    act(() => cm().dispatch({ selection: { anchor: "/review ".length } }));
+    cmPress("Delete");
+    expect(cm().state.doc.toString()).toBe("/review notes");
+    expect(names()).toEqual(["review"]);
+    expect(renders[renders.length - 1].menu).toBeNull();
+    act(() => cm().dispatch({ selection: { anchor: "/review".length } }));
+    cmPress("Backspace");
+    expect(cm().state.doc.toString()).toBe("notes");
+    expect(names()).toEqual([]);
+    expect(renders[renders.length - 1].menu).toBeNull();
   });
   it("restores the personal prompt owner after invocation deletion and undo", async () => {
     activateSkills(true);

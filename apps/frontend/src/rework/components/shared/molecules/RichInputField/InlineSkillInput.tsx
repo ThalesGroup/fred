@@ -62,8 +62,6 @@ class SkillWidget extends WidgetType {
     button.onclick = () => this.token.onOpen(this.token.name);
     return button;
   }
-  // The widget is deliberately not an atomic range. Deleting or editing one
-  // underlying character makes the name incomplete and removes its import.
   ignoreEvent() {
     return true;
   }
@@ -99,6 +97,25 @@ class PromptWidget extends WidgetType {
   ignoreEvent() {
     return false;
   }
+}
+
+type TokenRange = { from: number; to: number };
+
+// Removes the token the caret touches as one block. The space after it goes
+// too when one already precedes it, so no double or leading space is left.
+function deleteToken(view: EditorView, tokens: readonly TokenRange[], forward: boolean): boolean {
+  const { main } = view.state.selection;
+  const token = main.empty && tokens.find((range) => (forward ? range.from : range.to) === main.head);
+  if (!token || view.state.sliceDoc(token.from, token.from + 1) !== "/") return false;
+  const before = token.from === 0 ? "\n" : view.state.sliceDoc(token.from - 1, token.from);
+  const spaceAfter = view.state.sliceDoc(token.to, token.to + 1) === " " && /\s/.test(before);
+  view.dispatch({
+    changes: { from: token.from, to: token.to + (spaceAfter ? 1 : 0) },
+    selection: { anchor: token.from },
+    userEvent: forward ? "delete.forward" : "delete.backward",
+    scrollIntoView: true,
+  });
+  return true;
 }
 
 const rememberChoices = StateEffect.define<readonly CommandChoice[]>({
@@ -138,6 +155,7 @@ export function InlineSkillInput(props: Props) {
   const propsRef = useRef(props);
   propsRef.current = props;
   const configuration = useRef(new Compartment());
+  const tokenRangesRef = useRef<readonly TokenRange[]>([]);
 
   useLayoutEffect(() => {
     if (!hostRef.current) return;
@@ -151,7 +169,12 @@ export function InlineSkillInput(props: Props) {
           invertedEffects.of((transaction) =>
             transaction.docChanged ? [rememberChoices.of(transaction.startState.field(choiceHistory))] : [],
           ),
-          keymap.of([...defaultKeymap, ...historyKeymap]),
+          keymap.of([
+            { key: "Backspace", run: (view) => deleteToken(view, tokenRangesRef.current, false) },
+            { key: "Delete", run: (view) => deleteToken(view, tokenRangesRef.current, true) },
+            ...defaultKeymap,
+            ...historyKeymap,
+          ]),
           EditorView.lineWrapping,
           configuration.current.of([]),
           Prec.highest(
@@ -241,6 +264,18 @@ export function InlineSkillInput(props: Props) {
         annotations: externalSync.of(true),
       });
     }
+    // Tokens are atomic: the caret, a selection and a deletion take one as a
+    // whole instead of stepping through the `/name` hidden under it.
+    tokenRangesRef.current = [
+      ...(promptFrom !== undefined && promptTo !== undefined && promptName !== undefined
+        ? [{ from: promptFrom, to: promptTo }]
+        : []),
+      ...props.tokens.map(({ from, to }) => ({ from, to })),
+    ];
+    const atomic = Decoration.set(
+      tokenRangesRef.current.map(({ from, to }) => Decoration.mark({}).range(from, to)),
+      true,
+    );
     const decorations = Decoration.set(
       [
         ...(promptFrom !== undefined && promptTo !== undefined && promptName !== undefined
@@ -282,6 +317,7 @@ export function InlineSkillInput(props: Props) {
           EditorView.editable.of(!props.disabled),
           EditorState.readOnly.of(props.disabled),
           EditorView.decorations.of(decorations),
+          EditorView.atomicRanges.of(() => atomic),
           EditorView.contentAttributes.of({
             spellcheck: "true",
             ...(props.placeholder ? { "aria-placeholder": props.placeholder } : {}),

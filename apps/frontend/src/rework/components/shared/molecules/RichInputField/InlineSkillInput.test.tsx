@@ -3,7 +3,7 @@
 import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { EditorView } from "@codemirror/view";
-import { deleteCharBackward, undo } from "@codemirror/commands";
+import { cursorCharLeft, cursorCharRight, selectCharLeft, undo } from "@codemirror/commands";
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
 import { usePastedFiles } from "@rework/components/pages/ManagedChatPage/usePastedFiles";
 import { RichInputField } from "./RichInputField";
@@ -91,17 +91,47 @@ it("keeps canonical text in the editor while placing the clickable token between
   expect(onSend).not.toHaveBeenCalled();
   expect(onChange).not.toHaveBeenCalled();
 });
-it("deleting a character removes the import and undo restores it with the request intact", () => {
+const TOKEN = { from: "Before ".length, to: "Before /meeting-minutes".length };
+const pressKey = (key: string) =>
   act(() => {
-    editor().dispatch({ selection: { anchor: "Before /meeting-minutes".length } });
-    deleteCharBackward(editor());
+    editor().contentDOM.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
   });
-  expect(editor().state.doc.toString()).toBe("Before /meeting-minute after\nAction");
+it.each([
+  ["Backspace", TOKEN.to],
+  ["Delete", TOKEN.from],
+])("%s next to a token removes it whole, and undo restores it with the request intact", (key, caret) => {
+  act(() => editor().dispatch({ selection: { anchor: caret } }));
+  pressKey(key);
+  // The token goes with one of the two spaces around it: no double space.
+  expect(editor().state.doc.toString()).toBe("Before after\nAction");
+  expect(editor().state.selection.main.head).toBe(TOKEN.from);
   expect(container.querySelector('[aria-label="chatbot.skills.open"]')).toBeNull();
   expect(editor().contentDOM.getAttribute("aria-label")).toBe("chatbot.composerPlaceholder");
   act(() => {
     undo(editor());
   });
+  expect(editor().state.doc.toString()).toBe("Before /meeting-minutes after\nAction");
+  expect(container.querySelector('[aria-label="chatbot.skills.open"]')).not.toBeNull();
+});
+it("moves the caret and extends a selection over a token in one step", () => {
+  const head = () => editor().state.selection.main.head;
+  act(() => editor().dispatch({ selection: { anchor: TOKEN.to } }));
+  act(() => {
+    cursorCharLeft(editor());
+  });
+  expect(head()).toBe(TOKEN.from);
+  act(() => {
+    cursorCharRight(editor());
+  });
+  expect(head()).toBe(TOKEN.to);
+  act(() => {
+    selectCharLeft(editor());
+  });
+  expect(editor().state.selection.main).toMatchObject({ from: TOKEN.from, to: TOKEN.to });
+  // Backspace away from a token still removes a single character.
+  act(() => editor().dispatch({ selection: { anchor: "Before".length } }));
+  pressKey("Backspace");
+  expect(editor().state.doc.toString()).toBe("Befor /meeting-minutes after\nAction");
   expect(container.querySelector('[aria-label="chatbot.skills.open"]')).not.toBeNull();
 });
 it("lets the completion handler consume Enter before the editor inserts a newline or sends", () => {
@@ -204,11 +234,9 @@ it("keeps a prompt command copyable, editable and undoable beneath its visual", 
     editor().contentDOM.dispatchEvent(event);
   });
   expect(setData).toHaveBeenCalledWith("text/plain", "/hello");
-  act(() => {
-    editor().dispatch({ selection: { anchor: 6 } });
-    deleteCharBackward(editor());
-  });
-  expect(editor().state.doc.toString()).toBe("/hell Notes");
+  act(() => editor().dispatch({ selection: { anchor: 6 } }));
+  pressKey("Backspace");
+  expect(editor().state.doc.toString()).toBe("Notes");
   expect(container.querySelector("[data-kind=prompt]")).toBeNull();
   act(() => {
     undo(editor());
