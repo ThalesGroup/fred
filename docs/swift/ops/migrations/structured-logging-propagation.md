@@ -2,6 +2,7 @@
 schema: 1
 title: "Correlate admitted delegated calls across Fred services"
 impact: minor
+after: [structured-logging-context]
 configuration: none
 configuration_reason: "Existing delegation switches govern diagnostic context; no new option is introduced."
 ---

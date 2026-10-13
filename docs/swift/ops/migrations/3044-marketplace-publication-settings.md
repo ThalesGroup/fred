@@ -26,7 +26,7 @@ No configuration changes are required. The platform default (publishing off,
 ## Upgrade
 
 1. Apply the control-plane Alembic head before starting the new Knowledge Flow
-   pods: revision `b5e1c9d3a7f2` (after `93427a5fe874`) creates
+   pods: revision `b5e1c9d3a7f2` (after `9f6d3c2a1b08`) creates
    `platform_marketplace_settings` (no row seeded) and adds the nullable
    `agents_publishing_enabled` and `agents_publish_quota` columns to
    `teammetadata`. Knowledge Flow reads `teammetadata` through the shared model,
@@ -46,7 +46,7 @@ No configuration changes are required. The platform default (publishing off,
 
 ## Rollback
 
-Roll back the images, then `alembic downgrade 93427a5fe874` on the control plane
+Roll back the images, then `alembic downgrade 9f6d3c2a1b08` on the control plane
 if the schema must go back too: it drops `platform_marketplace_settings` and the
 two `teammetadata` columns, so every marketplace setting is lost.
 

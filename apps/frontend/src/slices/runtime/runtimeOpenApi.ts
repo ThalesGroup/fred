@@ -590,6 +590,14 @@ export type ConversationTurn = {
   agent_response: string;
   user_message: string;
 };
+export type TurnCommandPrompt = {
+  command: string;
+  draft_offset: number;
+  prompt_id?: string | null;
+  prompt_name?: string | null;
+  text_length: number;
+  text_offset: number;
+};
 export type TurnCommand = {
   appended_text?: string;
   command: string;
@@ -597,6 +605,7 @@ export type TurnCommand = {
   draft_text?: string | null;
   prompt_id?: string | null;
   prompt_name?: string | null;
+  prompts?: TurnCommandPrompt[] | null;
 };
 export type SkillInvocation = {
   name: string;
@@ -1030,6 +1039,15 @@ export type Channel =
   | "system_note"
   | "hitl_request"
   | "hitl_response";
+export type CommandPromptDescriptor = {
+  command: string;
+  draft_offset: number;
+  prompt_id?: string | null;
+  prompt_name?: string | null;
+  text_length: number;
+  text_offset: number;
+  [key: string]: any;
+};
 export type CommandDescriptor = {
   appended_text?: string;
   command: string;
@@ -1037,6 +1055,7 @@ export type CommandDescriptor = {
   draft_text?: string | null;
   prompt_id?: string | null;
   prompt_name?: string | null;
+  prompts?: CommandPromptDescriptor[] | null;
   [key: string]: any;
 };
 export type ChatTokenUsage = {

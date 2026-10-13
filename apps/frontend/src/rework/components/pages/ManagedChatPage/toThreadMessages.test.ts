@@ -141,6 +141,24 @@ describe("explicit skill selection on user turns", () => {
       expect(turn.command).toEqual(command);
     },
   );
+  it.each([false, true])("carries the prompt list of a command turn to the thread (optimistic: %s)", (optimistic) => {
+    const command = {
+      command: "summary",
+      prompt_id: "p-summary",
+      draft_text: "/summary then /tone",
+      draft_command_offset: 0,
+      prompts: [
+        { command: "summary", prompt_id: "p-summary", draft_offset: 0, text_offset: 0, text_length: 10 },
+        { command: "tone", prompt_id: "p-tone", draft_offset: 14, text_offset: 18, text_length: 10 },
+      ],
+    };
+    const [turn] = toThreadMessages(
+      [{ ...user(), metadata: { command, extras: { optimistic_user: optimistic } } }],
+      optimistic,
+    );
+    expect(turn.command).toEqual(command);
+    expect(turn.command?.prompts).toHaveLength(2);
+  });
   it("ignores malformed invocation hints", () => {
     for (const extras of [
       { optimistic_user: true, skill_invocation: { name: 42 } },

@@ -2,12 +2,13 @@
 schema: 1
 title: "Select structured JSON output for Fred APIs"
 impact: minor
+after: [000-v3-4-0-release-preparation]
 configuration: production
 configuration_reason: "app.log_format selects json or text in the three API models and deployed chart reference values explicitly select json."
 ---
 ## Applicability
 
-Control Plane, Knowledge Flow and hosted Fred agent APIs. This first slice covers output; request, delegated-call and worker correlation follow in later slices.
+Control Plane, Knowledge Flow and hosted Fred agent APIs. The following procedures in this guide cover request, delegated-call and worker correlation in the same release.
 
 ## Prerequisites
 
@@ -40,4 +41,4 @@ Set `app.log_format: text` and restart if a parser needs the prior readable work
 
 ## Limitations
 
-No GKE deployment or canary was performed during offline verification. Native processes outside Python do not use this formatter. Configuration-load statuses are buffered until the selected formatter is available; invalid/unavailable configuration can still produce bootstrap failure output before a valid logging setting exists. This slice does not yet provide ingress/journey scopes, trusted downstream propagation, or worker handoff. Dependency warning/error events are console-only to avoid recursive store emission.
+No GKE deployment or canary was performed during offline verification. Native processes outside Python do not use this formatter. Configuration-load statuses are buffered until the selected formatter is available; invalid/unavailable configuration can still produce bootstrap failure output before a valid logging setting exists. Request context, trusted downstream propagation and worker handoff are covered by the following procedures in this release. Dependency warning/error events are console-only to avoid recursive store emission.

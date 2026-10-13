@@ -2,6 +2,7 @@
 schema: 1
 title: "Read-only conversations after managed agent deletion"
 impact: minor
+after: [3042-unique-agent-names-per-team]
 configuration: none
 configuration_reason: "The fix uses existing runtime snapshots and browser ingress routes. No configuration keys change."
 ---
@@ -45,8 +46,10 @@ agent conversation still accepts messages.
 
 Roll back the application images together; the nullable column may remain in place.
 If a schema downgrade is required, stop updated application readers/writers first
-and downgrade the Control Plane to `a4d85307ea0e`. Only the display-name snapshots
-are dropped; sessions and runtime history remain. The previous deleted-agent
+and follow the coordinated release rollback before considering
+`a4d85307ea0e`. This revision itself drops only display-name snapshots; sessions
+and runtime history remain. Downgrading from a later head also removes every
+subsequent revision, including announcement data and creation-assistant settings. The previous deleted-agent
 history limitation would return with older application images.
 
 ## Limitations

@@ -15,6 +15,7 @@ from fred_core.security.delegation import require_active_subject
 from fred_core.security.models import AccountStatusError
 from fred_core.security.platform_access.access_control import PlatformAccess
 from fred_core.security.platform_access.models import (
+    PlatformAccessLinkJoinerRow,
     PlatformAccessLinkRow,
     PlatformAccessSettingsRow,
     PlatformAccessUserRow,
@@ -25,12 +26,13 @@ from fred_core.security.platform_access.rules import (
     extract_claims,
     path_key,
 )
+from fred_core.security.platform_access.store import PlatformAccessStore
 from fred_core.teams.team_metatada_models import TeamMetadataRow
 from fred_core.users.user_models import UserRow
 from fred_pod.security.platform_access import PlatformAccessPolicy
 from fred_pod.security.structure import KeycloakUser, is_service_agent
 from pydantic import JsonValue
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import delete, func, inspect, or_, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
@@ -48,6 +50,8 @@ from control_plane_backend.platform_access.schemas import (
     PlatformAccessTeam,
     PlatformAccessUser,
     PlatformAccessUsersPage,
+    PlatformEnrollmentJoiner,
+    PlatformEnrollmentJoinersPage,
     PlatformEnrollmentLinkInfo,
     PlatformEnrollmentLinksPage,
     PlatformEnrollmentLinkStatus,
@@ -122,12 +126,6 @@ async def set_filtering(
 ) -> PlatformAccessState:
     async with access.store.mutation() as session:
         state = await access.state(session)
-        from fred_core.security.whitelist_access_control.access_control import (
-            is_whitelist_active,
-        )
-
-        if enabled and is_whitelist_active():
-            raise HTTPException(409, "platform_access_legacy_gate_conflict")
         if expected_revision is not None and expected_revision != state.revision:
             raise HTTPException(409, "platform_access_policy_conflict")
         if enabled and not await has_admission_sources(access, state, session):
@@ -139,8 +137,9 @@ async def set_filtering(
 
 async def grant_users(
     access: PlatformAccess, actor: KeycloakUser, user_ids: list[UUID]
-) -> None:
+) -> int:
     selected = sorted(set(user_ids))
+    granted_count = 0
     async with access.store.mutation() as session:
         await access.state(session)
         now = datetime.now(timezone.utc)
@@ -158,6 +157,7 @@ async def grant_users(
                     )
                 )
             )
+            new_batch = [uid for uid in batch if uid not in granted]
             session.add_all(
                 [
                     PlatformAccessUserRow(
@@ -166,10 +166,11 @@ async def grant_users(
                         granted_by=actor.uid,
                         granted_at=now,
                     )
-                    for uid in batch
-                    if uid not in granted
+                    for uid in new_batch
                 ]
             )
+            granted_count += len(new_batch)
+    return granted_count
 
 
 async def set_user(
@@ -201,6 +202,8 @@ async def users_page(
         async with slots:
             uid = str(row.id)
             sources: list[AdmissionSource] = []
+            if await access.platform_admin_uid(uid):
+                sources.append(AdmissionSource(kind="admin"))
             if await asyncio.to_thread(access.observed_match, row, policy):
                 sources.append(AdmissionSource(kind="attribute"))
             exception = await access.store.exception(UUID(uid))
@@ -262,6 +265,8 @@ async def activation_preview(access: PlatformAccess) -> PlatformAccessActivation
             except AccountStatusError as error:
                 outcome = "unknown" if error.unavailable else "blocked"
             else:
+                if await access.platform_admin_uid(uid):
+                    sources.append(AdmissionSource(kind="admin"))
                 exception = exceptions.get(UUID(uid))
                 if exception:
                     sources.append(
@@ -346,9 +351,9 @@ async def activation_preview(access: PlatformAccess) -> PlatformAccessActivation
     )
 
 
-async def t0(
+async def _t0_with_import_count(
     access: PlatformAccess, actor: KeycloakUser | None = None
-) -> PlatformT0Preview:
+) -> tuple[PlatformT0Preview, int | None]:
     async with access.store.read() as session:
         state = await access.state(session)
         rows = list((await session.scalars(select(UserRow))).all())
@@ -359,16 +364,24 @@ async def t0(
     )
     matching, candidates = sum(matches), len(rows) - sum(matches)
     if actor is None:
-        return PlatformT0Preview(
-            candidates=candidates, matching=matching, completed_at=state.t0_completed_at
+        return (
+            PlatformT0Preview(
+                candidates=candidates,
+                matching=matching,
+                completed_at=state.t0_completed_at,
+            ),
+            None,
         )
     async with access.store.mutation() as session:
         state = await access.state(session)
         if state.t0_completed_at is not None:
-            return PlatformT0Preview(
-                candidates=candidates,
-                matching=matching,
-                completed_at=state.t0_completed_at,
+            return (
+                PlatformT0Preview(
+                    candidates=candidates,
+                    matching=matching,
+                    completed_at=state.t0_completed_at,
+                ),
+                None,
             )
         if state.revision != revision:
             raise HTTPException(409, "platform_access_t0_snapshot_changed")
@@ -379,22 +392,39 @@ async def t0(
         )
         present = set((await session.scalars(select(UserRow.id))).all())
         now = datetime.now(timezone.utc)
-        session.add_all(
-            [
-                PlatformAccessUserRow(
-                    user_id=row.id,
-                    source="t0",
-                    granted_by=actor.uid,
-                    granted_at=now,
-                )
-                for row, matched in zip(rows, matches, strict=True)
-                if not matched and row.id in present and row.id not in existing
-            ]
-        )
+        new_rows = [
+            PlatformAccessUserRow(
+                user_id=row.id,
+                source="t0",
+                granted_by=actor.uid,
+                granted_at=now,
+            )
+            for row, matched in zip(rows, matches, strict=True)
+            if not matched and row.id in present and row.id not in existing
+        ]
+        session.add_all(new_rows)
         state.t0_completed_at = now
-        return PlatformT0Preview(
-            candidates=candidates, matching=matching, completed_at=state.t0_completed_at
+        return (
+            PlatformT0Preview(
+                candidates=candidates,
+                matching=matching,
+                completed_at=state.t0_completed_at,
+            ),
+            len(new_rows),
         )
+
+
+async def t0(
+    access: PlatformAccess, actor: KeycloakUser | None = None
+) -> PlatformT0Preview:
+    result, _ = await _t0_with_import_count(access, actor)
+    return result
+
+
+async def import_t0(
+    access: PlatformAccess, actor: KeycloakUser
+) -> tuple[PlatformT0Preview, int | None]:
+    return await _t0_with_import_count(access, actor)
 
 
 async def require_team(
@@ -453,12 +483,12 @@ def link_view(
     )
 
 
-async def generate_link(
+async def generate_link_record(
     access: PlatformAccess,
     team_id: str,
     actor: KeycloakUser,
     body: CreatePlatformEnrollmentLink | None = None,
-) -> str:
+) -> tuple[str, UUID]:
     body = body or CreatePlatformEnrollmentLink()
     async with access.store.mutation() as session:
         await access.state(session)
@@ -469,9 +499,10 @@ async def generate_link(
         if body.expires_at is not None and body.expires_at <= now:
             raise HTTPException(409, "free_enrollment_expiry_past")
         token = secrets.token_urlsafe(32)
+        link_id = uuid4()
         session.add(
             PlatformAccessLinkRow(
-                id=uuid4(),
+                id=link_id,
                 team_id=team_id,
                 token=token,
                 token_hash=hashlib.sha256(token.encode()).hexdigest(),
@@ -482,7 +513,17 @@ async def generate_link(
                 opening_count=0,
             )
         )
-        return token
+        return token, link_id
+
+
+async def generate_link(
+    access: PlatformAccess,
+    team_id: str,
+    actor: KeycloakUser,
+    body: CreatePlatformEnrollmentLink | None = None,
+) -> str:
+    token, _ = await generate_link_record(access, team_id, actor, body)
+    return token
 
 
 async def list_links(
@@ -542,6 +583,84 @@ async def list_links(
                 )
                 or 0
             ),
+        )
+
+
+async def list_link_joiners(
+    access: PlatformAccess, team_id: str, link_id: UUID, offset: int, limit: int
+) -> PlatformEnrollmentJoinersPage:
+    async with access.store.read() as session:
+        await access.state(session)
+        await owned_link(access, team_id, link_id, session)
+        rows = await session.execute(
+            select(PlatformAccessLinkJoinerRow, UserRow)
+            .outerjoin(UserRow, UserRow.id == PlatformAccessLinkJoinerRow.user_id)
+            .where(PlatformAccessLinkJoinerRow.link_id == link_id)
+            .order_by(
+                PlatformAccessLinkJoinerRow.joined_at,
+                PlatformAccessLinkJoinerRow.user_id,
+            )
+            .offset(offset)
+            .limit(limit)
+        )
+        total = await session.scalar(
+            select(func.count())
+            .select_from(PlatformAccessLinkJoinerRow)
+            .where(PlatformAccessLinkJoinerRow.link_id == link_id)
+        )
+        return PlatformEnrollmentJoinersPage(
+            items=[
+                PlatformEnrollmentJoiner(
+                    user_id=str(joiner.user_id),
+                    username=(
+                        joiner.username_snapshot
+                        if joiner.deleted_at or user is None
+                        else user.username
+                    ),
+                    first_name=(
+                        joiner.first_name_snapshot
+                        if joiner.deleted_at or user is None
+                        else user.first_name
+                    ),
+                    last_name=(
+                        joiner.last_name_snapshot
+                        if joiner.deleted_at or user is None
+                        else user.last_name
+                    ),
+                    joined_at=joiner.joined_at,
+                    deleted=joiner.deleted_at is not None or user is None,
+                )
+                for joiner, user in rows
+            ],
+            total=int(total or 0),
+        )
+
+
+async def mark_user_join_history_deleted(
+    store: PlatformAccessStore, user_id: str, *, table_may_be_missing: bool = False
+) -> None:
+    try:
+        uid = UUID(user_id)
+    except ValueError:
+        return
+    async with store.mutation() as session:
+        if table_may_be_missing and not await session.run_sync(
+            lambda sync: inspect(sync.connection()).has_table(
+                PlatformAccessLinkJoinerRow.__tablename__
+            )
+        ):
+            return
+        profile = await session.get(UserRow, uid)
+        snapshots: dict[str, Any] = {}
+        if profile is not None:
+            for field in ("username", "first_name", "last_name"):
+                value = getattr(profile, field)
+                if value is not None:
+                    snapshots[f"{field}_snapshot"] = value
+        await session.execute(
+            update(PlatformAccessLinkJoinerRow)
+            .where(PlatformAccessLinkJoinerRow.user_id == uid)
+            .values(deleted_at=datetime.now(timezone.utc), **snapshots)
         )
 
 
@@ -671,17 +790,41 @@ async def enroll(
     access: PlatformAccess, user: KeycloakUser, token: str, version: str | None
 ) -> PlatformAccessStatus:
     await access.observe(user)
+    joined = False
     async with access.store.mutation() as session:
         await require_active_subject(user)
         await access.state(session)
-        _, team = await require_link(access, token, session)
+        link, team = await require_link(access, token, session)
         if await cgu_required(access, user.uid, version, session):
             raise HTTPException(403, "user_not_accept_gcu")
         if not (await access.rebac.has_team_memberships(user.uid, [team.id]))[0]:
             await _add_team_member_relation(
                 access.rebac, TeamId(team.id), user.uid, UserTeamRelation.TEAM_MEMBER
             )
-    emit_audit_log("platform.access.free.enrolled", actor_uid=user.uid, team_id=team.id)
+            if (
+                await session.get(
+                    PlatformAccessLinkJoinerRow, (link.id, UUID(user.uid))
+                )
+                is None
+            ):
+                session.add(
+                    PlatformAccessLinkJoinerRow(
+                        link_id=link.id,
+                        user_id=UUID(user.uid),
+                        joined_at=datetime.now(timezone.utc),
+                        username_snapshot=user.username,
+                        first_name_snapshot=user.first_name,
+                        last_name_snapshot=user.last_name,
+                    )
+                )
+            joined = True
+    if joined:
+        emit_audit_log(
+            "platform.access.free.enrolled",
+            actor_uid=user.uid,
+            team_id=team.id,
+            link_id=str(link.id),
+        )
     return await self_status(access, user, version)
 
 
