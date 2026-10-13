@@ -27,14 +27,22 @@ import {
   useAnnouncementActivationHistoryQuery,
   useUsersByIdsQuery,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import type { MaterialIconType } from "@shared/utils/Type";
 import type { AnnouncementActivationEvent } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./ActivationHistory.module.css";
 
 type HistoryAction = AnnouncementActivationEvent["action"];
-const ACTIONS: HistoryAction[] = ["activated", "deactivated"];
+const ACTIONS: HistoryAction[] = ["activated", "deactivated", "announced", "unannounced"];
+const ACTION_ICONS = {
+  activated: "visibility",
+  deactivated: "visibility_off",
+  announced: "campaign",
+  unannounced: "do_not_disturb_on",
+} as const satisfies Record<HistoryAction, MaterialIconType>;
 
 /**
- * Who switched which announcement on or off, and when, as a dense full-width table.
+ * Who switched which announcement on or off, announced the patch notes or had
+ * that announcement cancelled, and when, as a dense full-width table.
  * The API returns the newest 100 events already sorted, also the `/users/by-ids`
  * limit, so actors resolve in one call.
  */
@@ -106,7 +114,7 @@ export default function ActivationHistory() {
       size: "minmax(9rem, 1fr)",
       cellRenderer: (event) => (
         <span className={styles.action} data-action={event.action}>
-          <Icon category="outlined" type={event.action === "activated" ? "visibility" : "visibility_off"} />
+          <Icon category="outlined" type={ACTION_ICONS[event.action]} />
           {action(event)}
         </span>
       ),

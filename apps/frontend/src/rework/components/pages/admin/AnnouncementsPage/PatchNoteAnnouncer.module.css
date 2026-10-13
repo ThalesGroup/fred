@@ -14,11 +14,18 @@
  * limitations under the License.
  */
 
-/* Two tiles side by side, stacked once they would get too narrow to read.
-   Fluid: the Dialog decides the width. */
-.tiles {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
-  gap: var(--spacing-s);
-  width: 100%;
+/* "Announce the update" and its last use, see PatchNoteAnnouncer.tsx */
+
+.announcer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-xs) var(--spacing-s);
+  margin-bottom: var(--spacing-m);
+}
+
+.lastUse {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
 }

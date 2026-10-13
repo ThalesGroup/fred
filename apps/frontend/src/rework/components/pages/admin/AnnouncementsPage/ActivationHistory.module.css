@@ -57,7 +57,8 @@
   font-size: inherit;
 }
 
-.action[data-action="deactivated"] {
+.action[data-action="deactivated"],
+.action[data-action="unannounced"] {
   color: var(--on-surface-retreat);
 }
 

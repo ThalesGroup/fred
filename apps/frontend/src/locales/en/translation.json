@@ -3442,13 +3442,10 @@
         "subtitle_one": "{{count}} banner is live for every user.",
         "subtitle_other": "{{count}} banners are live for every user.",
         "subtitle_zero": "No banner is showing right now.",
-        "empty": "No announcement yet.\nCreate a banner, shown at the top of the app, or a patch note, shown to users when they arrive.",
-        "create": "New announcement"
-      },
-      "chooser": {
-        "title": "New announcement",
-        "bannerDescription": "A short message shown at the top of the app.",
-        "patchNoteDescription": "What's new in a release, shown to users when they arrive."
+        "emptyBanners": "No banner yet.\nCreate one to show a message at the top of the app.",
+        "emptyPatchNotes": "No patch note yet.\nCreate one: it stays hidden until you show it.",
+        "createBanner": "New banner",
+        "createPatchNote": "New patch note"
       },
       "severity": {
         "info": "Info",
@@ -3465,8 +3462,7 @@
         "enableHint": "Enable for all users",
         "disableHint": "Disable for all users",
         "edit": "Edit this announcement",
-        "delete": "Delete this announcement",
-        "preview": "Preview as users see it"
+        "delete": "Delete this announcement"
       },
       "editor": {
         "createTitle": "New announcement",
@@ -3497,7 +3493,9 @@
       },
       "patchNote": {
         "dialog": {
-          "dontShowAgain": "Don't show again"
+          "navigation": "Browse patch notes",
+          "newer": "Newer patch note",
+          "older": "Older patch note"
         },
         "editor": {
           "createTitle": "New patch note",
@@ -3513,30 +3511,61 @@
           "bodyRequired": "Write the content in this language.",
           "tooLong": "The content is longer than {{max}} characters in one language.",
           "incomplete": "The {{language}} version needs both a title and content, or neither.",
-          "saveAndActivate": "Save and activate"
+          "saveAndActivate": "Save and show"
         },
-        "dismissFailed": "Your choice was not saved. This note may show again next time.",
         "discard": {
           "title": "Discard your changes?",
           "message": "The patch note you are writing has not been saved.",
           "confirm": "Discard changes",
           "cancel": "Keep writing"
         },
-        "activate": {
-          "title": "Switch the active patch note?",
-          "message": "Only one patch note can be active at a time: “{{title}}” will be switched off.",
-          "confirm": "Activate"
+        "savedActive": "Patch note saved. Users can read it in What's new.",
+        "savedInactive": "Patch note saved. It stays hidden: show it for users to read it.",
+        "row": {
+          "enabled": "Show this patch note in What's new",
+          "enableHint": "Show in users' What's new",
+          "disableHint": "Hide from users' What's new",
+          "statusVisible": "Visible in What's new",
+          "statusHidden": "Hidden",
+          "preview": "Preview as users see it",
+          "edit": "Edit this patch note",
+          "delete": "Delete this patch note",
+          "move": "Move “{{title}}”"
         },
-        "savedActive": "Patch note saved. Users see it when they arrive.",
-        "savedInactive": "Patch note saved. It is not active: switch it on for users to see it.",
-        "dismissalCount_zero": "No user has chosen to hide this patch note",
-        "dismissalCount_one": "{{count}} user chose to hide this patch note",
-        "dismissalCount_other": "{{count}} users chose to hide this patch note"
+        "delete": {
+          "title": "Delete this patch note?",
+          "message": "“{{title}}” will be removed for good. Users will no longer be able to read it."
+        },
+        "deleted": "Patch note deleted.",
+        "reorder": {
+          "instructions": "To move this patch note, press Space or Enter, use the up and down arrows, then press Space or Enter again to drop it, or Escape to cancel.",
+          "picked": "“{{title}}” picked up, at position {{position}} of {{total}}.",
+          "moved": "“{{title}}” moved to position {{position}} of {{total}}.",
+          "dropped": "“{{title}}” dropped at position {{position}} of {{total}}.",
+          "cancelled": "Move cancelled. “{{title}}” stays at position {{position}} of {{total}}.",
+          "failed": "The new order was not saved.",
+          "role": "sortable item"
+        },
+        "announce": {
+          "action": "Announce the update",
+          "lastUse": "Last announced on {{date}}, by {{name}}",
+          "noneVisible": "Show at least one patch note to announce the update.",
+          "confirm": {
+            "title": "Announce the update?",
+            "message_one": "Every user will see the What's new dialog at their next sign-in. It holds {{count}} patch note: “{{title}}”.",
+            "message_other": "Every user will see the What's new dialog at their next sign-in. It holds {{count}} patch notes and opens on “{{title}}”.",
+            "confirm": "Announce"
+          },
+          "done": "Update announced. Users will see it at their next sign-in.",
+          "failed": "The update was not announced."
+        }
       },
       "history": {
         "empty": "No activation yet.",
         "activated": "Activated",
         "deactivated": "Deactivated",
+        "announced": "Announced to users",
+        "unannounced": "Announcement cancelled",
         "unknownActor": "Unknown author",
         "error": "Could not load the activation history.",
         "column": {
@@ -3550,12 +3579,15 @@
           "all": "All",
           "activated": "Activations",
           "deactivated": "Deactivations",
+          "announced": "Announcements to users",
+          "unannounced": "Cancelled announcements",
           "group": "Filter by action"
         }
       },
       "view": {
         "group": "Announcements page view",
-        "announcements": "Announcements",
+        "banners": "Banners",
+        "patchNotes": "Patch notes",
         "history": "History"
       }
     },

@@ -21,14 +21,22 @@
   width: 100%;
 }
 
-.dontShowAgain {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-xs);
+/* Notes differ in length: a floor keeps the arrows from jumping under the
+   pointer while the user steps through the history. */
+.body[data-navigable] {
+  min-height: min(28rem, 50dvh);
 }
 
-.dontShowAgainLabel {
-  cursor: pointer;
-  color: var(--on-surface);
-  font: var(--font-body-medium);
+.navigation {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+}
+
+.position {
+  min-width: 3.5rem;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-large);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
 }

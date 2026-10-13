@@ -189,6 +189,34 @@ describe("ActivationHistory", () => {
     expect(rows(render())).toHaveLength(1);
   });
 
+  it("shows and filters announcements to users and their cancellation", () => {
+    historyMock.mockReturnValue({
+      data: [
+        event({ id: "e3", action: "unannounced", kind: "patch_note" }),
+        event({ id: "e2", action: "announced", kind: "patch_note" }),
+        event({ id: "e1", action: "activated" }),
+      ],
+      isLoading: false,
+    });
+    const el = render();
+
+    expect(rows(el)).toHaveLength(3);
+    expect(el.querySelector('[data-action="announced"]')?.textContent).toContain(
+      "rework.announcements.history.announced",
+    );
+    expect(el.querySelector('[data-action="unannounced"]')?.textContent).toContain(
+      "rework.announcements.history.unannounced",
+    );
+
+    act(() => buttonWith(el, "rework.announcements.history.filter.announced").click());
+    expect(el.querySelectorAll("[data-action]")).toHaveLength(1);
+    expect(el.querySelector('[data-action="announced"]')).not.toBeNull();
+
+    act(() => buttonWith(el, "rework.announcements.history.filter.unannounced").click());
+    expect(el.querySelectorAll("[data-action]")).toHaveLength(1);
+    expect(el.querySelector('[data-action="unannounced"]')).not.toBeNull();
+  });
+
   it("names its filter group and ignores an unknown remembered filter", () => {
     historyMock.mockReturnValue({
       data: [event({ id: "e2", action: "deactivated" }), event({ id: "e1" })],
