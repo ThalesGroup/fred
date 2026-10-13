@@ -511,18 +511,17 @@ async def mark_patch_note_announcement_seen(
     """Record that the caller saw that announcement; idempotent."""
 
     store = deps.get_announcement_store()
-    exposure = await store.get_exposure(announcement_id)
-    if exposure is None or exposure.note_count is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
-    seen_id = await store.get_seen_announcement_id(user.uid)
-    if seen_id == exposure.id:
-        return
-    if seen_id is not None:
-        seen = await store.get_exposure(seen_id)
-        # A late close of an older dialog must not undo a newer record.
-        if seen is not None and seen.activated_at > exposure.activated_at:
+    async with store.transaction() as session:
+        if await store.record_seen_announcement(
+            user_id=user.uid, announcement_id=announcement_id, session=session
+        ):
             return
-    await store.set_seen_announcement(user_id=user.uid, announcement_id=exposure.id)
+        # Nothing written: an unknown id, or a record already at or past it.
+        exposure = await store.get_exposure(announcement_id, session=session)
+        if exposure is None or exposure.note_count is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND
+            )
 
 
 async def list_exposure_history(

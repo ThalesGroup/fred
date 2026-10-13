@@ -22,10 +22,20 @@ from typing import Any, cast
 
 from fred_core.sql import make_session_factory, use_session
 from fred_core.sql.base_sql import advisory_lock_key
-from sqlalchemy import CursorResult, delete, select, text, update
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import (
+    CursorResult,
+    DateTime,
+    delete,
+    literal,
+    literal_column,
+    select,
+    text,
+    update,
+)
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
-from sqlalchemy.orm import undefer
+from sqlalchemy.orm import aliased, undefer
 
 from control_plane_backend.models.announcement_models import (
     AnnouncementExposureRow,
@@ -492,30 +502,59 @@ class AnnouncementStore:
             row = await s.get(AnnouncementSeenRow, user_id)
             return None if row is None else row.announcement_id
 
-    async def set_seen_announcement(
+    async def record_seen_announcement(
         self,
         *,
         user_id: str,
         announcement_id: str,
         session: AsyncSession | None = None,
-    ) -> None:
-        """Record what `user_id` last saw; idempotent."""
-        try:
-            async with use_session(self._sessions, session) as s:
-                row = await s.get(AnnouncementSeenRow, user_id)
-                if row is None:
-                    s.add(
-                        AnnouncementSeenRow(
-                            user_id=user_id, announcement_id=announcement_id
-                        )
-                    )
-                else:
-                    row.announcement_id = announcement_id
-                    row.seen_at = utcnow()
-        except IntegrityError:
-            # Two closes at once (two tabs): the other insert already won.
-            if session is not None:
-                raise
+    ) -> bool:
+        """Record that `user_id` saw that announcement, in one statement.
+
+        Returns `False`, writing nothing, when no announcement has that id or
+        the user's record is already at it or at a more recent one.
+        """
+        seen = AnnouncementSeenRow.__table__
+        target = aliased(AnnouncementExposureRow)
+        recorded = aliased(AnnouncementExposureRow)
+        insert = (
+            pg_insert if self._engine.dialect.name == "postgresql" else sqlite_insert
+        )
+        statement = insert(AnnouncementSeenRow).from_select(
+            ["user_id", "announcement_id", "seen_at"],
+            select(
+                literal(user_id),
+                target.id,
+                literal(utcnow(), type_=DateTime(timezone=True)),
+            ).where(target.id == announcement_id, target.note_count.is_not(None)),
+        )
+        # Never backwards: a late close of an older dialog keeps the newer record.
+        recorded_is_newer = (
+            select(recorded.id)
+            .where(
+                # By name: a table object would be joined in, not correlated.
+                recorded.id
+                == literal_column(
+                    f"{AnnouncementSeenRow.__tablename__}.announcement_id"
+                ),
+                recorded.activated_at
+                > select(target.activated_at)
+                .where(target.id == announcement_id)
+                .scalar_subquery(),
+            )
+            .exists()
+        )
+        statement = statement.on_conflict_do_update(
+            index_elements=[seen.c.user_id],
+            set_={
+                "announcement_id": statement.excluded.announcement_id,
+                "seen_at": statement.excluded.seen_at,
+            },
+            where=(seen.c.announcement_id != announcement_id) & ~recorded_is_newer,
+        )
+        async with use_session(self._sessions, session) as s:
+            result = await s.execute(statement)
+            return cast(CursorResult[Any], result).rowcount > 0
 
     async def delete_seen_for_user(
         self, user_id: str, *, session: AsyncSession | None = None

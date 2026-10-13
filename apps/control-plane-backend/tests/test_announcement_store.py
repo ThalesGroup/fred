@@ -362,22 +362,58 @@ async def test_end_exposures_ends_only_the_open_ones_it_is_asked_for(
 
 @pytest.mark.asyncio
 async def test_seen_announcement_is_one_row_per_user(store: AnnouncementStore) -> None:
+    await store.add_exposure(_package("first", 0))
+    await store.add_exposure(_package("second", 1))
     assert await store.get_seen_announcement_id("alice") is None
 
-    for announcement_id in ("first", "first", "second"):
-        await store.set_seen_announcement(
-            user_id="alice", announcement_id=announcement_id
-        )
-    await store.set_seen_announcement(user_id="bob", announcement_id="first")
+    written = [
+        await store.record_seen_announcement(user_id="alice", announcement_id=seen)
+        for seen in ("first", "first", "second")
+    ]
+    await store.record_seen_announcement(user_id="bob", announcement_id="first")
 
+    # The repeat writes nothing: the record is already there.
+    assert written == [True, False, True]
     assert await store.get_seen_announcement_id("alice") == "second"
     assert await store.get_seen_announcement_id("bob") == "first"
 
 
 @pytest.mark.asyncio
+async def test_seen_announcement_never_moves_back(store: AnnouncementStore) -> None:
+    for minute, announcement_id in enumerate(("first", "second", "third")):
+        await store.add_exposure(_package(announcement_id, minute))
+    await store.record_seen_announcement(user_id="alice", announcement_id="third")
+    await store.record_seen_announcement(user_id="bob", announcement_id="first")
+
+    assert not await store.record_seen_announcement(
+        user_id="alice", announcement_id="first"
+    )
+    # Alice's newer record holds nobody else back.
+    assert await store.record_seen_announcement(user_id="bob", announcement_id="second")
+
+    assert await store.get_seen_announcement_id("alice") == "third"
+    assert await store.get_seen_announcement_id("bob") == "second"
+
+
+@pytest.mark.asyncio
+async def test_seen_announcement_needs_an_announced_package(
+    store: AnnouncementStore,
+) -> None:
+    await store.add_exposure(_exposure("banner-line", 0))
+
+    for not_a_package in ("ghost", "banner-line"):
+        assert not await store.record_seen_announcement(
+            user_id="alice", announcement_id=not_a_package
+        )
+
+    assert await store.get_seen_announcement_id("alice") is None
+
+
+@pytest.mark.asyncio
 async def test_delete_seen_for_user(store: AnnouncementStore) -> None:
+    await store.add_exposure(_package("first", 0))
     for uid in ("alice", "bob"):
-        await store.set_seen_announcement(user_id=uid, announcement_id="first")
+        await store.record_seen_announcement(user_id=uid, announcement_id="first")
 
     await store.delete_seen_for_user("alice")
 
