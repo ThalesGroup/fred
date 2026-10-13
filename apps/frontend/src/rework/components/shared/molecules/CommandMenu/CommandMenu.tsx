@@ -72,8 +72,14 @@ export const CommandMenu = memo(function CommandMenu({
   // Instant rather than smooth (unlike `Menu`): a held arrow key would queue
   // animations behind the focus it is already past.
   useEffect(() => {
-    const focused = listRef.current?.querySelector(`[data-active="true"]`);
+    const list = listRef.current;
+    const focused = list?.querySelector(`[data-active="true"]`);
+    // The first row of a section brings its heading along, and the very first
+    // row takes the list to the end of its scroll.
+    const heading = focused?.previousElementSibling;
+    if (heading && heading.getAttribute("role") !== "option") heading.scrollIntoView({ block: "nearest" });
     focused?.scrollIntoView({ block: "nearest" });
+    if (list && activeIndex === 0) list.scrollTop = 0;
   }, [activeIndex, entries]);
 
   // Activating on mousedown, with the default suppressed: a click that first

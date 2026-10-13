@@ -387,6 +387,27 @@ describe("the command menu", () => {
     expect(scrollIntoView.mock.calls.length).toBeGreaterThan(callsAfterOpen);
   });
 
+  it("shows the section heading with the first entry, back at the top of the list", () => {
+    const scrolled: Element[] = [];
+    Object.defineProperty(Element.prototype, "scrollIntoView", {
+      value(this: Element) {
+        scrolled.push(this);
+      },
+      configurable: true,
+      writable: true,
+    });
+    type("/");
+    const list = container.querySelector<HTMLElement>('[role="listbox"]')!;
+    press("ArrowDown");
+    list.scrollTop = 40;
+    scrolled.length = 0;
+
+    press("ArrowUp");
+
+    expect(scrolled.map((element) => element.getAttribute("role"))).toEqual([null, "option"]);
+    expect(list.scrollTop).toBe(0);
+  });
+
   it("prefetches the focused entry once, and not again on the way back", () => {
     type("/");
     expect(fetchPrompt.mock.calls.map(([arg]) => arg.promptId)).toEqual(["p-search"]);
