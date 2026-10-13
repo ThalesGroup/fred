@@ -4491,7 +4491,7 @@ the period, read from `agent.creation_assistant_completed` only.
 ## 63. Contract Notes — team model settings, recommended model and composer model choice (2026-10-09, #3029)
 
 Amends §33 (per-agent reasoning), §37 (team routing policy) and §41 (effective
-chat model). Runtime side: `RUNTIME-EXECUTION-CONTRACT.md` §8.113. OpenSpec
+chat model). Runtime side: `RUNTIME-EXECUTION-CONTRACT.md` §8.114. OpenSpec
 change `chat-model-and-reasoning-picker`.
 
 ### §37 amended — the team policy becomes the team's Models section
