@@ -2,7 +2,7 @@
 schema: 1
 title: "Members pick the chat model per conversation; teams curate their models and reasoning defaults"
 impact: minor
-after: [user-profile-picture, 2965-platform-access-planning]
+after: [user-profile-picture, add-agent-creation-assistant]
 configuration: none
 configuration_reason: "No configuration key, default, chart value or models_catalog.yaml entry changes; team model settings live in the existing team_routing_policy table and agent recommendations in agent_instance.tuning_json."
 ---
@@ -34,7 +34,7 @@ No configuration changes are required.
 
 1. Deploy control-plane, the agent pods and the frontend together. Run the
    normal control-plane `alembic upgrade head`. Revision `e9026d8e4db6` (after
-   `f9a2c7d81e40`):
+   `93427a5fe874`):
    - adds `disabled_model_ids_json` and `reasoning_default_off_model_ids_json`
      to `team_routing_policy`, both empty;
    - copies each team's per-template model override into

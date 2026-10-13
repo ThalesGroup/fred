@@ -20,7 +20,7 @@ The downgrade re-adds that column empty: the copied recommendations stay in
 `tuning_json`, so per-template routing is lost on rollback.
 
 Revision ID: e9026d8e4db6
-Revises: f9a2c7d81e40
+Revises: 93427a5fe874
 """
 
 import json
@@ -32,7 +32,7 @@ from alembic import op
 
 revision: str = "e9026d8e4db6"  # pragma: allowlist secret
 down_revision: Union[str, Sequence[str], None] = (
-    "f9a2c7d81e40"  # pragma: allowlist secret
+    "93427a5fe874"  # pragma: allowlist secret
 )
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
