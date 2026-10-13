@@ -490,12 +490,21 @@ struct IngestRequest {
     profile: Option<String>,
 }
 
+/// The body is optional; when present it gets the same 422 contract as `ApiJson`.
+fn ingest_request(body: &[u8]) -> AppResult<IngestRequest> {
+    if body.is_empty() {
+        return Ok(IngestRequest::default());
+    }
+    serde_json::from_slice(body).map_err(|e| AppError::Unprocessable(e.to_string()))
+}
+
 async fn ingest_document(
     State(s): State<AppState>,
     CurrentUser { uid: user, .. }: CurrentUser,
     Path(id): Path<Uuid>,
-    body: Option<Json<IngestRequest>>,
+    body: axum::body::Bytes,
 ) -> AppResult<StatusCode> {
+    let request = ingest_request(&body)?;
     let document = db::document(&s.pool, id).await?;
     require(&s.fga, &user, Permission::Write, document.space_id).await?;
     let folder_path = match document.folder_id {
@@ -510,9 +519,7 @@ async fn ingest_document(
         source_key: format!("{storage_prefix}source"),
         storage_prefix,
         mime: document.mime,
-        profile: body
-            .and_then(|Json(b)| b.profile)
-            .unwrap_or_else(|| "medium".into()),
+        profile: request.profile.unwrap_or_else(|| "medium".into()),
         requested_by: user,
     };
     match s.ingestion.ingest(input).await? {
@@ -569,4 +576,25 @@ async fn authorize_scope(
     Ok(Json(Scope {
         space_ids: space.path,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ingest_body_is_optional_and_never_plain_text() {
+        assert_eq!(ingest_request(b"").unwrap().profile, None);
+        assert_eq!(
+            ingest_request(br#"{"profile":"rich"}"#)
+                .unwrap()
+                .profile
+                .as_deref(),
+            Some("rich")
+        );
+        assert!(matches!(
+            ingest_request(b"{not json"),
+            Err(AppError::Unprocessable(_))
+        ));
+    }
 }

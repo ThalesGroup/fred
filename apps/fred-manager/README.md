@@ -11,8 +11,9 @@ OpenFGA check, and submits ingestion work to the Python workers through Temporal
   and no parent relation, plus `platform:root` for platform roles
   (`openfga/model.fga`). A role on a space requires read access to its parent;
   fred-manager refuses writes that would break this, and serializes every role or
-  space mutation of one organization under a Postgres advisory lock so concurrent
-  requests cannot interleave between the check and the write.
+  space mutation of one organization under a Postgres advisory lock, checking the
+  caller's own right under that lock too, so concurrent requests cannot interleave
+  between a check and its write.
 - **Personal spaces** are managed from their organization: an organization admin can
   remove the owner's roles there, nobody can add any. A member leaves an organization
   by losing their personal-space roles first, then their organization role.
@@ -59,7 +60,7 @@ make code-quality                     # clippy + rustfmt
 Building needs `protoc`; `PROTOC` defaults to `~/bin/tools/protoc/bin/protoc`. The
 Makefile fragments are `scripts/makefiles/rust-*.mk`, mirroring the `python-*.mk` ones.
 `GET /fred-manager/v1/healthz` is the only route without a bearer token. Invalid JSON
-bodies get 422 with a `detail`, as in FastAPI. Document pages use a keyset cursor,
+bodies, optional ones included, get 422 with a `detail`, as in FastAPI. Document pages use a keyset cursor,
 `after_name` and `after_id` of the previous page's last document: deleting that
 document changes nothing, and a document renamed across the cursor between two pages
 may be skipped or repeated.
@@ -117,9 +118,11 @@ make bootstrap-local BOOTSTRAP_USER=<you> BOOTSTRAP_PASSWORD=<pw>   # FRED_BOOTS
 `POST /fred-manager/v1/bootstrap/platform-admin {"token": ...}` grants `admin` on
 `platform:root` to the caller only: 422 for a token under 16 characters, 403 for a wrong
 or unconfigured secret, 409 once completed (even if every admin is later removed), 503
-when authentication is disabled. Unlike the control-plane, the durable marker naming the
-caller in `platform_bootstrap` commits before the OpenFGA write: if that write fails,
-only the same caller can finish by retrying, so a second secret holder is never promoted. The secret is a
+when authentication is disabled. Unlike the control-plane, the marker naming the caller in
+`platform_bootstrap` commits before the OpenFGA write, and the bootstrap is finished once
+`granted_at` records that write: if it fails, only the same caller can finish by
+retrying, so a second secret holder is never promoted, and a finished bootstrap never
+reopens, even for its own admin after removal. The secret is a
 secret like the others, read from the variable `app.bootstrap_token_env_var` names
 (`FRED_BOOTSTRAP_TOKEN`): `config/.env` locally, and on k3d the control-plane's
 `CONTROL_PLANE_BOOTSTRAP_TOKEN` from `fred-secrets`. Each service keeps its own marker,
@@ -139,7 +142,8 @@ same lifetime ceiling and the same `security:` settings (`profile: c3`, `user`,
 Not ported yet, each needs its own decision: GCU acceptance, local identity
 snapshot, account status, platform access rules, whitelist and delegated callers.
 As PyJWT and its `PyJWKClient`: a future or non-integer `iat` is refused, and an unknown
-`kid` refetches the realm keys at most once per 30 seconds, one fetch at a time.
+`kid` refetches the realm keys at most once per 30 seconds, failed attempts included,
+one fetch at a time, while cached keys stay readable during a fetch.
 Deliberate differences, all stricter: no token cache (verification is cheap here),
 `exp` and `iat` are required so the lifetime ceiling always applies, and an empty
 subject is refused for every provider.

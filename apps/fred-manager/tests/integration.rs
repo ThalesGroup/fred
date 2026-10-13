@@ -33,6 +33,8 @@ const IGNORE: &str = "needs Postgres and OpenFGA: make test-integration";
 struct Env {
     pool: PgPool,
     fga: Fga,
+    openfga: String,
+    store: String,
 }
 
 async fn env() -> Env {
@@ -60,7 +62,49 @@ async fn env() -> Env {
     )
     .await
     .unwrap();
-    Env { pool, fga }
+    Env {
+        pool,
+        fga,
+        openfga,
+        store: name,
+    }
+}
+
+/// Removes a tuple behind fred-manager's back, as another admin or an operator would.
+async fn delete_tuple(e: &Env, user: &str, relation: &str, object: &str) {
+    let http = reqwest::Client::new();
+    let stores: serde_json::Value = http
+        .get(format!("{}/stores?name={}", e.openfga, e.store))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let id = stores["stores"][0]["id"].as_str().unwrap();
+    let body = serde_json::json!({ "deletes": { "tuple_keys": [
+        { "user": format!("user:{user}"), "relation": relation, "object": object }
+    ] } });
+    let status = http
+        .post(format!("{}/stores/{id}/write", e.openfga))
+        .json(&body)
+        .send()
+        .await
+        .unwrap()
+        .status();
+    assert!(status.is_success(), "delete tuple: {status}");
+}
+
+/// Holds the advisory lock fred-manager takes for `org`, until the transaction ends.
+async fn hold_organization_lock(e: &Env, org: Uuid) -> sqlx::Transaction<'static, sqlx::Postgres> {
+    let key = i64::from_be_bytes(org.as_bytes()[..8].try_into().unwrap());
+    let mut tx = e.pool.begin().await.unwrap();
+    sqlx::query("select pg_advisory_xact_lock($1)")
+        .bind(key)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    tx
 }
 
 /// Organization TSN administered by alice, team BID under it, alice member of both.
@@ -166,6 +210,35 @@ async fn concurrent_grant_and_revoke_keep_the_invariant() {
 
 #[tokio::test]
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn a_revoked_admin_cannot_finish_a_waiting_request() {
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    grant(&e, org.id, Role::Member, "bob").await;
+    grant(&e, team.id, Role::Admin, "bob").await;
+
+    let held = hold_organization_lock(&e, org.id).await;
+    let pending = {
+        let (pool, fga) = (e.pool.clone(), e.fga.clone());
+        tokio::spawn(
+            async move { spaces::grant(&pool, &fga, "bob", team.id, Role::Admin, "bob").await },
+        )
+    };
+    // Let bob's request reach the lock, then revoke him while it waits.
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    delete_tuple(&e, "bob", "admin", &format!("space:{}", team.id)).await;
+    held.commit().await.unwrap();
+
+    assert!(matches!(pending.await.unwrap(), Err(AppError::Forbidden)));
+    assert!(
+        !e.fga
+            .check("bob", Permission::Manage, team.id)
+            .await
+            .unwrap()
+    );
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
 async fn a_member_with_a_personal_space_can_leave_the_organization() {
     let e = env().await;
     let (org, _) = org_and_team(&e).await;
@@ -209,6 +282,19 @@ async fn bootstrap_promotes_one_person_once() {
         );
     }
     assert!(!e.fga.is_platform_admin("bob").await.unwrap());
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn a_finished_bootstrap_stays_closed_after_its_admin_is_removed() {
+    let e = env().await;
+    bootstrap::grant_root(&e.pool, &e.fga, "alice")
+        .await
+        .unwrap();
+    delete_tuple(&e, "alice", "admin", "platform:root").await;
+    let again = bootstrap::grant_root(&e.pool, &e.fga, "alice").await;
+    assert!(matches!(again, Err(AppError::Conflict(_))));
+    assert!(!e.fga.is_platform_admin("alice").await.unwrap());
 }
 
 #[tokio::test]

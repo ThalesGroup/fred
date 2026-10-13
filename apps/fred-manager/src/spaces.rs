@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Space and role mutations. Each one checks "a role on a space requires read on its
-//! parent" and writes under one transaction-scoped advisory lock per organization, so
-//! no concurrent mutation can interleave between the check and the write.
+//! Space and role mutations. Each one checks the caller's right and "a role on a space
+//! requires read on its parent", then writes, all under one transaction-scoped advisory
+//! lock per organization: no concurrent mutation can interleave between check and write.
 
 use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
@@ -107,9 +107,9 @@ pub async fn create_space(
 ) -> AppResult<Space> {
     let parent = db::space(pool, parent_id).await?;
     domain::check_parent(kind, Some(&parent))?;
-    require(fga, caller, Permission::Manage, parent.id).await?;
     let mut tx = pool.begin().await?;
     lock_organization(&mut tx, &parent).await?;
+    require(fga, caller, Permission::Manage, parent.id).await?;
     if !fga.check(admin, Permission::Read, parent.id).await? {
         return Err(AppError::Conflict(PARENT_REQUIRED.into()));
     }
@@ -184,9 +184,9 @@ pub async fn grant(
     if space.personal_owner.is_some() {
         return Err(AppError::Conflict(PERSONAL_FIXED.into()));
     }
-    require(fga, caller, Permission::Manage, space.id).await?;
     let mut tx = pool.begin().await?;
     lock_organization(&mut tx, &space).await?;
+    require(fga, caller, Permission::Manage, space.id).await?;
     if let Some(parent) = space.parent_id
         && !fga.check(target, Permission::Read, parent).await?
     {
@@ -220,9 +220,9 @@ pub async fn revoke(
         (Some(_), Some(org)) => org,
         _ => space.id,
     };
-    require(fga, caller, Permission::Manage, manager).await?;
     let mut tx = pool.begin().await?;
     lock_organization(&mut tx, &space).await?;
+    require(fga, caller, Permission::Manage, manager).await?;
     let held = fga.roles_of(target).await?;
     let on_space: Vec<Role> = held
         .iter()

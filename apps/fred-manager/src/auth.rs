@@ -166,7 +166,11 @@ impl IntoResponse for AuthError {
 struct Jwks {
     url: String,
     http: reqwest::Client,
+    /// When the keys were fetched, and the signing keys by kid.
     cache: RwLock<(Option<Instant>, HashMap<String, DecodingKey>)>,
+    /// When a fetch was last attempted, successful or not. Held during a fetch, so
+    /// refetches run one at a time while cached keys stay readable.
+    attempt: tokio::sync::Mutex<Option<Instant>>,
 }
 
 impl Jwks {
@@ -175,23 +179,31 @@ impl Jwks {
             url,
             http,
             cache: RwLock::new((None, HashMap::new())),
+            attempt: tokio::sync::Mutex::new(None),
         }
     }
 
+    async fn cached(&self, kid: &str) -> Option<DecodingKey> {
+        let (fetched, keys) = &*self.cache.read().await;
+        fetched
+            .is_some_and(|t| t.elapsed() < JWKS_LIFESPAN)
+            .then(|| keys.get(kid).cloned())
+            .flatten()
+    }
+
     async fn key(&self, kid: &str) -> Result<DecodingKey> {
-        {
-            let (fetched, keys) = &*self.cache.read().await;
-            if let Lookup::Use = lookup(fetched.map(|t| t.elapsed()), keys.contains_key(kid)) {
-                return Ok(keys[kid].clone());
-            }
+        if let Some(key) = self.cached(kid).await {
+            return Ok(key);
         }
-        // One fetch at a time: concurrent misses wait here and reuse its result.
-        let mut cache = self.cache.write().await;
-        match lookup(cache.0.map(|t| t.elapsed()), cache.1.contains_key(kid)) {
-            Lookup::Use => return Ok(cache.1[kid].clone()),
-            Lookup::Refuse => bail!("unknown kid within the refetch cooldown"),
-            Lookup::Fetch => {}
+        let mut attempt = self.attempt.lock().await;
+        // Another request may have fetched while this one waited.
+        if let Some(key) = self.cached(kid).await {
+            return Ok(key);
         }
+        if !may_fetch(attempt.map(|t| t.elapsed())) {
+            bail!("unknown kid within the refetch cooldown");
+        }
+        *attempt = Some(Instant::now());
         let set: JwkSet = self
             .http
             .get(&self.url)
@@ -200,25 +212,16 @@ impl Jwks {
             .error_for_status()?
             .json()
             .await?;
-        *cache = (Some(Instant::now()), signing_keys(&set));
-        cache.1.get(kid).cloned().context("no signing key for kid")
+        let keys = signing_keys(&set);
+        let found = keys.get(kid).cloned();
+        *self.cache.write().await = (Some(Instant::now()), keys);
+        found.context("no signing key for kid")
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
-enum Lookup {
-    Use,
-    Fetch,
-    Refuse,
-}
-
-/// `age` is the time since the last fetch, if any.
-fn lookup(age: Option<Duration>, known: bool) -> Lookup {
-    match age {
-        Some(age) if age < JWKS_LIFESPAN && known => Lookup::Use,
-        Some(age) if age < JWKS_COOLDOWN => Lookup::Refuse,
-        _ => Lookup::Fetch,
-    }
+/// PyJWKClient's cooldown, applied to every attempt: a failing realm is not hammered either.
+fn may_fetch(since_last_attempt: Option<Duration>) -> bool {
+    since_last_attempt.is_none_or(|elapsed| elapsed >= JWKS_COOLDOWN)
 }
 
 /// PyJWKClient keeps signing keys only; Keycloak also publishes an encryption key.
@@ -729,14 +732,19 @@ mod tests {
 
     #[test]
     fn jwks_refetch_rules() {
-        let s = Duration::from_secs;
-        assert_eq!(lookup(None, false), Lookup::Fetch);
-        assert_eq!(lookup(Some(s(10)), true), Lookup::Use);
-        // An unknown kid refetches at most once per cooldown.
-        assert_eq!(lookup(Some(s(10)), false), Lookup::Refuse);
-        assert_eq!(lookup(Some(s(31)), false), Lookup::Fetch);
-        // An expired set is refetched even for a known kid.
-        assert_eq!(lookup(Some(s(301)), true), Lookup::Fetch);
+        assert!(may_fetch(None));
+        assert!(!may_fetch(Some(Duration::from_secs(10))));
+        assert!(may_fetch(Some(Duration::from_secs(30))));
+    }
+
+    #[tokio::test]
+    async fn a_failed_fetch_starts_the_cooldown_too() {
+        // Nothing listens on port 1: the first attempt fails, the second is not even tried.
+        let jwks = Jwks::new("http://127.0.0.1:1/certs".into(), reqwest::Client::new());
+        let first = jwks.key("any").await.unwrap_err().to_string();
+        let second = jwks.key("any").await.unwrap_err().to_string();
+        assert!(!first.contains("cooldown"), "{first}");
+        assert!(second.contains("cooldown"), "{second}");
     }
 
     #[tokio::test]

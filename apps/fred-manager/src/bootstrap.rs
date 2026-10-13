@@ -50,29 +50,34 @@ pub fn same_secret(a: &str, b: &str) -> bool {
 }
 
 /// Grants platform admin to `uid`, the caller's own subject. Unlike the control-plane,
-/// the marker naming the caller commits before the OpenFGA write: a failure in between
-/// can only be finished by that same caller retrying, never by a second secret holder.
+/// the marker naming the caller commits before the OpenFGA write, and the bootstrap only
+/// finishes once that write is recorded: an interrupted grant can be finished by its
+/// claimant only, and a finished bootstrap never reopens, even if that admin is removed.
 pub async fn grant_root(pool: &PgPool, fga: &Fga, uid: &str) -> Result<(), AppError> {
     let mut tx = pool.begin().await?;
     sqlx::query("select pg_advisory_xact_lock($1)")
         .bind(LOCK_KEY)
         .execute(&mut *tx)
         .await?;
-    let owner: Option<String> = sqlx::query_scalar("select completed_by from platform_bootstrap")
-        .fetch_optional(&mut *tx)
-        .await?;
-    match owner {
+    let marker: Option<(String, bool)> =
+        sqlx::query_as("select completed_by, granted_at is not null from platform_bootstrap")
+            .fetch_optional(&mut *tx)
+            .await?;
+    match marker {
         None => {
             sqlx::query("insert into platform_bootstrap (completed_by) values ($1)")
                 .bind(uid)
                 .execute(&mut *tx)
                 .await?;
-            tx.commit().await?;
         }
-        Some(owner) if owner == uid && !fga.is_platform_admin(uid).await? => {}
+        Some((claimant, false)) if claimant == uid => {}
         Some(_) => return Err(AppError::Conflict(COMPLETED.into())),
     }
+    tx.commit().await?;
     fga.grant_platform_admin(uid).await?;
+    sqlx::query("update platform_bootstrap set granted_at = now() where granted_at is null")
+        .execute(pool)
+        .await?;
     Ok(())
 }
 
