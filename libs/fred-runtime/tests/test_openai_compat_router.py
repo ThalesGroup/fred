@@ -412,6 +412,75 @@ def test_chat_completions_streams_openai_chunks_and_done(monkeypatch, tmp_path) 
     # The final chunk must have finish_reason="stop"
     final_chunks = [c for c in chunks if c["choices"][0].get("finish_reason") == "stop"]
     assert final_chunks, "Expected a chunk with finish_reason=stop"
+    # The fake model does not stream: the answer reaches the client via `final`.
+    assert _answer_text(chunks) == "Hello there."
+
+
+@tool("demo.broken", description="Always fails.")
+async def _demo_broken(ctx: ToolContext) -> str:
+    """Raise so the runtime surfaces the tool error as the turn's answer."""
+    raise RuntimeError("backend unavailable")
+
+
+class _BrokenToolAgent(_HelloAgent):
+    agent_id: str = "test.broken.v1"
+    tools = (_demo_broken,)
+
+
+def _answer_text(chunks: list[dict[str, Any]]) -> str:
+    return "".join(
+        c["choices"][0]["delta"].get("content") or ""
+        for c in chunks
+        if not c.get("fred", {}).get("thought")
+    )
+
+
+def test_chat_completions_delivers_final_content_that_was_never_streamed(
+    monkeypatch, tmp_path
+) -> None:
+    """A failed tool round suppresses the model's deltas; the error text exists
+    only in the final event and must still reach an OpenAI client."""
+    model = ToolFriendlyFakeChatModel(
+        responses=[
+            AIMessage(
+                content="",
+                tool_calls=[{"id": "call-1", "name": "demo.broken", "args": {}}],
+            ),
+            AIMessage(content="ignored synthesis"),
+        ]
+    )
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+    definition = _BrokenToolAgent()
+    app = create_agent_app(
+        registry={definition.agent_id: definition}, config=_build_test_config(tmp_path)
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/chat/completions",
+            json={
+                "model": definition.agent_id,
+                "messages": [{"role": "user", "content": "hi"}],
+            },
+            headers={"X-Fred-Session-Id": "openai-tool-error"},
+        )
+
+    assert response.status_code == 200
+    chunks = [
+        json.loads(line.removeprefix("data: "))
+        for line in response.text.splitlines()
+        if line.startswith("data: ") and line != "data: [DONE]"
+    ]
+    assert any(c["choices"][0]["delta"].get("tool_calls") for c in chunks)
+    answer = _answer_text(chunks)
+    assert answer
+    assert "ignored synthesis" not in answer
+    assert chunks[-1]["choices"][0]["finish_reason"] == "stop"
+    assert chunks[-1]["choices"][0]["delta"]["content"] == answer
 
 
 def test_chat_completions_enforces_private_session_ownership(
@@ -759,6 +828,36 @@ def test_a_chat_completion_fails_closed_when_delegation_is_unusable(
     assert response.status_code == 503
     assert "kwargs" not in captured
     assert "resolved_with" not in captured
+
+
+@pytest.mark.parametrize(
+    "before_answer",
+    [[], [{"kind": "tool_call", "call_id": "c1", "tool_name": "t", "arguments": {}}]],
+    ids=["direct", "after-tool"],
+)
+def test_a_streamed_answer_is_not_repeated_by_the_final_chunk(
+    monkeypatch, compat_pod, before_answer: list[dict[str, Any]]
+) -> None:
+    set_delegation_runtime(None)
+
+    async def iterate(*_args: Any, **_kwargs: Any):
+        for event in before_answer:
+            yield event
+        yield {"kind": "assistant_delta", "delta": "Answer"}
+        yield {"kind": "final", "content": "Answer"}
+
+    with compat_client(monkeypatch, {}, compat_pod) as client:
+        monkeypatch.setattr(
+            openai_compat_router_module, "_iterate_runtime_event_payloads", iterate
+        )
+        response = chat_completion(client)
+
+    chunks = [
+        json.loads(line.removeprefix("data: "))
+        for line in response.text.splitlines()
+        if line.startswith("data: ") and line != "data: [DONE]"
+    ]
+    assert _answer_text(chunks) == "Answer"
 
 
 def test_with_the_flag_off_a_chat_completion_gets_no_provider_at_all(
