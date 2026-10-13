@@ -28,21 +28,40 @@ export interface RowControlsProps {
   onDelete: () => void;
 }
 
-/** Switch, Edit and Delete: the controls every row carries, worded for its kind. */
-export default function RowControls({ announcement, pending, onToggle, onEdit, onDelete }: RowControlsProps) {
+const rowKeys = (announcement: Announcement) =>
+  announcement.kind === "patch_note" ? "rework.announcements.patchNote.row" : "rework.announcements.row";
+
+/** The delivery switch, with a hint saying which way it goes. */
+export function RowSwitch({
+  announcement,
+  pending,
+  onToggle,
+}: Pick<RowControlsProps, "announcement" | "pending" | "onToggle">) {
   const { t } = useTranslation();
-  const keys = announcement.kind === "patch_note" ? "rework.announcements.patchNote.row" : "rework.announcements.row";
+  const keys = rowKeys(announcement);
+  return (
+    <Tooltip text={announcement.enabled ? t(`${keys}.disableHint`) : t(`${keys}.enableHint`)}>
+      <Switch
+        size="small"
+        checked={announcement.enabled}
+        disabled={pending}
+        onChange={(event) => onToggle(event.target.checked)}
+        aria-label={t(`${keys}.enabled`)}
+      />
+    </Tooltip>
+  );
+}
+
+/** Edit and Delete, worded for the row's kind. */
+export function RowActions({
+  announcement,
+  onEdit,
+  onDelete,
+}: Pick<RowControlsProps, "announcement" | "onEdit" | "onDelete">) {
+  const { t } = useTranslation();
+  const keys = rowKeys(announcement);
   return (
     <>
-      <Tooltip text={announcement.enabled ? t(`${keys}.disableHint`) : t(`${keys}.enableHint`)}>
-        <Switch
-          size="small"
-          checked={announcement.enabled}
-          disabled={pending}
-          onChange={(event) => onToggle(event.target.checked)}
-          aria-label={t(`${keys}.enabled`)}
-        />
-      </Tooltip>
       <IconButton
         size="small"
         variant="icon"
@@ -51,6 +70,16 @@ export default function RowControls({ announcement, pending, onToggle, onEdit, o
         onClick={onEdit}
       />
       <DeleteIconButton size="small" aria-label={t(`${keys}.delete`)} onClick={onDelete} />
+    </>
+  );
+}
+
+/** Switch, Edit and Delete side by side: a banner row's controls. */
+export default function RowControls(props: RowControlsProps) {
+  return (
+    <>
+      <RowSwitch {...props} />
+      <RowActions {...props} />
     </>
   );
 }

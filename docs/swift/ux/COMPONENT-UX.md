@@ -4554,9 +4554,10 @@ new tab.
   filled create button ("Nouveau bandeau" / "Nouveau patch note") that opens
   its editor directly, and its own empty state.
 - **Patch-note card (`PatchNoteList`).** Neutral `surface-container` card with
-  an `outline-muted` border: drag handle at the left (`drag_indicator`), title,
-  a `--font-body-small` / `on-surface-retreat` line saying whether users can
-  read it, then Preview, `Switch`, Edit, Delete. The switch only decides
+  an `outline-muted` border: drag handle at the left (`drag_indicator`), the
+  `Switch` right after it, title over a `--font-body-small` /
+  `on-surface-retreat` line saying whether users can read it, then Preview,
+  Edit, Delete at the right. The switch only decides
   whether the note is in the users' history: any number can be on, it never
   asks for confirmation, and a new note starts off.
 - **Reordering.** `@dnd-kit` sortable list, vertical only. While a card is
@@ -4568,7 +4569,7 @@ new tab.
   English. One request on drop carries the whole order; the list shows the new
   order at once and goes back, with an error toast, if the server refuses it.
   Motion is dropped under `prefers-reduced-motion`.
-- **Announce (`PatchNoteAnnouncer`).** Above the list, an outlined "Annoncer
+- **Announce (`PatchNoteAnnouncer`).** Above the list, a tonal "Annoncer
   la mise à jour" button (`campaign` icon) and, beside it, the date and time of
   the announcement in effect with the administrator's name. The plain
   `ConfirmationDialog` says every user gets the dialog at their next sign-in,

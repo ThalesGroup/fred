@@ -86,7 +86,7 @@ export default function PatchNoteAnnouncer({ visibleNotes }: { visibleNotes: Ann
       <Button
         type="button"
         color="primary"
-        variant="outlined"
+        variant="tonal"
         size="medium"
         icon={{ category: "outlined", type: "campaign" }}
         disabled={!first || isLoading}

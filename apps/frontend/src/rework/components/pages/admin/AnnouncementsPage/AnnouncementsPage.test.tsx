@@ -308,7 +308,7 @@ describe("AnnouncementsPage", () => {
     expect(document.body.textContent).not.toContain(`${ROW}.disableHint`);
   });
 
-  it("renders a patch note card with its handle at the left, its title, its state and its controls", () => {
+  it("renders a patch note card with its handle and switch at the left, then its title, state and actions", () => {
     listMock.mockReturnValue({ data: [patchNote({ enabled: true })], isLoading: false, refetch: refetchMock });
     const row = renderPatchNotes().querySelector('[data-kind="patch_note"]')!;
 
@@ -317,8 +317,8 @@ describe("AnnouncementsPage", () => {
     expect(row.textContent).toContain(`${NOTE_ROW}.statusVisible`);
     expect([...row.querySelectorAll("button, input")].map((control) => control.getAttribute("aria-label"))).toEqual([
       `${NOTE_ROW}.move`,
-      `${NOTE_ROW}.preview`,
       `${NOTE_ROW}.enabled`,
+      `${NOTE_ROW}.preview`,
       `${NOTE_ROW}.edit`,
       `${NOTE_ROW}.delete`,
     ]);

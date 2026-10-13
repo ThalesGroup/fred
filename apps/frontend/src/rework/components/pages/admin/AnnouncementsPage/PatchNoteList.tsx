@@ -42,7 +42,7 @@ import { normalizeApiError } from "@core/errors/normalizeApiError";
 import { resolveAnnouncementText } from "../../../../features/announcements/announcementText";
 import { useSetPatchNoteOrderMutation } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { Announcement } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
-import RowControls from "./RowControls";
+import { RowActions, RowSwitch } from "./RowControls";
 import styles from "./PatchNoteList.module.css";
 
 const verticalOnly: Modifier = ({ transform }) => ({ ...transform, x: 0 });
@@ -79,6 +79,8 @@ function PatchNoteCard({ note, pending, state, handle, onPreview, onToggle, onEd
       >
         <Icon category="outlined" type="drag_indicator" />
       </button>
+      {/* Beside the status line it drives, so the two read as one. */}
+      <RowSwitch announcement={note} pending={pending} onToggle={(enabled) => onToggle(note, enabled)} />
       <div className={styles.text}>
         <span className={styles.title}>{title}</span>
         <span className={styles.status}>
@@ -88,7 +90,6 @@ function PatchNoteCard({ note, pending, state, handle, onPreview, onToggle, onEd
         </span>
       </div>
       <div className={styles.controls}>
-        {/* Before the switch, so the three shared controls line up with the banner rows'. */}
         <IconButton
           size="small"
           variant="icon"
@@ -96,13 +97,7 @@ function PatchNoteCard({ note, pending, state, handle, onPreview, onToggle, onEd
           aria-label={t("rework.announcements.patchNote.row.preview")}
           onClick={() => onPreview(note)}
         />
-        <RowControls
-          announcement={note}
-          pending={pending}
-          onToggle={(enabled) => onToggle(note, enabled)}
-          onEdit={() => onEdit(note)}
-          onDelete={() => onDelete(note)}
-        />
+        <RowActions announcement={note} onEdit={() => onEdit(note)} onDelete={() => onDelete(note)} />
       </div>
     </div>
   );
