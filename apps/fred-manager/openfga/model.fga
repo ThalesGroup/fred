@@ -3,6 +3,11 @@ model
 
 type user
 
+# One object, platform:root. Platform roles grant no access to any space's content.
+type platform
+  relations
+    define admin: [user]
+
 # One type, direct roles only, no parent relation: the tree lives in SQL.
 # A role on a space requires a content role on its parent (enforced by fred-manager).
 type space

@@ -3,6 +3,7 @@
 
 mod api;
 mod auth;
+mod bootstrap;
 mod config;
 mod db;
 mod domain;
@@ -81,6 +82,7 @@ async fn serve(config: Config) -> Result<()> {
         auth: std::sync::Arc::new(auth::Authenticator::start(config.security()?).await?),
         pool: pool(&config).await?,
         fga: fga(&config).await?,
+        bootstrap_token_env_var: config.app.bootstrap_token_env_var.clone(),
         ingestion: ingestion::Ingestion::connect(
             &config.temporal_url(),
             &config.scheduler.temporal.namespace,

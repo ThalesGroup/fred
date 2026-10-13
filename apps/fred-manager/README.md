@@ -8,8 +8,9 @@ OpenFGA check, and submits ingestion work to the Python workers through Temporal
 - **Spaces**: organization > team > project. A personal space is a team with
   `personal_owner` set, one member, no project. Placement never changes.
 - **Rights**: OpenFGA type `space` with direct roles `member`, `editor`, `admin`
-  and no parent relation (`openfga/model.fga`). A role on a space requires read
-  access to its parent; fred-manager refuses writes that would break this.
+  and no parent relation, plus `platform:root` for platform roles
+  (`openfga/model.fga`). A role on a space requires read access to its parent;
+  fred-manager refuses writes that would break this.
 - **Folders**: classification only, no rights. `folder.path` is a chain of ids.
 - **Documents**: one space, one folder, both immutable. Renames are free; a move is
   a re-import.
@@ -28,7 +29,7 @@ OpenFGA check, and submits ingestion work to the Python workers through Temporal
 As in the Python backends: `config/configuration.yaml` (named by `CONFIG_FILE`) holds
 the settings with the same sections and names (`app`, `security`, `storage.postgres`,
 `scheduler.temporal`), and `config/.env` (named by `ENV_FILE`) holds the secrets only,
-`FRED_POSTGRES_PASSWORD` and `OPENFGA_API_TOKEN`. Variables already set in the process
+`FRED_POSTGRES_PASSWORD`, `OPENFGA_API_TOKEN` and `FRED_BOOTSTRAP_TOKEN`. Variables already set in the process
 win over `.env`. The `FRED_STRICT_*` and `FRED_JWT_*` toggles keep their fred-core
 meaning. The tables live in the shared `fred` database; none of fred's tables shares
 their names.
@@ -42,7 +43,7 @@ At startup, as fred-core's OpenFGA engine does, fred-manager finds the store nam
 Same targets as the other apps (`make help` lists them):
 
 ```
-cp config/.env.template config/.env   # fill the two secrets
+cp config/.env.template config/.env   # fill the three secrets
 make run                              # http://localhost:8400/fred-manager/v1
 make create-org ORG_NAME=TSN ORG_ADMIN=<keycloak sub>
 make test                             # offline unit tests
@@ -74,6 +75,27 @@ Makefile fragments are `scripts/makefiles/rust-*.mk`, mirroring the `python-*.mk
   symlinks without `values.schema.json`, whose closed application list `helm lint`
   enforces even with `--skip-schema-validation`. It goes away when fred-manager joins
   the chart and its schema.
+
+## Root platform admin
+
+Same contract and same commands as the control-plane's root bootstrap. A fresh
+deployment has no platform admin; the first one promotes themselves once, with two
+independent proofs: their own verified bearer and the deploy-time secret.
+
+```
+make bootstrap-local BOOTSTRAP_USER=<you> BOOTSTRAP_PASSWORD=<pw>   # FRED_BOOTSTRAP_TOKEN from config/.env
+```
+
+`POST /fred-manager/v1/bootstrap/platform-admin {"token": ...}` grants `admin` on
+`platform:root` to the caller only, then writes a durable marker in
+`platform_bootstrap`: 403 for a wrong or unconfigured secret, 409 once completed (even
+if every admin is later removed), 503 when authentication is disabled. The secret is a
+secret like the others, read from the variable `app.bootstrap_token_env_var` names
+(`FRED_BOOTSTRAP_TOKEN`): `config/.env` locally, and on k3d the control-plane's
+`CONTROL_PLANE_BOOTSTRAP_TOKEN` from `fred-secrets`. Each service keeps its own marker,
+so bootstrapping one never consumes the other.
+`GET /fred-manager/v1/me` returns the caller's `platform_roles`. Platform roles grant no
+access to any space's content.
 
 ## Authentication
 

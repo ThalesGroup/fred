@@ -11,6 +11,9 @@ use uuid::Uuid;
 
 use crate::domain::{Permission, Role};
 
+/// The single platform object holding platform roles.
+const PLATFORM: &str = "platform:root";
+
 #[derive(Clone)]
 pub struct Fga {
     http: reqwest::Client,
@@ -111,12 +114,23 @@ impl Fga {
 
     /// The single authorization call of every request.
     pub async fn check(&self, user: &str, permission: Permission, space: Uuid) -> Result<bool> {
+        self.check_object(user, permission.as_str(), &format!("space:{space}"))
+            .await
+    }
+
+    pub async fn is_platform_admin(&self, user: &str) -> Result<bool> {
+        self.check_object(user, "admin", PLATFORM).await
+    }
+
+    pub async fn grant_platform_admin(&self, user: &str) -> Result<()> {
+        let key =
+            json!({ "user": format!("user:{user}"), "relation": "admin", "object": PLATFORM });
+        self.write_keys(vec![key], Vec::new()).await
+    }
+
+    async fn check_object(&self, user: &str, relation: &str, object: &str) -> Result<bool> {
         let mut body = json!({
-            "tuple_key": {
-                "user": format!("user:{user}"),
-                "relation": permission.as_str(),
-                "object": format!("space:{space}"),
-            },
+            "tuple_key": { "user": format!("user:{user}"), "relation": relation, "object": object },
         });
         self.pin_model(&mut body);
         let resp = self
@@ -126,19 +140,22 @@ impl Fga {
     }
 
     pub async fn write(&self, writes: &[Tuple<'_>], deletes: &[Tuple<'_>]) -> Result<()> {
+        self.write_keys(
+            writes.iter().map(Tuple::key).collect(),
+            deletes.iter().map(Tuple::key).collect(),
+        )
+        .await
+    }
+
+    /// Idempotent, as fred-core's engine: duplicates and missing deletes are ignored.
+    async fn write_keys(&self, writes: Vec<Value>, deletes: Vec<Value>) -> Result<()> {
         let mut body = json!({});
         self.pin_model(&mut body);
         if !writes.is_empty() {
-            body["writes"] = json!({
-                "tuple_keys": writes.iter().map(Tuple::key).collect::<Vec<_>>(),
-                "on_duplicate": "ignore",
-            });
+            body["writes"] = json!({ "tuple_keys": writes, "on_duplicate": "ignore" });
         }
         if !deletes.is_empty() {
-            body["deletes"] = json!({
-                "tuple_keys": deletes.iter().map(Tuple::key).collect::<Vec<_>>(),
-                "on_missing": "ignore",
-            });
+            body["deletes"] = json!({ "tuple_keys": deletes, "on_missing": "ignore" });
         }
         self.post(&format!("/stores/{}/write", self.store), body)
             .await?;

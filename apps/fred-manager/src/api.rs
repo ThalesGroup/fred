@@ -16,7 +16,7 @@ use uuid::Uuid;
 
 use crate::{
     auth::{Authenticator, CurrentUser},
-    db,
+    bootstrap, db,
     domain::{self, Document, Folder, Permission, Role, Space, SpaceKind},
     error::{AppError, AppResult},
     fga::{Fga, Tuple},
@@ -28,6 +28,7 @@ pub struct AppState {
     pub auth: Arc<Authenticator>,
     pub pool: PgPool,
     pub fga: Fga,
+    pub bootstrap_token_env_var: Option<String>,
     pub ingestion: Ingestion,
 }
 
@@ -60,6 +61,8 @@ pub fn router(state: AppState, base_url: &str, authorized_origins: &[String]) ->
             "/healthz",
             get(|| async { Json(serde_json::json!({ "status": "ok" })) }),
         )
+        .route("/bootstrap/platform-admin", post(bootstrap_platform_admin))
+        .route("/me", get(me))
         .route("/me/spaces", get(my_spaces))
         .route("/me/personal-space", post(create_personal_space))
         .route("/spaces", post(create_space))
@@ -94,6 +97,65 @@ async fn require(fga: &Fga, user: &str, permission: Permission, space: Uuid) -> 
     } else {
         Err(AppError::Forbidden)
     }
+}
+
+// ---------------------------------------------------------------- platform
+
+#[derive(Deserialize)]
+struct BootstrapRequest {
+    token: String,
+}
+
+#[derive(Serialize)]
+struct BootstrapResponse {
+    user_id: String,
+    username: String,
+}
+
+/// Same contract as the control-plane's `POST /bootstrap/platform-admin`: the caller's
+/// own verified bearer plus the deploy-time secret, granting platform admin to the
+/// caller only, once ever.
+async fn bootstrap_platform_admin(
+    State(s): State<AppState>,
+    user: CurrentUser,
+    Json(req): Json<BootstrapRequest>,
+) -> AppResult<Json<BootstrapResponse>> {
+    let configured = bootstrap::configured_token(s.bootstrap_token_env_var.as_deref());
+    if !configured.is_some_and(|t| bootstrap::same_secret(&t, &req.token)) {
+        return Err(AppError::Denied(bootstrap::INVALID.into()));
+    }
+    if !s.auth.enabled() {
+        return Err(AppError::Unavailable(bootstrap::AUTH_DISABLED.into()));
+    }
+    bootstrap::grant_root(&s.pool, &s.fga, &user.uid).await?;
+    tracing::info!(
+        user_id = user.uid,
+        "[BOOTSTRAP] Granted platform_admin via root bootstrap"
+    );
+    Ok(Json(BootstrapResponse {
+        user_id: user.uid,
+        username: user.username,
+    }))
+}
+
+#[derive(Serialize)]
+struct Me {
+    user_id: String,
+    username: String,
+    platform_roles: Vec<&'static str>,
+}
+
+async fn me(State(s): State<AppState>, user: CurrentUser) -> AppResult<Json<Me>> {
+    let admin = s.fga.is_platform_admin(&user.uid).await?;
+    Ok(Json(Me {
+        platform_roles: if admin {
+            vec!["platform_admin"]
+        } else {
+            Vec::new()
+        },
+        user_id: user.uid,
+        username: user.username,
+    }))
 }
 
 // ---------------------------------------------------------------- spaces and roles

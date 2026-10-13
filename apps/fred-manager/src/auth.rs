@@ -270,6 +270,10 @@ impl Authenticator {
         })
     }
 
+    pub fn enabled(&self) -> bool {
+        self.verifier.is_some()
+    }
+
     pub async fn authenticate(&self, token: Option<&str>) -> Result<CurrentUser, AuthError> {
         let Some(v) = &self.verifier else {
             return Ok(mock_admin());

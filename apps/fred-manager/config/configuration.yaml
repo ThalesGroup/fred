@@ -6,6 +6,8 @@ app:
   base_url: /fred-manager/v1
   address: 0.0.0.0
   port: 8400
+  # One-time root platform-admin bootstrap secret, from config/.env.
+  bootstrap_token_env_var: FRED_BOOTSTRAP_TOKEN
 
 security:
   profile: c3

@@ -49,6 +49,11 @@ applications:
       - name: OPENFGA_API_TOKEN
         valueFrom:
           secretKeyRef: { name: fred-secrets, key: OPENFGA_API_TOKEN, optional: false }
+      # Root platform-admin bootstrap: the control-plane's own secret, deliberately
+      # shared; each service keeps its own one-time completion marker.
+      - name: FRED_BOOTSTRAP_TOKEN
+        valueFrom:
+          secretKeyRef: { name: fred-secrets, key: CONTROL_PLANE_BOOTSTRAP_TOKEN, optional: false }
     ports:
       - name: http
         containerPort: 8400
@@ -136,6 +141,7 @@ applications:
         base_url: "/fred-manager/v1"
         address: "0.0.0.0"
         port: 8400
+        bootstrap_token_env_var: "FRED_BOOTSTRAP_TOKEN"
       security:
         profile: c3                        # posture
         m2m: { realm_url: "http://keycloak:8080/realms/app" }   # address

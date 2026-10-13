@@ -25,6 +25,9 @@ pub struct AppConfig {
     #[serde(default = "default_address")]
     pub address: String,
     pub port: u16,
+    /// Root-bootstrap secret, read from this environment variable.
+    #[serde(default)]
+    pub bootstrap_token_env_var: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
