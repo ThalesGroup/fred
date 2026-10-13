@@ -112,17 +112,44 @@ class PlatformAccessStore:
         )
 
     @staticmethod
-    def user_filter(query: str, exceptions_only: bool) -> list[ColumnElement[bool]]:
-        clauses: list[ColumnElement[bool]] = []
-        if query:
-            clauses.append(PlatformAccessStore.user_search(query))
-        if exceptions_only:
-            clauses.append(
-                select(PlatformAccessUserRow.user_id)
-                .where(PlatformAccessUserRow.user_id == UserRow.id)
-                .exists()
+    def user_filter(query: str) -> list[ColumnElement[bool]]:
+        return [PlatformAccessStore.user_search(query)] if query else []
+
+    async def users_with_exceptions(
+        self,
+        offset: int,
+        limit: int,
+        query: str = "",
+        session: AsyncSession | None = None,
+        *,
+        exceptions_only: bool = False,
+    ) -> list[tuple[UserRow, PlatformAccessUserRow | None]]:
+        """One page of users, each with their individual exception when they hold one."""
+        async with self.read(session) as s:
+            # Explicit NULLS LAST: PostgreSQL and SQLite disagree on the default.
+            alphabetical = (
+                func.lower(UserRow.username).asc().nulls_last(),
+                UserRow.id,
             )
-        return clauses
+            statement = (
+                select(UserRow, PlatformAccessUserRow)
+                .join(
+                    PlatformAccessUserRow,
+                    PlatformAccessUserRow.user_id == UserRow.id,
+                    isouter=not exceptions_only,
+                )
+                .where(*self.user_filter(query))
+            )
+            # The whitelist reads newest grant first; a batch shares one date and stays alphabetical.
+            statement = (
+                statement.order_by(
+                    PlatformAccessUserRow.granted_at.desc(), *alphabetical
+                )
+                if exceptions_only
+                else statement.order_by(*alphabetical)
+            )
+            result = await s.execute(statement.offset(offset).limit(limit))
+            return [(user, exception) for user, exception in result.all()]
 
     async def users(
         self,
@@ -133,14 +160,10 @@ class PlatformAccessStore:
         *,
         exceptions_only: bool = False,
     ) -> list[UserRow]:
-        async with self.read(session) as s:
-            # Explicit NULLS LAST: PostgreSQL and SQLite disagree on the default.
-            statement = (
-                select(UserRow)
-                .where(*self.user_filter(query, exceptions_only))
-                .order_by(func.lower(UserRow.username).asc().nulls_last(), UserRow.id)
-            )
-            return list((await s.scalars(statement.offset(offset).limit(limit))).all())
+        page = await self.users_with_exceptions(
+            offset, limit, query, session, exceptions_only=exceptions_only
+        )
+        return [user for user, _ in page]
 
     async def add_exception(
         self, uid: UUID, actor: str, source: str, session: AsyncSession
@@ -228,12 +251,14 @@ class PlatformAccessStore:
         self, query: str = "", *, exceptions_only: bool = False
     ) -> int:
         async with self.read() as session:
-            statement = (
-                select(func.count())
-                .select_from(UserRow)
-                .where(*self.user_filter(query, exceptions_only))
+            statement = select(func.count()).select_from(UserRow)
+            if exceptions_only:
+                statement = statement.join(
+                    PlatformAccessUserRow, PlatformAccessUserRow.user_id == UserRow.id
+                )
+            return int(
+                (await session.scalar(statement.where(*self.user_filter(query)))) or 0
             )
-            return int((await session.scalar(statement)) or 0)
 
     async def team(self, team_id: str, session: AsyncSession) -> TeamMetadataRow | None:
         return await session.get(TeamMetadataRow, team_id)

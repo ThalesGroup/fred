@@ -1681,20 +1681,41 @@ async def test_population_preview_suspension_overrides_exception_and_requires_ad
 
 
 @pytest.mark.asyncio
-async def test_users_listing_restricts_to_individual_exceptions_in_username_order(
-    access,
+async def test_users_listing_restricts_to_individual_exceptions_newest_first(
+    access, monkeypatch
 ):
+    from datetime import datetime, timedelta, timezone
+
     actor = user("other")
     names = ["zoe", "Bob", "alice", None]
     ids = [UUID(int=500 - index) for index in range(len(names))]
+    day = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    grants = {0: (1, "manual"), 1: (3, "t0"), 3: (1, "manual")}
     async with access.store.mutation() as session:
         session.add_all(
             [UserRow(id=uid, username=name) for uid, name in zip(ids, names)]
         )
         await session.flush()
-        await access.store.add_exception(ids[0], actor.uid, "manual", session)
-        await access.store.add_exception(ids[1], actor.uid, "t0", session)
-        await access.store.add_exception(ids[3], actor.uid, "manual", session)
+        session.add_all(
+            [
+                PlatformAccessUserRow(
+                    user_id=ids[index],
+                    source=source,
+                    granted_by=actor.uid,
+                    granted_at=day + timedelta(days=offset),
+                )
+                for index, (offset, source) in grants.items()
+            ]
+        )
+    access.rebac.members[str(ids[0])] = {"demo"}
+    async with access.store.mutation() as session:
+        (await access.store.team("demo", session)).platform_access_allowed = True
+
+    # The page query already carries each exception: no read per row.
+    async def no_row_read(*args, **kwargs):
+        raise AssertionError("exception read per row")
+
+    monkeypatch.setattr(access.store, "exception", no_row_read)
 
     everyone = await service.users_page(access, 0, 25, "")
     assert [item.username for item in everyone.items] == [
@@ -1704,6 +1725,8 @@ async def test_users_listing_restricts_to_individual_exceptions_in_username_orde
         None,
     ]
     assert everyone.total == 4
+    # No exception: no individual source, hence no grant date.
+    assert everyone.items[0].sources == []
 
     listed = await service.users_page(access, 0, 25, "", True)
     assert [item.user_id for item in listed.items] == [
@@ -1712,12 +1735,22 @@ async def test_users_listing_restricts_to_individual_exceptions_in_username_orde
         str(ids[3]),
     ]
     assert listed.total == 3
-    # Sources are computed the same way in both modes.
-    assert [[source.kind for source in item.sources] for item in listed.items] == [
-        ["t0"],
-        ["manual"],
-        ["manual"],
+
+    # SQLite hands the stored dates back without their zone.
+    def moment(value):
+        return value.replace(tzinfo=None) if value else None
+
+    first, later = moment(day + timedelta(days=1)), moment(day + timedelta(days=3))
+    assert [
+        [(source.kind, moment(source.granted_at)) for source in item.sources]
+        for item in listed.items
+    ] == [
+        [("t0", later)],
+        [("manual", first), ("team", None)],
+        [("manual", first)],
     ]
+    # The same row carries the same sources without the filter.
+    assert everyone.items[2].sources == listed.items[1].sources
     second = await service.users_page(access, 2, 2, "", True)
     assert [item.user_id for item in second.items] == [str(ids[3])]
     assert second.total == 3
@@ -1740,4 +1773,7 @@ async def test_users_listing_restricts_to_individual_exceptions_in_username_orde
         )
         assert filtered.status_code == 200
         assert filtered.json()["total"] == 2
-        assert [item["username"] for item in filtered.json()["items"]] == ["zoe"]
+        item = filtered.json()["items"][0]
+        assert item["username"] == "zoe"
+        assert [source["kind"] for source in item["sources"]] == ["manual", "team"]
+        assert item["sources"][0]["granted_at"].startswith("2026-01-02T00:00:00")

@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 import time
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from typing import cast
 from uuid import UUID, uuid4
@@ -598,13 +599,16 @@ async def test_pure_workload_mount_defers_account_status_but_tool_request_does_n
 
 
 @pytest.mark.asyncio
-async def test_user_listing_orders_by_username_and_filters_individual_exceptions(
+async def test_user_listing_filters_individual_exceptions_and_orders_each_mode(
     access,
 ):
     store = access.store
     # Ids run against the alphabet so id order and username order cannot coincide.
     names = ["zoe", "Bob", "alice", "bob", None, "Carol", None]
     ids = [UUID(int=100 - index) for index in range(len(names))]
+    day = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    # zoe and Carol were granted together; the unnamed user last, Bob first.
+    granted = {0: (2, "manual"), 1: (1, "t0"), 4: (3, "manual"), 5: (2, "manual")}
     async with store.mutation() as session:
         session.add_all(
             [
@@ -613,13 +617,22 @@ async def test_user_listing_orders_by_username_and_filters_individual_exceptions
             ]
         )
         await session.flush()
-        for index, source in ((0, "manual"), (1, "t0"), (4, "manual"), (5, "manual")):
-            await store.add_exception(ids[index], "actor", source, session)
+        session.add_all(
+            [
+                PlatformAccessUserRow(
+                    user_id=ids[index],
+                    source=source,
+                    granted_by="actor",
+                    granted_at=day + timedelta(days=offset),
+                )
+                for index, (offset, source) in granted.items()
+            ]
+        )
 
     def listed(rows):
         return [(row.username, row.id) for row in rows]
 
-    # Case-insensitive username, id as tiebreaker, missing usernames last.
+    # Without the filter: case-insensitive username, id as tiebreaker, no username last.
     everyone = [
         ("alice", ids[2]),
         ("bob", ids[3]),
@@ -631,24 +644,46 @@ async def test_user_listing_orders_by_username_and_filters_individual_exceptions
     ]
     assert listed(await store.users(0, 25)) == everyone
     assert await store.user_count() == 7
+    assert listed(await store.users(2, 3)) == everyone[2:5]
 
-    exceptions = [("Bob", ids[1]), ("Carol", ids[5]), ("zoe", ids[0]), (None, ids[4])]
+    # With the filter: newest grant first, a shared date falling back to the alphabet.
+    exceptions = [(None, ids[4]), ("Carol", ids[5]), ("zoe", ids[0]), ("Bob", ids[1])]
     assert listed(await store.users(0, 25, exceptions_only=True)) == exceptions
     assert await store.user_count(exceptions_only=True) == 4
-
     pages = [
         listed(await store.users(offset, 3, exceptions_only=True))
         for offset in (0, 3, 6)
     ]
     assert pages == [exceptions[:3], exceptions[3:], []]
-    assert listed(await store.users(2, 3)) == everyone[2:5]
+    one_by_one = [
+        listed(await store.users(offset, 1, exceptions_only=True))[0]
+        for offset in range(4)
+    ]
+    assert one_by_one == exceptions
 
-    # The search narrows the filtered set; the total follows the same set.
+    # The search narrows either set; the total follows the same set.
     assert listed(await store.users(0, 25, "BO")) == everyone[1:3]
     assert await store.user_count("BO") == 2
     assert listed(await store.users(0, 25, "BO", exceptions_only=True)) == [
         ("Bob", ids[1])
     ]
     assert await store.user_count("BO", exceptions_only=True) == 1
+    assert (
+        listed(await store.users(0, 25, "example", exceptions_only=True)) == exceptions
+    )
     assert await store.users(0, 25, "alice", exceptions_only=True) == []
     assert await store.user_count("alice", exceptions_only=True) == 0
+
+    # Each user comes with their own exception row, or none.
+    paired = await store.users_with_exceptions(0, 25)
+    assert [(user.id, row.source if row else None) for user, row in paired] == [
+        (ids[2], None),
+        (ids[3], None),
+        (ids[1], "t0"),
+        (ids[5], "manual"),
+        (ids[0], "manual"),
+        (ids[6], None),
+        (ids[4], "manual"),
+    ]
+    filtered = await store.users_with_exceptions(0, 25, exceptions_only=True)
+    assert all(row is not None and row.user_id == user.id for user, row in filtered)
