@@ -3605,14 +3605,12 @@
       "t0Preview": "{{count}} utilisateurs à importer ; {{matching}} attributs actuellement acceptés.",
       "t0Done": "Import initial terminé",
       "t0Import": "Importer les utilisateurs existants",
-      "users": "Liste blanche",
       "search": "Rechercher dans les utilisateurs locaux",
       "user": "Utilisateur",
       "sources": "Accès via",
       "exception": "Exception individuelle",
       "remove": "Retirer l'exception",
       "allow": "Autoriser l'utilisateur",
-      "teams": "Équipes",
       "team": "Équipe",
       "allowTeam": "Ajouter cette équipe à la liste blanche",
       "free": "Accès par lien",
@@ -3643,7 +3641,6 @@
       "actorLockout": "Ce changement retirerait votre dernière source d'accès.",
       "rule": {
         "title": "Règle d'accès",
-        "hint": "Les exceptions individuelles et les équipes autorisées permettent toujours l'accès.",
         "combination": "Combiner les conditions",
         "all": "Toutes les conditions (ET)",
         "any": "Au moins une condition (OU)",
@@ -3693,7 +3690,6 @@
         },
         "invalidRegex": "Expression régulière invalide. Vérifiez sa syntaxe.",
         "invalidCondition": "Condition invalide. Vérifiez ses clés et sa valeur.",
-        "delegatedHint": "Après un changement de champ, les requêtes déléguées peuvent nécessiter une nouvelle requête directe. Les exceptions et les équipes restent valides.",
         "empty": "Aucune condition. Ajoutez une condition pour choisir un champ de votre compte.",
         "saving": "Enregistrement...",
         "unsaved": "Modifications non enregistrées",
@@ -3794,7 +3790,10 @@
         "allowed": "Autorisés",
         "blocked": "Bloqués",
         "email": "E-mail"
-      }
+      },
+      "whitelistHint": "Les exceptions individuelles et les équipes autorisées permettent toujours l'accès.",
+      "filteringOn": "Filtrage actif",
+      "filteringOff": "Filtrage inactif"
     }
   },
   "runtime": {

@@ -195,6 +195,21 @@ it("hides earlier rows during a search request or a failed search", () => {
   expect(host.textContent).not.toContain("Alice");
 });
 
+it("states next to the title whether filtering is on", () => {
+  act(() => root.render(<PlatformAccessPage />));
+  const title = () => host.querySelector("h1")!.parentElement!.textContent;
+  expect(title()).toContain("rework.platformAccess.filteringOff");
+  state.filteringEnabled = true;
+  act(() => root.render(<PlatformAccessPage />));
+  expect(title()).toContain("rework.platformAccess.filteringOn");
+});
+
+it("names each whitelist panel through its tab only", () => {
+  render();
+  expect(host.querySelectorAll("h2")).toHaveLength(0);
+  expect(host.querySelector('[id$="-users-panel"]')?.textContent).toContain("rework.platformAccess.whitelistHint");
+});
+
 it("exposes only the selected panel and supports keyboard section navigation", () => {
   act(() => root.render(<PlatformAccessPage />));
   const tabs = [

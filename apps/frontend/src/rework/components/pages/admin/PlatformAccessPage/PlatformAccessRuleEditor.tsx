@@ -217,8 +217,6 @@ export default function PlatformAccessRuleEditor({
         }))}
         onChange={(mode) => edit({ ...draft, mode: mode === "block" ? "block" : "allow" })}
       />
-      <p>{t("rework.platformAccess.rule.hint")}</p>
-      <p className={styles.hint}>{t("rework.platformAccess.rule.delegatedHint")}</p>
       <div className={styles.row} role="group" aria-label={t("rework.platformAccess.rule.combination")}>
         <span>{t("rework.platformAccess.rule.combination")}</span>
         {(["all", "any"] as const).map((combination) => (
