@@ -91,8 +91,10 @@ refused and SHALL change nothing.
 
 The Patch notes tab SHALL offer an action, labelled "Announce the update"
 ("Annoncer la mise à jour" in French), that announces the included patch
-notes. The action SHALL show the included patch notes in their order and ask
-the administrator to confirm before anything happens.
+notes. Its label SHALL carry the number of included patch notes against the
+most an announcement holds, as in "Announce the update (3/10)". The action
+SHALL show the included patch notes in their order and ask the administrator
+to confirm before anything happens.
 
 Once confirmed, the system SHALL freeze the included patch notes, in list
 order, with their title and body in every language they hold, as a package
@@ -234,8 +236,9 @@ SHALL hold a navigation made of an icon button, a position indicator such as
 left button SHALL move towards position 1 and the right button towards the
 following positions. The button that cannot move further SHALL be disabled.
 Moving SHALL replace the dialog's title and body with the patch note at the
-new position, shown from its top. With a single patch note the dialog SHALL
-show no navigation. The dialog SHALL NOT offer any "Don't show again" control.
+new position, shown from its top. The dialog SHALL keep the same height from
+one patch note to the next, whatever their length. With a single patch note
+the dialog SHALL show no navigation. The dialog SHALL NOT offer any "Don't show again" control.
 
 A patch note with no text at all for the viewer SHALL be left out of that
 viewer's dialog and of the position count.
@@ -445,14 +448,16 @@ later load.
 Patch notes SHALL be listed in the Patch notes tab of the administration page,
 in a neutral style, in the administrator's order. Each row SHALL show, at its
 left, a handle to move it, the patch note's title in the administrator's
-locale, its toggle, and Preview, Edit and Delete actions. Changing a toggle
+locale, its toggle, and Preview, Edit and Delete actions. The toggle SHALL be
+a checkbox labelled by the patch note's title and its "included" or "not
+included" status, so that activating that text changes it. Changing a toggle
 SHALL take effect without confirmation.
 
 #### Scenario: Patch-note row content
 
 - **GIVEN** an included patch note titled `What's new in 3.4` in `en`
 - **WHEN** an administrator whose locale is `en` opens the Patch notes tab
-- **THEN** its row shows a move control, `What's new in 3.4`, a toggle that is on, and Preview, Edit and Delete actions
+- **THEN** its row shows a move control, a checked checkbox named `What's new in 3.4`, and Preview, Edit and Delete actions
 
 #### Scenario: Toggling from the list
 

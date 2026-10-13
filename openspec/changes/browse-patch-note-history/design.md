@@ -54,7 +54,7 @@ generated API client, existing design tokens and components only.
 ## Decisions
 
 **1. Inclusion is `enabled`.** A patch note's `enabled` column keeps its
-route, its switch and its audit records; it means "included in the next
+route, its control in the list and its audit records; it means "included in the next
 announcement" and writes no history. The partial unique index goes, and with
 it `disable_other_patch_notes`, the `409` branch, `auto_disabled_ids` and the
 frontend confirmation naming the replaced note. A patch note's
@@ -118,7 +118,7 @@ a user table. Rejected: control-plane has no user table of its own to extend.
 | PUT | `/announcements/patch-note-announcements/{id}/seen` | authenticated | `204`, idempotent; `404` when the id is not an announced package |
 | PUT | `/admin/platform/announcements/patch-notes/order` | `can_manage_platform` | full ordered id list; `409` when stale |
 | GET | `/admin/platform/announcements/patch-notes/announcement` | `can_manage_platform` | the announcement in effect (`id`, `announced_at`, `announced_by`) or null |
-| POST | `/admin/platform/announcements/patch-notes/announcement` | `can_manage_platform` | announce; `409` when no patch note is included |
+| POST | `/admin/platform/announcements/patch-notes/announcement` | `can_manage_platform` | announce the confirmed `ids`; `409` when no patch note is included, when more than 10 are, or when the included ones are not exactly `ids` in order |
 | DELETE | `/admin/platform/announcements/patch-notes/announcement` | `can_manage_platform` | withdraw, `204`; `404` when none is in effect |
 | GET | `/admin/platform/announcements/patch-notes/announcements/{id}` | `can_manage_platform` | `PatchNoteSnapshot[]`: the package of a history line; `404` when the line is unknown or keeps none |
 | GET | `/admin/platform/announcements/activation-history` | `can_manage_platform` | `AnnouncementExposure[]`, 100 newest first |
@@ -139,9 +139,9 @@ load".
 **6. Dialog navigation in `footerStart`.** `PatchNoteDialog` takes the ordered
 list of notes instead of one title and body, keeps the current position in
 state, and resets to position 1 each time it opens. The navigation is two
-`IconButton`s (default `size="medium"`, `color="on-surface-retreat"`) around
-the position text, placed with `Dialog`'s existing `footerStart`, so `Dialog`
-is not changed. Hidden with one entry, which is how the admin preview uses
+`IconButton`s (`color="on-surface-retreat"`; `size="small"` since the dialog
+became dense, see "Late Owner Decisions") around the position text, placed
+with `Dialog`'s existing `footerStart`. Hidden with one entry, which is how the admin preview uses
 it. The gate keeps a component state so a failed write cannot reopen the
 dialog during the page view; `patchNoteSession.ts` and its test are deleted.
 
@@ -175,7 +175,7 @@ in `PatchNoteDialog`.
 - [Other open PRs add migrations on the same parent, `93427a5fe874`] → done
   once: `e5ff6d80cc9f` is re-parented onto `9f6d3c2a1b08`, the `swift` head
   after the merge of 2026-10-13, with no merge revision; to redo if `swift`
-  gains another migration before this one lands (task 2.2).
+  gains another migration before this one lands.
 - [Native drag and drop is weak on touch screens and gives plain visual
   feedback] → the admin page is a desktop surface and the keyboard path covers
   the rest; the library alternative is listed for the owner.
@@ -185,8 +185,9 @@ in `PatchNoteDialog`.
 - [Fixing a typo re-opens the dialog for everyone] → intended by the owner: an
   announcement is never replaced silently.
 - [Two administrators announce at the same moment and leave two open rows] →
-  the newest is the one in effect, and the next announcement or withdrawal
-  ends every open patch-note row.
+  announce and withdraw are serialized by an advisory lock (see "Review
+  Fixes"); should two rows ever be open, the newest is the one in effect and
+  the next announcement or withdrawal ends every open patch-note row.
 - [The exposure table is updated in place, so a wrong end time cannot be
   traced] → every change still emits its audit record.
 - [A user created after the last announcement gets the dialog at first
@@ -288,8 +289,9 @@ Closed by the owner; written into the specs and tasks.
   audit records.
 - Banners enabled before the history existed have no line; disabling one ends
   nothing and writes nothing.
-- Still open on the backend: a real `alembic upgrade head` on PostgreSQL (task
-  2.2); both migrations are exercised on SQLite only.
+- PostgreSQL: both upgrades ran on the developer's database before
+  `e5ff6d80cc9f` was re-parented; the automated migration tests run on SQLite
+  only. Exact evidence and gaps: verification.md.
 
 ## Frontend Divergences
 
@@ -319,7 +321,7 @@ tasks.md is done.
   with no text at all is left out.
 - **A failed "seen" record is silent**, as the spec requires; the former error
   toast and its key are removed.
-- **Not in the plan**: each card has a line saying whether users can read it;
+- **Not in the plan**: each card has a line saying whether it is included;
   the dialog body keeps a minimum height while navigable so the arrows stay
   put; an arrow reaching its end hands the focus to the other one; the history
   filters gained `unannounced` beside `announced`; `drag_indicator` joins the
@@ -389,13 +391,32 @@ tasks.md is done.
   its package is rebuilt as an activation only. It is recognized by its end
   time, equal to the package's start; when the upgrade found no enabled patch
   note there is no package to compare with and the deactivation is kept.
-- **Not run**: the upsert, the advisory lock and both migrations on a real
-  PostgreSQL; `libs/frontend/tests/validate-ui-archive.test.mjs`, which needs
-  a full package build (the expected glyph count is 140, counted from
-  `materialIcons`).
+- **Not run**: `libs/frontend/tests/validate-ui-archive.test.mjs`, which
+  needs a full package build (the expected glyph count is 140, counted from
+  `materialIcons`); no automated test exercises the upsert, the advisory lock
+  or the migrations on PostgreSQL. See verification.md.
+
+## Late Owner Decisions
+
+Taken while the owner tested the running app; they supersede the earlier text
+of this file where they differ.
+
+- **Cap confirmed**: 10 patch notes per announcement.
+- **The announce label carries the count**: "Annoncer la mise à jour (X/10)" /
+  "Announce the update (X/10)", X being the number of included patch notes.
+- **The include control is a `Checkbox`, not a `Switch`**, in a round click
+  target the size of a medium icon button; the title and status line are its
+  `<label>`, so clicking the text toggles it and names it.
+- **Withdraw sits at the far right of the announce row**, a text button in the
+  `error` colour, behind the critical `ConfirmationDialog`.
+- **The user dialog has a fixed height** (capped to the viewport) so it does
+  not resize between notes, and uses a new optional `Dialog` `dense` prop:
+  tighter header and action bar, small action buttons. This reverses "so
+  `Dialog` is not changed" in decision 6; the prop is off by default and
+  `Dialog` is packaged in `@fred-oss/ui`.
+- **Help Center**: the platform-admin Announcements sections are removed; the
+  Help Center documents the user side only.
 
 ## Open Questions
 
-- The drag-and-drop question is closed (library, see above).
-- **Owner decision pending**: the cap of 10 patch notes per announcement. The
-  mechanism is in place; only the number waits for confirmation.
+None. The drag-and-drop question (library) and the cap (10) are closed.

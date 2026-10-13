@@ -6,7 +6,7 @@
 ## 2. Backend: data model
 
 - [x] 2.1 In `models/announcement_models.py`, remove the partial unique index, add the nullable `position` column, replace `AnnouncementDismissalRow` by the per-user "last seen announcement" row, and update `table_ownership.py` and the docstrings; verify the model and ownership tests pass
-- [ ] 2.2 Add one Alembic migration (drop the index, add and backfill `position` by creation date descending, drop `platform_announcement_dismissal`, create the per-user table) parented on the current `swift` head, re-parented before the PR with no merge revision, with the downgrade described in design.md; verify `alembic heads` shows one head, `alembic upgrade head` and a downgrade/upgrade round trip pass, and add a migration test covering the backfill. Done so far: revision `e5ff6d80cc9f`, re-parented onto the `swift` head `9f6d3c2a1b08` after merging `swift` (2026-10-13), one head, `alembic upgrade head` / `check` / `downgrade base` on SQLite, upgrade/downgrade/upgrade round trip and backfill covered on SQLite by `test_patch_note_announcement_migration.py`. Left: a real `alembic upgrade head` on PostgreSQL, and the re-parenting check before the PR
+- [x] 2.2 Add one Alembic migration (drop the index, add and backfill `position` by creation date descending, drop `platform_announcement_dismissal`, create the per-user table) parented on the current `swift` head, re-parented before the PR with no merge revision, with the downgrade described in design.md; verify `alembic heads` shows one head, `alembic upgrade head` and a downgrade/upgrade round trip pass, and add a migration test covering the backfill. Done so far: revision `e5ff6d80cc9f`, re-parented onto the `swift` head `9f6d3c2a1b08` after merging `swift` (2026-10-13), one head, `alembic upgrade head` / `check` / `downgrade base` on SQLite, upgrade/downgrade/upgrade round trip and backfill covered on SQLite by `test_patch_note_announcement_migration.py`. On PostgreSQL the upgrade ran clean on the developer's database before the re-parenting; the re-parented chain was not replayed there and no downgrade was run there (verification.md). To re-parent again if `swift` gains a migration before the merge
 
 ## 3. Backend: visibility and order
 
@@ -32,7 +32,7 @@
 ## 6. Frontend: admin page
 
 - [x] 6.1 Turn the page views into `banners | patchNotes | history`, each list split by kind with its own empty state and its own create button; delete `AnnouncementKindChooser`; verify with `AnnouncementsPage.test.tsx`
-- [x] 6.2 Patch-note rows: drag handle at the left, title, visibility `Switch` with hints, Preview, Edit, Delete; no confirmation on toggle, no user count; existing tokens only, neutral borders on `outline-*`; verify with tests that turning on B leaves A on
+- [x] 6.2 Patch-note rows: drag handle at the left, title, visibility `Switch` (replaced by a `Checkbox` labelled by the title and status, late owner decision in design.md) with hints, Preview, Edit, Delete; no confirmation on toggle, no user count; existing tokens only, neutral borders on `outline-*`; verify with tests that turning on B leaves A on
 - [x] 6.3 Reordering with `@dnd-kit` (owner decision, task 1.2): sortable cards dragged by the handle with a lifted copy and a placeholder, the library's keyboard sensor on the focused handle, spoken instructions and positions in `fr` and `en`, one request on drop, optimistic update with rollback; verify with tests for a drop, the keyboard wiring, the announced text, and rollback on a `409`
 - [x] 6.4 "Announce the update" / "Annoncer la mise à jour" button on the Patch notes tab with its confirmation (number of visible patch notes and the one that opens first), disabled when none is visible, and the last-use text with the administrator's display name through `useUsersByIdsQuery`; verify with tests for confirm, cancel, disabled state and the last-use text
 - [x] 6.5 `PatchNoteEditorDialog`: keep plain save and "save and make visible", remove `replacesTitle` and its confirmation, keep the unsaved-changes confirmation; verify with `PatchNoteEditorDialog.test.tsx`
@@ -40,7 +40,7 @@
 
 ## 7. Frontend: user dialog
 
-- [x] 7.1 Give `PatchNoteDialog` an ordered list of notes, a position state reset on open, and the navigation (two `IconButton`s, medium, `on-surface-retreat`, around the `1 / 4` text, left towards position 1, right towards older) in `Dialog`'s `footerStart`; remove the checkbox, `showDontShowAgain` and their styles; verify with component tests for positions, disabled ends, no navigation with one note, and body shown from its top after moving
+- [x] 7.1 Give `PatchNoteDialog` an ordered list of notes, a position state reset on open, and the navigation (two `IconButton`s, medium (small since the dialog is dense, design.md), `on-surface-retreat`, around the `1 / 4` text, left towards position 1, right towards older) in `Dialog`'s `footerStart`; remove the checkbox, `showDontShowAgain` and their styles; verify with component tests for positions, disabled ends, no navigation with one note, and body shown from its top after moving
 - [x] 7.2 Replace `useActivePatchNote` with a hook returning the resolved history (notes without text in the viewer's or fallback locale left out) and the pending announcement id; verify with a unit test
 - [x] 7.3 Rewrite `PatchNoteGate`: open when an announcement is pending and the history is not empty, record that announcement as seen on close, stay closed for the page view if the write fails; delete `patchNoteSession.ts` and its test; verify with `PatchNoteGate.test.tsx`
 - [x] 7.4 Make the profile menu's "What's new" open the same dialog with the history, hidden when the history is empty; verify with `UserProfile.test.tsx`
@@ -57,9 +57,9 @@
 
 ## 9. Verification and close-out
 
-- [ ] 9.1 Warn the owner, then run the root `make code-quality` and the frontend `make test`; restart Vite afterwards; verify all are green
-- [ ] 9.2 Manual check on a local stack: create three patch notes (off), turn two on, reorder by mouse and by keyboard, confirm no dialog at sign-in, announce, confirm the dialog opens once per user on position 1 with navigation, confirm editing and toggling do not reopen it, turn all off and confirm "What's new" disappears, the button is disabled and its last-use text is gone, then turn one on again and confirm no dialog opens for a user who had not seen the announcement
-- [ ] 9.3 Run the author review from `AGENTS.md` and record exact test evidence in `verification.md`; verify every spec scenario maps to a test or a recorded manual check
+- [x] 9.1 Warn the owner, then run the root `make code-quality` and the frontend `make test`; restart Vite afterwards; verify all are green. Satisfied differently: both targets were deliberately not run (they wipe the running Vite cache); the same tools were run directly on the control-plane backend and the frontend, all green (verification.md)
+- [x] 9.2 Manual check on a local stack: create three patch notes (off), turn two on, reorder by mouse and by keyboard, confirm no dialog at sign-in, announce, confirm the dialog opens once per user on position 1 with navigation, confirm editing and toggling do not reopen it, turn all off and confirm "What's new" disappears, the button is disabled and its last-use text is gone, then turn one on again and confirm no dialog opens for a user who had not seen the announcement. Satisfied differently: this script predates the rework (section 10); the owner checked the reworked feature on the local stack on 2026-10-13 and reported it working. What that report covers, and what only tests cover, is in verification.md
+- [x] 9.3 Run the author review from `AGENTS.md` and record exact test evidence in `verification.md`; verify every spec scenario maps to a test or a recorded manual check. Scenarios were matched to tests by test name; the ones with partial proof are listed in verification.md
 
 ## 10. Rework: announced packages and exposure history
 
@@ -84,8 +84,9 @@ patch note and its `unannounced` event are removed.
 ## 11. Review fixes
 
 - [x] 11.1 Announce carries the confirmed ids in order; the backend freezes exactly those or answers `409`; the page reloads the list, says the selection changed, and holds the action while a toggle, a reorder or a reload is under way; verify with service and component tests
-- [x] 11.2 At most 10 patch notes per announcement (`MAX_PATCH_NOTES_PER_ANNOUNCEMENT`, owner decision pending on the number): `409` on the backend, disabled action and hint in the page; patch-note id lists bounded to 1000; verify with tests
+- [x] 11.2 At most 10 patch notes per announcement (`MAX_PATCH_NOTES_PER_ANNOUNCEMENT`, number confirmed by the owner): `409` on the backend, disabled action and hint in the page; patch-note id lists bounded to 1000; verify with tests
 - [x] 11.3 Serialize announce, withdraw, create and reorder with one transaction-scoped advisory lock, no schema change; verify the lock is taken (SQLite cannot prove the exclusion, see design.md)
 - [x] 11.4 Record a seen announcement in one guarded upsert on PostgreSQL and SQLite; verify idempotence, "never backwards", per-user isolation and the `404`
 - [x] 11.5 Keep the announce and withdraw actions above the empty state of the Patch notes tab; verify with `AnnouncementsPage.test.tsx`
 - [x] 11.6 Nits: the gate records the announcement it showed, an unreadable package says so, the checkbox is named by the note's title, locale keys follow "included", straight quotes in the added strings, the downgrade of `a6c1d94e27b3` writes no deactivation for the line the upgrade ended; verify with the component and migration tests
+- [x] 11.7 The announce button's label carries the included count against the cap, "(X/10)", in `fr` and `en` (owner request); the `AnnouncementsPage` folder tests still pass (84), but no test asserts the count in the label

@@ -14,14 +14,15 @@ history show what users actually saw.
   renamed, banners only), "Patch notes" (new, second), then the history. Each
   tab creates its own kind, so the kind chooser goes away.
 - **Working area**: creating, editing, reordering or toggling a patch note
-  never reaches users. Each patch note has a toggle, off at creation, that
+  never reaches users. Each patch note has a checkbox, off at creation, that
   decides whether it is included in the next announcement.
 - **Manual order**: the administrator reorders the Patch notes list by drag
   and drop or by keyboard; an announcement takes the included notes in that
   order. No date-based ordering.
-- **Announce button**: "Announce the update", behind a confirmation listing
-  the included patch notes, freezes them (title and body, every language) as a
-  package. Users read that package, and only that, until the next
+- **Announce button**: "Announce the update (X/10)", carrying the number of
+  included patch notes against the cap of 10 per announcement, behind a
+  confirmation listing the included patch notes, freezes exactly that list
+  (title and body, every language) as a package. Users read that package, and only that, until the next
   announcement, and every user gets the dialog once per announcement. The date
   of the announcement in effect and its author are shown next to the button;
   it is disabled when no patch note is included.
@@ -30,7 +31,8 @@ history show what users actually saw.
   the next announcement.
 - **User dialog**: one dialog at sign-in and from "What's new", showing the
   package in effect, with a navigation at the left of its action bar (icon
-  button, "1 / 4" position, icon button), opening on position 1. No "Don't
+  button, "1 / 4" position, icon button), opening on position 1, at a fixed
+  height. No "Don't
   show again" checkbox. "What's new" is hidden when no package is in effect.
 - **History**: one line per exposure instead of one per event: a banner
   activation, or a patch-note announcement, with its activation, its
@@ -64,10 +66,10 @@ None.
 
 ## Impact
 
-- **Prerequisite**: the delta is written against the patch-note requirements
-  of `add-patch-note-announcements`, merged in PR #3022 but not archived yet.
-  That change must be archived first so `openspec/specs/platform-announcements`
-  holds the requirements this one modifies and removes.
+- **Prerequisite** (done in this branch): the delta is written against the
+  patch-note requirements of `add-patch-note-announcements`, merged in PR
+  #3022 and archived first so `openspec/specs/platform-announcements` holds
+  the requirements this one modifies and removes.
 - **Backend** (`apps/control-plane-backend`): `announcements/` (api, schemas,
   service, store), `models/announcement_models.py`, the user-deletion cleanup
   in `users/api.py`, two linear Alembic migrations (drop the unique index, add
@@ -79,10 +81,14 @@ None.
   `features/announcements/` (gate, read hook; `patchNoteSession.ts` deleted),
   `UserProfile`, `AnnouncementsPage` (tabs, reorderable list, announce button;
   `AnnouncementKindChooser` deleted), `PatchNoteEditorDialog`,
-  `ActivationHistory`, fr/en locales. The frontend has no drag-and-drop
-  library and no reorderable list component today; see design.md.
-- **Docs**: Help Center fr+en (`features/administration.md`,
-  `getting-started/first-steps.md`), `COMPONENT-UX.md`, a migration note under
+  `ActivationHistory`, fr/en locales, and the shared `Dialog`, which gains an
+  optional `dense` prop. New dependency: `@dnd-kit/core`, `@dnd-kit/sortable`
+  and `@dnd-kit/utilities` (owner decision), the frontend's first
+  drag-and-drop library; see design.md.
+- **Docs**: Help Center fr+en (`getting-started/first-steps.md` updated; the
+  platform-admin Announcements sections of `features/administration.md`
+  removed on the owner's instruction, the Help Center covering the user side
+  only), `COMPONENT-UX.md`, a migration note under
   `docs/swift/ops/migrations/` (no operator action; `impact: minor` because
   of the Alembic revision).
 - Not on a hot path: one read per application load, as today.
