@@ -137,8 +137,9 @@ async def set_filtering(
 
 async def grant_users(
     access: PlatformAccess, actor: KeycloakUser, user_ids: list[UUID]
-) -> None:
+) -> int:
     selected = sorted(set(user_ids))
+    granted_count = 0
     async with access.store.mutation() as session:
         await access.state(session)
         now = datetime.now(timezone.utc)
@@ -156,6 +157,7 @@ async def grant_users(
                     )
                 )
             )
+            new_batch = [uid for uid in batch if uid not in granted]
             session.add_all(
                 [
                     PlatformAccessUserRow(
@@ -164,10 +166,11 @@ async def grant_users(
                         granted_by=actor.uid,
                         granted_at=now,
                     )
-                    for uid in batch
-                    if uid not in granted
+                    for uid in new_batch
                 ]
             )
+            granted_count += len(new_batch)
+    return granted_count
 
 
 async def set_user(
@@ -348,9 +351,9 @@ async def activation_preview(access: PlatformAccess) -> PlatformAccessActivation
     )
 
 
-async def t0(
+async def _t0_with_import_count(
     access: PlatformAccess, actor: KeycloakUser | None = None
-) -> PlatformT0Preview:
+) -> tuple[PlatformT0Preview, int | None]:
     async with access.store.read() as session:
         state = await access.state(session)
         rows = list((await session.scalars(select(UserRow))).all())
@@ -361,16 +364,24 @@ async def t0(
     )
     matching, candidates = sum(matches), len(rows) - sum(matches)
     if actor is None:
-        return PlatformT0Preview(
-            candidates=candidates, matching=matching, completed_at=state.t0_completed_at
+        return (
+            PlatformT0Preview(
+                candidates=candidates,
+                matching=matching,
+                completed_at=state.t0_completed_at,
+            ),
+            None,
         )
     async with access.store.mutation() as session:
         state = await access.state(session)
         if state.t0_completed_at is not None:
-            return PlatformT0Preview(
-                candidates=candidates,
-                matching=matching,
-                completed_at=state.t0_completed_at,
+            return (
+                PlatformT0Preview(
+                    candidates=candidates,
+                    matching=matching,
+                    completed_at=state.t0_completed_at,
+                ),
+                None,
             )
         if state.revision != revision:
             raise HTTPException(409, "platform_access_t0_snapshot_changed")
@@ -381,22 +392,39 @@ async def t0(
         )
         present = set((await session.scalars(select(UserRow.id))).all())
         now = datetime.now(timezone.utc)
-        session.add_all(
-            [
-                PlatformAccessUserRow(
-                    user_id=row.id,
-                    source="t0",
-                    granted_by=actor.uid,
-                    granted_at=now,
-                )
-                for row, matched in zip(rows, matches, strict=True)
-                if not matched and row.id in present and row.id not in existing
-            ]
-        )
+        new_rows = [
+            PlatformAccessUserRow(
+                user_id=row.id,
+                source="t0",
+                granted_by=actor.uid,
+                granted_at=now,
+            )
+            for row, matched in zip(rows, matches, strict=True)
+            if not matched and row.id in present and row.id not in existing
+        ]
+        session.add_all(new_rows)
         state.t0_completed_at = now
-        return PlatformT0Preview(
-            candidates=candidates, matching=matching, completed_at=state.t0_completed_at
+        return (
+            PlatformT0Preview(
+                candidates=candidates,
+                matching=matching,
+                completed_at=state.t0_completed_at,
+            ),
+            len(new_rows),
         )
+
+
+async def t0(
+    access: PlatformAccess, actor: KeycloakUser | None = None
+) -> PlatformT0Preview:
+    result, _ = await _t0_with_import_count(access, actor)
+    return result
+
+
+async def import_t0(
+    access: PlatformAccess, actor: KeycloakUser
+) -> tuple[PlatformT0Preview, int | None]:
+    return await _t0_with_import_count(access, actor)
 
 
 async def require_team(
@@ -455,12 +483,12 @@ def link_view(
     )
 
 
-async def generate_link(
+async def generate_link_record(
     access: PlatformAccess,
     team_id: str,
     actor: KeycloakUser,
     body: CreatePlatformEnrollmentLink | None = None,
-) -> str:
+) -> tuple[str, UUID]:
     body = body or CreatePlatformEnrollmentLink()
     async with access.store.mutation() as session:
         await access.state(session)
@@ -471,9 +499,10 @@ async def generate_link(
         if body.expires_at is not None and body.expires_at <= now:
             raise HTTPException(409, "free_enrollment_expiry_past")
         token = secrets.token_urlsafe(32)
+        link_id = uuid4()
         session.add(
             PlatformAccessLinkRow(
-                id=uuid4(),
+                id=link_id,
                 team_id=team_id,
                 token=token,
                 token_hash=hashlib.sha256(token.encode()).hexdigest(),
@@ -484,7 +513,17 @@ async def generate_link(
                 opening_count=0,
             )
         )
-        return token
+        return token, link_id
+
+
+async def generate_link(
+    access: PlatformAccess,
+    team_id: str,
+    actor: KeycloakUser,
+    body: CreatePlatformEnrollmentLink | None = None,
+) -> str:
+    token, _ = await generate_link_record(access, team_id, actor, body)
+    return token
 
 
 async def list_links(
@@ -751,6 +790,7 @@ async def enroll(
     access: PlatformAccess, user: KeycloakUser, token: str, version: str | None
 ) -> PlatformAccessStatus:
     await access.observe(user)
+    joined = False
     async with access.store.mutation() as session:
         await require_active_subject(user)
         await access.state(session)
@@ -777,7 +817,14 @@ async def enroll(
                         last_name_snapshot=user.last_name,
                     )
                 )
-    emit_audit_log("platform.access.free.enrolled", actor_uid=user.uid, team_id=team.id)
+            joined = True
+    if joined:
+        emit_audit_log(
+            "platform.access.free.enrolled",
+            actor_uid=user.uid,
+            team_id=team.id,
+            link_id=str(link.id),
+        )
     return await self_status(access, user, version)
 
 

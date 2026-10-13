@@ -12,6 +12,7 @@
 - [x] 2.3 Add a platform-admin-only paginated joiner API with current first name, last name, username and join time; regenerate the frontend API client and run targeted authorization/pagination tests.
 - [x] 2.4 Add a localized joiner action and paginated list in the existing link manager; run its focused Vitest suite for loading, empty/error, permission and revoked/expired-link cases.
 - [x] 2.5 Retain the last known identity fields and join event after account deletion, visibly mark deleted joiners in the API and UI, and cover deletion with or without the local user row.
+- [x] 2.6 Check the security audit stream for Platform access mutations, summarize bulk grants and T0 imports, identify successful Free-link joins, and cover failed authorization without logging tokens or rule claim values.
 
 ## 3. Integration and close-out
 

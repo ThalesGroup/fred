@@ -158,6 +158,35 @@ async def test_t0_once_and_deleted_entries_never_return(access):
 
 
 @pytest.mark.asyncio
+async def test_t0_audit_reports_actual_import_once(access, monkeypatch):
+    actor, candidate, matching = user(), user(), user("accepted")
+    for person in (actor, candidate, matching):
+        await access.observe(person)
+    events: list[tuple[str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        api, "emit_audit_log", lambda name, **fields: events.append((name, fields))
+    )
+    app = FastAPI()
+    app.include_router(api.router)
+    app.dependency_overrides[get_platform_access] = lambda: access
+    app.dependency_overrides[api.get_current_user] = lambda: actor
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        first = await client.post("/admin/platform/access/t0-import")
+        later = user()
+        await access.observe(later)
+        retry = await client.post("/admin/platform/access/t0-import")
+    assert first.status_code == retry.status_code == 200
+    assert len(events) == 1
+    assert events[0][0] == "platform.access.t0.imported"
+    assert events[0][1]["actor_uid"] == actor.uid
+    assert events[0][1]["candidates"] == 2
+    assert events[0][1]["matching"] == 1
+    assert events[0][1]["imported_count"] == 2
+
+
+@pytest.mark.asyncio
 async def test_filter_and_exception_mutations_preserve_acting_admin(access):
     actor = user()
     await access.observe(actor)
@@ -856,10 +885,18 @@ async def test_bulk_grants_are_atomic_preserve_provenance_and_revoke_independent
 
 
 @pytest.mark.asyncio
-async def test_bulk_endpoint_bounds_unknown_users_and_fresh_admin_permission(access):
+async def test_bulk_endpoint_bounds_unknown_users_and_fresh_admin_permission(
+    access, monkeypatch
+):
     from unittest.mock import AsyncMock
 
     actor, first, second = user("accepted"), user(), user()
+    events: list[tuple[str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        api,
+        "emit_audit_log",
+        lambda name, **fields: events.append((name, fields)),
+    )
     await access.observe(first)
     await access.observe(second)
     gate = AsyncMock()
@@ -882,11 +919,24 @@ async def test_bulk_endpoint_bounds_unknown_users_and_fresh_admin_permission(acc
         )
         assert response.status_code == 404
         assert await access.store.exception(UUID(first.uid)) is None
+        assert events == []
+        async with access.store.mutation() as session:
+            await access.state(session)
+            await access.store.add_exception(UUID(first.uid), actor.uid, "t0", session)
         response = await client.post(
             "/admin/platform/access/users",
             json={"user_ids": [first.uid] * 101 + [second.uid]},
         )
         assert response.status_code == 204
+        summary = [
+            fields for name, fields in events if name == "platform.access.users.granted"
+        ]
+        assert len(summary) == 1
+        assert summary[0] == {
+            "actor_uid": actor.uid,
+            "count": 2,
+            "granted_count": 1,
+        }
         assert (
             gate.call_args.kwargs["consistency_token"]
             == access.rebac.HIGHER_CONSISTENCY
@@ -899,6 +949,7 @@ async def test_bulk_endpoint_bounds_unknown_users_and_fresh_admin_permission(acc
         )
         assert response.status_code == 403
         assert await access.store.exception(UUID(third.uid)) is None
+        assert len(events) == 1
 
 
 @pytest.mark.asyncio
@@ -1184,7 +1235,13 @@ async def test_free_link_history_openings_recovery_expiry_and_individual_revocat
 
 
 @pytest.mark.asyncio
-async def test_free_link_joiners_follow_successful_enrollment_and_cleanup(access):
+async def test_free_link_joiners_follow_successful_enrollment_and_cleanup(
+    access, monkeypatch
+):
+    events: list[tuple[str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        service, "emit_audit_log", lambda name, **fields: events.append((name, fields))
+    )
     actor = user("accepted")
     first = user().model_copy(
         update={"username": "first", "first_name": "First", "last_name": "Joiner"}
@@ -1207,6 +1264,13 @@ async def test_free_link_joiners_follow_successful_enrollment_and_cleanup(access
     already_member = user()
     access.rebac.members[already_member.uid] = {"demo"}
     await service.enroll(access, already_member, first_token, None)
+    assert events == [
+        (
+            "platform.access.free.enrolled",
+            {"actor_uid": person.uid, "team_id": "demo", "link_id": str(first_id)},
+        )
+        for person in (first, second)
+    ]
     first_page = await service.list_link_joiners(access, "demo", first_id, 0, 1)
     assert first_page.total == 2 and len(first_page.items) == 1
     assert (await service.list_link_joiners(access, "demo", first_id, 1, 1)).items[
@@ -1219,6 +1283,10 @@ async def test_free_link_joiners_follow_successful_enrollment_and_cleanup(access
 
     access.rebac.members[first.uid].remove("demo")
     await service.enroll(access, first, second_token, None)
+    assert events[-1] == (
+        "platform.access.free.enrolled",
+        {"actor_uid": first.uid, "team_id": "demo", "link_id": str(second_id)},
+    )
     assert (await service.list_link_joiners(access, "demo", second_id, 0, 25)).items[
         0
     ].username == "first"
@@ -1294,8 +1362,12 @@ def test_link_creation_rejects_past_naive_expiry_and_oversized_note():
 
 
 @pytest.mark.asyncio
-async def test_link_admin_history_and_tokens_are_guarded(access):
+async def test_link_admin_history_and_tokens_are_guarded(access, monkeypatch):
     actor = user("accepted")
+    events: list[tuple[str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        api, "emit_audit_log", lambda name, **fields: events.append((name, fields))
+    )
     await access.observe(actor)
     await service.set_team(access, actor, "demo", False, True)
     token = await service.generate_link(access, "demo", actor)
@@ -1323,6 +1395,20 @@ async def test_link_admin_history_and_tokens_are_guarded(access):
         ):
             assert (await client.request(method, path)).status_code == 403
         access.rebac.admin = True
+        created = await client.post(
+            "/admin/platform/access/teams/demo/enrollment-link", json={}
+        )
+        assert created.status_code == 200
+        created_id = next(
+            item.id
+            for item in (await service.list_links(access, "demo", 0, 25)).items
+            if item.id != link_id
+        )
+        assert (
+            "platform.access.link.created",
+            {"actor_uid": actor.uid, "team_id": "demo", "link_id": str(created_id)},
+        ) in events
+        assert created.json()["token"] not in str(events)
         history = await client.get("/admin/platform/access/teams/demo/enrollment-links")
         assert token not in history.text
         await service.enroll(

@@ -435,6 +435,6 @@ def log_setup(
     audit_handler = logging.StreamHandler(sys.stdout)
     audit_handler.setFormatter(CompactJsonFormatter(service_name))
     audit_logger.addHandler(audit_handler)
-    audit_logger.setLevel(log_level.upper())
+    audit_logger.setLevel(logging.INFO)
     audit_logger.propagate = False
     flush_startup_logs()

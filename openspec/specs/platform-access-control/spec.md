@@ -45,6 +45,31 @@ An active person holding the current platform-management permission SHALL pass p
 - **WHEN** the current platform-management permission cannot be checked reliably
 - **THEN** admission SHALL fail with the existing availability error rather than inventing an administrator role or returning a policy denial
 
+### Requirement: Platform access mutations remain attributable in the security audit stream
+
+Successful administrator changes to filtering, saved rules, manual exceptions, team access and Free links SHALL emit structured security audit events with the acting administrator and relevant non-secret state or target identifiers, independently of the ordinary application log level. Link creation SHALL identify the new link without exposing its token. Bulk manual grants and T0 imports SHALL emit one summary with counts, without one event per user. A successful new Free-link team join SHALL identify the joining user, team and link. Failed or unauthorized changes SHALL NOT emit success events. Audit events SHALL NOT contain link tokens or rule claim values.
+
+#### Scenario: Bulk grants have a bounded audit summary
+
+- **WHEN** an administrator grants admission to a selected user list
+- **THEN** the security audit stream SHALL identify the acting administrator, the number of distinct selected users and the number of newly granted users in one event
+- **WHEN** the operation fails or is unauthorized
+- **THEN** no successful grant audit event SHALL be emitted
+
+#### Scenario: New Free-link membership is audited
+
+- **WHEN** a valid Free link adds a person to a team
+- **THEN** one success event SHALL identify the joining user, team and link without the token
+- **WHEN** a person only opens the link or repeats enrollment while already a member
+- **THEN** no new join success event SHALL be emitted
+
+#### Scenario: T0 import is recorded once
+
+- **WHEN** the initial T0 import completes
+- **THEN** one audit summary SHALL include the acting administrator and number of exceptions actually added
+- **WHEN** T0 has already completed and an administrator repeats the request
+- **THEN** no new import success event SHALL be emitted
+
 ### Requirement: Administrators can inspect successful Free-link joiners
 
 Each Free-team link SHALL retain a bounded, paginated history of distinct people who successfully became members by enrolling through that link. Only platform administrators SHALL read the history. Each entry SHALL expose that person's current first name, last name and username while the account is active, or the last recorded values with a deleted marker after account deletion, plus the time of the successful join. This history SHALL remain visible if the person later leaves the team, the account is deleted, or the link is suspended, revoked or expired. An explicit deletion of the link history SHALL delete its joiner entries. Opening, previewing, accepting terms, unsuccessful enrollment and a repeated enrollment while already a member SHALL NOT create a joiner entry or change the page-opening aggregate.
