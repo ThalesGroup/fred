@@ -3538,7 +3538,7 @@
           "role": "élément déplaçable"
         },
         "announce": {
-          "action": "Annoncer la mise à jour",
+          "action": "Annoncer la mise à jour ({{included}}/{{max}})",
           "lastUse": "Dernière annonce le {{date}}, par {{name}}",
           "noneIncluded": "Incluez au moins un patch note pour annoncer la mise à jour.",
           "tooMany": "Une annonce contient au plus {{max}} patch notes. Désélectionnez-en pour annoncer.",

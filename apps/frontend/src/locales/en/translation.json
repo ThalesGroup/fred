@@ -3538,7 +3538,7 @@
           "role": "sortable item"
         },
         "announce": {
-          "action": "Announce the update",
+          "action": "Announce the update ({{included}}/{{max}})",
           "lastUse": "Last announced on {{date}}, by {{name}}",
           "noneIncluded": "Include at least one patch note to announce the update.",
           "tooMany": "An announcement holds at most {{max}} patch notes. Deselect some to announce.",

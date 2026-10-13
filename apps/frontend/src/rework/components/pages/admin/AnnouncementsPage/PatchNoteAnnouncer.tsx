@@ -123,7 +123,7 @@ export default function PatchNoteAnnouncer({ includedNotes, settling, onSelectio
         disabled={includedNotes.length === 0 || tooMany || settling || isAnnouncing}
         onClick={() => setConfirming(true)}
       >
-        {t(`${KEYS}.action`)}
+        {t(`${KEYS}.action`, { included: includedNotes.length, max: MAX_PATCH_NOTES_PER_ANNOUNCEMENT })}
       </Button>
       <p className={styles.lastUse} aria-live="polite">
         {tooMany
