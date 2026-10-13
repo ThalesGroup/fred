@@ -31,7 +31,8 @@ import styles from "./PlatformAccessPage.module.css";
 
 const tabs = ["rules", "users"] as const;
 const whitelistTabs = ["users", "teams"] as const;
-const PAGE_SIZE = 25;
+// First option of the table's rows-per-page selector.
+const DEFAULT_PAGE_SIZE = 20;
 
 export default function PlatformAccessPage() {
   const { t } = useTranslation();
@@ -41,6 +42,7 @@ export default function PlatformAccessPage() {
   const [whitelistTabIndex, setWhitelistTabIndex] = useState(0);
   const panelId = useId();
   const [offset, setOffset] = useState(0);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [query, setQuery] = useState("");
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -60,7 +62,7 @@ export default function PlatformAccessPage() {
   const usersShown = enabled && tabIndex === 1 && whitelistTabIndex === 0;
   // The whitelist is the people holding an individual exception, never every known user.
   const users = usePlatformAccessUsersQuery(
-    { offset, limit: PAGE_SIZE, query: searchQuery, exceptionsOnly: true },
+    { offset, limit: pageSize, query: searchQuery, exceptionsOnly: true },
     { skip: !usersShown },
   );
   // Rows of another page or search are never shown; the total keeps the pagination in place meanwhile.
@@ -69,8 +71,8 @@ export default function PlatformAccessPage() {
   // Removing the last row of a later page would leave an empty page with people still listed before it.
   const pageEmptied = !users.isFetching && offset > 0 && users.currentData?.items.length === 0;
   useEffect(() => {
-    if (pageEmptied) setOffset((current) => Math.max(0, current - PAGE_SIZE));
-  }, [pageEmptied]);
+    if (pageEmptied) setOffset((current) => Math.max(0, current - pageSize));
+  }, [pageEmptied, pageSize]);
   const t0 = usePlatformAccessT0Query(undefined, { skip: !enabled });
   const teams = usePlatformAccessTeamsQuery(undefined, { skip: !enabled });
   const [filter] = useSetPlatformFilteringMutation();
@@ -265,9 +267,13 @@ export default function PlatformAccessPage() {
                   rowKey={(user) => user.user_id}
                   serverPagination={{
                     offset,
-                    limit: PAGE_SIZE,
+                    limit: pageSize,
                     totalCount: userTotal,
                     onOffsetChange: setOffset,
+                    onLimitChange: (limit) => {
+                      setPageSize(limit);
+                      setOffset(0);
+                    },
                   }}
                   columns={[
                     {

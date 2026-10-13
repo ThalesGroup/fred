@@ -225,7 +225,7 @@ it("lists individual exceptions without a search and requests them only while th
   expect(state.searchUsers.mock.calls.every(([, options]) => options.skip)).toBe(true);
   openTab("users");
   expect(state.searchUsers.mock.lastCall).toEqual([
-    { offset: 0, limit: 25, query: "", exceptionsOnly: true },
+    { offset: 0, limit: 20, query: "", exceptionsOnly: true },
     { skip: false },
   ]);
   expect(host.textContent).toContain("Alice");
@@ -242,16 +242,16 @@ it("waits for a pause in typing, trims the search and restarts at the first page
   state.usersTotal = 60;
   render("");
   act(() => host.querySelector<HTMLButtonElement>('button[aria-label="dataTable.pagination.next"]')!.click());
-  expect(state.searchUsers.mock.lastCall?.[0]).toEqual({ offset: 25, limit: 25, query: "", exceptionsOnly: true });
+  expect(state.searchUsers.mock.lastCall?.[0]).toEqual({ offset: 20, limit: 20, query: "", exceptionsOnly: true });
   type(" A");
   type(" Al ");
-  expect(state.searchUsers.mock.lastCall?.[0]).toEqual({ offset: 25, limit: 25, query: "", exceptionsOnly: true });
+  expect(state.searchUsers.mock.lastCall?.[0]).toEqual({ offset: 20, limit: 20, query: "", exceptionsOnly: true });
   act(() => vi.advanceTimersByTime(300));
-  expect(state.searchUsers.mock.lastCall?.[0]).toEqual({ offset: 0, limit: 25, query: "Al", exceptionsOnly: true });
+  expect(state.searchUsers.mock.lastCall?.[0]).toEqual({ offset: 0, limit: 20, query: "Al", exceptionsOnly: true });
   expect(state.searchUsers.mock.calls.some(([args]) => args.query === "A")).toBe(false);
   act(() => host.querySelector<HTMLButtonElement>('button[aria-label="dataTable.pagination.next"]')!.click());
   search("");
-  expect(state.searchUsers.mock.lastCall?.[0]).toEqual({ offset: 0, limit: 25, query: "", exceptionsOnly: true });
+  expect(state.searchUsers.mock.lastCall?.[0]).toEqual({ offset: 0, limit: 20, query: "", exceptionsOnly: true });
 });
 
 it("tells an empty whitelist apart from a search without match", () => {
@@ -294,9 +294,9 @@ it("steps back a page when a removal empties a later page", () => {
   state.usersTotal = 26;
   render("");
   act(() => host.querySelector<HTMLButtonElement>('button[aria-label="dataTable.pagination.next"]')!.click());
-  expect(state.searchUsers.mock.lastCall?.[0]).toMatchObject({ offset: 25 });
+  expect(state.searchUsers.mock.lastCall?.[0]).toMatchObject({ offset: 20 });
   state.users = [];
-  state.usersTotal = 25;
+  state.usersTotal = 20;
   act(() => root.render(<PlatformAccessPage />));
   expect(state.searchUsers.mock.lastCall?.[0]).toMatchObject({ offset: 0 });
 });
@@ -466,7 +466,7 @@ it("preserves the rule draft, the search and the page across tabs without mutati
   openWhitelistTab("teams");
   openWhitelistTab("users");
   expect(state.searchUsers.mock.lastCall).toEqual([
-    { offset: 25, limit: 25, query: "Al", exceptionsOnly: true },
+    { offset: 20, limit: 20, query: "Al", exceptionsOnly: true },
     { skip: false },
   ]);
   expect(state.bulk).not.toHaveBeenCalled();
