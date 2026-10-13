@@ -36,6 +36,7 @@
 - [x] 7.3 Show "Added on", "Origin" and "Other access" in the whitelist table; verify with page tests for the date cell and origin of both origins, the filtered chips and the empty-cell marker.
 - [x] 7.4 Add the French and English strings and delete the unused ones; verify key parity and that no deleted key is referenced.
 - [x] 7.5 Update the contract entry, `COMPONENT-UX.md` and the migration note; record the evidence below and re-run `openspec validate whitelist-lists-individual-exceptions --strict`.
+- [x] 7.6 Title the Users block with an `h3` above the toolbar and reword the search; verify with a page test that the heading is the panel's first element and the only `h3` in it.
 
 ## Verification evidence (2026-10-13)
 
@@ -86,3 +87,5 @@ Nothing visual was checked, and the new order was not run against the live contr
 - `openspec validate whitelist-lists-individual-exceptions --strict`: valid.
 
 Divergence from the request: no top-level grant-date field was added to the user, because the individual source of each row already carries `granted_at`; see design.md.
+
+Block title (task 7.6), from `apps/frontend`: `npx tsc --noEmit` exit 0; `npx eslint src/rework/components/pages/admin/PlatformAccessPage` exit 0; prettier check passes on that folder and both `translation.json`; `npx vitest run src/rework/components/pages/admin/PlatformAccessPage/PlatformAccessPage.test.tsx` 33 passed (the former "no heading" test now checks the `h3`, its text and its position). `rework.platformAccess` then exposes 222 keys in each language.
