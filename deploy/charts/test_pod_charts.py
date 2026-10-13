@@ -38,6 +38,15 @@ KNOWLEDGE_BASE = {
 }
 
 
+NOTES_AS_TEMPLATE = """apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: notes
+data:
+  notes: {{ tpl (.Files.Get "notes.txt") . | quote }}
+"""
+
+
 def merged(base: dict, overrides: dict) -> dict:
     result = dict(base)
     for key, value in overrides.items():
@@ -54,34 +63,21 @@ class PodChartTests(unittest.TestCase):
     def render(
         self, chart: str, values: dict, *, notes: bool = False
     ) -> subprocess.CompletedProcess:
-        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as file:
-            json.dump(values, file)
-        command = [
-            "helm",
-            "template",
-            "release",
-            str(CHARTS / chart),
-            "-n",
-            "ns",
-            "-f",
-            file.name,
-        ]
-        if notes:
-            command = [
-                "helm",
-                "install",
-                "release",
-                str(CHARTS / chart),
-                "-n",
-                "ns",
-                "-f",
-                file.name,
-                "--dry-run",
-            ]
-        try:
+        with tempfile.TemporaryDirectory() as work:
+            source = CHARTS / chart
+            if notes:
+                # helm renders NOTES.txt only on install, which needs a cluster:
+                # render it as an ordinary template of a copy instead.
+                source = Path(work) / chart
+                shutil.copytree(CHARTS / chart, source)
+                notes_file = source / "templates" / "NOTES.txt"
+                (source / "notes.txt").write_text(notes_file.read_text())
+                (source / "templates" / "zz-notes.yaml").write_text(NOTES_AS_TEMPLATE)
+            values_file = Path(work) / "values.json"
+            values_file.write_text(json.dumps(values))
+            command = ["helm", "template", "release", str(source)]
+            command += ["-n", "ns", "-f", str(values_file)]
             return subprocess.run(command, capture_output=True, text=True, check=False)
-        finally:
-            Path(file.name).unlink()
 
     def assert_refused(self, chart: str, values: dict, message: str) -> None:
         result = self.render(chart, values)
@@ -160,6 +156,27 @@ class PodChartTests(unittest.TestCase):
         )
         self.assertIn('mountPath: "/app/config/models_catalog.yaml"', result.stdout)
         self.assertIn("models_catalog.yaml: |", result.stdout)
+
+    def test_metrics_exposed_only_on_a_reachable_address(self):
+        loopback = {"observability": {"kpi": {"prometheus": {"enabled": True}}}}
+        for chart, values in (("agent-pod", AGENT), ("knowledge-base", KNOWLEDGE_BASE)):
+            with self.subTest(chart=chart):
+                self.assert_refused(
+                    chart, merged(values, {"configuration": loopback}), "set 0.0.0.0"
+                )
+        reachable = {"enabled": True, "address": "0.0.0.0"}
+        rendered = self.render(
+            "agent-pod",
+            merged(
+                AGENT,
+                {
+                    "configuration": {
+                        "observability": {"kpi": {"prometheus": reachable}}
+                    }
+                },
+            ),
+        ).stdout
+        self.assertIn("containerPort: 9000", rendered)
 
     def test_knowledge_base_publish_job(self):
         rendered = self.render("knowledge-base", KNOWLEDGE_BASE).stdout

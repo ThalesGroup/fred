@@ -55,13 +55,23 @@ configuration the pod reads. Empty when both are disabled.
 {{- $kpi := dig "observability" "kpi" "prometheus" dict .Values.configuration -}}
 {{- $temporal := dig "observability" "temporal" "prometheus" dict .Values.configuration -}}
 {{- if $kpi.enabled }}
+{{- include "knowledge-base.reachableMetrics" (dict "path" "observability.kpi.prometheus" "address" $kpi.address) }}
 - name: metrics
   port: {{ $kpi.port | default 9000 }}
 {{- end }}
 {{- if $temporal.enabled }}
+{{- include "knowledge-base.reachableMetrics" (dict "path" "observability.temporal.prometheus" "address" $temporal.address) }}
 - name: engine-metrics
   port: {{ $temporal.port | default 9001 }}
 {{- end }}
+{{- end -}}
+
+{{/* The libraries bind metrics to 127.0.0.1 unless told otherwise: refuse to expose that. */}}
+{{- define "knowledge-base.reachableMetrics" -}}
+{{- $address := .address | default "127.0.0.1" -}}
+{{- if or (hasPrefix "127." $address) (eq $address "localhost") (eq $address "::1") -}}
+{{- fail (printf "configuration.%s.address is %s: set 0.0.0.0, or Prometheus cannot reach the metrics port the chart opens" .path $address) -}}
+{{- end -}}
 {{- end -}}
 
 {{/*

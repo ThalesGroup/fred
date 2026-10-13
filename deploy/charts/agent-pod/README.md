@@ -107,7 +107,7 @@ Secrets the platform already owns (`valueFrom.secretKeyRef`), under other key na
 | Value | Default | Meaning |
 | --- | --- | --- |
 | `extraConfigFiles` | `{}` | other files under `/app/config/` (`models_catalog.yaml`...); a file left out stays the image's |
-| `configuration.observability.kpi.prometheus` | off | when enabled, the chart opens its port and annotates the pod for scraping |
+| `configuration.observability.kpi.prometheus` | not exposed | with `enabled: true` and `address: 0.0.0.0`, the chart opens `port` (9000 by default) and annotates the pod for scraping; it refuses a loopback address, the library's default |
 | `ingress` | off | browser route on `base_url`; Fred's own Ingress usually carries it already |
 | `service.port` | `80` | |
 | `replicaCount`, `resources` | `1`, see `values.yaml` | |

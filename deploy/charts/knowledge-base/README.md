@@ -93,12 +93,19 @@ names, plus whatever the pod's source needs. `secret.existingSecret` mounts a wh
 
 | Value | Default | Meaning |
 | --- | --- | --- |
-| `configuration.observability.kpi.prometheus`, `.temporal.prometheus` | off | the pod's and the workflow engine's metrics; the chart opens the ports and the metrics Service |
+| `configuration.observability.kpi.prometheus`, `.temporal.prometheus` | not exposed | the pod's and the workflow engine's metrics: with `enabled: true` and `address: 0.0.0.0`, the chart opens `port` (9000, 9001 by default) and the metrics Service; it refuses a loopback address, the library's default |
 | `metricsService.serviceMonitor.enabled` | `false` | a ServiceMonitor for the Prometheus Operator |
 | `publish.enabled` | `true` | the declaration Job; turn off to declare by other means |
 | `extraVolumes`, `extraVolumeMounts` | `[]` | e.g. a private CA bundle for the source |
 | `resources`, `publish.resources` | see `values.yaml` | |
 | `imagePullSecrets` | `[]` | for a private registry |
+
+### Writable paths
+
+The container's root filesystem is read-only (`securityContext.readOnlyRootFilesystem`);
+only `/tmp` is writable. A pod that caches or clones under its home directory needs that
+directory pointed at `/tmp` (for example `XDG_CACHE_HOME=/tmp/cache` in `extraEnvVars`) or a
+volume (`extraVolumes`, `extraVolumeMounts`).
 
 ## Enable in Fred
 

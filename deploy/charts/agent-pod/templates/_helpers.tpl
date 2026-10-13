@@ -47,10 +47,23 @@ app.kubernetes.io/component: agent-pod
 {{- required "configuration.app.base_url is required: the path the pod serves, and its ingress_prefix in Fred" .Values.configuration.app.base_url -}}
 {{- end -}}
 
-{{/* The Prometheus exporter, when the KPI configuration enables it. */}}
+{{/*
+The Prometheus exporter, when the KPI configuration enables it. The library binds it
+to 127.0.0.1 unless told otherwise, which no scraper reaches: refuse to expose that.
+*/}}
 {{- define "agent-pod.metricsPort" -}}
 {{- $prometheus := dig "observability" "kpi" "prometheus" dict .Values.configuration -}}
-{{- if and $prometheus.enabled $prometheus.port -}}{{ $prometheus.port }}{{- end -}}
+{{- if $prometheus.enabled -}}
+{{- include "agent-pod.reachableMetrics" (dict "path" "observability.kpi.prometheus" "address" $prometheus.address) -}}
+{{ $prometheus.port | default 9000 }}
+{{- end -}}
+{{- end -}}
+
+{{- define "agent-pod.reachableMetrics" -}}
+{{- $address := .address | default "127.0.0.1" -}}
+{{- if or (hasPrefix "127." $address) (eq $address "localhost") (eq $address "::1") -}}
+{{- fail (printf "configuration.%s.address is %s: set 0.0.0.0, or Prometheus cannot reach the metrics port the chart opens" .path $address) -}}
+{{- end -}}
 {{- end -}}
 
 {{- define "agent-pod.secretName" -}}
