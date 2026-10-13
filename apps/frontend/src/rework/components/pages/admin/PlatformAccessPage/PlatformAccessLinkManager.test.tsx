@@ -252,9 +252,8 @@ it("shows successful joiners on a revoked link with bounded pages", () => {
   expect(document.body.textContent).toContain("simon");
   expect(document.body.textContent).toContain("Martin");
   expect(document.querySelector('[inert] [role="dialog"]')?.textContent).toContain("Workshop");
-  act(() =>
-    [...document.querySelectorAll<HTMLButtonElement>('button[aria-label="dataTable.pagination.next"]')].at(-1)!.click(),
-  );
+  const nextButtons = document.querySelectorAll<HTMLButtonElement>('button[aria-label="dataTable.pagination.next"]');
+  act(() => nextButtons[nextButtons.length - 1]!.click());
   expect(hooks.joinerQuery.mock.lastCall?.[0]).toMatchObject({ offset: 25 });
 });
 
