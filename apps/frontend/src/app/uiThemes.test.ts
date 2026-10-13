@@ -26,6 +26,7 @@ import {
   availableUiThemes,
   setCustomUiThemes,
   uiThemeBase,
+  uiThemeTab,
   type PlatformUiThemes,
   resolveUiTheme,
   THEME_MODE_STORAGE_KEY,
@@ -199,6 +200,24 @@ it("retains the validated catalog and selected theme across Vite hot-module repl
   expect(Array.from(refreshed.offeredUiThemes(platform))).toEqual(["paris-aeroport"]);
   expect(refreshed.resolveUiTheme("paris-aeroport", platform)).toBe("paris-aeroport");
   expect(refreshed.uiThemeBase("paris-aeroport")).toBe("cobalt");
+});
+
+it("brands the tab from the active ZIP theme and restores the app's branding", () => {
+  setCustomUiThemes([
+    { id: "acme", label: "Acme", base: "cobalt", tabTitle: "Acme", faviconName: "acme", faviconNameDark: "acme-dark" },
+    { id: "single", label: "Single", base: "cloud", faviconName: "single" },
+  ]);
+  const tab = (id: string, dark: boolean) => uiThemeTab(id, dark, "App", "app", "app-dark");
+  expect([tab("acme", false), tab("acme", true)]).toEqual([
+    { title: "Acme", icon: "acme" },
+    { title: "Acme", icon: "acme-dark" },
+  ]);
+  expect(tab("single", true)).toEqual({ title: "App", icon: "single" });
+  expect([tab("pebble", false), tab("pebble", true)]).toEqual([
+    { title: "App", icon: "app" },
+    { title: "App", icon: "app-dark" },
+  ]);
+  setCustomUiThemes([]);
 });
 
 describe("resolveUiTheme with platform settings", () => {

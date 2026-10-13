@@ -23,7 +23,7 @@ Custom catalog entries SHALL support optional `tabTitle`, `faviconName` and `fav
 
 ### Requirement: Browser tab metadata is validated before activation
 
-The installer and browser SHALL reject blank or overlong tab titles and favicon names that are not bounded SVG basenames. Titles SHALL have at most 200 characters; names SHALL have at most 128 characters and contain only letters, digits, underscores and hyphens, starting with a letter or digit. Existing id, label and base constraints SHALL remain in effect.
+The theme installer SHALL reject blank or overlong tab titles and favicon names that are not bounded SVG basenames. Titles SHALL have at most 200 characters; names SHALL have at most 128 characters and contain only letters, digits, underscores and hyphens, starting with a letter or digit. Existing id, label and base constraints SHALL remain in effect.
 
 #### Scenario: Escaping favicon name
 

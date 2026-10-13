@@ -2,8 +2,8 @@
 
 ## 1. Theme-local tab metadata
 
-- [x] 1.1 Extend the custom catalog type, browser validation and shared installer validation; verify valid/omitted metadata and malformed title/path cases with focused catalog and overlay tests.
-- [x] 1.2 Update the existing tab effect to resolve active-theme title and light/dark favicons; verify Paris-to-Pebble and mode transitions with a browser-DOM test. Document the optional fields in the frontend README and existing operator migration note.
+- [x] 1.1 Extend the custom catalog type and shared installer validation; verify valid/omitted metadata and malformed title/path cases with overlay tests.
+- [x] 1.2 Update the existing tab effect to resolve active-theme title and light/dark favicons; verify theme and mode transitions with a `uiThemeTab` unit test. Document the optional fields in the frontend README and existing operator migration note.
 
 ## 2. Settings synchronization and administration
 

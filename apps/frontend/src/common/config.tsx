@@ -127,18 +127,7 @@ async function loadThemeCatalog(): Promise<void> {
       typeof theme.label !== "string" ||
       !theme.label.trim() ||
       theme.label.length > 80 ||
-      !UI_THEMES.includes(theme.base) ||
-      Object.keys(theme).some(
-        (key) => !["id", "label", "base", "tabTitle", "faviconName", "faviconNameDark"].includes(key),
-      ) ||
-      ("tabTitle" in theme &&
-        (typeof theme.tabTitle !== "string" || !theme.tabTitle.trim() || theme.tabTitle.length > 200)) ||
-      ["faviconName", "faviconNameDark"].some(
-        (key) =>
-          key in theme &&
-          (typeof theme[key as keyof CustomUiTheme] !== "string" ||
-            !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/.test(theme[key as keyof CustomUiTheme] as string)),
-      )
+      !UI_THEMES.includes(theme.base)
     )
       throw new Error("Invalid theme catalog");
     ids.add(theme.id);

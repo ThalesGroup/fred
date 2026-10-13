@@ -65,10 +65,19 @@ export function setCustomUiThemes(themes: CustomUiTheme[]): void {
 }
 
 export const availableUiThemes = (): UiTheme[] => [...UI_THEMES, ...customThemes.map((theme) => theme.id)];
-export const uiThemeTabBranding = (id: UiTheme) => customThemes.find((theme) => theme.id === id);
-export const uiThemeBase = (id: UiTheme): string => customThemes.find((theme) => theme.id === id)?.base ?? id;
+const customUiTheme = (id: UiTheme) => customThemes.find((theme) => theme.id === id);
+export const uiThemeBase = (id: UiTheme): string => customUiTheme(id)?.base ?? id;
 export const uiThemeLabel = (id: UiTheme, t: (key: string) => string): string =>
-  customThemes.find((theme) => theme.id === id)?.label ?? t(UI_THEME_LABEL_KEYS[id] ?? id);
+  customUiTheme(id)?.label ?? t(UI_THEME_LABEL_KEYS[id] ?? id);
+/** Browser tab title and favicon: a ZIP theme may override the app's own. */
+export function uiThemeTab(id: UiTheme, darkMode: boolean, title: string, icon: string, iconDark: string) {
+  const theme = customUiTheme(id);
+  const light = theme?.faviconName ?? icon;
+  return {
+    title: theme?.tabTitle ?? title,
+    icon: darkMode ? (theme?.faviconNameDark ?? theme?.faviconName ?? iconDark) : light,
+  };
+}
 
 const isUiTheme = (value: unknown): value is UiTheme =>
   typeof value === "string" && availableUiThemes().includes(value);
