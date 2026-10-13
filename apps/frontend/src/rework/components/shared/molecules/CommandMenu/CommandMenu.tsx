@@ -141,7 +141,7 @@ export const CommandMenu = memo(function CommandMenu({
               onMouseMove={() => onFocusEntry(index)}
               onMouseDown={activate(index)}
             >
-              <span className={`${styles.rowIcon} ${entry.kind === "prompt" ? styles.promptIcon : ""}`} aria-hidden>
+              <span className={styles.rowIcon} aria-hidden>
                 {entry.kind === "skill" ? (
                   <Icon category="outlined" type="customPlatformSkill" />
                 ) : (

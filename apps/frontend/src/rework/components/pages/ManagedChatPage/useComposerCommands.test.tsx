@@ -1330,9 +1330,9 @@ describe("personal and team prompt commands", () => {
     mountReact();
     type("/");
     expect(labels()).toEqual(["/search", "/summary", "/summary", "review"]);
-    expect(options()[0].querySelector("[class*=promptIcon]")?.textContent).toBe("edit_note");
+    expect(options()[0].querySelector("[class*=rowIcon]")?.textContent).toBe("edit_note");
     expect(options()[0].querySelector("em")?.textContent).toBe("Chercher");
-    expect(options()[3].querySelector("[class*=promptIcon]")).toBeNull();
+    expect(options()[3].querySelector("[class*=rowIcon]")?.textContent).not.toBe("edit_note");
     expect(options()[3].querySelector("em")?.textContent).toBe("Review");
     expect(sections()).toEqual([
       ["chatbot.commandMenu.sections.teamFallback", ["/search", "/summary"]],

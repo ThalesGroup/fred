@@ -77,11 +77,6 @@
   font-size: 0.875rem;
 }
 
-.promptIcon {
-  background: var(--primary-container);
-  color: var(--on-primary-container);
-}
-
 .rowText {
   display: flex;
   flex: 1;

@@ -20,11 +20,6 @@
   line-height: 1.5;
 }
 
-.badge[data-kind="prompt"] {
-  background: var(--primary-container);
-  color: var(--on-primary-container);
-}
-
 /* The user bubble is itself a secondary container: a hairline keeps the
    container readable there without changing its size. */
 .badge[data-surface="bubble"] {
