@@ -56,7 +56,7 @@ starts only when group 3 is green. Commands are in design.md, section 11; no
 - [x] 7.3 (S) Update `docs/swift/ops/migrations/3073-composer-command-menu-sections.md`: impact `minor`, `no_action_reason` removed, the order in Upgrade, the reload rendering in Limitations, a multi-prompt step in Validation; verify with the migration check command of design.md section 11, run directly and not through its `make` target
 - [x] 7.4 (S) Reconcile this change with what was built: record exact verification evidence in `verification.md`, note any divergence in design.md, and list in the pull request the open questions for the reviewer (cap of 16, migration impact `minor` or `none`); verify `openspec validate allow-several-prompt-commands --strict` passes
 - [x] 7.5 (M) (done by the owner on 2026-10-13 in Firefox, all good; Chrome not confirmed, see verification.md, "Owner check") Owner check in the app, in Firefox and Chrome, fr and en: two and three prompts picked from both sections, the same one twice, prompts mixed with skills, typed names, each composer preview, send, badges, each panel, reload, recall, copy, a deleted prompt among several, the limit, an old conversation, and a new conversation's title; verify each point is ticked in `verification.md`
-- [ ] 7.6 (S) After the merge, archive `section-composer-command-menu` first, then this change; verify `openspec validate --specs --strict` passes after each archive
+- [x] 7.6 (S) (archived in the pull request itself, before the merge, on the owner's request) After the merge, archive `section-composer-command-menu` first, then this change; verify `openspec validate --specs --strict` passes after each archive
 
 ## 8. Independent review fixes
 

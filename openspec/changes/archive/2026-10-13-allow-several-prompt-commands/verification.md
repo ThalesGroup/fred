@@ -338,3 +338,32 @@ Accepted as is by the owner:
   and the retry on submit also fails, a message holding a hand-typed word
   shaped like `/name` is held back with the "could not be read" toast, even
   when that word was ordinary text. No change is planned.
+
+### Final run after the rebase (both changes, before archiving)
+
+Run on 2026-10-13 after a conflict-free rebase onto `origin/swift` (ee8330219),
+with the commands of the first section and no `make` target.
+
+| Project | pytest | ruff check | import order | format | basedpyright |
+| --- | --- | --- | --- | --- | --- |
+| `libs/fred-sdk` | 647 passed, 3 skipped | passed | passed | 97 files formatted | 0 errors, 0 warnings |
+| `libs/fred-core` | 1267 passed, 1 skipped, 42 deselected | passed | passed | 284 files formatted | 0 errors, 0 warnings |
+| `libs/fred-runtime` | 2119 passed, 11 skipped, 22 deselected | passed | passed | 262 files formatted | 0 errors, 5 warnings (untouched files) |
+| `apps/control-plane-backend` | 1780 passed, 9 skipped, 11 deselected | passed | passed | 407 files formatted | 0 errors, 0 warnings |
+| `apps/knowledge-flow-backend` | 1454 passed, 45 deselected | passed | passed | 461 files formatted | 0 errors, 0 warnings |
+| `apps/fred-agents` | 132 passed, 6 xfailed | passed | passed | 54 files formatted | 0 errors, 0 warnings |
+
+Generated clients: the three specs and the three clients were regenerated with
+the direct commands of "Generated files"; `runtimeOpenApi.ts`,
+`controlPlaneOpenApi.ts` and `knowledgeFlowOpenApi.ts` came out unchanged.
+
+Frontend, from `apps/frontend`: `tsc --noEmit -p .` exit 0; eslint clean on
+the 28 changed `.ts`/`.tsx` files; `prettier --check` clean on the 39
+changed files; `vitest run`: 331 files passed, 1 skipped; 4092 tests passed,
+7 skipped. `scripts/migration_guides.py check-pr --base origin/swift
+--worktree`: valid, 1 new declaration. Both changes valid with `--strict`
+before their archive.
+
+After the two archives, `openspec validate --all --strict`: 72 passed, 2
+failed (`add-agent-initiated-human-questions` and the spec
+`frontend-surface-scale`); both fail the same way on `origin/swift`.

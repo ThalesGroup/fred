@@ -6937,4 +6937,4 @@ renders its first prompt command and shows the others as the `/name` the user
 typed. A pod rolled back after such rows were written keeps serving their
 list. Deploy runtime pods before the web client to avoid that rendering for
 the turns sent in between. Acceptance:
-`openspec/changes/allow-several-prompt-commands/`.
+`openspec/specs/platform-agent-skills/spec.md`.
