@@ -23,12 +23,26 @@ FOLDED_LETTERS = _folding_table()
 _ACCENTED = "".join(FOLDED_LETTERS)
 _PLAIN = "".join(FOLDED_LETTERS.values())
 _PYTHON_TABLE = str.maketrans(FOLDED_LETTERS)
+# What an ASCII-only lower() changes (SQLite, PostgreSQL under a C/POSIX LC_CTYPE).
+_ASCII_LOWER = str.maketrans({chr(code): chr(code + 32) for code in range(65, 91)})
 
 
 def fold_text(value: str) -> str:
-    """Fold a search string exactly as `fold_accents` folds a column."""
+    """Fold text as `fold_accents` does where the database lower() knows Unicode."""
     # Composed first so a letter typed as base + combining mark folds like the stored one.
     return unicodedata.normalize("NFC", value).translate(_PYTHON_TABLE).lower()
+
+
+def search_spellings(value: str) -> tuple[str, ...]:
+    """Spellings of a search text for the database to fold through `fold_accents`.
+
+    Composed (NFC) only. A capital an ASCII-only lower() would keep also goes in
+    lower case, so text stored in lower case is still found.
+    """
+    typed = unicodedata.normalize("NFC", value)
+    ascii_folded = typed.translate(_PYTHON_TABLE).translate(_ASCII_LOWER)
+    kept_capital = ascii_folded != fold_text(typed)
+    return (typed, typed.lower()) if kept_capital else (typed,)
 
 
 class fold_accents(FunctionElement[str]):
@@ -42,7 +56,7 @@ class fold_accents(FunctionElement[str]):
 @compiles(fold_accents)
 def _fold_with_replace(element: fold_accents, compiler: Any, **kw: Any) -> str:
     # No translate() outside PostgreSQL: one replace per letter, as text (nested constructs
-    # overflow the compiler). SQLite's lower() is ASCII-only, so other scripts stay case-sensitive there.
+    # overflow the compiler). Letters outside the table take the case folding of the database lower().
     (value,) = element.clauses
     folded = compiler.process(func.lower(value), **kw)
     for accented, plain in FOLDED_LETTERS.items():

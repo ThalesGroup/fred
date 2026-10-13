@@ -37,7 +37,12 @@ from fred_core.security.platform_access.rules import (
 from fred_core.security.platform_access.store import PlatformAccessStore
 from fred_core.security.rebac.noop_engine import NoopRebacEngine
 from fred_core.security.rebac.rebac_engine import OrganizationPermission, RebacReference
-from fred_core.sql.accent_folding import FOLDED_LETTERS, fold_text
+from fred_core.sql.accent_folding import (
+    FOLDED_LETTERS,
+    fold_accents,
+    fold_text,
+    search_spellings,
+)
 from fred_core.teams.team_metatada_models import TeamMetadataRow
 from fred_core.users.user_models import UserRow
 
@@ -756,6 +761,63 @@ async def test_user_search_ignores_accents_and_case_on_both_sides(access):
     assert await found("strasse") == set()
 
 
+@pytest.mark.asyncio
+async def test_user_search_finds_stored_capitals_outside_the_folding_table(access):
+    from sqlalchemy import literal, select
+
+    store = access.store
+    people = [
+        ("lukasz", "Łukasz"),
+        ("soren", "SØREN"),
+        ("zhanna", "Жанна"),
+        ("omega", "Ωmega"),
+    ]
+    async with store.mutation() as session:
+        session.add_all(
+            [
+                UserRow(id=UUID(int=index + 1), username=username, first_name=first)
+                for index, (username, first) in enumerate(people)
+            ]
+        )
+        # Whether this database lower() folds letters beyond ASCII (SQLite does not).
+        unicode_lower = (
+            await session.scalar(select(fold_accents(literal("ŁØЖΩ")))) == "łøжω"
+        )
+
+    async def found(query: str) -> set[str]:
+        rows = await store.users(0, 25, query)
+        assert await store.user_count(query) == len(rows)
+        return {row.username for row in rows}
+
+    # Typed as stored, a capital the table does not fold is always found.
+    for username, first in people:
+        assert await found(first) == {username}
+        assert await found(first[:3]) == {username}
+    # In the other case it is found wherever the database can fold it, on both sides alike.
+    for username, first in people:
+        assert await found(first.lower()) == ({username} if unicode_lower else set())
+    # Stored in lower case, it is found in either case on every database.
+    async with store.mutation() as session:
+        session.add(UserRow(id=UUID(int=99), username="pawel", first_name="paweł"))
+    assert (
+        await found("PAWEŁ")
+        == await found("Paweł")
+        == await found("paweł")
+        == {"pawel"}
+    )
+
+
+def test_search_spellings_leave_the_folding_to_the_database():
+    # Only composed, never folded: the database applies one construct to both sides.
+    assert search_spellings("Hélène") == ("Hélène",)
+    assert search_spellings("ELODIE") == ("ELODIE",)
+    assert search_spellings("E\u0301lodie") == ("Élodie",)
+    # A capital an ASCII-only lower() would keep also goes in lower case.
+    assert search_spellings("Łukasz") == ("Łukasz", "łukasz")
+    assert search_spellings("Ольга") == ("Ольга", "ольга")
+    assert search_spellings("łukasz ольга") == ("łukasz ольга",)
+
+
 def test_accent_folding_table_and_postgresql_expression():
     from sqlalchemy import select
     from sqlalchemy.dialects import postgresql
@@ -771,4 +833,8 @@ def test_accent_folding_table_and_postgresql_expression():
     assert str(compiled).count("translate(lower(users.") == 4
     assert "replace(" not in str(compiled)
     assert "".join(FOLDED_LETTERS) in compiled.params.values()
-    assert "%he%" in compiled.params.values()
+    # The typed text is a bind parameter folded by the same expression, never by Python.
+    assert "Hé" in compiled.params.values()
+    assert "Hé" not in str(compiled)
+    assert "%he%" not in compiled.params.values()
+    assert str(compiled).count("translate(lower(%(") == 4

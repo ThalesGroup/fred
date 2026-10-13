@@ -8,7 +8,7 @@ from uuid import UUID
 from fastapi import HTTPException
 from fred_pod.security.platform_access import PlatformAccessPolicy
 from fred_pod.security.structure import KeycloakUser
-from sqlalchemy import ColumnElement, func, or_, select, text
+from sqlalchemy import ColumnElement, func, literal, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from fred_core.security.platform_access.models import (
@@ -18,7 +18,7 @@ from fred_core.security.platform_access.models import (
 )
 from fred_core.security.platform_access.rules import Fact, path_key
 from fred_core.sql import make_session_factory, use_session
-from fred_core.sql.accent_folding import fold_accents, fold_text
+from fred_core.sql.accent_folding import fold_accents, search_spellings
 from fred_core.sql.base_sql import advisory_lock_key
 from fred_core.teams.team_metatada_models import TeamMetadataRow
 from fred_core.users.user_models import UserRow
@@ -101,16 +101,20 @@ class PlatformAccessStore:
     @staticmethod
     def user_search(query: str) -> ColumnElement[bool]:
         # Accents and case are ignored on both sides: "helene" finds "Hélène" and back.
-        pattern = f"%{fold_text(query)}%"
+        # The typed text is bound and folded by the database, exactly like the columns.
+        patterns = [
+            fold_accents(literal(spelling)) for spelling in search_spellings(query)
+        ]
         return or_(
             *(
-                fold_accents(column).like(pattern)
+                fold_accents(column).contains(pattern)
                 for column in (
                     UserRow.username,
                     UserRow.email,
                     UserRow.first_name,
                     UserRow.last_name,
                 )
+                for pattern in patterns
             )
         )
 
