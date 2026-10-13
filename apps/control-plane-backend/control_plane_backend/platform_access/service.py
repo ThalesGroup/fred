@@ -32,7 +32,7 @@ from fred_core.users.user_models import UserRow
 from fred_pod.security.platform_access import PlatformAccessPolicy
 from fred_pod.security.structure import KeycloakUser, is_service_agent
 from pydantic import JsonValue
-from sqlalchemy import delete, func, inspect, or_, select
+from sqlalchemy import delete, func, inspect, or_, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
@@ -555,7 +555,7 @@ async def list_link_joiners(
         await owned_link(access, team_id, link_id, session)
         rows = await session.execute(
             select(PlatformAccessLinkJoinerRow, UserRow)
-            .join(UserRow, UserRow.id == PlatformAccessLinkJoinerRow.user_id)
+            .outerjoin(UserRow, UserRow.id == PlatformAccessLinkJoinerRow.user_id)
             .where(PlatformAccessLinkJoinerRow.link_id == link_id)
             .order_by(
                 PlatformAccessLinkJoinerRow.joined_at,
@@ -567,17 +567,29 @@ async def list_link_joiners(
         total = await session.scalar(
             select(func.count())
             .select_from(PlatformAccessLinkJoinerRow)
-            .join(UserRow, UserRow.id == PlatformAccessLinkJoinerRow.user_id)
             .where(PlatformAccessLinkJoinerRow.link_id == link_id)
         )
         return PlatformEnrollmentJoinersPage(
             items=[
                 PlatformEnrollmentJoiner(
-                    user_id=str(user.id),
-                    username=user.username,
-                    first_name=user.first_name,
-                    last_name=user.last_name,
+                    user_id=str(joiner.user_id),
+                    username=(
+                        joiner.username_snapshot
+                        if joiner.deleted_at or user is None
+                        else user.username
+                    ),
+                    first_name=(
+                        joiner.first_name_snapshot
+                        if joiner.deleted_at or user is None
+                        else user.first_name
+                    ),
+                    last_name=(
+                        joiner.last_name_snapshot
+                        if joiner.deleted_at or user is None
+                        else user.last_name
+                    ),
                     joined_at=joiner.joined_at,
+                    deleted=joiner.deleted_at is not None or user is None,
                 )
                 for joiner, user in rows
             ],
@@ -585,7 +597,7 @@ async def list_link_joiners(
         )
 
 
-async def delete_user_join_history(
+async def mark_user_join_history_deleted(
     store: PlatformAccessStore, user_id: str, *, table_may_be_missing: bool = False
 ) -> None:
     try:
@@ -599,10 +611,17 @@ async def delete_user_join_history(
             )
         ):
             return
+        profile = await session.get(UserRow, uid)
+        snapshots: dict[str, Any] = {}
+        if profile is not None:
+            for field in ("username", "first_name", "last_name"):
+                value = getattr(profile, field)
+                if value is not None:
+                    snapshots[f"{field}_snapshot"] = value
         await session.execute(
-            delete(PlatformAccessLinkJoinerRow).where(
-                PlatformAccessLinkJoinerRow.user_id == uid
-            )
+            update(PlatformAccessLinkJoinerRow)
+            .where(PlatformAccessLinkJoinerRow.user_id == uid)
+            .values(deleted_at=datetime.now(timezone.utc), **snapshots)
         )
 
 
@@ -753,6 +772,9 @@ async def enroll(
                         link_id=link.id,
                         user_id=UUID(user.uid),
                         joined_at=datetime.now(timezone.utc),
+                        username_snapshot=user.username,
+                        first_name_snapshot=user.first_name,
+                        last_name_snapshot=user.last_name,
                     )
                 )
     emit_audit_log("platform.access.free.enrolled", actor_uid=user.uid, team_id=team.id)

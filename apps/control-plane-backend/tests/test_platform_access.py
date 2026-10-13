@@ -1242,18 +1242,35 @@ async def test_free_link_joiners_follow_successful_enrollment_and_cleanup(access
     assert (
         await service.list_link_joiners(access, "demo", second_id, 0, 25)
     ).total == 1
-    await service.delete_user_join_history(access.store, first.uid)
-    assert (
+    await service.mark_user_join_history_deleted(access.store, first.uid)
+    deleted_joiner = (
         await service.list_link_joiners(access, "demo", second_id, 0, 25)
-    ).total == 0
-    await service.delete_user_join_history(
+    ).items[0]
+    assert deleted_joiner.deleted
+    assert (
+        deleted_joiner.username,
+        deleted_joiner.first_name,
+        deleted_joiner.last_name,
+    ) == (
+        "first",
+        "First",
+        "Updated",
+    )
+    async with access.store.mutation() as session:
+        user_row = await session.get(UserRow, UUID(first.uid))
+        assert user_row is not None
+        await session.delete(user_row)
+    assert (await service.list_link_joiners(access, "demo", second_id, 0, 25)).items[
+        0
+    ] == deleted_joiner
+    await service.mark_user_join_history_deleted(
         access.store, second.uid, table_may_be_missing=True
     )
     async with access.store.engine.begin() as connection:
         await connection.run_sync(
             cast(Table, PlatformAccessLinkJoinerRow.__table__).drop
         )
-    await service.delete_user_join_history(
+    await service.mark_user_join_history_deleted(
         access.store, first.uid, table_may_be_missing=True
     )
 

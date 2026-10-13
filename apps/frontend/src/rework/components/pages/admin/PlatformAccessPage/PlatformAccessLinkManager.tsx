@@ -355,6 +355,7 @@ export default function PlatformAccessLinkManager({
               <DataTable
                 data={joiners.currentData.items}
                 rowKey={(person) => person.user_id}
+                rowClassName={(person) => (person.deleted ? styles.deletedJoiner : undefined)}
                 serverPagination={{
                   offset: joinersOffset,
                   limit: 25,
@@ -364,7 +365,14 @@ export default function PlatformAccessLinkManager({
                 columns={[
                   {
                     label: t("rework.platformAccess.links.username"),
-                    cellRenderer: (person) => person.username || "-",
+                    cellRenderer: (person) => (
+                      <span className={styles.joinerUsername}>
+                        <span className={styles.joinerUsernameText} title={person.username || "-"}>
+                          {person.username || "-"}
+                        </span>
+                        {person.deleted && <span>({t("rework.platformAccess.links.deletedUser")})</span>}
+                      </span>
+                    ),
                   },
                   {
                     label: t("rework.teamSettings.members.table.firstName"),

@@ -15,6 +15,7 @@ const hooks = vi.hoisted(() => ({
   joinerFetching: false,
   joinerError: false,
   joinerTotal: 1,
+  joinerDeleted: false,
   cleanup: vi.fn(),
   fetching: false,
   error: false,
@@ -64,6 +65,7 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
             first_name: "Simon",
             last_name: "Martin",
             joined_at: "2026-10-12T12:00:00Z",
+            deleted: hooks.joinerDeleted,
           },
         ],
         total: hooks.joinerTotal,
@@ -97,6 +99,7 @@ beforeEach(() => {
   hooks.joinerFetching = false;
   hooks.joinerError = false;
   hooks.joinerTotal = 1;
+  hooks.joinerDeleted = false;
   Object.defineProperty(navigator, "clipboard", {
     configurable: true,
     value: { writeText: vi.fn().mockResolvedValue(undefined) },
@@ -255,6 +258,17 @@ it("shows successful joiners on a revoked link with bounded pages", () => {
   const nextButtons = document.querySelectorAll<HTMLButtonElement>('button[aria-label="dataTable.pagination.next"]');
   act(() => nextButtons[nextButtons.length - 1]!.click());
   expect(hooks.joinerQuery.mock.lastCall?.[0]).toMatchObject({ offset: 25 });
+});
+
+it("keeps the last known identity visible on a dimmed deleted joiner", () => {
+  hooks.joinerDeleted = true;
+  render();
+  act(() => button("links.joiners").click());
+  const row = document.querySelector(`.${styles.deletedJoiner}`);
+  expect(row?.textContent).toContain("simon(rework.platformAccess.links.deletedUser)");
+  expect(row?.textContent).toContain("Simon");
+  expect(row?.textContent).toContain("Martin");
+  expect(row?.querySelector(`.${styles.joinerUsernameText}`)?.getAttribute("title")).toBe("simon");
 });
 
 it("shows joiner loading, empty and retry states without stale rows", () => {

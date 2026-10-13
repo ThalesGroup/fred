@@ -95,7 +95,11 @@ class PlatformAccessLinkJoinerRow(Base):
         ForeignKey("platform_access_links.id", ondelete="CASCADE"),
         primary_key=True,
     )
-    user_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
-    )
+    user_id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
     joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    username_snapshot: Mapped[str | None] = mapped_column(String, nullable=True)
+    first_name_snapshot: Mapped[str | None] = mapped_column(String, nullable=True)
+    last_name_snapshot: Mapped[str | None] = mapped_column(String, nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )

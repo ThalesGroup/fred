@@ -57,7 +57,7 @@ def stub_join_history_storage(monkeypatch) -> None:
 
     monkeypatch.setattr(users_api, "platform_access_available", lambda: False)
     monkeypatch.setattr(users_api, "PlatformAccessStore", lambda _engine: object())
-    monkeypatch.setattr(users_api, "delete_user_join_history", no_join_history)
+    monkeypatch.setattr(users_api, "mark_user_join_history_deleted", no_join_history)
 
 
 class _IdentityProvider:
@@ -187,7 +187,7 @@ async def test_delete_bans_before_identity_deletion() -> None:
         ("local", True, 204, False),
     ],
 )
-async def test_delete_removes_link_join_history(
+async def test_delete_marks_link_join_history(
     monkeypatch,
     directory: str,
     identity_exists: bool,
@@ -196,7 +196,7 @@ async def test_delete_removes_link_join_history(
 ) -> None:
     calls: list[bool] = []
 
-    async def purge(
+    async def mark_deleted(
         _store: object, user_id: str, *, table_may_be_missing: bool = False
     ) -> None:
         assert user_id == _PERSON
@@ -206,7 +206,7 @@ async def test_delete_removes_link_join_history(
     monkeypatch.setattr(
         users_api, "get_platform_access", lambda: SimpleNamespace(store=object())
     )
-    monkeypatch.setattr(users_api, "delete_user_join_history", purge)
+    monkeypatch.setattr(users_api, "mark_user_join_history_deleted", mark_deleted)
     async with _deployment(user_directory=directory) as deployment:
         if not identity_exists:
             deployment.identity.accounts.discard(_PERSON)

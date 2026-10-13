@@ -7,10 +7,11 @@
 
 ## 2. Free-link join history
 
-- [x] 2.1 Add one migration and shared model for per-link/per-user join records with cascade deletion and stable pagination indexes; verify migration upgrade/downgrade and model tests.
+- [x] 2.1 Add one migration and shared model for per-link/per-user join records with link-history cascade deletion and stable pagination indexes; verify migration upgrade/downgrade and model tests.
 - [x] 2.2 Record only successful new membership grants in the existing enrollment path; run targeted tests for failed joins, repeated joins, different links, later departure and link cleanup.
 - [x] 2.3 Add a platform-admin-only paginated joiner API with current first name, last name, username and join time; regenerate the frontend API client and run targeted authorization/pagination tests.
 - [x] 2.4 Add a localized joiner action and paginated list in the existing link manager; run its focused Vitest suite for loading, empty/error, permission and revoked/expired-link cases.
+- [x] 2.5 Retain the last known identity fields and join event after account deletion, visibly mark deleted joiners in the API and UI, and cover deletion with or without the local user row.
 
 ## 3. Integration and close-out
 

@@ -41,7 +41,7 @@ An active person holding the current platform-management permission SHALL pass p
 
 ### Requirement: Administrators can inspect successful Free-link joiners
 
-Each Free-team link SHALL retain a bounded, paginated history of distinct people who successfully became members by enrolling through that link. Only platform administrators SHALL read the history. Each entry SHALL expose that person's current first name, last name and username and the time of the successful join. This history SHALL remain visible if the person later leaves the team or the link is suspended, revoked or expired. An explicit deletion of the link history SHALL delete its joiner entries; deletion of a user identity SHALL remove that user's entry. Opening, previewing, accepting terms, unsuccessful enrollment and a repeated enrollment while already a member SHALL NOT create a joiner entry or change the page-opening aggregate.
+Each Free-team link SHALL retain a bounded, paginated history of distinct people who successfully became members by enrolling through that link. Only platform administrators SHALL read the history. Each entry SHALL expose that person's current first name, last name and username while the account is active, or the last recorded values with a deleted marker after account deletion, plus the time of the successful join. This history SHALL remain visible if the person later leaves the team, the account is deleted, or the link is suspended, revoked or expired. An explicit deletion of the link history SHALL delete its joiner entries. Opening, previewing, accepting terms, unsuccessful enrollment and a repeated enrollment while already a member SHALL NOT create a joiner entry or change the page-opening aggregate.
 
 #### Scenario: Two links have different joiners
 
@@ -53,6 +53,12 @@ Each Free-team link SHALL retain a bounded, paginated history of distinct people
 
 - **WHEN** a person joins through a link, later leaves the team and the link is revoked or expires
 - **THEN** that person's join entry SHALL remain visible on that link until the link history is deleted
+
+#### Scenario: Joiner account is deleted
+
+- **WHEN** a person joins through a link and their account is later deleted
+- **THEN** the join entry SHALL remain visible with their last recorded username and names, join time, and a deleted marker
+- **AND** a missing local user row SHALL NOT erase or hide the entry
 
 #### Scenario: Opening or repeat enrollment
 

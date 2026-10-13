@@ -3723,6 +3723,7 @@
         "statusLabel": "Statut",
         "openings": "Accès",
         "joiners": "Utilisateurs inscrits",
+        "deletedUser": "Supprimé",
         "joinersTitle": "Inscrits via {{note}}",
         "joinedAt": "Date d'inscription",
         "noJoiners": "Aucune inscription enregistrée depuis le début du suivi.",

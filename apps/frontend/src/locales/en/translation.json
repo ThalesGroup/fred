@@ -3723,6 +3723,7 @@
         "statusLabel": "Status",
         "openings": "Accesses",
         "joiners": "Joined users",
+        "deletedUser": "Deleted",
         "joinersTitle": "Joined through {{note}}",
         "joinedAt": "Joined at",
         "noJoiners": "No joins recorded since tracking began.",

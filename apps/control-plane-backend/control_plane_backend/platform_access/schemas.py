@@ -123,6 +123,7 @@ class PlatformEnrollmentJoiner(BaseModel):
     first_name: str | None
     last_name: str | None
     joined_at: datetime
+    deleted: bool
 
 
 class PlatformEnrollmentJoinersPage(BaseModel):

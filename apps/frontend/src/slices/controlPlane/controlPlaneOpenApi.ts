@@ -3423,6 +3423,7 @@ export type PlatformEnrollmentJoiner = {
   first_name: string | null;
   last_name: string | null;
   joined_at: string;
+  deleted: boolean;
 };
 export type PlatformEnrollmentJoinersPage = {
   items: PlatformEnrollmentJoiner[];

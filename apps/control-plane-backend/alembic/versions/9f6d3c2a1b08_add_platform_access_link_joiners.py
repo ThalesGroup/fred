@@ -23,13 +23,12 @@ def upgrade() -> None:
             sa.ForeignKey("platform_access_links.id", ondelete="CASCADE"),
             primary_key=True,
         ),
-        sa.Column(
-            "user_id",
-            sa.Uuid(),
-            sa.ForeignKey("users.id", ondelete="CASCADE"),
-            primary_key=True,
-        ),
+        sa.Column("user_id", sa.Uuid(), primary_key=True),
         sa.Column("joined_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("username_snapshot", sa.String(), nullable=True),
+        sa.Column("first_name_snapshot", sa.String(), nullable=True),
+        sa.Column("last_name_snapshot", sa.String(), nullable=True),
+        sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
     )
     op.create_index(
         "ix_platform_access_link_joiners_page",

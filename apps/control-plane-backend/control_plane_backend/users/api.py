@@ -50,7 +50,7 @@ from pydantic import BaseModel
 from control_plane_backend.announcements.store import AnnouncementStore
 from control_plane_backend.app.dependencies import get_application_container
 from control_plane_backend.bootstrap.store import PlatformBootstrapStore
-from control_plane_backend.platform_access.service import delete_user_join_history
+from control_plane_backend.platform_access.service import mark_user_join_history_deleted
 from control_plane_backend.prompts.store import PromptStore
 from control_plane_backend.teams.dependencies import (
     TeamServiceDependencies,
@@ -129,14 +129,14 @@ def _get_rebac_engine(request: Request) -> RebacEngine:
     return get_application_container(request).get_rebac_engine()
 
 
-async def _delete_user_join_history(request: Request, user_id: str) -> None:
+async def _mark_user_join_history_deleted(request: Request, user_id: str) -> None:
     if platform_access_available():
-        await delete_user_join_history(get_platform_access().store, user_id)
+        await mark_user_join_history_deleted(get_platform_access().store, user_id)
     else:
         store = PlatformAccessStore(
             get_application_container(request).get_pg_async_engine()
         )
-        await delete_user_join_history(store, user_id, table_may_be_missing=True)
+        await mark_user_join_history_deleted(store, user_id, table_may_be_missing=True)
 
 
 def _get_platform_bootstrap_store(request: Request) -> PlatformBootstrapStore:
@@ -450,7 +450,7 @@ async def delete_user(
         if not rebac.requires_active_accounts:
             raise AccountSuspensionDisabledError()
         await rebac.suspend_account(user_id)
-        await _delete_user_join_history(request, user_id)
+        await _mark_user_join_history_deleted(request, user_id)
         return
 
     admin = _get_keycloak_admin_for_user_operations(deps)
@@ -466,9 +466,9 @@ async def delete_user(
     try:
         await delete_user_from_service(admin, user_id)
     except UserNotFoundError:
-        await _delete_user_join_history(request, user_id)
+        await _mark_user_join_history_deleted(request, user_id)
         raise
-    await _delete_user_join_history(request, user_id)
+    await _mark_user_join_history_deleted(request, user_id)
 
 
 @router.post(

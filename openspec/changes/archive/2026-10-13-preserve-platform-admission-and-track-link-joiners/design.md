@@ -9,12 +9,12 @@ See proposal.md. The shared SQL setting already has `filtering_enabled`, and bot
 - Make the open-access state and retained configuration explicit and regression-tested across the admin UI and shared admission path.
 - Remove the independent file whitelist and its deployment settings so disabling the SQL filter actually opens platform admission for every active authenticated person.
 - Use live ReBAC platform authority for the administrator admission source, including delegated-person requests and role removal.
-- Attribute new successful membership grants to their specific Free link and display current local user profile fields to platform administrators.
+- Attribute new successful membership grants to their specific Free link and display current local user profile fields to platform administrators, retaining the last known fields after account deletion.
 
 **Non-Goals:**
 
 - Backfill joiners for existing links: opening aggregates cannot identify them.
-- Capture visitors, IPs, arbitrary token claims, or a historical snapshot of user profile fields.
+- Capture visitors, IPs, arbitrary token claims, or profile changes unrelated to enrollment and deletion.
 - Change team membership semantics, resource authorization, or the link-opening aggregate.
 
 ## Decisions
@@ -29,9 +29,9 @@ Use the current SQL boolean, versioned API mutation and top-right UI action. Add
 
 ### 3. Persist one join record per link and person
 
-Add one `platform_access_link_joiners` table in a single control-plane migration. Its composite link/user key prevents duplicate attribution, `joined_at` records first successful enrollment through that link, and foreign keys cascade on link-history or physical user-row deletion. The account deletion route also removes joiners explicitly because it retains the local user row; it does so even when the admission module is disabled, if the table exists. The control-plane enrollment path writes the record only when it creates the caller's team-member relation. An existing member opening another link is not attributed to it. If the person later leaves and explicitly rejoins through a different link, both links retain their respective history. The existing SQL mutation and link validity check serialize the join with revocation and cleanup; preserve the existing rollback behavior when the membership grant fails.
+Add one `platform_access_link_joiners` table in a single control-plane migration. Its composite link/user key prevents duplicate attribution, `joined_at` records first successful enrollment through that link, and its link foreign key cascades on explicit link-history deletion. Store the joiner's username and names at enrollment, without a user foreign key that could erase the record when the user row is deleted. The account deletion route marks that person's join records deleted and refreshes their snapshots from the last available local profile, even when the admission module is disabled if the table exists. The control-plane enrollment path writes the record only when it creates the caller's team-member relation. An existing member opening another link is not attributed to it. If the person later leaves and explicitly rejoins through a different link, both links retain their respective history. The existing SQL mutation and link validity check serialize the join with revocation and cleanup; preserve the existing rollback behavior when the membership grant fails.
 
-Read joiners by team and link ID under the existing platform-admin dependency, with bounded server pagination and stable `joined_at`/user-ID ordering. Join `users` at read time to show current first name, last name and username; no duplicate profile values are stored. The endpoint returns no token and excludes unrelated teams. The existing link manager gets a localized row action that opens a joiner list with loading, empty, error and pagination states. It remains accessible for revoked, expired and suspended links.
+Read joiners by team and link ID under the existing platform-admin dependency, with bounded server pagination and stable `joined_at`/user-ID ordering. Join `users` at read time to show current first name, last name and username for active users; use the retained snapshot and a deleted flag after account deletion or a missing local user row. The endpoint returns no token and excludes unrelated teams. The existing link manager gets a localized row action that opens a joiner list with loading, empty, error, deletion state and pagination states. It remains accessible for revoked, expired and suspended links.
 
 A separate joiner table is preferable to extending the opening aggregate: visits and joins have different meanings and retention. It also avoids trying to infer origin from current team membership, which loses provenance when a member leaves.
 
@@ -39,7 +39,7 @@ A separate joiner table is preferable to extending the opening aggregate: visits
 
 - [OpenFGA and SQL are separate authorities] -> Keep the record creation within the existing serialized enrollment mutation after a successful relation grant, test grant failure and rollback, and surface any commit failure. A cross-system failure between the relation grant and SQL commit may require operator reconciliation; the current enrollment path already has this boundary.
 - [Live administrator checks add a ReBAC call on active-filter requests] -> Use the existing shared client and bounded timeout, exercise concurrent admission tests, and review request-path impact before readiness. Correctness after role revocation takes priority over token-local caching.
-- [New history contains personal data] -> Restrict it to platform administrators, store only link/user IDs and join time, derive names from current profiles, and remove it on explicit link-history and account deletion. Do not add it to logs or opening analytics.
+- [New history retains personal data after account deletion] -> Restrict it to platform administrators, retain only the three requested identity fields and join time, mark deleted accounts visibly, and remove it on explicit link-history deletion. Document the retention in the operator note and avoid logs or opening analytics.
 - [Old links have no attributable history] -> Show an empty joiner list until a new successful enrollment occurs; describe this limit in the PR and operator guide.
 - [Retiring the file gate can widen access] -> Call out removal of `global.whitelist` and migration of intended restrictions to the SQL UI before rollout; the only remaining filtering switch is the administrator action.
 
