@@ -3031,8 +3031,16 @@
         "toasts": {
           "created": "Prompt created",
           "updated": "Prompt updated",
-          "saveFailed": "Failed to save prompt"
+          "saveFailed": "Failed to save prompt",
+          "deleted": "Prompt deleted",
+          "deleteFailed": "Failed to delete prompt"
         },
+        "deleteDialog": {
+          "title": "Delete prompt?",
+          "message": "\"{{name}}\" will be permanently deleted. This action cannot be undone.",
+          "confirm": "Delete"
+        },
+        "missingTeam": "Missing team id in route.",
         "title": "Team prompts",
         "view": {
           "closeAria": "Close",

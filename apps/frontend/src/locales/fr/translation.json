@@ -3031,8 +3031,16 @@
         "toasts": {
           "created": "Prompt créé",
           "updated": "Prompt modifié",
-          "saveFailed": "Échec de l'enregistrement du prompt"
+          "saveFailed": "Échec de l'enregistrement du prompt",
+          "deleted": "Prompt supprimé",
+          "deleteFailed": "Échec de la suppression du prompt"
         },
+        "deleteDialog": {
+          "title": "Supprimer le prompt ?",
+          "message": "« {{name}} » sera définitivement supprimé. Cette action est irréversible.",
+          "confirm": "Supprimer"
+        },
+        "missingTeam": "Identifiant d'équipe manquant dans l'URL.",
         "title": "Prompts de l'équipe",
         "view": {
           "closeAria": "Fermer",
