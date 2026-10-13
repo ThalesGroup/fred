@@ -1,0 +1,32 @@
+{{- if .Values.publish.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "knowledge-base.fullname" . }}-publish
+  labels:
+    {{- include "knowledge-base.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade,post-rollback
+    helm.sh/hook-weight: "0"
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  backoffLimit: {{ .Values.publish.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.publish.activeDeadlineSeconds }}
+  {{- with .Values.publish.ttlSecondsAfterFinished }}
+  ttlSecondsAfterFinished: {{ . }}
+  {{- end }}
+  template:
+    metadata:
+      labels:
+        {{- include "knowledge-base.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: knowledge-base-publisher
+      {{- with .Values.publish.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      restartPolicy: Never
+      {{- include "knowledge-base.podSpec" . | nindent 6 }}
+      containers:
+        {{- include "knowledge-base.container" (dict "root" $ "command" "publish" "resources" .Values.publish.resources) | nindent 8 }}
+{{- end }}
