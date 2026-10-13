@@ -3642,7 +3642,6 @@
       "t0Done": "Initial import completed",
       "t0Import": "Import existing users",
       "search": "Search individual access",
-      "sources": "Access via",
       "exception": "Individual access",
       "remove": "Remove",
       "team": "Team",
@@ -3681,8 +3680,6 @@
       "source": {
         "admin": "Platform administrator",
         "attribute": "Rule",
-        "manual": "Individual access",
-        "t0": "Initial import",
         "team": "Authorized team",
         "free": "Link access"
       },
@@ -3878,6 +3875,13 @@
         "alreadyGranted": "Already has individual access",
         "more_one": "{{count}} more result. Refine the search to see it.",
         "more_other": "{{count}} more results. Refine the search to see them."
+      },
+      "addedOn": "Added on",
+      "otherSources": "Other access",
+      "origin": {
+        "label": "Origin",
+        "manual": "Manual",
+        "t0": "Initial import"
       }
     }
   },

@@ -3642,7 +3642,6 @@
       "t0Done": "Import initial terminé",
       "t0Import": "Importer les utilisateurs existants",
       "search": "Rechercher un accès individuel",
-      "sources": "Accès via",
       "exception": "Accès individuel",
       "remove": "Retirer",
       "team": "Équipe",
@@ -3681,8 +3680,6 @@
       "source": {
         "admin": "Administrateur plateforme",
         "attribute": "Règle",
-        "manual": "Accès individuel",
-        "t0": "Import initial",
         "team": "Équipe autorisée",
         "free": "Accès par lien"
       },
@@ -3878,6 +3875,13 @@
         "alreadyGranted": "A déjà un accès individuel",
         "more_one": "{{count}} autre résultat. Précisez la recherche pour l'afficher.",
         "more_other": "{{count}} autres résultats. Précisez la recherche pour les afficher."
+      },
+      "addedOn": "Ajouté le",
+      "otherSources": "Autres accès",
+      "origin": {
+        "label": "Origine",
+        "manual": "Manuel",
+        "t0": "Import initial"
       }
     }
   },

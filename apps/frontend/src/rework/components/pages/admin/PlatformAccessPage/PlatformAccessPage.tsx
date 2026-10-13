@@ -24,6 +24,7 @@ import {
   useImportPlatformT0Mutation,
   useSetPlatformTeamMutation,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import type { AdmissionSource, PlatformAccessUser } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import PlatformAccessActivationDialog from "./PlatformAccessActivationDialog";
 import PlatformAccessAddUsersDialog from "./PlatformAccessAddUsersDialog";
 import PlatformAccessRuleEditor from "./PlatformAccessRuleEditor";
@@ -31,11 +32,13 @@ import styles from "./PlatformAccessPage.module.css";
 
 const tabs = ["rules", "users"] as const;
 const whitelistTabs = ["users", "teams"] as const;
+const isIndividual = (source: AdmissionSource) => source.kind === "manual" || source.kind === "t0";
+const individualSource = (user: PlatformAccessUser) => user.sources.find(isIndividual);
 // First option of the table's rows-per-page selector.
 const DEFAULT_PAGE_SIZE = 20;
 
 export default function PlatformAccessPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { showError, showSuccess } = useToast();
   const enabled = getConfig()?.platform_access_enabled ?? false;
   const [tabIndex, setTabIndex] = useState(0);
@@ -292,20 +295,40 @@ export default function PlatformAccessPage() {
                       cellRenderer: (user) => user.last_name || "-",
                     },
                     {
-                      label: t("rework.platformAccess.sources"),
-                      size: "3fr",
-                      cellRenderer: (user) => (
-                        <div className={styles.accessSources}>
-                          {user.sources.length
-                            ? user.sources.map((source, index) => (
-                                <Chip
-                                  key={index}
-                                  label={`${t(`rework.platformAccess.source.${source.kind}`)}${source.team_name ? `: ${source.team_name}` : ""}`}
-                                />
-                              ))
-                            : "-"}
-                        </div>
-                      ),
+                      label: t("rework.platformAccess.addedOn"),
+                      size: "11rem",
+                      cellRenderer: (user) => {
+                        const grantedAt = individualSource(user)?.granted_at;
+                        return grantedAt ? new Date(grantedAt).toLocaleString(i18n.language) : "-";
+                      },
+                    },
+                    {
+                      label: t("rework.platformAccess.origin.label"),
+                      size: "8rem",
+                      cellRenderer: (user) => {
+                        const kind = individualSource(user)?.kind;
+                        return kind ? t(`rework.platformAccess.origin.${kind}`) : "-";
+                      },
+                    },
+                    {
+                      // Empty means the individual access is the person's only one: removing it shuts them out.
+                      label: t("rework.platformAccess.otherSources"),
+                      size: "2fr",
+                      cellRenderer: (user) => {
+                        const others = user.sources.filter((source) => !isIndividual(source));
+                        return (
+                          <div className={styles.accessSources}>
+                            {others.length
+                              ? others.map((source, index) => (
+                                  <Chip
+                                    key={index}
+                                    label={`${t(`rework.platformAccess.source.${source.kind}`)}${source.team_name ? `: ${source.team_name}` : ""}`}
+                                  />
+                                ))
+                              : "-"}
+                          </div>
+                        );
+                      },
                     },
                     {
                       label: t("rework.platformAccess.exception"),

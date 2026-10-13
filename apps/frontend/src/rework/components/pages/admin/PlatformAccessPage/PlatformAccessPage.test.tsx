@@ -3,7 +3,10 @@
 import { act, useState } from "react";
 import { createRoot, Root } from "react-dom/client";
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
-import type { PlatformAccessActivationUser } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type {
+  PlatformAccessActivationUser,
+  PlatformAccessUser,
+} from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 const state = vi.hoisted(() => ({
   users: [
     {
@@ -12,7 +15,7 @@ const state = vi.hoisted(() => ({
       email: "alice@example.org",
       sources: [{ kind: "free", team_id: "demo", team_name: "Demo" }],
     },
-  ],
+  ] as PlatformAccessUser[],
   searchUsers: vi.fn(),
   picked: ["first", "second"] as string[],
   usersTotal: undefined as number | undefined,
@@ -273,6 +276,67 @@ it("offers removal only, without row selection or a bulk bar", () => {
   expect(pageButton("rework.platformAccess.remove")).toBeDefined();
   expect(host.textContent).toContain("rework.platformAccess.source.free: Demo");
   expect(host.textContent).not.toContain("alice@example.org");
+});
+
+it("shows when and how each individual access was added, and only the other sources as chips", () => {
+  state.users = [
+    {
+      user_id: "manual",
+      username: "Alice",
+      email: null,
+      sources: [
+        { kind: "attribute" },
+        { kind: "manual", granted_at: "2026-03-04T10:20:30Z" },
+        { kind: "team", team_id: "demo", team_name: "Demo" },
+        { kind: "free", team_id: "open", team_name: "Open" },
+        { kind: "admin" },
+      ],
+    },
+    {
+      user_id: "imported",
+      username: "Bob",
+      email: null,
+      sources: [{ kind: "t0", granted_at: "2025-12-31T08:00:00Z" }],
+    },
+  ];
+  render("");
+  const panel = host.querySelector<HTMLElement>('[id$="-whitelist-users-panel"]')!;
+  const headers = [...panel.querySelectorAll(`[class*="datatable-header"] > [class*="datatable-cell"]`)].map(
+    (node) => node.textContent,
+  );
+  expect(headers).toEqual([
+    "rework.teamSettings.members.table.identifiant",
+    "rework.teamSettings.members.table.firstName",
+    "rework.teamSettings.members.table.lastName",
+    "rework.platformAccess.addedOn",
+    "rework.platformAccess.origin.label",
+    "rework.platformAccess.otherSources",
+    "rework.platformAccess.exception",
+  ]);
+  const cells = (name: string) =>
+    [
+      ...[...panel.querySelectorAll(`[class*="datatable-row"]`)]
+        .find((row) => row.textContent?.includes(name))!
+        .querySelectorAll(`:scope > [class*="datatable-cell"]`),
+    ].map((cell) => cell.textContent);
+  const [, , , aliceDate, aliceOrigin, aliceOthers] = cells("Alice");
+  expect(aliceDate).toBe(new Date("2026-03-04T10:20:30Z").toLocaleString("en"));
+  expect(aliceOrigin).toBe("rework.platformAccess.origin.manual");
+  expect(aliceOthers).toBe(
+    [
+      "rework.platformAccess.source.attribute",
+      "rework.platformAccess.source.team: Demo",
+      "rework.platformAccess.source.free: Open",
+      "rework.platformAccess.source.admin",
+    ].join(""),
+  );
+  const [, , , bobDate, bobOrigin, bobOthers] = cells("Bob");
+  expect(bobDate).toBe(new Date("2025-12-31T08:00:00Z").toLocaleString("en"));
+  expect(bobOrigin).toBe("rework.platformAccess.origin.t0");
+  // Nothing else grants access: the cell shows the table's empty marker.
+  expect(bobOthers).toBe("-");
+  expect(panel.textContent).not.toContain("rework.platformAccess.source.manual");
+  expect(panel.textContent).not.toContain("rework.platformAccess.source.t0");
 });
 
 it("confirms a removal and stays silent on failure", async () => {
