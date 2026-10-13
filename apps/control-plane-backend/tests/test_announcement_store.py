@@ -23,6 +23,7 @@ call, and keeping it out of here is what stops the rule living in two places.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timezone
 
 import pytest
@@ -32,8 +33,6 @@ from control_plane_backend.announcements.store import (
     StoredActivationEvent,
 )
 from control_plane_backend.models.table_ownership import OWNED_TABLES
-from sqlalchemy import event
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 
@@ -199,7 +198,7 @@ async def test_delete_removes_the_row_and_reports_whether_it_did(
 
 
 # ---------------------------------------------------------------------------
-# Patch notes, dismissals and the activation history
+# Patch notes, their order, announcements and the activation history
 # ---------------------------------------------------------------------------
 
 
@@ -237,28 +236,23 @@ def _event(
 def test_new_tables_are_owned_by_control_plane() -> None:
     assert {
         "platform_announcement",
-        "platform_announcement_dismissal",
+        "platform_announcement_seen",
         "platform_announcement_activation_event",
     } <= OWNED_TABLES
+    assert "platform_announcement_dismissal" not in OWNED_TABLES
 
 
 @pytest.mark.asyncio
-async def test_second_enabled_patch_note_violates_the_unique_index(
-    store: AnnouncementStore,
-) -> None:
-    # The service disables the previous one first; the index is the backstop
-    # for two concurrent activations.
+async def test_several_patch_notes_can_be_enabled(store: AnnouncementStore) -> None:
     await _make_patch_note(store, "p1", enabled=True)
     await _make_patch_note(store, "p2", enabled=False)
-    await _make(store, "b1", enabled=True)
 
-    with pytest.raises(IntegrityError):
-        await store.set_enabled(
-            announcement_id="p2",
-            enabled=True,
-            content_version=2,
-            updated_by=None,
-        )
+    await store.set_enabled(
+        announcement_id="p2", enabled=True, content_version=2, updated_by=None
+    )
+
+    # Newest at the top: p2 was created last.
+    assert [n.id for n in await store.list_visible_patch_notes()] == ["p2", "p1"]
 
 
 @pytest.mark.asyncio
@@ -267,101 +261,90 @@ async def test_list_enabled_returns_banners_only(store: AnnouncementStore) -> No
     await _make_patch_note(store, "note", enabled=True)
 
     assert [a.id for a in await store.list_enabled()] == ["banner"]
-    note = await store.get_enabled_patch_note()
-    assert note is not None and note.kind == "patch_note"
+    assert [a.id for a in await store.list_visible_patch_notes()] == ["note"]
 
 
 @pytest.mark.asyncio
-async def test_disable_other_patch_notes_returns_what_it_disabled(
+async def test_list_all_puts_banners_first_then_patch_notes_by_position(
     store: AnnouncementStore,
 ) -> None:
-    await _make_patch_note(store, "p1", enabled=True)
-    await _make(store, "b1", enabled=True)
-
-    async with store.transaction() as session:
-        disabled = await store.disable_other_patch_notes(
-            except_id="p2", updated_by="admin", session=session
-        )
-
-    assert [a.id for a in disabled] == ["p1"]
-    assert disabled[0].enabled is True  # as stored before the change
-    assert (await store.get("p1")).enabled is False  # type: ignore[union-attr]
-    assert (await store.get("b1")).enabled is True  # type: ignore[union-attr]
-
-
-@pytest.mark.asyncio
-async def test_add_dismissal_is_idempotent(store: AnnouncementStore) -> None:
     await _make_patch_note(store, "p1")
-
-    await store.add_dismissal(announcement_id="p1", user_id="alice")
-    await store.add_dismissal(announcement_id="p1", user_id="alice")
-
-    assert await store.is_dismissed(announcement_id="p1", user_id="alice")
-    assert not await store.is_dismissed(announcement_id="p1", user_id="bob")
-    assert await store.count_dismissals() == {"p1": 1}
-
-
-@pytest.mark.asyncio
-async def test_count_dismissals_per_note(store: AnnouncementStore) -> None:
-    await _make_patch_note(store, "p1")
+    await _make(store, "b1", enabled=False)
     await _make_patch_note(store, "p2")
-    for uid in ("alice", "bob"):
-        await store.add_dismissal(announcement_id="p1", user_id=uid)
-    await store.add_dismissal(announcement_id="p2", user_id="alice")
 
-    assert await store.count_dismissals() == {"p1": 2, "p2": 1}
+    assert await store.set_patch_note_order(["p1", "p2"]) is True
 
-
-@pytest.mark.asyncio
-async def test_delete_dismissals_spares_other_notes(store: AnnouncementStore) -> None:
-    await _make_patch_note(store, "p1")
-    await _make_patch_note(store, "p2")
-    for note in ("p1", "p2"):
-        await store.add_dismissal(announcement_id=note, user_id="alice")
-
-    await store.delete_dismissals("p1")
-
-    assert await store.count_dismissals() == {"p2": 1}
+    listed = await store.list_all()
+    assert [(a.id, a.position) for a in listed] == [("b1", None), ("p1", 1), ("p2", 2)]
 
 
 @pytest.mark.asyncio
-async def test_add_dismissal_for_a_deleted_note_raises(
-    store: AnnouncementStore, control_plane_sql_engine: AsyncEngine
+async def test_set_patch_note_order_refuses_anything_but_the_current_set(
+    store: AnnouncementStore,
 ) -> None:
-    # SQLite only enforces foreign keys per connection, when asked to.
-    event.listen(
-        control_plane_sql_engine.sync_engine,
-        "connect",
-        lambda conn, _record: conn.execute("PRAGMA foreign_keys=ON"),
-    )
-    await control_plane_sql_engine.dispose()
-
-    with pytest.raises(IntegrityError):
-        await store.add_dismissal(announcement_id="ghost", user_id="alice")
-
-
-@pytest.mark.asyncio
-async def test_delete_removes_dismissals(store: AnnouncementStore) -> None:
-    await _make_patch_note(store, "p1")
-    await store.add_dismissal(announcement_id="p1", user_id="alice")
-
-    deleted = await store.delete("p1")
-    assert deleted is True
-    assert not await store.is_dismissed(announcement_id="p1", user_id="alice")
-
-
-@pytest.mark.asyncio
-async def test_delete_dismissals_for_user(store: AnnouncementStore) -> None:
     await _make_patch_note(store, "p1")
     await _make_patch_note(store, "p2")
-    for note in ("p1", "p2"):
-        await store.add_dismissal(announcement_id=note, user_id="alice")
-    await store.add_dismissal(announcement_id="p1", user_id="bob")
+    await _make(store, "b1", enabled=False)
 
-    await store.delete_dismissals_for_user("alice")
+    for ordered in (["p1"], ["p1", "p1"], ["p1", "p2", "b1"], ["p1", "b1"]):
+        assert await store.set_patch_note_order(ordered) is False
 
-    assert await store.count_dismissals() == {"p1": 1}
-    assert await store.is_dismissed(announcement_id="p1", user_id="bob")
+    assert [n.id for n in await store.list_all() if n.kind == "patch_note"] == [
+        "p2",
+        "p1",
+    ]
+
+
+def _announcement_event(event_id: str, minute: int, action: str):
+    return replace(_event(event_id, minute, severity=None), action=action)
+
+
+@pytest.mark.asyncio
+async def test_current_announcement_is_the_newest_unless_cancelled(
+    store: AnnouncementStore,
+) -> None:
+    assert await store.get_current_announcement() is None
+    await store.append_activation_events(
+        [_announcement_event("first", 1, "announced"), _event("noise", 2)]
+    )
+    current = await store.get_current_announcement()
+    assert current is not None and current.id == "first"
+
+    await store.append_activation_events([_announcement_event("off", 3, "unannounced")])
+    assert await store.get_current_announcement() is None
+
+    await store.append_activation_events(
+        [_announcement_event("second", 4, "announced")]
+    )
+    current = await store.get_current_announcement()
+    assert current is not None and current.id == "second"
+    assert (await store.get_activation_event("off")).action == "unannounced"  # type: ignore[union-attr]
+    assert await store.get_activation_event("ghost") is None
+
+
+@pytest.mark.asyncio
+async def test_seen_announcement_is_one_row_per_user(store: AnnouncementStore) -> None:
+    assert await store.get_seen_announcement_id("alice") is None
+
+    for event_id in ("first", "first", "second"):
+        await store.set_seen_announcement(
+            user_id="alice", announcement_event_id=event_id
+        )
+    await store.set_seen_announcement(user_id="bob", announcement_event_id="first")
+
+    assert await store.get_seen_announcement_id("alice") == "second"
+    assert await store.get_seen_announcement_id("bob") == "first"
+
+
+@pytest.mark.asyncio
+async def test_delete_seen_for_user(store: AnnouncementStore) -> None:
+    for uid in ("alice", "bob"):
+        await store.set_seen_announcement(user_id=uid, announcement_event_id="first")
+
+    await store.delete_seen_for_user("alice")
+
+    assert await store.get_seen_announcement_id("alice") is None
+    assert await store.get_seen_announcement_id("bob") == "first"
 
 
 @pytest.mark.asyncio

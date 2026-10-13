@@ -16,16 +16,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import (
-    JSON,
-    Boolean,
-    DateTime,
-    ForeignKey,
-    Index,
-    Integer,
-    String,
-    text,
-)
+from sqlalchemy import JSON, Boolean, DateTime, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from control_plane_backend.models.base import Base, utcnow
@@ -44,43 +35,32 @@ MAX_DESCRIPTION_LONG_CHARS = 20_000
 MAX_TITLE_CHARS = 200
 
 
-#: Predicate of the partial unique index: at most one enabled patch note.
-_ACTIVE_PATCH_NOTE = "enabled AND kind = 'patch_note'"
-
-
 class AnnouncementRow(Base):
     """ORM model for the ``platform_announcement`` table.
 
     One platform-admin-authored announcement, delivered to every authenticated
     user while ``enabled``. Platform-wide: teams have no dimension here. A
-    banner's dismissal lives in the user's browser; a patch note's lives in
-    ``platform_announcement_dismissal``.
+    banner's dismissal lives in the user's browser.
 
     ``kind`` is ``banner`` or ``patch_note``. A patch note keeps its markdown
-    body in ``description_long`` and is shown once per user as a dialog; the
-    partial unique index keeps at most one of them enabled.
+    body in ``description_long``; ``enabled`` makes it readable in the users'
+    history, in ``position`` order. What opens the dialog on its own is an
+    ``announced`` event, never this row.
 
     Deliberately NOT a ReBAC resource, same reasoning as ``platform_prompt``:
     this is a platform-wide assertion with no subject, written by the org-admin
     authority. Read access is not a permission surface either — every
     authenticated user on the deployment is meant to see it.
 
-    ``content_version`` keys the browser-side close (a banner's dismissal, a
-    patch note's "closed this sign-in"); when it moves is the service's job (``announcements/service.py``), not a
-    column default, and the rule differs per kind (see the service).
+    ``content_version`` keys a banner's browser-side dismissal; when it moves
+    is the service's job (``announcements/service.py``), not a column default.
+    Nothing reads it on a patch note.
     """
 
     __tablename__ = "platform_announcement"
     __table_args__ = (
         # The delivery route reads exactly this: the enabled ones, ordered.
         Index("ix_platform_announcement_enabled", "enabled"),
-        Index(
-            "uq_platform_announcement_active_patch_note",
-            "kind",
-            unique=True,
-            postgresql_where=text(_ACTIVE_PATCH_NOTE),
-            sqlite_where=text(_ACTIVE_PATCH_NOTE),
-        ),
     )
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
@@ -129,6 +109,12 @@ class AnnouncementRow(Base):
     dismissible: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default="true"
     )
+    position: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        comment="Patch note only: its place in the administrator's order, 1 "
+        "at the top. Null for a banner.",
+    )
     content_version: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
@@ -147,28 +133,25 @@ class AnnouncementRow(Base):
     updated_by: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
-class AnnouncementDismissalRow(Base):
-    """One user's "don't show again" on one patch note, for every device.
+class AnnouncementSeenRow(Base):
+    """The last patch-note announcement one user has seen, for every device.
 
-    A row present means hidden for that user. Removed when the note is
-    re-enabled, with the announcement and with the user.
+    ``announcement_event_id`` names an ``announced`` activation event. One row
+    per user, removed with the user.
     """
 
-    __tablename__ = "platform_announcement_dismissal"
+    __tablename__ = "platform_announcement_seen"
 
-    announcement_id: Mapped[str] = mapped_column(
-        String,
-        ForeignKey("platform_announcement.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
     user_id: Mapped[str] = mapped_column(String, primary_key=True)
-    dismissed_at: Mapped[datetime] = mapped_column(
+    announcement_event_id: Mapped[str] = mapped_column(String, nullable=False)
+    seen_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )
 
 
 class AnnouncementActivationEventRow(Base):
-    """Append-only record of one announcement going on or off air.
+    """Append-only record of one announcement going on or off air, and of the
+    patch notes being announced to users (or that announcement being cancelled).
 
     No foreign key on ``announcement_id`` so the history outlives the
     announcement; ``label`` snapshots its title at event time.
@@ -186,7 +169,9 @@ class AnnouncementActivationEventRow(Base):
         comment="Locale → title at event time.",
     )
     action: Mapped[str] = mapped_column(
-        String(16), nullable=False, comment="activated | deactivated"
+        String(16),
+        nullable=False,
+        comment="activated | deactivated | announced | unannounced",
     )
     severity: Mapped[str | None] = mapped_column(
         String(16),

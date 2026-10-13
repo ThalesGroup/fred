@@ -32,7 +32,7 @@ from control_plane_backend.models.announcement_models import (
 AnnouncementSeverity = Literal["info", "warning", "error", "success"]
 
 # A banner is a strip at the top of every page; a patch note is a markdown
-# "what's new" note shown once per user at load, with at most one enabled.
+# "what's new" note users browse in a dialog, in the administrator's order.
 AnnouncementKind = Literal["banner", "patch_note"]
 
 #: Locale the frontend falls back to when the viewer's has no entry.
@@ -84,7 +84,10 @@ class Announcement(BaseModel):
         )
     )
     enabled: bool = Field(
-        description="Whether the announcement is delivered to users right now."
+        description=(
+            "Whether the announcement is delivered to users right now. For a "
+            "patch note: whether users can read it in their history."
+        )
     )
     dismissible: bool = Field(
         description=(
@@ -94,27 +97,22 @@ class Announcement(BaseModel):
     )
     content_version: int = Field(
         description=(
-            "The edition the browser-side close is keyed on, so a bump shows "
-            "the announcement again to everyone who had closed it. Both kinds "
-            "bump when re-enabled; a banner also on a content edit."
+            "The edition a banner's browser-side close is keyed on, so a bump "
+            "shows it again to everyone who had closed it. Not used by patch "
+            "notes."
         )
+    )
+    position: int | None = Field(
+        default=None,
+        description=(
+            "Patch note only: its place in the administrator's order, 1 at "
+            "the top. Null for a banner."
+        ),
     )
     created_at: datetime
     updated_at: datetime
     created_by: str | None = None
     updated_by: str | None = None
-
-
-class AdminAnnouncement(Announcement):
-    """An announcement as the admin list reports it."""
-
-    dismissal_count: int | None = Field(
-        default=None,
-        description=(
-            'Patch note only: how many users ticked "Don\'t show again" '
-            "since it was last enabled. Null for a banner."
-        ),
-    )
 
 
 class AnnouncementWriteRequest(BaseModel):
@@ -192,39 +190,71 @@ def _require_one_locale(cleaned: dict[str, str], field: str) -> dict[str, str]:
 
 
 class SetAnnouncementEnabledRequest(BaseModel):
-    """Toggle delivery without resubmitting the content."""
+    """Toggle delivery (a patch note's visibility) without resubmitting the content."""
 
     model_config = ConfigDict(extra="forbid")
 
     enabled: bool
 
 
-class ActivePatchNote(BaseModel):
-    """The enabled patch note, if any, and whether the caller dismissed it."""
+class PatchNoteHistory(BaseModel):
+    """What a user can read, and whether the dialog should open on its own."""
 
     model_config = ConfigDict(extra="forbid")
 
-    patch_note: Announcement | None = None
-    dismissed: bool = Field(
-        default=False,
+    patch_notes: list[Announcement] = Field(
+        description="The visible patch notes, in the administrator's order."
+    )
+    pending_announcement_id: str | None = Field(
+        default=None,
         description=(
-            'Whether the caller ticked "Don\'t show again" since it was last '
-            "enabled: the client does not open it at load, only on request."
+            "Set when an announcement is in effect and the caller has not "
+            "recorded it as seen: the client opens the dialog, then records "
+            "this id. Null when no patch note is visible."
         ),
     )
 
 
-AnnouncementActivationAction = Literal["activated", "deactivated"]
+class PatchNoteOrderRequest(BaseModel):
+    """The full order of the patch notes, top first."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ids: list[str] = Field(
+        description="Every patch note's id, exactly once; anything else is refused."
+    )
+
+
+class PatchNoteAnnouncement(BaseModel):
+    """The announcement in effect, as the admin page shows it."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    announced_at: datetime
+    announced_by: str | None = Field(
+        default=None, description="Uid of the administrator who announced."
+    )
+
+
+AnnouncementActivationAction = Literal[
+    "activated", "deactivated", "announced", "unannounced"
+]
 
 
 class AnnouncementActivationEvent(BaseModel):
-    """One announcement going on or off air, as the admin history lists it."""
+    """One history entry: an announcement going on or off air, or the patch
+    notes being announced to users (`unannounced` when that is cancelled)."""
 
     model_config = ConfigDict(extra="forbid")
 
     id: str
     announcement_id: str = Field(
-        description="May name an announcement that has since been deleted."
+        description=(
+            "May name an announcement that has since been deleted. For "
+            "`announced`, the patch note at the top of the users' history; "
+            "for `unannounced`, the last one that stopped being visible."
+        )
     )
     kind: AnnouncementKind
     label: dict[str, str] = Field(

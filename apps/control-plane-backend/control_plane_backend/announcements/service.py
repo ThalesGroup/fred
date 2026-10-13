@@ -21,16 +21,17 @@ from fastapi import HTTPException, status
 from fred_core import KeycloakUser, OrganizationPermission
 from fred_core.logs.audit_log import emit_audit_log
 from fred_core.security.rebac.rebac_engine import ORGANIZATION_ID
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from control_plane_backend.announcements.schemas import (
-    ActivePatchNote,
-    AdminAnnouncement,
     Announcement,
     AnnouncementActivationEvent,
     AnnouncementWriteRequest,
+    PatchNoteAnnouncement,
+    PatchNoteHistory,
 )
 from control_plane_backend.announcements.store import (
+    AnnouncementStore,
     StoredActivationEvent,
     StoredAnnouncement,
 )
@@ -41,9 +42,8 @@ from control_plane_backend.product.dependencies import ProductServiceDependencie
 ACTIVATION_HISTORY_LIMIT = 100
 
 _NOT_FOUND = "announcement not found"
-_CONCURRENT_ACTIVATION = (
-    "another patch note was activated at the same time; reload and retry"
-)
+_STALE_ORDER = "the patch notes changed meanwhile; reload and retry"
+_NOTHING_VISIBLE = "no patch note is visible; nothing to announce"
 
 
 async def _require_manage_platform(
@@ -77,14 +77,22 @@ def _to_announcement(stored: StoredAnnouncement) -> Announcement:
         updated_at=stored.updated_at,
         created_by=stored.created_by,
         updated_by=stored.updated_by,
+        position=stored.position,
+    )
+
+
+def _to_patch_note_announcement(event: StoredActivationEvent) -> PatchNoteAnnouncement:
+    return PatchNoteAnnouncement(
+        id=event.id, announced_at=event.occurred_at, announced_by=event.actor_uid
     )
 
 
 class _EventLog:
     """Events of one transaction, with strictly increasing timestamps.
 
-    Several events can share one transaction (auto-deactivation, then
-    activation); the history orders on `occurred_at`, so ties are broken here.
+    Several events can share one transaction (deactivation, then the
+    cancelled announcement); the history orders on `occurred_at`, so ties are
+    broken here.
     """
 
     def __init__(self, actor_uid: str) -> None:
@@ -134,8 +142,8 @@ def _content_changed(
 def _versioning_after_edit(stored: StoredAnnouncement, changed: bool) -> int:
     """`content_version` once the content PUT lands.
 
-    A banner bumps on every visible change; a patch note never does here, so a
-    typo fix does not re-show it.
+    A banner bumps on every visible change; a patch note never does, since
+    nothing is keyed on it.
     """
 
     if stored.kind == "patch_note" or not changed:
@@ -146,7 +154,7 @@ def _versioning_after_edit(stored: StoredAnnouncement, changed: bool) -> int:
 def _versioning_after_toggle(stored: StoredAnnouncement, enabled: bool) -> int:
     """`content_version` once the toggle lands: every off-to-on bumps it.
 
-    Going back on air is a relaunch, for a banner and a patch note alike.
+    Going back on air relaunches a banner; nothing reads it on a patch note.
     """
 
     if enabled and not stored.enabled:
@@ -154,23 +162,33 @@ def _versioning_after_toggle(stored: StoredAnnouncement, enabled: bool) -> int:
     return stored.content_version
 
 
+async def _cancel_announcement_if_nothing_visible(
+    store: AnnouncementStore,
+    hidden: StoredAnnouncement,
+    log: _EventLog,
+    session: AsyncSession,
+) -> None:
+    """Record `unannounced` when `hidden` was the last visible patch note.
+
+    Otherwise the announcement would fire later, on notes nobody announced.
+    """
+
+    if hidden.kind != "patch_note":
+        return
+    if await store.list_visible_patch_notes(session=session):
+        return
+    if await store.get_current_announcement(session=session) is not None:
+        log.record(hidden, "unannounced")
+
+
 async def list_announcements(
     *, user: KeycloakUser, deps: ProductServiceDependencies
-) -> list[AdminAnnouncement]:
-    """Every announcement, with each patch note's dismissal count, for the admin page."""
+) -> list[Announcement]:
+    """Every announcement for the admin page: banners, then patch notes in order."""
 
     await _require_manage_platform(deps, user)
-    store = deps.get_announcement_store()
-    async with store.transaction() as session:
-        stored = await store.list_all(session=session)
-        counts = await store.count_dismissals(session=session)
-    return [
-        AdminAnnouncement(
-            **_to_announcement(row).model_dump(),
-            dismissal_count=counts.get(row.id, 0) if row.kind == "patch_note" else None,
-        )
-        for row in stored
-    ]
+    stored = await deps.get_announcement_store().list_all()
+    return [_to_announcement(row) for row in stored]
 
 
 async def list_active_announcements(
@@ -197,34 +215,22 @@ async def create_announcement(
     store = deps.get_announcement_store()
     announcement_id = str(uuid.uuid4())
     log = _EventLog(user.uid)
-    auto_disabled: list[StoredAnnouncement] = []
-    try:
-        async with store.transaction() as session:
-            if request.enabled and request.kind == "patch_note":
-                auto_disabled = await store.disable_other_patch_notes(
-                    except_id=announcement_id, updated_by=user.uid, session=session
-                )
-            stored = await store.create(
-                announcement_id=announcement_id,
-                kind=request.kind,
-                severity=request.severity,
-                title=request.title,
-                description_short=request.description_short,
-                description_long=request.description_long,
-                enabled=request.enabled,
-                dismissible=request.dismissible,
-                created_by=user.uid,
-                session=session,
-            )
-            for previous in auto_disabled:
-                log.record(previous, "deactivated")
-            if stored.enabled:
-                log.record(stored, "activated")
-            await store.append_activation_events(log.events, session=session)
-    except IntegrityError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail=_CONCURRENT_ACTIVATION
-        ) from exc
+    async with store.transaction() as session:
+        stored = await store.create(
+            announcement_id=announcement_id,
+            kind=request.kind,
+            severity=request.severity,
+            title=request.title,
+            description_short=request.description_short,
+            description_long=request.description_long,
+            enabled=request.enabled,
+            dismissible=request.dismissible,
+            created_by=user.uid,
+            session=session,
+        )
+        if stored.enabled:
+            log.record(stored, "activated")
+        await store.append_activation_events(log.events, session=session)
     emit_audit_log(
         "platform.announcement.created",
         actor_uid=user.uid,
@@ -232,7 +238,6 @@ async def create_announcement(
         kind=request.kind,
         severity=request.severity,
         enabled=request.enabled,
-        auto_disabled_ids=[previous.id for previous in auto_disabled],
     )
     return _to_announcement(stored)
 
@@ -299,52 +304,39 @@ async def set_announcement_enabled(
     await _require_manage_platform(deps, user)
     store = deps.get_announcement_store()
     log = _EventLog(user.uid)
-    auto_disabled: list[StoredAnnouncement] = []
-    try:
-        async with store.transaction() as session:
-            # Locked so two concurrent toggles cannot both record the change.
-            existing = await store.get(
-                announcement_id, for_update=True, session=session
+    async with store.transaction() as session:
+        # Locked so two concurrent toggles cannot both record the change.
+        existing = await store.get(announcement_id, for_update=True, session=session)
+        if existing is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND
             )
-            if existing is None:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND
-                )
-            changed = existing.enabled != enabled
-            if changed and enabled and existing.kind == "patch_note":
-                auto_disabled = await store.disable_other_patch_notes(
-                    except_id=announcement_id, updated_by=user.uid, session=session
-                )
-                # A relaunch shows the note to everyone again.
-                await store.delete_dismissals(announcement_id, session=session)
-            content_version = _versioning_after_toggle(existing, enabled)
-            stored = await store.set_enabled(
-                announcement_id=announcement_id,
-                enabled=enabled,
-                content_version=content_version,
-                updated_by=user.uid,
-                session=session,
+        changed = existing.enabled != enabled
+        content_version = _versioning_after_toggle(existing, enabled)
+        stored = await store.set_enabled(
+            announcement_id=announcement_id,
+            enabled=enabled,
+            content_version=content_version,
+            updated_by=user.uid,
+            session=session,
+        )
+        if stored is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND
             )
-            if stored is None:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND
+        if changed:
+            log.record(stored, "activated" if enabled else "deactivated")
+            if not enabled:
+                await _cancel_announcement_if_nothing_visible(
+                    store, stored, log, session
                 )
-            for previous in auto_disabled:
-                log.record(previous, "deactivated")
-            if changed:
-                log.record(stored, "activated" if enabled else "deactivated")
-            await store.append_activation_events(log.events, session=session)
-    except IntegrityError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail=_CONCURRENT_ACTIVATION
-        ) from exc
+        await store.append_activation_events(log.events, session=session)
     emit_audit_log(
         "platform.announcement.toggled",
         actor_uid=user.uid,
         announcement_id=announcement_id,
         enabled=enabled,
         content_version=content_version,
-        auto_disabled_ids=[previous.id for previous in auto_disabled],
     )
     return _to_announcement(stored)
 
@@ -367,6 +359,7 @@ async def delete_announcement(
             )
         if existing.enabled:
             log.record(existing, "deactivated")
+            await _cancel_announcement_if_nothing_visible(store, existing, log, session)
         await store.append_activation_events(log.events, session=session)
     emit_audit_log(
         "platform.announcement.deleted",
@@ -376,50 +369,113 @@ async def delete_announcement(
     )
 
 
-async def get_active_patch_note(
+async def set_patch_note_order(
+    *,
+    user: KeycloakUser,
+    ordered_ids: list[str],
+    deps: ProductServiceDependencies,
+) -> None:
+    """Store the administrator's order; refuses a list that is not the current set."""
+
+    await _require_manage_platform(deps, user)
+    if not await deps.get_announcement_store().set_patch_note_order(ordered_ids):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_STALE_ORDER)
+    emit_audit_log(
+        "platform.announcement.patch_notes_reordered",
+        actor_uid=user.uid,
+        ordered_ids=ordered_ids,
+    )
+
+
+async def announce_patch_notes(
     *, user: KeycloakUser, deps: ProductServiceDependencies
-) -> ActivePatchNote:
-    """The enabled patch note, flagged when the caller dismissed it.
+) -> PatchNoteAnnouncement:
+    """Announce the visible patch notes: every user gets the dialog once."""
+
+    await _require_manage_platform(deps, user)
+    store = deps.get_announcement_store()
+    log = _EventLog(user.uid)
+    async with store.transaction() as session:
+        visible = await store.list_visible_patch_notes(session=session)
+        if not visible:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail=_NOTHING_VISIBLE
+            )
+        # Snapshots the note users will open on.
+        log.record(visible[0], "announced")
+        await store.append_activation_events(log.events, session=session)
+    event = log.events[0]
+    emit_audit_log(
+        "platform.announcement.patch_notes_announced",
+        actor_uid=user.uid,
+        announcement_event_id=event.id,
+        first_patch_note_id=event.announcement_id,
+        visible_count=len(visible),
+    )
+    return _to_patch_note_announcement(event)
+
+
+async def get_patch_note_announcement(
+    *, user: KeycloakUser, deps: ProductServiceDependencies
+) -> PatchNoteAnnouncement | None:
+    """The announcement in effect, or `None` when none was made or it was cancelled."""
+
+    await _require_manage_platform(deps, user)
+    event = await deps.get_announcement_store().get_current_announcement()
+    return None if event is None else _to_patch_note_announcement(event)
+
+
+async def get_patch_note_history(
+    *, user: KeycloakUser, deps: ProductServiceDependencies
+) -> PatchNoteHistory:
+    """The visible patch notes, and the announcement the caller has not seen.
 
     Authentication only, like the banner read; identity comes from the token.
     """
 
     store = deps.get_announcement_store()
     async with store.transaction() as session:
-        note = await store.get_enabled_patch_note(session=session)
-        if note is None:
-            return ActivePatchNote()
-        dismissed = await store.is_dismissed(
-            announcement_id=note.id, user_id=user.uid, session=session
-        )
-    return ActivePatchNote(patch_note=_to_announcement(note), dismissed=dismissed)
+        notes = await store.list_visible_patch_notes(session=session)
+        current = await store.get_current_announcement(session=session)
+        pending = None
+        # `notes` is checked too: two concurrent toggles can hide everything
+        # without either cancelling the announcement.
+        if notes and current is not None:
+            seen = await store.get_seen_announcement_id(user.uid, session=session)
+            pending = None if seen == current.id else current.id
+    return PatchNoteHistory(
+        patch_notes=[_to_announcement(note) for note in notes],
+        pending_announcement_id=pending,
+    )
 
 
-async def dismiss_patch_note(
+async def mark_patch_note_announcement_seen(
     *,
     user: KeycloakUser,
-    announcement_id: str,
+    announcement_event_id: str,
     deps: ProductServiceDependencies,
 ) -> None:
-    """Record the caller's own "don't show again"; idempotent."""
+    """Record that the caller saw that announcement; idempotent."""
 
     store = deps.get_announcement_store()
-    stored = await store.get(announcement_id)
-    if stored is None or stored.kind != "patch_note":
+    event = await store.get_activation_event(announcement_event_id)
+    if event is None or event.action != "announced":
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
-    try:
-        await store.add_dismissal(announcement_id=announcement_id, user_id=user.uid)
-    except IntegrityError as exc:
-        # The note was deleted between the check above and the insert.
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND
-        ) from exc
+    seen_id = await store.get_seen_announcement_id(user.uid)
+    if seen_id == event.id:
+        return
+    if seen_id is not None:
+        seen = await store.get_activation_event(seen_id)
+        # A late close of an older dialog must not undo a newer record.
+        if seen is not None and seen.occurred_at > event.occurred_at:
+            return
+    await store.set_seen_announcement(user_id=user.uid, announcement_event_id=event.id)
 
 
 async def list_activation_history(
     *, user: KeycloakUser, deps: ProductServiceDependencies
 ) -> list[AnnouncementActivationEvent]:
-    """The newest activation events, for the admin page."""
+    """The newest history events, for the admin page."""
 
     await _require_manage_platform(deps, user)
     events = await deps.get_announcement_store().list_activation_events(
