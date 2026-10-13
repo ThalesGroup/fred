@@ -165,9 +165,15 @@
   max-width: 100%;
 }
 .linkTable {
-  height: 26rem;
   min-height: 0;
   max-height: 45dvh;
+}
+.linkActions {
+  min-width: max-content;
+}
+.linkActions > button:last-child,
+.linkActions > button:last-child:hover:not(:disabled) {
+  color: var(--error);
 }
 /* Rows use display: contents; dim cell content without fading their backgrounds. */
 .suspendedLink > * > *,

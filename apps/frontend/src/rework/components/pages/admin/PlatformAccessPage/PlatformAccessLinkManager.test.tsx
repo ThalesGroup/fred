@@ -9,6 +9,7 @@ const hooks = vi.hoisted(() => ({
   reveal: vi.fn(),
   revoke: vi.fn(),
   reset: vi.fn(),
+  revealLoading: false,
   query: vi.fn(),
   joinerQuery: vi.fn(),
   joinerRefetch: vi.fn(),
@@ -76,7 +77,7 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
     };
   },
   useGeneratePlatformLinkMutation: () => [hooks.generate, { isLoading: false, reset: hooks.reset }],
-  useRevealPlatformLinkMutation: () => [hooks.reveal, { isLoading: false, reset: hooks.reset }],
+  useRevealPlatformLinkMutation: () => [hooks.reveal, { isLoading: hooks.revealLoading, reset: hooks.reset }],
   useRevokePlatformLinkMutation: () => [hooks.revoke, { isLoading: false }],
   useDeleteInactivePlatformLinksMutation: () => [hooks.cleanup, { isLoading: false }],
 }));
@@ -100,6 +101,7 @@ beforeEach(() => {
   hooks.joinerError = false;
   hooks.joinerTotal = 1;
   hooks.joinerDeleted = false;
+  hooks.revealLoading = false;
   Object.defineProperty(navigator, "clipboard", {
     configurable: true,
     value: { writeText: vi.fn().mockResolvedValue(undefined) },
@@ -125,6 +127,14 @@ const button = (key: string) =>
       (key === "links.copyUrl" && node.getAttribute("aria-label") === "rework.platformAccess.links.copied") ||
       node.textContent?.trim() === `rework.platformAccess.${key}`,
   )!;
+const frontDialog = () => {
+  const dialogs = document.querySelectorAll<HTMLElement>('[role="dialog"]');
+  return dialogs[dialogs.length - 1]!;
+};
+const frontConfirmButton = () => {
+  const buttons = frontDialog().querySelectorAll<HTMLButtonElement>("button");
+  return buttons[buttons.length - 1]!;
+};
 const input = (key: string) =>
   [...document.querySelectorAll<HTMLInputElement>("input")].find(
     (node) => node.labels?.[0]?.textContent === `rework.platformAccess.${key}`,
@@ -241,10 +251,33 @@ it("keeps history available while Free is suspended and prevents link creation",
   );
 });
 
+it("keeps link actions and dialog controls available during URL reveal", () => {
+  hooks.revealLoading = true;
+  render();
+  expect(button("createLink").disabled).toBe(false);
+  expect(
+    [...document.querySelectorAll<HTMLButtonElement>("button")].find((node) => node.textContent === "common.close")
+      ?.disabled,
+  ).toBe(false);
+  expect(button("links.copyUrl").disabled).toBe(false);
+  expect(button("links.joiners").disabled).toBe(false);
+  expect(button("links.revoke").disabled).toBe(false);
+});
+
 it("shows successful joiners on a revoked link with bounded pages", () => {
   hooks.linkStatus = "revoked";
   hooks.joinerTotal = 26;
   render(false);
+  expect(document.querySelector<HTMLElement>(`.${styles.linkTable}`)?.style.height).toBe("11.25rem");
+  expect(
+    [...document.querySelectorAll<HTMLButtonElement>(`.${styles.linkActions} button`)].map((node) =>
+      node.getAttribute("aria-label"),
+    ),
+  ).toEqual([
+    "rework.platformAccess.links.copyUrl",
+    "rework.platformAccess.links.joiners",
+    "rework.platformAccess.links.revoke",
+  ]);
   act(() => button("links.joiners").click());
   expect(hooks.joinerQuery.mock.lastCall?.[0]).toMatchObject({
     teamId: "demo",
@@ -254,10 +287,20 @@ it("shows successful joiners on a revoked link with bounded pages", () => {
   });
   expect(document.body.textContent).toContain("simon");
   expect(document.body.textContent).toContain("Martin");
+  expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(2);
   expect(document.querySelector('[inert] [role="dialog"]')?.textContent).toContain("Workshop");
+  expect(document.querySelector('[inert] [role="dialog"]')?.closest('[aria-hidden="true"]')).not.toBeNull();
   const nextButtons = document.querySelectorAll<HTMLButtonElement>('button[aria-label="dataTable.pagination.next"]');
   act(() => nextButtons[nextButtons.length - 1]!.click());
   expect(hooks.joinerQuery.mock.lastCall?.[0]).toMatchObject({ offset: 25 });
+  act(() =>
+    [...document.querySelectorAll<HTMLButtonElement>("button")]
+      .find((node) => node.textContent === "rework.back")!
+      .click(),
+  );
+  expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+  expect(document.querySelector('[inert] [role="dialog"]')).toBeNull();
+  expect(document.body.textContent).toContain("Workshop");
 });
 
 it("keeps the last known identity visible on a dimmed deleted joiner", () => {
@@ -313,9 +356,12 @@ it("recovers an existing URL without creating another invitation and confirms re
   act(() => button("links.revoke").click());
   expect(hooks.revoke).not.toHaveBeenCalled();
   expect(document.body.textContent).toContain("rework.platformAccess.links.revokeHint");
-  await act(async () => button("links.revoke").click());
+  expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(2);
+  expect(document.querySelector('[inert] [role="dialog"]')?.textContent).toContain("Workshop");
+  await act(async () => frontConfirmButton().click());
   expect(hooks.revoke).toHaveBeenCalledWith({ teamId: "demo", linkId: "invitation" });
   expect(input("copyLink")).toBeUndefined();
+  expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
 });
 it("rejects a past local expiry before requesting a link and preserves the note", () => {
   render();
@@ -346,8 +392,8 @@ it("keeps revocation failure visible inside the confirmation", async () => {
   });
   render();
   act(() => button("links.revoke").click());
-  await act(async () => button("links.revoke").click());
-  const dialog = document.querySelector('[role="dialog"]')!;
+  await act(async () => frontConfirmButton().click());
+  const dialog = frontDialog();
   expect(dialog.querySelector('[role="alert"]')?.textContent).toContain("rework.platformAccess.failed");
 });
 it("shows history first and returns without generation when creation is canceled", () => {
