@@ -172,8 +172,12 @@ const composerValue = {
   reset: composerResetMock,
   bindSession: composerBindSessionMock,
 };
+let composerModelArg: unknown;
 vi.mock("./useComposerSettings", () => ({
-  useComposerSettings: () => composerValue,
+  useComposerSettings: (_sessionId: unknown, _controls: unknown, effectiveModel: unknown) => {
+    composerModelArg = effectiveModel;
+    return composerValue;
+  },
 }));
 
 const sessionHistoryValue = { isLoading: false };
@@ -203,7 +207,13 @@ let patchSessionImpl: (args: unknown) => Promise<unknown> = async () => ({});
 const registerSessionCalls: unknown[] = [];
 const patchSessionCalls: unknown[] = [];
 let sessionData:
-  | { context_prompt_ids?: string[]; title?: string; agent_deleted?: boolean; agent_display_name?: string | null }
+  | {
+      context_prompt_ids?: string[];
+      title?: string;
+      agent_deleted?: boolean;
+      agent_display_name?: string | null;
+      agent_instance_id?: string;
+    }
   | undefined;
 let sessionQueryUnresolved = false;
 const refetchSessionMock = vi.fn();
@@ -2597,6 +2607,38 @@ describe("useManagedChat — session write reliability", () => {
     expect(latest.pendingHitl).toEqual(newerPrompt);
     expect(latest.hitlFreeText).toBe("answer for the newer prompt");
   });
+  // The page reads the model list before it knows whether the conversation can
+  // run; that answer must not drop the stored choice (and warn) meanwhile.
+  it("hides the model read from the composer while the conversation cannot run", () => {
+    hostEffectiveModel = {
+      capability_id: "model__mistral__small",
+      selectable_models: [{ profile_id: "chat.small", capability_id: "model__mistral__small", name: "small" }],
+    };
+    mount();
+    act(() => capturedSetSearchParams?.(new URLSearchParams("session=saved")));
+    expect(composerModelArg).toBe(hostEffectiveModel);
+
+    // Agent deleted: the read answers with an empty model.
+    sessionData = { agent_deleted: true };
+    rerender();
+    expect(composerModelArg).toBeUndefined();
+
+    // Conversation of another agent: the read describes the wrong agent.
+    sessionData = { agent_instance_id: "agent-2" };
+    rerender();
+    expect(composerModelArg).toBeUndefined();
+
+    // Conversation row not loaded yet.
+    sessionData = undefined;
+    sessionQueryUnresolved = true;
+    rerender();
+    expect(composerModelArg).toBeUndefined();
+
+    sessionQueryUnresolved = false;
+    rerender();
+    expect(composerModelArg).toBe(hostEffectiveModel);
+  });
+
   it("freezes an existing conversation after deletion and resumes normal behavior on a live conversation", async () => {
     mount();
     act(() => capturedSetSearchParams?.(new URLSearchParams("session=saved")));

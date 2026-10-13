@@ -2044,6 +2044,35 @@ async def test_effective_model_ignores_a_disabled_runtime_source(
 
 
 @pytest.mark.asyncio
+async def test_effective_model_is_empty_for_a_deleted_instance(
+    monkeypatch: pytest.MonkeyPatch, _stub_team_lookup
+) -> None:
+    """The chat page reads this once for a conversation whose agent was
+    deleted, before it knows: the answer is an empty model, never an error,
+    and no pod is asked."""
+
+    async def _must_not_fetch(base_url: str):
+        raise AssertionError("a deleted instance must not reach the pod catalog")
+
+    from control_plane_backend.product import service as product_service
+
+    monkeypatch.setattr(
+        product_service, "_model_capabilities_for_source", _must_not_fetch
+    )
+    deps = _resolution_deps()
+    deps._instance = None  # type: ignore[attr-defined]
+    result = await resolve_effective_chat_model(
+        _user(), TeamId("team-1"), "deleted-inst", deps
+    )
+    assert result.model_dump(exclude_none=True) == {
+        "enabled_for_team": True,
+        "reasoning_enabled": False,
+        "selectable_models": [],
+        "choice_locked": False,
+    }
+
+
+@pytest.mark.asyncio
 async def test_effective_model_is_empty_for_an_instance_of_another_team(
     monkeypatch: pytest.MonkeyPatch, _stub_team_lookup
 ) -> None:

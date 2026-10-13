@@ -494,7 +494,10 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     (model: string) => showWarn({ summary: t("chatbot.composerSettings.modelChoiceLost", { model }) }),
     [showWarn, t],
   );
-  const composer = useComposerSettings(sessionId, chatControls, effectiveChatModel, handleModelChoiceDropped);
+  // A conversation that cannot run ignores the model read: it may describe
+  // another agent, or none (deleted), and must not judge the stored choice.
+  const composerModel = executionDisabled ? undefined : effectiveChatModel;
+  const composer = useComposerSettings(sessionId, chatControls, composerModel, handleModelChoiceDropped);
 
   useEffect(() => {
     if (skipResetOnSessionBindRef.current) {
@@ -689,7 +692,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
           : undefined;
       // The reasoning value is explicit while the composer shows its row, and
       // absent otherwise; the model choice rides along when one is made.
-      const reasoningShown = offersReasoning(chatControls, effectiveChatModel, composer.chatProfileId);
+      const reasoningShown = offersReasoning(chatControls, composerModel, composer.chatProfileId);
       const extras = resumedExchangeId
         ? latestMessagesRef.current.find(
             (message) => message.exchange_id === resumedExchangeId && message.role === "user",
@@ -732,7 +735,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
       composer.reasoning,
       composer.askUser,
       composer.chatProfileId,
-      effectiveChatModel,
+      composerModel,
     ],
   );
 
