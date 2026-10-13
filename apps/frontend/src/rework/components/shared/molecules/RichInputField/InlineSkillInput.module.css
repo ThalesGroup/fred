@@ -28,6 +28,14 @@
 .hint {
   color: var(--on-surface-muted);
 }
+/* The native caret sits on the first glyph of these widgets, and an engine may
+   paint the widget after it. One layer down (the scroller is the stacking
+   context) keeps the caret in front without moving any text. */
+.editor :global(.cm-placeholder),
+.hint {
+  position: relative;
+  z-index: -1;
+}
 .editor[aria-disabled="true"] {
   color: var(--state-on-surface-disabled);
 }
