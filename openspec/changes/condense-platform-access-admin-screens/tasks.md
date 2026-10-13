@@ -31,13 +31,21 @@ Written after the implementation (see proposal.md, Process note). Ticked items a
 
 ## 5. Still to do
 
-- [ ] 5.1 Run root `make code-quality` and record the result here.
-- [ ] 5.2 Run the frontend `make test` (full suite) and record the result here.
+- [x] 5.1 Run `make code-quality` and record the result here. Run from `apps/frontend`, the only project this branch touches (tsc, prettier, eslint: clean, 2026-10-14); the root target was not run.
+- [x] 5.2 Run the frontend `make test` (full suite) and record the result here: 330 files passed, 1 skipped; 4121 tests passed, 7 skipped (2026-10-14).
 - [ ] 5.3 Check in a browser where focus lands when the invitation-links dialog opens (design.md, Open Questions b) and that keyboard order through the filter, Create link and the footer is usable.
 - [ ] 5.4 Check on screen: the conditions row wrapping below 700px, the page in the dark theme, and the two banners with a screen reader (one status region).
-- [ ] 5.5 Get the reviewer's answers to design.md Open Questions (a) to (e) and open follow-up issues where one is wanted.
+- [ ] 5.5 Get the reviewer's answers to design.md Open Questions (a), (a2) and (b) to (e) and open follow-up issues where one is wanted.
 - [ ] 5.6 Align the #3086 change `whitelist-lists-individual-exceptions` with this delta as listed in design.md, "Coordination with #3086", on its own branch.
 - [ ] 5.7 Archive this change after merge and before #3086's.
+
+## 6. Pre-PR review fixes
+
+- [x] 6.1 A failed test or save is always shown and never beside "Rule saved": the error clears the saved state, and the saved confirmation lives only beside the Save button; verified by "shows a failed test after a save instead of the saved state" and "keeps the saved state after a successful test".
+- [x] 6.2 The access banner never shows a team identifier: a team without a name is counted in a neutral localized wording (fr, en, singular and plural); verified by "never shows a team identifier when a team has no name".
+- [x] 6.3 The Conditions title is an `h2`, directly under the page `h1`; verified by "keeps the add button in the conditions header, before the list" (level) and the page test "names each whitelist panel through its tab only" (no heading in the whitelist panel).
+- [x] 6.4 `COMPONENT-UX.md` uses the shipped labels "Opens (Ouvertures)" and "Copy link".
+- [x] 6.5 design.md records the cost of the source lookup as a reviewer question (Open Questions c) and the two reviewer notes on row selection and lost focus (a, a2).
 
 ## Verification evidence
 
@@ -51,3 +59,13 @@ Reported by the implementation sessions, from `apps/frontend`, at the last admin
 Re-run on 2026-10-14 at `e4dfeb459` while writing these artifacts: `npx tsc --noEmit` exit 0; the same vitest command, 4 files, 103 tests passed. Prettier and eslint were not re-run.
 
 Not run: `make code-quality`, `make test`, the full frontend suite, any browser automation. The product owner checked the screens by hand during the sessions; no screenshot evidence is recorded.
+
+Re-run on 2026-10-14 after the pre-PR review fixes (section 6), on the branch tip:
+
+- `make code-quality` from `apps/frontend` (`npx tsc --noEmit`, prettier check, eslint): exit 0, all clean.
+- `make test` from `apps/frontend` (full vitest suite with coverage): 330 files passed, 1 skipped; 4121 tests passed, 7 skipped.
+- `npx vitest run src/rework/components/pages/admin/PlatformAccessPage`: 3 files, 94 tests passed.
+- `make migration-check` from the repository root: "Migration notes valid: 1 new declaration(s)".
+- `openspec validate condense-platform-access-admin-screens --strict`: valid.
+
+Still not run: the root `make code-quality`, any browser automation.
