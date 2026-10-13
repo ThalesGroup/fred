@@ -34,7 +34,7 @@ No configuration changes are required.
 
 1. Deploy control-plane, the agent pods and the frontend together. Run the
    normal control-plane `alembic upgrade head`. Revision `e9026d8e4db6` (after
-   `93427a5fe874`):
+   `9f6d3c2a1b08`):
    - adds `disabled_model_ids_json` and `reasoning_default_off_model_ids_json`
      to `team_routing_policy`, both empty;
    - copies each team's per-template model override into
