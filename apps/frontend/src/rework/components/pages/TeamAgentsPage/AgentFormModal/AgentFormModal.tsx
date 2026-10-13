@@ -29,7 +29,6 @@ import {
   applyRecommendedCapabilities,
   type DraftTargets,
   findSystemPromptField,
-  isReasoningOffered,
 } from "./CreationAssistantDialog/creationAssistant.ts";
 import styles from "./AgentFormModal.module.css";
 import { TemplateBrowser } from "./TemplateBrowser/TemplateBrowser.tsx";
@@ -476,15 +475,12 @@ export default function AgentFormModal({
             {
               selectedCapabilityIds: prev.selectedCapabilityIds,
               capabilityConfigValues: prev.capabilityConfigValues,
-              reasoningEnabled: prev.reasoningEnabled,
             },
             advertisedCapabilityIds(selectedTemplate),
           ),
         );
       }
-      // Last and on `next`: the capability step carries the old reasoningEnabled,
-      // and merging from prev would copy every other old field back.
-      return draft.reasoning ? { ...next, ...withReasoning(next, true) } : next;
+      return next;
     });
     setDraftRevision((revision) => revision + 1);
     setAssistantOpen(false);
@@ -605,7 +601,6 @@ export default function AgentFormModal({
           templateId={form.templateId}
           capabilities={templateCapabilities}
           hasPromptField={!!promptField}
-          offersReasoning={isReasoningOffered(advertisedCapabilityIds(selectedTemplate))}
           current={draftTargets(form, selectedTemplate, lang, promptField?.key, mode)}
           onApply={applyDraft}
           onClose={() => setAssistantOpen(false)}

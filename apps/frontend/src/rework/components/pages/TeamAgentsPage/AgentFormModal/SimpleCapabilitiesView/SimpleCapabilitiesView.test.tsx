@@ -137,7 +137,6 @@ describe("SimpleCapabilitiesView for an agent without free selection", () => {
 
     expect(html).not.toContain(DATA_KNOWLEDGE_KEY);
     expect(html).not.toContain(TEAM_DOCUMENTS_KEY);
-    expect(html).toContain(REASONING_KEY);
   });
 
   it("says so neutrally when the agent includes nothing", () => {

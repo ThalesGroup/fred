@@ -56,13 +56,11 @@ un agent existant :
    suffisent.
 2. Cliquez sur **Proposer**. Après quelques secondes, l'assistant propose un
    nom, un rôle, une courte description, des instructions et les capacités qui
-   semblent utiles à cet agent. Quand l'agent peut le proposer, le
-   **Raisonnement** figure toujours en tête des capacités.
+   semblent utiles à cet agent.
 3. Relisez les propositions. Tout est coché : décochez ce que vous ne voulez
    pas. Si rien ne convient, modifiez votre description et redemandez.
 4. Cliquez sur **Appliquer** : seuls les éléments cochés sont remplis. Les
-   capacités cochées remplacent la sélection actuelle. Le **Raisonnement**
-   coché est proposé dans le chat et activé au début de chaque conversation.
+   capacités cochées remplacent la sélection actuelle.
 
 Si un élément coché doit remplacer quelque chose que vous aviez déjà écrit,
 l'assistant vous demande d'abord de confirmer. Rien n'est enregistré tant que

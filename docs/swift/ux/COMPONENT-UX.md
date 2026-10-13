@@ -322,11 +322,9 @@ over a scrolling body (`--spacing-xs` padding). The header is a full-width `butt
 on `--surface-container` (`--spacing-xs` `--spacing-s` padding, `--font-title-small`, top corners
 following the panel) that selects or clears the whole section: tri-state icon right (`check_circle`,
 `remove_circle` with `aria-checked="mixed"` when partly selected, `radio_button_unchecked`), inset
-state-layer hover, 2px `--primary` focus ring. Wherever the Simple view offers its reasoning pack,
-the capabilities column always starts with a reasoning tile (the pack's title), selected by default
-and counted in the header's tri-state; applied, it turns reasoning on with conversations starting
-in it, unticked it leaves the form's reasoning alone. The hint shows when no capability is
-recommended and no reasoning tile is offered; the header is a plain title only when the column has no tile at all. **Apply** is disabled when nothing is ticked and writes only ticked items
+state-layer hover, 2px `--primary` focus ring. The column proposes no reasoning tile: reasoning
+follows the conversation's model, not the agent. The hint shows when no capability is
+recommended; the header is then a plain title. **Apply** is disabled when nothing is ticked and writes only ticked items
 (capabilities replace the selection, document access through the resource pack). If a ticked item
 would replace a value the user wrote (on create, template seeds count as empty; capabilities compare
 what Apply would write, selection and document sources), a critical `ConfirmationDialog` lists
