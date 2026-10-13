@@ -132,7 +132,7 @@ and the sent skill badge. `.badge` becomes the container (secondary pair,
 alike: the owner settled on one colour for every command, so the two differ by
 their icon only. The components still set `data-kind` (`prompt` / `skill`),
 which the tests select on and which carries no style, and
-`data-surface="bubble"` adds an inset `--outline-variant` hairline. No custom
+`data-surface="bubble"` adds an inset `--secondary` hairline (same hue as the bubble; the neutral outline read poorly on it). No custom
 property is added. `CommandTurn` (the sent prompt) drops
 its own `--info` slug styles and reuses `.badge`. The composer-only
 `.promptToken` class is deleted.
