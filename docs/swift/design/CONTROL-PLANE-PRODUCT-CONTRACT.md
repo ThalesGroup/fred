@@ -4691,11 +4691,13 @@ The own-credential `/platform-access/status` endpoint exposes only admission and
 Platform admission administration also accepts an atomic manual grant of any positive number of existing Fred user UUIDs through `POST /admin/platform/access/users`.
 Unknown identities reject the whole request; duplicate IDs do not duplicate
 exceptions and existing manual/T0 provenance is preserved. The UI retains its
-selection across searches and pages. Every admission administrator check uses
+selection across searches. Every admission administrator check uses
 higher-consistency OpenFGA authorization so revoking administrator authority
 withdraws these mutations on subsequent requests.
 
 User listing includes `first_name` and `last_name` alongside username/email and searches these same fields (2026-10-08). Manual grants validate and insert in bounded SQL batches within one transaction, without an arbitrary 100-user cap.
+
+`GET /admin/platform/access/users` accepts the optional boolean query parameter `exceptions_only` (2026-10-13, default `false`). When `true`, the page and `total` cover only users holding an individual exception (manual or T0); it combines with `query`, `offset` and `limit`. In both modes rows are ordered in SQL by `lower(username)` ascending, users without a username last, then by user id; the previous order was user id alone. Each row's `sources` are computed as before. The whitelist Users tab requests `exceptions_only=true`; its add dialog and the rule tester's own-row lookup do not.
 
 `PlatformAccessState.has_admission_sources` identifies a saved rule, individual exception or eligible authorized/Free team. Filtering can activate with independent sources alone. `PATCH /admin/platform/access` accepts `expected_revision`, rejecting stale confirmations with 409 while preserving legacy-gate and actor-lockout safeguards. `GET /admin/platform/access/activation-preview` returns all known local users with identity metadata and allowed/blocked/unknown outcomes, counts, `revision` and `checked_at` (2026-10-08). It evaluates saved policy, fresh selected evidence, suspension, individual exceptions and live higher-consistency team membership without mutating admission or exposing claim values. Missing/stale/conflicting rule evidence produces unknown unless another authoritative source suffices; unavailable account status remains unknown. A membership-authority error fails the preview instead of claiming a complete classification. Bounded concurrent checks and a 120-second total deadline protect this explicit administrative read; unavailable or changed policy snapshots return errors. The preview is an observation, not a frozen authorization decision. The UI requires explicit confirmation, uses the returned revision and never implicitly saves a draft.
 

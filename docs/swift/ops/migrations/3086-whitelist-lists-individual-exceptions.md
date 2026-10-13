@@ -1,0 +1,40 @@
+---
+schema: 1
+title: "Platform access whitelist lists individual exceptions and adds people through a dialog"
+impact: none
+configuration: none
+configuration_reason: "One optional query parameter and a new sort order on an existing administration endpoint, plus frontend changes; no configuration key, default or chart value changes."
+no_action_reason: "The new query parameter is optional and defaults to the previous behaviour, no schema or stored data changes, and the control-plane backend and the frontend are deployed together as usual."
+---
+## Applicability
+
+Fred deployments where platform access administration is available (user sign-in and permission checks enabled).
+
+## Prerequisites
+
+No additional prerequisites beyond the normal deployment procedure.
+
+## Configuration
+
+No configuration changes are required.
+
+## Upgrade
+
+Deploy Fred normally; no additional operator or user action is required. There is no database migration.
+
+Two behaviours of `GET /admin/platform/access/users` change for anyone calling it directly:
+
+- It accepts the optional query parameter `exceptions_only` (default `false`). When `true`, the returned page and `total` cover only users holding an individual exception.
+- Rows are now ordered by username without regard to case, users without a username last, then by user id. They were previously ordered by user id. A script paging through this endpoint keeps working; only the order of rows differs.
+
+## Validation
+
+As a platform administrator, open Platform access > Whitelist > Users: the table lists only people holding an individual access, in alphabetical order. Use "Add users" to search for a person who is not listed, add them, and check that they appear in the table.
+
+## Rollback
+
+Use the normal rollback procedure; this change introduces no data migration. Roll the frontend back together with the control-plane backend: a frontend from this release talking to an older backend would have its filter ignored and would list every known user in the whitelist tab.
+
+## Limitations
+
+The list is filtered on individual exceptions only. People admitted by the rule, by an authorized team or as platform administrators are not listed unless they also hold an individual exception. The filtered listing sorts the set of individual exceptions on each request without a dedicated index; this is expected to stay cheap for a few thousand exceptions.
