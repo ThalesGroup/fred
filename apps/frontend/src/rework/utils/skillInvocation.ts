@@ -43,8 +43,9 @@ export function skillInvocationsText(
   return [...names].reverse().reduce((value, name) => skillInvocationText(value, name), text);
 }
 
-/** Displayed names omit the slash; native selection-copy restores it only
- * for complete selected badges, leaving partial names and prose unchanged. */
+/** Badges show `/name` as text. A selection touching one is still serialised
+ * here: the browser would copy icon glyphs as words and break lines around the
+ * badge's flex box. */
 export function selectedSkillText(range: Range, container: HTMLElement): string | null {
   if (!container.contains(range.commonAncestorContainer)) return null;
   const regionOf = (node: Node) =>
@@ -52,30 +53,11 @@ export function selectedSkillText(range: Range, container: HTMLElement): string 
   const region = regionOf(range.startContainer);
   // Cross-turn selections keep the browser's block-boundary serialisation.
   if (!region || region !== regionOf(range.endContainer)) return null;
-  const selectedText = (selection: Range) => {
-    const fragment = selection.cloneContents();
-    fragment.querySelectorAll('.material-symbols-outlined[aria-hidden="true"]').forEach((icon) => icon.remove());
-    return fragment.textContent ?? "";
-  };
-  const replacements: { from: number; to: number; text: string }[] = [];
-  for (const label of region.querySelectorAll<HTMLElement>("[data-skill-name]")) {
-    const name = label.dataset.skillName;
-    if (!name || !label.firstChild || !range.intersectsNode(label)) continue;
-    const nameRange = document.createRange();
-    nameRange.selectNodeContents(label.firstChild);
-    if (
-      range.compareBoundaryPoints(Range.START_TO_START, nameRange) > 0 ||
-      range.compareBoundaryPoints(Range.END_TO_END, nameRange) < 0
-    )
-      continue;
-    const prefix = range.cloneRange();
-    prefix.setEnd(nameRange.startContainer, nameRange.startOffset);
-    const from = selectedText(prefix).length;
-    replacements.push({ from, to: from + name.length, text: `/${name}` });
-  }
-  let text = selectedText(range);
-  if (!replacements.length && text === range.toString()) return null;
-  for (const replacement of replacements.sort((a, b) => b.from - a.from))
-    text = text.slice(0, replacement.from) + replacement.text + text.slice(replacement.to);
-  return text;
+  const fragment = range.cloneContents();
+  fragment.querySelectorAll('.material-symbols-outlined[aria-hidden="true"]').forEach((icon) => icon.remove());
+  const text = fragment.textContent ?? "";
+  const touchesBadge = Array.from(region.querySelectorAll("[data-skill-name]")).some((label) =>
+    range.intersectsNode(label),
+  );
+  return touchesBadge || text !== range.toString() ? text : null;
 }

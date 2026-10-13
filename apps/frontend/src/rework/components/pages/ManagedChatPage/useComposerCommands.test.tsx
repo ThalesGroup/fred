@@ -564,7 +564,7 @@ describe("platform skills", () => {
         selection: { anchor: prefix.length },
       }),
     );
-    expect(labels()).toEqual(["review"]);
+    expect(labels()).toEqual(["/review"]);
     if (method === "click")
       act(() => options()[0].dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true })));
     else cmPress(method);
@@ -807,7 +807,7 @@ describe("platform skills", () => {
 
     // A new slash further on is a new command: the menu is for it alone.
     cmTypeByHand(" /re");
-    expect(labels()).toEqual(["review"]);
+    expect(labels()).toEqual(["/review"]);
     expect(promptShown()).toBe(true);
   });
   it("deletes one of two adjacent tokens without touching the other", () => {
@@ -866,7 +866,7 @@ describe("platform skills", () => {
   it("lists all runtime skills with descriptions and platform identity, without their argument hint", () => {
     activateSkills();
     type("/");
-    expect(labels()).toEqual(["/search", "/summary", "meeting-minutes", "review"]);
+    expect(labels()).toEqual(["/search", "/summary", "/meeting-minutes", "/review"]);
     // The native tooltip gives the full description, which the row may cut.
     expect(options()[2].title).toBe("Meeting minutes");
     expect(options()[2].querySelector("[class*=customIcon]")).not.toBeNull();
@@ -976,7 +976,7 @@ describe("platform skills", () => {
     expect(onRunCommand).toHaveBeenCalledOnce();
     expect(onRunSkill).not.toHaveBeenCalled();
     type("/rev");
-    expect(labels()).toEqual(["/review", "review"]);
+    expect(labels()).toEqual(["/review", "/review"]);
     press("ArrowDown");
     press("Tab");
     expect(selected()).toEqual({ name: "review" });
@@ -1001,7 +1001,7 @@ describe("platform skills", () => {
     skillCatalog = { supported: true, skills: [...skillCatalog!.skills, { name: "skillet", description: "Cooking" }] };
     act(() => root.render(<Host />));
     type("/ski");
-    expect(labels()).toEqual(["skillet"]);
+    expect(labels()).toEqual(["/skillet"]);
     press("Tab");
     expect(selected()).toEqual({ name: "skillet" });
   });
@@ -1028,7 +1028,7 @@ describe("platform skills", () => {
   it("keeps named legacy completion available without a dispatcher row", () => {
     activateSkills();
     type("/skill");
-    expect(labels()).toEqual(["meeting-minutes", "review"]);
+    expect(labels()).toEqual(["/meeting-minutes", "/review"]);
     press("Tab");
     expect(textarea().value).toBe("/meeting-minutes ");
     expect(selected()).toEqual({ name: "meeting-minutes" });
@@ -1075,7 +1075,7 @@ describe("platform skills", () => {
       const append = "Before /meeting-minutes middle /review after";
       act(() => cm().dispatch({ changes: { from: cm().state.doc.length, insert: append } }));
       const prompt = container.querySelector<HTMLElement>("[data-kind=prompt]");
-      expect(prompt?.textContent).toBe("edit_notesummary");
+      expect(prompt?.textContent).toBe("edit_note/summary");
       expect(prompt?.title).toContain("Résumé");
       expect(container.querySelectorAll('[aria-label="chatbot.skills.open"]')).toHaveLength(2);
       const draft = cm().state.doc.toString();
@@ -1105,7 +1105,7 @@ describe("platform skills", () => {
         cmType(`${before} /su`);
         expect(labels()).toEqual(["/summary"]);
         cmPress("Tab");
-        expect(container.querySelector("[data-kind=prompt]")?.textContent).toBe("edit_notesummary");
+        expect(container.querySelector("[data-kind=prompt]")?.textContent).toBe("edit_note/summary");
         for (const insert of promptFirst ? ["middle /rev", "after /meet"] : ["after /meet"]) {
           act(() => {
             const end = cm().state.doc.length;
@@ -1310,7 +1310,7 @@ describe("personal and team prompt commands", () => {
     );
     const token = container.querySelector<HTMLElement>("[data-kind=prompt]")!;
     expect(token).not.toBeNull();
-    expect(token.textContent).toBe("edit_notesummary");
+    expect(token.textContent).toBe("edit_note/summary");
     expect(token.title).toContain(`chatbot.commandMenu.sources.${source}`);
     expect(token.querySelector('[aria-hidden="true"]')?.textContent).toBe("edit_note");
     expect(view.state.doc.toString()).toBe("/summary ");
@@ -1329,7 +1329,7 @@ describe("personal and team prompt commands", () => {
     skillCatalog = { supported: true, skills: [{ name: "review", description: "Review" }] };
     mountReact();
     type("/");
-    expect(labels()).toEqual(["/search", "/summary", "/summary", "review"]);
+    expect(labels()).toEqual(["/search", "/summary", "/summary", "/review"]);
     expect(options()[0].querySelector("[class*=rowIcon]")?.textContent).toBe("edit_note");
     expect(options()[0].querySelector("em")?.textContent).toBe("Chercher");
     expect(options()[3].querySelector("[class*=rowIcon]")?.textContent).not.toBe("edit_note");
@@ -1337,7 +1337,7 @@ describe("personal and team prompt commands", () => {
     expect(sections()).toEqual([
       ["chatbot.commandMenu.sections.teamFallback", ["/search", "/summary"]],
       ["chatbot.commandMenu.sections.personal", ["/summary"]],
-      ["chatbot.commandMenu.sections.platform", ["review"]],
+      ["chatbot.commandMenu.sections.platform", ["/review"]],
     ]);
     expect(container.textContent).not.toContain("chatbot.commandMenu.sources.");
     type("/sea");
@@ -1345,7 +1345,7 @@ describe("personal and team prompt commands", () => {
     // The arrows cross section boundaries and stop on the last row.
     type("/");
     for (let step = 0; step < 4; step += 1) press("ArrowDown");
-    expect(focusedLabel()).toBe("review");
+    expect(focusedLabel()).toBe("/review");
     press("ArrowUp");
     expect(options()[2].getAttribute("aria-selected")).toBe("true");
   });
