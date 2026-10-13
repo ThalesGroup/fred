@@ -38,8 +38,8 @@ export default function CommandPromptPanel({ open, onClose, text, command, promp
       persistKey="command-prompt-panel"
     >
       <div className={styles.header}>
-        {command && <span className={styles.slug}>/{command}</span>}
         {promptName && <span className={styles.name}>{promptName}</span>}
+        {command && <span className={styles.slug}>/{command}</span>}
       </div>
       <p className={styles.text}>{text}</p>
     </ChatSidePanel>
