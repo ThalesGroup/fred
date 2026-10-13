@@ -3662,12 +3662,6 @@
           "allow": "Autoriser les utilisateurs correspondant à la règle",
           "block": "Bloquer les utilisateurs correspondant à la règle"
         },
-        "testAllowed": "Vous garderiez l'accès",
-        "testDenied": "Vous perdriez l'accès",
-        "ruleMatches": "Votre compte correspond à la règle.",
-        "ruleDoesNotMatch": "Votre compte ne correspond pas à la règle.",
-        "admitted": "Avec le filtrage actif, vous auriez accès, en comptant vos accès individuels et vos équipes.",
-        "denied": "Avec le filtrage actif, votre accès serait refusé.",
         "operatorLabel": {
           "contains": "Contient",
           "not_contains": "Ne contient pas",
@@ -3688,7 +3682,22 @@
         "empty": "Aucune condition. Ajoutez une condition pour choisir un champ de votre compte.",
         "saving": "Enregistrement...",
         "unsaved": "Modifications non enregistrées",
-        "conditions": "Conditions"
+        "conditions": "Conditions",
+        "ruleAccepts": "La règle accepte votre compte.",
+        "ruleRejects": "La règle n'accepte pas votre compte.",
+        "ruleBlocks": "La règle bloque votre compte.",
+        "ruleDoesNotBlock": "La règle ne bloque pas votre compte.",
+        "ruleUnchecked": "La règle n'a pas pu être vérifiée sur votre compte : elle ne vous donne pas accès.",
+        "accessKeptBy": "Avec le filtrage actif, vous gardez l'accès grâce à : {{sources}}.",
+        "accessKept": "Avec le filtrage actif, vous gardez l'accès.",
+        "accessLost": "Avec le filtrage actif, vous perdriez l'accès à la plateforme.",
+        "accessSource": {
+          "rule": "la règle",
+          "admin": "votre rôle d'administrateur de la plateforme",
+          "manual": "votre accès individuel",
+          "team": "l'équipe autorisée {{team}}",
+          "free": "l'accès par lien de l'équipe {{team}}"
+        }
       },
       "picker": {
         "choose": "Choisir un champ de mon compte",

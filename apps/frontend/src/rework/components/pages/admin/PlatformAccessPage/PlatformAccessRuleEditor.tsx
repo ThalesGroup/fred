@@ -18,9 +18,11 @@ import type {
   PlatformAccessState,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
+  usePlatformAccessUsersQuery,
   usePreviewPlatformPolicyMutation,
   useSavePlatformPolicyMutation,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { KeyCloakService } from "../../../../../security/KeycloakService";
 import styles from "./PlatformAccessPage.module.css";
 import PlatformAccessClaimPicker from "./PlatformAccessClaimPicker";
 import PlatformAccessValuePrompt from "./PlatformAccessValuePrompt";
@@ -66,6 +68,28 @@ export default function PlatformAccessRuleEditor({
   const [selection, setSelection] = useState<number>();
   const [result, setResult] = useState<PlatformAccessPolicyPreview>();
   const locked = disabled || busy;
+  // The test answers "kept or lost" only; the admin user list names what else grants access.
+  const username = KeyCloakService.GetUserName();
+  const ownAccess = usePlatformAccessUsersQuery(
+    { offset: 0, limit: 100, query: username ?? "" },
+    { skip: !result?.admitted || !username },
+  );
+  const ruleUnchecked = result?.conditions.some((reason) => reason === "timeout" || reason === "unavailable") ?? false;
+  const blocking = draft.mode === "block";
+  const ruleAccepts = !!result && !ruleUnchecked && (blocking ? !result.matched : result.matched);
+  const ownSources = ownAccess.currentData?.items.find((user) => user.user_id === KeyCloakService.GetUserId())?.sources;
+  const accessSources = [
+    ...new Set([
+      ...(ruleAccepts ? [t("rework.platformAccess.rule.accessSource.rule")] : []),
+      ...(ownSources ?? [])
+        .filter((source) => source.kind !== "attribute")
+        .map((source) =>
+          source.kind === "team" || source.kind === "free"
+            ? t(`rework.platformAccess.rule.accessSource.${source.kind}`, { team: source.team_name || source.team_id })
+            : t(`rework.platformAccess.rule.accessSource.${source.kind === "admin" ? "admin" : "manual"}`),
+        ),
+    ]),
+  ];
   const [saved, setSaved] = useState(false);
   const valid =
     draft.conditions.length > 0 &&
@@ -374,16 +398,33 @@ export default function PlatformAccessRuleEditor({
       </div>
       {feedback && !saved && <p role="status">{feedback}</p>}
       {result && (
-        <div className={styles.testResult} data-outcome={result.admitted ? "allowed" : "denied"} role="status">
-          <h3>
-            {t(result.admitted ? "rework.platformAccess.rule.testAllowed" : "rework.platformAccess.rule.testDenied")}
-          </h3>
-          <p>
-            {t(
-              result.matched ? "rework.platformAccess.rule.ruleMatches" : "rework.platformAccess.rule.ruleDoesNotMatch",
-            )}
+        <div className={styles.testResults} role="status">
+          <p className={styles.banner} data-outcome={ruleAccepts ? "success" : "error"}>
+            <Icon category="outlined" type={ruleAccepts ? "check_circle" : "error"} />
+            <span>
+              {t(
+                ruleUnchecked
+                  ? "rework.platformAccess.rule.ruleUnchecked"
+                  : blocking
+                    ? result.matched
+                      ? "rework.platformAccess.rule.ruleBlocks"
+                      : "rework.platformAccess.rule.ruleDoesNotBlock"
+                    : result.matched
+                      ? "rework.platformAccess.rule.ruleAccepts"
+                      : "rework.platformAccess.rule.ruleRejects",
+              )}
+            </span>
           </p>
-          <p>{t(result.admitted ? "rework.platformAccess.rule.admitted" : "rework.platformAccess.rule.denied")}</p>
+          <p className={styles.banner} data-outcome={result.admitted ? "success" : "error"}>
+            <Icon category="outlined" type={result.admitted ? "check_circle" : "error"} />
+            <span>
+              {!result.admitted
+                ? t("rework.platformAccess.rule.accessLost")
+                : accessSources.length
+                  ? t("rework.platformAccess.rule.accessKeptBy", { sources: accessSources.join(", ") })
+                  : t("rework.platformAccess.rule.accessKept")}
+            </span>
+          </p>
         </div>
       )}
       {picking !== undefined && (

@@ -143,25 +143,28 @@
   border-top: 1px solid var(--outline-muted);
   padding-top: var(--spacing-s);
 }
-.testResult {
+.testResults {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-xs);
-  border-radius: var(--radius-ms);
+}
+/* One banner per tested fact, coloured by its own outcome. */
+.banner {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  margin: 0;
+  border-radius: var(--radius-s);
   background: var(--success-container);
-  padding: var(--spacing-m);
+  padding: var(--spacing-xs) var(--spacing-s);
   color: var(--on-success-container);
 }
-.testResult[data-outcome="denied"] {
+.banner[data-outcome="error"] {
   background: var(--error-container);
   color: var(--on-error-container);
 }
-.testResult h3 {
-  margin: 0;
-  font: var(--font-title-medium);
-}
-.testResult p {
-  margin: 0;
+.banner > span:last-child {
+  min-width: 0;
 }
 @container (max-width: 700px) {
   .conditionLabels {

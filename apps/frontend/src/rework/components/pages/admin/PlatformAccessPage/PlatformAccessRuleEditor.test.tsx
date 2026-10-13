@@ -4,11 +4,20 @@ import { act } from "react";
 import { createRoot, Root } from "react-dom/client";
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import type { PlatformAccessState } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
-const hooks = vi.hoisted(() => ({ preview: vi.fn(), save: vi.fn() }));
+import type { AdmissionSource } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+const hooks = vi.hoisted(() => ({
+  preview: vi.fn(),
+  save: vi.fn(),
+  users: vi.fn(),
+  ownSources: undefined as AdmissionSource[] | undefined,
+}));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string, values?: { number: number }) => (values ? `${key} ${values.number}` : key),
+    t: (key: string, values?: Record<string, unknown>) => (values ? `${key} ${Object.values(values).join(" ")}` : key),
   }),
+}));
+vi.mock("../../../../../security/KeycloakService", () => ({
+  KeyCloakService: { GetUserName: () => "me", GetUserId: () => "me-id" },
 }));
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   usePlatformAccessOwnClaimsQuery: () => ({
@@ -27,6 +36,21 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
       truncated: false,
     },
   }),
+  usePlatformAccessUsersQuery: (args: unknown, options: { skip: boolean }) => {
+    hooks.users(args, options);
+    return {
+      currentData:
+        options.skip || !hooks.ownSources
+          ? undefined
+          : {
+              total: 2,
+              items: [
+                { user_id: "other", username: "meadow", email: null, sources: [{ kind: "manual" }] },
+                { user_id: "me-id", username: "me", email: null, sources: hooks.ownSources },
+              ],
+            },
+    };
+  },
   usePreviewPlatformPolicyMutation: () => [hooks.preview],
   useSavePlatformPolicyMutation: () => [hooks.save],
 }));
@@ -37,6 +61,7 @@ let host: HTMLDivElement, root: Root, state: PlatformAccessState;
 const reload = vi.fn();
 beforeEach(() => {
   vi.clearAllMocks();
+  hooks.ownSources = undefined;
   state = {
     filtering_enabled: false,
     has_admission_sources: true,
@@ -62,6 +87,8 @@ afterEach(() => {
 });
 const render = () =>
   act(() => root.render(<PlatformAccessRuleEditor state={state} disabled={false} reload={reload} />));
+const banners = () => [...host.querySelectorAll<HTMLElement>(`.${styles.banner}`)];
+const text = (banner: HTMLElement) => banner.querySelector("span:last-child")!.textContent;
 const button = (name: string) =>
   [...host.querySelectorAll("button")].find(
     (node) => node.textContent?.trim() === `rework.platformAccess.rule.${name}`,
@@ -103,8 +130,8 @@ it("previews without saving and distinguishes rule match from independent admiss
   expect(hooks.preview).toHaveBeenCalledWith({ platformAccessPolicy: state.policy });
   expect(hooks.save).not.toHaveBeenCalled();
   expect(host.textContent).toContain("rework.platformAccess.rule.result.missing");
-  expect(host.textContent).toContain("rework.platformAccess.rule.ruleDoesNotMatch");
-  expect(host.textContent).toContain("rework.platformAccess.rule.admitted");
+  expect(host.textContent).toContain("rework.platformAccess.rule.ruleRejects");
+  expect(host.textContent).toContain("rework.platformAccess.rule.accessKept");
   change(input("value"), "new");
   expect(host.textContent).not.toContain("rework.platformAccess.rule.result.missing");
 });
@@ -552,12 +579,96 @@ it("places persisted allow/block mode before conditions and submits the selected
   expect(hooks.save).not.toHaveBeenCalled();
   await act(async () => button("test").click());
   expect(hooks.preview.mock.calls[0][0].platformAccessPolicy.mode).toBe("block");
-  expect(host.querySelector('[data-outcome="allowed"] h3')?.textContent).toContain("rule.testAllowed");
+  expect(banners().map((banner) => [banner.dataset.outcome, text(banner)])).toEqual([
+    ["success", "rework.platformAccess.rule.ruleDoesNotBlock"],
+    ["success", "rework.platformAccess.rule.accessKeptBy rework.platformAccess.rule.accessSource.rule"],
+  ]);
 });
 it("shows an explicit readable refusal when preview denies effective admission", async () => {
   hooks.preview.mockReturnValue({ unwrap: async () => ({ matched: false, admitted: false, conditions: ["missing"] }) });
   render();
   await act(async () => button("test").click());
-  expect(host.querySelector('[data-outcome="denied"] h3')?.textContent).toContain("rule.testDenied");
-  expect(host.textContent).toContain("rule.ruleDoesNotMatch");
+  expect(banners().map((banner) => [banner.dataset.outcome, text(banner)])).toEqual([
+    ["error", "rework.platformAccess.rule.ruleRejects"],
+    ["error", "rework.platformAccess.rule.accessLost"],
+  ]);
+  expect(hooks.users.mock.calls.every(([, options]) => options.skip)).toBe(true);
+});
+
+const runTest = async (
+  outcome: { matched: boolean; admitted: boolean; conditions?: string[] },
+  mode?: "allow" | "block",
+) => {
+  if (mode) state.policy!.mode = mode;
+  hooks.preview.mockReturnValue({ unwrap: async () => ({ conditions: ["matched"], ...outcome }) });
+  act(() => root.unmount());
+  root = createRoot(host);
+  render();
+  await act(async () => button("test").click());
+  return banners().map((banner) => [banner.dataset.outcome, text(banner)]);
+};
+const kept = (...sources: string[]) =>
+  `rework.platformAccess.rule.accessKeptBy ${sources.map((source) => `rework.platformAccess.rule.accessSource.${source}`).join(", ")}`;
+
+it("judges the rule banner from the selected filtering mode", async () => {
+  expect((await runTest({ matched: true, admitted: true }, "allow"))[0]).toEqual([
+    "success",
+    "rework.platformAccess.rule.ruleAccepts",
+  ]);
+  expect((await runTest({ matched: false, admitted: true }, "allow"))[0]).toEqual([
+    "error",
+    "rework.platformAccess.rule.ruleRejects",
+  ]);
+  expect((await runTest({ matched: true, admitted: true }, "block"))[0]).toEqual([
+    "error",
+    "rework.platformAccess.rule.ruleBlocks",
+  ]);
+  expect((await runTest({ matched: false, admitted: true }, "block"))[0]).toEqual([
+    "success",
+    "rework.platformAccess.rule.ruleDoesNotBlock",
+  ]);
+});
+
+it("never counts a rule that could not be checked as accepting, in either mode", async () => {
+  for (const mode of ["allow", "block"] as const)
+    for (const reason of ["timeout", "unavailable"])
+      expect((await runTest({ matched: false, admitted: false, conditions: [reason] }, mode))[0]).toEqual([
+        "error",
+        "rework.platformAccess.rule.ruleUnchecked",
+      ]);
+});
+
+it("colours the access banner by its own outcome, whatever the rule banner says", async () => {
+  expect(await runTest({ matched: false, admitted: true })).toEqual([
+    ["error", "rework.platformAccess.rule.ruleRejects"],
+    ["success", "rework.platformAccess.rule.accessKept"],
+  ]);
+  expect(host.querySelector(`.${styles.testResults}`)?.getAttribute("role")).toBe("status");
+  expect(host.querySelector("fieldset")?.textContent).toContain("rework.platformAccess.rule.result.matched");
+});
+
+it("names what keeps the access: none known, one source, several sources", async () => {
+  expect((await runTest({ matched: false, admitted: true }))[1][1]).toBe("rework.platformAccess.rule.accessKept");
+  expect(hooks.users.mock.lastCall).toEqual([{ offset: 0, limit: 100, query: "me" }, { skip: false }]);
+  hooks.ownSources = [{ kind: "manual" }];
+  expect((await runTest({ matched: false, admitted: true }))[1][1]).toBe(kept("manual"));
+  hooks.ownSources = [
+    { kind: "attribute" },
+    { kind: "admin" },
+    { kind: "t0" },
+    { kind: "team", team_id: "t1", team_name: "Demos" },
+    { kind: "free", team_id: "t2", team_name: "Guests" },
+  ];
+  expect((await runTest({ matched: true, admitted: true }))[1][1]).toBe(
+    "rework.platformAccess.rule.accessKeptBy rework.platformAccess.rule.accessSource.rule, " +
+      "rework.platformAccess.rule.accessSource.admin, rework.platformAccess.rule.accessSource.manual, " +
+      "rework.platformAccess.rule.accessSource.team Demos, rework.platformAccess.rule.accessSource.free Guests",
+  );
+});
+
+it("does not name the saved rule as a source when the tested rule refuses the account", async () => {
+  hooks.ownSources = [{ kind: "attribute" }, { kind: "team", team_id: "t1", team_name: "Demos" }];
+  expect((await runTest({ matched: false, admitted: true }))[1][1]).toBe(
+    "rework.platformAccess.rule.accessKeptBy rework.platformAccess.rule.accessSource.team Demos",
+  );
 });

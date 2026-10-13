@@ -3662,12 +3662,6 @@
           "allow": "Allow users matching the rule",
           "block": "Block users matching the rule"
         },
-        "testAllowed": "You would keep access",
-        "testDenied": "You would lose access",
-        "ruleMatches": "Your account matches the rule.",
-        "ruleDoesNotMatch": "Your account does not match the rule.",
-        "admitted": "With filtering on, you would have access, counting your individual access and your teams.",
-        "denied": "With filtering on, your access would be refused.",
         "operatorLabel": {
           "contains": "Contains",
           "not_contains": "Does not contain",
@@ -3688,7 +3682,22 @@
         "empty": "No conditions yet. Add a condition to choose a field from your account.",
         "saving": "Saving...",
         "unsaved": "Unsaved changes",
-        "conditions": "Conditions"
+        "conditions": "Conditions",
+        "ruleAccepts": "The rule accepts your account.",
+        "ruleRejects": "The rule does not accept your account.",
+        "ruleBlocks": "The rule blocks your account.",
+        "ruleDoesNotBlock": "The rule does not block your account.",
+        "ruleUnchecked": "The rule could not be checked on your account: it does not give you access.",
+        "accessKeptBy": "With filtering on, you keep access thanks to: {{sources}}.",
+        "accessKept": "With filtering on, you keep access.",
+        "accessLost": "With filtering on, you would lose access to the platform.",
+        "accessSource": {
+          "rule": "the rule",
+          "admin": "your platform administrator role",
+          "manual": "your individual access",
+          "team": "the authorized team {{team}}",
+          "free": "link access of the team {{team}}"
+        }
       },
       "picker": {
         "choose": "Choose an account field",
