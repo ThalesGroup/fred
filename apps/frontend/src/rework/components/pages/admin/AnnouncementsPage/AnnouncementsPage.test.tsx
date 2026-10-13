@@ -20,7 +20,7 @@
 // first, because an announcement is not recoverable. And the header reports
 // how many banners are actually live, the number an admin loses track of.
 // Banners and patch notes each have their tab, their empty state and their
-// create button; a patch note's switch only decides whether the next announcement includes it,
+// create button; a patch note's checkbox only decides whether the next announcement includes it,
 // so it never asks, and its preview is the users' dialog with that single note.
 
 import { act } from "react";
@@ -326,7 +326,7 @@ describe("AnnouncementsPage", () => {
     expect(document.body.textContent).not.toContain(`${ROW}.disableHint`);
   });
 
-  it("renders a patch note card with its handle and switch at the left, then its title, state and actions", () => {
+  it("renders a patch note card with its handle and checkbox at the left, then its title, state and actions", () => {
     listMock.mockReturnValue({ data: [patchNote({ enabled: true })], isLoading: false, refetch: refetchMock });
     const row = renderPatchNotes().querySelector('[data-kind="patch_note"]')!;
 
@@ -355,9 +355,9 @@ describe("AnnouncementsPage", () => {
       refetch: refetchMock,
     });
     const el = renderPatchNotes();
-    const switches = el.querySelectorAll<HTMLInputElement>(NOTE_CHECKBOX);
+    const checkboxes = el.querySelectorAll<HTMLInputElement>(NOTE_CHECKBOX);
 
-    act(() => switches[1].click());
+    act(() => checkboxes[1].click());
 
     expect(confirmMock).not.toHaveBeenCalled();
     expect(setEnabledMock).toHaveBeenCalledExactlyOnceWith({
@@ -391,7 +391,7 @@ describe("AnnouncementsPage", () => {
     expect(switches()[0].disabled).toBe(false);
   });
 
-  it("keeps the switch disabled during save and make visible", async () => {
+  it("keeps the checkbox disabled during save and make visible", async () => {
     let settle!: () => void;
     updateMock.mockReturnValue({ unwrap: () => Promise.resolve({}) });
     setEnabledMock.mockReturnValue({ unwrap: () => new Promise<void>((resolve) => (settle = resolve)) });
@@ -407,7 +407,7 @@ describe("AnnouncementsPage", () => {
     expect(toggle().disabled).toBe(false);
   });
 
-  it("save and make visible saves the note, then switches it on, and says so", async () => {
+  it("save and make visible saves the note, then checks it, and says so", async () => {
     updateMock.mockReturnValue({ unwrap: () => Promise.resolve({}) });
     listMock.mockReturnValue({
       data: [patchNote({ id: "p1", enabled: true }), patchNote({ id: "p2" })],
@@ -420,7 +420,7 @@ describe("AnnouncementsPage", () => {
     await act(async () => patchNoteEditor.props!.onSave({ kind: "patch_note" }, true));
 
     expect(updateMock).toHaveBeenCalledWith(expect.objectContaining({ announcementId: "p2" }));
-    // Only the saved note is switched: the other visible one is left alone.
+    // Only the saved note is checked: the other visible one is left alone.
     expect(setEnabledMock).toHaveBeenCalledExactlyOnceWith({
       announcementId: "p2",
       setAnnouncementEnabledRequest: { enabled: true },

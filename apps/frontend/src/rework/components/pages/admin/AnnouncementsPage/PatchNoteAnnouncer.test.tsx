@@ -181,6 +181,15 @@ describe("PatchNoteAnnouncer", () => {
     expect(announceButton().disabled).toBe(true);
   });
 
+  it("shows on the button how many patch notes are included, against the most an announcement holds", () => {
+    render();
+
+    expect(announceButton().textContent).toContain(
+      `${KEYS}.action:${JSON.stringify({ included: INCLUDED.length, max: MAX_PATCH_NOTES_PER_ANNOUNCEMENT })}`,
+    );
+    expect(announceButton().disabled).toBe(false);
+  });
+
   it("is unavailable above the most an announcement holds, and says to deselect some", () => {
     const eleven = Array.from({ length: MAX_PATCH_NOTES_PER_ANNOUNCEMENT + 1 }, (_, index) => note(`p${index}`, "N"));
     inEffect();
@@ -188,6 +197,10 @@ describe("PatchNoteAnnouncer", () => {
     render(eleven);
 
     expect(announceButton().disabled).toBe(true);
+    // The count keeps showing above the cap: it is what tells how many to deselect.
+    expect(announceButton().textContent).toContain(
+      `${KEYS}.action:${JSON.stringify({ included: eleven.length, max: MAX_PATCH_NOTES_PER_ANNOUNCEMENT })}`,
+    );
     expect(line()).toBe(`${KEYS}.tooMany:{"max":${MAX_PATCH_NOTES_PER_ANNOUNCEMENT}}`);
     act(() => root!.render(<PatchNoteAnnouncer includedNotes={eleven.slice(1)} />));
     expect(announceButton().disabled).toBe(false);
