@@ -331,6 +331,31 @@ tasks.md is done.
   drag-and-drop context's callbacks and check the sensors and spoken texts;
   the real gestures belong to the manual check (task 9.2).
 
+## Frontend Divergences Of The Rework
+
+- **The withdraw explanation is the text of its confirmation**, not a tooltip
+  on an info button: the critical `ConfirmationDialog` is the app's pattern
+  for an action of that weight, and it cannot be missed.
+- **The announce confirmation uses `ConfirmationDialog` directly**, for its
+  `details` slot (the numbered list); the provider only carries a text.
+- **The last-use line stays when nothing is included**: the announcement in
+  effect is a frozen package and outlives the toggles. The "include at least
+  one patch note" hint shows only when there is no last use to show.
+- **"+ N others" counts from `note_count`** (N is `note_count - 1`); the line's
+  title is the API's `label`, the first note's title.
+- **The history filter is stored under a new browser key**, so a remembered
+  action filter from the first version is simply ignored.
+- **A package is fetched when its line's button is pressed**, not with the
+  table; a failed read shows an error toast and opens nothing.
+- **Toggle wording follows through**: the editor's second save reads "Save
+  and include", and deleting a patch note says the current announcement is
+  not changed.
+- **Help Center**: the user page (`getting-started/first-steps.md`) already
+  matches and is unchanged; no administrator content is added.
+- The earlier point about "What's new" refreshing on the administrator's own
+  changes now only concerns announcing and withdrawing; the gate still decides
+  on the first read.
+
 ## Open Questions
 
 - None left: the drag-and-drop question is closed (library, see above).
