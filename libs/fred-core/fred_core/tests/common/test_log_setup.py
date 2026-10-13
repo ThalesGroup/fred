@@ -1212,7 +1212,7 @@ async def test_completion_handles_real_stream_disconnect_and_probe_failures(
     "path",
     [
         "/control-plane/v1/platform-access/free/opaque-token/enroll",
-        "/ui/join-free/opaque-token",
+        "/ui/join/opaque-token",
     ],
 )
 def test_free_enrollment_capability_is_redacted_without_delegation(path, monkeypatch):

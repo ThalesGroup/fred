@@ -383,8 +383,8 @@ it("creates a noted link without an implicit expiry and clears reusable mutation
     teamId: "demo",
     createPlatformEnrollmentLink: { note: "Demo workshop", expires_at: null },
   });
-  expect(input("copyLink").value).toContain("/join-free/fixture-generated-token");
-  expect(navigator.clipboard.writeText).toHaveBeenCalledWith("http://localhost:5173/join-free/fixture-generated-token");
+  expect(input("copyLink").value).toContain("/join/fixture-generated-token");
+  expect(navigator.clipboard.writeText).toHaveBeenCalledWith("http://localhost:5173/join/fixture-generated-token");
   expect(button("links.copyUrl").querySelector('[aria-hidden="true"]')?.textContent).toBe("check");
   expect(input("links.note")).toBeUndefined();
   expect(hooks.reset).toHaveBeenCalled();
@@ -394,7 +394,7 @@ it("keeps a generated URL available when automatic clipboard writing fails", asy
   render();
   act(() => button("createLink").click());
   await act(async () => button("createLink").click());
-  expect(input("copyLink").value).toContain("/join-free/fixture-generated-token");
+  expect(input("copyLink").value).toContain("/join/fixture-generated-token");
   expect(document.body.textContent).toContain("rework.platformAccess.links.copyFailed");
   expect(document.body.textContent).not.toContain("rework.platformAccess.failed");
   expect(hooks.generate).toHaveBeenCalledTimes(1);
@@ -434,7 +434,7 @@ it("recovers an existing URL without creating another invitation and confirms re
   await act(async () => button("links.copyUrl").click());
   expect(hooks.reveal).toHaveBeenCalledWith({ teamId: "demo", linkId: "invitation" });
   expect(hooks.generate).not.toHaveBeenCalled();
-  expect(navigator.clipboard.writeText).toHaveBeenCalledWith("http://localhost:5173/join-free/fixture-original-token");
+  expect(navigator.clipboard.writeText).toHaveBeenCalledWith("http://localhost:5173/join/fixture-original-token");
   expect(document.body.textContent).toContain("rework.platformAccess.links.copied");
   expect(button("links.copyUrl").querySelector('[aria-hidden="true"]')?.textContent).toBe("check");
   expect(document.querySelector('[role="dialog"] p[role="status"]')).toBeNull();
@@ -512,6 +512,10 @@ it("keeps the links and create dialog mounted while showing a generated URL", as
   expect(frontDialog().style.width).toBe(createWidth);
   expect(document.querySelector('[inert] [role="dialog"]')).toBe(linksDialog);
   expect(document.activeElement).toBe(input("copyLink"));
+  expect(input("copyLink").selectionStart).toBe(0);
+  expect(input("copyLink").selectionEnd).toBe(input("copyLink").value.length);
+  expect(input("copyLink").selectionDirection).toBe("backward");
+  expect(input("copyLink").scrollLeft).toBe(0);
   act(() => frontConfirmButton().click());
   expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
   expect(frontDialog()).toBe(linksDialog);
@@ -521,7 +525,7 @@ it("retains an existing recovered URL when clipboard access fails without genera
   vi.mocked(navigator.clipboard.writeText).mockRejectedValue(new Error("permission"));
   render();
   await act(async () => button("links.copyUrl").click());
-  expect(input("copyLink").value).toContain("/join-free/fixture-original-token");
+  expect(input("copyLink").value).toContain("/join/fixture-original-token");
   expect(document.body.textContent).toContain("rework.platformAccess.links.copyFailed");
   expect(document.body.textContent).not.toContain("rework.platformAccess.failed");
   expect(hooks.generate).not.toHaveBeenCalled();

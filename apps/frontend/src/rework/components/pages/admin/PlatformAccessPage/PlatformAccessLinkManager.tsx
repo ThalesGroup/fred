@@ -27,6 +27,11 @@ import styles from "./PlatformAccessPage.module.css";
 
 type LinkStatusFilter = Exclude<PlatformEnrollmentLinkInfo["status"], "suspended"> | "all";
 
+const selectUrlFromStart = (input: HTMLInputElement) => {
+  input.setSelectionRange(0, input.value.length, "backward");
+  input.scrollLeft = 0;
+};
+
 export default function PlatformAccessLinkManager({
   team,
   onClose,
@@ -89,7 +94,7 @@ export default function PlatformAccessLinkManager({
       setFailed(true);
     }
   };
-  const linkUrl = (token: string) => new URL(platformPath(`join-free/${token}`), window.location.origin).toString();
+  const linkUrl = (token: string) => new URL(platformPath(`join/${token}`), window.location.origin).toString();
   const rememberFocus = (trigger: HTMLElement) => {
     copyAttemptRef.current += 1;
     returnFocusRef.current = { trigger, dialog: trigger.closest<HTMLElement>('[role="dialog"]') };
@@ -168,7 +173,10 @@ export default function PlatformAccessLinkManager({
   const expiredInput =
     expiry !== "" && (!Number.isFinite(new Date(expiry).getTime()) || new Date(expiry).getTime() <= Date.now());
   useLayoutEffect(() => {
-    if (view === "output") outputInputRef.current?.focus();
+    if (view !== "output") return;
+    const input = outputInputRef.current;
+    input?.focus();
+    if (input) selectUrlFromStart(input);
   }, [view]);
   useLayoutEffect(() => {
     if (view !== "list" || confirmCleanup || confirmRevoke || joinersLink) return;
@@ -516,7 +524,7 @@ export default function PlatformAccessLinkManager({
                 label={t("rework.platformAccess.copyLink")}
                 value={url}
                 readOnly
-                onFocus={(event) => event.target.select()}
+                onFocus={(event) => selectUrlFromStart(event.currentTarget)}
               />
               {copyAction(() => void copy(url), busy)}
               {copyStatus === "failed" && <p role="alert">{t("rework.platformAccess.links.copyFailed")}</p>}

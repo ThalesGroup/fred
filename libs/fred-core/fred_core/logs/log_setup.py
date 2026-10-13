@@ -199,7 +199,7 @@ _SENSITIVE_QUERY_PARAM_RE = re.compile(
 
 def _sanitize_sensitive_query_params(value: str) -> str:
     value = re.sub(
-        r"((?:/platform-access/free/|/join-free/))[^/?\s\"]+", r"\1<redacted>", value
+        r"((?:/platform-access/free/|/join/))[^/?\s\"]+", r"\1<redacted>", value
     )
     return _SENSITIVE_QUERY_PARAM_RE.sub(r"\1<redacted>", value)
 

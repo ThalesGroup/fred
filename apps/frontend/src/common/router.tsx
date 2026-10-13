@@ -104,7 +104,7 @@ const SuspenseWrapper = ({ children }: { children: React.ReactNode }) => (
 
 export const routes: RouteObject[] = [
   { path: "/platform-access-denied", element: <PlatformAccessDeniedPage /> },
-  { path: "/join-free/:token", element: <FreeEnrollmentPage /> },
+  { path: "/join/:token", element: <FreeEnrollmentPage /> },
   {
     path: "/",
     element: <MainLayout />,
