@@ -1,6 +1,6 @@
 ---
 schema: 1
-title: "Browse the patch-note history and announce it explicitly"
+title: "Announce patch notes as a package and show the history by exposure"
 impact: minor
 after: [add-patch-note-announcements]
 configuration: none
@@ -20,42 +20,58 @@ No configuration changes are required.
 
 ## Upgrade
 
-Deploy the control-plane backend and the frontend together. The control-plane
-Alembic revision `e5ff6d80cc9f` (parent `93427a5fe874`) runs with the normal
-migration step; no backfill or manual step is needed:
+Deploy the control-plane backend and the frontend together. Two control-plane
+Alembic revisions run with the normal migration step; no backfill or manual
+step is needed.
 
-- it drops the index that allowed a single enabled patch note;
-- it adds `platform_announcement.position` and numbers the existing patch
-  notes, most recently created first;
-- it drops `platform_announcement_dismissal` and creates
+`e5ff6d80cc9f` (parent `93427a5fe874`):
+
+- drops the index that allowed a single enabled patch note;
+- adds `platform_announcement.position` and numbers the existing patch notes,
+  most recently created first;
+- drops `platform_announcement_dismissal` and creates
   `platform_announcement_seen` (one row per user).
+
+`a6c1d94e27b3` (parent `e5ff6d80cc9f`):
+
+- creates `platform_announcement_exposure` and converts the activation
+  history into it, one line per exposure: each banner activation is paired
+  with the deactivation that followed it;
+- turns the patch note that was enabled into the first announced package;
+- drops `platform_announcement_activation_event`.
 
 What administrators and users see afterwards:
 
-- the patch note that was enabled stays the only one users can read; an
-  administrator turns on the older ones to put them in the history;
-- no patch-note dialog opens for anyone until an administrator uses
-  **Announce the update**;
+- users keep reading the patch note that was enabled, from **What's new**; no
+  patch-note dialog opens for anyone until an administrator uses **Announce
+  the update**;
+- the Patch notes tab is a working area: its toggles choose what the next
+  announcement includes, and nothing done there reaches users before that;
 - earlier "Don't show again" choices are discarded: that option no longer
-  exists.
+  exists;
+- in the history, patch-note lines from before the upgrade show their dates
+  but cannot be opened: their content of the time was not kept.
 
 ## Validation
 
 As a platform admin, open **Administration → Announcements → Patch notes**,
-turn on two patch notes and reload as another user: no dialog opens, and the
-profile menu's **What's new** shows both. Use **Announce the update** and
-reload as that user: the dialog opens once, on the patch note at the top of
-the list.
+turn on two patch notes and reload as another user: no dialog opens, and
+**What's new** still shows the earlier patch note. Use **Announce the update**
+and reload as that user: the dialog opens once, on the first of the two. Edit
+one of them: users still read the announced text. In the history, the
+announcement is one line that opens the package as users saw it.
 
 ## Rollback
 
-Use the normal rollback procedure. Downgrading the revision keeps the topmost
-visible patch note enabled and disables the others, removes the announcement
-events from the activation history, and drops what users have seen; the
-earlier "Don't show again" choices are not restored.
+Use the normal rollback procedure. Downgrading `a6c1d94e27b3` rebuilds the
+activation events from the history lines and loses the announced packages and
+who ended an exposure. Downgrading `e5ff6d80cc9f` keeps the topmost enabled
+patch note enabled and disables the others, and drops what users have seen;
+the earlier "Don't show again" choices are not restored.
 
 ## Limitations
 
-Turning off or deleting the last visible patch note cancels the announcement
-for users who had not seen it yet; an administrator announces again once a
-patch note is visible.
+An announced package cannot be edited: correcting a typo means editing the
+patch note and announcing again, which shows the dialog to every user once
+more. **Withdraw the current announcement** leaves **What's new** empty until
+the next announcement.

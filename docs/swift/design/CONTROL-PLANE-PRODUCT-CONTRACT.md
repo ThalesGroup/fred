@@ -4359,73 +4359,82 @@ and must cover exactly the locales that have a body.
 dismissals, the unique index, its `409` and `dismissal_count` are gone. Toggle,
 content update and delete still read the row `FOR UPDATE`.
 
-**Activation history.** `platform_announcement_activation_event`, append-only,
-no foreign key so it outlives the announcement. One event per real `enabled`
-change: toggle on/off, creation enabled and deletion of an enabled
-announcement (`deactivated`). Each event carries `announcement_id`, `kind`,
-`label` (title per locale at event time), `severity` (the
-banner's severity at event time; `null` for a patch note, whose stored
-severity is a placeholder), `action` (`activated | deactivated`, plus the two
-of 61.1), `actor_uid` and `occurred_at`, written in the same
-transaction as the change.
+**Activation history.** Superseded by 61.1: one line per exposure
+(`platform_announcement_exposure`) instead of one event per change.
 
-| Method | Path                                                  | Permission            | Response                                   |
-| ------ | ----------------------------------------------------- | --------------------- | ------------------------------------------ |
-| GET    | `/admin/platform/announcements/activation-history`    | `can_manage_platform` | `AnnouncementActivationEvent[]`, 100 newest first |
+### 61.1 Patch-note packages, order and exposure history (2026-10-13)
 
-### 61.1 Patch-note history, order and announcing (2026-10-13)
+OpenSpec change `browse-patch-note-history`. Replaces "one active patch note,
+shown when enabled, dismissible for good" and the event history.
 
-OpenSpec change `browse-patch-note-history`. Three independent controls
-replace "one active patch note, shown when enabled, dismissible for good".
-
-**Visibility.** A patch note's `enabled` only decides whether users can read
-it; any number can be enabled, and enabling one changes no other. A patch note
-is created disabled by default. Its `content_version` keys nothing.
+**Working area.** The `patch_note` rows of `platform_announcement` are what
+administrators edit; users never read them. `enabled` means "included in the
+next announcement": any number can be enabled, a patch note is created
+disabled, and toggling writes no history. Its `content_version` keys nothing.
 
 **Order.** `Announcement.position` (`platform_announcement.position`, nullable
 integer): 1 at the top for a patch note, `null` for a banner. A new patch note
 takes position 1 and the others move down. `GET /admin/platform/announcements`
 returns `Announcement[]`: banners newest first, then patch notes by position.
 
-**Announcement.** Announcing appends an activation-history event with
-`action = "announced"`, `kind = "patch_note"`, and the id and title of the
-visible patch note at position 1. Nothing else opens the users' dialog on its
-own: not creating, editing, reordering or toggling. When a toggle-off or a
-delete leaves no visible patch note while an announcement is in effect, the
-same transaction appends an `unannounced` event (the hidden note's id and
-title, the acting admin) and the announcement is cancelled for everyone who
-had not seen it; only a new announcement brings the dialog back. The
-announcement *in effect* is the newest event among `announced` and
-`unannounced`, when it is `announced`.
+**Announcement = frozen package.** Announcing snapshots the enabled patch
+notes, in position order, as `PatchNoteSnapshot { id, title, description_long }`
+with every locale they hold. Users read that package, and only that, until the
+next announcement or a withdrawal; later edits, reorders, toggles and deletions
+do not reach it. Every announcement is a new package, pending again for every
+user. Withdrawing leaves no package in effect: the user read is empty and
+nothing is pending.
+
+**Exposures.** `platform_announcement_exposure` holds one row per exposure, no
+foreign key so it outlives the announcement: `id`, `kind`, `announcement_id`
+(the banner; for a package, its first patch note), `label` and `severity` as
+they were at the start, `actor_uid`, `activated_at`, `deactivated_at` (null
+while it lasts), and for a package `note_count` and `package`. A banner's row
+starts when it is enabled (toggle, or created enabled) and ends when it is
+disabled or deleted. A package's row starts at the announcement and ends when
+the next one replaces it or when it is withdrawn. The announcement *in effect*
+is the open `patch_note` row with a non-null `note_count`. Rows are written in
+the same transaction as the change.
 
 **Seen.** `platform_announcement_seen`, one row per user (`user_id`,
-`announcement_event_id`, `seen_at`), replaces
-`platform_announcement_dismissal`. An announcement is pending for a user when
-one is in effect and the user's row does not name it. A record never moves a
-user back to an older announcement. Rows are removed with the user
-(`DELETE /users/{id}`).
+`announcement_id`, `seen_at`), replaces `platform_announcement_dismissal`. An
+announcement is pending for a user when one is in effect and the user's row
+does not name it. A record never moves a user back to an older announcement.
+Rows are removed with the user (`DELETE /users/{id}`).
 
 | Method | Path                                                         | Permission            | Request / response |
 | ------ | ------------------------------------------------------------ | --------------------- | ------------------ |
-| GET    | `/announcements/patch-notes`                                 | authenticated         | `PatchNoteHistory { patch_notes: Announcement[], pending_announcement_id: str \| null }`: the visible patch notes in order; `pending_announcement_id` is null when nothing is visible |
-| PUT    | `/announcements/patch-note-announcements/{id}/seen`          | authenticated         | `204`, idempotent; `404` when the id is not an `announced` event. Identity from the token only |
+| GET    | `/announcements/patch-notes`                                 | authenticated         | `PatchNoteHistory { patch_notes: PatchNoteSnapshot[], pending_announcement_id: str \| null }`: the package in effect, empty when none |
+| PUT    | `/announcements/patch-note-announcements/{id}/seen`          | authenticated         | `204`, idempotent; `404` when the id is not an announced package. Identity from the token only |
 | PUT    | `/admin/platform/announcements/patch-notes/order`            | `can_manage_platform` | `PatchNoteOrderRequest { ids: str[] }` → `204`; `409`, changing nothing, unless the list names each patch note exactly once |
 | GET    | `/admin/platform/announcements/patch-notes/announcement`     | `can_manage_platform` | `PatchNoteAnnouncement { id, announced_at, announced_by } \| null`: the announcement in effect |
-| POST   | `/admin/platform/announcements/patch-notes/announcement`     | `can_manage_platform` | `201` `PatchNoteAnnouncement`; `409` when no patch note is visible |
+| POST   | `/admin/platform/announcements/patch-notes/announcement`     | `can_manage_platform` | `201` `PatchNoteAnnouncement`; `409` when no patch note is included |
+| DELETE | `/admin/platform/announcements/patch-notes/announcement`     | `can_manage_platform` | withdraw, `204`; `404` when none is in effect |
+| GET    | `/admin/platform/announcements/patch-notes/announcements/{id}` | `can_manage_platform` | `PatchNoteSnapshot[]`: the package of a history line; `404` for an unknown line or one without package |
+| GET    | `/admin/platform/announcements/activation-history`           | `can_manage_platform` | `AnnouncementExposure[]`, 100 newest first |
 
-`GET /announcements/patch-notes` is read once per application load (no
-polling). Audit records: `platform.announcement.patch_notes_reordered`,
-`platform.announcement.patch_notes_announced`.
+`AnnouncementExposure` is `{ id, kind, announcement_id, label, severity,
+note_count, activated_at, deactivated_at, actor_uid }`; there is no `action`.
+For a patch-note line `label` is the first note's title and `note_count` the
+size of the package; `note_count` is null for a banner and for a line that
+kept no package, which cannot be opened. `GET /announcements/patch-notes` is
+read once per application load (no polling). Audit records:
+`platform.announcement.patch_notes_reordered`, `.patch_notes_announced`,
+`.patch_notes_withdrawn`.
 
 **Removed.** `GET /announcements/patch-note` and `ActivePatchNote`;
 `PUT /announcements/{id}/dismissal`; `AdminAnnouncement` and its
 `dismissal_count`; the `409` on concurrent activation; `auto_disabled_ids` in
-the `.created` and `.toggled` audit records.
+the `.created` and `.toggled` audit records; `AnnouncementActivationEvent` and
+its `action`; `platform_announcement_activation_event`.
 
 **Upgrade.** Migration `e5ff6d80cc9f` drops the unique index and the dismissal
-table, and numbers existing patch notes newest first. The patch note enabled
-before stays the only visible one, and no announcement exists, so no user gets
-a dialog until an administrator announces.
+table and numbers existing patch notes newest first. Migration `a6c1d94e27b3`
+converts the events to exposure rows (each activation paired with the
+deactivation that followed; earlier patch-note activations become ended rows
+without package) and makes the enabled patch note the first package, with
+`opens_dialog = false`: readable from "What's new", pending for nobody. No
+user gets a dialog until an administrator announces.
 
 ## 62. Contract Notes — agent creation assistant (2026-10-08)
 
