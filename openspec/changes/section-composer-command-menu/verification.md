@@ -106,6 +106,66 @@ turns still display as `/name` (existing `UserTurn.test.tsx` cases). The full
 suite count is unchanged at 3968: expectations were updated, none removed
 except one partial-name selection assertion that no longer has a meaning.
 
+## Owner review of the commands feature
+
+Run from `apps/frontend` on 2026-10-13, after tasks 8.1 to 8.8.
+
+| Check | Result |
+| --- | --- |
+| `npx tsc --noEmit -p .` | exit 0 |
+| `npx eslint` on the 12 touched `.ts`/`.tsx` files | exit 0, no warning |
+| `npx prettier --check` on the 18 touched frontend files | all formatted |
+| `npx vitest run` (full suite) | 329 files passed, 1 skipped; 3982 tests passed, 7 skipped (3968 before) |
+| `openspec validate section-composer-command-menu --strict` | valid |
+| `scripts/migration_guides.py check-pr --base origin/swift --worktree` | valid, 1 new declaration |
+
+Proven by tests:
+
+- Enter (`useComposerCommands.test.tsx`): Enter on a prompt row gives
+  `/summary `, closes the menu and calls neither send path; the second Enter
+  sends the prompt's text with the full descriptor (`command`, `prompt_id`,
+  `prompt_name`, `draft_text`, `draft_command_offset`); picking with Enter and
+  with Tab in `Avant /su` produce two identical calls; Shift+Enter is left to
+  the composer; the personal homonym is sent from its own library when picked
+  with Tab, a click or Enter. Five existing cases that ran a prompt with one
+  Enter now press it twice.
+- Search (`useComposerCommands.test.tsx`): `/MAR` lists `/summary`, `see /Ear`
+  lists `/search`, `/cher` (the prompt's name and description) matches
+  nothing; with five prompts and two skills, `/sum` gives `/pre-sum`,
+  `/big-sum` then `/sum-up`, `/sum`, `/my-sum` then `/summarize`, `/resume`,
+  with the focus on `/pre-sum`.
+- Empty states (`CommandMenu.test.tsx`, `useComposerCommands.test.tsx`): each
+  of the three lines as a status; a catalog in flight shows the loading line
+  for `/` and for `/zzz`, never "no command" or "no match"; rows of a catalog
+  that answered are shown meanwhile; once everything answered empty, the "no
+  command" line.
+- Run errors (`useComposerCommands.test.tsx`): `stale` after a team, agent or
+  personal-space change, for a prompt gone from its catalog, for a recalled
+  prompt that no longer exists and for a 403 or 404 read; `unreadable` for a
+  thrown read and for a typed personal command while the team's catalog is
+  pending.
+- Token hint and preview (`InlineSkillInput.test.tsx`,
+  `ManagedChatPage.test.tsx`): the token is a `button` with the shared action
+  class and the "open the prompt" label; its hint's second line is the
+  personal-space key, the team key with a name, the fallback without one; a
+  click calls the preview and neither sends nor edits; one arrow press still
+  crosses it; without a preview handler it stays an inert group. On the page,
+  the click reads the prompt with its id and team, the panel shows the loading
+  line, then name, command and text in that order, then the error line when
+  the read fails, and a second click closes it with a single read made.
+- Prompts page (`PromptsPage.test.tsx`): the created and failed-save toasts
+  use their keys.
+
+Not proven: nothing was looked at in a browser. The wording of the new fr and
+en strings, the hover and focus look of the prompt token, the panel's layout
+and the loading line's timing are for the owner check (task 6.4). No test
+drives a real pointer on the CodeMirror token; the click is dispatched on the
+widget's element.
+
+Not done, reported to the owner: a hand-typed name shared by a prompt and a
+platform skill still resolves as before (see design.md), and a command typed
+in full in another case is not recognised.
+
 ## Divergence from the plan
 
 - The spec delta uses REMOVED plus ADDED instead of RENAMED plus MODIFIED, to

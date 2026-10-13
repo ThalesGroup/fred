@@ -5159,6 +5159,16 @@ known the team heading reads `Team`. Rows carry no source label: the heading,
 which also labels the section for assistive technology, says where they come
 from. Arrow keys walk every displayed row as one list, across sections.
 
+The typed text is matched against the command name only (not the prompt's
+name or description), anywhere inside it and whatever the case. Inside each
+section the names that start with the typed text come first, the others
+follow, each group in the order the server returned. Sections keep their
+order, so the flat list stays grouped by source. The focus always starts on
+the first row shown, even when a later section holds a name starting with the
+text: one rule, no jump between sections while typing. `Enter`, `Tab` and a
+click all do the same thing: they insert the focused command in the composer
+and send nothing.
+
 Entries preserve their owning team and id; choosing either
 homonymous prompt runs that exact prompt after completion. A typed prompt
 command without an explicit row prefers the chat team's match, then the personal
@@ -5168,7 +5178,7 @@ Explicit personal selections are usable while team discovery is pending.
 In the managed-chat composer, a completed recognized prompt command uses the same
 inline icon-and-name container as platform skills, in the same colours
 (`--secondary-container` / `--on-secondary-container`), its name shown with the leading slash. Its hover hint gives the full
-prompt title, personal/team source and description. The document retains
+prompt title, its source worded like the menu's section heading (`Personal space`, `Team "<name>"`) and its description. The token is a button that opens the prompt's preview (see below). The document retains
 `/command` for editing, copying and undo; the visual follows the exact prompt
 selected for submission, including homonyms. Incomplete, removed or invalidated
 prompt selections receive no prompt visual.
@@ -5215,8 +5225,12 @@ activation suppresses its own default, so clicking an entry is not a focus loss.
 `Esc` outlives a focus round trip — a menu dismissed stays dismissed for that
 query.
 
-With nothing to offer, the panel still appears and says why — a team holding no
-command at all reads differently from a query matching none of the ones it has.
+With nothing to offer, the panel still appears and says why, in one of three
+lines: the commands are loading (a catalog has not answered yet, so nothing is
+claimed about what exists), there is no command at all (true in a team and in
+the personal space: anyone can add one to a personal prompt, an editor to a
+team prompt), or the query matches none of the existing ones. Rows that have
+already arrived are shown while another catalog loads.
 The placeholder has just invited the user to type `/`, so a silent nothing would
 read as a broken hint. Such a panel is a `role="status"` line rather than an
 empty listbox (the swap `Menu` already makes) and claims no key but `Esc`: the
@@ -5226,7 +5240,7 @@ typed token still submits as ordinary text and `Tab` still moves focus.
 
 A completed `/<name>` stays at its invocation position within the editable text. The full name with its leading slash (`/name`, for prompts and platform skills alike, in the menu, the composer and sent messages) and its icon form a small clickable container: `--secondary-container` fill with `--on-secondary-container` icon and name, for a platform skill and for a prompt (team or personal) alike, so that every command has one colour and the two differ by their icon only; `--radius-xs`, `--spacing-2xs` horizontal padding and no vertical padding, so a line holding one is exactly as tall as a plain line. No border, removal cross or separate row. Chat uses a CodeMirror plain-text document with an inline replacement decoration; ordinary textarea consumers are unchanged. Wrapped lines and explicit newlines start at the normal text inset, and the label scrolls with its line. A token is one block (a CodeMirror atomic range): Left/Right and a selection cross it in one step, Backspace right after it or Delete right before it removes the whole `/name` together with the space that would otherwise be left doubled or leading, and undo brings it back. The command menu does not reopen on that deletion, and it stays closed whenever the caret sits right after a rendered token, prompt or skill, picked or typed by hand, even at the very end of the draft: the text under a token is no longer a command being typed. A new `/` further on opens it for that new command only. A programmatic edit that breaks the name still drops recognition while preserving surrounding text. A skill can be sent alone. Its advisory argument hint appears after a bare selected invocation without becoming document content. The placeholder is not part of the editable line: it is an `aria-hidden` element sharing the editor's grid cell, under it, with the same inset, font and line height, shown while the document is empty (`aria-placeholder` carries it for assistive technology). The empty line then holds only its line break, so the native caret is drawn at its normal height with nothing against it; a long placeholder still wraps and sizes the field.
 
-Skill suggestions use the command range at the caret, including before, after or within existing text. Completion replaces only that range and preserves its position. An exact catalog name followed by whitespace also imports on typing or paste. Neither action sends. Available prompt commands also complete inline without erasing surrounding text, before or after selected skills in every managed execution family. ReAct alone adds the caller's separate personal library to a team chat. A complete delimited skill name takes precedence, while choosing the prompt entry explicitly preserves prompt dispatch.
+Skill suggestions use the command range at the caret, including before, after or within existing text. Completion replaces only that range and preserves its position. An exact catalog name followed by whitespace also imports on typing or paste. Neither action sends. Available prompt commands also complete inline without erasing surrounding text, before or after selected skills in every managed execution family. A complete delimited skill name takes precedence, while choosing the prompt entry explicitly preserves prompt dispatch.
 
 Sent attributed user messages render the same inline token at its stored position. Full copy, native selection-copy and edit use `/name`. Older request-only and `/skill name` turns normalize to this canonical form for display/copy/edit without a backend schema change. Multiple skills can coexist with one available prompt in either selection order. Draft and history show the same prompt and skill containers. The user bubble is itself `--secondary-container`, the fill of every container, so sent containers add an inset 1px `--secondary` hairline (a shadow, not a border: no size change). Each occurrence remains independently editable; repeated names load once. A catalog refresh invalidating a completed selection fails submission rather than dropping it. Canonical prompt draft text and its selected occurrence preserve mixed history, copying and editing.
 Agent-selected skills appear in the reasoning trace rather than labeling the user
@@ -5278,9 +5292,16 @@ child loads, and toggles it closed on a second activation.
 
 ### Running a command, and the turn it leaves
 
-Resolution happens on submit, whatever the menu is doing, so `Tab` then `Enter`
-and `Enter` from the open menu reach the same send. A token no prompt holds is
-sent as typed — the user may genuinely have meant to write it.
+The menu never sends. `Enter` on a row inserts the command like `Tab` and a
+click; a second `Enter`, with the menu closed, sends the message. Resolution
+happens on that ordinary submit only, so every way of picking a row reaches the
+same send, with the same pinned prompt and the same turn descriptor. A token no
+prompt holds is sent as typed — the user may genuinely have meant to write it.
+
+When a command cannot run, the toast says which case it is. If its prompt was
+deleted or renamed, or the token was picked for another agent or team, it asks
+the user to remove the command and choose it again. "Try again in a moment" is
+kept for a read that failed or a catalog that has not answered yet.
 
 What goes on the wire is the **prompt's text**, never the command: the text does
 not pass through the composer and the user never sees it there. In ReAct, text
@@ -5292,7 +5313,7 @@ The turn itself renders as its command rather than as the assembled text
 (`UserMessage` + `CommandTurn`), which keeps a transcript of long prompts
 readable. Sent prompt tokens use the composer's prompt container and
 decorative `edit_note` icon, with the same compact inline presentation as skill
-badges; keyboard focus draws a `--primary` outline around the container. The panel a sent prompt opens (`CommandPromptPanel`) stacks its header: the prompt's name on top (`--on-surface`, label-large), its `/command` below (`--on-surface-retreat`, body-medium), then the text that was sent; no description is shown. Legacy appended text keeps the bubble's text colour. Hover and press tint
+badges; keyboard focus draws a `--primary` outline around the container. The panel a sent prompt opens (`CommandPromptPanel`) stacks its header: the prompt's name on top (`--on-surface`, label-large), its `/command` below (`--on-surface-retreat`, body-medium), then the text that was sent; no description is shown. The composer's prompt token opens the same panel before anything is sent: same header, then the prompt's current text read on opening, with a short line while it loads or when it cannot be read (deleted, or no longer accessible); activating the token again closes it. Legacy appended text keeps the bubble's text colour. Hover and press tint
 the badge with the secondary container state layers, like a tonal button (no underline), for prompt and skill badges alike and for the clickable composer token; keyboard focus is visible. The slash is display only: stored text, recognition, offsets, `data-skill-name` and accessible labels keep the bare name, and a selection-copy never adds a second slash. Selection-copy omits decorative glyph
 names and preserves the command and skill slashes.
 The command and the text typed after it are laid out as one inline

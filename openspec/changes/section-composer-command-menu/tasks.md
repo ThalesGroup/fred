@@ -40,10 +40,21 @@
 - [x] 7.10 Show the leading slash on every command name (menu rows, composer tokens, sent skill badge) without changing stored text, labels or copy; verify with `useComposerCommands.test.tsx`, `InlineSkillInput.test.tsx` and `UserTurn.test.tsx`
 - [x] 7.6 Update `COMPONENT-UX.md` (composer token, sent badges, caret) and this change's artifacts; verify `openspec validate section-composer-command-menu --strict`
 
+## 8. Owner review of the commands feature
+
+- [x] 8.1 Enter on a menu row completes like Tab and a click; delete the run-from-menu path so the ordinary submit is the only sender; verify with `useComposerCommands.test.tsx` (insert then send, same turn as Tab then Enter, Shift+Enter)
+- [x] 8.2 Match the typed text inside command names, whatever the case, names starting with it first in each section, focus on the first row; `commandQueryOf` opens mid-message on the same match; verify with `useComposerCommands.test.tsx`
+- [x] 8.3 Replace `teamHasCommands` by an `empty` reason (`loading`, `none`, `noMatch`) with the keys `loading` and `none`; verify with `CommandMenu.test.tsx` and `useComposerCommands.test.tsx`
+- [x] 8.4 Give `onResolveError` a reason and add `runErrorStale`; verify with `useComposerCommands.test.tsx` (scope change, prompt gone from its catalog, 403/404, failed read, pending catalog)
+- [x] 8.5 Build the token hint from the `sections.*` keys with the team name and delete `sources.*`; verify with `InlineSkillInput.test.tsx` and a grep for the removed keys
+- [x] 8.6 Move the three save toasts of `PromptsPage.tsx` to `rework.teams.prompts.toasts.*` and reword `form.commandConflict`; verify with `PromptsPage.test.tsx`
+- [x] 8.7 Make the composer's prompt token a button opening its prompt in `CommandPromptPanel` (name, command, current text, loading and error lines); verify with `InlineSkillInput.test.tsx` and `ManagedChatPage.test.tsx`
+- [x] 8.8 Update the Help Center pages (`commands.md`, `chat.md`, fr and en), `COMPONENT-UX.md` and this change's artifacts; verify `openspec validate section-composer-command-menu --strict`
+
 ## 6. Verification
 
 - [x] 6.1 From `apps/frontend`, run `npx tsc --noEmit -p .`; verify it exits 0
 - [x] 6.2 From `apps/frontend`, run `npx eslint` and `npx prettier --check` on the touched files; verify both exit 0
 - [x] 6.3 From `apps/frontend`, run `npx vitest run` on `useComposerCommands.test.tsx`, `CommandMenu.test.tsx`, `ManagedChatPage.test.tsx` and `InlineSkillInput.test.tsx`; verify all pass, then clean the vitest cache directories left in `/tmp`
-- [ ] 6.4 Owner check in the app, in Firefox and Chrome: caret in the empty composer and next to a skill's argument hint, tokens as one block (arrows, Backspace, Delete, shift-selection, click on each side, undo), token containers in the composer and in sent messages (three themes, light and dark), and team chat with a ReAct agent and with a Deep agent (three sections, team name in the header, long name truncated, filtering hides a section, arrows cross sections, both `/summary` rows, typed `/summary` runs the team's), personal-space chat (single personal section), fr and en, light and dark theme, and the inline token hover hint
+- [ ] 6.4 Owner check in the app, in Firefox and Chrome: caret in the empty composer and next to a skill's argument hint, tokens as one block (arrows, Backspace, Delete, shift-selection, click on each side, undo), token containers in the composer and in sent messages (three themes, light and dark), and team chat with a ReAct agent and with a Deep agent (three sections, team name in the header, long name truncated, filtering hides a section, arrows cross sections, both `/summary` rows, typed `/summary` runs the team's), personal-space chat (single personal section), fr and en, light and dark theme, and the inline token hover hint; then Enter on a prompt row and on a skill row (inserts, second Enter sends), search inside names and upper case, the loading and "no command" lines, both run-error toasts, and the prompt token preview (hover, click, keyboard, loading, a deleted prompt)
 - [ ] 6.5 Record the verification evidence in this change, then archive it once merged; verify `openspec validate --specs --strict` passes after the archive

@@ -65,7 +65,7 @@ The slash menu SHALL group its entries in up to three sections, always in this o
 
 #### Scenario: Empty and unmatched sections are hidden
 
-- **GIVEN** a team chat where only the personal library holds a command starting with `re`
+- **GIVEN** a team chat where only the personal library holds a command whose name contains `re`
 - **WHEN** the user types `/re`
 - **THEN** only the personal-space section and its heading are shown
 
@@ -100,6 +100,117 @@ The slash menu SHALL group its entries in up to three sections, always in this o
 - **THEN** each row shows its name above its description, the description on one line and cut with an ellipsis when too long
 - **AND** hovering a row gives its full description
 - **AND** the skill's argument hint is not shown in the menu
+
+### Requirement: Picking a menu row inserts the command and never sends
+
+In the slash menu, Enter, Tab and a pointer activation on a row SHALL all do the same thing, for a prompt command and for a platform skill alike: insert the row's command in the composer at the command being typed, keep the surrounding text, close the menu and send nothing. A turn SHALL only be sent by the ordinary submit, with the menu closed: Enter again, or the send button. That submit SHALL resolve a picked prompt command to the exact prompt of the picked row (its id and its owning library) and send the same expanded text and the same command attribution whichever way the row was picked. Shift+Enter SHALL keep its ordinary composer behaviour while the menu is open.
+
+#### Scenario: Enter on a prompt row inserts it
+
+- **GIVEN** the menu is open on `/su` with the prompt command `/summary` focused
+- **WHEN** the user presses Enter
+- **THEN** the composer reads `/summary ` with the command shown as a token, the menu is closed and no turn is sent
+
+#### Scenario: A second Enter sends
+
+- **GIVEN** a prompt command was inserted from the menu with Enter
+- **WHEN** the user presses Enter again
+- **THEN** the turn is sent with the prompt's text in place of the command and the command attribution of the picked prompt
+
+#### Scenario: Enter and Tab reach the same send
+
+- **GIVEN** the same draft and the same focused prompt row
+- **WHEN** the row is picked once with Enter and once with Tab, each followed by Enter
+- **THEN** both turns carry the same text and the same command attribution
+
+### Requirement: The slash menu searches inside command names
+
+The slash menu SHALL match the typed text against the command name only, never against a prompt's name or description. The match SHALL ignore case and SHALL accept the typed text anywhere inside the name. Inside each section, entries whose name starts with the typed text SHALL be listed before the others, and each of the two groups SHALL keep the order the catalog returned. Sections SHALL keep their order and their entries SHALL stay grouped, so keyboard navigation follows the displayed order. When the menu opens or the typed text changes, the focus SHALL be on the first row displayed, whichever section holds an entry starting with the typed text. A command typed in full by hand SHALL still be recognised only in its exact, lowercase spelling.
+
+#### Scenario: Match inside a name, whatever the case
+
+- **GIVEN** the commands `/search` and `/summary`
+- **WHEN** the user types `/MAR`
+- **THEN** the menu lists `/summary` only
+
+#### Scenario: The description is not searched
+
+- **GIVEN** a command `/search` whose description is "Chercher"
+- **WHEN** the user types `/cher`
+- **THEN** the menu says that no command matches
+
+#### Scenario: Names starting with the text come first in each section
+
+- **GIVEN** the team commands `/pre-sum` and `/big-sum`, and the personal commands `/my-sum`, `/sum-up` and `/sum`, in that catalog order
+- **WHEN** the user types `/sum`
+- **THEN** the team section lists `/pre-sum` then `/big-sum`, and the personal section lists `/sum-up`, `/sum`, then `/my-sum`
+- **AND** the focus is on `/pre-sum`, the first row displayed
+
+### Requirement: The empty slash menu says why it is empty
+
+When the slash menu has no row to show, it SHALL stay visible and show one status line. While a command catalog it reads has not answered yet, the line SHALL say that the commands are loading and SHALL NOT say that there is no command or no match. When every catalog has answered and none holds a command or a skill, the line SHALL say that there is no command yet and what the user can do, in words that hold in a team chat and in the personal space: add a command to one of their personal prompts, and, in a team, an editor can add one to a team prompt. When commands exist but none matches the typed text, the line SHALL say that no command matches. Rows from a catalog that has already answered SHALL be shown while another one is loading.
+
+#### Scenario: Catalogs still loading
+
+- **GIVEN** the team's command catalog has not answered yet and nothing else is available
+- **WHEN** the user types `/`
+- **THEN** the menu shows a loading line and does not claim that there is no command
+
+#### Scenario: Nothing exists
+
+- **GIVEN** every catalog has answered and there is no team command, no personal command and no skill
+- **WHEN** the user types `/`
+- **THEN** the menu says there is no command yet and how to add one, with the same text in a team chat and in the personal space
+
+#### Scenario: Nothing matches
+
+- **GIVEN** commands exist
+- **WHEN** the user types `/zzz`
+- **THEN** the menu says that no command matches
+
+### Requirement: A command that cannot run says why
+
+When a prompt command cannot be run on submit, the user SHALL be told which of two cases applies, and nothing SHALL be sent. When the picked prompt is no longer in its catalog (deleted, or its command renamed), when reading it is refused or it is not found, or when the token was picked for another agent, team or personal space, the message SHALL say that the command is no longer available and tell the user to remove it from the message and choose it again. When the read fails for another reason, or the catalog needed to resolve the command has not answered yet, the message SHALL tell the user to try again in a moment.
+
+#### Scenario: The prompt was deleted or renamed
+
+- **GIVEN** a prompt command picked from the menu whose prompt has since left its catalog
+- **WHEN** the user submits
+- **THEN** nothing is sent and the message asks to remove the command and choose it again
+
+#### Scenario: The token belongs to another agent or team
+
+- **GIVEN** a prompt command picked before the chat's team, agent or personal space changed
+- **WHEN** the user submits
+- **THEN** nothing is sent and the message asks to remove the command and choose it again
+
+#### Scenario: A read that failed
+
+- **GIVEN** a prompt command whose prompt exists but whose read fails with a network or server error
+- **WHEN** the user submits
+- **THEN** nothing is sent and the message asks to try again in a moment
+
+### Requirement: A prompt token in the composer opens a preview of its prompt
+
+A completed prompt command token in the composer SHALL be a control that opens a preview in the chat side panel, like a platform skill token: reachable and activated in the same way, with the same hover, press and keyboard-focus indication, and still behaving as one block of text. The panel SHALL show, from top to bottom, the prompt's name, its `/command`, then the prompt's current text, read when the panel opens from the library that owns the picked prompt; it SHALL NOT show a description. While the text is being read the panel SHALL say so, and when it cannot be read (not found, or access refused) it SHALL say so in a short message instead of showing another prompt's text. Activating the same token again SHALL close the panel. Opening or closing the preview SHALL NOT change the draft and SHALL NOT send anything. The token's hover hint SHALL name its source with the wording of the menu's section headings: the personal space, or the team with its name.
+
+#### Scenario: Preview before sending
+
+- **GIVEN** a draft holding the token of the team prompt "Résumé" with the command `/summary`
+- **WHEN** the user activates the token
+- **THEN** the side panel shows "Résumé", then `/summary`, then the prompt's current text
+- **AND** the draft is unchanged and nothing is sent
+
+#### Scenario: The prompt cannot be read
+
+- **GIVEN** a token whose prompt was deleted, or that the user may no longer read
+- **WHEN** the user activates the token
+- **THEN** the panel shows the name and the command with a short message saying the prompt cannot be shown
+
+#### Scenario: Hover hint uses the section wording
+
+- **WHEN** the user hovers a personal prompt token and a team prompt token in a team named "Finance"
+- **THEN** the hints read the personal-space heading and the "Finance" team heading, as in the menu
 
 ### Requirement: Invoked prompts and skills are shown as small containers
 

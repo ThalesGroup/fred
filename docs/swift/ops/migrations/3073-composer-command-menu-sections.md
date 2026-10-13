@@ -27,8 +27,10 @@ Deploy Fred normally; no additional operator or user action is required.
 In a team conversation, type `/` in the empty composer: the menu lists the
 team's commands under a heading carrying the team name, then the user's own
 commands under "Personal space", then the platform skills, whatever the agent.
-Pick a command and a skill: each shows as a small coloured container in the
-field and, once sent, in the message.
+Pick a command with Enter: it is added to the field as a small coloured
+container and nothing is sent; press Enter again to send. A skill behaves the
+same way, and both keep their container in the sent message. Click the
+command's container in the field: a side panel shows the prompt's text.
 
 ## Rollback
 
@@ -38,3 +40,5 @@ Use the normal rollback procedure; this change introduces no data migration.
 
 Users now see their personal-space commands with every agent, not only some of
 them; a command typed without picking a row still runs the team's one first.
+Enter on a command in the menu no longer sends the message at once: it adds
+the command, and a second Enter sends.

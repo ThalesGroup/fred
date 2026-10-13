@@ -29,10 +29,10 @@ See proposal.md for motivation. Current state, read from the code:
 
 **Non-Goals:**
 
-- Skill availability, the `/skill ` filter, the empty states (`noMatch`,
-  `noneInTeam`) and the typed-command precedence are untouched.
-- No change to the inline prompt token in the composer beyond what removing the
-  gate implies (see Risks).
+- Skill availability and the typed-command precedence are untouched. The
+  empty states, the filter and the inline prompt token were left alone at
+  first and changed after the owner's review of the feature (see "Owner review
+  of the commands feature").
 - No new CSS custom property, no API or generated client change.
 
 ## Decisions
@@ -84,8 +84,9 @@ See proposal.md for motivation. Current state, read from the code:
    `chatbot.skills.menuTitle` is `Skills` in both languages, which does not fit
    the agreed label, and the menu is its only reader: it is replaced rather
    than reworded so the three headers live in one family.
-   `chatbot.commandMenu.sources.personal` and `.team` stay for the inline token
-   hint in `InlineSkillInput.tsx`, which only ever reads those two.
+   `chatbot.commandMenu.sources.personal` and `.team` first stayed for the
+   inline token hint; they were removed later, when the hint took the section
+   wording (see "Owner review of the commands feature").
    `chatbot.commandMenu.ariaLabel` stays as the listbox label; it is no longer
    used as a header.
 
@@ -194,7 +195,89 @@ non-atomic so that editing one character dropped recognition; that path still
 exists for programmatic edits, it is just no longer reachable from the
 keyboard inside a token.
 
+### Owner review of the commands feature
+
+Decisions taken by the owner after an audit of the feature, and how each one
+is built.
+
+**Enter inserts, it never sends.** `Enter` in the open menu calls the same
+completion as `Tab` and a click. The direct "run from the menu" path is
+deleted: `run` now has one caller, the ordinary submit, which already resolved
+a picked prompt by its pinned id and owning team and builds the same
+`TurnCommand`. The scope and skill checks `run` repeated are removed, since
+submit makes them first. The only difference in what is sent is the trailing
+space completion adds to `draft_text`, as `Tab` then `Enter` always did.
+
+**Search inside names.** The filter was already on the command name only. It
+becomes a case-insensitive substring match, applied source by source (team,
+personal, platform) so the flat list stays grouped like the sections; inside a
+source, names starting with the text come first, then the others, each in
+catalog order. `commandQueryOf` opens the menu in the middle of a message when
+some name contains the text, where it required a name starting with it, and
+accepts upper case.
+
+**Initial focus: the first row shown.** Alternative: focus the first name that
+starts with the text, wherever its section is. Rejected: the focus would jump
+between sections from one keystroke to the next, and the row under it would
+no longer be the one at the top. "First row" needs no explanation.
+
+**Hand-typed recognition stays case-sensitive.** `/Resume` typed in full is
+not turned into `/resume`. Recognition is an exact comparison between the
+document text and the name in four places (the token regex, the selection
+tracking, recall, the sent bubble), and the typed text is what is stored in
+`draft_text` and sent to the agent with the skill names. Accepting another
+case would mean either rewriting what the user typed or teaching each of those
+places, and the runtime, to compare loosely. Not a small change, so it is left
+out; the menu covers the need, since `/Res` lists `/resume` and picking it
+inserts the exact name.
+
+**Empty states.** The menu takes one `empty` reason instead of
+`teamHasCommands`: `loading` while a catalog it reads is in flight without
+data, `none` when nothing exists, `noMatch` otherwise. Keys: `loading` and
+`none` added, `noneInTeam` removed (its text was only true in a team).
+
+**Run errors.** `onResolveError` carries a reason. `stale`: the pick's scope
+changed, the picked prompt is no longer in a catalog that has answered, or its
+read answers 403 or 404. `unreadable`: any other read failure, an empty prompt
+text, or a catalog that has not answered. Key `runErrorStale` added;
+`runErrorDetail` keeps the retry wording.
+
+**Token hint.** The composer token's hint builds its source line from the
+`sections.*` keys with the team's name, passed with the token.
+`sources.personal` and `sources.team` are deleted.
+
+**Prompt preview.** `PromptWidget` renders a button when it is given an
+`onOpen`, with the shared `.action` hover and focus styles; it stays an inert
+span otherwise (hosts that give no preview). The page keeps one stable
+`onOpen`, so the widget is not rebuilt on each keystroke. A new drawer kind
+carries the prompt's id, team, command and name; `CommandPromptPanel` gains an
+optional `status` for loading and error. The text comes from the page's own
+lazy prompt-detail query, triggered on opening and not served from cache, so
+the panel shows the prompt as it is now. Alternative: a second panel
+component. Rejected: same shell, same header, one more file.
+
+**Prompt and skill with the same name: not changed.** The request was to make
+a hand-typed name resolve in menu order (team prompt, personal prompt, then
+skill) whatever follows it. It is left as it was and reported to the owner,
+because it runs against a requirement this spec states twice ("typing/paste
+retains existing delimited-skill precedence", "complete delimited skill names
+take precedence for typing/paste") and is not a small change: a delimited
+skill name gets a skill selection as soon as it is typed, which the token
+rendering, undo, recall and submit all read, and that selection is created
+before the prompt catalogs are known to have answered.
+
 ## Risks / Trade-offs
+
+- [Searching inside names opens the menu on more text typed after a space and
+  a slash, for example a path fragment that happens to sit inside a command
+  name; Enter would then insert that command instead of sending] → same risk
+  as before with names starting with the text, slightly wider; `Esc` closes
+  the menu and nothing is ever sent by the menu any more.
+- [A user used to running a prompt with one Enter now needs two] → decided by
+  the owner, and said in the Help Center.
+- [A catalog whose read failed for good shows "no command" or the rows of the
+  other catalogs, not an error] → unchanged; only an in-flight read shows the
+  loading line.
 
 - [Removing the gate also removes the page's agent-templates request, whose
   only reader was the gate] → one request less per chat page; nothing else in
