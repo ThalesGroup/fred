@@ -405,20 +405,6 @@
   min-width: 0;
   max-width: 30rem;
 }
-/* Same tint as the selected rows it acts on. */
-.selectionBar {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-s);
-  border-radius: var(--radius-s);
-  background: var(--state-primary-selected);
-  padding: var(--spacing-2xs) var(--spacing-s);
-  color: var(--on-surface);
-}
-.selectionBar > span {
-  flex: 1;
-  min-width: 0;
-}
 .importRow {
   display: flex;
   flex-wrap: wrap;
@@ -429,9 +415,7 @@
   flex-shrink: 0;
   max-width: 100%;
 }
-.importRow > span,
-.importCompleted {
-  margin: 0;
+.importRow > span {
   color: var(--on-surface-retreat);
 }
 .reviewHeader {

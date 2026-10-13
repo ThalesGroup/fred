@@ -5,7 +5,6 @@ import { useTranslation } from "react-i18next";
 import { normalizeApiError } from "@core/errors/normalizeApiError";
 import Button from "@shared/atoms/Button/Button";
 import Chip from "@shared/atoms/Chip/Chip";
-import IconButton from "@shared/atoms/IconButton/IconButton";
 import { Spinner } from "@shared/atoms/Spinner/Spinner";
 import StatusBadge from "@shared/atoms/StatusBadge/StatusBadge";
 import Switch from "@shared/atoms/Switch/Switch";
@@ -20,18 +19,19 @@ import {
   usePlatformAccessT0Query,
   usePlatformAccessTeamsQuery,
   useSetPlatformFilteringMutation,
-  useGrantPlatformUserMutation,
   useGrantPlatformUsersMutation,
   useRevokePlatformUserMutation,
   useImportPlatformT0Mutation,
   useSetPlatformTeamMutation,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import PlatformAccessActivationDialog from "./PlatformAccessActivationDialog";
+import PlatformAccessAddUsersDialog from "./PlatformAccessAddUsersDialog";
 import PlatformAccessRuleEditor from "./PlatformAccessRuleEditor";
 import styles from "./PlatformAccessPage.module.css";
 
 const tabs = ["rules", "users"] as const;
 const whitelistTabs = ["users", "teams"] as const;
+const PAGE_SIZE = 25;
 
 export default function PlatformAccessPage() {
   const { t } = useTranslation();
@@ -42,12 +42,12 @@ export default function PlatformAccessPage() {
   const panelId = useId();
   const [offset, setOffset] = useState(0);
   const [query, setQuery] = useState("");
-  const [selected, setSelected] = useState<string[]>([]);
+  const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState(false);
   const [filterConfirmation, setFilterConfirmation] = useState<boolean>();
   const state = usePlatformAccessStateQuery(undefined, { skip: !enabled });
   const [searchQuery, setSearchQuery] = useState("");
-  // Typing narrows a server-paginated list of every known user: wait for a pause, then restart at page one.
+  // Typing narrows a server-paginated list: wait for a pause, then restart at page one.
   useEffect(() => {
     const next = query.trim();
     if (next === searchQuery) return;
@@ -58,14 +58,22 @@ export default function PlatformAccessPage() {
     return () => clearTimeout(timer);
   }, [query, searchQuery]);
   const usersShown = enabled && tabIndex === 1 && whitelistTabIndex === 0;
-  const users = usePlatformAccessUsersQuery({ offset, limit: 25, query: searchQuery }, { skip: !usersShown });
+  // The whitelist is the people holding an individual exception, never every known user.
+  const users = usePlatformAccessUsersQuery(
+    { offset, limit: PAGE_SIZE, query: searchQuery, exceptionsOnly: true },
+    { skip: !usersShown },
+  );
   // Rows of another page or search are never shown; the total keeps the pagination in place meanwhile.
   const userRows = users.isError ? undefined : users.currentData?.items;
   const userTotal = users.isError ? 0 : (users.currentData?.total ?? users.data?.total ?? 0);
+  // Removing the last row of a later page would leave an empty page with people still listed before it.
+  const pageEmptied = !users.isFetching && offset > 0 && users.currentData?.items.length === 0;
+  useEffect(() => {
+    if (pageEmptied) setOffset((current) => Math.max(0, current - PAGE_SIZE));
+  }, [pageEmptied]);
   const t0 = usePlatformAccessT0Query(undefined, { skip: !enabled });
   const teams = usePlatformAccessTeamsQuery(undefined, { skip: !enabled });
   const [filter] = useSetPlatformFilteringMutation();
-  const [grant] = useGrantPlatformUserMutation();
   const [grantUsers] = useGrantPlatformUsersMutation();
   const [revoke] = useRevokePlatformUserMutation();
   const [importT0] = useImportPlatformT0Mutation();
@@ -207,69 +215,47 @@ export default function PlatformAccessPage() {
                     onChange={setQuery}
                   />
                 </div>
-                {t0.data?.completed_at ? (
-                  <p className={styles.importCompleted} role="status">
-                    {t("rework.platformAccess.t0Done")}
-                  </p>
-                ) : (
-                  <div className={styles.importRow}>
-                    {t0.data && (
-                      <span>
-                        {t("rework.platformAccess.t0Preview", {
-                          count: t0.data.candidates,
-                          matching: t0.data.matching,
-                        })}
-                      </span>
-                    )}
-                    <Button
-                      color="primary"
-                      variant="outlined"
-                      size="small"
-                      title={t("rework.platformAccess.t0Hint")}
-                      disabled={locked || !t0.data || t0.isFetching || t0.isError}
-                      onClick={() => void run(() => importT0().unwrap())}
-                    >
-                      {t("rework.platformAccess.t0Import")}
-                    </Button>
-                  </div>
-                )}
-              </div>
-              {selected.length > 0 && (
-                <div className={styles.selectionBar}>
-                  <span>{t("rework.platformAccess.selectedCount", { count: selected.length })}</span>
+                <div className={styles.importRow}>
+                  {t0.data?.completed_at ? (
+                    <span role="status">{t("rework.platformAccess.t0Done")}</span>
+                  ) : (
+                    <>
+                      {t0.data && (
+                        <span>
+                          {t("rework.platformAccess.t0Preview", {
+                            count: t0.data.candidates,
+                            matching: t0.data.matching,
+                          })}
+                        </span>
+                      )}
+                      <Button
+                        color="primary"
+                        variant="outlined"
+                        size="small"
+                        title={t("rework.platformAccess.t0Hint")}
+                        disabled={locked || !t0.data || t0.isFetching || t0.isError}
+                        onClick={() => void run(() => importT0().unwrap())}
+                      >
+                        {t("rework.platformAccess.t0Import")}
+                      </Button>
+                    </>
+                  )}
                   <Button
                     color="primary"
-                    variant="outlined"
+                    variant="filled"
                     size="small"
+                    icon={{ category: "outlined", type: "add" }}
                     disabled={locked}
-                    onClick={() =>
-                      void run(async () => {
-                        await grantUsers({ grantPlatformAccessUsers: { user_ids: selected } }).unwrap();
-                        showSuccess({
-                          summary: t("rework.platformAccess.grantedSelected", { count: selected.length }),
-                        });
-                        setSelected([]);
-                      })
-                    }
+                    onClick={() => setAdding(true)}
                   >
-                    {t("rework.platformAccess.allowSelected")}
+                    {t("rework.platformAccess.addUsers")}
                   </Button>
-                  <IconButton
-                    color="on-surface-retreat"
-                    variant="icon"
-                    size="small"
-                    icon={{ category: "outlined", type: "close" }}
-                    title={t("rework.platformAccess.clearSelection")}
-                    aria-label={t("rework.platformAccess.clearSelection")}
-                    disabled={locked}
-                    onClick={() => setSelected([])}
-                  />
                 </div>
-              )}
+              </div>
               {users.isFetching && !userRows && <Spinner statusText={t("rework.platformAccess.loading")} />}
               {usersShown && !users.isFetching && !users.isError && userTotal === 0 && (
                 <p className={styles.hint}>
-                  {t(searchQuery ? "rework.platformAccess.noUsers" : "rework.platformAccess.noKnownUsers")}
+                  {t(searchQuery ? "rework.platformAccess.noUsers" : "rework.platformAccess.emptyWhitelist")}
                 </p>
               )}
               {userTotal > 0 && (
@@ -277,15 +263,9 @@ export default function PlatformAccessPage() {
                   size="small"
                   data={userRows ?? []}
                   rowKey={(user) => user.user_id}
-                  selectable
-                  selectedKeys={new Set(selected)}
-                  // Selection stays frozen while a change is being saved, as the row checkboxes were.
-                  onSelectionChange={(keys) => {
-                    if (!locked) setSelected([...keys].map(String));
-                  }}
                   serverPagination={{
                     offset,
-                    limit: 25,
+                    limit: PAGE_SIZE,
                     totalCount: userTotal,
                     onOffsetChange: setOffset,
                   }}
@@ -324,34 +304,26 @@ export default function PlatformAccessPage() {
                     {
                       label: t("rework.platformAccess.exception"),
                       size: "10rem",
-                      cellRenderer: (user) => {
-                        const hasIndividual = user.sources.some(
-                          (source) => source.kind === "manual" || source.kind === "t0",
-                        );
-                        return (
-                          <Button
-                            color={hasIndividual ? "error" : "primary"}
-                            variant="outlined"
-                            size="small"
-                            disabled={locked || users.isFetching}
-                            onClick={() =>
-                              void run(async () => {
-                                await (hasIndividual ? revoke : grant)({ userId: user.user_id }).unwrap();
-                                showSuccess({
-                                  summary: t(
-                                    hasIndividual
-                                      ? "rework.platformAccess.revokedUser"
-                                      : "rework.platformAccess.grantedUser",
-                                    { user: user.username || user.email || user.user_id },
-                                  ),
-                                });
-                              })
-                            }
-                          >
-                            {t(hasIndividual ? "rework.platformAccess.remove" : "rework.platformAccess.allow")}
-                          </Button>
-                        );
-                      },
+                      cellRenderer: (user) => (
+                        <Button
+                          color="error"
+                          variant="outlined"
+                          size="small"
+                          disabled={locked || users.isFetching}
+                          onClick={() =>
+                            void run(async () => {
+                              await revoke({ userId: user.user_id }).unwrap();
+                              showSuccess({
+                                summary: t("rework.platformAccess.revokedUser", {
+                                  user: user.username || user.email || user.user_id,
+                                }),
+                              });
+                            })
+                          }
+                        >
+                          {t("rework.platformAccess.remove")}
+                        </Button>
+                      ),
                     },
                   ]}
                 />
@@ -403,6 +375,18 @@ export default function PlatformAccessPage() {
               </div>
             </div>
           </div>
+          <PlatformAccessAddUsersDialog
+            open={adding}
+            busy={busy}
+            onClose={() => setAdding(false)}
+            onConfirm={(userIds) =>
+              void run(async () => {
+                await grantUsers({ grantPlatformAccessUsers: { user_ids: userIds } }).unwrap();
+                showSuccess({ summary: t("rework.platformAccess.grantedSelected", { count: userIds.length }) });
+                setAdding(false);
+              })
+            }
+          />
           {filterConfirmation !== undefined && state.data && (
             <PlatformAccessActivationDialog
               enabling={filterConfirmation}

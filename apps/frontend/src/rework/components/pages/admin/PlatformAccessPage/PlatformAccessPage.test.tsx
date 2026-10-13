@@ -14,6 +14,7 @@ const state = vi.hoisted(() => ({
     },
   ],
   searchUsers: vi.fn(),
+  picked: ["first", "second"] as string[],
   usersTotal: undefined as number | undefined,
   success: vi.fn(),
   revoke: vi.fn(() => ({ unwrap: async () => undefined })),
@@ -37,7 +38,6 @@ const state = vi.hoisted(() => ({
   configured: true,
   filter: vi.fn(() => ({ unwrap: async () => undefined })),
   bulk: vi.fn((_arg: { grantPlatformAccessUsers: { user_ids: string[] } }) => ({ unwrap: async () => undefined })),
-  grant: vi.fn(() => ({ unwrap: async () => undefined })),
   importT0: vi.fn(() => ({ unwrap: async () => undefined })),
   setTeam: vi.fn(() => ({ unwrap: async () => undefined })),
 }));
@@ -96,7 +96,6 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
   }),
   useSetPlatformFilteringMutation: () => [state.filter],
   useGrantPlatformUsersMutation: () => [state.bulk],
-  useGrantPlatformUserMutation: () => [state.grant],
   useRevokePlatformUserMutation: () => [state.revoke],
   useImportPlatformT0Mutation: () => [state.importT0],
   useSetPlatformTeamMutation: () => [state.setTeam],
@@ -115,11 +114,35 @@ vi.mock("./PlatformAccessRuleEditor", () => ({
     );
   },
 }));
+vi.mock("./PlatformAccessAddUsersDialog", () => ({
+  default: ({
+    open,
+    busy,
+    onClose,
+    onConfirm,
+  }: {
+    open: boolean;
+    busy: boolean;
+    onClose: () => void;
+    onConfirm: (ids: string[]) => void;
+  }) =>
+    open ? (
+      <div data-testid="add-users-dialog" data-busy={busy}>
+        <button type="button" onClick={() => onConfirm(state.picked)}>
+          Confirm selection
+        </button>
+        <button type="button" onClick={onClose}>
+          Close dialog
+        </button>
+      </div>
+    ) : null,
+}));
 import PlatformAccessPage from "./PlatformAccessPage";
 import styles from "./PlatformAccessPage.module.css";
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 let host: HTMLDivElement, root: Root;
 beforeEach(() => {
+  state.picked = ["first", "second"];
   state.users = [
     {
       user_id: "user",
@@ -186,17 +209,25 @@ const type = (value: string) => {
 };
 const pageButton = (key: string) =>
   [...host.querySelectorAll<HTMLButtonElement>("button")].find((node) => node.textContent === key)!;
+// The add button carries an icon, so its text is more than its label.
+const addUsersButton = () =>
+  [...host.querySelectorAll<HTMLButtonElement>("button")].find((node) =>
+    node.textContent?.includes("rework.platformAccess.addUsers"),
+  )!;
 const render = (query = "Al") => {
   act(() => root.render(<PlatformAccessPage />));
   openTab("users");
   search(query);
 };
 
-it("lists known users without a search and requests them only while the users sub-tab is shown", () => {
+it("lists individual exceptions without a search and requests them only while the users sub-tab is shown", () => {
   act(() => root.render(<PlatformAccessPage />));
   expect(state.searchUsers.mock.calls.every(([, options]) => options.skip)).toBe(true);
   openTab("users");
-  expect(state.searchUsers.mock.lastCall).toEqual([{ offset: 0, limit: 25, query: "" }, { skip: false }]);
+  expect(state.searchUsers.mock.lastCall).toEqual([
+    { offset: 0, limit: 25, query: "", exceptionsOnly: true },
+    { skip: false },
+  ]);
   expect(host.textContent).toContain("Alice");
   expect(host.textContent).not.toContain("Previous search");
   openWhitelistTab("teams");
@@ -211,63 +242,116 @@ it("waits for a pause in typing, trims the search and restarts at the first page
   state.usersTotal = 60;
   render("");
   act(() => host.querySelector<HTMLButtonElement>('button[aria-label="dataTable.pagination.next"]')!.click());
-  expect(state.searchUsers.mock.lastCall?.[0]).toEqual({ offset: 25, limit: 25, query: "" });
+  expect(state.searchUsers.mock.lastCall?.[0]).toEqual({ offset: 25, limit: 25, query: "", exceptionsOnly: true });
   type(" A");
   type(" Al ");
-  expect(state.searchUsers.mock.lastCall?.[0]).toEqual({ offset: 25, limit: 25, query: "" });
+  expect(state.searchUsers.mock.lastCall?.[0]).toEqual({ offset: 25, limit: 25, query: "", exceptionsOnly: true });
   act(() => vi.advanceTimersByTime(300));
-  expect(state.searchUsers.mock.lastCall?.[0]).toEqual({ offset: 0, limit: 25, query: "Al" });
+  expect(state.searchUsers.mock.lastCall?.[0]).toEqual({ offset: 0, limit: 25, query: "Al", exceptionsOnly: true });
   expect(state.searchUsers.mock.calls.some(([args]) => args.query === "A")).toBe(false);
   act(() => host.querySelector<HTMLButtonElement>('button[aria-label="dataTable.pagination.next"]')!.click());
   search("");
-  expect(state.searchUsers.mock.lastCall?.[0]).toEqual({ offset: 0, limit: 25, query: "" });
+  expect(state.searchUsers.mock.lastCall?.[0]).toEqual({ offset: 0, limit: 25, query: "", exceptionsOnly: true });
 });
 
-it("tells an empty platform apart from a search without match", () => {
+it("tells an empty whitelist apart from a search without match", () => {
   state.users = [];
   render("");
   const panel = host.querySelector<HTMLElement>('[id$="-whitelist-users-panel"]')!;
-  expect(panel.textContent).toContain("rework.platformAccess.noKnownUsers");
+  expect(panel.textContent).toContain("rework.platformAccess.emptyWhitelist");
+  expect(addUsersButton().disabled).toBe(false);
+  expect(panel.querySelector('input[type="text"]')).not.toBeNull();
   search("zz");
   expect(panel.textContent).toContain("rework.platformAccess.noUsers");
-  expect(panel.textContent).not.toContain("rework.platformAccess.noKnownUsers");
+  expect(panel.textContent).not.toContain("rework.platformAccess.emptyWhitelist");
 });
 
-it("confirms a bulk grant from the selection and clears it", async () => {
-  state.users = [
-    { user_id: "first", username: "Alice", email: "", sources: [] },
-    { user_id: "second", username: "Bob", email: "", sources: [] },
-  ];
+it("offers removal only, without row selection or a bulk bar", () => {
   render("");
-  await act(async () =>
-    host.querySelector<HTMLInputElement>('input[aria-label="dataTable.selection.selectAllOnPage"]')!.click(),
-  );
-  await act(async () => pageButton("rework.platformAccess.allowSelected").click());
-  expect(state.success).toHaveBeenCalledWith({ summary: "rework.platformAccess.grantedSelected" });
-  expect(host.querySelector(`.${styles.selectionBar}`)).toBeNull();
-  expect(host.querySelectorAll('input[aria-label="dataTable.selection.selectRow"]:checked')).toHaveLength(0);
+  const panel = host.querySelector<HTMLElement>('[id$="-whitelist-users-panel"]')!;
+  expect(panel.querySelector('input[type="checkbox"]')).toBeNull();
+  expect(pageButton("rework.platformAccess.remove")).toBeDefined();
+  expect(host.textContent).toContain("rework.platformAccess.source.free: Demo");
+  expect(host.textContent).not.toContain("alice@example.org");
 });
 
-it("confirms a single grant and a single removal, and stays silent on failure", async () => {
+it("confirms a removal and stays silent on failure", async () => {
   render("");
-  await act(async () => pageButton("rework.platformAccess.allow").click());
-  expect(state.grant).toHaveBeenCalledWith({ userId: "user" });
-  expect(state.success).toHaveBeenLastCalledWith({ summary: "rework.platformAccess.grantedUser" });
-  state.users = [
-    { user_id: "user", username: "Alice", email: "", sources: [{ kind: "manual", team_id: "", team_name: "" }] },
-  ];
-  act(() => root.render(<PlatformAccessPage />));
   await act(async () => pageButton("rework.platformAccess.remove").click());
   expect(state.revoke).toHaveBeenCalledWith({ userId: "user" });
   expect(state.success).toHaveBeenLastCalledWith({ summary: "rework.platformAccess.revokedUser" });
-  expect(state.success).toHaveBeenCalledTimes(2);
+  expect(state.success).toHaveBeenCalledTimes(1);
   state.revoke.mockImplementationOnce(() => ({
     unwrap: async () => {
       throw new Error("Unsuccessful removal");
     },
   }));
   await act(async () => pageButton("rework.platformAccess.remove").click());
-  expect(state.success).toHaveBeenCalledTimes(2);
+  expect(state.success).toHaveBeenCalledTimes(1);
+});
+
+it("steps back a page when a removal empties a later page", () => {
+  state.usersTotal = 26;
+  render("");
+  act(() => host.querySelector<HTMLButtonElement>('button[aria-label="dataTable.pagination.next"]')!.click());
+  expect(state.searchUsers.mock.lastCall?.[0]).toMatchObject({ offset: 25 });
+  state.users = [];
+  state.usersTotal = 25;
+  act(() => root.render(<PlatformAccessPage />));
+  expect(state.searchUsers.mock.lastCall?.[0]).toMatchObject({ offset: 0 });
+});
+
+const dialog = () => host.querySelector<HTMLElement>('[data-testid="add-users-dialog"]');
+
+it("opens the add dialog, grants its selection in one call, confirms and closes", async () => {
+  render("");
+  expect(dialog()).toBeNull();
+  act(() => addUsersButton().click());
+  expect(dialog()).not.toBeNull();
+  await act(async () => pageButton("Confirm selection").click());
+  expect(state.bulk).toHaveBeenCalledTimes(1);
+  expect(state.bulk).toHaveBeenCalledWith({ grantPlatformAccessUsers: { user_ids: ["first", "second"] } });
+  expect(state.success).toHaveBeenCalledWith({ summary: "rework.platformAccess.grantedSelected" });
+  expect(dialog()).toBeNull();
+});
+
+it("keeps the add dialog open and stays silent after a failed grant", async () => {
+  state.bulk.mockImplementationOnce(() => ({
+    unwrap: async () => {
+      throw new Error("Unsuccessful grant");
+    },
+  }));
+  render("");
+  act(() => addUsersButton().click());
+  await act(async () => pageButton("Confirm selection").click());
+  expect(dialog()).not.toBeNull();
+  expect(state.success).not.toHaveBeenCalled();
+  act(() => pageButton("Close dialog").click());
+  expect(dialog()).toBeNull();
+});
+
+it("marks the add dialog busy while the grant is being saved", async () => {
+  let finish!: () => void;
+  state.bulk.mockImplementationOnce(() => ({
+    unwrap: () =>
+      new Promise<undefined>((resolve) => {
+        finish = () => resolve(undefined);
+      }),
+  }));
+  render("");
+  act(() => addUsersButton().click());
+  await act(async () => pageButton("Confirm selection").click());
+  expect(dialog()?.dataset.busy).toBe("true");
+  await act(async () => finish());
+  expect(dialog()).toBeNull();
+});
+
+it("grants more than 100 selections without a product cap", async () => {
+  state.picked = Array.from({ length: 101 }, (_, index) => `user-${index}`);
+  render("");
+  act(() => addUsersButton().click());
+  await act(async () => pageButton("Confirm selection").click());
+  expect(state.bulk.mock.calls[0][0].grantPlatformAccessUsers.user_ids).toHaveLength(101);
 });
 
 it("keeps the pagination but no stale rows while another page or search loads", () => {
@@ -336,7 +420,8 @@ it("separates user and team whitelist controls with keyboard-accessible sub-tabs
   render();
   const userPanel = host.querySelector<HTMLElement>('[id$="-whitelist-users-panel"]')!;
   const teamPanel = host.querySelector<HTMLElement>('[id$="-whitelist-teams-panel"]')!;
-  expect(userPanel.querySelector('input[aria-label="dataTable.selection.selectRow"]')).not.toBeNull();
+  expect(userPanel.textContent).toContain("rework.platformAccess.remove");
+  expect(userPanel.textContent).toContain("rework.platformAccess.addUsers");
   expect(userPanel.textContent).toContain("rework.platformAccess.t0Import");
   expect(userPanel.hidden).toBe(false);
   expect(teamPanel.hidden).toBe(true);
@@ -366,37 +451,27 @@ it("whitelists a whole team while retaining its independent Free enrollment flag
     setPlatformAccessTeam: { allowed: true, free: true },
   });
   expect(state.bulk).not.toHaveBeenCalled();
-  expect(state.grant).not.toHaveBeenCalled();
 });
 
-it("preserves rule drafts and user selections across tabs without mutations", async () => {
+it("preserves the rule draft, the search and the page across tabs without mutations", async () => {
+  state.usersTotal = 60;
   act(() => root.render(<PlatformAccessPage />));
   act(() => [...host.querySelectorAll("button")].find((node) => node.textContent === "Edit draft")!.click());
   openTab("users");
   search("Al");
-  const selection = host.querySelector<HTMLInputElement>('input[aria-label="dataTable.selection.selectRow"]')!;
-  await act(async () => selection.click());
+  act(() => host.querySelector<HTMLButtonElement>('button[aria-label="dataTable.pagination.next"]')!.click());
   openTab("rules");
   expect(host.querySelector('[role="tabpanel"]:not([hidden])')?.textContent).toContain("Unsaved rule");
   openTab("users");
-  expect(selection.checked).toBe(true);
   openWhitelistTab("teams");
   openWhitelistTab("users");
-  expect(selection.checked).toBe(true);
+  expect(state.searchUsers.mock.lastCall).toEqual([
+    { offset: 25, limit: 25, query: "Al", exceptionsOnly: true },
+    { skip: false },
+  ]);
   expect(state.bulk).not.toHaveBeenCalled();
-  expect(state.grant).not.toHaveBeenCalled();
+  expect(state.revoke).not.toHaveBeenCalled();
   expect(state.importT0).not.toHaveBeenCalled();
-});
-it("shows Free team provenance and offers an independent individual grant", async () => {
-  render();
-  expect(host.textContent).toContain("rework.platformAccess.source.free: Demo");
-  expect(host.textContent).not.toContain("(demo)");
-  expect(host.textContent).not.toContain("alice@example.org");
-  const button = [...host.querySelectorAll("button")].find(
-    (node) => node.textContent === "rework.platformAccess.allow",
-  )!;
-  await act(async () => button.click());
-  expect(state.grant).toHaveBeenCalledWith({ userId: "user" });
 });
 it("reduces the completed import to a discreet status without an import action", () => {
   state.completed = true;
@@ -407,90 +482,6 @@ it("reduces the completed import to a discreet status without an import action",
     [...host.querySelectorAll("button")].some((node) => node.textContent === "rework.platformAccess.t0Import"),
   ).toBe(false);
   expect(state.importT0).not.toHaveBeenCalled();
-});
-
-it("grants selected users and clears selection only on success", async () => {
-  render();
-  const selection = host.querySelector<HTMLInputElement>('input[aria-label="dataTable.selection.selectRow"]')!;
-  await act(async () => selection.click());
-  const button = [...host.querySelectorAll("button")].find(
-    (node) => node.textContent === "rework.platformAccess.allowSelected",
-  )!;
-  expect(button.disabled).toBe(false);
-  await act(async () => button.click());
-  expect(state.bulk).toHaveBeenCalledWith({ grantPlatformAccessUsers: { user_ids: ["user"] } });
-  expect(selection.checked).toBe(false);
-});
-
-it("retains selection across changed search/page results", async () => {
-  render();
-  await act(async () =>
-    host.querySelector<HTMLInputElement>('input[type="checkbox"][aria-label="dataTable.selection.selectRow"]')!.click(),
-  );
-  state.users = [{ user_id: "second", username: "Bob", email: "bob@example.org", sources: [] }];
-  render();
-  await act(async () =>
-    host.querySelector<HTMLInputElement>('input[type="checkbox"][aria-label="dataTable.selection.selectRow"]')!.click(),
-  );
-  await act(async () =>
-    [...host.querySelectorAll("button")]
-      .find((node) => node.textContent === "rework.platformAccess.allowSelected")!
-      .click(),
-  );
-  expect(state.bulk).toHaveBeenCalledWith({ grantPlatformAccessUsers: { user_ids: ["user", "second"] } });
-});
-
-it("shows the selection bar only while users are selected and clears it on request", async () => {
-  render();
-  const bar = () => host.querySelector(`.${styles.selectionBar}`);
-  expect(bar()).toBeNull();
-  expect(host.textContent).not.toContain("rework.platformAccess.allowSelected");
-  const selection = host.querySelector<HTMLInputElement>('input[aria-label="dataTable.selection.selectRow"]')!;
-  await act(async () => selection.click());
-  expect(bar()?.textContent).toContain("rework.platformAccess.selectedCount");
-  await act(async () =>
-    bar()!.querySelector<HTMLButtonElement>('button[aria-label="rework.platformAccess.clearSelection"]')!.click(),
-  );
-  expect(bar()).toBeNull();
-  expect(selection.checked).toBe(false);
-  expect(state.bulk).not.toHaveBeenCalled();
-});
-
-it("selects every user of the page from the table header", async () => {
-  state.users = [
-    { user_id: "first", username: "Alice", email: "", sources: [] },
-    { user_id: "second", username: "Bob", email: "", sources: [] },
-  ];
-  render();
-  await act(async () =>
-    host.querySelector<HTMLInputElement>('input[aria-label="dataTable.selection.selectAllOnPage"]')!.click(),
-  );
-  await act(async () =>
-    [...host.querySelectorAll("button")]
-      .find((node) => node.textContent === "rework.platformAccess.allowSelected")!
-      .click(),
-  );
-  expect(state.bulk).toHaveBeenCalledWith({ grantPlatformAccessUsers: { user_ids: ["first", "second"] } });
-});
-
-it("keeps the selection unchanged while a grant is being saved", async () => {
-  let finish!: () => void;
-  state.grant.mockImplementationOnce(() => ({
-    unwrap: () =>
-      new Promise<undefined>((resolve) => {
-        finish = () => resolve(undefined);
-      }),
-  }));
-  render();
-  const selection = host.querySelector<HTMLInputElement>('input[aria-label="dataTable.selection.selectRow"]')!;
-  await act(async () =>
-    [...host.querySelectorAll("button")].find((node) => node.textContent === "rework.platformAccess.allow")!.click(),
-  );
-  await act(async () => selection.click());
-  expect(selection.checked).toBe(false);
-  await act(async () => finish());
-  await act(async () => selection.click());
-  expect(selection.checked).toBe(true);
 });
 
 it("says so when a search matches no user and shows progress while searching", () => {
@@ -506,43 +497,6 @@ it("says so when a search matches no user and shows progress while searching", (
   state.usersFetching = false;
   search("");
   expect(panel.textContent).not.toContain("rework.platformAccess.noUsers");
-});
-
-it("retains the selected users after a failed grant", async () => {
-  state.bulk.mockImplementationOnce(() => ({
-    unwrap: async () => {
-      throw new Error("Unsuccessful grant");
-    },
-  }));
-  render();
-  const selection = host.querySelector<HTMLInputElement>('input[aria-label="dataTable.selection.selectRow"]')!;
-  await act(async () => selection.click());
-  await act(async () =>
-    [...host.querySelectorAll("button")]
-      .find((node) => node.textContent === "rework.platformAccess.allowSelected")!
-      .click(),
-  );
-  expect(selection.checked).toBe(true);
-});
-
-it("grants more than 100 selections without a product cap", async () => {
-  state.users = Array.from({ length: 101 }, (_, index) => ({
-    user_id: `user-${index}`,
-    username: `User ${index}`,
-    email: "",
-    sources: [],
-  }));
-  render();
-  const choices = [...host.querySelectorAll<HTMLInputElement>('input[aria-label="dataTable.selection.selectRow"]')];
-  for (const choice of choices) await act(async () => choice.click());
-  expect(choices.filter((choice) => choice.checked)).toHaveLength(101);
-  expect(choices[100].disabled).toBe(false);
-  await act(async () =>
-    [...host.querySelectorAll("button")]
-      .find((node) => node.textContent === "rework.platformAccess.allowSelected")!
-      .click(),
-  );
-  expect(state.bulk.mock.calls[0][0].grantPlatformAccessUsers.user_ids).toHaveLength(101);
 });
 
 it("requires configuration and confirmation across all tabs before activating", async () => {
