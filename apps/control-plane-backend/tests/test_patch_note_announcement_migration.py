@@ -442,6 +442,10 @@ def test_exposure_downgrade_rebuilds_events_and_round_trips(with_events):
         ("legacy", "deactivated", None),
         ("legacy", "activated", "bob"),
     ]
+    # "mid" was still shown when the upgrade ended its line: no deactivation.
+    assert [e[1] for e in events if e[0] == "mid" and e[1].endswith("activated")] == [
+        "activated"
+    ]
     announcing = [tuple(e) for e in events if e[1] in ("announced", "unannounced")]
     # The upgrade's own package is not an announcement: it would open a dialog.
     assert announcing == [("mid", "announced", "carol"), ("mid", "unannounced", None)]

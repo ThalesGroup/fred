@@ -294,10 +294,18 @@ def downgrade() -> None:
     ).all()
     events: list[dict] = []
     last_announced = None
+    # The upgrade ended the open patch-note lines as it made its own package:
+    # that end is no deactivation, the older code still shows the note.
+    upgraded_at = next(
+        (x.activated_at for x in lines if x.note_count and not x.opens_dialog), None
+    )
     for line in lines:
         if line.note_count is None:
             events.append(_event(line, "activated", line.activated_at, line.id))
-            if line.deactivated_at is not None:
+            ended_by_upgrade = (
+                line.kind == "patch_note" and line.deactivated_at == upgraded_at
+            )
+            if line.deactivated_at is not None and not ended_by_upgrade:
                 events.append(
                     _event(line, "deactivated", line.deactivated_at, str(uuid.uuid4()))
                 )

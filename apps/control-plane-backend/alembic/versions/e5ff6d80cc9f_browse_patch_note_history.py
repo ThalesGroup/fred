@@ -14,8 +14,9 @@
 
 """Patch notes: any number visible, a manual order, a per-user seen marker.
 
-The enabled patch note stays the only visible one and no announcement exists
-after the upgrade, so no user gets a dialog. Earlier "Don't show again"
+The enabled patch note stays the only visible one. This revision records no
+announcement, so no user gets a dialog; the next one (a6c1d94e27b3) freezes the
+enabled patch notes as a first package, pending for nobody. Earlier "Don't show again"
 choices are discarded with their table. Downgrading keeps the top visible
 patch note enabled and drops the announcement events the older code cannot read.
 
