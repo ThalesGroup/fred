@@ -53,9 +53,8 @@ vi.mock("@core/hooks/usePromptFavoriteToggle.ts", () => ({ usePromptFavoriteTogg
 vi.mock("@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider", () => ({
   useConfirmationDialog: () => ({ showConfirmationDialog: () => {} }),
 }));
-vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
-  useToast: () => ({ showError: () => {}, showSuccess: () => {} }),
-}));
+const toast = vi.hoisted(() => ({ showError: vi.fn(), showSuccess: vi.fn() }));
+vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => toast }));
 
 const PROMPT_SUMMARY = {
   id: "prompt-1",
@@ -536,6 +535,28 @@ describe("PromptsPage command field", () => {
     });
     expect(createCalls).toHaveLength(1);
     expect((createCalls[0] as { createPromptRequest: { command: string } }).createPromptRequest.command).toBe("weekly");
+    expect(toast.showSuccess).toHaveBeenLastCalledWith({ summary: "rework.teams.prompts.toasts.created" });
+  });
+
+  it("reports a failed save with a translated toast", async () => {
+    createRejectsWith = { data: { detail: "boom" } };
+    openCreateForm();
+    typeInto(fieldByLabel("form.name")!, "Weekly");
+    const editor = document.querySelector('[role="dialog"] .cm-editor');
+    act(() => {
+      const view = EditorView.findFromDOM(editor as HTMLElement);
+      view?.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: "body" } });
+    });
+    const save = Array.from(document.querySelectorAll('[role="dialog"] button')).find(
+      (b) => b.textContent?.trim() === "rework.create",
+    );
+    await act(async () => {
+      save?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
+    expect(toast.showError).toHaveBeenLastCalledWith({
+      summary: "rework.teams.prompts.toasts.saveFailed",
+      detail: "boom",
+    });
   });
 
   it("marks the command field, not a toast, when the backend reports a command conflict", async () => {

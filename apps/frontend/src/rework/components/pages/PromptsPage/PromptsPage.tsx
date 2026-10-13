@@ -234,7 +234,7 @@ export default function PromptsPage() {
             text: form.text,
           },
         }).unwrap();
-        showSuccess({ summary: "Prompt updated" });
+        showSuccess({ summary: t("rework.teams.prompts.toasts.updated") });
       } else {
         await createPrompt({
           teamId,
@@ -247,7 +247,7 @@ export default function PromptsPage() {
             text: form.text,
           },
         }).unwrap();
-        showSuccess({ summary: "Prompt created" });
+        showSuccess({ summary: t("rework.teams.prompts.toasts.created") });
       }
       closeModal();
     } catch (error: unknown) {
@@ -264,7 +264,7 @@ export default function PromptsPage() {
         return;
       }
       showError({
-        summary: "Failed to save prompt",
+        summary: t("rework.teams.prompts.toasts.saveFailed"),
         detail: detailMessage(detail) || err?.message || String(error),
       });
     }

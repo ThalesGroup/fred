@@ -3016,7 +3016,7 @@
         "firstCreate": "Create prompt",
         "form": {
           "command": "Command",
-          "commandConflict": "This command label is already used by another team prompt",
+          "commandConflict": "This command is already used by another prompt",
           "commandHelp": "Launch shortcuts in the chat",
           "description": "Description",
           "name": "Name",
@@ -3028,6 +3028,11 @@
         "modalEdit": "Edit prompt",
         "noPrompt": "Create your first prompt to get started.",
         "searchPlaceholder": "Search prompts...",
+        "toasts": {
+          "created": "Prompt created",
+          "updated": "Prompt updated",
+          "saveFailed": "Failed to save prompt"
+        },
         "title": "Team prompts",
         "view": {
           "closeAria": "Close",

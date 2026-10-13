@@ -3016,7 +3016,7 @@
         "firstCreate": "Créer un prompt",
         "form": {
           "command": "Commande",
-          "commandConflict": "Label de commande déjà pris par un autre prompt d'équipe",
+          "commandConflict": "Cette commande est déjà utilisée par un autre prompt",
           "commandHelp": "Raccourcis de lancement dans le chat",
           "description": "Description",
           "name": "Nom",
@@ -3028,6 +3028,11 @@
         "modalEdit": "Modifier le prompt",
         "noPrompt": "Créez votre premier prompt pour commencer.",
         "searchPlaceholder": "Rechercher des prompts...",
+        "toasts": {
+          "created": "Prompt créé",
+          "updated": "Prompt modifié",
+          "saveFailed": "Échec de l'enregistrement du prompt"
+        },
         "title": "Prompts de l'équipe",
         "view": {
           "closeAria": "Fermer",
