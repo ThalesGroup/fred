@@ -154,23 +154,35 @@ describe("RichInputField command trigger", () => {
     expect(onSend).not.toHaveBeenCalled();
   });
 
-  // Running a command IS sending, so it obeys the same gate as the send button:
-  // an attachment still uploading or an over-limit draft must not let Enter
-  // through the menu into a send the field itself refuses.
-  it("withholds Enter from the menu while sending is blocked, but not the other keys", () => {
-    const onKeyDown = vi.fn(() => true);
+  // Enter on a row only inserts it, so the menu gets the key whatever the send
+  // state: an upload in progress or an over-limit draft must not turn the pick
+  // into a newline.
+  it("hands Enter to the menu while sending is blocked, and sends nothing", () => {
+    const onKeyDown = vi.fn((event: { preventDefault: () => void }) => {
+      event.preventDefault();
+      return true;
+    });
     const onSend = vi.fn();
     render(<Host trigger={binding({ open: true, onKeyDown })} onSend={onSend} sendDisabled />);
 
-    type("/summary");
-    pressEnter();
-    expect(onKeyDown).not.toHaveBeenCalled();
-    expect(onSend).not.toHaveBeenCalled();
-
+    type("/su");
+    let enter!: KeyboardEvent;
     act(() => {
-      textarea().dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }));
+      enter = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+      textarea().dispatchEvent(enter);
     });
     expect(onKeyDown).toHaveBeenCalledOnce();
+    expect(enter.defaultPrevented).toBe(true);
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it("still refuses to send on Enter while sending is blocked and the menu leaves the key", () => {
+    const onSend = vi.fn();
+    render(<Host trigger={binding({ onKeyDown: () => false })} onSend={onSend} sendDisabled />);
+
+    type("hello");
+    pressEnter();
+    expect(onSend).not.toHaveBeenCalled();
   });
 
   it("reports focus leaving and returning, so the menu can follow it", () => {

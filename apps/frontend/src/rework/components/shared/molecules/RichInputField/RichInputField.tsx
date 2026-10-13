@@ -309,12 +309,9 @@ export function RichInputField({
   const handleKeyDown = useCallback(
     (e: CommandKeyEvent) => {
       // The menu owns Enter, Tab, the arrows and Esc while it is open, and says
-      // so by returning true — it has already called preventDefault. Enter is
-      // withheld while sending is blocked: running a command IS sending, so it
-      // must obey the same gate as the send button, and the menu has no reason
-      // to know about uploads or an over-limit draft.
-      const sendBlocked = disabled || sendDisabled;
-      if (!(e.key === "Enter" && sendBlocked) && commandTrigger?.onKeyDown(e)) return;
+      // so by returning true: it has already called preventDefault. Enter on a
+      // row only inserts it, so the menu gets the key whatever the send state.
+      if (commandTrigger?.onKeyDown(e)) return;
       if (onRecallKeyDown?.(e)) return;
       if (e.key === "Enter" && !e.shiftKey && !disabled && !sendDisabled && !e.nativeEvent.isComposing) {
         e.preventDefault();
