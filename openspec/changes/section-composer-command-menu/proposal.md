@@ -30,10 +30,10 @@ Tracked in GitHub issue #3073.
   the first and last row instead of wrapping.
 - Menu rows are tighter: name above a one-line description cut with an
   ellipsis (full text on hover), no argument hint in the menu, section headings
-  on a filled band, prompt icons on a primary container tile.
+  on a filled band, prompt and skill icons on the same secondary container tile.
 - Inline tokens in the composer and badges in sent messages become small
-  containers: primary container for prompts (team or personal), secondary
-  container for platform skills, with the line height unchanged.
+  containers, one colour for all (the secondary container): prompts and
+  platform skills differ by their icon only, and the line height is unchanged.
 - In the empty composer the caret is always drawn in front of the placeholder.
 
 No **BREAKING** change. Frontend only: no API, data, configuration or migration

@@ -29,8 +29,8 @@
 
 ## 7. Menu rows, token containers and caret
 
-- [x] 7.1 Menu rows: no argument hint and no gap, one-line description with the full text in `title`, heading band, prompt tiles in the primary container, arrow keys clamped at both ends; verify with `useComposerCommands.test.tsx`
-- [x] 7.2 In `SkillBadge.module.css`, make `.badge` a container (secondary pair, `--radius-xs`, horizontal `--spacing-2xs` padding) with `data-kind="prompt"` (primary pair) and `data-surface="bubble"` (inset `--outline-variant` hairline) variants; verify no new custom property (diff review) and a 24px line with and without a token in a rendered sample
+- [x] 7.1 Menu rows: no argument hint and no gap, one-line description with the full text in `title`, heading band, prompt and skill tiles in the same secondary container, arrow keys clamped at both ends; verify with `useComposerCommands.test.tsx`
+- [x] 7.2 In `SkillBadge.module.css`, make `.badge` a container (secondary pair, `--radius-xs`, horizontal `--spacing-2xs` padding) for prompts and skills alike, with a `data-surface="bubble"` variant (inset `--outline-variant` hairline); verify no new custom property (diff review) and a 24px line with and without a token in a rendered sample
 - [x] 7.3 Set `data-kind` on `SkillWidget` and `PromptWidget` in `InlineSkillInput.tsx` and delete `.promptToken`; verify with `InlineSkillInput.test.tsx`
 - [x] 7.4 Set `data-kind` and `data-surface` in `SkillBadge.tsx` and make `CommandTurn` reuse the shared container; verify with `UserTurn.test.tsx`
 - [x] 7.5 In `InlineSkillInput.module.css`, paint the placeholder and the argument hint one layer below the editor content; verify in a rendered sample that the caret is in front and nothing moves

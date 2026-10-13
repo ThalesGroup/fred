@@ -121,24 +121,26 @@ Rows lost their inner gap and the skill argument hint; the description is one
 line with an ellipsis and the row's `title` gives it in full (it replaced the
 "provided by the platform" hint, which the section heading now says). Headings
 sit on a `--surface-container-high` band with `--radius-xs` in
-`--on-surface-retreat`; prompt tiles use `--primary-container`. The arrow keys
+`--on-surface-retreat`; prompt and skill tiles share `--secondary-container`. The arrow keys
 clamp at both ends instead of wrapping.
 
 ### Token containers
 
 One stylesheet, `SkillBadge.module.css`, already dressed the composer widgets
 and the sent skill badge. `.badge` becomes the container (secondary pair,
-`--radius-xs`, horizontal `--spacing-2xs` padding only) and two data attributes
-set by the components pick the variant: `data-kind="prompt"` switches to the
-primary pair, `data-surface="bubble"` adds an inset `--outline-variant`
-hairline. No custom property is added. `CommandTurn` (the sent prompt) drops
+`--radius-xs`, horizontal `--spacing-2xs` padding only) for prompts and skills
+alike: the owner settled on one colour for every command, so the two differ by
+their icon only. The components still set `data-kind` (`prompt` / `skill`),
+which the tests select on and which carries no style, and
+`data-surface="bubble"` adds an inset `--outline-variant` hairline. No custom
+property is added. `CommandTurn` (the sent prompt) drops
 its own `--info` slug styles and reuses `.badge`. The composer-only
 `.promptToken` class is deleted.
 
-The hairline exists because the user bubble is `--secondary-container`: a
-skill container would be invisible on it, and in Pebble light
-`--primary-container` has the same value, so the prompt one would be too. It is
-a `box-shadow`, so the container's box and the line height do not change.
+The hairline exists because the user bubble is `--secondary-container`, the
+fill of every container, which would be invisible on it. The owner confirmed
+it. It is a `box-shadow`, so the container's box and the line height do not
+change.
 Alternative: a different fill inside the bubble. Rejected: it would break
 "same colours in the composer and in the message".
 

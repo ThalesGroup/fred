@@ -34,8 +34,9 @@ Seen in a rendered sample (the stylesheet's own rules on a static page,
 headless Chrome, values of Pebble light, Pebble dark and Cloud light): a line
 with a prompt and a skill container measures 24px, like a plain line, in the
 composer and in the bubble; the hairline separates both containers from the
-bubble. In Pebble light `--primary-container` and `--secondary-container` have
-the same value, so prompt and skill containers differ there by icon only.
+bubble. That sample predates the owner's decision to use one colour, the
+secondary container, for prompts and skills: they now differ by icon only in
+every theme, and the hairline in the bubble is a confirmed decision.
 
 Caret, first attempt (paint order only): pixel-identical in headless Chrome,
 where the caret was already in front; the owner then reported no change in

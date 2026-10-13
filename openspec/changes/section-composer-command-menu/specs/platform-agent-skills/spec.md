@@ -103,13 +103,13 @@ The slash menu SHALL group its entries in up to three sections, always in this o
 
 ### Requirement: Invoked prompts and skills are shown as small containers
 
-A completed prompt command or platform skill SHALL be shown as a small filled container holding its icon and name, in the composer and in sent or reopened user messages. A prompt container SHALL use the primary container colour pair whether the prompt comes from the team or from the personal space; a platform skill container SHALL use the secondary container colour pair; icon and name SHALL take the container's content colour. The container SHALL have a small corner radius and light horizontal padding and SHALL NOT change the height of the line it sits on. Where the surrounding surface has the same colour as the container, as in the user's sent message, the container SHALL remain distinguishable from that surface. Clickable containers SHALL keep their hover and keyboard-focus indication.
+A completed prompt command or platform skill SHALL be shown as a small filled container holding its icon and name, in the composer and in sent or reopened user messages. Every container SHALL use the same colour pair, the secondary container one, for a platform skill and for a prompt whether it comes from the team or from the personal space, so that a prompt and a skill differ by their icon only; icon and name SHALL take the container's content colour. The container SHALL have a small corner radius and light horizontal padding and SHALL NOT change the height of the line it sits on. In the user's sent message, whose bubble has the same colour as the container, the container SHALL carry a thin outline that keeps it distinguishable without changing its size. Clickable containers SHALL keep their hover and keyboard-focus indication.
 
 #### Scenario: Tokens in the composer
 
 - **GIVEN** a draft holding a completed prompt command and a completed platform skill among ordinary text
 - **WHEN** the composer shows the draft
-- **THEN** the prompt appears in a primary container and the skill in a secondary container, each with its icon and name
+- **THEN** the prompt and the skill each appear in a container of the same colour, with their own icon and their name
 - **AND** the line is exactly as tall as a line of plain text
 
 #### Scenario: Badges in a sent message
@@ -122,7 +122,7 @@ A completed prompt command or platform skill SHALL be shown as a small filled co
 #### Scenario: Team and personal prompts look the same
 
 - **WHEN** a team prompt and a personal prompt are each completed in the composer
-- **THEN** both use the same prompt container
+- **THEN** both use the same container, with the prompt icon
 
 ### Requirement: The composer caret stays visible in the empty field
 
