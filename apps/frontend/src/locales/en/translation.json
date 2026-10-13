@@ -3696,7 +3696,11 @@
           "admin": "your platform administrator role",
           "manual": "your individual access",
           "team": "the authorized team {{team}}",
-          "free": "link access of the team {{team}}"
+          "teamUnnamed_one": "an authorized team",
+          "teamUnnamed_other": "{{count}} authorized teams",
+          "free": "link access of the team {{team}}",
+          "freeUnnamed_one": "link access of a team",
+          "freeUnnamed_other": "link access of {{count}} teams"
         }
       },
       "picker": {

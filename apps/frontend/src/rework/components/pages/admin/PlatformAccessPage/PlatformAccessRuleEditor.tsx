@@ -78,6 +78,9 @@ export default function PlatformAccessRuleEditor({
   const blocking = draft.mode === "block";
   const ruleAccepts = !!result && !ruleUnchecked && (blocking ? !result.matched : result.matched);
   const ownSources = ownAccess.currentData?.items.find((user) => user.user_id === KeyCloakService.GetUserId())?.sources;
+  // A team without a name is counted, never shown by its identifier.
+  const unnamedTeams = (kind: "team" | "free") =>
+    (ownSources ?? []).filter((source) => source.kind === kind && !source.team_name).length;
   const accessSources = [
     ...new Set([
       ...(ruleAccepts ? [t("rework.platformAccess.rule.accessSource.rule")] : []),
@@ -85,7 +88,9 @@ export default function PlatformAccessRuleEditor({
         .filter((source) => source.kind !== "attribute")
         .map((source) =>
           source.kind === "team" || source.kind === "free"
-            ? t(`rework.platformAccess.rule.accessSource.${source.kind}`, { team: source.team_name || source.team_id })
+            ? source.team_name
+              ? t(`rework.platformAccess.rule.accessSource.${source.kind}`, { team: source.team_name })
+              : t(`rework.platformAccess.rule.accessSource.${source.kind}Unnamed`, { count: unnamedTeams(source.kind) })
             : t(`rework.platformAccess.rule.accessSource.${source.kind === "admin" ? "admin" : "manual"}`),
         ),
     ]),
@@ -162,6 +167,8 @@ export default function PlatformAccessRuleEditor({
           ? "actorLockout"
           : "invalidOrFailed";
     setConflict(key === "conflict");
+    // An error replaces the saved state: the two are never shown together.
+    setSaved(false);
     setFeedback(t(`rework.platformAccess.rule.${key}`));
   };
   const test = async () => {
@@ -191,7 +198,6 @@ export default function PlatformAccessRuleEditor({
       setConditionErrors({});
       setResult(undefined);
       setSaved(true);
-      setFeedback(t("rework.platformAccess.rule.saved"));
     } catch (error) {
       reportError(error);
     } finally {
@@ -234,7 +240,7 @@ export default function PlatformAccessRuleEditor({
         onChange={(mode) => edit({ ...draft, mode: mode === "block" ? "block" : "allow" })}
       />
       <div className={styles.conditionsHeader}>
-        <h3>{t("rework.platformAccess.rule.conditions")}</h3>
+        <h2>{t("rework.platformAccess.rule.conditions")}</h2>
         {draft.conditions.length > 1 && (
           <ButtonGroup
             size="small"
@@ -396,7 +402,7 @@ export default function PlatformAccessRuleEditor({
           </Button>
         </div>
       </div>
-      {feedback && !saved && <p role="status">{feedback}</p>}
+      {feedback && <p role="status">{feedback}</p>}
       {result && (
         <div className={styles.testResults} role="status">
           <p className={styles.banner} data-outcome={ruleAccepts ? "success" : "error"}>

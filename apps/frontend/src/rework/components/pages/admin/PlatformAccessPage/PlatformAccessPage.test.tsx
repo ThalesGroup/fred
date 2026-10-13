@@ -207,7 +207,7 @@ it("states next to the title whether filtering is on", () => {
 
 it("names each whitelist panel through its tab only", () => {
   render();
-  expect(host.querySelectorAll("h2")).toHaveLength(0);
+  expect(host.querySelector('[id$="-users-panel"]')?.querySelectorAll("h2, h3")).toHaveLength(0);
   expect(host.querySelector('[id$="-users-panel"]')?.textContent).toContain("rework.platformAccess.whitelistHint");
 });
 

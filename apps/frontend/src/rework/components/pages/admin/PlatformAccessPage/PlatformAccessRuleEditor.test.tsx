@@ -298,10 +298,37 @@ it("groups test, discard and save in one row with the save state beside the butt
   expect(host.textContent?.split("rework.platformAccess.rule.saved")).toHaveLength(2);
 });
 
+it("shows a failed test after a save instead of the saved state", async () => {
+  render();
+  change(input("value"), "draft");
+  await act(async () => button("save").click());
+  const status = button("save").closest(`.${styles.ruleActions}`)!.querySelector('[role="status"]')!;
+  expect(status.textContent).toBe("rework.platformAccess.rule.saved");
+  hooks.preview.mockReturnValue({
+    unwrap: async () => {
+      throw { status: 500, data: { detail: "unexpected" } };
+    },
+  });
+  await act(async () => button("test").click());
+  expect(host.textContent).toContain("rework.platformAccess.rule.invalidOrFailed");
+  expect(host.textContent).not.toContain("rework.platformAccess.rule.saved");
+  expect(status.textContent).toBe("");
+});
+
+it("keeps the saved state after a successful test", async () => {
+  render();
+  change(input("value"), "draft");
+  await act(async () => button("save").click());
+  await act(async () => button("test").click());
+  expect(host.textContent?.split("rework.platformAccess.rule.saved")).toHaveLength(2);
+  expect(banners()).toHaveLength(2);
+});
+
 it("keeps the add button in the conditions header, before the list", () => {
   render();
   const header = host.querySelector(`.${styles.conditionsHeader}`)!;
-  expect(header.textContent).toContain("rework.platformAccess.rule.conditions");
+  expect(header.querySelector("h2")?.textContent).toBe("rework.platformAccess.rule.conditions");
+  expect(host.querySelector("h3")).toBeNull();
   expect(header.contains(button("addCondition"))).toBe(true);
   expect(
     header.compareDocumentPosition(host.querySelector("fieldset")!) & Node.DOCUMENT_POSITION_FOLLOWING,
@@ -671,4 +698,19 @@ it("does not name the saved rule as a source when the tested rule refuses the ac
   expect((await runTest({ matched: false, admitted: true }))[1][1]).toBe(
     "rework.platformAccess.rule.accessKeptBy rework.platformAccess.rule.accessSource.team Demos",
   );
+});
+
+it("never shows a team identifier when a team has no name", async () => {
+  hooks.ownSources = [
+    { kind: "team", team_id: "team-uid-1", team_name: null },
+    { kind: "team", team_id: "team-uid-2" },
+    { kind: "free", team_id: "team-uid-3", team_name: "" },
+    { kind: "team", team_id: "t4", team_name: "Demos" },
+  ];
+  const access = (await runTest({ matched: false, admitted: true }))[1][1];
+  expect(access).toBe(
+    "rework.platformAccess.rule.accessKeptBy rework.platformAccess.rule.accessSource.teamUnnamed 2, " +
+      "rework.platformAccess.rule.accessSource.freeUnnamed 1, rework.platformAccess.rule.accessSource.team Demos",
+  );
+  expect(access).not.toContain("uid");
 });

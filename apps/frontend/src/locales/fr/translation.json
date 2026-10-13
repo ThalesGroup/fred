@@ -3696,7 +3696,11 @@
           "admin": "votre rôle d'administrateur de la plateforme",
           "manual": "votre accès individuel",
           "team": "l'équipe autorisée {{team}}",
-          "free": "l'accès par lien de l'équipe {{team}}"
+          "teamUnnamed_one": "une équipe autorisée",
+          "teamUnnamed_other": "{{count}} équipes autorisées",
+          "free": "l'accès par lien de l'équipe {{team}}",
+          "freeUnnamed_one": "l'accès par lien d'une équipe",
+          "freeUnnamed_other": "l'accès par lien de {{count}} équipes"
         }
       },
       "picker": {
