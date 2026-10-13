@@ -131,8 +131,7 @@ Deleted: `GET /announcements/patch-note`, `ActivePatchNote`,
 (the admin list returns `Announcement[]`, which gains `position`).
 `AnnouncementActivationAction` gains `announced` and `unannounced`. The
 history read stays once per application load, so "next sign-in" is in practice
-"next load". `pending_announcement_id` is null when no patch note is visible,
-which decision 4b guarantees rather than a second check.
+"next load". `pending_announcement_id` is null when no patch note is visible.
 
 **6. Dialog navigation in `footerStart`.** `PatchNoteDialog` takes the ordered
 list of notes instead of one title and body, keeps the current position in
@@ -198,10 +197,12 @@ One linear Alembic migration:
 
 No `announced` event is created, so nothing is pending and no user gets a
 dialog after the upgrade. The patch note enabled before the upgrade stays the
-only visible one. No operator action, configuration or chart value: patch
-increment. Downgrade recreates the dismissal table empty, keeps the top
-enabled patch note and disables the others before recreating the index, drops
-the position column and the per-user table.
+only visible one. No operator action, configuration or chart value; the
+migration note still declares `impact: minor`, which the migration-note check
+requires of any new Alembic revision. Downgrade recreates the dismissal table
+empty, keeps the top enabled patch note and disables the others before
+recreating the index, drops the position column and the per-user table, and
+deletes the `announced` and `unannounced` events the older code cannot read.
 
 ## Owner Decisions
 
@@ -229,6 +230,19 @@ Closed by the owner; written into the specs and tasks.
   modified: the dialog at load, the admin list, the activation history and
   the authorization. In the editor safeguards the scenario keeps its former
   name, "Save and activate". No behaviour changed.
+- Migration note impact is `minor`, not the "patch increment" first planned:
+  `make migration-check` refuses `none` for a new Alembic revision.
+- The contract entry is subsection 61.1, not a new numbered section, to stay
+  out of the section-number collisions between open pull requests.
+- The seen route is declared as `{announcement_event_id}` and the reorder
+  route answers `204`; the per-user table is `platform_announcement_seen`.
+- `GET /announcements/patch-notes` also checks that a patch note is visible
+  before reporting a pending announcement: two administrators hiding the last
+  two notes at the same moment can each miss the cancellation of decision 4b.
+- The migration also updates the comment of the events table's `action`
+  column, so that table is touched after all (comment only).
+- New routes are listed in `docs/swift/platform/authz-endpoint-matrix.yaml`,
+  which a backend test requires; the plan did not name that file.
 
 ## Open Questions
 

@@ -73,5 +73,6 @@ None.
   library and no reorderable list component today; see design.md.
 - **Docs**: Help Center fr+en (`features/administration.md`,
   `getting-started/first-steps.md`), `COMPONENT-UX.md`, a migration note under
-  `docs/swift/ops/migrations/` (no operator action: patch increment).
+  `docs/swift/ops/migrations/` (no operator action; `impact: minor` because
+  of the Alembic revision).
 - Not on a hot path: one read per application load, as today.
