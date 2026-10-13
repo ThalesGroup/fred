@@ -2734,7 +2734,7 @@
         "isDefault": "Default",
         "setDefault": "Set as default",
         "defaultUnavailable": "The team's default model is no longer available to this team. Set another model as default.",
-        "saveSuccess": "Model routing saved.",
+        "saveSuccess": "Team models saved.",
         "saveError": "Could not save the team's models.",
         "disableDialog": {
           "title": "Disable {{model}}?",

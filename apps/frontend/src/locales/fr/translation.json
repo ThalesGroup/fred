@@ -2734,7 +2734,7 @@
         "isDefault": "Par défaut",
         "setDefault": "Définir par défaut",
         "defaultUnavailable": "Le modèle par défaut de l'équipe n'est plus disponible pour cette équipe. Définissez un autre modèle par défaut.",
-        "saveSuccess": "Routage des modèles enregistré.",
+        "saveSuccess": "Modèles de l'équipe enregistrés.",
         "saveError": "Impossible d'enregistrer les modèles de l'équipe.",
         "disableDialog": {
           "title": "Désactiver {{model}} ?",

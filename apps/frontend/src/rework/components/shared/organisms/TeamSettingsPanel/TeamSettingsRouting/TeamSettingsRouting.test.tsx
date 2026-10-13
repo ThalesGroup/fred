@@ -239,13 +239,44 @@ describe("TeamSettingsRouting", () => {
         expected_version: 1,
       },
     });
+  });
+
+  it("confirms a saved change with a toast, once the save has resolved", async () => {
+    h.policy = policy();
+    h.availableModels = MODELS;
+    let resolveSave!: () => void;
+    const saved = new Promise<void>((resolve) => {
+      resolveSave = resolve;
+    });
+    h.updateRoutingPolicy.mockReturnValueOnce({ unwrap: () => saved });
+    render(true);
+
+    act(() => defaultButton("GPT-5").click());
+    await flush();
     expect(h.showSuccess).not.toHaveBeenCalled();
     await act(async () => {
       resolveSave();
       await saved;
     });
+
     expect(h.showSuccess).toHaveBeenCalledExactlyOnceWith({ summary: "rework.teamSettings.routing.saveSuccess" });
     expect(h.showError).not.toHaveBeenCalled();
+  });
+
+  it("shows the server's detail inline and an error toast when the save is rejected", async () => {
+    h.policy = policy();
+    h.availableModels = MODELS;
+    h.updateRoutingPolicy.mockImplementationOnce(() => ({
+      unwrap: () => Promise.reject({ status: 400, data: { detail: "Team 'team-1' may not use this model." } }),
+    }));
+    render(true);
+
+    act(() => defaultButton("GPT-5").click());
+    await flush();
+
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("may not use this model");
+    expect(h.showError).toHaveBeenCalledExactlyOnceWith({ summary: "rework.teamSettings.routing.saveError" });
+    expect(h.showSuccess).not.toHaveBeenCalled();
   });
 
   it("lists the recommending agents and the conversation fallback, then saves on confirm", async () => {
@@ -336,6 +367,8 @@ describe("TeamSettingsRouting", () => {
       expect.objectContaining({ summary: "rework.teamSettings.routing.conflict" }),
     );
     expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(h.showError).not.toHaveBeenCalled();
+    expect(h.showSuccess).not.toHaveBeenCalled();
   });
 
   it("shows a load error, not the empty state, when the policy cannot be read", () => {
