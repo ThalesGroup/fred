@@ -2,6 +2,7 @@
 schema: 1
 title: "Enable shared platform skills for managed ReAct and Deep agents"
 impact: minor
+after: [000-v3-4-0-release-preparation]
 configuration: production
 configuration_reason: "Optional skills.directory selects packaged resources or a read-only project directory; chart defaults remain disabled."
 ---

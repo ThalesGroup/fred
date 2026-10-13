@@ -62,7 +62,7 @@ from knowledge_flow_backend.features.tabular.structures import (
     TabularTableSchema,
     TabularTableSummary,
 )
-from knowledge_flow_backend.features.tabular.utils import quote_identifier, quote_string_literal, validate_read_query
+from knowledge_flow_backend.features.tabular.utils import dataframe_to_records, quote_identifier, quote_string_literal, validate_read_query
 from knowledge_flow_backend.features.tag.tag_service import TagService
 
 logger = logging.getLogger(__name__)
@@ -636,7 +636,7 @@ class TabularService:
                 limited_query = f"SELECT * FROM ({validated.sql}) AS fred_result LIMIT {effective_max_rows}"
                 with _redacting_query_execution_errors():
                     rows_df = connection.execute(limited_query).df()
-                return validated.sql, rows_df.to_dict(orient="records"), mounted_datasets
+                return validated.sql, dataframe_to_records(rows_df), mounted_datasets
             finally:
                 close_duckdb_connection(handle, connection)
 
@@ -851,7 +851,7 @@ class TabularService:
         sample_sql = f"SELECT * FROM {alias_sql} WHERE {where_any_column} LIMIT {max_rows_per_table + 1}"  # nosec B608 — machine-built; relation/columns quoted, no caller text
         rows_df = connection.execute(sample_sql).df()
         row_truncated = len(rows_df) > max_rows_per_table
-        rows = rows_df.head(max_rows_per_table).to_dict(orient="records")
+        rows = dataframe_to_records(rows_df.head(max_rows_per_table))
 
         artifact = dataset.artifact
         is_table_artifact = isinstance(artifact, TabularTableArtifactV1)

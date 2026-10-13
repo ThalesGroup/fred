@@ -13,12 +13,13 @@
 // limitations under the License.
 
 import styles from "./ActionBar.module.css";
+import type { MouseEvent } from "react";
 
 export interface Action {
   id: string;
   icon: string;
   label: string;
-  onClick: () => void;
+  onClick: (event: MouseEvent<HTMLButtonElement>) => void;
   disabled?: boolean;
 }
 

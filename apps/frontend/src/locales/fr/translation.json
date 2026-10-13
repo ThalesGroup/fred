@@ -395,20 +395,27 @@
     "commandTurn": {
       "open": "Ouvrir le prompt de la commande /{{command}}",
       "openWithText": "Ouvrir le prompt de la commande /{{command}}, suivie de « {{appended}} »",
-      "panelTitle": "Prompt de la commande"
+      "panelTitle": "Prompt de la commande",
+      "previewLoading": "Chargement du prompt…",
+      "previewEmpty": "Ce prompt est vide.",
+      "previewError": "Ce prompt ne peut pas être affiché. Il a peut-être été supprimé, ou vous n'y avez plus accès."
     },
     "commandMenu": {
-      "sources": {
-        "platform": "Skill plateforme",
-        "personal": "Prompt personnel",
-        "team": "Prompt d’équipe"
-      },
       "ariaLabel": "Commandes disponibles",
-      "promptsSection": "Prompts de la bibliothèque",
-      "noneInTeam": "Aucune commande dans cette équipe. Un éditeur peut en attribuer une à un prompt depuis la page Prompts.",
+      "sections": {
+        "team": "Équipe « {{name}} »",
+        "teamFallback": "Équipe",
+        "personal": "Espace personnel",
+        "platform": "Skills plateforme"
+      },
+      "loading": "Chargement des commandes…",
+      "error": "Les commandes n'ont pas pu être chargées. Tapez / à nouveau pour réessayer.",
+      "none": "Aucune commande pour l'instant. Ajoutez-en une à l'un de vos prompts personnels depuis la page Prompts. Dans une équipe, un éditeur peut aussi en ajouter une à un prompt de l'équipe.",
       "noMatch": "Aucune commande ne correspond.",
       "runErrorSummary": "Commande impossible à lancer",
-      "runErrorDetail": "Le prompt de cette commande n'a pas pu être lu. Réessayez dans un instant."
+      "runErrorDetail": "Le prompt de la commande /{{command}} n'a pas pu être lu. Réessayez dans un instant.",
+      "runErrorStale": "La commande /{{command}} n'est plus disponible : son prompt a été supprimé ou renommé, ou elle vient d'un autre agent ou d'une autre équipe. Retirez-la de votre message et choisissez-la à nouveau.",
+      "runErrorTooMany": "Un message peut contenir au plus {{limit}} commandes de prompt. Retirez-en quelques-unes, puis envoyez à nouveau."
     },
     "composerPlaceholder": "Posez votre question, ou tapez / pour une commande",
     "newConversation": "Nouvelle conversation",
@@ -623,7 +630,6 @@
       "badge": "Skill : {{name}}",
       "platformProvided": "Skill fourni par la plateforme",
       "requestPlaceholder": "Votre demande (facultative)",
-      "menuTitle": "Skills",
       "usage": "Utilisez /<nom-du-skill> [demande]. Sélectionnez un skill ; la demande est facultative.",
       "errorTitle": "Le skill ne peut pas être utilisé",
       "unavailable": "Le contenu de ce skill est indisponible.",
@@ -640,10 +646,6 @@
       "description": "Description :",
       "arguments": "Arguments :"
     }
-  },
-  "comingSoon": {
-    "description": "La plateforme \n d'innovation au service de votre quotidien : gagnez en clarté et en pertinence décisionnelle. Un nouveau service conçu pour vous épauler chaque jour et répondre à vos enjeux métiers et opérationnels.",
-    "title": "{{siteDisplayName}} arrive très bientôt."
   },
   "common": {
     "cancel": "Annuler",
@@ -3013,7 +3015,7 @@
         "firstCreate": "Créer un prompt",
         "form": {
           "command": "Commande",
-          "commandConflict": "Label de commande déjà pris par un autre prompt d'équipe",
+          "commandConflict": "Cette commande est déjà utilisée par un autre prompt",
           "commandHelp": "Raccourcis de lancement dans le chat",
           "description": "Description",
           "name": "Nom",
@@ -3025,6 +3027,19 @@
         "modalEdit": "Modifier le prompt",
         "noPrompt": "Créez votre premier prompt pour commencer.",
         "searchPlaceholder": "Rechercher des prompts...",
+        "toasts": {
+          "created": "Prompt créé",
+          "updated": "Prompt modifié",
+          "saveFailed": "Échec de l'enregistrement du prompt",
+          "deleted": "Prompt supprimé",
+          "deleteFailed": "Échec de la suppression du prompt"
+        },
+        "deleteDialog": {
+          "title": "Supprimer le prompt ?",
+          "message": "« {{name}} » sera définitivement supprimé. Cette action est irréversible.",
+          "confirm": "Supprimer"
+        },
+        "missingTeam": "Identifiant d'équipe manquant dans l'URL.",
         "title": "Prompts de l'équipe",
         "view": {
           "closeAria": "Fermer",
@@ -3618,13 +3633,14 @@
       "invalidLink": "Ce lien ne peut pas être utilisé. Il est peut-être expiré, révoqué ou suspendu, ou le service est indisponible.",
       "loading": "Chargement...",
       "source": {
+        "admin": "Administrateur plateforme",
         "attribute": "Attribut d'identité",
         "manual": "Exception manuelle",
         "t0": "Import initial",
         "team": "Équipe autorisée",
         "free": "Accès par lien"
       },
-      "actorLockout": "Accordez-vous d'abord une autre source d'accès avant d'activer le filtrage ou de retirer votre dernière autorisation.",
+      "actorLockout": "Ce changement retirerait votre dernière source d'accès.",
       "rule": {
         "title": "Règle d'accès",
         "hint": "Les exceptions individuelles et les équipes autorisées permettent toujours l'accès.",
@@ -3710,7 +3726,8 @@
       "links": {
         "manage": "Gérer les liens",
         "title": "Invitations pour {{team}}",
-        "hint": "Partagez les liens manuellement. Les accès comptent les ouvertures après connexion.",
+        "hint": "Partagez les liens manuellement. Les accès comptent les ouvertures après connexion; les utilisateurs inscrits sont ceux qui ont rejoint l'équipe.",
+        "suspendedHint": "L'accès par lien est désactivé pour cette équipe. Les liens d'invitation encore valides sont suspendus jusqu'à sa réactivation.",
         "note": "Note (facultative)",
         "expiry": "Expiration (facultative)",
         "expiryDate": "Date d'expiration",
@@ -3721,10 +3738,16 @@
         },
         "futureExpiry": "Choisissez une date et une heure futures.",
         "never": "Sans expiration",
-        "untitled": "Sans note",
         "created": "Création",
         "statusLabel": "Statut",
         "openings": "Accès",
+        "joiners": "Utilisateurs inscrits",
+        "deletedUser": "Supprimé",
+        "joinersTitle": "Inscrits via {{note}}",
+        "joinedAt": "Date d'inscription",
+        "noJoiners": "Aucune inscription enregistrée depuis le début du suivi.",
+        "username": "Identifiant",
+        "joinersFailed": "Impossible de charger les personnes inscrites via ce lien.",
         "actions": "Actions",
         "revoke": "Révoquer",
         "revokeTitle": "Révoquer cette invitation ?",

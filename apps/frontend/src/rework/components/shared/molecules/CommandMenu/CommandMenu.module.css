@@ -38,11 +38,15 @@
 }
 
 .groupTitle {
+  margin-bottom: var(--spacing-2xs);
+  border-radius: var(--radius-xs);
+  background: var(--surface-container-high);
   padding: var(--spacing-2xs) var(--spacing-s);
-  color: var(--on-surface-muted);
+  overflow: hidden;
+  color: var(--on-surface-retreat);
   font: var(--font-label-small);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .row {
@@ -73,16 +77,10 @@
   font-size: 0.875rem;
 }
 
-.promptIcon {
-  background: var(--info-container);
-  color: var(--on-info-container);
-}
-
 .rowText {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: var(--spacing-2xs);
   min-width: 0;
 }
 
@@ -102,28 +100,11 @@
   font: var(--font-body-medium);
 }
 
-.rowHeading {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--spacing-2xs) var(--spacing-s);
-}
-
-.argumentHint {
-  color: var(--on-surface-retreat);
-  font: var(--font-body-small);
-  overflow-wrap: anywhere;
-}
-
 .rowDescription {
+  overflow: hidden;
   color: var(--on-surface-retreat);
   font: var(--font-body-small);
   font-style: italic;
-  overflow-wrap: anywhere;
-}
-
-.sourceLabel {
-  flex-shrink: 0;
-  color: var(--on-surface-retreat);
-  font: var(--font-label-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

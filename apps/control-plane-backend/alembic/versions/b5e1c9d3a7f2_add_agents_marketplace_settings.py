@@ -18,7 +18,7 @@ The platform default (`platform_marketplace_settings`, at most one row keyed
 per-team overrides on `teammetadata` (null = the team follows the default).
 
 Revision ID: b5e1c9d3a7f2
-Revises: 93427a5fe874
+Revises: 9f6d3c2a1b08
 Create Date: 2026-10-12 00:00:00.000000
 
 """
@@ -31,7 +31,7 @@ from alembic import op
 # revision identifiers, used by Alembic.
 revision: str = "b5e1c9d3a7f2"  # pragma: allowlist secret
 down_revision: Union[str, Sequence[str], None] = (
-    "93427a5fe874"  # pragma: allowlist secret
+    "9f6d3c2a1b08"  # pragma: allowlist secret
 )
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None

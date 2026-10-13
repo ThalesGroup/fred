@@ -36,30 +36,6 @@
             }
           },
           "additionalProperties": false
-        },
-        "whitelist": {
-          "type": "object",
-          "properties": {
-            "enabled": {
-              "type": "boolean"
-            },
-            "configMapName": {
-              "type": "string"
-            },
-            "filePath": {
-              "type": "string"
-            },
-            "user_list_inline": {
-              "type": "string"
-            },
-            "mountPath": {
-              "type": "string"
-            },
-            "subPath": {
-              "type": "string"
-            }
-          },
-          "additionalProperties": false
         }
       },
       "additionalProperties": false

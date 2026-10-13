@@ -6,6 +6,109 @@ Control platform admission using administrator-managed verified IdP claim rules 
 
 ## Requirements
 
+### Requirement: Filtering can be paused without losing admission configuration
+
+A platform administrator SHALL be able to turn filtering off from the existing administration action. While filtering is off, every authenticated, active person SHALL pass platform admission, including people who do not match a saved rule or exception. The saved rule, revision, individual exceptions, team authorization, Free flags and links SHALL remain unchanged and available for a later explicit activation. Authentication, account suspension, required terms acceptance and resource permissions SHALL continue to apply.
+
+#### Scenario: Pause and resume configured filtering
+
+- **GIVEN** filtering is active with a saved rule, individual exceptions and Free-team links
+- **WHEN** an administrator disables filtering
+- **THEN** a person outside every admission source SHALL pass platform admission on their next request
+- **AND** the saved configuration SHALL remain visible and unchanged
+- **WHEN** the administrator re-enables filtering through the existing review and confirmation
+- **THEN** the retained configuration SHALL govern the next request without rebuilding it
+
+#### Scenario: Other gates continue while filtering is off
+
+- **WHEN** filtering is off and a person is suspended, has not accepted required terms, or lacks a resource permission
+- **THEN** the corresponding existing refusal SHALL remain effective
+
+### Requirement: Platform administrators cannot be denied by admission filtering
+
+An active person holding the current platform-management permission SHALL pass platform admission when filtering is active, independently of rule results and individual or team exceptions. This admission SHALL use the authoritative current role on direct and delegated requests; it SHALL not grant a role, team membership or resource permission. A removed role SHALL stop providing this admission source on the next request. An unavailable authorization authority SHALL remain an availability failure, not a definitive admission denial.
+
+#### Scenario: Administrator is outside every configured source
+
+- **GIVEN** filtering is active and a platform administrator matches no saved rule or exception
+- **WHEN** that administrator makes a direct or delegated human request
+- **THEN** platform admission SHALL pass while ordinary authorization remains enforced
+
+#### Scenario: Platform role is removed
+
+- **GIVEN** an administrator was admitted only through the platform role
+- **WHEN** that role is removed
+- **THEN** the next direct or delegated human request SHALL no longer use the administrator admission source
+
+#### Scenario: Unavailable role authority
+
+- **WHEN** the current platform-management permission cannot be checked reliably
+- **THEN** admission SHALL fail with the existing availability error rather than inventing an administrator role or returning a policy denial
+
+### Requirement: Platform access mutations remain attributable in the security audit stream
+
+Successful administrator changes to filtering, saved rules, manual exceptions, team access and Free links SHALL emit structured security audit events with the acting administrator and relevant non-secret state or target identifiers, independently of the ordinary application log level. Link creation SHALL identify the new link without exposing its token. Bulk manual grants and T0 imports SHALL emit one summary with counts, without one event per user. A successful new Free-link team join SHALL identify the joining user, team and link. Failed or unauthorized changes SHALL NOT emit success events. Audit events SHALL NOT contain link tokens or rule claim values.
+
+#### Scenario: Bulk grants have a bounded audit summary
+
+- **WHEN** an administrator grants admission to a selected user list
+- **THEN** the security audit stream SHALL identify the acting administrator, the number of distinct selected users and the number of newly granted users in one event
+- **WHEN** the operation fails or is unauthorized
+- **THEN** no successful grant audit event SHALL be emitted
+
+#### Scenario: New Free-link membership is audited
+
+- **WHEN** a valid Free link adds a person to a team
+- **THEN** one success event SHALL identify the joining user, team and link without the token
+- **WHEN** a person only opens the link or repeats enrollment while already a member
+- **THEN** no new join success event SHALL be emitted
+
+#### Scenario: T0 import is recorded once
+
+- **WHEN** the initial T0 import completes
+- **THEN** one audit summary SHALL include the acting administrator and number of exceptions actually added
+- **WHEN** T0 has already completed and an administrator repeats the request
+- **THEN** no new import success event SHALL be emitted
+
+### Requirement: Administrators can inspect successful Free-link joiners
+
+Each Free-team link SHALL retain a bounded, paginated history of distinct people who successfully became members by enrolling through that link. Only platform administrators SHALL read the history. Each entry SHALL expose that person's current first name, last name and username while the account is active, or the last recorded values with a deleted marker after account deletion, plus the time of the successful join. This history SHALL remain visible if the person later leaves the team, the account is deleted, or the link is suspended, revoked or expired. An explicit deletion of the link history SHALL delete its joiner entries. Opening, previewing, accepting terms, unsuccessful enrollment and a repeated enrollment while already a member SHALL NOT create a joiner entry or change the page-opening aggregate.
+
+#### Scenario: Two links have different joiners
+
+- **GIVEN** a team has links A and B
+- **WHEN** one person successfully joins through A and another through B
+- **THEN** each link's joiner list SHALL contain only the person who joined through that link
+
+#### Scenario: Member leaves and link is revoked
+
+- **WHEN** a person joins through a link, later leaves the team and the link is revoked or expires
+- **THEN** that person's join entry SHALL remain visible on that link until the link history is deleted
+
+#### Scenario: Joiner account is deleted
+
+- **WHEN** a person joins through a link and their account is later deleted
+- **THEN** the join entry SHALL remain visible with their last recorded username and names, join time, and a deleted marker
+- **AND** a missing local user row SHALL NOT erase or hide the entry
+
+#### Scenario: Opening or repeat enrollment
+
+- **WHEN** a person opens a link without joining, enrollment fails, or an existing member enrolls again
+- **THEN** no new joiner entry SHALL be created
+- **AND** the existing page-opening aggregate SHALL retain its established meaning
+
+#### Scenario: Joiner history is restricted and paginated
+
+- **WHEN** an ordinary team manager or person requests a link's joiner history
+- **THEN** no joiner identity SHALL be returned
+- **WHEN** a platform administrator opens a link with more joiners than one page
+- **THEN** the complete history SHALL be reachable through bounded pages for that link only
+
+#### Scenario: Explicit link-history cleanup
+
+- **WHEN** an administrator deletes a revoked or expired link's history through the existing cleanup action
+- **THEN** its joiner entries SHALL be deleted with the link, without changing team membership
+
 ### Requirement: Admission policy is managed and activated by administrators
 
 Admission administration SHALL be available in authenticated Fred deployments with enforced ReBAC after the required shared SQL migration. Its policy and activation SHALL be controlled exclusively by versioned durable administrator state. There SHALL be no admission-specific YAML, Helm, SDK environment or Pydantic configuration model, and no deployment seed. An absent authority SHALL initialize with no policy, revision zero and filtering inactive. Restarts SHALL preserve administrator state. Authentication-disabled development SHALL retain its existing behavior. Support destinations SHALL reuse frontend `contactSupportLink`.
@@ -39,11 +142,11 @@ Admission administration SHALL be available in authenticated Fred deployments wi
 
 ### Requirement: Admission sources are independent of resource permissions
 
-When filtering is active, the system SHALL admit a non-suspended person if their verified claim evaluation permits admission under the current allow/block mode, they have a current individual exception, or they are a current member of an authorized team, including a Free team. Ordinary public-team visibility SHALL not count as membership. Admission SHALL neither grant a platform role nor extend team or resource permissions. Account suspension and required CGU acceptance SHALL still apply.
+When filtering is active, the system SHALL admit a non-suspended person if their verified claim evaluation permits admission under the current allow/block mode, they have a current individual exception, they are a current member of an authorized team (including a Free team), or they hold the current platform-management permission. Ordinary public-team visibility SHALL not count as membership. Admission SHALL neither grant a platform role nor extend team or resource permissions. Account suspension and required CGU acceptance SHALL still apply.
 
 #### Scenario: New non-matching person is refused
 
-- **WHEN** a new person is not admitted by the current rule mode and has no individual exception or eligible membership
+- **WHEN** a new person is not admitted by the current rule mode and has no individual exception, eligible membership or platform-management permission
 - **THEN** normal platform access SHALL return HTTP 403 with `detail="platform_access_denied"`
 
 #### Scenario: One source is removed while another remains
@@ -235,7 +338,7 @@ The frontend SHALL display a standalone localized refusal page for `platform_acc
 
 ### Requirement: Activation and migration are explicit
 
-An absent admission authority SHALL initialize with filtering inactive until explicit administrator activation. Activation SHALL require a saved valid rule or at least one independent individual/team source and SHALL be refused if the acting administrator would lose their last admission source. Saving a policy or changing access exceptions while filtering is active SHALL apply the same actor safeguard atomically. Existing root bootstrap safeguards SHALL remain intact. Activation concurrent with a nonempty legacy-file gate SHALL be rejected; readers SHALL refuse an active conflicting gate. Policy, imported entries and membership SHALL survive restarts and temporary filtering disablement.
+An absent admission authority SHALL initialize with filtering inactive until explicit administrator activation. Activation SHALL require a saved valid rule or at least one independent individual/team source and SHALL be refused if the acting administrator would lose their last admission source. Saving a policy or changing access exceptions while filtering is active SHALL apply the same actor safeguard atomically. Existing root bootstrap safeguards SHALL remain intact. The retired file-based whitelist SHALL NOT affect direct or delegated admission or activation. The administrator-managed SQL filter SHALL be the only platform admission filter. Policy, imported entries and membership SHALL survive restarts and temporary filtering disablement.
 
 #### Scenario: Upgrade does not silently activate filtering
 
@@ -254,8 +357,8 @@ An absent admission authority SHALL initialize with filtering inactive until exp
 
 #### Scenario: Conflicting whitelist modes
 
-- **WHEN** an administrator attempts activation while a nonempty legacy file gate is active
-- **THEN** activation SHALL be refused without changing state, and readers SHALL fail closed if conflicting active state exists
+- **WHEN** an obsolete `users.txt` file remains on disk after upgrading
+- **THEN** it SHALL NOT restrict a direct or delegated person or block activation of the administrator-managed filter
 
 The page SHALL offer a top-right filtering action in the page header across every tab with explicit confirmation. Before activation, a read-only population review SHALL show identifiable users in counted Allowed and Blocked lists under the saved rule and current independent sources, with observation time. Stale/missing/conflicted evidence SHALL appear in a separate expandable Verification unavailable section rather than be declared allowed or blocked. A missing field in an available verified token SHALL be evaluated normally. The initial view SHALL show Blocked when that group is nonempty, otherwise Allowed; empty groups SHALL show a short message without table pagination. An Update action SHALL reread the database snapshot, reference policy and import status without changing admission state; stale rows SHALL be hidden and confirmation disabled during loading, failure or revision conflict. A preview SHALL NOT grant access or save drafts. Activation confirmation SHALL reject a changed policy revision and retain the actor safeguard.
 
@@ -475,9 +578,9 @@ Admission denial, invalid Free enrollment links and admission verification failu
 
 ### Requirement: Administrators manage independent Free-link history
 
-Only platform administrators SHALL create, list and revoke Free-team links. The platform administration Teams registry SHALL expose the Free toggle and Manage links action for each eligible team; ordinary team managers SHALL NOT see these controls or issue admission administration queries. Platform access SHALL group individual exceptions and independent team authorization in its Whitelist panel and SHALL NOT duplicate Free/link controls. The bounded paginated history SHALL expose the link identifier, note, creation and expiry dates, revocation state, suspension state and authenticated opening count, without reusable tokens or visitor identity. Administrators SHALL be able to inspect and revoke links while Free is disabled. Manage links SHALL open on the bounded invitation list with a Create link action; note and expiry inputs SHALL appear only in a separate creation view. That view SHALL place the optional note before optional expiration and reuse the platform KPI selector presentation, with a single future date/time input, future duration shortcuts, a No expiration option and Apply. The date draft SHALL prevent creation until applied or dismissed; Escape SHALL close only the selector and restore trigger focus. Empty expiration SHALL mean no expiry; invalid or past expiration SHALL prevent creation without losing the note. Generation success SHALL show the original URL and an immediately available Copy URL action.
+Only platform administrators SHALL create, list and revoke Free-team links. The platform administration Teams registry SHALL expose the Free toggle and Manage links action for each eligible team; ordinary team managers SHALL NOT see these controls or issue admission administration queries. Platform access SHALL group individual exceptions and independent team authorization in its Whitelist panel and SHALL NOT duplicate Free/link controls. The bounded paginated history SHALL expose the link identifier, note, creation and expiry dates, revocation state, suspension state and authenticated opening count, without reusable tokens or visitor identity. Administrators SHALL be able to inspect and revoke links while Free is disabled. Manage links SHALL open on the bounded invitation list with a Create link action; note and expiry inputs SHALL appear only in a separate creation view. That view SHALL place the optional note before optional expiration and reuse the platform KPI selector presentation, with a single future date/time input, future duration shortcuts, a No expiration option and Apply. The date draft SHALL prevent creation until applied or dismissed; Escape SHALL close only the selector and restore trigger focus. Empty expiration SHALL mean no expiry; invalid or past expiration SHALL prevent creation without losing the note. Generation success SHALL show the original URL in the platform's monospace font and an immediately available Copy URL action, and SHALL attempt to copy that URL to the clipboard automatically.
 
-History SHALL use an explicit Copy URL action that recovers the original token and attempts clipboard writing without generating another link. Clipboard success SHALL be announced only after the write succeeds through temporary feedback on the clicked button and a screen-reader status, without changing the dialog layout. If clipboard writing is unavailable or rejected, the UI SHALL retain the usable URL with a clear manual-copy fallback; a copy failure SHALL NOT be presented as generation failure or cause another invitation to be created. Creation/recovery URL state SHALL remain transient and clear on manager dismissal, without logging URLs or retaining reusable mutation payloads.
+History SHALL use an explicit Copy URL action that recovers the original token and attempts clipboard writing without generating another link. Clipboard success SHALL be announced only after the write succeeds through temporary feedback on the corresponding Copy URL button and a screen-reader status, without changing the dialog layout. If clipboard writing is unavailable or rejected, the UI SHALL retain the usable URL with a clear manual-copy fallback; a copy failure SHALL NOT be presented as generation failure or cause another invitation to be created. Creation/recovery URL state SHALL remain transient and clear on manager dismissal, without logging URLs or retaining reusable mutation payloads.
 
 The opening-count column SHALL use the short localized label Accesses (Accès) without showing the last-access timestamp, and explain that it counts authenticated page openings rather than unique users, anonymous clicks or message delivery. The UI SHALL identify manual sharing and explicit URL recovery; it SHALL NOT claim message delivery.
 
@@ -519,7 +622,9 @@ The opening-count column SHALL use the short localized label Accesses (Accès) w
 
 - **WHEN** generation succeeds
 - **THEN** the usable invitation URL and Copy URL action SHALL be shown with successful creation feedback
-- **AND** generating the link SHALL NOT claim that clipboard writing or message delivery succeeded
+- **AND** the displayed URL SHALL use the platform's monospace font
+- **AND** the UI SHALL attempt to copy that URL to the clipboard automatically
+- **AND** clipboard success SHALL be announced only after the write succeeds; creation SHALL NOT claim message delivery
 
 #### Scenario: Copy from invitation history
 
@@ -533,6 +638,11 @@ The opening-count column SHALL use the short localized label Accesses (Accès) w
 - **THEN** the usable URL SHALL remain available for manual copying with specific feedback
 - **AND** no replacement invitation SHALL be created and the failure SHALL NOT be announced as a failed creation
 
+#### Scenario: Delayed clipboard result after dismissal
+
+- **WHEN** an administrator dismisses the generated URL or begins a newer copy while a clipboard write is pending
+- **THEN** a later result from the earlier write SHALL NOT reopen the dismissed dialog or replace the newer copy feedback
+
 #### Scenario: Short counter heading retains its meaning
 
 - **WHEN** the invitation history displays Accesses
@@ -542,7 +652,6 @@ The opening-count column SHALL use the short localized label Accesses (Accès) w
 
 - **WHEN** expiration is invalid or no longer in the future, or generation fails
 - **THEN** the creation form SHALL retain the note and date with actionable feedback, without closing the manager
-
 ### Requirement: Authenticated enrollment-page openings use link aggregates
 
 The frontend SHALL record each authenticated enrollment-page opening using its own credential. Aggregate opening count and last-opening time SHALL be stored on the link row without a separate visit table. The frontend SHALL submit one signal per page opening, including under duplicate React effects; every accepted opening POST SHALL increment the count. A subsequent new page opening SHALL count again. Preview, terms acceptance and enrollment SHALL NOT increment the opening count themselves. Invalid, expired, revoked or suspended links SHALL NOT record openings. Visitor identities, IP addresses and account payloads SHALL NOT be stored as analytics.
@@ -592,9 +701,24 @@ The page SHALL provide localized Rules and Whitelist tabs using the shared Fred 
 - **WHEN** an administrator changes top-level or whitelist sub-tabs
 - **THEN** the filtering action SHALL remain at the top right of the page header with the same activation guards
 
+### Requirement: Optional invitation notes have no placeholder identity
+
+An invitation without a note SHALL have an empty note cell in history and a generic localized joiner-dialog title. An invitation with a note SHALL retain that note in history and use it to identify the joiner dialog.
+
+#### Scenario: Invitation without a note
+
+- **WHEN** an administrator views an invitation whose optional note is absent
+- **THEN** its note cell SHALL be empty
+- **AND** its joiner dialog SHALL use a generic title without a placeholder note
+
+#### Scenario: Invitation with a note
+
+- **WHEN** an administrator opens the joiner history for an invitation with a note
+- **THEN** the note SHALL remain visible in the invitation row and joiner-dialog title
+
 ### Requirement: Administrators filter invitation history by lifecycle status
 
-Platform administrators SHALL be able to filter one team's complete invitation history by All, Active, Revoked or Expired. All SHALL be the default. Results and pagination totals SHALL reflect the selected status across the entire history, not only loaded rows. Revoked SHALL take precedence over Expired, which SHALL take precedence over Suspended; unrevoked, unexpired links SHALL be Active when Link access is enabled and Suspended otherwise. Changing the filter SHALL start at the first page and SHALL NOT display rows from the previous filter as current results. Filtering SHALL NOT change validity, membership, counters or access settings. The history table SHALL have a bounded fixed height with internal row scrolling, while its header, pagination and surrounding controls remain visible.
+Platform administrators SHALL be able to filter one team's complete invitation history by All, Active, Revoked or Expired. All SHALL be the default. Results and pagination totals SHALL reflect the selected status across the entire history, not only loaded rows. Revoked SHALL take precedence over Expired, which SHALL take precedence over Suspended; unrevoked, unexpired links SHALL be Active when Link access is enabled and Suspended otherwise. Changing the filter SHALL start at the first page and SHALL NOT display rows from the previous filter as current results. Filtering SHALL NOT change validity, membership, counters or access settings. The history table SHALL have a bounded fixed height with internal row scrolling, while its header, pagination and surrounding controls remain visible. When Link access is disabled, the invitation manager SHALL state that link sharing is disabled and valid links are suspended until it is enabled again.
 
 #### Scenario: Filter beyond the first page
 
@@ -610,7 +734,14 @@ Platform administrators SHALL be able to filter one team's complete invitation h
 
 - **WHEN** a team's Link access is disabled
 - **THEN** its unrevoked, unexpired links SHALL appear in All with grayscale rows at reduced opacity, rather than appearing under Active
-- **AND** no separate Suspended filter, visible status label or explanatory paragraph SHALL be offered, while copying, revocation and an accessible status remain available
+- **AND** those rows SHALL display Suspended in the visible Status column
+- **AND** the manager SHALL explain that Link access is disabled and valid invitations cannot be used until it is enabled again
+- **AND** no separate Suspended filter SHALL be offered, while copying, revocation and an accessible status remain available
+
+#### Scenario: Another administrator changes Link access
+
+- **WHEN** the Link access setting changes while an administrator keeps the invitation manager open
+- **THEN** the manager SHALL refresh the setting so its disabled notice and creation controls match the current team state
 
 ### Requirement: Administrators delete obsolete invitation history explicitly
 
@@ -641,3 +772,24 @@ Only platform administrators SHALL permanently delete a team's revoked or expire
 
 - **WHEN** a person without platform-management permission requests cleanup
 - **THEN** the request SHALL be refused without removing history or changing admission
+
+### Requirement: Team invitations use the join route
+
+The frontend SHALL generate and recover Free-team invitation URLs at `/join/:token`, respecting its configured basename. An authenticated person, including one denied normal platform admission, SHALL reach the standalone enrollment page at that route. The previous `/join-free/:token` route SHALL not be served. Fred access logs SHALL redact the opaque token from the new route.
+
+#### Scenario: Create and open an invitation
+
+- **WHEN** a platform administrator creates or recovers a Free-team invitation
+- **THEN** the displayed and copied URL SHALL use `/join/:token`
+- **AND** opening that URL SHALL render the standalone enrollment page through the authentication redirect when needed
+
+#### Scenario: Protect the new capability path
+
+- **WHEN** admission denies normal platform access while a person opens `/join/:token`
+- **THEN** the person SHALL remain on the enrollment route
+- **AND** Fred access logs SHALL not expose the token
+
+#### Scenario: Retired route
+
+- **WHEN** a person requests `/join-free/:token`
+- **THEN** the frontend SHALL not route that path to the enrollment page

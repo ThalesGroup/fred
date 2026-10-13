@@ -395,20 +395,27 @@
     "commandTurn": {
       "open": "Open the prompt behind the /{{command}} command",
       "openWithText": "Open the prompt behind the /{{command}} command, followed by “{{appended}}”",
-      "panelTitle": "Command prompt"
+      "panelTitle": "Command prompt",
+      "previewLoading": "Loading the prompt…",
+      "previewEmpty": "This prompt is empty.",
+      "previewError": "This prompt cannot be shown. It may have been deleted, or you may no longer have access to it."
     },
     "commandMenu": {
-      "sources": {
-        "platform": "Platform skill",
-        "personal": "Personal prompt",
-        "team": "Team prompt"
-      },
       "ariaLabel": "Available commands",
-      "promptsSection": "Prompt library",
-      "noneInTeam": "No command in this team yet. An editor can give one to a prompt from the Prompts page.",
+      "sections": {
+        "team": "Team \"{{name}}\"",
+        "teamFallback": "Team",
+        "personal": "Personal space",
+        "platform": "Platform skills"
+      },
+      "loading": "Loading commands…",
+      "error": "The commands could not be loaded. Type / again to retry.",
+      "none": "No command yet. Add one to any of your personal prompts from the Prompts page. In a team, an editor can also add one to a team prompt.",
       "noMatch": "No command matches.",
       "runErrorSummary": "Could not run the command",
-      "runErrorDetail": "The prompt behind this command could not be read. Please try again in a moment."
+      "runErrorDetail": "The prompt behind the /{{command}} command could not be read. Please try again in a moment.",
+      "runErrorStale": "The /{{command}} command is no longer available: its prompt was deleted or renamed, or it comes from another agent or team. Remove it from your message and choose it again.",
+      "runErrorTooMany": "A message can hold at most {{limit}} prompt commands. Remove a few, then send again."
     },
     "composerPlaceholder": "Ask your question, or type / for a command",
     "newConversation": "New conversation",
@@ -623,7 +630,6 @@
       "badge": "Skill: {{name}}",
       "platformProvided": "Skill provided by the platform",
       "requestPlaceholder": "Your request (optional)",
-      "menuTitle": "Skills",
       "usage": "Use /<skill-name> [request]. Select a skill; the request is optional.",
       "errorTitle": "Skill could not be used",
       "unavailable": "This skill’s content is unavailable.",
@@ -640,10 +646,6 @@
       "description": "Description:",
       "arguments": "Arguments:"
     }
-  },
-  "comingSoon": {
-    "description": "Empowering your daily work through this innovation platform: gain clarity and make smarter decisions. A new service tailored to support your daily tasks and address your operational needs.",
-    "title": "{{siteDisplayName}} is coming soon."
   },
   "common": {
     "cancel": "Cancel",
@@ -3013,7 +3015,7 @@
         "firstCreate": "Create prompt",
         "form": {
           "command": "Command",
-          "commandConflict": "This command label is already used by another team prompt",
+          "commandConflict": "This command is already used by another prompt",
           "commandHelp": "Launch shortcuts in the chat",
           "description": "Description",
           "name": "Name",
@@ -3025,6 +3027,19 @@
         "modalEdit": "Edit prompt",
         "noPrompt": "Create your first prompt to get started.",
         "searchPlaceholder": "Search prompts...",
+        "toasts": {
+          "created": "Prompt created",
+          "updated": "Prompt updated",
+          "saveFailed": "Failed to save prompt",
+          "deleted": "Prompt deleted",
+          "deleteFailed": "Failed to delete prompt"
+        },
+        "deleteDialog": {
+          "title": "Delete prompt?",
+          "message": "\"{{name}}\" will be permanently deleted. This action cannot be undone.",
+          "confirm": "Delete"
+        },
+        "missingTeam": "Missing team id in route.",
         "title": "Team prompts",
         "view": {
           "closeAria": "Close",
@@ -3618,13 +3633,14 @@
       "invalidLink": "This link cannot be used. It may be expired, revoked or suspended, or the service is unavailable.",
       "loading": "Loading...",
       "source": {
+        "admin": "Platform administrator",
         "attribute": "Identity attribute",
         "manual": "Manual exception",
         "t0": "Initial import",
         "team": "Authorized team",
         "free": "Link access"
       },
-      "actorLockout": "First grant yourself another admission source before enabling filtering or removing your last authorization.",
+      "actorLockout": "This change would remove your last admission source.",
       "rule": {
         "title": "Admission rule",
         "hint": "Individual exceptions and authorized teams always allow access.",
@@ -3710,7 +3726,8 @@
       "links": {
         "manage": "Manage links",
         "title": "Invitations for {{team}}",
-        "hint": "Share links manually. Accesses count page openings after sign-in.",
+        "hint": "Share links manually. Accesses count page openings after sign-in; Joined users lists successful enrollments.",
+        "suspendedHint": "Link access is disabled for this team. Valid invitation links are suspended until it is enabled again.",
         "note": "Note (optional)",
         "expiry": "Expiration (optional)",
         "expiryDate": "Expiration date",
@@ -3721,10 +3738,16 @@
         },
         "futureExpiry": "Choose a future date and time.",
         "never": "No expiration",
-        "untitled": "No note",
         "created": "Created",
         "statusLabel": "Status",
         "openings": "Accesses",
+        "joiners": "Joined users",
+        "deletedUser": "Deleted",
+        "joinersTitle": "Joined through {{note}}",
+        "joinedAt": "Joined at",
+        "noJoiners": "No joins recorded since tracking began.",
+        "username": "Username",
+        "joinersFailed": "Could not load the people who joined through this link.",
         "actions": "Actions",
         "revoke": "Revoke",
         "revokeTitle": "Revoke this invitation?",

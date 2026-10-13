@@ -442,6 +442,19 @@ def test_log_setup_gives_audit_logger_a_dedicated_non_propagating_json_handler()
     assert snapshot.values == {}
 
 
+def test_audit_logger_still_accepts_info_when_application_log_level_is_warning() -> (
+    None
+):
+    log_setup(
+        service_name="test-log-setup-audit-level",
+        log_level="WARNING",
+        store=_StubLogStore(),
+        include_uvicorn=False,
+        use_rich=False,
+    )
+    assert logging.getLogger(AUDIT_LOGGER_NAME).isEnabledFor(logging.INFO)
+
+
 def test_store_emit_handler_hard_drops_audit_logger_records() -> None:
     """Issue #2009: belt-and-braces alongside AUDIT_LOGGER_NAME's own
     propagate=False — even if a handler were mistakenly attached directly to
@@ -1199,7 +1212,7 @@ async def test_completion_handles_real_stream_disconnect_and_probe_failures(
     "path",
     [
         "/control-plane/v1/platform-access/free/opaque-token/enroll",
-        "/ui/join-free/opaque-token",
+        "/ui/join/opaque-token",
     ],
 )
 def test_free_enrollment_capability_is_redacted_without_delegation(path, monkeypatch):
