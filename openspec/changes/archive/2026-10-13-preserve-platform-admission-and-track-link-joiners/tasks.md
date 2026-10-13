@@ -16,5 +16,5 @@
 
 - [x] 3.1 Update the compact product/operator contract for the joiner API, retention and migration with no backfill; verify it agrees with the delta spec and implementation.
 - [x] 3.2 Run focused backend/frontend integration checks and a real Playwright walkthrough using the local services, capturing the filtering action, administrator admission and a link's joiner list; record what was and was not exercised.
-- [ ] 3.3 Run the root quality gate once, review the full branch against `swift` with the audit-branch procedure and obtain an independent read-only review; resolve findings and record verification in the draft PR.
-- [ ] 3.4 Reconcile and validate the OpenSpec artifacts, sync and archive the completed change, then push the branch and open/update the draft PR linked to #3061; verify the PR shows the final commits and evidence.
+- [x] 3.3 Run the root quality gate once, review the full branch against `swift` with the audit-branch procedure and obtain an independent read-only review; resolve findings and record verification in the draft PR.
+- [x] 3.4 Reconcile and validate the OpenSpec artifacts, sync and archive the completed change, then push the branch and open/update the draft PR linked to #3061; verify the PR shows the final commits and evidence.
