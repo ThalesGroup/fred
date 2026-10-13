@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import JSON, Boolean, DateTime, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
@@ -43,9 +44,9 @@ class AnnouncementRow(Base):
     banner's dismissal lives in the user's browser.
 
     ``kind`` is ``banner`` or ``patch_note``. A patch note keeps its markdown
-    body in ``description_long``; ``enabled`` makes it readable in the users'
-    history, in ``position`` order. What opens the dialog on its own is an
-    ``announced`` event, never this row.
+    body in ``description_long``; ``enabled`` includes it in the
+    next announcement, in ``position`` order. Users never read this row: they
+    read the package an announcement froze (``AnnouncementExposureRow``).
 
     Deliberately NOT a ReBAC resource, same reasoning as ``platform_prompt``:
     this is a platform-wide assertion with no subject, written by the org-admin
@@ -136,49 +137,72 @@ class AnnouncementRow(Base):
 class AnnouncementSeenRow(Base):
     """The last patch-note announcement one user has seen, for every device.
 
-    ``announcement_event_id`` names an ``announced`` activation event. One row
-    per user, removed with the user.
+    ``announcement_id`` names an exposure row holding a package. One row per
+    user, removed with the user.
     """
 
     __tablename__ = "platform_announcement_seen"
 
     user_id: Mapped[str] = mapped_column(String, primary_key=True)
-    announcement_event_id: Mapped[str] = mapped_column(String, nullable=False)
+    announcement_id: Mapped[str] = mapped_column(String, nullable=False)
     seen_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )
 
 
-class AnnouncementActivationEventRow(Base):
-    """Append-only record of one announcement going on or off air, and of the
-    patch notes being announced to users (or that announcement being cancelled).
+class AnnouncementExposureRow(Base):
+    """One period during which users saw something: a banner on air, or an
+    announced package of patch notes. Each row is one line of the admin history.
 
-    No foreign key on ``announcement_id`` so the history outlives the
-    announcement; ``label`` snapshots its title at event time.
+    No foreign key on ``announcement_id`` so a line outlives its announcement;
+    ``label`` snapshots its title when the exposure started.
     """
 
-    __tablename__ = "platform_announcement_activation_event"
+    __tablename__ = "platform_announcement_exposure"
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
-    announcement_id: Mapped[str] = mapped_column(String, nullable=False)
     kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    announcement_id: Mapped[str] = mapped_column(
+        String,
+        nullable=False,
+        comment="The banner; for a package, its first patch note.",
+    )
     label: Mapped[dict[str, str]] = mapped_column(
         JSON,
         nullable=False,
         default=dict,
-        comment="Locale → title at event time.",
-    )
-    action: Mapped[str] = mapped_column(
-        String(16),
-        nullable=False,
-        comment="activated | deactivated | announced | unannounced",
+        comment="Locale → title when the exposure started.",
     )
     severity: Mapped[str | None] = mapped_column(
         String(16),
         nullable=True,
-        comment="Banner severity at event time; null for a patch note.",
+        comment="Banner severity when the exposure started; null for patch notes.",
     )
     actor_uid: Mapped[str | None] = mapped_column(String, nullable=True)
-    occurred_at: Mapped[datetime] = mapped_column(
+    activated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow, index=True
+    )
+    deactivated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="Null while users still see it.",
+    )
+    note_count: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        comment="Patch notes in the package; null when the row keeps none.",
+    )
+    package: Mapped[list[dict[str, Any]] | None] = mapped_column(
+        JSON(none_as_null=True),
+        nullable=True,
+        deferred=True,
+        comment="The announced patch notes, frozen: [{id, title, description_long}].",
+    )
+    opens_dialog: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default="true",
+        comment="False only for the package the upgrade created: readable, "
+        "pending for nobody.",
     )

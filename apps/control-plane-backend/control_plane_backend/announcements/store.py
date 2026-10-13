@@ -18,14 +18,16 @@ from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any, cast
 
 from fred_core.sql import make_session_factory, use_session
-from sqlalchemy import delete, select, update
+from sqlalchemy import CursorResult, delete, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
+from sqlalchemy.orm import undefer
 
 from control_plane_backend.models.announcement_models import (
-    AnnouncementActivationEventRow,
+    AnnouncementExposureRow,
     AnnouncementRow,
     AnnouncementSeenRow,
 )
@@ -53,17 +55,20 @@ class StoredAnnouncement:
 
 
 @dataclass(frozen=True)
-class StoredActivationEvent:
-    """One row of the append-only activation history."""
+class StoredExposure:
+    """One exposure row. `package` is only loaded where a caller asks for it."""
 
     id: str
-    announcement_id: str
     kind: str
+    announcement_id: str
     label: dict[str, str]
-    action: str
     actor_uid: str | None
-    occurred_at: datetime
+    activated_at: datetime
+    deactivated_at: datetime | None = None
     severity: str | None = None
+    note_count: int | None = None
+    opens_dialog: bool = True
+    package: list[dict[str, Any]] | None = None
 
 
 def _to_stored(row: AnnouncementRow) -> StoredAnnouncement:
@@ -85,16 +90,22 @@ def _to_stored(row: AnnouncementRow) -> StoredAnnouncement:
     )
 
 
-def _to_stored_event(row: AnnouncementActivationEventRow) -> StoredActivationEvent:
-    return StoredActivationEvent(
+def _to_stored_exposure(
+    row: AnnouncementExposureRow, *, with_package: bool = False
+) -> StoredExposure:
+    return StoredExposure(
         id=row.id,
-        announcement_id=row.announcement_id,
         kind=row.kind,
+        announcement_id=row.announcement_id,
         label=dict(row.label),
-        severity=row.severity,
-        action=row.action,
         actor_uid=row.actor_uid,
-        occurred_at=row.occurred_at,
+        activated_at=row.activated_at,
+        deactivated_at=row.deactivated_at,
+        severity=row.severity,
+        note_count=row.note_count,
+        opens_dialog=row.opens_dialog,
+        # Deferred column: only touch it when the query loaded it.
+        package=row.package if with_package else None,
     )
 
 
@@ -301,10 +312,11 @@ class AnnouncementStore:
             await s.delete(row)
             return True
 
-    async def list_visible_patch_notes(
+    async def list_included_patch_notes(
         self, *, session: AsyncSession | None = None
     ) -> list[StoredAnnouncement]:
-        """The enabled patch notes in the administrator's order: what users read."""
+        """The enabled patch notes in the administrator's order: what the next
+        announcement will freeze."""
         async with use_session(self._sessions, session) as s:
             rows = (
                 await s.execute(
@@ -345,96 +357,129 @@ class AnnouncementStore:
             await s.flush()
             return True
 
-    async def append_activation_events(
-        self,
-        events: Sequence[StoredActivationEvent],
-        *,
-        session: AsyncSession | None = None,
+    async def add_exposure(
+        self, exposure: StoredExposure, *, session: AsyncSession | None = None
     ) -> None:
-        """Append history rows. There is deliberately no update or delete."""
-        if not events:
-            return
+        """Start an exposure: one new history line."""
         async with use_session(self._sessions, session) as s:
-            s.add_all(
-                AnnouncementActivationEventRow(
-                    id=event.id,
-                    announcement_id=event.announcement_id,
-                    kind=event.kind,
-                    label=event.label,
-                    severity=event.severity,
-                    action=event.action,
-                    actor_uid=event.actor_uid,
-                    occurred_at=event.occurred_at,
+            s.add(
+                AnnouncementExposureRow(
+                    id=exposure.id,
+                    kind=exposure.kind,
+                    announcement_id=exposure.announcement_id,
+                    label=exposure.label,
+                    severity=exposure.severity,
+                    actor_uid=exposure.actor_uid,
+                    activated_at=exposure.activated_at,
+                    deactivated_at=exposure.deactivated_at,
+                    note_count=exposure.note_count,
+                    package=exposure.package,
+                    opens_dialog=exposure.opens_dialog,
                 )
-                for event in events
             )
             await s.flush()
 
-    async def list_activation_events(
+    async def end_exposures(
+        self,
+        *,
+        kind: str,
+        at: datetime,
+        announcement_id: str | None = None,
+        session: AsyncSession | None = None,
+    ) -> int:
+        """End the open exposures of `kind` (of one announcement when given).
+
+        Returns how many were open.
+        """
+        query = update(AnnouncementExposureRow).where(
+            AnnouncementExposureRow.kind == kind,
+            AnnouncementExposureRow.deactivated_at.is_(None),
+        )
+        if announcement_id is not None:
+            query = query.where(
+                AnnouncementExposureRow.announcement_id == announcement_id
+            )
+        async with use_session(self._sessions, session) as s:
+            result = await s.execute(query.values(deactivated_at=at))
+            return cast(CursorResult[Any], result).rowcount
+
+    async def list_exposures(
         self, *, limit: int, session: AsyncSession | None = None
-    ) -> list[StoredActivationEvent]:
-        """The newest `limit` events, newest first."""
+    ) -> list[StoredExposure]:
+        """The newest `limit` exposures, newest first, without their packages."""
         async with use_session(self._sessions, session) as s:
             rows = (
                 await s.execute(
-                    select(AnnouncementActivationEventRow)
+                    select(AnnouncementExposureRow)
                     .order_by(
-                        AnnouncementActivationEventRow.occurred_at.desc(),
-                        AnnouncementActivationEventRow.id.desc(),
+                        AnnouncementExposureRow.activated_at.desc(),
+                        AnnouncementExposureRow.id.desc(),
                     )
                     .limit(limit)
                 )
             ).scalars()
-            return [_to_stored_event(row) for row in rows]
+            return [_to_stored_exposure(row) for row in rows]
 
-    async def get_activation_event(
-        self, event_id: str, *, session: AsyncSession | None = None
-    ) -> StoredActivationEvent | None:
+    async def get_exposure(
+        self,
+        exposure_id: str,
+        *,
+        with_package: bool = False,
+        session: AsyncSession | None = None,
+    ) -> StoredExposure | None:
+        query = select(AnnouncementExposureRow).where(
+            AnnouncementExposureRow.id == exposure_id
+        )
+        if with_package:
+            query = query.options(undefer(AnnouncementExposureRow.package))
         async with use_session(self._sessions, session) as s:
-            row = await s.get(AnnouncementActivationEventRow, event_id)
-            return None if row is None else _to_stored_event(row)
+            row = (await s.execute(query)).scalar_one_or_none()
+            if row is None:
+                return None
+            return _to_stored_exposure(row, with_package=with_package)
 
-    async def get_current_announcement(
-        self, *, session: AsyncSession | None = None
-    ) -> StoredActivationEvent | None:
-        """The newest `announced` event, unless an `unannounced` one followed it.
+    async def get_announcement_in_effect(
+        self, *, with_package: bool = False, session: AsyncSession | None = None
+    ) -> StoredExposure | None:
+        """The open patch-note exposure that holds a package, if any.
 
         The one definition of "an announcement is in effect": the users' read,
-        the admin read and the cancellation all go through it.
+        the admin read and the withdrawal all go through it.
         """
+        query = (
+            select(AnnouncementExposureRow)
+            .where(
+                AnnouncementExposureRow.kind == "patch_note",
+                AnnouncementExposureRow.deactivated_at.is_(None),
+                AnnouncementExposureRow.note_count.is_not(None),
+            )
+            .order_by(
+                AnnouncementExposureRow.activated_at.desc(),
+                AnnouncementExposureRow.id.desc(),
+            )
+            .limit(1)
+        )
+        if with_package:
+            query = query.options(undefer(AnnouncementExposureRow.package))
         async with use_session(self._sessions, session) as s:
-            row = (
-                await s.execute(
-                    select(AnnouncementActivationEventRow)
-                    .where(
-                        AnnouncementActivationEventRow.action.in_(
-                            ("announced", "unannounced")
-                        )
-                    )
-                    .order_by(
-                        AnnouncementActivationEventRow.occurred_at.desc(),
-                        AnnouncementActivationEventRow.id.desc(),
-                    )
-                    .limit(1)
-                )
-            ).scalar_one_or_none()
-            if row is None or row.action != "announced":
+            row = (await s.execute(query)).scalar_one_or_none()
+            if row is None:
                 return None
-            return _to_stored_event(row)
+            return _to_stored_exposure(row, with_package=with_package)
 
     async def get_seen_announcement_id(
         self, user_id: str, *, session: AsyncSession | None = None
     ) -> str | None:
-        """The announcement event `user_id` last saw, if any."""
+        """The announcement `user_id` last saw, if any."""
         async with use_session(self._sessions, session) as s:
             row = await s.get(AnnouncementSeenRow, user_id)
-            return None if row is None else row.announcement_event_id
+            return None if row is None else row.announcement_id
 
     async def set_seen_announcement(
         self,
         *,
         user_id: str,
-        announcement_event_id: str,
+        announcement_id: str,
         session: AsyncSession | None = None,
     ) -> None:
         """Record what `user_id` last saw; idempotent."""
@@ -444,12 +489,11 @@ class AnnouncementStore:
                 if row is None:
                     s.add(
                         AnnouncementSeenRow(
-                            user_id=user_id,
-                            announcement_event_id=announcement_event_id,
+                            user_id=user_id, announcement_id=announcement_id
                         )
                     )
                 else:
-                    row.announcement_event_id = announcement_event_id
+                    row.announcement_id = announcement_id
                     row.seen_at = utcnow()
         except IntegrityError:
             # Two closes at once (two tabs): the other insert already won.
@@ -468,4 +512,4 @@ class AnnouncementStore:
             )
 
 
-__all__ = ["AnnouncementStore", "StoredActivationEvent", "StoredAnnouncement"]
+__all__ = ["AnnouncementStore", "StoredAnnouncement", "StoredExposure"]

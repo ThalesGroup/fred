@@ -15,6 +15,7 @@
 """Patch-note migrations: the announcement kind, then the browsable history."""
 
 import importlib.util
+import json
 from pathlib import Path
 
 import pytest
@@ -261,3 +262,190 @@ def test_history_downgrade_keeps_the_top_visible_note_and_round_trips(
         ("mid", 2),
         ("old", 3),
     ]
+
+
+_PACKAGES = "a6c1d94e27b3_patch_note_packages_and_exposures.py"
+
+
+def _add_event(connection, event_id, announcement_id, kind, action, at, actor=None):
+    connection.execute(
+        sa.text(
+            "INSERT INTO platform_announcement_activation_event "
+            "(id, announcement_id, kind, label, action, severity, actor_uid, "
+            "occurred_at) VALUES (:id, :a, :kind, :label, :action, :severity, "
+            ":actor, :at)"
+        ),
+        {
+            "id": event_id,
+            "a": announcement_id,
+            "kind": kind,
+            "label": '{"en": "' + announcement_id + '"}',
+            "action": action,
+            "severity": "warning" if kind == "banner" else None,
+            "actor": actor,
+            "at": f"{at} 10:00:00.000000",
+        },
+    )
+
+
+@pytest.fixture
+def with_events(with_patch_notes):
+    """After the first history migration: banner and patch-note events, "mid" enabled."""
+    engine = with_patch_notes
+    _run(engine, _load(_HISTORY), "upgrade")
+    with engine.begin() as connection:
+        connection.execute(
+            sa.text(
+                'UPDATE platform_announcement SET title = \'{"en": "Mid"}\', '
+                'description_long = \'{"en": "# Mid", "fr": "# Milieu"}\' '
+                "WHERE id = 'mid'"
+            )
+        )
+        _add_event(
+            connection, "b1", "legacy", "banner", "activated", "2026-08-01", "alice"
+        )
+        _add_event(
+            connection, "b2", "legacy", "banner", "deactivated", "2026-08-05", "bob"
+        )
+        _add_event(
+            connection, "b3", "legacy", "banner", "activated", "2026-08-09", "bob"
+        )
+        # A deactivation with no activation before it pairs with nothing.
+        _add_event(connection, "b0", "gone", "banner", "deactivated", "2026-07-01")
+        _add_event(
+            connection, "p1", "old", "patch_note", "activated", "2026-08-02", "alice"
+        )
+        _add_event(connection, "p2", "old", "patch_note", "deactivated", "2026-08-31")
+        connection.execute(
+            sa.text(
+                "INSERT INTO platform_announcement_seen VALUES "
+                "('alice', 'e9', '2026-10-02 10:00:00.000000')"
+            )
+        )
+    return engine
+
+
+def _lines(engine):
+    with engine.begin() as connection:
+        rows = connection.execute(
+            sa.text(
+                "SELECT id, kind, announcement_id, actor_uid, severity, note_count, "
+                "opens_dialog, activated_at, deactivated_at, package, label "
+                "FROM platform_announcement_exposure ORDER BY activated_at, id"
+            )
+        ).mappings()
+        return [dict(row) for row in rows]
+
+
+def test_exposure_upgrade_pairs_events_and_freezes_the_enabled_note(with_events):
+    engine = with_events
+    _run(engine, _load(_PACKAGES), "upgrade")
+
+    *converted, package = _lines(engine)
+    assert [
+        (
+            line["id"],
+            line["kind"],
+            line["actor_uid"],
+            line["activated_at"][:10],
+            (line["deactivated_at"] or "")[:10],
+        )
+        for line in converted[:3]
+    ] == [
+        ("b1", "banner", "alice", "2026-08-01", "2026-08-05"),
+        ("p1", "patch_note", "alice", "2026-08-02", "2026-08-31"),
+        ("b3", "banner", "bob", "2026-08-09", ""),
+    ]
+    assert converted[0]["severity"] == "warning"
+    assert json.loads(converted[0]["label"]) == {"en": "legacy"}
+    # "e1" is the enabled note's own activation: ended, it kept no content.
+    [earlier] = converted[3:]
+    assert earlier["id"] == "e1" and earlier["deactivated_at"] is not None
+    assert all(line["note_count"] is None for line in converted)
+    assert all(line["package"] is None for line in converted)
+
+    assert (package["kind"], package["announcement_id"]) == ("patch_note", "mid")
+    assert (package["note_count"], package["actor_uid"]) == (1, None)
+    # Readable, pending for nobody.
+    assert package["opens_dialog"] == 0 and package["deactivated_at"] is None
+    assert json.loads(package["label"]) == {"en": "Mid"}
+    assert json.loads(package["package"]) == [
+        {
+            "id": "mid",
+            "title": {"en": "Mid"},
+            "description_long": {"en": "# Mid", "fr": "# Milieu"},
+        }
+    ]
+
+    inspector = sa.inspect(engine)
+    assert "platform_announcement_activation_event" not in inspector.get_table_names()
+    seen = {c["name"] for c in inspector.get_columns("platform_announcement_seen")}
+    assert seen == {"user_id", "announcement_id", "seen_at"}
+    with engine.begin() as connection:
+        assert (
+            connection.scalar(
+                sa.text("SELECT announcement_id FROM platform_announcement_seen")
+            )
+            == "e9"
+        )
+        # The toggle stays on: the note is in the next announcement too.
+        assert (
+            connection.scalar(
+                sa.text("SELECT enabled FROM platform_announcement WHERE id = 'mid'")
+            )
+            == 1
+        )
+
+
+def test_exposure_upgrade_without_enabled_patch_note_leaves_no_package(with_events):
+    engine = with_events
+    with engine.begin() as connection:
+        connection.execute(sa.text("UPDATE platform_announcement SET enabled = 0"))
+
+    _run(engine, _load(_PACKAGES), "upgrade")
+
+    assert all(line["note_count"] is None for line in _lines(engine))
+
+
+def test_exposure_downgrade_rebuilds_events_and_round_trips(with_events):
+    engine = with_events
+    migration = _load(_PACKAGES)
+    _run(engine, migration, "upgrade")
+    before = [line["id"] for line in _lines(engine) if line["note_count"] is None]
+    with engine.begin() as connection:
+        # An announcement made after the upgrade, then withdrawn.
+        connection.execute(
+            sa.text(
+                "INSERT INTO platform_announcement_exposure (id, kind, "
+                "announcement_id, label, actor_uid, activated_at, deactivated_at, "
+                "note_count, package, opens_dialog) VALUES ('n1', 'patch_note', "
+                "'mid', '{}', 'carol', '2026-10-20 10:00:00.000000', "
+                "'2026-10-21 10:00:00.000000', 1, '[]', 1)"
+            )
+        )
+
+    _run(engine, migration, "downgrade")
+
+    inspector = sa.inspect(engine)
+    assert "platform_announcement_exposure" not in inspector.get_table_names()
+    seen = {c["name"] for c in inspector.get_columns("platform_announcement_seen")}
+    assert "announcement_event_id" in seen
+    with engine.begin() as connection:
+        events = connection.execute(
+            sa.text(
+                "SELECT announcement_id, action, actor_uid FROM "
+                "platform_announcement_activation_event ORDER BY occurred_at, action"
+            )
+        ).all()
+    assert [tuple(e) for e in events if e[0] == "legacy"] == [
+        ("legacy", "activated", "alice"),
+        ("legacy", "deactivated", None),
+        ("legacy", "activated", "bob"),
+    ]
+    announcing = [tuple(e) for e in events if e[1] in ("announced", "unannounced")]
+    # The upgrade's own package is not an announcement: it would open a dialog.
+    assert announcing == [("mid", "announced", "carol"), ("mid", "unannounced", None)]
+
+    _run(engine, migration, "upgrade")
+    again = [line["id"] for line in _lines(engine) if line["note_count"] is None]
+    assert set(before) <= set(again)
