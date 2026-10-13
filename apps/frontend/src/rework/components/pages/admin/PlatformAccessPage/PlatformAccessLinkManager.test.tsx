@@ -384,8 +384,50 @@ it("creates a noted link without an implicit expiry and clears reusable mutation
     createPlatformEnrollmentLink: { note: "Demo workshop", expires_at: null },
   });
   expect(input("copyLink").value).toContain("/join-free/fixture-generated-token");
+  expect(navigator.clipboard.writeText).toHaveBeenCalledWith("http://localhost:5173/join-free/fixture-generated-token");
+  expect(button("links.copyUrl").querySelector('[aria-hidden="true"]')?.textContent).toBe("check");
   expect(input("links.note")).toBeUndefined();
   expect(hooks.reset).toHaveBeenCalled();
+});
+it("keeps a generated URL available when automatic clipboard writing fails", async () => {
+  vi.mocked(navigator.clipboard.writeText).mockRejectedValueOnce(new Error("permission"));
+  render();
+  act(() => button("createLink").click());
+  await act(async () => button("createLink").click());
+  expect(input("copyLink").value).toContain("/join-free/fixture-generated-token");
+  expect(document.body.textContent).toContain("rework.platformAccess.links.copyFailed");
+  expect(document.body.textContent).not.toContain("rework.platformAccess.failed");
+  expect(hooks.generate).toHaveBeenCalledTimes(1);
+  await act(async () => button("links.copyUrl").click());
+  expect(button("links.copyUrl").querySelector('[aria-hidden="true"]')?.textContent).toBe("check");
+  expect(hooks.generate).toHaveBeenCalledTimes(1);
+});
+it("does not reopen a dismissed result after a delayed clipboard rejection", async () => {
+  let rejectCopy!: (error: Error) => void;
+  vi.mocked(navigator.clipboard.writeText).mockImplementationOnce(
+    () => new Promise<void>((_, reject) => (rejectCopy = reject)),
+  );
+  render();
+  act(() => button("createLink").click());
+  await act(async () => button("createLink").click());
+  act(() => frontConfirmButton().click());
+  expect(input("copyLink")).toBeUndefined();
+  await act(async () => rejectCopy(new Error("permission")));
+  expect(input("copyLink")).toBeUndefined();
+  expect(document.body.textContent).not.toContain("rework.platformAccess.links.copyFailed");
+});
+it("ignores an older automatic copy result after a manual retry", async () => {
+  let rejectCopy!: (error: Error) => void;
+  vi.mocked(navigator.clipboard.writeText).mockImplementationOnce(
+    () => new Promise<void>((_, reject) => (rejectCopy = reject)),
+  );
+  render();
+  act(() => button("createLink").click());
+  await act(async () => button("createLink").click());
+  await act(async () => button("links.copyUrl").click());
+  await act(async () => rejectCopy(new Error("permission")));
+  expect(button("links.copyUrl").querySelector('[aria-hidden="true"]')?.textContent).toBe("check");
+  expect(document.body.textContent).not.toContain("rework.platformAccess.links.copyFailed");
 });
 it("recovers an existing URL without creating another invitation and confirms revocation", async () => {
   render();

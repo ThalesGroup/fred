@@ -578,9 +578,9 @@ Admission denial, invalid Free enrollment links and admission verification failu
 
 ### Requirement: Administrators manage independent Free-link history
 
-Only platform administrators SHALL create, list and revoke Free-team links. The platform administration Teams registry SHALL expose the Free toggle and Manage links action for each eligible team; ordinary team managers SHALL NOT see these controls or issue admission administration queries. Platform access SHALL group individual exceptions and independent team authorization in its Whitelist panel and SHALL NOT duplicate Free/link controls. The bounded paginated history SHALL expose the link identifier, note, creation and expiry dates, revocation state, suspension state and authenticated opening count, without reusable tokens or visitor identity. Administrators SHALL be able to inspect and revoke links while Free is disabled. Manage links SHALL open on the bounded invitation list with a Create link action; note and expiry inputs SHALL appear only in a separate creation view. That view SHALL place the optional note before optional expiration and reuse the platform KPI selector presentation, with a single future date/time input, future duration shortcuts, a No expiration option and Apply. The date draft SHALL prevent creation until applied or dismissed; Escape SHALL close only the selector and restore trigger focus. Empty expiration SHALL mean no expiry; invalid or past expiration SHALL prevent creation without losing the note. Generation success SHALL show the original URL and an immediately available Copy URL action.
+Only platform administrators SHALL create, list and revoke Free-team links. The platform administration Teams registry SHALL expose the Free toggle and Manage links action for each eligible team; ordinary team managers SHALL NOT see these controls or issue admission administration queries. Platform access SHALL group individual exceptions and independent team authorization in its Whitelist panel and SHALL NOT duplicate Free/link controls. The bounded paginated history SHALL expose the link identifier, note, creation and expiry dates, revocation state, suspension state and authenticated opening count, without reusable tokens or visitor identity. Administrators SHALL be able to inspect and revoke links while Free is disabled. Manage links SHALL open on the bounded invitation list with a Create link action; note and expiry inputs SHALL appear only in a separate creation view. That view SHALL place the optional note before optional expiration and reuse the platform KPI selector presentation, with a single future date/time input, future duration shortcuts, a No expiration option and Apply. The date draft SHALL prevent creation until applied or dismissed; Escape SHALL close only the selector and restore trigger focus. Empty expiration SHALL mean no expiry; invalid or past expiration SHALL prevent creation without losing the note. Generation success SHALL show the original URL in the platform's monospace font and an immediately available Copy URL action, and SHALL attempt to copy that URL to the clipboard automatically.
 
-History SHALL use an explicit Copy URL action that recovers the original token and attempts clipboard writing without generating another link. Clipboard success SHALL be announced only after the write succeeds through temporary feedback on the clicked button and a screen-reader status, without changing the dialog layout. If clipboard writing is unavailable or rejected, the UI SHALL retain the usable URL with a clear manual-copy fallback; a copy failure SHALL NOT be presented as generation failure or cause another invitation to be created. Creation/recovery URL state SHALL remain transient and clear on manager dismissal, without logging URLs or retaining reusable mutation payloads.
+History SHALL use an explicit Copy URL action that recovers the original token and attempts clipboard writing without generating another link. Clipboard success SHALL be announced only after the write succeeds through temporary feedback on the corresponding Copy URL button and a screen-reader status, without changing the dialog layout. If clipboard writing is unavailable or rejected, the UI SHALL retain the usable URL with a clear manual-copy fallback; a copy failure SHALL NOT be presented as generation failure or cause another invitation to be created. Creation/recovery URL state SHALL remain transient and clear on manager dismissal, without logging URLs or retaining reusable mutation payloads.
 
 The opening-count column SHALL use the short localized label Accesses (Accès) without showing the last-access timestamp, and explain that it counts authenticated page openings rather than unique users, anonymous clicks or message delivery. The UI SHALL identify manual sharing and explicit URL recovery; it SHALL NOT claim message delivery.
 
@@ -622,7 +622,9 @@ The opening-count column SHALL use the short localized label Accesses (Accès) w
 
 - **WHEN** generation succeeds
 - **THEN** the usable invitation URL and Copy URL action SHALL be shown with successful creation feedback
-- **AND** generating the link SHALL NOT claim that clipboard writing or message delivery succeeded
+- **AND** the displayed URL SHALL use the platform's monospace font
+- **AND** the UI SHALL attempt to copy that URL to the clipboard automatically
+- **AND** clipboard success SHALL be announced only after the write succeeds; creation SHALL NOT claim message delivery
 
 #### Scenario: Copy from invitation history
 
@@ -636,6 +638,11 @@ The opening-count column SHALL use the short localized label Accesses (Accès) w
 - **THEN** the usable URL SHALL remain available for manual copying with specific feedback
 - **AND** no replacement invitation SHALL be created and the failure SHALL NOT be announced as a failed creation
 
+#### Scenario: Delayed clipboard result after dismissal
+
+- **WHEN** an administrator dismisses the generated URL or begins a newer copy while a clipboard write is pending
+- **THEN** a later result from the earlier write SHALL NOT reopen the dismissed dialog or replace the newer copy feedback
+
 #### Scenario: Short counter heading retains its meaning
 
 - **WHEN** the invitation history displays Accesses
@@ -645,7 +652,6 @@ The opening-count column SHALL use the short localized label Accesses (Accès) w
 
 - **WHEN** expiration is invalid or no longer in the future, or generation fails
 - **THEN** the creation form SHALL retain the note and date with actionable feedback, without closing the manager
-
 ### Requirement: Authenticated enrollment-page openings use link aggregates
 
 The frontend SHALL record each authenticated enrollment-page opening using its own credential. Aggregate opening count and last-opening time SHALL be stored on the link row without a separate visit table. The frontend SHALL submit one signal per page opening, including under duplicate React effects; every accepted opening POST SHALL increment the count. A subsequent new page opening SHALL count again. Preview, terms acceptance and enrollment SHALL NOT increment the opening count themselves. Invalid, expired, revoked or suspended links SHALL NOT record openings. Visitor identities, IP addresses and account payloads SHALL NOT be stored as analytics.

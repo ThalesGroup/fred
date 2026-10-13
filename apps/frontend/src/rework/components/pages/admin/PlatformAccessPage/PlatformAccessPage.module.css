@@ -165,6 +165,9 @@
   color: var(--on-warning-container);
   font: var(--font-body-medium);
 }
+.dialogBody .linkUrlInput {
+  font-family: var(--font-family-mono, monospace);
+}
 .linkControls {
   display: flex;
   flex-wrap: wrap;

@@ -71,6 +71,7 @@ export default function PlatformAccessLinkManager({
   const [choosingExpiry, setChoosingExpiry] = useState(false);
   const [url, setUrl] = useState<string>();
   const outputInputRef = useRef<HTMLInputElement>(null);
+  const copyAttemptRef = useRef(0);
   const returnFocusRef = useRef<{ trigger: HTMLElement | null; dialog: HTMLElement | null } | null>(null);
   const [confirmRevoke, setConfirmRevoke] = useState<string>();
   const [failed, setFailed] = useState(false);
@@ -90,7 +91,9 @@ export default function PlatformAccessLinkManager({
   };
   const linkUrl = (token: string) => new URL(platformPath(`join-free/${token}`), window.location.origin).toString();
   const rememberFocus = (trigger: HTMLElement) => {
+    copyAttemptRef.current += 1;
     returnFocusRef.current = { trigger, dialog: trigger.closest<HTMLElement>('[role="dialog"]') };
+    return copyAttemptRef.current;
   };
   const copyConfirmed = (linkId?: string) => copied && copyStatus === "copied" && copiedLinkId === linkId;
   const copyAction = (onClick: () => void, disabled: boolean, linkId?: string) => (
@@ -115,13 +118,16 @@ export default function PlatformAccessLinkManager({
     </span>
   );
   const copy = async (value: string, linkId?: string) => {
+    const attempt = ++copyAttemptRef.current;
     setCopyStatus(undefined);
     try {
       await navigator.clipboard.writeText(value);
+      if (attempt !== copyAttemptRef.current) return;
       setCopiedLinkId(linkId);
       setCopyStatus("copied");
       confirmCopied();
     } catch {
+      if (attempt !== copyAttemptRef.current) return;
       setCopyStatus("failed");
       setUrl(value);
       setView("output");
@@ -129,6 +135,7 @@ export default function PlatformAccessLinkManager({
   };
   const back = () => {
     if (busy) return;
+    copyAttemptRef.current += 1;
     setView("list");
     setChoosingExpiry(false);
     setUrl(undefined);
@@ -145,13 +152,14 @@ export default function PlatformAccessLinkManager({
             expires_at: expiry ? new Date(expiry).toISOString() : null,
           },
         }).unwrap();
+        const createdUrl = linkUrl(result.token);
         setCreated(true);
-        setUrl(linkUrl(result.token));
-        setCopyStatus(undefined);
+        setUrl(createdUrl);
         setView("output");
         setOffset(0);
         setNote("");
         setExpiry("");
+        void copy(createdUrl);
       } finally {
         generating.reset();
       }
@@ -182,10 +190,16 @@ export default function PlatformAccessLinkManager({
         confirmLabel={t("common.close")}
         confirmDisabled={busy}
         onConfirm={() => {
-          if (!busy) onClose();
+          if (!busy) {
+            copyAttemptRef.current += 1;
+            onClose();
+          }
         }}
         onCancel={() => {
-          if (!busy) onClose();
+          if (!busy) {
+            copyAttemptRef.current += 1;
+            onClose();
+          }
         }}
       >
         <div className={styles.dialogBody}>
@@ -320,9 +334,10 @@ export default function PlatformAccessLinkManager({
                           ),
                           disabled: busy || links.isFetching || !link.recoverable,
                           onClick: (event) => {
-                            rememberFocus(event.currentTarget);
+                            const attempt = rememberFocus(event.currentTarget);
                             void run(async () => {
                               const result = await reveal({ teamId: team.team_id, linkId: link.id }).unwrap();
+                              if (attempt !== copyAttemptRef.current) return;
                               setCreated(false);
                               await copy(linkUrl(result.token), link.id);
                             });
@@ -497,6 +512,7 @@ export default function PlatformAccessLinkManager({
             <div className={styles.dialogBody}>
               <TextInput
                 ref={outputInputRef}
+                className={styles.linkUrlInput}
                 label={t("rework.platformAccess.copyLink")}
                 value={url}
                 readOnly
