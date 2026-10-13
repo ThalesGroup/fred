@@ -109,7 +109,7 @@ Adding people SHALL go through a dialog that searches all known users on the ser
 
 ### Requirement: Access administration has readable section navigation
 
-The page SHALL provide one level of navigation with localized Rules, Users and Teams tabs using the shared Fred navigation presentation, without sub-tabs. Only the active panel SHALL be exposed visually or to keyboard and assistive navigation, and no listing SHALL be requested for a tab that is not shown. The rule draft, the user search, page and page size SHALL survive tab changes without implicit saving or admission mutations. Users and Teams are the two halves of the whitelist: each SHALL open with a heading naming it and a short description stating that its entries always have access whatever the rule, placed above its controls. Import existing users and individual exceptions SHALL appear in Users; independent team authorization SHALL appear in Teams. Every search field of the page (users, teams, account-field picker) SHALL ignore letter case and accents. A top-right filtering action in the page header SHALL remain available across all tabs, without a separate Activation tab. Ordinary content, secondary explanations and section headings SHALL use a consistent readable typography scale across the page and its dialogs. Repeated explanations SHALL be removed while authorization exceptions, revocation consequences, validation and errors remain understandable.
+The page SHALL provide one level of navigation with localized Rules, Users and Teams tabs using the shared Fred navigation presentation, without sub-tabs. Only the active panel SHALL be exposed visually or to keyboard and assistive navigation, and no listing SHALL be requested for a tab that is not shown. The rule draft, the user search, page and page size SHALL survive tab changes without implicit saving or admission mutations. Users and Teams are the two halves of the whitelist: each SHALL open with a heading naming it and a short description stating that its entries always have access whatever the rule, placed above its controls. Import existing users and individual exceptions SHALL appear in Users; independent team authorization SHALL appear in Teams. Every search field of the page (users, teams, account-field picker) SHALL ignore letter case and accents. A top-right filtering action in the page header SHALL remain available across all tabs, without a separate Activation tab. Once the filtering state is known, a status indicator beside the page title SHALL state whether filtering is on or off, on every tab. Ordinary content and secondary explanations SHALL use the body text size of the sibling administration pages across the page and its dialogs, secondary explanations being set apart by a subdued colour rather than a different size. No section heading SHALL reuse the page-title size. Repeated explanations SHALL be removed while authorization exceptions, revocation consequences, validation and errors remain understandable.
 
 #### Scenario: Return to an unsaved rule or selected users
 
@@ -124,7 +124,7 @@ The page SHALL provide one level of navigation with localized Rules, Users and T
 #### Scenario: Read page and modal content
 
 - **WHEN** an administrator reads conditions, selection dialogs or invitation history
-- **THEN** ordinary text and secondary help SHALL use consistent readable sizes, with errors and revocation guidance retained
+- **THEN** ordinary text and secondary help SHALL use the body text size of the sibling administration pages, with errors and revocation guidance retained
 
 #### Scenario: Separate whitelist management
 
@@ -141,3 +141,9 @@ The page SHALL provide one level of navigation with localized Rules, Users and T
 
 - **WHEN** an administrator changes tabs
 - **THEN** the filtering action SHALL remain at the top right of the page header with the same activation guards
+
+#### Scenario: Filtering status beside the title
+
+- **WHEN** an administrator opens the page while filtering is off, then enables filtering
+- **THEN** the indicator beside the page title SHALL read that filtering is off, then that it is on
+- **AND** it SHALL remain visible when the administrator changes tabs

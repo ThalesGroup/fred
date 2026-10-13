@@ -57,3 +57,7 @@ The team "Add members" dialog (`AddTeamMembersDialog`) is a hand-rolled modal: a
 - For the PR reviewer: `granted_by` (a technical user id) is already returned inside each individual source and is not displayed. Showing who granted an access needs a name lookup; should the id stay in the payload meanwhile?
 - For the PR reviewer: the add dialog follows the team dialog's search-and-pending-list pattern, so results are not browsable page by page. If browsing all users page by page inside the dialog is wanted, it needs a table-in-dialog design (and a per-row "not selectable" state the shared `DataTable` does not have). Is the shared pattern acceptable?
 - For the PR reviewer: the confirmation toast reports the number of people selected, not the number newly granted, because the bulk grant answers 204 without a count. Worth returning the count?
+
+## Ordering with the condensed administration screens change
+
+This change is stacked on `condense-platform-access-admin-screens`, which also modifies "Access administration has readable section navigation". That change must be archived first. This delta is written as the state after both: it keeps that change's body text size, its rule on section heading size and its filtering status indicator, and replaces its two-tab layout with sub-tabs by one level of three tabs, each whitelist tab opening with its own heading and description.
