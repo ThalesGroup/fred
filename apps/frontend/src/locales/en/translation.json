@@ -411,8 +411,9 @@
       "none": "No command yet. Add one to any of your personal prompts from the Prompts page. In a team, an editor can also add one to a team prompt.",
       "noMatch": "No command matches.",
       "runErrorSummary": "Could not run the command",
-      "runErrorDetail": "The prompt behind this command could not be read. Please try again in a moment.",
-      "runErrorStale": "This command is no longer available: its prompt was deleted or renamed, or it comes from another agent or team. Remove the command from your message and choose it again."
+      "runErrorDetail": "The prompt behind the /{{command}} command could not be read. Please try again in a moment.",
+      "runErrorStale": "The /{{command}} command is no longer available: its prompt was deleted or renamed, or it comes from another agent or team. Remove it from your message and choose it again.",
+      "runErrorTooMany": "A message can hold at most {{limit}} prompt commands. Remove a few, then send again."
     },
     "composerPlaceholder": "Ask your question, or type / for a command",
     "newConversation": "New conversation",

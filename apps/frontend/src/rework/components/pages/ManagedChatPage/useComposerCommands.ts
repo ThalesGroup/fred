@@ -27,7 +27,12 @@ import {
   useGetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetQuery,
   useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
-import { findSkillInvocations } from "@rework/utils/skillInvocation";
+import {
+  assemblePromptTurn,
+  findSkillInvocations,
+  MAX_TURN_PROMPTS,
+  usablePromptList,
+} from "@rework/utils/skillInvocation";
 import type { SkillInvocation, TurnCommand } from "../../../../slices/runtime/runtimeOpenApi";
 
 /**
@@ -54,6 +59,21 @@ function matchByName<T extends { command: string }>(entries: readonly T[], query
   const hits = entries.filter((entry) => entry.command.toLowerCase().includes(needle));
   const starts = (entry: T) => entry.command.toLowerCase().startsWith(needle);
   return [...hits.filter(starts), ...hits.filter((entry) => !starts(entry))];
+}
+
+/** The span one edit replaced: positions before `from` stay, those from `end`
+ *  on shift by `delta`, anything in between was rewritten. */
+function editBetween(old: string, value: string) {
+  let from = 0;
+  while (from < old.length && from < value.length && old[from] === value[from]) from++;
+  let tail = 0;
+  while (
+    tail < old.length - from &&
+    tail < value.length - from &&
+    old[old.length - tail - 1] === value[value.length - tail - 1]
+  )
+    tail++;
+  return { from, end: old.length - tail, delta: value.length - old.length };
 }
 
 /** A deleted or forbidden prompt will not come back by retrying. */
@@ -102,22 +122,22 @@ export function useComposerCommands(params: {
   onRunCommand: (run: { text: string; command: TurnCommand; skills?: SkillInvocation[] }) => void;
   /** Ordinary submit — no command, or a token no prompt holds. */
   onSend: () => void;
-  /** The command cannot run: `stale` when its prompt is gone, renamed or from
-   *  another agent or team; `unreadable` when the read failed for now. */
-  onResolveError: (reason: "stale" | "unreadable") => void;
+  /** The message is held back because of `command`: `stale` when its prompt is
+   *  gone, renamed or from another agent or team; `unreadable` when the read
+   *  failed for now; `tooMany` when it is the first one past the limit. */
+  onResolveError: (reason: "stale" | "unreadable" | "tooMany", command: string) => void;
 }): {
   trigger: CommandTriggerBinding;
   menu: ComposerCommandsMenu | null;
   submit: () => void;
   dismiss: (line: string, message?: ThreadMessage) => void;
   selectedSkills: { name: string; from: number; to: number }[];
-  selectedPrompt:
-    | (Omit<Extract<CommandMenuEntry, { kind: "prompt" }>, "source"> & {
-        source: "personal" | "team";
-        from: number;
-        to: number;
-      })
-    | null;
+  /** Every prompt command shown as a token, in the order of the line. */
+  selectedPrompts: (Omit<Extract<CommandMenuEntry, { kind: "prompt" }>, "source"> & {
+    source: "personal" | "team";
+    from: number;
+    to: number;
+  })[];
   selectedSkillArgumentHint: string | null;
   skillDescriptions: ReadonlyMap<string, string>;
   composerValue: string;
@@ -188,60 +208,71 @@ export function useComposerCommands(params: {
   const commandsRef = useRef(commands);
   commandsRef.current = commands;
   const matchedChoices = choices.filter((choice) => params.input.slice(choice.from, choice.to) === `/${choice.name}`);
-  const promptChoice = matchedChoices.find((choice) => choice.kind === "prompt");
-  const currentPromptChoice = promptChoice?.scope === scopeRef.current.version ? promptChoice : undefined;
+  const promptChoices = matchedChoices.flatMap((choice) => (choice.kind === "prompt" ? [{ ...choice, choice }] : []));
   const allSkillRanges = findSkillInvocations(params.input, skillNames);
+  // A name picked as a prompt is never also a skill, wherever it sits.
   const selectedSkills = allSkillRanges.filter(
     (token) =>
-      token.from !== promptChoice?.from &&
+      !promptChoices.some((choice) => choice.from === token.from) &&
       (token.to < params.input.length ||
         matchedChoices.some((choice) => choice.kind === "skill" && choice.from === token.from)),
   );
-  const promptRange =
-    promptChoice ??
-    findSkillInvocations(
-      params.input,
-      commands.map((entry) => entry.command),
-    ).find((token) => !selectedSkills.some((skill) => skill.from === token.from));
-  const promptEntry =
-    (!promptChoice || currentPromptChoice) && promptRange
-      ? commands.find(
-          (entry) =>
-            entry.command === promptRange.name &&
-            (!currentPromptChoice ||
-              currentPromptChoice.kind !== "prompt" ||
-              (entry.promptId === currentPromptChoice.promptId &&
-                (!currentPromptChoice.promptTeamId || entry.promptTeamId === currentPromptChoice.promptTeamId))),
-        )
-      : undefined;
   // A typed prompt has no choice behind it, so once shown it is remembered:
   // deleting the text after it must not turn the token back into raw text.
-  const shownPromptRef = useRef<{ from: number; name: string } | null>(null);
-  const selectedPrompt =
-    promptEntry &&
-    promptRange &&
-    (promptRange.to < params.input.length ||
-      currentPromptChoice ||
-      (shownPromptRef.current?.from === promptRange.from && shownPromptRef.current.name === promptRange.name)) &&
-    (promptEntry.promptTeamId === teamId || currentPromptChoice || prompts !== undefined)
-      ? { ...promptEntry, from: promptRange.from, to: promptRange.to }
-      : null;
-  shownPromptRef.current = selectedPrompt && { from: selectedPrompt.from, name: selectedPrompt.command };
+  const shownPromptsRef = useRef<{ input: string; tokens: { from: number; name: string }[] }>({
+    input: params.input,
+    tokens: [],
+  });
+  const shownEdit = editBetween(shownPromptsRef.current.input, params.input);
+  const shownBefore = shownPromptsRef.current.tokens.flatMap((token) =>
+    token.from + token.name.length + 1 <= shownEdit.from
+      ? [token]
+      : token.from >= shownEdit.end
+        ? [{ ...token, from: token.from + shownEdit.delta }]
+        : [],
+  );
+  const selectedPrompts = [
+    ...promptChoices,
+    ...findSkillInvocations(
+      params.input,
+      commands.map((entry) => entry.command),
+    )
+      .filter(
+        (token) =>
+          !promptChoices.some((choice) => choice.from === token.from) &&
+          !selectedSkills.some((skill) => skill.from === token.from),
+      )
+      .map((token) => ({ ...token, choice: undefined })),
+  ]
+    .sort((a, b) => a.from - b.from)
+    .flatMap((range) => {
+      const { choice } = range;
+      // A choice made for another agent or team is not shown as a token.
+      if (choice && choice.scope !== scopeRef.current.version) return [];
+      const entry = commands.find(
+        (candidate) =>
+          candidate.command === range.name &&
+          (!choice ||
+            (candidate.promptId === choice.promptId &&
+              (!choice.promptTeamId || candidate.promptTeamId === choice.promptTeamId))),
+      );
+      const shown =
+        entry &&
+        (range.to < params.input.length ||
+          choice ||
+          shownBefore.some((token) => token.from === range.from && token.name === range.name)) &&
+        (entry.promptTeamId === teamId || choice || prompts !== undefined);
+      return shown ? [{ ...entry, from: range.from, to: range.to }] : [];
+    });
+  shownPromptsRef.current = {
+    input: params.input,
+    tokens: selectedPrompts.map((prompt) => ({ from: prompt.from, name: prompt.command })),
+  };
   const selectedSummary = skills.find((skill) => skill.name === selectedSkills[0]?.name);
 
   const mapChoices = useCallback((value: string) => {
     const old = paramsRef.current.input;
-    let from = 0;
-    while (from < old.length && from < value.length && old[from] === value[from]) from++;
-    let tail = 0;
-    while (
-      tail < old.length - from &&
-      tail < value.length - from &&
-      old[old.length - tail - 1] === value[value.length - tail - 1]
-    )
-      tail++;
-    const end = old.length - tail;
-    const delta = value.length - old.length;
+    const { from, end, delta } = editBetween(old, value);
     const replacing = draftReplaceRef.current;
     draftReplaceRef.current = false;
     const previous = replacing ? [] : [...choicesRef.current];
@@ -315,17 +346,15 @@ export function useComposerCommands(params: {
         : query === "skill" || query.startsWith("skill ")
           ? matchByName(skillEntries, query.startsWith("skill ") ? query.slice(6) : "")
           : [
-              ...(!promptChoice || commandRange?.start === promptChoice.from
-                ? (["team", "personal"] as const).flatMap((source) =>
-                    matchByName(
-                      commands.filter((entry) => entry.source === source),
-                      query,
-                    ),
-                  )
-                : []),
+              ...(["team", "personal"] as const).flatMap((source) =>
+                matchByName(
+                  commands.filter((entry) => entry.source === source),
+                  query,
+                ),
+              ),
               ...matchByName(skillEntries, query),
             ],
-    [commands, skillEntries, query, commandRange, promptChoice],
+    [commands, skillEntries, query],
   );
   const safeIndex = entries.length === 0 ? 0 : Math.min(activeIndex, entries.length - 1);
   // Two distinct states. The panel is shown whenever the trigger is live — with
@@ -339,7 +368,7 @@ export function useComposerCommands(params: {
       commandQueryOf(params.input, commandRange?.end, [...skillNames, ...commands.map((entry) => entry.command)]) &&
     query !== dismissedQuery &&
     !selectedSkills.some((token) => token.from === commandRange?.start) &&
-    !(selectedPrompt && selectedPrompt.from === commandRange?.start);
+    !selectedPrompts.some((prompt) => prompt.from === commandRange?.start);
   const hasEntries = entries.length > 0;
 
   const entriesRef = useRef(entries);
@@ -365,29 +394,38 @@ export function useComposerCommands(params: {
   // Recall preserves selected identities and leaves the menu closed until editing.
   const dismiss = useCallback((line: string, message?: ThreadMessage) => {
     const command = message?.command;
-    const promptRange = command
-      ? findSkillInvocations(line, [command.command]).find(
-          (token) => command.draft_command_offset == null || token.from === command.draft_command_offset,
-        )
-      : undefined;
+    const listed = message ? usablePromptList(command, message.text) : null;
+    // One restored prompt per listed entry; an older turn has its single one.
+    const sent = listed
+      ? listed.map((entry) => ({
+          name: entry.command,
+          from: entry.draft_offset,
+          to: entry.draft_offset + entry.command.length + 1,
+          promptId: entry.prompt_id,
+        }))
+      : command
+        ? findSkillInvocations(line, [command.command])
+            .filter((token) => command.draft_command_offset == null || token.from === command.draft_command_offset)
+            .slice(0, 1)
+            .map((token) => ({ ...token, promptId: command.prompt_id }))
+        : [];
     const restored: Choice[] = findSkillInvocations(
       line,
       message?.skillNames ?? (message?.skillName ? [message.skillName] : []),
     )
-      .filter((token) => token.from !== promptRange?.from)
+      .filter((token) => !sent.some((prompt) => prompt.from === token.from))
       .map((token) => ({
         ...token,
         kind: "skill",
         scope: scopeRef.current.version,
       }));
-    if (command?.prompt_id && promptRange) {
-      const entry = commandsRef.current.find(
-        (entry) => entry.promptId === command.prompt_id && entry.command === command.command,
-      );
+    for (const { promptId, ...range } of sent) {
+      if (!promptId || line.slice(range.from, range.to) !== `/${range.name}`) continue;
+      const entry = commandsRef.current.find((entry) => entry.promptId === promptId && entry.command === range.name);
       restored.push({
-        ...promptRange,
+        ...range,
         kind: "prompt",
-        promptId: command.prompt_id,
+        promptId,
         promptTeamId: entry?.promptTeamId ?? "",
         scope: scopeRef.current.version,
       });
@@ -449,47 +487,55 @@ export function useComposerCommands(params: {
     [mapChoices],
   );
 
+  type PromptEntry = Extract<CommandMenuEntry, { kind: "prompt" }>;
   const run = useCallback(
     async (
-      entry: Extract<CommandMenuEntry, { kind: "prompt" }>,
       draft: string,
-      range: { from: number; to: number },
+      targets: { entry: PromptEntry; from: number; to: number }[],
+      selections: SkillInvocation[],
     ) => {
       const scopeAtSubmit = scopeRef.current.version;
-      const selections = [
-        ...new Set(
-          findSkillInvocations(
-            draft,
-            skillsRef.current.map((skill) => skill.name),
-          )
-            .filter((token) => token.from !== range.from)
-            .map((token) => token.name),
-        ),
-      ].map((name) => ({ name }));
-      try {
-        const detail = await fetchPrompt({ teamId: entry.promptTeamId, promptId: entry.promptId }, true).unwrap();
-        if (scopeRef.current.version !== scopeAtSubmit) return;
-        const text = detail.text?.trim();
-        if (!text) throw new Error("empty prompt");
-        const before = draft.slice(0, range.from).trim();
-        const after = draft.slice(range.to).trim();
-        const appended = [before, after].filter(Boolean).join("\n\n");
-        paramsRef.current.onRunCommand({
-          text: [before, text, after].filter(Boolean).join("\n\n"),
-          command: {
-            command: entry.command,
-            ...(appended ? { appended_text: appended } : {}),
-            prompt_id: entry.promptId,
-            prompt_name: entry.name,
-            draft_text: draft,
-            draft_command_offset: range.from,
-          },
-          ...(selections.length ? { skills: selections } : {}),
-        });
-      } catch (error) {
-        if (scopeRef.current.version === scopeAtSubmit)
-          paramsRef.current.onResolveError(isGone(error) ? "stale" : "unreadable");
+      // One read per distinct prompt, all started together.
+      const reads = new Map<string, Promise<string>>();
+      for (const { entry } of targets) {
+        const key = `${entry.promptTeamId}:${entry.promptId}`;
+        if (reads.has(key)) continue;
+        reads.set(
+          key,
+          fetchPrompt({ teamId: entry.promptTeamId, promptId: entry.promptId }, true)
+            .unwrap()
+            .then((detail) => {
+              const text = detail.text?.trim();
+              if (!text) throw new Error("empty prompt");
+              return text;
+            }),
+        );
       }
+      const results = await Promise.allSettled(
+        targets.map(({ entry }) => reads.get(`${entry.promptTeamId}:${entry.promptId}`)!),
+      );
+      if (scopeRef.current.version !== scopeAtSubmit) return;
+      // All or nothing: the first command of the line that failed is reported.
+      const failed = results.findIndex((result) => result.status === "rejected");
+      if (failed >= 0) {
+        const { reason } = results[failed] as PromiseRejectedResult;
+        paramsRef.current.onResolveError(isGone(reason) ? "stale" : "unreadable", targets[failed].entry.command);
+        return;
+      }
+      paramsRef.current.onRunCommand({
+        ...assemblePromptTurn(
+          draft,
+          targets.map(({ entry, from, to }, index) => ({
+            command: entry.command,
+            promptId: entry.promptId,
+            promptName: entry.name,
+            from,
+            to,
+            text: (results[index] as PromiseFulfilledResult<string>).value,
+          })),
+        ),
+        ...(selections.length ? { skills: selections } : {}),
+      });
     },
     [fetchPrompt],
   );
@@ -515,10 +561,15 @@ export function useComposerCommands(params: {
     // Legacy prefix normalization must preserve the chosen prompt's owner.
     const active = choicesRef.current
       .map((choice) => ({ ...choice, from: choice.from + choiceOffset, to: choice.to + choiceOffset }))
-      .filter((choice) => input.slice(choice.from, choice.to) === `/${choice.name}`);
-    const explicitPrompt = active.find((choice) => choice.kind === "prompt");
+      .filter((choice) => input.slice(choice.from, choice.to) === `/${choice.name}`)
+      .sort((a, b) => a.from - b.from);
+    const explicitPrompts = active.flatMap((choice) =>
+      choice.kind === "prompt" ? [{ ...choice, explicit: choice }] : [],
+    );
     if (active.some((choice) => choice.scope !== scopeRef.current.version)) {
-      if (explicitPrompt) paramsRef.current.onResolveError("stale");
+      const outdated =
+        explicitPrompts.find((choice) => choice.scope !== scopeRef.current.version) ?? explicitPrompts[0];
+      if (outdated) paramsRef.current.onResolveError("stale", outdated.name);
       else paramsRef.current.onSkillError?.("unavailable");
       return;
     }
@@ -532,41 +583,56 @@ export function useComposerCommands(params: {
       input,
       skillsRef.current.map((skill) => skill.name),
     );
-    const promptRanges = findSkillInvocations(
+    // A typed name that is also a skill is a skill, unless it ends the line
+    // undelimited and was not picked as one: then the prompt gets it.
+    const typedPrompts = findSkillInvocations(
       input,
       commandsRef.current.map((entry) => entry.command),
+    ).filter(
+      (token) =>
+        !explicitPrompts.some((choice) => choice.from === token.from) &&
+        !skillRanges.some(
+          (skill) =>
+            skill.from === token.from &&
+            (skill.to < input.length || active.some((choice) => choice.kind === "skill" && choice.from === skill.from)),
+        ),
     );
-    const range =
-      explicitPrompt ??
-      promptRanges.find(
-        (token) =>
-          !skillRanges.some(
-            (skill) =>
-              skill.from === token.from &&
-              (skill.to < input.length ||
-                active.some((choice) => choice.kind === "skill" && choice.from === skill.from)),
-          ),
-      );
-    const entry = range
-      ? commandsRef.current.find(
-          (candidate) =>
-            candidate.command === range.name &&
-            (!explicitPrompt ||
-              explicitPrompt.kind !== "prompt" ||
-              (candidate.promptId === explicitPrompt.promptId &&
-                (!explicitPrompt.promptTeamId || candidate.promptTeamId === explicitPrompt.promptTeamId))),
-        )
-      : undefined;
-    if (explicitPrompt && !entry) {
-      paramsRef.current.onResolveError(promptCatalogsReadyRef.current ? "stale" : "unreadable");
+    const ranges = [...explicitPrompts, ...typedPrompts.map((token) => ({ ...token, explicit: undefined }))].sort(
+      (a, b) => a.from - b.from,
+    );
+    if (ranges.length > MAX_TURN_PROMPTS) {
+      paramsRef.current.onResolveError("tooMany", ranges[MAX_TURN_PROMPTS].name);
       return;
     }
-    if (entry && range) {
-      if (!explicitPrompt && entry.promptTeamId !== paramsRef.current.teamId && !teamCommandsReadyRef.current) {
-        paramsRef.current.onResolveError("unreadable");
+    const targets: { entry: PromptEntry; from: number; to: number }[] = [];
+    for (const range of ranges) {
+      const { explicit } = range;
+      const entry = commandsRef.current.find(
+        (candidate) =>
+          candidate.command === range.name &&
+          (!explicit ||
+            (candidate.promptId === explicit.promptId &&
+              (!explicit.promptTeamId || candidate.promptTeamId === explicit.promptTeamId))),
+      );
+      if (!entry) {
+        paramsRef.current.onResolveError(promptCatalogsReadyRef.current ? "stale" : "unreadable", range.name);
         return;
       }
-      void run(entry, input, range);
+      // A typed name falls back to the personal library only once the team's
+      // catalog has answered that it has no such command.
+      if (!explicit && entry.promptTeamId !== paramsRef.current.teamId && !teamCommandsReadyRef.current) {
+        paramsRef.current.onResolveError("unreadable", range.name);
+        return;
+      }
+      targets.push({ entry, from: range.from, to: range.to });
+    }
+    if (targets.length) {
+      const selections = [
+        ...new Set(
+          skillRanges.filter((token) => !ranges.some((range) => range.from === token.from)).map((token) => token.name),
+        ),
+      ].map((name) => ({ name }));
+      void run(input, targets, selections);
       return;
     }
     if (skillRanges.length) {
@@ -673,7 +739,7 @@ export function useComposerCommands(params: {
     submit,
     dismiss,
     selectedSkills,
-    selectedPrompt,
+    selectedPrompts,
     selectedSkillArgumentHint: selectedSkills.length === 1 ? selectedSummary?.argument_hint?.trim() || null : null,
     skillDescriptions,
     composerValue: params.input,

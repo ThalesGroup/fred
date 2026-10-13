@@ -122,7 +122,7 @@ function Host({
       inlineSkills={
         inlineEditor
           ? {
-              promptToken: commands.selectedPrompt,
+              promptTokens: commands.selectedPrompts,
               tokens: commands.selectedSkills.map((token) => ({ ...token, onOpen: () => {} })),
             }
           : undefined
@@ -551,6 +551,16 @@ describe("running a command", () => {
         prompt_name: "Résumé",
         draft_text: "/summary ",
         draft_command_offset: 0,
+        prompts: [
+          {
+            command: "summary",
+            prompt_id: "p-summary",
+            prompt_name: "Résumé",
+            draft_offset: 0,
+            text_offset: 0,
+            text_length: 23,
+          },
+        ],
       },
     });
     expect(onSend).not.toHaveBeenCalled();
@@ -626,7 +636,7 @@ describe("running a command", () => {
     expect(onResolveError).not.toHaveBeenCalled();
     await pressAsync("Enter");
 
-    expect(onResolveError.mock.calls).toEqual([["unreadable"]]);
+    expect(onResolveError.mock.calls).toEqual([["unreadable", "summary"]]);
     expect(onRunCommand).not.toHaveBeenCalled();
     expect(onSend).not.toHaveBeenCalled();
   });
@@ -637,7 +647,7 @@ describe("running a command", () => {
     fetchPrompt.mockImplementation(() => ({ unwrap: () => Promise.reject({ status, data: {} }) }));
     await pressAsync("Enter");
 
-    expect(onResolveError.mock.calls).toEqual([["stale"]]);
+    expect(onResolveError.mock.calls).toEqual([["stale", "summary"]]);
     expect(onRunCommand).not.toHaveBeenCalled();
     expect(onSend).not.toHaveBeenCalled();
   });
@@ -752,6 +762,16 @@ describe("platform skills", () => {
           appended_text: "Before /review middle\n\nafter /meeting-minutes Notes",
           draft_text: draft,
           draft_command_offset: 22,
+          prompts: [
+            {
+              command: "summary",
+              prompt_id: "p-summary",
+              prompt_name: "Résumé",
+              draft_offset: 22,
+              text_offset: 23,
+              text_length: 23,
+            },
+          ],
         },
         skills: [{ name: "review" }, { name: "meeting-minutes" }],
       });
@@ -770,7 +790,7 @@ describe("platform skills", () => {
       const suffix = "after /meeting-minutes Notes";
       const draft = cm().state.doc.toString() + suffix;
       act(() => cm().dispatch({ changes: { from: cm().state.doc.length, insert: suffix } }));
-      expect(renders[renders.length - 1]!.selectedPrompt?.command).toBe(command);
+      expect(renders[renders.length - 1]!.selectedPrompts[0]?.command).toBe(command);
       await act(async () => renders[renders.length - 1]!.submit());
       expect(onRunCommand).toHaveBeenCalledWith({
         text: "Before /review middle\n\nRésume le document en :\n\nafter /meeting-minutes Notes",
@@ -1405,7 +1425,7 @@ describe("personal and team prompt commands", () => {
       act(() =>
         view.contentDOM.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true })),
       );
-      expect(renders[renders.length - 1].selectedPrompt?.promptId).toBe(react ? "personal-summary" : "p-summary");
+      expect(renders[renders.length - 1].selectedPrompts[0]?.promptId).toBe(react ? "personal-summary" : "p-summary");
       act(() => view.dispatch({ changes: { from: view.state.doc.length, insert: "Notes" } }));
       await act(async () => renders[renders.length - 1].submit());
       expect(onRunCommand).toHaveBeenCalledWith({
@@ -1545,7 +1565,7 @@ describe("personal and team prompt commands", () => {
         ? { name: renders[renders.length - 1].selectedSkills[0].name }
         : null,
     ).toEqual({ name: "summary" });
-    expect(renders[renders.length - 1]?.selectedPrompt).toBeNull();
+    expect(renders[renders.length - 1]?.selectedPrompts).toEqual([]);
     press("Enter");
     expect(onRunSkill).toHaveBeenCalledWith({ text: "/summary notes", skills: [{ name: "summary" }] });
   });
@@ -1557,8 +1577,8 @@ describe("personal and team prompt commands", () => {
     personalResult = { data: [] };
     act(() => root.render(<Host personalTeamId="personal-1" />));
     await pressAsync("Enter");
-    expect(renders[renders.length - 1]?.selectedPrompt).toBeNull();
-    expect(onResolveError.mock.calls).toEqual([["stale"]]);
+    expect(renders[renders.length - 1]?.selectedPrompts).toEqual([]);
+    expect(onResolveError.mock.calls).toEqual([["stale", "summary"]]);
     expect(onRunCommand).not.toHaveBeenCalled();
     expect(onSend).not.toHaveBeenCalled();
   });
@@ -1573,7 +1593,7 @@ describe("personal and team prompt commands", () => {
       },
     }));
     await pressAsync("Enter");
-    expect(onResolveError.mock.calls).toEqual([["unreadable"]]);
+    expect(onResolveError.mock.calls).toEqual([["unreadable", "summary"]]);
     expect(onRunCommand).not.toHaveBeenCalled();
   });
   it("queries a personal chat once and lists its prompts in the personal section only", () => {
@@ -1620,7 +1640,7 @@ describe("personal and team prompt commands", () => {
         ),
       );
       await pressAsync("Enter");
-      expect(onResolveError.mock.calls).toEqual([["stale"]]);
+      expect(onResolveError.mock.calls).toEqual([["stale", "summary"]]);
       expect(onRunCommand).not.toHaveBeenCalled();
       expect(onRunSkill).not.toHaveBeenCalled();
       expect(onSend).not.toHaveBeenCalled();
@@ -1638,7 +1658,7 @@ describe("personal and team prompt commands", () => {
     type("/summary notes");
     await pressAsync("Enter");
     expect(onRunCommand).not.toHaveBeenCalled();
-    expect(onResolveError.mock.calls).toEqual([["unreadable"]]);
+    expect(onResolveError.mock.calls).toEqual([["unreadable", "summary"]]);
     // Once resolved, the same typed command takes the team's match.
     listResult = { currentData: PROMPTS };
     act(() => root.render(<Host personalTeamId="personal-1" />));
@@ -1734,7 +1754,7 @@ describe("restoring recalled invocations", () => {
       }
       await act(async () => renders[renders.length - 1]!.submit());
       if (variant === "missing") {
-        expect(onResolveError.mock.calls).toEqual([["stale"]]);
+        expect(onResolveError.mock.calls).toEqual([["stale", "review"]]);
         expect(onRunCommand).not.toHaveBeenCalled();
       } else {
         expect(onRunCommand).toHaveBeenCalledOnce();
@@ -1773,5 +1793,415 @@ describe("restoring recalled invocations", () => {
     expect(onSkillError).toHaveBeenCalledWith("unavailable");
     expect(onRunSkill).not.toHaveBeenCalled();
     expect(onSend).not.toHaveBeenCalled();
+  });
+});
+
+describe("several prompt commands in one message", () => {
+  const TONE = { prompt_id: "p-tone", command: "tone", name: "Ton", description: "Ton formel", emoji: null };
+  const TEXTS: Record<string, string> = {
+    "p-summary": "Summarise the document.",
+    "p-search": "Search the corpus.",
+    "p-tone": "Use a formal tone.",
+    "personal-summary": "My own summary.",
+    "p-style": "Write plainly.",
+    "p-review": "Review it.",
+  };
+  const latest = () => renders[renders.length - 1]!;
+  const cm = () => EditorView.findFromDOM(container.querySelector(".cm-content")!)!;
+  const cmPress = (key: string) =>
+    act(() => cm().contentDOM.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true })));
+  /** Types at the end of the line, one user edit. */
+  const cmAppend = (text: string) =>
+    act(() => {
+      const end = cm().state.doc.length;
+      cm().dispatch({ changes: { from: end, insert: text }, selection: { anchor: end + text.length } });
+    });
+  const tokens = () => latest().selectedPrompts.map((prompt) => [prompt.command, prompt.promptTeamId, prompt.from]);
+  const submit = () => act(async () => latest().submit());
+
+  function mount(personal: unknown[] = [TONE], skills: string[] = []) {
+    personalResult = { data: personal as typeof PROMPTS };
+    skillCatalog = { supported: true, skills: skills.map((name) => ({ name, description: name })) };
+    fetchPrompt.mockImplementation(({ promptId }: { promptId: string }) => ({
+      unwrap: async () => ({ text: TEXTS[promptId] }),
+    }));
+    act(() => root.render(<Host inlineEditor personalTeamId="personal-1" />));
+    act(() => cm().contentDOM.focus());
+  }
+
+  it("still offers the prompts of both libraries once the message holds a prompt", () => {
+    mount([TONE], ["verify-answer"]);
+    cmAppend("/su");
+    cmPress("Tab");
+    expect(cm().state.doc.toString()).toBe("/summary ");
+    expect(latest().menu).toBeNull();
+
+    cmAppend("/");
+    // The token in the editor is a group of its own, with no heading.
+    expect(sections().filter(([heading]) => heading)).toEqual([
+      ["chatbot.commandMenu.sections.teamFallback", ["/search", "/summary"]],
+      ["chatbot.commandMenu.sections.personal", ["/tone"]],
+      ["chatbot.commandMenu.sections.platform", ["/verify-answer"]],
+    ]);
+  });
+
+  it("holds two tokens picked from two libraries and keeps one when the other is removed", () => {
+    mount([TONE, { ...TONE, prompt_id: "personal-summary", command: "summary", name: "Mine" }]);
+    cmAppend("/to");
+    cmPress("Tab");
+    cmAppend("then /summ");
+    // The team's `/summary` is the first row, the personal one the second.
+    cmPress("ArrowDown");
+    cmPress("Tab");
+    expect(cm().state.doc.toString()).toBe("/tone then /summary ");
+    expect(tokens()).toEqual([
+      ["tone", "personal-1", 0],
+      ["summary", "personal-1", 11],
+    ]);
+    expect(latest().selectedPrompts[1].promptId).toBe("personal-summary");
+    expect(container.querySelectorAll(".cm-content [data-kind=prompt]")).toHaveLength(2);
+    expect(latest().menu).toBeNull();
+
+    // One Backspace takes the first token as a block; the second keeps its library.
+    act(() => cm().dispatch({ selection: { anchor: 5 } }));
+    cmPress("Backspace");
+    expect(cm().state.doc.toString()).toBe("then /summary ");
+    expect(latest().selectedPrompts.map((prompt) => [prompt.promptId, prompt.from])).toEqual([["personal-summary", 5]]);
+  });
+
+  it("expands every prompt in place, in order, and lists each one on the descriptor", async () => {
+    mount();
+    cmAppend("First /summary then /tone please");
+    fetchPrompt.mockClear();
+    await submit();
+
+    expect(fetchPrompt.mock.calls).toEqual([
+      [{ teamId: "team-1", promptId: "p-summary" }, true],
+      [{ teamId: "personal-1", promptId: "p-tone" }, true],
+    ]);
+    expect(onRunCommand).toHaveBeenCalledExactlyOnceWith({
+      text: "First\n\nSummarise the document.\n\nthen\n\nUse a formal tone.\n\nplease",
+      command: {
+        command: "summary",
+        appended_text: "First\n\nthen\n\nplease",
+        prompt_id: "p-summary",
+        prompt_name: "Résumé",
+        draft_text: "First /summary then /tone please",
+        draft_command_offset: 6,
+        prompts: [
+          {
+            command: "summary",
+            prompt_id: "p-summary",
+            prompt_name: "Résumé",
+            draft_offset: 6,
+            text_offset: 7,
+            text_length: 23,
+          },
+          {
+            command: "tone",
+            prompt_id: "p-tone",
+            prompt_name: "Ton",
+            draft_offset: 20,
+            text_offset: 38,
+            text_length: 18,
+          },
+        ],
+      },
+    });
+    expect(onRunSkill).not.toHaveBeenCalled();
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it("starts every read before waiting for any of them", async () => {
+    mount();
+    cmAppend("/summary and /tone now");
+    const pending: (() => void)[] = [];
+    fetchPrompt.mockReset();
+    fetchPrompt.mockImplementation(({ promptId }: { promptId: string }) => ({
+      unwrap: () => new Promise((resolve) => pending.push(() => resolve({ text: TEXTS[promptId] }))),
+    }));
+    act(() => latest().submit());
+
+    expect(fetchPrompt).toHaveBeenCalledTimes(2);
+    expect(onRunCommand).not.toHaveBeenCalled();
+    // Answers arriving out of order do not change the order of the text.
+    await act(async () => pending.reverse().forEach((resolve) => resolve()));
+    expect(onRunCommand.mock.calls[0][0].text).toBe("Summarise the document.\n\nand\n\nUse a formal tone.\n\nnow");
+  });
+
+  it("sends the selected skills with the prompts", async () => {
+    mount([TONE], ["verify-answer"]);
+    cmAppend("/summary /verify-answer and /tone now");
+    await submit();
+
+    expect(onRunCommand).toHaveBeenCalledOnce();
+    expect(onRunCommand.mock.calls[0][0]).toMatchObject({
+      text: "Summarise the document.\n\n/verify-answer and\n\nUse a formal tone.\n\nnow",
+      skills: [{ name: "verify-answer" }],
+    });
+    expect(onRunCommand.mock.calls[0][0].command.prompts.map((entry: { command: string }) => entry.command)).toEqual([
+      "summary",
+      "tone",
+    ]);
+    expect(onRunSkill).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { status: 404, reason: "stale" },
+    { status: 500, reason: "unreadable" },
+  ])("holds the whole message back and names the command when one read answers $status", async ({ status, reason }) => {
+    mount([TONE], ["verify-answer"]);
+    cmAppend("/summary /verify-answer and /tone now");
+    fetchPrompt.mockImplementation(({ promptId }: { promptId: string }) => ({
+      unwrap: () =>
+        promptId === "p-tone" ? Promise.reject({ status, data: {} }) : Promise.resolve({ text: TEXTS[promptId] }),
+    }));
+    await submit();
+
+    expect(onResolveError.mock.calls).toEqual([[reason, "tone"]]);
+    expect(onRunCommand).not.toHaveBeenCalled();
+    expect(onRunSkill).not.toHaveBeenCalled();
+    expect(onSend).not.toHaveBeenCalled();
+    expect(cm().state.doc.toString()).toBe("/summary /verify-answer and /tone now");
+  });
+
+  it("holds the message back when a prompt is empty", async () => {
+    mount();
+    cmAppend("/summary and /tone now");
+    fetchPrompt.mockImplementation(({ promptId }: { promptId: string }) => ({
+      unwrap: async () => ({ text: promptId === "p-tone" ? "  " : TEXTS[promptId] }),
+    }));
+    await submit();
+
+    expect(onResolveError.mock.calls).toEqual([["unreadable", "tone"]]);
+    expect(onRunCommand).not.toHaveBeenCalled();
+  });
+
+  it("reports the first failing command of the line, not the first failure in time", async () => {
+    mount();
+    cmAppend("/summary and /tone now");
+    const reject: Record<string, () => void> = {};
+    fetchPrompt.mockReset();
+    fetchPrompt.mockImplementation(({ promptId }: { promptId: string }) => ({
+      unwrap: () =>
+        new Promise((_resolve, fail) => {
+          reject[promptId] = () => fail({ status: promptId === "p-tone" ? 500 : 404, data: {} });
+        }),
+    }));
+    act(() => latest().submit());
+    await act(async () => reject["p-tone"]());
+    expect(onResolveError).not.toHaveBeenCalled();
+    await act(async () => reject["p-summary"]());
+
+    expect(onResolveError.mock.calls).toEqual([["stale", "summary"]]);
+    expect(onRunCommand).not.toHaveBeenCalled();
+  });
+
+  it("expands the same command at each occurrence and reads its prompt once", async () => {
+    mount();
+    cmAppend("/summary of A, /summary of B");
+    expect(tokens()).toEqual([
+      ["summary", "team-1", 0],
+      ["summary", "team-1", 15],
+    ]);
+    fetchPrompt.mockClear();
+    await submit();
+
+    expect(fetchPrompt).toHaveBeenCalledOnce();
+    const run = onRunCommand.mock.calls[0][0];
+    expect(run.text).toBe("Summarise the document.\n\nof A,\n\nSummarise the document.\n\nof B");
+    expect(run.command.prompts.map((entry: { draft_offset: number }) => entry.draft_offset)).toEqual([0, 15]);
+  });
+
+  it("refuses a message holding more prompt commands than the limit, and sends one at the limit", async () => {
+    mount();
+    cmAppend(Array.from({ length: 17 }, () => "/summary").join(" ") + " end");
+    fetchPrompt.mockClear();
+    await submit();
+
+    expect(onResolveError.mock.calls).toEqual([["tooMany", "summary"]]);
+    expect(fetchPrompt).not.toHaveBeenCalled();
+    expect(onRunCommand).not.toHaveBeenCalled();
+    expect(onSend).not.toHaveBeenCalled();
+
+    act(() => cm().dispatch({ changes: { from: 0, to: "/summary ".length } }));
+    await submit();
+    expect(onRunCommand.mock.calls[0][0].command.prompts).toHaveLength(16);
+  });
+
+  it("resolves hand-typed names one by one, the team's command before the personal one", async () => {
+    mount([TONE, { ...TONE, prompt_id: "personal-summary", command: "summary", name: "Mine" }]);
+    cmAppend("/summary and /tone then /summary now");
+    expect(tokens()).toEqual([
+      ["summary", "team-1", 0],
+      ["tone", "personal-1", 13],
+      ["summary", "team-1", 24],
+    ]);
+    fetchPrompt.mockClear();
+    await submit();
+
+    expect(fetchPrompt.mock.calls.map(([arg]) => arg)).toEqual([
+      { teamId: "team-1", promptId: "p-summary" },
+      { teamId: "personal-1", promptId: "p-tone" },
+    ]);
+    expect(
+      onRunCommand.mock.calls[0][0].command.prompts.map((entry: { prompt_id: string }) => entry.prompt_id),
+    ).toEqual(["p-summary", "p-tone", "p-summary"]);
+  });
+
+  it("mixes a picked personal homonym with the same name typed by hand", async () => {
+    mount([{ ...TONE, prompt_id: "personal-summary", command: "summary", name: "Mine" }]);
+    cmAppend("/summ");
+    cmPress("ArrowDown");
+    cmPress("Tab");
+    cmAppend("then /summary now");
+    await submit();
+
+    expect(
+      onRunCommand.mock.calls[0][0].command.prompts.map((entry: { prompt_id: string }) => entry.prompt_id),
+    ).toEqual(["personal-summary", "p-summary"]);
+    expect(onRunCommand.mock.calls[0][0].text).toBe("My own summary.\n\nthen\n\nSummarise the document.\n\nnow");
+  });
+
+  it("applies the pending team catalog guard to each typed name, not to a picked personal prompt", async () => {
+    mount([TONE, { ...TONE, prompt_id: "p-style", command: "style", name: "Style" }]);
+    listResult = { data: PROMPTS, currentData: undefined };
+    act(() => root.render(<Host inlineEditor personalTeamId="personal-1" />));
+    cmAppend("/sty");
+    cmPress("Tab");
+    cmAppend("then /tone now");
+    fetchPrompt.mockClear();
+    await submit();
+
+    expect(onResolveError.mock.calls).toEqual([["unreadable", "tone"]]);
+    expect(fetchPrompt).not.toHaveBeenCalled();
+    expect(onRunCommand).not.toHaveBeenCalled();
+
+    // Once the team has answered that it has no `/tone`, the personal one runs.
+    listResult = { currentData: PROMPTS };
+    act(() => root.render(<Host inlineEditor personalTeamId="personal-1" />));
+    await submit();
+    expect(
+      onRunCommand.mock.calls[0][0].command.prompts.map((entry: { prompt_id: string }) => entry.prompt_id),
+    ).toEqual(["p-style", "p-tone"]);
+  });
+
+  it("keeps a typed skill homonym a skill next to a prompt, unless its prompt row was picked", async () => {
+    mount([{ ...TONE, prompt_id: "p-review", command: "review", name: "Relecture" }], ["review"]);
+    cmAppend("/summary then /review the text");
+    expect(latest().selectedPrompts.map((prompt) => prompt.command)).toEqual(["summary"]);
+    expect(latest().selectedSkills.map((skill) => skill.name)).toEqual(["review"]);
+    await submit();
+    expect(onRunCommand.mock.calls[0][0]).toMatchObject({
+      text: "Summarise the document.\n\nthen /review the text",
+      skills: [{ name: "review" }],
+    });
+    expect(onRunCommand.mock.calls[0][0].command.prompts).toHaveLength(1);
+
+    // Picked from the personal section, the same name is a prompt and no longer a skill.
+    onRunCommand.mockClear();
+    act(() => cm().dispatch({ changes: { from: 0, to: cm().state.doc.length, insert: "/summary then " } }));
+    act(() => cm().dispatch({ selection: { anchor: cm().state.doc.length } }));
+    cmAppend("/rev");
+    expect(latest().menu?.entries.map((entry) => entry.kind)).toEqual(["prompt", "skill"]);
+    cmPress("Tab");
+    expect(latest().selectedPrompts.map((prompt) => prompt.command)).toEqual(["summary", "review"]);
+    expect(latest().selectedSkills).toEqual([]);
+    await submit();
+    expect(onRunCommand.mock.calls[0][0].text).toBe("Summarise the document.\n\nthen\n\nReview it.");
+    expect(onRunCommand.mock.calls[0][0]).not.toHaveProperty("skills");
+  });
+
+  it("keeps hand-typed tokens while the text around them is edited", () => {
+    mount();
+    cmAppend("/summary and /tone now");
+    expect(tokens().map(([command]) => command)).toEqual(["summary", "tone"]);
+
+    // Deleting what follows the last token leaves it at the very end of the line.
+    act(() => cm().dispatch({ changes: { from: "/summary and /tone".length, to: cm().state.doc.length } }));
+    expect(cm().state.doc.toString()).toBe("/summary and /tone");
+    expect(tokens().map(([command]) => command)).toEqual(["summary", "tone"]);
+    expect(latest().menu).toBeNull();
+
+    // An edit before it moves it; it is still the same token.
+    act(() => cm().dispatch({ changes: { from: 9, insert: "first " } }));
+    expect(cm().state.doc.toString()).toBe("/summary first and /tone");
+    expect(tokens()).toEqual([
+      ["summary", "team-1", 0],
+      ["tone", "personal-1", 19],
+    ]);
+  });
+
+  describe("recalled", () => {
+    const personalSummary2 = { ...TONE, prompt_id: "personal-summary", command: "summary-2", name: "Mine" };
+    const line = "/summary then /summary-2 now";
+    const message = {
+      id: "recalled",
+      role: "user" as const,
+      text: "Summarise the document.\n\nthen\n\nMy own summary.\n\nnow",
+      isStreaming: false,
+      traceMessages: [],
+      sources: [],
+      uiParts: [],
+      command: {
+        command: "summary",
+        prompt_id: "p-summary",
+        draft_text: line,
+        draft_command_offset: 0,
+        prompts: [
+          { command: "summary", prompt_id: "p-summary", draft_offset: 0, text_offset: 0, text_length: 23 },
+          { command: "summary-2", prompt_id: "personal-summary", draft_offset: 14, text_offset: 31, text_length: 15 },
+        ],
+      },
+    };
+    const recall = () =>
+      act(() => {
+        latest().dismiss(line, message);
+        setHostInput(line);
+      });
+
+    it("restores every prompt with its identity and reads each from its own library", async () => {
+      mount([personalSummary2]);
+      recall();
+      expect(latest().trigger.choices).toEqual([
+        expect.objectContaining({ kind: "prompt", promptId: "p-summary", promptTeamId: "team-1", from: 0 }),
+        expect.objectContaining({ kind: "prompt", promptId: "personal-summary", promptTeamId: "personal-1", from: 14 }),
+      ]);
+      expect(latest().menu).toBeNull();
+      fetchPrompt.mockClear();
+      await submit();
+
+      expect(fetchPrompt.mock.calls.map(([arg]) => arg)).toEqual([
+        { teamId: "team-1", promptId: "p-summary" },
+        { teamId: "personal-1", promptId: "personal-summary" },
+      ]);
+      expect(onRunCommand.mock.calls[0][0].command.prompts).toEqual([
+        expect.objectContaining({ prompt_id: "p-summary", draft_offset: 0 }),
+        expect.objectContaining({ prompt_id: "personal-summary", draft_offset: 14 }),
+      ]);
+    });
+
+    it("holds the message back and names the prompt that is gone, with no homonym fallback", async () => {
+      // The personal prompt was deleted and another one took its command.
+      mount([{ ...personalSummary2, prompt_id: "another" }]);
+      recall();
+      fetchPrompt.mockClear();
+      await submit();
+
+      expect(onResolveError.mock.calls).toEqual([["stale", "summary-2"]]);
+      expect(fetchPrompt).not.toHaveBeenCalled();
+      expect(onRunCommand).not.toHaveBeenCalled();
+    });
+
+    it("restores the single prompt of a turn whose list does not fit its text", () => {
+      mount([personalSummary2]);
+      act(() => {
+        latest().dismiss(line, { ...message, text: "short" });
+        setHostInput(line);
+      });
+      expect(latest().trigger.choices).toEqual([
+        expect.objectContaining({ kind: "prompt", promptId: "p-summary", from: 0 }),
+      ]);
+    });
   });
 });

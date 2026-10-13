@@ -15,13 +15,18 @@ export interface InlinePromptToken {
   from: number;
   to: number;
   name: string;
+  /** The prompt behind the token and the library it was picked from. */
+  promptId: string;
+  promptTeamId: string;
   description?: string | null;
   source?: "personal" | "team";
   /** Name of the conversation's team, for the hover hint of a team prompt. */
   teamName?: string;
-  /** Opens the prompt's preview; without it the token is not clickable. */
-  onOpen?: () => void;
 }
+
+/** What an activated prompt token hands to its opener. No position: a widget
+ *  outlives the edits made before it. */
+export type InlinePromptTarget = Pick<InlinePromptToken, "promptId" | "promptTeamId" | "name"> & { command: string };
 
 export interface InlineSkillToken {
   from: number;
@@ -73,16 +78,19 @@ class SkillWidget extends WidgetType {
 
 class PromptWidget extends WidgetType {
   constructor(
-    readonly command: string,
+    readonly target: InlinePromptTarget,
     readonly hint: string,
     readonly label: string,
-    readonly onOpen?: () => void,
+    readonly onOpen?: (target: InlinePromptTarget) => void,
   ) {
     super();
   }
+  // The opener is one callback for every token, so a keystroke rebuilds none.
   eq(other: PromptWidget) {
     return (
-      this.command === other.command &&
+      this.target.command === other.target.command &&
+      this.target.promptId === other.target.promptId &&
+      this.target.promptTeamId === other.target.promptTeamId &&
       this.hint === other.hint &&
       this.label === other.label &&
       this.onOpen === other.onOpen
@@ -98,7 +106,7 @@ class PromptWidget extends WidgetType {
       token.type = "button";
       token.classList.add(badgeStyles.action);
       token.setAttribute("aria-label", this.label);
-      token.onclick = () => this.onOpen?.();
+      token.onclick = () => this.onOpen?.(this.target);
     } else {
       token.setAttribute("role", "group");
       token.setAttribute("aria-label", this.hint);
@@ -109,7 +117,7 @@ class PromptWidget extends WidgetType {
     icon.setAttribute("aria-hidden", "true");
     const name = document.createElement("span");
     name.className = badgeStyles.name;
-    name.textContent = this.command;
+    name.textContent = `/${this.target.command}`;
     token.append(icon, name);
     return token;
   }
@@ -155,7 +163,10 @@ interface Props {
   value: string;
   onChange: (value: string) => void;
   tokens: InlineSkillToken[];
-  promptToken?: InlinePromptToken | null;
+  promptTokens?: readonly InlinePromptToken[];
+  /** Opens a prompt token's preview; without it the tokens are not clickable.
+   *  Keep one identity across renders. */
+  onOpenPrompt?: (target: InlinePromptTarget) => void;
   placeholder?: string;
   disabled: boolean;
   maxHeight: number;
@@ -261,13 +272,19 @@ export function InlineSkillInput(props: Props) {
   )
     callbacksRef.current = props.tokens.map((token) => token.onOpen);
   const tokenCallbacks = callbacksRef.current;
-  const promptFrom = props.promptToken?.from;
-  const promptTo = props.promptToken?.to;
-  const promptName = props.promptToken?.name;
-  const promptDescription = props.promptToken?.description;
-  const promptSource = props.promptToken?.source;
-  const promptTeamName = props.promptToken?.teamName;
-  const promptOnOpen = props.promptToken?.onOpen;
+  const promptKey = JSON.stringify(
+    (props.promptTokens ?? []).map((token) => [
+      token.from,
+      token.to,
+      token.name,
+      token.promptId,
+      token.promptTeamId,
+      token.description,
+      token.source,
+      token.teamName,
+    ]),
+  );
+  const onOpenPrompt = props.onOpenPrompt;
   const hasTrigger = Boolean(props.commandTrigger);
   const triggerOpen = props.commandTrigger?.open;
   const triggerListboxId = props.commandTrigger?.listboxId;
@@ -287,43 +304,38 @@ export function InlineSkillInput(props: Props) {
     }
     // Tokens are atomic: the caret, a selection and a deletion take one as a
     // whole instead of stepping through the `/name` hidden under it.
-    tokenRangesRef.current = [
-      ...(promptFrom !== undefined && promptTo !== undefined && promptName !== undefined
-        ? [{ from: promptFrom, to: promptTo }]
-        : []),
-      ...props.tokens.map(({ from, to }) => ({ from, to })),
-    ];
+    const promptTokens = props.promptTokens ?? [];
+    tokenRangesRef.current = [...promptTokens, ...props.tokens].map(({ from, to }) => ({ from, to }));
     const atomic = Decoration.set(
       tokenRangesRef.current.map(({ from, to }) => Decoration.mark({}).range(from, to)),
       true,
     );
     const decorations = Decoration.set(
       [
-        ...(promptFrom !== undefined && promptTo !== undefined && promptName !== undefined
-          ? [
-              Decoration.replace({
-                widget: new PromptWidget(
-                  props.value.slice(promptFrom, promptTo),
-                  // The source reads like the heading of its section in the menu.
-                  [
-                    promptName,
-                    promptSource === "personal"
-                      ? t("chatbot.commandMenu.sections.personal")
-                      : promptSource === "team"
-                        ? promptTeamName
-                          ? t("chatbot.commandMenu.sections.team", { name: promptTeamName })
-                          : t("chatbot.commandMenu.sections.teamFallback")
-                        : "",
-                    promptDescription?.trim(),
-                  ]
-                    .filter(Boolean)
-                    .join("\n"),
-                  t("chatbot.commandTurn.open", { command: props.value.slice(promptFrom + 1, promptTo) }),
-                  promptOnOpen,
-                ),
-              }).range(promptFrom, promptTo),
-            ]
-          : []),
+        ...promptTokens.map((token) => {
+          const command = props.value.slice(token.from + 1, token.to);
+          return Decoration.replace({
+            widget: new PromptWidget(
+              { promptId: token.promptId, promptTeamId: token.promptTeamId, name: token.name, command },
+              // The source reads like the heading of its section in the menu.
+              [
+                token.name,
+                token.source === "personal"
+                  ? t("chatbot.commandMenu.sections.personal")
+                  : token.source === "team"
+                    ? token.teamName
+                      ? t("chatbot.commandMenu.sections.team", { name: token.teamName })
+                      : t("chatbot.commandMenu.sections.teamFallback")
+                    : "",
+                token.description?.trim(),
+              ]
+                .filter(Boolean)
+                .join("\n"),
+              t("chatbot.commandTurn.open", { command }),
+              onOpenPrompt,
+            ),
+          }).range(token.from, token.to);
+        }),
         ...props.tokens.flatMap((token) => [
           Decoration.replace({
             widget: new SkillWidget(
@@ -372,13 +384,8 @@ export function InlineSkillInput(props: Props) {
     tokenKey,
     choicesKey,
     tokenCallbacks,
-    promptFrom,
-    promptTo,
-    promptName,
-    promptDescription,
-    promptSource,
-    promptTeamName,
-    promptOnOpen,
+    promptKey,
+    onOpenPrompt,
     props.placeholder,
     props.disabled,
     props.invalid,

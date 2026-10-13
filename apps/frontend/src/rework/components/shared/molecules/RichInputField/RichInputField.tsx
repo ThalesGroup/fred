@@ -18,7 +18,12 @@ import IconButton from "@shared/atoms/IconButton/IconButton";
 import { CharacterLimitNotice } from "@shared/atoms/CharacterLimitNotice/CharacterLimitNotice";
 import { appendVoiceTranscript, audioFileExtensionForMimeType } from "./voiceInputUtils";
 import styles from "./RichInputField.module.css";
-import { InlineSkillInput, type InlineSkillToken, type InlinePromptToken } from "./InlineSkillInput";
+import {
+  InlineSkillInput,
+  type InlineSkillToken,
+  type InlinePromptTarget,
+  type InlinePromptToken,
+} from "./InlineSkillInput";
 
 export type CommandKeyEvent = Pick<KeyboardEvent, "key" | "shiftKey" | "preventDefault"> & {
   ctrlKey?: boolean;
@@ -99,7 +104,11 @@ interface RichInputFieldProps {
   /** Rendered above the textarea — typically attachment chips that should stay close to the cursor. */
   aboveTextSlot?: ReactNode;
   /** Opt-in plain-text editor with inline skill and prompt visuals. */
-  inlineSkills?: { tokens: InlineSkillToken[]; promptToken?: InlinePromptToken | null };
+  inlineSkills?: {
+    tokens: InlineSkillToken[];
+    promptTokens?: readonly InlinePromptToken[];
+    onOpenPrompt?: (target: InlinePromptTarget) => void;
+  };
   /** Rendered floating just above the field — the command menu. */
   aboveFieldSlot?: ReactNode;
   /**
@@ -482,7 +491,8 @@ export function RichInputField({
               value={value}
               onChange={onChange}
               tokens={inlineSkills.tokens}
-              promptToken={inlineSkills.promptToken}
+              promptTokens={inlineSkills.promptTokens}
+              onOpenPrompt={inlineSkills.onOpenPrompt}
               placeholder={placeholder}
               disabled={disabled}
               maxHeight={maxHeight}

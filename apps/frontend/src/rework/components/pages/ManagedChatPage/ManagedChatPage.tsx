@@ -20,6 +20,7 @@ import { ConversationThread } from "./ConversationThread/ConversationThread";
 import { ConversationOutlineRail } from "@shared/molecules/ConversationOutlineRail/ConversationOutlineRail";
 import { sameTurnIds, toOutlinePreview, toTurnIds } from "@shared/molecules/ConversationOutlineRail/outlineItems";
 import { RichInputField } from "@shared/molecules/RichInputField/RichInputField";
+import type { InlinePromptTarget } from "@shared/molecules/RichInputField/InlineSkillInput";
 import { SessionTitleEditor } from "@shared/molecules/SessionTitleEditor/SessionTitleEditor";
 import SkillDetailPanel from "@shared/molecules/SkillDetailPanel/SkillDetailPanel";
 import CommandPromptPanel from "@shared/molecules/CommandPromptPanel/CommandPromptPanel";
@@ -39,6 +40,7 @@ import {
   traceEntryKey,
   type TraceEntry,
 } from "../../../utils/traceUtils";
+import { MAX_TURN_PROMPTS, usablePromptList } from "@rework/utils/skillInvocation";
 import { isAgentTodoSnapshotSettled, latestAgentTodoSnapshot, presentAgentTodos } from "../../../utils/agentTodo";
 import { ComposerActionsMenu } from "@shared/molecules/ComposerActionsMenu/ComposerActionsMenu";
 import { UploadWarningAckDialog } from "@shared/molecules/UploadWarningAckDialog/UploadWarningAckDialog";
@@ -633,27 +635,30 @@ export default function ManagedChatPage() {
     setInput: chat.setInput,
     onRunCommand: (run) => void chat.runCommand(run),
     onSend: () => void chat.handleSend(),
-    onResolveError: (reason) =>
+    onResolveError: (reason, command) =>
       showError({
         summary: t("chatbot.commandMenu.runErrorSummary"),
-        detail: t(reason === "stale" ? "chatbot.commandMenu.runErrorStale" : "chatbot.commandMenu.runErrorDetail"),
+        detail:
+          reason === "tooMany"
+            ? t("chatbot.commandMenu.runErrorTooMany", { limit: MAX_TURN_PROMPTS })
+            : t(reason === "stale" ? "chatbot.commandMenu.runErrorStale" : "chatbot.commandMenu.runErrorDetail", {
+                command,
+              }),
       }),
   });
 
-  // The composer's prompt token opens its prompt; a second click closes it.
+  // A composer prompt token opens its own prompt; a second click closes it.
   const [fetchPromptPreview, promptPreview] = useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery();
-  const selectedPrompt = commands.selectedPrompt;
-  const selectedPromptRef = useRef(selectedPrompt);
-  selectedPromptRef.current = selectedPrompt;
-  // One identity across keystrokes, so the token is not rebuilt as the user types.
-  const openPromptPreview = useCallback(() => {
-    const prompt = selectedPromptRef.current;
-    if (!prompt) return;
-    const { promptId, promptTeamId, command, name } = prompt;
-    const open = previewPromptIdRef.current === promptId;
-    setActivePushDrawer(open ? null : { kind: "prompt-preview", promptId, promptTeamId, command, promptName: name });
-    if (!open) void fetchPromptPreview({ teamId: promptTeamId, promptId });
-  }, [fetchPromptPreview]);
+  // One identity for every token and across keystrokes, so no token is
+  // rebuilt as the user types: the activated token says which prompt it is.
+  const openPromptPreview = useCallback(
+    ({ promptId, promptTeamId, command, name }: InlinePromptTarget) => {
+      const open = previewPromptIdRef.current === promptId;
+      setActivePushDrawer(open ? null : { kind: "prompt-preview", promptId, promptTeamId, command, promptName: name });
+      if (!open) void fetchPromptPreview({ teamId: promptTeamId, promptId });
+    },
+    [fetchPromptPreview],
+  );
   const promptPreviewStatus = !promptPreviewDrawer
     ? undefined
     : promptPreview.isFetching
@@ -713,7 +718,8 @@ export default function ManagedChatPage() {
       focusEndRequestId={focusEndRequestId}
       showSendButton
       inlineSkills={{
-        promptToken: selectedPrompt && { ...selectedPrompt, teamName: team?.name, onOpen: openPromptPreview },
+        promptTokens: commands.selectedPrompts.map((prompt) => ({ ...prompt, teamName: team?.name })),
+        onOpenPrompt: openPromptPreview,
         tokens: commands.selectedSkills.map((token) => ({
           ...token,
           description: commands.skillDescriptions.get(token.name),
@@ -773,12 +779,16 @@ export default function ManagedChatPage() {
   // already readable in the trace drawer — the raw message dump for admins only.
   // Stable identity: an inline arrow here would defeat ConversationThread's
   // memo and re-render the whole transcript on every composer keystroke.
-  const openCommandPrompt = useCallback((turn: { text: string; command: CommandDescriptor }) => {
+  const openCommandPrompt = useCallback((turn: { text: string; command: CommandDescriptor; promptIndex?: number }) => {
+    // A listed prompt shows its own part of the stored text; a turn without
+    // a usable list shows the whole text under its single command.
+    const entry =
+      turn.promptIndex === undefined ? undefined : usablePromptList(turn.command, turn.text)?.[turn.promptIndex];
     setActivePushDrawer({
       kind: "command-prompt",
-      text: turn.text,
-      command: turn.command.command,
-      promptName: turn.command.prompt_name ?? null,
+      text: entry ? turn.text.slice(entry.text_offset, entry.text_offset + entry.text_length) : turn.text,
+      command: (entry ?? turn.command).command,
+      promptName: (entry ?? turn.command).prompt_name ?? null,
     });
   }, []);
 

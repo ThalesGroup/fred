@@ -35,15 +35,20 @@ function Host({
   source = "personal",
   teamName,
   inert = false,
+  twoPrompts = false,
 }: {
   disabled?: boolean;
   prompt?: boolean;
   source?: "personal" | "team";
   teamName?: string;
   inert?: boolean;
+  twoPrompts?: boolean;
 }) {
   usePastedFiles({ enabled: !disabled, onFiles });
-  const [value, setValue] = useState(prompt ? "/hello Notes" : "Before /meeting-minutes after\nAction");
+  const [value, setValue] = useState(
+    twoPrompts ? "/hello then /bye Notes" : prompt ? "/hello Notes" : "Before /meeting-minutes after\nAction",
+  );
+  const bye = value.indexOf("/bye ");
   const token = findSkillInvocation(value, ["meeting-minutes"], true);
   return (
     <RichInputField
@@ -59,18 +64,37 @@ function Host({
       placeholder="[notes]"
       inlineSkills={{
         tokens: token ? [{ ...token, description: "Meeting minutes", onOpen }] : [],
-        promptToken:
-          prompt && value.startsWith("/hello ")
-            ? {
-                from: 0,
-                to: 6,
-                name: "Hello",
-                description: "Say hello",
-                source,
-                teamName,
-                onOpen: inert ? undefined : onOpenPrompt,
-              }
-            : null,
+        promptTokens: [
+          ...((prompt || twoPrompts) && value.startsWith("/hello ")
+            ? [
+                {
+                  from: 0,
+                  to: 6,
+                  name: "Hello",
+                  promptId: "p-hello",
+                  promptTeamId: "personal-1",
+                  description: "Say hello",
+                  source,
+                  teamName,
+                },
+              ]
+            : []),
+          ...(twoPrompts && bye >= 0
+            ? [
+                {
+                  from: bye,
+                  to: bye + 4,
+                  name: "Goodbye",
+                  promptId: "p-bye",
+                  promptTeamId: "team-1",
+                  description: "Say goodbye",
+                  source: "team" as const,
+                  teamName: "Finance",
+                },
+              ]
+            : []),
+        ],
+        onOpenPrompt: inert ? undefined : onOpenPrompt,
       }}
       commandTrigger={{
         onQueryChange: vi.fn(),
@@ -288,7 +312,12 @@ it("opens the prompt preview from its token, which stays one block and sends not
   // The hover hint names the source like the menu's section headings.
   expect(token().title).toBe("Hello\nchatbot.commandMenu.sections.personal\nSay hello");
   act(() => token().click());
-  expect(onOpenPrompt).toHaveBeenCalledOnce();
+  expect(onOpenPrompt).toHaveBeenCalledExactlyOnceWith({
+    promptId: "p-hello",
+    promptTeamId: "personal-1",
+    name: "Hello",
+    command: "hello",
+  });
   expect(onSend).not.toHaveBeenCalled();
   expect(onChange).not.toHaveBeenCalled();
   act(() => editor().dispatch({ selection: { anchor: 6 } }));
@@ -306,6 +335,59 @@ it("opens the prompt preview from its token, which stays one block and sends not
   mount({ inert: true });
   expect(token().tagName).toBe("SPAN");
   expect(token().getAttribute("role")).toBe("group");
+});
+
+it("shows two prompt tokens, each one block with its own hint, label and preview", () => {
+  act(() => {
+    root.unmount();
+    root = createRoot(container);
+    root.render(<Host twoPrompts />);
+  });
+  const tokens = () => Array.from(container.querySelectorAll<HTMLButtonElement>("[data-kind=prompt]"));
+  expect(tokens().map((token) => token.textContent)).toEqual(["edit_note/hello", "edit_note/bye"]);
+  expect(tokens().map((token) => token.title)).toEqual([
+    "Hello\nchatbot.commandMenu.sections.personal\nSay hello",
+    "Goodbye\nchatbot.commandMenu.sections.team\nSay goodbye",
+  ]);
+  expect(tokens().map((token) => token.getAttribute("aria-label"))).toEqual([
+    "chatbot.commandTurn.open",
+    "chatbot.commandTurn.open",
+  ]);
+
+  act(() => tokens()[1].click());
+  expect(onOpenPrompt).toHaveBeenLastCalledWith({
+    promptId: "p-bye",
+    promptTeamId: "team-1",
+    name: "Goodbye",
+    command: "bye",
+  });
+  act(() => tokens()[0].click());
+  expect(onOpenPrompt).toHaveBeenLastCalledWith(expect.objectContaining({ promptId: "p-hello" }));
+  expect(onSend).not.toHaveBeenCalled();
+  expect(onChange).not.toHaveBeenCalled();
+
+  // The caret crosses each token in one step.
+  act(() => editor().dispatch({ selection: { anchor: 16 } }));
+  act(() => {
+    cursorCharLeft(editor());
+  });
+  expect(editor().state.selection.main.head).toBe(12);
+
+  // Typing after the tokens, or before the second one, rebuilds neither.
+  const [hello, goodbye] = tokens();
+  act(() => editor().dispatch({ changes: { from: editor().state.doc.length, insert: " more" } }));
+  act(() => editor().dispatch({ changes: { from: 7, insert: "and " } }));
+  expect(editor().state.doc.toString()).toBe("/hello and then /bye Notes more");
+  expect(tokens()[0]).toBe(hello);
+  expect(tokens()[1]).toBe(goodbye);
+  act(() => tokens()[1].click());
+  expect(onOpenPrompt).toHaveBeenLastCalledWith(expect.objectContaining({ promptId: "p-bye", command: "bye" }));
+
+  // One Backspace removes the second token whole and leaves the first.
+  act(() => editor().dispatch({ selection: { anchor: 20 } }));
+  pressKey("Backspace");
+  expect(editor().state.doc.toString()).toBe("/hello and then Notes more");
+  expect(tokens().map((token) => token.textContent)).toEqual(["edit_note/hello"]);
 });
 
 it("routes modified arrow keys to recall and lets a consumed recall stop the editor", () => {
