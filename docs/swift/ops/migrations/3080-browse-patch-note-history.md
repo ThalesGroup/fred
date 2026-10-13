@@ -73,5 +73,5 @@ the earlier "Don't show again" choices are not restored.
 
 An announced package cannot be edited: correcting a typo means editing the
 patch note and announcing again, which shows the dialog to every user once
-more. **Withdraw the current announcement** leaves **What's new** empty until
+more. An announcement holds at most 10 patch notes. **Withdraw the current announcement** leaves **What's new** empty until
 the next announcement.

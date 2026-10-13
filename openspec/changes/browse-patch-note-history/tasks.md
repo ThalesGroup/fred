@@ -36,7 +36,7 @@
 - [x] 6.3 Reordering with `@dnd-kit` (owner decision, task 1.2): sortable cards dragged by the handle with a lifted copy and a placeholder, the library's keyboard sensor on the focused handle, spoken instructions and positions in `fr` and `en`, one request on drop, optimistic update with rollback; verify with tests for a drop, the keyboard wiring, the announced text, and rollback on a `409`
 - [x] 6.4 "Announce the update" / "Annoncer la mise à jour" button on the Patch notes tab with its confirmation (number of visible patch notes and the one that opens first), disabled when none is visible, and the last-use text with the administrator's display name through `useUsersByIdsQuery`; verify with tests for confirm, cancel, disabled state and the last-use text
 - [x] 6.5 `PatchNoteEditorDialog`: keep plain save and "save and make visible", remove `replacesTitle` and its confirmation, keep the unsaved-changes confirmation; verify with `PatchNoteEditorDialog.test.tsx`
-- [x] 6.6 `ActivationHistory`: show and filter the `announced` and `unannounced` actions; verify with `ActivationHistory.test.tsx`
+- [x] 6.6 `ActivationHistory`: show and filter the patch-note announcements; verify with `ActivationHistory.test.tsx` (superseded by 10.12: one line per exposure, filter by type, no action)
 
 ## 7. Frontend: user dialog
 
@@ -49,7 +49,7 @@
 
 ## 8. Documentation
 
-- [ ] 8.1 Help Center `features/administration.md` in `fr` and `en`: left untouched on the owner's instruction (the Help Center documents the end-user side only in this change); its announcement sections now describe the former behaviour and wait for the owner's decision to remove or keep them
+- [x] 8.1 Help Center `features/administration.md` in `fr` and `en`: the platform-admin Announcements sections are deleted on the owner's instruction (they described the former behaviour; the Help Center documents the end-user side only); verify both languages match
 - [x] 8.2 Update the Help Center `getting-started/first-steps.md` in `fr` and `en` ("What's new" opens the history and how to move through it); verify both languages match
 - [x] 8.3 Update `docs/swift/ux/COMPONENT-UX.md` (`PatchNoteDialog` / `PatchNoteGate`, patch-note row and reordering, announce button, tabs, editor); verify it names no removed component
 - [x] 8.4 Add the English migration note under `docs/swift/ops/migrations/` from the template in `MIGRATION-GUIDES.md` (no operator action; earlier "Don't show again" choices are discarded; no dialog until an administrator announces; one visible patch note after upgrade); verify the release checks accept it
@@ -80,3 +80,12 @@ patch note and its `unannounced` event are removed.
 - [x] 10.11 Frontend: "Withdraw the current announcement" with its confirmation, shown while an announcement is in effect; verify with tests for confirm, cancel and absence when none is in effect
 - [x] 10.12 Frontend: history table by exposure (type, title with "+ N others", activation, deactivation, author), filter by type, and opening a line's package in the dialog; no action column; verify with `ActivationHistory.test.tsx`, including a line without package
 - [x] 10.13 Update Help Center, `COMPONENT-UX.md` and the locales for the wording above; verify `fr` and `en` match
+
+## 11. Review fixes
+
+- [x] 11.1 Announce carries the confirmed ids in order; the backend freezes exactly those or answers `409`; the page reloads the list, says the selection changed, and holds the action while a toggle, a reorder or a reload is under way; verify with service and component tests
+- [x] 11.2 At most 10 patch notes per announcement (`MAX_PATCH_NOTES_PER_ANNOUNCEMENT`, owner decision pending on the number): `409` on the backend, disabled action and hint in the page; patch-note id lists bounded to 1000; verify with tests
+- [x] 11.3 Serialize announce, withdraw, create and reorder with one transaction-scoped advisory lock, no schema change; verify the lock is taken (SQLite cannot prove the exclusion, see design.md)
+- [x] 11.4 Record a seen announcement in one guarded upsert on PostgreSQL and SQLite; verify idempotence, "never backwards", per-user isolation and the `404`
+- [x] 11.5 Keep the announce and withdraw actions above the empty state of the Patch notes tab; verify with `AnnouncementsPage.test.tsx`
+- [x] 11.6 Nits: the gate records the announcement it showed, an unreadable package says so, the checkbox is named by the note's title, locale keys follow "included", straight quotes in the added strings, the downgrade of `a6c1d94e27b3` writes no deactivation for the line the upgrade ended; verify with the component and migration tests

@@ -4385,6 +4385,13 @@ do not reach it. Every announcement is a new package, pending again for every
 user. Withdrawing leaves no package in effect: the user read is empty and
 nothing is pending.
 
+The announce request carries the ids the administrator confirmed, in order;
+the package is frozen only when the enabled patch notes are exactly that list,
+so a change made meanwhile by someone else is refused, not announced. A
+package holds at most 10 patch notes (`MAX_PATCH_NOTES_PER_ANNOUNCEMENT`).
+Announce, withdraw, create and reorder take one transaction-scoped advisory
+lock on PostgreSQL, so at most one package is ever in effect.
+
 **Exposures.** `platform_announcement_exposure` holds one row per exposure, no
 foreign key so it outlives the announcement: `id`, `kind`, `announcement_id`
 (the banner; for a package, its first patch note), `label` and `severity` as
@@ -4399,16 +4406,17 @@ the same transaction as the change.
 **Seen.** `platform_announcement_seen`, one row per user (`user_id`,
 `announcement_id`, `seen_at`), replaces `platform_announcement_dismissal`. An
 announcement is pending for a user when one is in effect and the user's row
-does not name it. A record never moves a user back to an older announcement.
+does not name it. A record never moves a user back to an older announcement
+(one guarded upsert).
 Rows are removed with the user (`DELETE /users/{id}`).
 
 | Method | Path                                                         | Permission            | Request / response |
 | ------ | ------------------------------------------------------------ | --------------------- | ------------------ |
 | GET    | `/announcements/patch-notes`                                 | authenticated         | `PatchNoteHistory { patch_notes: PatchNoteSnapshot[], pending_announcement_id: str \| null }`: the package in effect, empty when none |
 | PUT    | `/announcements/patch-note-announcements/{id}/seen`          | authenticated         | `204`, idempotent; `404` when the id is not an announced package. Identity from the token only |
-| PUT    | `/admin/platform/announcements/patch-notes/order`            | `can_manage_platform` | `PatchNoteOrderRequest { ids: str[] }` → `204`; `409`, changing nothing, unless the list names each patch note exactly once |
+| PUT    | `/admin/platform/announcements/patch-notes/order`            | `can_manage_platform` | `PatchNoteOrderRequest { ids: str[] }` (at most 1000) → `204`; `409`, changing nothing, unless the list names each patch note exactly once |
 | GET    | `/admin/platform/announcements/patch-notes/announcement`     | `can_manage_platform` | `PatchNoteAnnouncement { id, announced_at, announced_by } \| null`: the announcement in effect |
-| POST   | `/admin/platform/announcements/patch-notes/announcement`     | `can_manage_platform` | `201` `PatchNoteAnnouncement`; `409` when no patch note is included |
+| POST   | `/admin/platform/announcements/patch-notes/announcement`     | `can_manage_platform` | `PatchNoteAnnounceRequest { ids: str[] }` (1 to 1000) → `201` `PatchNoteAnnouncement`; `409`, announcing nothing, when no patch note is included, when more than 10 are, or when the included ones are not exactly `ids` in order |
 | DELETE | `/admin/platform/announcements/patch-notes/announcement`     | `can_manage_platform` | withdraw, `204`; `404` when none is in effect |
 | GET    | `/admin/platform/announcements/patch-notes/announcements/{id}` | `can_manage_platform` | `PatchNoteSnapshot[]`: the package of a history line; `404` for an unknown line or one without package |
 | GET    | `/admin/platform/announcements/activation-history`           | `can_manage_platform` | `AnnouncementExposure[]`, 100 newest first |

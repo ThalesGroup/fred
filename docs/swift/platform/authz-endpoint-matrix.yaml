@@ -1108,7 +1108,7 @@ operations:
     method: POST
     path: /control-plane/v1/admin/platform/announcements/patch-notes/announcement
     review_status: pending_review
-    required_permission: can_manage_platform # Freezes the included patch notes (title and body, every language) as a package on a new history line and ends the previous one; from then on users read that package and every user's client opens the dialog once. This gate is the only thing between an actor and a dialog on every user's screen. 409 when no patch note is included. Emits audit event platform.announcement.patch_notes_announced.
+    required_permission: can_manage_platform # Freezes the included patch notes (title and body, every language) as a package on a new history line and ends the previous one; from then on users read that package and every user's client opens the dialog once. This gate is the only thing between an actor and a dialog on every user's screen. The body names the patch notes the administrator confirmed, in order: 409, announcing nothing, when the included ones are not exactly that list, when none is included, or when more than 10 are. Serialized with withdraw, create and reorder by a transaction-scoped advisory lock. Emits audit event platform.announcement.patch_notes_announced.
   - service: control-plane
     method: DELETE
     path: /control-plane/v1/admin/platform/announcements/patch-notes/announcement

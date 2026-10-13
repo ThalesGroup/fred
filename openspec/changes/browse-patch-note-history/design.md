@@ -324,8 +324,10 @@ tasks.md is done.
   filters gained `unannounced` beside `announced`; `drag_indicator` joins the
   supported icon list; `RowControls` moved to its own file, shared by both
   lists; patch notes have their own delete confirmation wording.
-- **Help Center**: only `getting-started/first-steps.md` is updated (owner
-  instruction); task 8.1 stays open.
+- **Help Center**: `getting-started/first-steps.md` is updated, and the
+  platform-admin Announcements sections of `features/administration.md` are
+  deleted in `fr` and `en` (owner instruction): they described the former
+  behaviour and the Help Center documents the end-user side only.
 - **Tests**: happy-dom has no layout, so a pointer drag and the keyboard
   sensor's moves cannot run there. The list tests drive the drop through the
   drag-and-drop context's callbacks and check the sensors and spoken texts;
@@ -351,11 +353,48 @@ tasks.md is done.
   and include", and deleting a patch note says the current announcement is
   not changed.
 - **Help Center**: the user page (`getting-started/first-steps.md`) already
-  matches and is unchanged; no administrator content is added.
+  matches and is unchanged; no administrator content is added, and the former
+  administrator sections stay deleted.
 - The earlier point about "What's new" refreshing on the administrator's own
   changes now only concerns announcing and withdrawing; the gate still decides
   on the first read.
 
+## Review Fixes
+
+- **The confirmation is the contract.** The announce request carries the ids
+  the confirmation listed, in order; the service compares them with the
+  included patch notes inside the transaction and answers `409` on any
+  difference. The page then reloads the list and says the selection changed.
+  The action is also held while a toggle, a reorder or a list reload is under
+  way, so the confirmation shows the settled order.
+- **At most 10 patch notes per announcement**, one constant on each side
+  (`MAX_PATCH_NOTES_PER_ANNOUNCEMENT`): `409` from the service, disabled
+  action with a hint in the page. Patch-note id lists (order, announce) are
+  bounded to 1000 by the schema (`422`), far above a real working list; the
+  number of patch notes itself is not capped.
+- **One lock for the writes that order or announce.** Announce, withdraw,
+  create and reorder first take one transaction-scoped PostgreSQL advisory
+  lock (the primitive `team_wiki` and the bootstrap already use). Two
+  administrators can no longer leave two packages in effect, and a patch note
+  created during a reorder no longer shares position 1. No schema change: a
+  partial unique index would do the first part, but both migrations already
+  ran on a development database. SQLite takes no lock (one writer at a time),
+  so the offline tests check that the lock is taken, not the exclusion.
+- **Seen is one statement.** `INSERT ... ON CONFLICT (user_id) DO UPDATE`,
+  guarded so that it never replaces a record with an older announcement; when
+  it writes nothing, a second read in the same transaction tells an unknown id
+  (`404`) from a record already up to date. Same statement on both dialects.
+- **Downgrade of `a6c1d94e27b3`**: the line the upgrade ended as it created
+  its package is rebuilt as an activation only. It is recognized by its end
+  time, equal to the package's start; when the upgrade found no enabled patch
+  note there is no package to compare with and the deactivation is kept.
+- **Not run**: the upsert, the advisory lock and both migrations on a real
+  PostgreSQL; `libs/frontend/tests/validate-ui-archive.test.mjs`, which needs
+  a full package build (the expected glyph count is 140, counted from
+  `materialIcons`).
+
 ## Open Questions
 
-- None left: the drag-and-drop question is closed (library, see above).
+- The drag-and-drop question is closed (library, see above).
+- **Owner decision pending**: the cap of 10 patch notes per announcement. The
+  mechanism is in place; only the number waits for confirmation.

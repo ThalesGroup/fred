@@ -4560,12 +4560,15 @@ on a neutral `surface-container` band, `h2` sections ruled with
   its editor directly, and its own empty state.
 - **Patch-note card (`PatchNoteList`).** The tab is a working area: nothing
   done on a card reaches users. Neutral `surface-container` card with an
-  `outline-muted` border: drag handle at the left (`drag_indicator`), the
-  `Switch` right after it, title over a `--font-body-small` line reading
+  `outline-muted` border: drag handle at the left (`drag_indicator`), a
+  `Checkbox` right after it, title over a `--font-body-small` line reading
   "Inclus dans la prochaine annonce" (primary) or "Non inclus"
-  (`on-surface-retreat`), then Preview, Edit, Delete at the right. Any number
-  can be included, the switch never asks for confirmation, and a new note
-  starts not included.
+  (`on-surface-retreat`), then Preview, Edit, Delete at the right. The
+  checkbox sits in a round click target the size of a medium icon button
+  (2.5rem, `state-on-surface-hover` on hover), and the title and status are
+  its `<label>`: clicking the text toggles it and gives it its accessible
+  name, so it carries no `aria-label`. Any number can be included, the
+  checkbox never asks for confirmation, and a new note starts not included.
 - **Reordering.** `@dnd-kit` sortable list, vertical only. While a card is
   moved, a lifted copy (`surface-container-high`, `--shadow-m`) follows the
   pointer, its slot stays as a dashed `outline-variant` placeholder and the
@@ -4575,16 +4578,23 @@ on a neutral `surface-container` band, `h2` sections ruled with
   English. One request on drop carries the whole order; the list shows the new
   order at once and goes back, with an error toast, if the server refuses it.
   Motion is dropped under `prefers-reduced-motion`.
-- **Announce (`PatchNoteAnnouncer`).** Above the list, a tonal "Annoncer
+- **Announce (`PatchNoteAnnouncer`).** Above the list, and above the empty
+  state when the list holds no patch note, a tonal "Annoncer
   la mise à jour" button (`campaign` icon), disabled when nothing is included
   (a short line then says to include a note), and beside it the date and time
-  of the announcement in effect with the administrator's name. The plain
+  of the announcement in effect with the administrator's name. It is also
+  disabled above 10 included patch notes, the line then saying to deselect
+  some, and while a toggle, a reorder or a list reload is under way, so the
+  confirmation always lists the settled order. Confirming sends that list; if
+  the server answers that it changed meanwhile, the list reloads and an error
+  toast says so. The plain
   `ConfirmationDialog` asks whether this is the list to send: its `details`
   slot holds the included titles as a numbered list, in order, under a
   sentence saying users see exactly this list at their next sign-in and in
   "Nouveautés", and that later edits wait for the next announcement.
 - **Withdraw.** While an announcement is in effect, a text button "Retirer
-  l'annonce en cours" (`on-surface`) follows the last-use line. It goes
+  l'annonce en cours" in the `error` colour sits at the far right of the
+  announce row, apart from the announce button and its last-use line. It goes
   through the critical `ConfirmationDialog`, whose text is the explanation:
   "Nouveautés" becomes empty for everyone and nobody gets the dialog until the
   next announcement.

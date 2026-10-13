@@ -103,6 +103,20 @@ for every user at their next application load, once per user for that
 announcement, including users who had seen the previous one. There SHALL be no
 way to change a package once announced.
 
+The package SHALL be exactly the list the administrator confirmed: the
+request SHALL name the confirmed patch notes in order, and SHALL be refused,
+announcing nothing, when the included patch notes are no longer that list in
+that order. The page SHALL then reload the list and tell the administrator
+that the selection changed. The action SHALL be unavailable while a toggle or
+a reorder is still being saved.
+
+An announcement SHALL hold at most 10 patch notes. Above that number the
+action SHALL be unavailable, with a hint to deselect some, and a request to
+announce SHALL be refused.
+
+Two announcements or withdrawals requested at the same time SHALL be applied
+one after the other, so that at most one package is in effect.
+
 The action SHALL be unavailable while no patch note is included, and a request
 to announce in that state SHALL be refused. Next to the action, the page SHALL
 show the date and time of the announcement in effect and the display name of
@@ -145,6 +159,24 @@ announcement SHALL emit an audit record.
 - **WHEN** an administrator opens the Patch notes tab
 - **THEN** the page shows, next to the action, that date and time and Alice's display name
 
+#### Scenario: The list changed since the confirmation
+
+- **GIVEN** an administrator's confirmation lists A then B, while another administrator has just excluded B
+- **WHEN** the first administrator confirms
+- **THEN** the request is refused, no package is recorded, the list is reloaded and the page says the selection changed
+
+#### Scenario: More patch notes than an announcement holds
+
+- **GIVEN** 11 patch notes are included
+- **WHEN** an administrator opens the Patch notes tab
+- **THEN** the announce action is disabled with a hint to deselect some
+- **AND** a request to announce sent anyway is refused and records nothing
+
+#### Scenario: Two administrators announce at the same time
+
+- **WHEN** two administrators confirm an announcement at the same moment
+- **THEN** one package is in effect afterwards and the other one's line is ended
+
 #### Scenario: Nothing included, no announcement
 
 - **GIVEN** no patch note is included
@@ -155,7 +187,8 @@ announcement SHALL emit an audit record.
 ### Requirement: Withdrawing the current announcement
 
 The Patch notes tab SHALL offer an action, "Withdraw the current
-announcement", available while an announcement is in effect. It SHALL tell the
+announcement", available while an announcement is in effect, including when
+the list holds no patch note any more. It SHALL tell the
 administrator what will happen and ask for confirmation. Once confirmed, no
 package SHALL be in effect: users SHALL read no patch note, the dialog SHALL
 NOT open for anyone, and the page SHALL show no last announcement, until the
@@ -174,6 +207,12 @@ SHALL emit an audit record.
 - **GIVEN** an announcement was withdrawn
 - **WHEN** an administrator confirms a new announcement
 - **THEN** every user gets the dialog once, with the new package
+
+#### Scenario: Withdrawing after every patch note was deleted
+
+- **GIVEN** an announcement is in effect and every patch note has since been deleted
+- **WHEN** an administrator opens the Patch notes tab
+- **THEN** the withdraw action is offered above the empty state
 
 #### Scenario: Nothing to withdraw
 
