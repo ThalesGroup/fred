@@ -3622,8 +3622,15 @@
       "createLink": "Create link",
       "copyLink": "Invitation URL",
       "failed": "The operation could not be completed. Check your access and try again.",
-      "deniedTitle": "Access not authorized",
-      "deniedMessage": "You are not authorized to access this platform. Please contact support to request access.",
+      "denied": {
+        "titleNamed": "Hello {{firstName}}, your access is not open yet",
+        "title": "Hello, your access is not open yet",
+        "stepRequestWithEmail": "Ask support for access, giving the address above.",
+        "stepRequest": "Ask support for access.",
+        "stepReturn": "Once it is open, come back here and check your access.",
+        "check": "Check my access",
+        "request": "Request access"
+      },
       "support": "Contact support",
       "retry": "Try again",
       "signOut": "Sign out",

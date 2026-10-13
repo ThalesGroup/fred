@@ -3622,8 +3622,15 @@
       "createLink": "Créer un lien",
       "copyLink": "URL d'invitation",
       "failed": "L'opération n'a pas abouti. Vérifiez votre accès et réessayez.",
-      "deniedTitle": "Accès non autorisé",
-      "deniedMessage": "Vous n'êtes pas autorisé à accéder à cette plateforme. Contactez le support pour demander un accès.",
+      "denied": {
+        "titleNamed": "Bonjour {{firstName}}, votre accès n'est pas encore ouvert",
+        "title": "Bonjour, votre accès n'est pas encore ouvert",
+        "stepRequestWithEmail": "Demandez un accès au support, en indiquant l'adresse ci-dessus.",
+        "stepRequest": "Demandez un accès au support.",
+        "stepReturn": "Quand il est ouvert, revenez ici et vérifiez votre accès.",
+        "check": "Vérifier mon accès",
+        "request": "Demander un accès"
+      },
       "support": "Contacter le support",
       "retry": "Réessayer",
       "signOut": "Se déconnecter",
