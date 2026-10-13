@@ -5,8 +5,9 @@ In Platform access > Whitelist > Users the page never shows the whitelist (GitHu
 ## What Changes
 
 - `GET /admin/platform/access/users` gains the optional query parameter `exceptions_only` (default `false`). When `true`, the page and `total` cover only users holding an individual exception (manual or initial import).
-- The endpoint returns rows in a stable alphabetical order in both modes: case-insensitive username, users without a username last, user id as tiebreaker. Without the parameter the answer is otherwise unchanged.
-- Whitelist > Users lists individual exceptions only, server-paginated 25 per page with the real total; the search narrows that list; each row keeps its "Accès via" chips and offers "Remove".
+- Without the parameter the endpoint returns rows in a stable alphabetical order: case-insensitive username, users without a username last, user id as tiebreaker; the answer is otherwise unchanged. With the parameter, the most recently granted exceptions come first, the alphabetical rule breaking ties.
+- Whitelist > Users lists individual exceptions only, newest first, server-paginated with the real total; the search narrows that list. Each row shows when the access was added, its origin (manual or initial import) and the person's other access sources, and offers "Remove". An empty "other access" cell means removing the person makes them lose access.
+- The response shape does not change: the grant date and the origin are read from the individual source each row already carries.
 - Row selection and the bulk bar leave this table: they only served granting, and there is no bulk-remove endpoint.
 - An "Add users" button opens a dialog built on the same shell as the team "Add members" dialog: a search across all known users, a pending selection that survives successive searches, people who already hold an individual exception shown as such and not selectable, one confirm action using the existing bulk grant.
 - An empty whitelist gets its own short state pointing to the add button, distinct from a search without match.

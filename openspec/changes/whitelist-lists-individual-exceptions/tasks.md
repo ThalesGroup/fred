@@ -29,6 +29,14 @@
 - [x] 6.2 Add the migration note.
 - [x] 6.3 Record the exact verification evidence below and run `openspec validate whitelist-lists-individual-exceptions --strict`.
 
+## 7. Grant date, origin and newest first
+
+- [ ] 7.1 Return each user with their exception row from the page query and order by grant date (newest first) under the filter; verify with fred-core tests (order with the filter, order unchanged without it, search with the filter, pagination stability, ties alphabetical).
+- [ ] 7.2 Use that row in the service projection instead of a per-row read; verify with control-plane tests that the individual source carries its grant date, that users without an exception carry none, and that no per-row exception read remains.
+- [ ] 7.3 Show "Added on", "Origin" and "Other access" in the whitelist table; verify with page tests for the date cell and origin of both origins, the filtered chips and the empty-cell marker.
+- [ ] 7.4 Add the French and English strings and delete the unused ones; verify key parity and that no deleted key is referenced.
+- [ ] 7.5 Update the contract entry, `COMPONENT-UX.md` and the migration note; record the evidence below and re-run `openspec validate whitelist-lists-individual-exceptions --strict`.
+
 ## Verification evidence (2026-10-13)
 
 Nothing visual was checked: the page and the dialog were not rendered in a browser, and the running control-plane was not restarted, so the new filter was not exercised against a live backend or PostgreSQL.
