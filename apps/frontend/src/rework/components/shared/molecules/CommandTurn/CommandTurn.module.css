@@ -29,8 +29,19 @@
   text-align: left;
 }
 
+/* Same tonal hover and press as the composer token. */
 .command:hover:not(:disabled) .slug {
-  text-decoration: underline;
+  background-image: linear-gradient(
+    var(--state-on-secondary-container-hover),
+    var(--state-on-secondary-container-hover)
+  );
+}
+
+.command:active:not(:disabled) .slug {
+  background-image: linear-gradient(
+    var(--state-on-secondary-container-pressed),
+    var(--state-on-secondary-container-pressed)
+  );
 }
 
 .command:focus-visible {

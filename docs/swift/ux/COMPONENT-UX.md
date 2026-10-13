@@ -5292,8 +5292,8 @@ The turn itself renders as its command rather than as the assembled text
 (`UserMessage` + `CommandTurn`), which keeps a transcript of long prompts
 readable. Sent prompt tokens use the composer's prompt container and
 decorative `edit_note` icon, with the same compact inline presentation as skill
-badges; keyboard focus draws a `--primary` outline around the container. The panel a sent prompt opens (`CommandPromptPanel`) stacks its header: the prompt's name on top (`--on-surface`, label-large), its `/command` below (`--on-surface-retreat`, body-medium), then the text that was sent; no description is shown. Legacy appended text keeps the bubble's text colour. Hover underlines
-the prompt; keyboard focus is visible. Selection-copy omits decorative glyph
+badges; keyboard focus draws a `--primary` outline around the container. The panel a sent prompt opens (`CommandPromptPanel`) stacks its header: the prompt's name on top (`--on-surface`, label-large), its `/command` below (`--on-surface-retreat`, body-medium), then the text that was sent; no description is shown. Legacy appended text keeps the bubble's text colour. Hover and press tint
+the badge with the secondary container state layers, like a tonal button (no underline), for prompt and skill badges alike and for the clickable composer token; keyboard focus is visible. Selection-copy omits decorative glyph
 names and preserves the command and skill slashes.
 The command and the text typed after it are laid out as one inline
 sentence, not as a flex row: they are one string and have to reflow as one when
