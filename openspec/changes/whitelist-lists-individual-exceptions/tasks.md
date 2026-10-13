@@ -40,10 +40,10 @@
 
 ## 8. One navigation level, whitelist wording, compact other access
 
-- [ ] 8.1 Replace the Whitelist tab and its sub-tabs by top-level Users and Teams tabs, each with an `h3` title and a description above its controls; verify with page tests (three tabs, one exposed panel, keyboard navigation, users request skipped on other tabs, draft/search/page/page size preserved, header action present on each tab).
-- [ ] 8.2 Show other access as one chip with a grouped tooltip and an empty cell otherwise; verify with page tests (one chip per row with other access, none without, grouped content for each kind and several teams, focusable trigger with an accessible name).
-- [ ] 8.3 Reword the French strings to "de la liste blanche" and delete unused keys; verify key parity and that no deleted key is referenced.
-- [ ] 8.4 Update `COMPONENT-UX.md`, record the evidence and re-run `openspec validate whitelist-lists-individual-exceptions --strict`.
+- [x] 8.1 Replace the Whitelist tab and its sub-tabs by top-level Users and Teams tabs, each with an `h3` title and a description above its controls; verify with page tests (three tabs, one exposed panel, keyboard navigation, users request skipped on other tabs, draft/search/page/page size preserved, header action present on each tab).
+- [x] 8.2 Show other access as one chip with a grouped tooltip and an empty cell otherwise; verify with page tests (one chip per row with other access, none without, grouped content for each kind and several teams, focusable trigger with an accessible name).
+- [x] 8.3 Reword the French strings to "de la liste blanche" and delete unused keys; verify key parity and that no deleted key is referenced.
+- [x] 8.4 Update `COMPONENT-UX.md`, record the evidence and re-run `openspec validate whitelist-lists-individual-exceptions --strict`.
 
 ## Verification evidence (2026-10-13)
 
@@ -96,3 +96,16 @@ Nothing visual was checked, and the new order was not run against the live contr
 Divergence from the request: no top-level grant-date field was added to the user, because the individual source of each row already carries `granted_at`; see design.md.
 
 Block title (task 7.6), from `apps/frontend`: `npx tsc --noEmit` exit 0; `npx eslint src/rework/components/pages/admin/PlatformAccessPage` exit 0; prettier check passes on that folder and both `translation.json`; `npx vitest run src/rework/components/pages/admin/PlatformAccessPage/PlatformAccessPage.test.tsx` 33 passed (the former "no heading" test now checks the `h3`, its text and its position). `rework.platformAccess` then exposes 222 keys in each language.
+
+## Verification evidence for section 8 (2026-10-14)
+
+Frontend only; nothing visual was checked (tab row, titles, chip, tooltip placement and the focus ring on the chip wrapper were not seen in a browser).
+
+From `apps/frontend`, no make target:
+
+- `npx tsc --noEmit`: exit 0. `npx eslint src/rework/components/pages/admin/PlatformAccessPage`: exit 0. `npx prettier --config .prettierrc --check` on that folder and both `translation.json`: pass.
+- `npx vitest run`, one file at a time: `PlatformAccessPage.test.tsx` 33 passed; `PlatformAccessAddUsersDialog.test.tsx` 9, `PlatformAccessRuleEditor.test.tsx` 34 and `PlatformAccessLinkManager.test.tsx` 27 passed, unmodified.
+- Page tests rewritten for this section: one tablist of three tabs with matching `aria-controls` / `aria-labelledby`, one exposed panel at a time, arrow-key navigation through the three tabs, header filtering action present on each; title then description as the first element of the Users and Teams panels, before any control; users request skipped on the Rules and Teams tabs; rule draft, search and page preserved across the three tabs; one focusable chip per row with other access, its accessible name and its tooltip listing rule, administrator, two authorized teams on one line and the link-access team; a single-kind row; an empty cell without chip for a row with no other access.
+- No shared component was changed. `Chip` has a single size and accepts neither focus nor ARIA props; it is wrapped, not extended.
+- `rework.platformAccess` exposes the same 223 keys in French and English; `whitelistTabs.*`, `whitelistHint`, `teamHint`, `source.*` and `otherSources` are removed and no longer referenced.
+- `openspec validate whitelist-lists-individual-exceptions --strict`: valid.
