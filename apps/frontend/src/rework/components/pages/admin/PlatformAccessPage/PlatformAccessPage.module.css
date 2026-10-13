@@ -153,6 +153,18 @@
 .linkToolbar > button {
   margin-inline-start: auto;
 }
+.linkSuspendedNotice {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
+  margin: 0 0 var(--spacing-m);
+  border-left: 4px solid var(--warning);
+  border-radius: var(--radius-ms);
+  background: var(--warning-container);
+  padding: var(--spacing-s) var(--spacing-m);
+  color: var(--on-warning-container);
+  font: var(--font-body-medium);
+}
 .linkControls {
   display: flex;
   flex-wrap: wrap;

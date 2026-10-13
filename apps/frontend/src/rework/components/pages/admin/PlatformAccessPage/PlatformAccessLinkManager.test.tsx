@@ -24,17 +24,24 @@ const hooks = vi.hoisted(() => ({
   inactive: 5,
   uncachedPage: false,
   linkStatus: "active",
+  linkNote: "Workshop" as string | null,
+  teamFree: undefined as boolean | undefined,
+  teamQuery: vi.fn(),
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }) }));
 vi.mock("../../../../../common/config", () => ({ getConfig: () => ({ frontend_basename: "/" }) }));
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  usePlatformAccessTeamsQuery: (...args: unknown[]) => {
+    hooks.teamQuery(...args);
+    return { data: hooks.teamFree === undefined ? undefined : [{ team_id: "demo", free: hooks.teamFree }] };
+  },
   usePlatformEnrollmentLinksQuery: (...args: unknown[]) => {
     hooks.query(...args);
     const data = {
       items: [
         {
           id: "invitation",
-          note: "Workshop",
+          note: hooks.linkNote,
           created_at: "2026-10-01T12:00:00Z",
           expires_at: null,
           revoked_at: null,
@@ -97,6 +104,8 @@ beforeEach(() => {
   hooks.inactive = 5;
   hooks.uncachedPage = false;
   hooks.linkStatus = "active";
+  hooks.linkNote = "Workshop";
+  hooks.teamFree = undefined;
   hooks.joinerFetching = false;
   hooks.joinerError = false;
   hooks.joinerTotal = 1;
@@ -239,10 +248,13 @@ it("keeps history available while Free is suspended and prevents link creation",
   expect(document.body.textContent).toContain("Workshop");
   expect(document.body.textContent).toContain("7");
   expect(document.body.textContent).not.toContain(new Date("2026-10-02T12:34:56Z").toLocaleString("en"));
-  expect(document.body.textContent).not.toContain("rework.platformAccess.links.suspendedHint");
-  expect(document.querySelector(`.${styles.suspendedLink} .${styles.screenReaderOnly}`)?.textContent).toBe(
+  expect(document.querySelector(`.${styles.linkSuspendedNotice}`)?.textContent).toContain(
+    "rework.platformAccess.links.suspendedHint",
+  );
+  expect(document.querySelector(`.${styles.suspendedLink}`)?.textContent).toContain(
     "rework.platformAccess.links.status.suspended",
   );
+  expect(document.querySelector(`.${styles.suspendedLink} .${styles.screenReaderOnly}`)).toBeNull();
   expect(button("createLink").disabled).toBe(true);
   expect(button("links.revoke").disabled).toBe(false);
   expect(button("links.copyUrl").disabled).toBe(false);
@@ -251,6 +263,25 @@ it("keeps history available while Free is suspended and prevents link creation",
   expect([...document.querySelectorAll('[role="option"]')].map((option) => option.textContent)).toEqual(
     ["all", "active", "revoked", "expired"].map((status) => `rework.platformAccess.links.status.${status}`),
   );
+});
+
+it("refreshes the link access notice when the team's setting changes elsewhere", () => {
+  render();
+  expect(hooks.teamQuery).toHaveBeenCalledWith(undefined, {
+    refetchOnMountOrArgChange: true,
+    pollingInterval: 30000,
+  });
+  expect(document.querySelector(`.${styles.linkSuspendedNotice}`)).toBeNull();
+  hooks.teamFree = false;
+  hooks.linkStatus = "suspended";
+  render();
+  expect(document.querySelector(`.${styles.linkSuspendedNotice}`)).not.toBeNull();
+  expect(button("createLink").disabled).toBe(true);
+  hooks.teamFree = true;
+  hooks.linkStatus = "active";
+  render();
+  expect(document.querySelector(`.${styles.linkSuspendedNotice}`)).toBeNull();
+  expect(button("createLink").disabled).toBe(false);
 });
 
 it("keeps link actions and dialog controls available during URL reveal", () => {
@@ -264,6 +295,15 @@ it("keeps link actions and dialog controls available during URL reveal", () => {
   expect(button("links.copyUrl").disabled).toBe(false);
   expect(button("links.joiners").disabled).toBe(false);
   expect(button("links.revoke").disabled).toBe(false);
+});
+
+it("leaves an absent note blank and gives its joiners a generic title", () => {
+  hooks.linkNote = null;
+  render();
+  expect(document.querySelector(`.${styles.linkSuspendedNotice}`)).toBeNull();
+  expect(document.querySelector(`.${styles.exampleValue}`)?.textContent).toBe("");
+  act(() => button("links.joiners").click());
+  expect(frontDialog().querySelector("p")?.textContent).toBe("rework.platformAccess.links.joiners");
 });
 
 it("shows successful joiners on a revoked link with bounded pages", () => {
@@ -281,6 +321,7 @@ it("shows successful joiners on a revoked link with bounded pages", () => {
     "rework.platformAccess.links.revoke",
   ]);
   act(() => button("links.joiners").click());
+  expect(frontDialog().querySelector("p")?.textContent).toBe("rework.platformAccess.links.joinersTitle");
   expect(hooks.joinerQuery.mock.lastCall?.[0]).toMatchObject({
     teamId: "demo",
     linkId: "invitation",

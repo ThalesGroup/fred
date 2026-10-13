@@ -21,6 +21,7 @@ import {
   useRevealPlatformLinkMutation,
   useRevokePlatformLinkMutation,
   useDeleteInactivePlatformLinksMutation,
+  usePlatformAccessTeamsQuery,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import styles from "./PlatformAccessPage.module.css";
 
@@ -36,6 +37,11 @@ export default function PlatformAccessLinkManager({
   const { t, i18n } = useTranslation();
   const [offset, setOffset] = useState(0);
   const [status, setStatus] = useState<LinkStatusFilter>("all");
+  const teams = usePlatformAccessTeamsQuery(undefined, {
+    refetchOnMountOrArgChange: true,
+    pollingInterval: 30000,
+  });
+  const linkAccessEnabled = teams.data?.find((entry) => entry.team_id === team.team_id)?.free ?? team.free;
   const links = usePlatformEnrollmentLinksQuery(
     { teamId: team.team_id, offset, limit: 25, status: status === "all" ? undefined : status },
     {
@@ -190,7 +196,7 @@ export default function PlatformAccessLinkManager({
               color="primary"
               variant="filled"
               size="medium"
-              disabled={busy || !team.free}
+              disabled={busy || !linkAccessEnabled}
               onClick={(event) => {
                 rememberFocus(event.currentTarget);
                 setFailed(false);
@@ -201,6 +207,14 @@ export default function PlatformAccessLinkManager({
               {t("rework.platformAccess.createLink")}
             </Button>
           </div>
+          {!linkAccessEnabled && (
+            <p className={styles.linkSuspendedNotice} role="status">
+              <span className="material-symbols-outlined" aria-hidden="true">
+                link_off
+              </span>
+              {t("rework.platformAccess.links.suspendedHint")}
+            </p>
+          )}
           <div className={styles.linkControls}>
             <div className={styles.linkFilter}>
               <Select<LinkStatusFilter>
@@ -253,7 +267,9 @@ export default function PlatformAccessLinkManager({
             <DataTable
               data={history?.items ?? []}
               rowKey={(link) => link.id}
-              rowClassName={(link) => (!team.free || link.status === "suspended" ? styles.suspendedLink : undefined)}
+              rowClassName={(link) =>
+                !linkAccessEnabled || link.status === "suspended" ? styles.suspendedLink : undefined
+              }
               serverPagination={{
                 offset,
                 limit: 25,
@@ -264,11 +280,7 @@ export default function PlatformAccessLinkManager({
                 {
                   label: t("rework.platformAccess.links.note"),
                   size: "2fr",
-                  cellRenderer: (link) => (
-                    <span className={styles.exampleValue}>
-                      {link.note || t("rework.platformAccess.links.untitled")}
-                    </span>
-                  ),
+                  cellRenderer: (link) => <span className={styles.exampleValue}>{link.note}</span>,
                 },
                 {
                   label: t("rework.platformAccess.links.created"),
@@ -283,11 +295,7 @@ export default function PlatformAccessLinkManager({
                 {
                   label: t("rework.platformAccess.links.statusLabel"),
                   size: "1fr",
-                  cellRenderer: (link) => (
-                    <span className={link.status === "suspended" ? styles.screenReaderOnly : undefined}>
-                      {t(`rework.platformAccess.links.status.${link.status}`)}
-                    </span>
-                  ),
+                  cellRenderer: (link) => t(`rework.platformAccess.links.status.${link.status}`),
                 },
                 {
                   label: t("rework.platformAccess.links.openings"),
@@ -353,9 +361,11 @@ export default function PlatformAccessLinkManager({
       {joinersLink && (
         <Dialog
           open
-          title={t("rework.platformAccess.links.joinersTitle", {
-            note: joinersLink.note || t("rework.platformAccess.links.untitled"),
-          })}
+          title={
+            joinersLink.note
+              ? t("rework.platformAccess.links.joinersTitle", { note: joinersLink.note })
+              : t("rework.platformAccess.links.joiners")
+          }
           maxWidth={900}
           hideCancel
           confirmLabel={t("rework.back")}
@@ -456,7 +466,7 @@ export default function PlatformAccessLinkManager({
           }
           maxWidth={700}
           confirmLabel={t(view === "create" ? "rework.platformAccess.createLink" : "common.close")}
-          confirmDisabled={view === "create" ? busy || !team.free || expiredInput || choosingExpiry : busy}
+          confirmDisabled={view === "create" ? busy || !linkAccessEnabled || expiredInput || choosingExpiry : busy}
           hideCancel={view === "output"}
           onCancel={back}
           onConfirm={view === "create" ? () => void create() : back}
@@ -467,12 +477,12 @@ export default function PlatformAccessLinkManager({
                 label={t("rework.platformAccess.links.note")}
                 value={note}
                 maxLength={512}
-                disabled={busy || !team.free}
+                disabled={busy || !linkAccessEnabled}
                 onChange={(event) => setNote(event.target.value)}
               />
               <PlatformAccessExpirationPicker
                 value={expiry}
-                disabled={busy || !team.free}
+                disabled={busy || !linkAccessEnabled}
                 onChange={setExpiry}
                 onOpenChange={setChoosingExpiry}
               />
