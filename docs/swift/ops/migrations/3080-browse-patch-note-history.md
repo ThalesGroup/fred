@@ -2,7 +2,7 @@
 schema: 1
 title: "Announce patch notes as a package and show the history by exposure"
 impact: minor
-after: [add-patch-note-announcements]
+after: [add-patch-note-announcements, 3061-platform-admission-and-link-joiners]
 configuration: none
 configuration_reason: "No configuration key, default or chart value changes; the order of patch notes and what each user has seen live in the existing control-plane database."
 ---
@@ -24,7 +24,7 @@ Deploy the control-plane backend and the frontend together. Two control-plane
 Alembic revisions run with the normal migration step; no backfill or manual
 step is needed.
 
-`e5ff6d80cc9f` (parent `93427a5fe874`):
+`e5ff6d80cc9f` (parent `9f6d3c2a1b08`):
 
 - drops the index that allowed a single enabled patch note;
 - adds `platform_announcement.position` and numbers the existing patch notes,

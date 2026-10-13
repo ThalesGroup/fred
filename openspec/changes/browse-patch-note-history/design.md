@@ -172,9 +172,10 @@ in `PatchNoteDialog`.
 - [The predecessor change was merged but not archived, so the main spec lacked
   the requirements this delta modifies] → `add-patch-note-announcements` is
   archived first, in its own commit (task 1.1).
-- [Other open PRs add migrations on the same parent, `93427a5fe874`] → this
-  migration will need re-parenting onto the `swift` head before the PR, never
-  a merge revision (task 2.2).
+- [Other open PRs add migrations on the same parent, `93427a5fe874`] → done
+  once: `e5ff6d80cc9f` is re-parented onto `9f6d3c2a1b08`, the `swift` head
+  after the merge of 2026-10-13, with no merge revision; to redo if `swift`
+  gains another migration before this one lands (task 2.2).
 - [Native drag and drop is weak on touch screens and gives plain visual
   feedback] → the admin page is a desktop surface and the keyboard path covers
   the rest; the library alternative is listed for the owner.

@@ -21,7 +21,7 @@ choices are discarded with their table. Downgrading keeps the top visible
 patch note enabled and drops the announcement events the older code cannot read.
 
 Revision ID: e5ff6d80cc9f
-Revises: 93427a5fe874
+Revises: 9f6d3c2a1b08
 """
 
 from typing import Sequence, Union
@@ -31,7 +31,7 @@ from alembic import op
 
 revision: str = "e5ff6d80cc9f"  # pragma: allowlist secret
 down_revision: Union[str, Sequence[str], None] = (
-    "93427a5fe874"  # pragma: allowlist secret
+    "9f6d3c2a1b08"  # pragma: allowlist secret
 )
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
