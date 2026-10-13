@@ -62,6 +62,7 @@ export default function PlatformAccessPage() {
   const [offset, setOffset] = useState(0);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [query, setQuery] = useState("");
+  const [teamQuery, setTeamQuery] = useState("");
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState(false);
   const [filterConfirmation, setFilterConfirmation] = useState<boolean>();
@@ -93,6 +94,11 @@ export default function PlatformAccessPage() {
   }, [pageEmptied, pageSize]);
   const t0 = usePlatformAccessT0Query(undefined, { skip: !enabled });
   const teams = usePlatformAccessTeamsQuery(undefined, { skip: !enabled });
+  // Teams arrive in one response, so the search only narrows what is already loaded.
+  const teamNeedle = teamQuery.trim().toLocaleLowerCase();
+  const teamRows = (teams.data ?? []).filter((team) =>
+    (team.name || team.team_id).toLocaleLowerCase().includes(teamNeedle),
+  );
   const [filter] = useSetPlatformFilteringMutation();
   const [grantUsers] = useGrantPlatformUsersMutation();
   const [revoke] = useRevokePlatformUserMutation();
@@ -375,10 +381,23 @@ export default function PlatformAccessPage() {
               <h3 className={styles.sectionTitle}>{t("rework.platformAccess.whitelistedTeams")}</h3>
               <p className={styles.hint}>{t("rework.platformAccess.whitelistedTeamsHint")}</p>
             </div>
-            <div className={styles.group}>
+            <div className={styles.toolbar}>
+              <div className={styles.search}>
+                <SearchInput
+                  size="small"
+                  value={teamQuery}
+                  placeholder={t("rework.platformAccess.searchTeam")}
+                  ariaLabel={t("rework.platformAccess.searchTeam")}
+                  clearAriaLabel={t("rework.platformAccess.clearSearch")}
+                  onChange={setTeamQuery}
+                />
+              </div>
+            </div>
+            {teamNeedle && teamRows.length === 0 && <p className={styles.hint}>{t("rework.platformAccess.noTeams")}</p>}
+            <div className={styles.group} hidden={!!teamNeedle && teamRows.length === 0}>
               <DataTable
                 size="small"
-                data={teams.data ?? []}
+                data={teamRows}
                 rowKey={(team) => team.team_id}
                 pageSize={20}
                 columns={[

@@ -3842,6 +3842,8 @@
       "filteringOn": "Filtrage actif",
       "filteringOff": "Filtrage inactif",
       "clearSearch": "Effacer la recherche",
+      "searchTeam": "Rechercher une équipe",
+      "noTeams": "Aucune équipe ne correspond à cette recherche.",
       "noUsers": "Aucun utilisateur de la liste blanche ne correspond à cette recherche.",
       "teamAllowed": "Autorisée",
       "grantedSelected_one": "{{count}} utilisateur ajouté à la liste blanche.",

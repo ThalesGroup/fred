@@ -3842,6 +3842,8 @@
       "filteringOn": "Filtering on",
       "filteringOff": "Filtering off",
       "clearSearch": "Clear search",
+      "searchTeam": "Search a team",
+      "noTeams": "No team matches this search.",
       "noUsers": "No whitelisted user matches this search.",
       "teamAllowed": "Allowed",
       "grantedSelected_one": "{{count}} user added to the whitelist.",
