@@ -313,7 +313,7 @@ export function useComposerCommands(params: {
       commandQueryOf(params.input, commandRange?.end, [...skillNames, ...commands.map((entry) => entry.command)]) &&
     query !== dismissedQuery &&
     !selectedSkills.some((token) => token.from === commandRange?.start) &&
-    !(promptEntry && promptRange && promptRange.to < params.input.length && promptRange.from === commandRange?.start);
+    !(selectedPrompt && selectedPrompt.from === commandRange?.start);
   const hasEntries = entries.length > 0;
 
   const entriesRef = useRef(entries);

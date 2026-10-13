@@ -784,6 +784,32 @@ describe("platform skills", () => {
       act(() => cm().dispatch({ changes: { from: 0, to: cm().state.doc.length }, selection: { anchor: 0 } }));
     }
   });
+  it.each(["picked", "typed"])("keeps the menu closed on a %s prompt token left at the end of the draft", (origin) => {
+    activateSkills(true);
+    act(() => cm().contentDOM.focus());
+    if (origin === "picked") {
+      cmTypeByHand("/su");
+      cmPress("Tab");
+    } else cmTypeByHand("/summary ");
+    expect(cm().state.doc.toString()).toBe("/summary ");
+    const menu = () => renders[renders.length - 1].menu;
+
+    cmPress("Backspace");
+    expect(cm().state.doc.toString()).toBe("/summary");
+    expect(promptShown()).toBe(true);
+    expect(menu()).toBeNull();
+
+    cmTypeByHand(" ");
+    expect(menu()).toBeNull();
+    cmTypeByHand("notes");
+    expect(promptShown()).toBe(true);
+    expect(menu()).toBeNull();
+
+    // A new slash further on is a new command: the menu is for it alone.
+    cmTypeByHand(" /re");
+    expect(labels()).toEqual(["review"]);
+    expect(promptShown()).toBe(true);
+  });
   it("deletes one of two adjacent tokens without touching the other", () => {
     activateSkills(true);
     cmType("/review /meeting-minutes notes");

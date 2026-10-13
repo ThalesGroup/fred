@@ -101,8 +101,8 @@ function Host() {
   });
   return (
     <RichInputField
-      value={input}
-      onChange={setInput}
+      value={commands.composerValue}
+      onChange={commands.onComposerChange}
       onSend={commands.submit}
       commandTrigger={commands.trigger}
       onRecallKeyDown={recallKeyDown}
