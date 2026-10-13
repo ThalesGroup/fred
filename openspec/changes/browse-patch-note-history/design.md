@@ -244,8 +244,42 @@ Closed by the owner; written into the specs and tasks.
 - New routes are listed in `docs/swift/platform/authz-endpoint-matrix.yaml`,
   which a backend test requires; the plan did not name that file.
 
+## Frontend Divergences
+
+- **Decision 7 is superseded and the "no new frontend dependency" goal is
+  dropped**: the owner chose `@dnd-kit/core`, `@dnd-kit/sortable` and
+  `@dnd-kit/utilities` for a smoother, animated reorder. The keyboard path is
+  the library's (Space or Enter on the handle, arrows, Space or Enter again),
+  not one Arrow press per move. The vertical-only constraint is a three-line
+  modifier, so `@dnd-kit/modifiers` is not added.
+- **Announce confirmation** carries both texts: the owner's sentence (every
+  user gets the dialog at their next sign-in) and the plan's count and first
+  note. The last-use slot shows nothing when no announcement is in effect, and
+  a short "show at least one patch note" hint while the button is disabled.
+- **The users' history read also refreshes on the administrator's own
+  changes** (it shares the announcements cache tag), so "What's new" shows an
+  edit without a reload. The gate therefore decides on the first read only: an
+  announcement made during a page view opens at the next load, for the
+  administrator as for everyone.
+- **Locale fallback** stays the shipped resolver (viewer's language, then
+  English, then any language filled in), so a French-only note is shown to an
+  English viewer rather than left out as the delta spec words it; only a note
+  with no text at all is left out.
+- **A failed "seen" record is silent**, as the spec requires; the former error
+  toast and its key are removed.
+- **Not in the plan**: each card has a line saying whether users can read it;
+  the dialog body keeps a minimum height while navigable so the arrows stay
+  put; an arrow reaching its end hands the focus to the other one; the history
+  filters gained `unannounced` beside `announced`; `drag_indicator` joins the
+  supported icon list; `RowControls` moved to its own file, shared by both
+  lists; patch notes have their own delete confirmation wording.
+- **Help Center**: only `getting-started/first-steps.md` is updated (owner
+  instruction); task 8.1 stays open.
+- **Tests**: happy-dom has no layout, so a pointer drag and the keyboard
+  sensor's moves cannot run there. The list tests drive the drop through the
+  drag-and-drop context's callbacks and check the sensors and spoken texts;
+  the real gestures belong to the manual check (task 9.2).
+
 ## Open Questions
 
-- Drag-and-drop implementation: native, no new dependency (default, decision
-  7), or a library. Adding a dependency is an owner and reviewer decision; it
-  changes task 6.3 only.
+- None left: the drag-and-drop question is closed (library, see above).

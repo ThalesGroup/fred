@@ -4438,7 +4438,7 @@ clears the binding back to "Using pod default".
 
 ---
 
-## Platform announcements: banners and patch notes (2026-08-19 as the config-driven info banner, replaced 2026-09-25, issue #2805; patch notes 2026-10-09)
+## Platform announcements: banners and patch notes (2026-08-19 as the config-driven info banner, replaced 2026-09-25, issue #2805; patch notes 2026-10-09; patch-note history 2026-10-13)
 
 ### `AnnouncementStack` / `AnnouncementBanner`
 
@@ -4487,7 +4487,8 @@ off does not. Storage failures degrade to "never dismissed".
 **Location:** `src/rework/components/pages/admin/AnnouncementsPage/`
 **Status:** `Functional`
 
-`/admin/annonces`, platform-admin only. One row per announcement, rendered
+`/admin/annonces`, platform-admin only. Three tabs: "Bandeaux", "Patch notes"
+and "Historique" (see below for the last two). One row per banner, rendered
 with the real `AnnouncementBanner` in preview mode — the component itself, not a
 lookalike, so what an admin sees is what users get — with the delivery switch
 and edit/delete actions beside it. In preview the close button still renders
@@ -4511,49 +4512,84 @@ enables from the list once the wording is right.
 
 **Location:** `src/rework/components/shared/molecules/PatchNoteDialog/` (the
 dialog and `PatchNoteBody`) and `src/rework/features/announcements/`
-(`PatchNoteGate`, `useActivePatchNote`)
+(`PatchNoteGate`, `usePatchNoteHistory`)
 **Status:** `Functional`
 
-The shared `Dialog` at `maxWidth` 720, `dividers`, `initialFocus="dialog"`,
-one "Fermer" button, titled with the note's title. `PatchNoteBody` renders the
-markdown for both this dialog and the editor's inline preview: first heading
-on a neutral `surface-container` band, `h2` sections ruled with
-`outline-muted`, links in a new tab. "Ne plus afficher" sits in the action bar
-(`actionsAddon`); Escape and the scrim report it like "Fermer". The gate,
-mounted once in `App.tsx` above the router, opens the note at load unless the
-server flags it `dismissed` or it was closed during this sign-in (flag keyed by
-user, login session, note and `content_version`). The profile menu's
-"Nouveautés" entry reopens the active note on request, without the checkbox.
-The admin preview is this same component and records nothing.
+One dialog for the patch-note history, wherever it opens: the shared `Dialog`
+at `maxWidth` 720, `dividers`, `initialFocus="dialog"`, one "Fermer" button,
+titled with the current note's title. It takes the ordered list of readable
+notes and opens on the first one. `PatchNoteBody` renders the markdown for
+both this dialog and the editor's inline preview: first heading on a neutral
+`surface-container` band, `h2` sections ruled with `outline-muted`, links in a
+new tab.
 
-### Patch-note admin row, editor and activation history
+- **Navigation.** With more than one note, `Dialog`'s `footerStart` holds an
+  `IconButton` (`chevron_left`, towards the newer note), the position
+  (`1 / 4`, `--font-label-large`, `on-surface-retreat`, tabular figures) and a
+  second `IconButton` (`chevron_right`, towards the older ones); both are
+  `size="medium"` in the default `on-surface-retreat`. The button that cannot
+  move further is disabled and hands the keyboard focus to the other one.
+  Moving replaces title and body and shows the note from its top. The body
+  keeps a minimum height while navigable, so the arrows do not jump between
+  notes of different lengths. A single note shows no navigation. There is no
+  "Ne plus afficher" control.
+- **Gate.** Mounted once in `App.tsx` above the router. It opens the dialog
+  only when the history read at load carries a pending announcement and at
+  least one readable note; closing (Close, Escape, scrim) records that
+  announcement as seen and keeps the dialog closed for the page view even if
+  the record fails. An announcement made later in the same page view waits for
+  the next load.
+- **Profile menu.** "Nouveautés" opens the same dialog on request, and is
+  absent when there is nothing to read.
+- **Admin preview.** This same component with a single note; it records
+  nothing.
+
+### Patch notes tab, editor and activation history
 
 **Location:** `src/rework/components/pages/admin/AnnouncementsPage/`
 **Status:** `Functional`
 
-- **Header and views.** One filled "Nouvelle annonce" button opens
-  `AnnouncementKindChooser` (two `SelectableCard` tiles, text Cancel only;
-  `SelectableCard` gained optional `icon` and `selected`, additive in
-  `@fred-oss/ui`);
-  a `ButtonGroup` tabs switch shows "Annonces" or "Historique" (not remembered).
-- **Patch-note row.** Neutral `surface-container` card (`outline-*` border,
-  `new_releases` icon, title, the number of users who hid it in
-  `--font-body-small` / `on-surface-retreat`), then Preview, `Switch`, Edit,
-  Delete aligned with banner rows. Enabling a note while another is active
-  first confirms, naming the one switched off.
+- **Header and tabs.** A `ButtonGroup` tabs switch: "Bandeaux", "Patch notes",
+  "Historique" (not remembered; opens on banners). Each list tab has its own
+  filled create button ("Nouveau bandeau" / "Nouveau patch note") that opens
+  its editor directly, and its own empty state.
+- **Patch-note card (`PatchNoteList`).** Neutral `surface-container` card with
+  an `outline-muted` border: drag handle at the left (`drag_indicator`), title,
+  a `--font-body-small` / `on-surface-retreat` line saying whether users can
+  read it, then Preview, `Switch`, Edit, Delete. The switch only decides
+  whether the note is in the users' history: any number can be on, it never
+  asks for confirmation, and a new note starts off.
+- **Reordering.** `@dnd-kit` sortable list, vertical only. While a card is
+  moved, a lifted copy (`surface-container-high`, `--shadow-m`) follows the
+  pointer, its slot stays as a dashed `outline-variant` placeholder and the
+  other cards slide to show where it will land; the copy then settles into
+  place. Keyboard: Space or Enter on the handle, arrows, Space or Enter again,
+  Escape to cancel, with spoken instructions and positions in French and
+  English. One request on drop carries the whole order; the list shows the new
+  order at once and goes back, with an error toast, if the server refuses it.
+  Motion is dropped under `prefers-reduced-motion`.
+- **Announce (`PatchNoteAnnouncer`).** Above the list, an outlined "Annoncer
+  la mise à jour" button (`campaign` icon) and, beside it, the date and time of
+  the announcement in effect with the administrator's name. The plain
+  `ConfirmationDialog` says every user gets the dialog at their next sign-in,
+  how many notes it holds and which one opens first. With no visible note the
+  button is disabled and the line says to show one first; the line is empty
+  when no announcement is in effect, including after hiding the last visible
+  note cancelled it.
 - **`PatchNoteEditorDialog`.** `maxWidth` 1200; FR/EN tabs (opens on the first
   language with content), title `TextInput`, `PromptEditor` beside the
   `PatchNoteBody` preview (stacked under 900 px). Save needs a title and body
-  in the same languages. "Enregistrer et activer" (outlined, `actionsAddon`)
-  on an inactive note. Escape, scrim or Cancel with unsaved changes ask
-  through `ConfirmationDialog`. Other dialogs (preview, confirmations) replace
-  the editor rather than stack on it.
+  in the same languages. "Enregistrer et afficher" (outlined, `actionsAddon`)
+  on a hidden note, with no confirmation. Escape, scrim or Cancel with unsaved
+  changes ask through `ConfirmationDialog`. Other dialogs (preview, discard
+  confirmation) replace the editor rather than stack on it.
 - **History.** `LocalizedDataTable` (`size="small"`), newest first, sortable,
-  with `FilterChips` (named group; remembered per browser, unknown values
-  ignored). A banner's Type chip takes its severity tone. Client-side
-  pagination (20 per page) over the API's newest 100 events; the table fills
-  the page body and scrolls its rows, the page never scrolls (server-side
-  paging: #3015).
+  with `FilterChips` for the four actions: activations, deactivations,
+  announcements to users (`campaign`) and cancelled announcements (named
+  group; remembered per browser, unknown values ignored). A banner's Type chip
+  takes its severity tone. Client-side pagination (20 per page) over the API's
+  newest 100 events; the table fills the page body and scrolls its rows, the
+  page never scrolls (server-side paging: #3015).
 
 #### Open UX issues
 
