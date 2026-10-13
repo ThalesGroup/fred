@@ -2,6 +2,7 @@
 schema: 1
 title: "Enable internal web research with direct or proxy access"
 impact: minor
+after: [000-v3-4-0-release-preparation]
 configuration: production
 configuration_reason: "Adds default-off internal web_research, optional forward-proxy configuration, and restricted retained activity."
 ---
@@ -30,7 +31,7 @@ web_research:
 ```
 
 Start the usual local infrastructure and run Fred normally (`make run` from the
-repository root). Fred Agents startup applies the existing runtime migration,
+repository root). Its database-upgrade prerequisite applies the runtime migration,
 including the restricted activity table. Its process must have
 working DNS and public HTTP(S) access. Enable Web research for the team and select
 it on the agent through the existing capability controls. Ask the agent to search
@@ -168,11 +169,17 @@ and there are no direct connections. Verify wrong HTTPS proxy trust is rejected.
 
 ## Upgrade
 
-Remove `egress_url`, `token_env`, `ca_file`, `client_certificate`, `client_key` and
-`WEB_RESEARCH_EGRESS_TOKEN`. Old YAML fields fail validation. Stop the draft Fred
-egress process and retire its Compose/Kubernetes deployment; use direct access or
-an operator-owned forward proxy instead. This revision reuses the activity schema;
-no further SQL migration is required.
+When upgrading from v3.3.0, apply runtime migration `e5f6a7b8c9d0`
+(parent `d4e5c6b7a8f9`) through the deployment's enabled migration job or
+`python -m fred_runtime migrate` before enabling research. API startup validates
+the schema; it does not apply this migration. Chart migration hooks default off.
+
+Only earlier draft adopters must remove `egress_url`, `token_env`, `ca_file`,
+`client_certificate`, `client_key` and `WEB_RESEARCH_EGRESS_TOKEN`. Old YAML fields
+fail validation. Stop the draft Fred egress process and retire its
+Compose/Kubernetes deployment; use direct access or an operator-owned forward
+proxy instead. Draft deployments already at the activity revision need no further
+SQL migration for that egress replacement.
 
 ## Rollback
 

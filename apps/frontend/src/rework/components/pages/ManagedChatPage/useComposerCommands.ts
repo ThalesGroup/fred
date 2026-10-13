@@ -14,12 +14,13 @@
 
 import type { ThreadMessage } from "@rework/types/thread";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import type { CommandMenuEntry } from "@shared/molecules/CommandMenu/CommandMenu";
+import type { CommandMenuEmptyReason, CommandMenuEntry } from "@shared/molecules/CommandMenu/CommandMenu";
 import {
   commandQueryOf,
   type CommandChoice,
   type CommandKeyEvent,
   type CommandTriggerBinding,
+  type DraftEdit,
 } from "@shared/molecules/RichInputField/RichInputField";
 import {
   type PromptCommandSummary,
@@ -27,17 +28,22 @@ import {
   useGetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetQuery,
   useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
-import { findSkillInvocations } from "@rework/utils/skillInvocation";
+import {
+  assemblePromptTurn,
+  findCommandWords,
+  findSkillInvocations,
+  isCommandTokenAt,
+  MAX_TURN_PROMPTS,
+  usablePromptList,
+} from "@rework/utils/skillInvocation";
 import type { SkillInvocation, TurnCommand } from "../../../../slices/runtime/runtimeOpenApi";
 
 /**
  * The composer's command trigger: the menu `/` opens, and the resolution of a
  * command on submit.
  *
- * Resolution happens on submit rather than only from the menu, so completing
- * with `Tab` and then pressing `Enter` reaches exactly the same place as
- * `Enter` from the open menu. Full rationale:
- * `openspec/changes/add-prompt-command-trigger/design.md`.
+ * The menu only ever inserts a command: `Tab`, `Enter` and a click all complete
+ * the row and send nothing. Resolution happens on submit, with the menu closed.
  */
 
 /** A composer line that starts with a command, split from its trailing text. */
@@ -46,11 +52,53 @@ export function parseCommandLine(value: string): { command: string; appended: st
   return match ? { command: match[1], appended: (match[2] ?? "").trim() } : null;
 }
 
+// The rest of the name under the caret, in any case like the menu's filter.
 function completionRange(input: string, range: { start: number; end: number }) {
-  return { ...range, end: range.end + (/^[a-z0-9_-]+/.exec(input.slice(range.end))?.[0].length ?? 0) };
+  return { ...range, end: range.end + (/^[a-z0-9_-]+/i.exec(input.slice(range.end))?.[0].length ?? 0) };
 }
 
-function promptEntries(prompts: PromptCommandSummary[], teamId: string, source?: "personal" | "team") {
+/** Entries whose name contains the query; names starting with it come first. */
+function matchByName<T extends { command: string }>(entries: readonly T[], query: string): T[] {
+  const needle = query.toLowerCase();
+  const hits = entries.filter((entry) => entry.command.toLowerCase().includes(needle));
+  const starts = (entry: T) => entry.command.toLowerCase().startsWith(needle);
+  return [...hits.filter(starts), ...hits.filter((entry) => !starts(entry))];
+}
+
+/** The span one edit replaced, guessed from the two texts. Only for a change
+ *  the editor did not report (recall, voice, a programmatic insert): where the
+ *  removed text repeats, the guess can name the wrong occurrence. */
+function editBetween(old: string, value: string): DraftEdit[] {
+  let from = 0;
+  while (from < old.length && from < value.length && old[from] === value[from]) from++;
+  let tail = 0;
+  while (
+    tail < old.length - from &&
+    tail < value.length - from &&
+    old[old.length - tail - 1] === value[value.length - tail - 1]
+  )
+    tail++;
+  return [{ from, to: old.length - tail, insert: value.length - tail - from }];
+}
+
+/** A range after the edits: unmoved before them, shifted after them, and
+ *  gone (`null`) when an edit reaches into it. */
+function mapRange<T extends { from: number; to: number }>(range: T, edits: readonly DraftEdit[]): T | null {
+  let shift = 0;
+  for (const edit of edits) {
+    if (edit.to <= range.from) shift += edit.insert - (edit.to - edit.from);
+    else if (edit.from < range.to) return null;
+  }
+  return shift ? { ...range, from: range.from + shift, to: range.to + shift } : range;
+}
+
+/** A deleted or forbidden prompt will not come back by retrying. */
+function isGone(error: unknown): boolean {
+  const status = (error as { status?: unknown } | null)?.status;
+  return status === 403 || status === 404;
+}
+
+function promptEntries(prompts: PromptCommandSummary[], teamId: string, source: "personal" | "team") {
   return prompts
     .filter((prompt) => prompt.command !== "skill")
     .map((prompt) => ({
@@ -65,13 +113,45 @@ function promptEntries(prompts: PromptCommandSummary[], teamId: string, source?:
     }));
 }
 
+/** The prompt commands of a conversation: the team's, then the personal ones. */
+function promptCommands(
+  team: PromptCommandSummary[] | undefined,
+  personal: PromptCommandSummary[] | undefined,
+  teamId: string,
+  personalTeamId: string | undefined,
+) {
+  return [
+    ...promptEntries(team ?? [], teamId, personalTeamId === teamId ? "personal" : "team"),
+    ...(personalTeamId && personalTeamId !== teamId ? promptEntries(personal ?? [], personalTeamId, "personal") : []),
+  ];
+}
+
+/** What a submit resolves the names of a draft against. */
+interface Catalogs {
+  commands: ReturnType<typeof promptCommands>;
+  skillNames: readonly string[];
+  /** The team's catalog has answered, so a personal fallback is safe. */
+  teamReady: boolean;
+  /** Every prompt catalog has answered: a missing prompt is known gone. */
+  promptsReady: boolean;
+}
+
+/** The answer a catalog gives once asked again; nothing when it fails. */
+function answerOf<T>(source: { missing: boolean; refetch: () => PromiseLike<{ data?: T }> }): Promise<T | undefined> {
+  if (!source.missing) return Promise.resolve(undefined);
+  return Promise.resolve(source.refetch()).then(
+    (result) => result.data,
+    () => undefined,
+  );
+}
+
 export interface ComposerCommandsMenu {
   id: string;
   entries: CommandMenuEntry[];
   activeIndex: number;
-  /** False when the team holds no command at all — a different empty state
-   *  from a query that happens to match none of them. */
-  teamHasCommands: boolean;
+  /** Why `entries` is empty: catalogs still loading, one that could not be
+   *  read, no command anywhere, or a query that matches none of them. */
+  empty: CommandMenuEmptyReason;
   optionId: (index: number) => string;
   onActivate: (index: number) => void;
   onFocusEntry: (index: number) => void;
@@ -80,8 +160,7 @@ export interface ComposerCommandsMenu {
 export function useComposerCommands(params: {
   teamId: string;
   agentInstanceId?: string;
-  /** Enables personal prompt commands only for a resolved ReAct template. */
-  includePersonalCommands?: boolean;
+  /** The caller's personal space, whose prompt commands join the team's. */
   personalTeamId?: string;
   onRunSkill?: (run: { text: string; skills: SkillInvocation[] }) => void;
   onSkillError?: (reason: "usage" | "unavailable") => void;
@@ -91,28 +170,29 @@ export function useComposerCommands(params: {
   onRunCommand: (run: { text: string; command: TurnCommand; skills?: SkillInvocation[] }) => void;
   /** Ordinary submit — no command, or a token no prompt holds. */
   onSend: () => void;
-  /** The prompt behind a command could not be read. */
-  onResolveError: () => void;
+  /** The message is held back because of `command`: `stale` when its prompt is
+   *  gone, renamed or from another agent or team; `unreadable` when the read
+   *  failed for now; `tooMany` when it is the first one past the limit. */
+  onResolveError: (reason: "stale" | "unreadable" | "tooMany", command: string) => void;
 }): {
   trigger: CommandTriggerBinding;
   menu: ComposerCommandsMenu | null;
   submit: () => void;
   dismiss: (line: string, message?: ThreadMessage) => void;
   selectedSkills: { name: string; from: number; to: number }[];
-  selectedPrompt:
-    | (Omit<Extract<CommandMenuEntry, { kind: "prompt" }>, "source"> & {
-        source?: "personal" | "team";
-        from: number;
-        to: number;
-      })
-    | null;
+  /** Every prompt command shown as a token, in the order of the line. */
+  selectedPrompts: (Omit<Extract<CommandMenuEntry, { kind: "prompt" }>, "source"> & {
+    source: "personal" | "team";
+    from: number;
+    to: number;
+  })[];
   selectedSkillArgumentHint: string | null;
   skillDescriptions: ReadonlyMap<string, string>;
   composerValue: string;
   onComposerChange: (value: string) => void;
 } {
-  const { teamId, agentInstanceId, includePersonalCommands = false, personalTeamId } = params;
-  const scopeKey = JSON.stringify([teamId, agentInstanceId, includePersonalCommands, personalTeamId]);
+  const { teamId, agentInstanceId, personalTeamId } = params;
+  const scopeKey = JSON.stringify([teamId, agentInstanceId, personalTeamId]);
   const scopeRef = useRef({ key: scopeKey, version: 0 });
   if (scopeRef.current.key !== scopeKey) scopeRef.current = { key: scopeKey, version: scopeRef.current.version + 1 };
   type Choice = CommandChoice;
@@ -120,10 +200,20 @@ export function useComposerCommands(params: {
   const choicesRef = useRef(choices);
   choicesRef.current = choices;
   const draftReplaceRef = useRef(false);
+  // The exact spans of the change the editor is reporting, and the last change
+  // applied: both replace a guess from the two texts wherever they are known.
+  const pendingEditsRef = useRef<readonly DraftEdit[] | null>(null);
+  const lastEditRef = useRef<{ old: string; value: string; edits: readonly DraftEdit[] } | null>(null);
   const restoredChoicesRef = useRef<readonly Choice[] | null>(null);
-  const { currentData: catalog } = useGetAgentInstanceSkillsQuery(
+  const skillsQueried = Boolean(teamId && agentInstanceId);
+  const {
+    currentData: catalog,
+    isFetching: skillsFetching,
+    isError: skillsFailed,
+    refetch: refetchSkills,
+  } = useGetAgentInstanceSkillsQuery(
     { teamId, agentInstanceId: agentInstanceId ?? "" },
-    { skip: !teamId || !agentInstanceId, refetchOnMountOrArgChange: true },
+    { skip: !skillsQueried, refetchOnMountOrArgChange: true },
   );
   const skills = catalog?.supported ? (catalog.skills ?? []) : [];
   const skillsRef = useRef(skills);
@@ -145,82 +235,133 @@ export function useComposerCommands(params: {
   // Its own endpoint rather than a filter over the prompt listing: that listing
   // is capped, and a command past the cap would resolve to nothing — silently,
   // since an unmatched token is sent to the agent as ordinary text.
-  const { currentData: prompts } = useGetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetQuery(
-    { teamId },
-    { skip: !teamId },
-  );
+  const {
+    currentData: prompts,
+    isFetching: teamCommandsFetching,
+    isError: teamCommandsFailed,
+    refetch: refetchTeamCommands,
+  } = useGetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetQuery({ teamId }, { skip: !teamId });
   const teamCommandsReadyRef = useRef(false);
   teamCommandsReadyRef.current = prompts !== undefined;
-  const { currentData: personalPrompts } = useGetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetQuery(
+  const personalQueried = Boolean(personalTeamId) && personalTeamId !== teamId;
+  const {
+    currentData: personalPrompts,
+    isFetching: personalCommandsFetching,
+    isError: personalCommandsFailed,
+    refetch: refetchPersonalCommands,
+  } = useGetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetQuery(
     { teamId: personalTeamId ?? "" },
-    { skip: !includePersonalCommands || !personalTeamId || personalTeamId === teamId },
+    { skip: !personalQueried },
   );
+  // A prompt missing from a catalog that has not answered is not known gone.
+  const promptCatalogsReadyRef = useRef(false);
+  promptCatalogsReadyRef.current = prompts !== undefined && (!personalQueried || personalPrompts !== undefined);
+  const catalogsLoading =
+    (teamCommandsFetching && prompts === undefined) ||
+    (personalCommandsFetching && personalPrompts === undefined) ||
+    (skillsFetching && catalog === undefined);
+  // A catalog is `missing` until it has answered once: still loading, or failed.
+  const catalogSources = {
+    team: {
+      data: prompts,
+      missing: Boolean(teamId) && prompts === undefined,
+      failed: teamCommandsFailed,
+      refetch: refetchTeamCommands,
+    },
+    personal: {
+      data: personalPrompts,
+      missing: personalQueried && personalPrompts === undefined,
+      failed: personalCommandsFailed,
+      refetch: refetchPersonalCommands,
+    },
+    skills: {
+      data: catalog,
+      missing: skillsQueried && catalog === undefined,
+      failed: skillsFailed,
+      refetch: refetchSkills,
+    },
+  };
+  const catalogSourcesRef = useRef(catalogSources);
+  catalogSourcesRef.current = catalogSources;
+  const catalogsFailed =
+    !catalogsLoading && Object.values(catalogSources).some((source) => source.missing && source.failed);
   const [fetchPrompt] = useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery();
 
   const commands = useMemo(
-    () => [
-      ...promptEntries(
-        prompts ?? [],
-        teamId,
-        includePersonalCommands ? (personalTeamId === teamId ? "personal" : "team") : undefined,
-      ),
-      ...(includePersonalCommands && personalTeamId && personalTeamId !== teamId
-        ? promptEntries(personalPrompts ?? [], personalTeamId, "personal")
-        : []),
-    ],
-    [prompts, personalPrompts, teamId, personalTeamId, includePersonalCommands],
+    () => promptCommands(prompts, personalPrompts, teamId, personalTeamId),
+    [prompts, personalPrompts, teamId, personalTeamId],
   );
   const commandsRef = useRef(commands);
   commandsRef.current = commands;
-  const matchedChoices = choices.filter((choice) => params.input.slice(choice.from, choice.to) === `/${choice.name}`);
-  const promptChoice = matchedChoices.find((choice) => choice.kind === "prompt");
-  const currentPromptChoice = promptChoice?.scope === scopeRef.current.version ? promptChoice : undefined;
+  const matchedChoices = choices.filter((choice) => isCommandTokenAt(params.input, choice.from, choice.name));
+  const promptChoices = matchedChoices.flatMap((choice) => (choice.kind === "prompt" ? [{ ...choice, choice }] : []));
   const allSkillRanges = findSkillInvocations(params.input, skillNames);
+  // A name picked as a prompt is never also a skill, wherever it sits.
   const selectedSkills = allSkillRanges.filter(
     (token) =>
-      token.from !== promptChoice?.from &&
+      !promptChoices.some((choice) => choice.from === token.from) &&
       (token.to < params.input.length ||
         matchedChoices.some((choice) => choice.kind === "skill" && choice.from === token.from)),
   );
-  const promptRange =
-    promptChoice ??
-    findSkillInvocations(
+  // A typed prompt has no choice behind it, so once shown it is remembered:
+  // deleting the text after it must not turn the token back into raw text.
+  const shownPromptsRef = useRef<{ input: string; tokens: { from: number; to: number; name: string }[] }>({
+    input: params.input,
+    tokens: [],
+  });
+  const remembered = shownPromptsRef.current;
+  const lastEdit = lastEditRef.current;
+  const shownEdits =
+    lastEdit?.old === remembered.input && lastEdit.value === params.input
+      ? lastEdit.edits
+      : editBetween(remembered.input, params.input);
+  const shownBefore = remembered.tokens.flatMap((token) => mapRange(token, shownEdits) ?? []);
+  const selectedPrompts = [
+    ...promptChoices,
+    ...findSkillInvocations(
       params.input,
       commands.map((entry) => entry.command),
-    ).find((token) => !selectedSkills.some((skill) => skill.from === token.from));
-  const promptEntry =
-    (!promptChoice || currentPromptChoice) && promptRange
-      ? commands.find(
-          (entry) =>
-            entry.command === promptRange.name &&
-            (!currentPromptChoice ||
-              currentPromptChoice.kind !== "prompt" ||
-              (entry.promptId === currentPromptChoice.promptId &&
-                (!currentPromptChoice.promptTeamId || entry.promptTeamId === currentPromptChoice.promptTeamId))),
-        )
-      : undefined;
-  const selectedPrompt =
-    promptEntry &&
-    promptRange &&
-    (promptRange.to < params.input.length || currentPromptChoice) &&
-    (promptEntry.promptTeamId === teamId || currentPromptChoice || prompts !== undefined)
-      ? { ...promptEntry, from: promptRange.from, to: promptRange.to }
-      : null;
+    )
+      .filter(
+        (token) =>
+          !promptChoices.some((choice) => choice.from === token.from) &&
+          !selectedSkills.some((skill) => skill.from === token.from),
+      )
+      .map((token) => ({ ...token, choice: undefined })),
+  ]
+    .sort((a, b) => a.from - b.from)
+    .flatMap((range) => {
+      const { choice } = range;
+      // A choice made for another agent or team is not shown as a token.
+      if (choice && choice.scope !== scopeRef.current.version) return [];
+      const entry = commands.find(
+        (candidate) =>
+          candidate.command === range.name &&
+          (!choice ||
+            (candidate.promptId === choice.promptId &&
+              (!choice.promptTeamId || candidate.promptTeamId === choice.promptTeamId))),
+      );
+      const shown =
+        entry &&
+        (range.to < params.input.length ||
+          choice ||
+          shownBefore.some((token) => token.from === range.from && token.name === range.name)) &&
+        (entry.promptTeamId === teamId || choice || prompts !== undefined);
+      return shown ? [{ ...entry, from: range.from, to: range.to }] : [];
+    });
+  // Committed after the render, so a render React discards remembers nothing.
+  useEffect(() => {
+    shownPromptsRef.current = {
+      input: params.input,
+      tokens: selectedPrompts.map((prompt) => ({ from: prompt.from, to: prompt.to, name: prompt.command })),
+    };
+  });
   const selectedSummary = skills.find((skill) => skill.name === selectedSkills[0]?.name);
 
-  const mapChoices = useCallback((value: string) => {
+  const mapChoices = useCallback((value: string, known?: readonly DraftEdit[] | null) => {
     const old = paramsRef.current.input;
-    let from = 0;
-    while (from < old.length && from < value.length && old[from] === value[from]) from++;
-    let tail = 0;
-    while (
-      tail < old.length - from &&
-      tail < value.length - from &&
-      old[old.length - tail - 1] === value[value.length - tail - 1]
-    )
-      tail++;
-    const end = old.length - tail;
-    const delta = value.length - old.length;
+    const edits = known ?? editBetween(old, value);
+    lastEditRef.current = { old, value, edits };
     const replacing = draftReplaceRef.current;
     draftReplaceRef.current = false;
     const previous = replacing ? [] : [...choicesRef.current];
@@ -231,14 +372,11 @@ export function useComposerCommands(params: {
     ))
       if (!replacing && !previous.some((choice) => choice.from === token.from))
         previous.push({ ...token, kind: "skill", scope: scopeRef.current.version });
+    // A choice whose token an edit reached into, or glued a character to, is
+    // dropped for good: the text left behind is ordinary typed text.
     const mappedChoices = previous.flatMap((choice) => {
-      const mapped =
-        choice.to <= from
-          ? choice
-          : choice.from >= end
-            ? { ...choice, from: choice.from + delta, to: choice.to + delta }
-            : null;
-      return mapped && value.slice(mapped.from, mapped.to) === `/${mapped.name}` ? [mapped] : [];
+      const mapped = mapRange(choice, edits);
+      return mapped && isCommandTokenAt(value, mapped.from, mapped.name) ? [mapped] : [];
     });
     for (const token of findSkillInvocations(
       value,
@@ -253,7 +391,10 @@ export function useComposerCommands(params: {
     (value: string) => {
       const restored = restoredChoicesRef.current;
       restoredChoicesRef.current = null;
-      setChoices(restored ? [...restored] : mapChoices(value));
+      const edits = pendingEditsRef.current;
+      pendingEditsRef.current = null;
+      const mapped = mapChoices(value, edits);
+      setChoices(restored ? [...restored] : mapped);
       paramsRef.current.setInput(value);
     },
     [mapChoices],
@@ -265,11 +406,10 @@ export function useComposerCommands(params: {
         command: skill.name,
         name: skill.name,
         description: skill.description,
-        argumentHint: skill.argument_hint,
         kind: "skill",
-        source: includePersonalCommands ? "platform" : undefined,
+        source: "platform",
       })),
-    [skills, includePersonalCommands],
+    [skills],
   );
 
   // `null` while the composer holds no command query. `dismissedQuery` is the
@@ -286,20 +426,24 @@ export function useComposerCommands(params: {
   // over the thread after a click elsewhere, with no way back to it but typing.
   const [focused, setFocused] = useState(false);
 
-  const entries = useMemo(
+  // Filtered source by source, so the flat list stays grouped like the menu's
+  // sections and the arrow keys walk it in display order.
+  const entries = useMemo<CommandMenuEntry[]>(
     () =>
       query === null
         ? []
         : query === "skill" || query.startsWith("skill ")
-          ? skillEntries.filter((entry) => entry.name.startsWith(query.startsWith("skill ") ? query.slice(6) : ""))
+          ? matchByName(skillEntries, query.startsWith("skill ") ? query.slice(6) : "")
           : [
-              ...commands.filter(
-                (entry) =>
-                  entry.command.startsWith(query) && (!promptChoice || commandRange?.start === promptChoice.from),
+              ...(["team", "personal"] as const).flatMap((source) =>
+                matchByName(
+                  commands.filter((entry) => entry.source === source),
+                  query,
+                ),
               ),
-              ...skillEntries.filter((entry) => entry.name.startsWith(query)),
+              ...matchByName(skillEntries, query),
             ],
-    [commands, skillEntries, query, commandRange, promptChoice],
+    [commands, skillEntries, query],
   );
   const safeIndex = entries.length === 0 ? 0 : Math.min(activeIndex, entries.length - 1);
   // Two distinct states. The panel is shown whenever the trigger is live — with
@@ -313,7 +457,7 @@ export function useComposerCommands(params: {
       commandQueryOf(params.input, commandRange?.end, [...skillNames, ...commands.map((entry) => entry.command)]) &&
     query !== dismissedQuery &&
     !selectedSkills.some((token) => token.from === commandRange?.start) &&
-    !(promptEntry && promptRange && promptRange.to < params.input.length && promptRange.from === commandRange?.start);
+    !selectedPrompts.some((prompt) => prompt.from === commandRange?.start);
   const hasEntries = entries.length > 0;
 
   const entriesRef = useRef(entries);
@@ -328,8 +472,8 @@ export function useComposerCommands(params: {
   const onQueryChange = useCallback((next: string | null, range?: { start: number; end: number }) => {
     setQuery(next);
     setCommandRange(next === null ? undefined : range);
-    // Re-filtering re-focuses the best match, so the focus is never left on
-    // something that is no longer on screen.
+    // Re-filtering puts the focus back on the first row shown, so it is never
+    // left on something that is no longer on screen.
     setActiveIndex(0);
     // Any other query clears the dismissal, or deleting then retyping the last
     // character after an Esc (or a recall) would find the menu still shut.
@@ -339,29 +483,38 @@ export function useComposerCommands(params: {
   // Recall preserves selected identities and leaves the menu closed until editing.
   const dismiss = useCallback((line: string, message?: ThreadMessage) => {
     const command = message?.command;
-    const promptRange = command
-      ? findSkillInvocations(line, [command.command]).find(
-          (token) => command.draft_command_offset == null || token.from === command.draft_command_offset,
-        )
-      : undefined;
+    const listed = message ? usablePromptList(command, message.text) : null;
+    // One restored prompt per listed entry; an older turn has its single one.
+    const sent = listed
+      ? listed.map((entry) => ({
+          name: entry.command,
+          from: entry.draft_offset,
+          to: entry.draft_offset + entry.command.length + 1,
+          promptId: entry.prompt_id,
+        }))
+      : command
+        ? findSkillInvocations(line, [command.command])
+            .filter((token) => command.draft_command_offset == null || token.from === command.draft_command_offset)
+            .slice(0, 1)
+            .map((token) => ({ ...token, promptId: command.prompt_id }))
+        : [];
     const restored: Choice[] = findSkillInvocations(
       line,
       message?.skillNames ?? (message?.skillName ? [message.skillName] : []),
     )
-      .filter((token) => token.from !== promptRange?.from)
+      .filter((token) => !sent.some((prompt) => prompt.from === token.from))
       .map((token) => ({
         ...token,
         kind: "skill",
         scope: scopeRef.current.version,
       }));
-    if (command?.prompt_id && promptRange) {
-      const entry = commandsRef.current.find(
-        (entry) => entry.promptId === command.prompt_id && entry.command === command.command,
-      );
+    for (const { promptId, ...range } of sent) {
+      if (!promptId || !isCommandTokenAt(line, range.from, range.name)) continue;
+      const entry = commandsRef.current.find((entry) => entry.promptId === promptId && entry.command === range.name);
       restored.push({
-        ...promptRange,
+        ...range,
         kind: "prompt",
-        promptId: command.prompt_id,
+        promptId,
         promptTeamId: entry?.promptTeamId ?? "",
         scope: scopeRef.current.version,
       });
@@ -378,8 +531,8 @@ export function useComposerCommands(params: {
     );
   }, []);
 
-  // Prefetch keeps the detail fetch off the critical path when the command
-  // runs; the set makes moving the focus back over an entry a no-op.
+  // Prefetch warms the connection and the preview for the focused row; the
+  // set makes moving the focus back over an entry a no-op. Submit reads again.
   const prefetchedRef = useRef(new Set<string>());
   const focusedEntry = panelOpen && hasEntries ? entries[safeIndex] : undefined;
   const focusedPromptId = focusedEntry?.kind === "prompt" ? focusedEntry.promptId : null;
@@ -403,7 +556,9 @@ export function useComposerCommands(params: {
       const trailing = input.slice(range.end);
       const separator = /^\s/.test(trailing) ? "" : " ";
       const value = input.slice(0, range.start) + token + separator + trailing;
-      const preserved = mapChoices(value).filter((choice) => choice.from !== range.start);
+      const preserved = mapChoices(value, [
+        { from: range.start, to: range.end, insert: token.length + separator.length },
+      ]).filter((choice) => choice.from !== range.start);
       const choice: Choice = {
         name,
         from: range.start,
@@ -423,111 +578,107 @@ export function useComposerCommands(params: {
     [mapChoices],
   );
 
+  type PromptEntry = Extract<CommandMenuEntry, { kind: "prompt" }>;
   const run = useCallback(
-    async (entry: CommandMenuEntry, draft: string, range: { from: number; to: number }) => {
-      if (entry.kind === "skill") {
-        complete(entry);
-        return;
-      }
+    async (
+      draft: string,
+      targets: { entry: PromptEntry; from: number; to: number }[],
+      selections: SkillInvocation[],
+    ) => {
       const scopeAtSubmit = scopeRef.current.version;
-      const active = choicesRef.current.filter(
-        (choice) => paramsRef.current.input.slice(choice.from, choice.to) === `/${choice.name}`,
+      // One read per distinct prompt, all started together, and never from the
+      // cache: what is sent is the prompt as its library holds it now.
+      const reads = new Map<string, Promise<string>>();
+      for (const { entry } of targets) {
+        const key = `${entry.promptTeamId}:${entry.promptId}`;
+        if (reads.has(key)) continue;
+        reads.set(
+          key,
+          fetchPrompt({ teamId: entry.promptTeamId, promptId: entry.promptId }, false)
+            .unwrap()
+            .then((detail) => {
+              const text = detail.text?.trim();
+              if (!text) throw new Error("empty prompt");
+              return text;
+            }),
+        );
+      }
+      const results = await Promise.allSettled(
+        targets.map(({ entry }) => reads.get(`${entry.promptTeamId}:${entry.promptId}`)!),
       );
-      if (active.some((choice) => choice.scope !== scopeAtSubmit)) {
-        paramsRef.current.onResolveError();
+      if (scopeRef.current.version !== scopeAtSubmit) return;
+      // All or nothing: the first command of the line that failed is reported.
+      const failed = results.findIndex((result) => result.status === "rejected");
+      if (failed >= 0) {
+        const { reason } = results[failed] as PromiseRejectedResult;
+        paramsRef.current.onResolveError(isGone(reason) ? "stale" : "unreadable", targets[failed].entry.command);
         return;
       }
-      if (
-        active.some(
-          (choice) => choice.kind === "skill" && !skillsRef.current.some((skill) => skill.name === choice.name),
-        )
-      ) {
-        paramsRef.current.onSkillError?.("unavailable");
-        return;
-      }
-      const selections = [
-        ...new Set(
-          findSkillInvocations(
-            draft,
-            skillsRef.current.map((skill) => skill.name),
-          )
-            .filter((token) => token.from !== range.from)
-            .map((token) => token.name),
-        ),
-      ].map((name) => ({ name }));
-      try {
-        const detail = await fetchPrompt({ teamId: entry.promptTeamId, promptId: entry.promptId }, true).unwrap();
-        if (scopeRef.current.version !== scopeAtSubmit) return;
-        const text = detail.text?.trim();
-        if (!text) throw new Error("empty prompt");
-        const before = draft.slice(0, range.from).trim();
-        const after = draft.slice(range.to).trim();
-        const appended = [before, after].filter(Boolean).join("\n\n");
-        paramsRef.current.onRunCommand({
-          text: [before, text, after].filter(Boolean).join("\n\n"),
-          command: {
+      paramsRef.current.onRunCommand({
+        ...assemblePromptTurn(
+          draft,
+          targets.map(({ entry, from, to }, index) => ({
             command: entry.command,
-            ...(appended ? { appended_text: appended } : {}),
-            prompt_id: entry.promptId,
-            prompt_name: entry.name,
-            draft_text: draft,
-            draft_command_offset: range.from,
-          },
-          ...(selections.length ? { skills: selections } : {}),
-        });
-      } catch {
-        if (scopeRef.current.version === scopeAtSubmit) paramsRef.current.onResolveError();
-      }
+            promptId: entry.promptId,
+            promptName: entry.name,
+            from,
+            to,
+            text: (results[index] as PromiseFulfilledResult<string>).value,
+          })),
+        ),
+        ...(selections.length ? { skills: selections } : {}),
+      });
     },
-    [fetchPrompt, complete],
+    [fetchPrompt],
   );
 
-  const submit = useCallback(() => {
-    let input = paramsRef.current.input;
-    let choiceOffset = 0;
-    const parsed = parseCommandLine(input);
-    if (parsed?.command === "skill") {
-      const match = /^(\S+)(?:\s+([\s\S]*))?$/.exec(parsed.appended);
-      if (!match) {
-        paramsRef.current.onSkillError?.("usage");
+  const resolve = useCallback(
+    (draft: string, choices: readonly Choice[], catalogs: Catalogs) => {
+      let input = draft;
+      let choiceOffset = 0;
+      const parsed = parseCommandLine(input);
+      if (parsed?.command === "skill") {
+        const match = /^(\S+)(?:\s+([\s\S]*))?$/.exec(parsed.appended);
+        if (!match) {
+          paramsRef.current.onSkillError?.("usage");
+          return;
+        }
+        if (!catalogs.skillNames.includes(match[1])) {
+          paramsRef.current.onSkillError?.("unavailable");
+          return;
+        }
+        const originalLength = input.trimEnd().length;
+        input = `/${match[1]}${match[2] ? " " + match[2] : ""}`;
+        choiceOffset = input.length - originalLength;
+      }
+      // Legacy prefix normalization must preserve the chosen prompt's owner.
+      const active = choices
+        .map((choice) => ({ ...choice, from: choice.from + choiceOffset, to: choice.to + choiceOffset }))
+        .filter((choice) => isCommandTokenAt(input, choice.from, choice.name))
+        .sort((a, b) => a.from - b.from);
+      const explicitPrompts = active.flatMap((choice) =>
+        choice.kind === "prompt" ? [{ ...choice, explicit: choice }] : [],
+      );
+      if (active.some((choice) => choice.scope !== scopeRef.current.version)) {
+        const outdated =
+          explicitPrompts.find((choice) => choice.scope !== scopeRef.current.version) ?? explicitPrompts[0];
+        if (outdated) paramsRef.current.onResolveError("stale", outdated.name);
+        else paramsRef.current.onSkillError?.("unavailable");
         return;
       }
-      if (!skillsRef.current.some((skill) => skill.name === match[1])) {
+      if (active.some((choice) => choice.kind === "skill" && !catalogs.skillNames.includes(choice.name))) {
         paramsRef.current.onSkillError?.("unavailable");
         return;
       }
-      const originalLength = input.trimEnd().length;
-      input = `/${match[1]}${match[2] ? " " + match[2] : ""}`;
-      choiceOffset = input.length - originalLength;
-    }
-    // Legacy prefix normalization must preserve the chosen prompt's owner.
-    const active = choicesRef.current
-      .map((choice) => ({ ...choice, from: choice.from + choiceOffset, to: choice.to + choiceOffset }))
-      .filter((choice) => input.slice(choice.from, choice.to) === `/${choice.name}`);
-    const explicitPrompt = active.find((choice) => choice.kind === "prompt");
-    if (active.some((choice) => choice.scope !== scopeRef.current.version)) {
-      if (explicitPrompt) paramsRef.current.onResolveError();
-      else paramsRef.current.onSkillError?.("unavailable");
-      return;
-    }
-    if (
-      active.some((choice) => choice.kind === "skill" && !skillsRef.current.some((skill) => skill.name === choice.name))
-    ) {
-      paramsRef.current.onSkillError?.("unavailable");
-      return;
-    }
-    const skillRanges = findSkillInvocations(
-      input,
-      skillsRef.current.map((skill) => skill.name),
-    );
-    const promptRanges = findSkillInvocations(
-      input,
-      commandsRef.current.map((entry) => entry.command),
-    );
-    const range =
-      explicitPrompt ??
-      promptRanges.find(
+      const skillRanges = findSkillInvocations(input, catalogs.skillNames);
+      // A typed name that is also a skill is a skill, unless it ends the line
+      // undelimited and was not picked as one: then the prompt gets it.
+      const typedPrompts = findSkillInvocations(
+        input,
+        catalogs.commands.map((entry) => entry.command),
+      ).filter(
         (token) =>
+          !explicitPrompts.some((choice) => choice.from === token.from) &&
           !skillRanges.some(
             (skill) =>
               skill.from === token.from &&
@@ -535,41 +686,113 @@ export function useComposerCommands(params: {
                 active.some((choice) => choice.kind === "skill" && choice.from === skill.from)),
           ),
       );
-    const entry = range
-      ? commandsRef.current.find(
+      const ranges = [...explicitPrompts, ...typedPrompts.map((token) => ({ ...token, explicit: undefined }))].sort(
+        (a, b) => a.from - b.from,
+      );
+      if (ranges.length > MAX_TURN_PROMPTS) {
+        paramsRef.current.onResolveError("tooMany", ranges[MAX_TURN_PROMPTS].name);
+        return;
+      }
+      const targets: { entry: PromptEntry; from: number; to: number }[] = [];
+      for (const range of ranges) {
+        const { explicit } = range;
+        const entry = catalogs.commands.find(
           (candidate) =>
             candidate.command === range.name &&
-            (!explicitPrompt ||
-              explicitPrompt.kind !== "prompt" ||
-              (candidate.promptId === explicitPrompt.promptId &&
-                (!explicitPrompt.promptTeamId || candidate.promptTeamId === explicitPrompt.promptTeamId))),
-        )
-      : undefined;
-    if (explicitPrompt && !entry) {
-      paramsRef.current.onResolveError();
-      return;
-    }
-    if (entry && range) {
-      if (!explicitPrompt && entry.promptTeamId !== paramsRef.current.teamId && !teamCommandsReadyRef.current) {
-        paramsRef.current.onResolveError();
+            (!explicit ||
+              (candidate.promptId === explicit.promptId &&
+                (!explicit.promptTeamId || candidate.promptTeamId === explicit.promptTeamId))),
+        );
+        if (!entry) {
+          paramsRef.current.onResolveError(catalogs.promptsReady ? "stale" : "unreadable", range.name);
+          return;
+        }
+        // A typed name falls back to the personal library only once the team's
+        // catalog has answered that it has no such command.
+        if (!explicit && entry.promptTeamId !== paramsRef.current.teamId && !catalogs.teamReady) {
+          paramsRef.current.onResolveError("unreadable", range.name);
+          return;
+        }
+        targets.push({ entry, from: range.from, to: range.to });
+      }
+      if (targets.length) {
+        const selections = [
+          ...new Set(
+            skillRanges
+              .filter((token) => !ranges.some((range) => range.from === token.from))
+              .map((token) => token.name),
+          ),
+        ].map((name) => ({ name }));
+        void run(input, targets, selections);
         return;
       }
-      void run(entry, input, range);
-      return;
-    }
-    if (skillRanges.length) {
-      if (!paramsRef.current.onRunSkill) {
-        paramsRef.current.onSkillError?.("unavailable");
+      if (skillRanges.length) {
+        if (!paramsRef.current.onRunSkill) {
+          paramsRef.current.onSkillError?.("unavailable");
+          return;
+        }
+        paramsRef.current.onRunSkill({
+          text: input,
+          skills: [...new Set(skillRanges.map((token) => token.name))].map((name) => ({ name })),
+        });
         return;
       }
-      paramsRef.current.onRunSkill({
-        text: input,
-        skills: [...new Set(skillRanges.map((token) => token.name))].map((name) => ({ name })),
+      paramsRef.current.onSend();
+    },
+    [run],
+  );
+
+  // Sending never races the catalogs. A draft holding a `/name` nobody picked
+  // waits for every catalog with no answer yet; one that failed is asked once
+  // more, and the message is held back only if it still does not answer.
+  const waitingRef = useRef(false);
+  const submit = useCallback(() => {
+    const draft = paramsRef.current.input;
+    const choices = choicesRef.current;
+    const sources = catalogSourcesRef.current;
+    const typed = findCommandWords(draft).find(
+      (word) =>
+        !choices.some((choice) => choice.from === word.from && isCommandTokenAt(draft, choice.from, choice.name)),
+    );
+    if (!typed || !(sources.team.missing || sources.personal.missing || sources.skills.missing)) {
+      resolve(draft, choices, {
+        commands: commandsRef.current,
+        skillNames: skillsRef.current.map((skill) => skill.name),
+        teamReady: teamCommandsReadyRef.current,
+        promptsReady: promptCatalogsReadyRef.current,
       });
       return;
     }
-    paramsRef.current.onSend();
-  }, [run]);
+    if (waitingRef.current) return;
+    waitingRef.current = true;
+    const scopeAtSubmit = scopeRef.current.version;
+    const { teamId, personalTeamId } = paramsRef.current;
+    void Promise.all([answerOf(sources.team), answerOf(sources.personal), answerOf(sources.skills)]).then(
+      ([team, personal, skillCatalog]) => {
+        waitingRef.current = false;
+        if (scopeRef.current.version !== scopeAtSubmit) return;
+        const answered = {
+          team: sources.team.missing ? team : sources.team.data,
+          personal: sources.personal.missing ? personal : sources.personal.data,
+          skills: sources.skills.missing ? skillCatalog : sources.skills.data,
+        };
+        if (
+          (sources.team.missing && !answered.team) ||
+          (sources.personal.missing && !answered.personal) ||
+          (sources.skills.missing && !answered.skills)
+        ) {
+          paramsRef.current.onResolveError("unreadable", typed.name);
+          return;
+        }
+        resolve(draft, choices, {
+          commands: promptCommands(answered.team, answered.personal, teamId, personalTeamId),
+          skillNames: answered.skills?.supported ? (answered.skills.skills ?? []).map((skill) => skill.name) : [],
+          teamReady: true,
+          promptsReady: true,
+        });
+      },
+    );
+  }, [resolve]);
 
   const onKeyDown = useCallback(
     (event: CommandKeyEvent): boolean => {
@@ -589,38 +812,26 @@ export function useComposerCommands(params: {
       switch (event.key) {
         case "ArrowDown":
           event.preventDefault();
-          setActiveIndex((index) => (Math.min(index, count - 1) + 1) % count);
+          // The focus stops at either end of the list instead of wrapping.
+          setActiveIndex((index) => Math.min(index + 1, count - 1));
           return true;
         case "ArrowUp":
           event.preventDefault();
-          setActiveIndex((index) => (Math.min(index, count - 1) + count - 1) % count);
+          setActiveIndex((index) => Math.max(Math.min(index, count - 1) - 1, 0));
           return true;
         case "Tab":
-          event.preventDefault();
-          complete(focusedEntry);
-          return true;
         case "Enter":
-          if (event.shiftKey || event.nativeEvent.isComposing) return false;
+          if (event.key === "Enter" && (event.shiftKey || event.nativeEvent.isComposing)) return false;
           event.preventDefault();
-          // Preserve the highlighted row's identity, including homonyms.
-          // Skill completion never sends; the next Enter submits the draft.
-          if (focusedEntry.kind === "skill") complete(focusedEntry);
-          else {
-            const range = commandRangeRef.current;
-            if (range) {
-              const input = paramsRef.current.input;
-              const replacement = completionRange(input, range);
-              const draft =
-                input.slice(0, replacement.start) + `/${focusedEntry.command}` + input.slice(replacement.end);
-              void run(focusedEntry, draft, { from: range.start, to: range.start + focusedEntry.command.length + 1 });
-            }
-          }
+          // Enter picks the row like Tab and sends nothing: the next Enter,
+          // with the menu closed, goes through the ordinary submit.
+          complete(focusedEntry);
           return true;
         default:
           return false;
       }
     },
-    [complete, run],
+    [complete],
   );
 
   const onActivate = useCallback(
@@ -641,6 +852,10 @@ export function useComposerCommands(params: {
     setChoices([]);
   }, []);
 
+  const onDraftEdit = useCallback((edits: readonly DraftEdit[]) => {
+    pendingEditsRef.current = edits;
+  }, []);
+
   const onChoicesRestore = useCallback((restored: readonly Choice[]) => {
     restoredChoicesRef.current = restored;
     draftReplaceRef.current = false;
@@ -652,6 +867,7 @@ export function useComposerCommands(params: {
     inlineCommandNames: [...skillNames, ...commands.map((entry) => entry.command)],
     selectionRequest,
     onDraftReplace,
+    onDraftEdit,
     onQueryChange,
     onKeyDown,
     onFocusChange,
@@ -660,13 +876,26 @@ export function useComposerCommands(params: {
     activeDescendantId: panelOpen && hasEntries ? optionId(safeIndex) : null,
   };
 
-  const teamHasCommands = commands.length > 0 || skillEntries.length > 0;
+  // A catalog that failed is asked again each time a command is started, not
+  // on each keystroke of its name.
+  const commandStarted = focused && query !== null;
+  useEffect(() => {
+    if (!commandStarted) return;
+    for (const source of Object.values(catalogSourcesRef.current))
+      if (source.missing && source.failed) void source.refetch();
+  }, [commandStarted]);
+
+  const empty = catalogsLoading
+    ? "loading"
+    : catalogsFailed
+      ? "error"
+      : commands.length > 0 || skillEntries.length > 0
+        ? "noMatch"
+        : "none";
   const menu = useMemo<ComposerCommandsMenu | null>(
     () =>
-      panelOpen
-        ? { id: listboxId, entries, activeIndex: safeIndex, teamHasCommands, optionId, onActivate, onFocusEntry }
-        : null,
-    [panelOpen, listboxId, entries, safeIndex, teamHasCommands, optionId, onActivate, onFocusEntry],
+      panelOpen ? { id: listboxId, entries, activeIndex: safeIndex, empty, optionId, onActivate, onFocusEntry } : null,
+    [panelOpen, listboxId, entries, safeIndex, empty, optionId, onActivate, onFocusEntry],
   );
 
   return {
@@ -675,7 +904,7 @@ export function useComposerCommands(params: {
     submit,
     dismiss,
     selectedSkills,
-    selectedPrompt,
+    selectedPrompts,
     selectedSkillArgumentHint: selectedSkills.length === 1 ? selectedSummary?.argument_hint?.trim() || null : null,
     skillDescriptions,
     composerValue: params.input,

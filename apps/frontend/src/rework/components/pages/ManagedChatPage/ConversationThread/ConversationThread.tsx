@@ -58,7 +58,7 @@ interface ConversationThreadProps {
    *  Must keep a stable identity: it is handed to every memoized row. */
   onOpenSkill?: (name: string) => void;
   skillDescriptions?: ReadonlyMap<string, string>;
-  onOpenCommandPrompt?: (turn: { text: string; command: CommandDescriptor }) => void;
+  onOpenCommandPrompt?: (turn: { text: string; command: CommandDescriptor; promptIndex?: number }) => void;
 }
 
 // Memoized: ManagedChatPage re-renders on every composer keystroke (the input

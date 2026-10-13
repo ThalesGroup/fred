@@ -598,6 +598,11 @@ Key models:
 Fred-specific metadata travels in the top-level `fred` field of each chunk.
 Standard OpenAI clients ignore unknown top-level fields.
 
+The `finish_reason` chunk carries the `final` event's `content` in `delta.content`
+when no `assistant_delta` was streamed since the last `tool_call` (non-streaming
+model, graph answer, tool error surfaced as the answer); a streamed answer is
+never repeated.
+
 Session ownership uses the native route's shared gate: with authentication enabled,
 `X-Fred-Session-Id` targeting another user's existing history session returns HTTP 403
 and emits `session_owner_mismatch` before credential admission or agent resolution.
@@ -6504,6 +6509,9 @@ than failing the turn. `prompt_id` is attribution, never resolved at display
 time — a prompt is overwritten on edit and can be deleted, so the turn's own
 text is the record of what was sent.
 
+A turn can hold several prompt commands since 8.112, which adds a list to this
+descriptor and leaves the fields above describing the first one.
+
 ### 8.99 Agent-initiated human questions
 
 An interactive ReAct or Deep turn exposes the platform `ask_user` tool only when
@@ -6888,3 +6896,45 @@ provider may bill it). The log line adds the same fields and `reasoning`
 (`used`/`off`/`fallback`).
 Never the description or any drafted text. Acceptance:
 `openspec/changes/add-agent-creation-assistant/`.
+
+### 8.112 Several prompt commands on a user turn (2026-10-13)
+
+Additive. `TurnCommand` (the `command` of `RuntimeContext`) and the stored
+`CommandDescriptor` (`ChatMetadata.command`) gain an optional `prompts` list:
+one entry per prompt command occurrence of the turn, in the order of the typed
+line, 1 to 16 entries (`TurnCommandPrompt` / `CommandPromptDescriptor`).
+
+| Field | Meaning |
+| --- | --- |
+| `command` | the command, without its slash (required, not empty) |
+| `prompt_id`, `prompt_name` | attribution, optional, never resolved at display time |
+| `draft_offset` | index of the command's `/` in `draft_text` (>= 0) |
+| `text_offset`, `text_length` | where that prompt's text sits in the turn's stored text (>= 0, >= 1) |
+
+The three positions are the client's string indices (UTF-16 code units), like
+`draft_command_offset`. The runtime stores and serves them and never compares
+them to the text: a Python length counts code points and would disagree on any
+character outside the basic plane. A reader checks that a list fits its turn
+before using it, and otherwise falls back to the single fields.
+
+The single fields of 8.98 are unchanged and describe the first entry
+(`command`, `prompt_id`, `prompt_name`, `draft_command_offset`);
+`appended_text` is the user's own text and `draft_text` the typed line. The
+list points into the stored text and copies none of it, so the turn's own text
+stays the record of what was sent, and the agent still receives nothing about
+commands.
+
+A request whose list is empty, longer than 16 or malformed is refused as
+invalid (422), like any other invalid request field. On the internal context
+path a malformed list drops the whole descriptor and the turn is stored as
+plain text, as in 8.98. No schema change: the descriptor is JSON in
+`session_history.metadata_json`.
+
+Mixed versions. No model on the path forbids unknown keys, so nothing is
+rejected. A pod whose fred-sdk predates the list ignores it: the turn runs on
+the full assembled text and is stored with the single fields only, so a client
+renders its first prompt command and shows the others as the `/name` the user
+typed. A pod rolled back after such rows were written keeps serving their
+list. Deploy runtime pods before the web client to avoid that rendering for
+the turns sent in between. Acceptance:
+`openspec/specs/platform-agent-skills/spec.md`.

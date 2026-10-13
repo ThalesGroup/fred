@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect, useState, ReactNode } from "react";
+import { useLayoutEffect, useState, ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 const portalOwners = new WeakMap<HTMLElement, { count: number; created: boolean }>();
@@ -39,7 +39,7 @@ interface PortalProps {
 export const Portal = ({ children, id = "portal-root", root }: PortalProps) => {
   const [container, setContainer] = useState<HTMLElement | null>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const host = root ?? document.body;
     let portalElement = [...host.children].find((child) => child.id === id) as HTMLElement | undefined;
     let created = false;

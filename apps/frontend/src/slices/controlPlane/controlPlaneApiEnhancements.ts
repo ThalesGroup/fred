@@ -65,6 +65,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     "ControlPlaneKnowledgeBase",
     "PlatformAccess",
     "PlatformAccessLinks",
+    "PlatformAccessJoiners",
     "ControlPlaneAnnouncement",
     "ControlPlanePatchNote",
   ],
@@ -92,6 +93,9 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     listPlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksGet: {
       providesTags: (_result, _error, arg) => [{ type: "PlatformAccessLinks", id: arg.teamId }],
     },
+    listPlatformEnrollmentJoinersControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdJoinersGet: {
+      providesTags: (_result, _error, arg) => [{ type: "PlatformAccessJoiners", id: arg.linkId }],
+    },
     deleteInactivePlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksInactiveDelete: {
       invalidatesTags: (_result, _error, arg) => [{ type: "PlatformAccessLinks", id: arg.teamId }],
     },
@@ -103,7 +107,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     },
     acceptFreeEnrollmentCguControlPlaneV1PlatformAccessFreeTokenGcuPost: { invalidatesTags: ["PlatformAccess"] },
     enrollFreeTeamControlPlaneV1PlatformAccessFreeTokenEnrollPost: {
-      invalidatesTags: ["PlatformAccess", "ControlPlaneTeam", "ControlPlaneTeamMember"],
+      invalidatesTags: ["PlatformAccess", "ControlPlaneTeam", "ControlPlaneTeamMember", "PlatformAccessJoiners"],
     },
 
     // Platform announcements. Both reads share one LIST tag: an admin mutation
@@ -949,6 +953,8 @@ export const {
   useSavePlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPutMutation: useSavePlatformPolicyMutation,
   useListPlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksGetQuery:
     usePlatformEnrollmentLinksQuery,
+  useListPlatformEnrollmentJoinersControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdJoinersGetQuery:
+    usePlatformEnrollmentJoinersQuery,
   useRevealPlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdRevealPostMutation:
     useRevealPlatformLinkMutation,
   useRevokePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdDeleteMutation:

@@ -293,7 +293,9 @@ def fred_event_to_openai_chunk(
     - thought_end      → content delta "</think>" + fred.thought (conclusion/duration)
     - tool_call        → tool_calls chunk (full call in one shot, not streamed)
     - tool_result      → zero-content chunk carrying fred.sources when present
-    - final            → finish_reason="stop" chunk with fred.sources + token_usage
+    - final            → finish_reason="stop" chunk with fred.sources + token_usage;
+                         content is left out (the router adds it when no
+                         answer text was streamed)
     - awaiting_human   → finish_reason="stop" chunk with fred.awaiting_human
     - node_error       → finish_reason="stop" chunk with fred.node_error
     - status           → dropped (None)

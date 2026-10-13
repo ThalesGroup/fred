@@ -10,7 +10,7 @@ export function platformPath(path: string): string {
 
 export function isPlatformAccessStandalone(): boolean {
   const path = window.location.pathname;
-  return path === platformPath("platform-access-denied") || path.startsWith(platformPath("join-free/"));
+  return path === platformPath("platform-access-denied") || path.startsWith(platformPath("join/"));
 }
 
 export function handlePlatformAccessDenial(status: unknown, body: unknown): boolean {

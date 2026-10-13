@@ -234,7 +234,7 @@ export default function PromptsPage() {
             text: form.text,
           },
         }).unwrap();
-        showSuccess({ summary: "Prompt updated" });
+        showSuccess({ summary: t("rework.teams.prompts.toasts.updated") });
       } else {
         await createPrompt({
           teamId,
@@ -247,7 +247,7 @@ export default function PromptsPage() {
             text: form.text,
           },
         }).unwrap();
-        showSuccess({ summary: "Prompt created" });
+        showSuccess({ summary: t("rework.teams.prompts.toasts.created") });
       }
       closeModal();
     } catch (error: unknown) {
@@ -264,7 +264,7 @@ export default function PromptsPage() {
         return;
       }
       showError({
-        summary: "Failed to save prompt",
+        summary: t("rework.teams.prompts.toasts.saveFailed"),
         detail: detailMessage(detail) || err?.message || String(error),
       });
     }
@@ -291,17 +291,18 @@ export default function PromptsPage() {
     if (!teamId) return;
     showConfirmationDialog({
       criticalAction: true,
-      title: "Delete prompt?",
-      message: `Remove "${prompt.name}"? This cannot be undone.`,
+      title: t("rework.teams.prompts.deleteDialog.title"),
+      message: t("rework.teams.prompts.deleteDialog.message", { name: prompt.name }),
+      confirmButtonLabel: t("rework.teams.prompts.deleteDialog.confirm"),
       onConfirm: async () => {
         try {
           await deletePrompt({ teamId, promptId: prompt.id }).unwrap();
-          showSuccess({ summary: "Prompt deleted" });
+          showSuccess({ summary: t("rework.teams.prompts.toasts.deleted") });
           closeModal();
         } catch (error: unknown) {
           const err = error as { data?: { detail?: string }; message?: string };
           showError({
-            summary: "Failed to delete prompt",
+            summary: t("rework.teams.prompts.toasts.deleteFailed"),
             detail: err?.data?.detail || err?.message || String(error),
           });
         }
@@ -383,7 +384,7 @@ export default function PromptsPage() {
   const promptsQueryState = getQueryUiState({ isLoading, isUninitialized, isError });
 
   if (!teamId) {
-    return <div className={styles.pageError}>Missing team id in route.</div>;
+    return <div className={styles.pageError}>{t("rework.teams.prompts.missingTeam")}</div>;
   }
 
   if (promptsQueryState === "loading") {
