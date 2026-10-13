@@ -3641,7 +3641,7 @@
       "t0Preview": "{{count}} utilisateurs à importer ; {{matching}} déjà acceptés par la règle.",
       "t0Done": "Import initial terminé",
       "t0Import": "Importer les utilisateurs existants",
-      "search": "Rechercher un accès individuel",
+      "search": "Rechercher un utilisateur whitelisté",
       "exception": "Accès individuel",
       "remove": "Retirer",
       "team": "Équipe",
@@ -3854,7 +3854,7 @@
       "filteringOn": "Filtrage actif",
       "filteringOff": "Filtrage inactif",
       "clearSearch": "Effacer la recherche",
-      "noUsers": "Aucun accès individuel ne correspond à cette recherche.",
+      "noUsers": "Aucun utilisateur whitelisté ne correspond à cette recherche.",
       "teamAllowed": "Autorisée",
       "grantedSelected_one": "Accès individuel accordé à {{count}} utilisateur.",
       "grantedSelected_other": "Accès individuel accordé à {{count}} utilisateurs.",
@@ -3882,7 +3882,8 @@
         "label": "Origine",
         "manual": "Manuel",
         "t0": "Import initial"
-      }
+      },
+      "whitelistedUsers": "Utilisateurs whitelistés"
     }
   },
   "runtime": {

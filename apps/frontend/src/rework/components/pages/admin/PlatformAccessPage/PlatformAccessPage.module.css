@@ -57,7 +57,8 @@
   align-items: center;
   gap: var(--spacing-s);
 }
-.conditionsHeader > h2 {
+.conditionsHeader > h2,
+.sectionTitle {
   margin: 0;
   font: var(--font-title-small);
 }

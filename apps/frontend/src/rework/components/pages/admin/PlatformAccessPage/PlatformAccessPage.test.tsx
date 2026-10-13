@@ -448,9 +448,14 @@ it("states next to the title whether filtering is on", () => {
   expect(title()).toContain("rework.platformAccess.filteringOn");
 });
 
-it("names each whitelist panel through its tab only", () => {
+it("titles the whitelisted users block one level under the page title's sections", () => {
   render();
-  expect(host.querySelector('[id$="-users-panel"]')?.querySelectorAll("h2, h3")).toHaveLength(0);
+  expect(host.querySelectorAll("h2")).toHaveLength(0);
+  const panel = host.querySelector<HTMLElement>('[id$="-whitelist-users-panel"]')!;
+  const headings = [...panel.querySelectorAll("h3")];
+  expect(headings.map((node) => node.textContent)).toEqual(["rework.platformAccess.whitelistedUsers"]);
+  // The title heads the whole block: it comes before the search, the import and the add button.
+  expect(panel.firstElementChild).toBe(headings[0]);
   expect(host.querySelector('[id$="-users-panel"]')?.textContent).toContain("rework.platformAccess.whitelistHint");
 });
 

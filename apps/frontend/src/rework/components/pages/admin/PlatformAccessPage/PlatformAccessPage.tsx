@@ -209,6 +209,7 @@ export default function PlatformAccessPage() {
               hidden={whitelistTabIndex !== 0}
               tabIndex={0}
             >
+              <h3 className={styles.sectionTitle}>{t("rework.platformAccess.whitelistedUsers")}</h3>
               <div className={styles.toolbar}>
                 <div className={styles.search}>
                   <SearchInput
