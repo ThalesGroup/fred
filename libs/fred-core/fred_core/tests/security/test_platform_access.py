@@ -595,3 +595,60 @@ async def test_pure_workload_mount_defers_account_status_but_tool_request_does_n
         await oidc.resolve_request_principal(request, workload)
     assert unavailable.value.detail == "account_status_unavailable"
     active.assert_awaited_once_with(workload)
+
+
+@pytest.mark.asyncio
+async def test_user_listing_orders_by_username_and_filters_individual_exceptions(
+    access,
+):
+    store = access.store
+    # Ids run against the alphabet so id order and username order cannot coincide.
+    names = ["zoe", "Bob", "alice", "bob", None, "Carol", None]
+    ids = [UUID(int=100 - index) for index in range(len(names))]
+    async with store.mutation() as session:
+        session.add_all(
+            [
+                UserRow(id=uid, username=name, email=f"{index}@example.org")
+                for index, (uid, name) in enumerate(zip(ids, names))
+            ]
+        )
+        await session.flush()
+        for index, source in ((0, "manual"), (1, "t0"), (4, "manual"), (5, "manual")):
+            await store.add_exception(ids[index], "actor", source, session)
+
+    def listed(rows):
+        return [(row.username, row.id) for row in rows]
+
+    # Case-insensitive username, id as tiebreaker, missing usernames last.
+    everyone = [
+        ("alice", ids[2]),
+        ("bob", ids[3]),
+        ("Bob", ids[1]),
+        ("Carol", ids[5]),
+        ("zoe", ids[0]),
+        (None, ids[6]),
+        (None, ids[4]),
+    ]
+    assert listed(await store.users(0, 25)) == everyone
+    assert await store.user_count() == 7
+
+    exceptions = [("Bob", ids[1]), ("Carol", ids[5]), ("zoe", ids[0]), (None, ids[4])]
+    assert listed(await store.users(0, 25, exceptions_only=True)) == exceptions
+    assert await store.user_count(exceptions_only=True) == 4
+
+    pages = [
+        listed(await store.users(offset, 3, exceptions_only=True))
+        for offset in (0, 3, 6)
+    ]
+    assert pages == [exceptions[:3], exceptions[3:], []]
+    assert listed(await store.users(2, 3)) == everyone[2:5]
+
+    # The search narrows the filtered set; the total follows the same set.
+    assert listed(await store.users(0, 25, "BO")) == everyone[1:3]
+    assert await store.user_count("BO") == 2
+    assert listed(await store.users(0, 25, "BO", exceptions_only=True)) == [
+        ("Bob", ids[1])
+    ]
+    assert await store.user_count("BO", exceptions_only=True) == 1
+    assert await store.users(0, 25, "alice", exceptions_only=True) == []
+    assert await store.user_count("alice", exceptions_only=True) == 0

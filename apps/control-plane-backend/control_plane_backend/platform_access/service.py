@@ -192,10 +192,16 @@ async def set_user(
 
 
 async def users_page(
-    access: PlatformAccess, offset: int, limit: int, query: str
+    access: PlatformAccess,
+    offset: int,
+    limit: int,
+    query: str,
+    exceptions_only: bool = False,
 ) -> PlatformAccessUsersPage:
     policy = access.policy(await access.state())
-    rows = await access.store.users(offset, limit, query)
+    rows = await access.store.users(
+        offset, limit, query, exceptions_only=exceptions_only
+    )
     slots = asyncio.Semaphore(8)
 
     async def project(row: UserRow) -> PlatformAccessUser:
@@ -239,7 +245,8 @@ async def users_page(
 
     items = await asyncio.gather(*(project(row) for row in rows))
     return PlatformAccessUsersPage(
-        items=items, total=await access.store.user_count(query)
+        items=items,
+        total=await access.store.user_count(query, exceptions_only=exceptions_only),
     )
 
 

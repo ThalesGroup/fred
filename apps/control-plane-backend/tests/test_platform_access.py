@@ -1678,3 +1678,66 @@ async def test_population_preview_suspension_overrides_exception_and_requires_ad
         assert (
             await client.get("/admin/platform/access/activation-preview")
         ).status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_users_listing_restricts_to_individual_exceptions_in_username_order(
+    access,
+):
+    actor = user("other")
+    names = ["zoe", "Bob", "alice", None]
+    ids = [UUID(int=500 - index) for index in range(len(names))]
+    async with access.store.mutation() as session:
+        session.add_all(
+            [UserRow(id=uid, username=name) for uid, name in zip(ids, names)]
+        )
+        await session.flush()
+        await access.store.add_exception(ids[0], actor.uid, "manual", session)
+        await access.store.add_exception(ids[1], actor.uid, "t0", session)
+        await access.store.add_exception(ids[3], actor.uid, "manual", session)
+
+    everyone = await service.users_page(access, 0, 25, "")
+    assert [item.username for item in everyone.items] == [
+        "alice",
+        "Bob",
+        "zoe",
+        None,
+    ]
+    assert everyone.total == 4
+
+    listed = await service.users_page(access, 0, 25, "", True)
+    assert [item.user_id for item in listed.items] == [
+        str(ids[1]),
+        str(ids[0]),
+        str(ids[3]),
+    ]
+    assert listed.total == 3
+    # Sources are computed the same way in both modes.
+    assert [[source.kind for source in item.sources] for item in listed.items] == [
+        ["t0"],
+        ["manual"],
+        ["manual"],
+    ]
+    second = await service.users_page(access, 2, 2, "", True)
+    assert [item.user_id for item in second.items] == [str(ids[3])]
+    assert second.total == 3
+    searched = await service.users_page(access, 0, 25, "o", True)
+    assert [item.username for item in searched.items] == ["Bob", "zoe"]
+    assert searched.total == 2
+
+    app = FastAPI()
+    app.include_router(api.router)
+    app.dependency_overrides[get_platform_access] = lambda: access
+    app.dependency_overrides[api.get_current_user] = lambda: actor
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        default = await client.get("/admin/platform/access/users")
+        assert default.status_code == 200 and default.json()["total"] == 4
+        filtered = await client.get(
+            "/admin/platform/access/users",
+            params={"exceptions_only": "true", "query": "o", "limit": 1, "offset": 1},
+        )
+        assert filtered.status_code == 200
+        assert filtered.json()["total"] == 2
+        assert [item["username"] for item in filtered.json()["items"]] == ["zoe"]

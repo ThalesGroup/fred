@@ -111,24 +111,36 @@ class PlatformAccessStore:
             )
         )
 
+    @staticmethod
+    def user_filter(query: str, exceptions_only: bool) -> list[ColumnElement[bool]]:
+        clauses: list[ColumnElement[bool]] = []
+        if query:
+            clauses.append(PlatformAccessStore.user_search(query))
+        if exceptions_only:
+            clauses.append(
+                select(PlatformAccessUserRow.user_id)
+                .where(PlatformAccessUserRow.user_id == UserRow.id)
+                .exists()
+            )
+        return clauses
+
     async def users(
         self,
         offset: int,
         limit: int,
         query: str = "",
         session: AsyncSession | None = None,
+        *,
+        exceptions_only: bool = False,
     ) -> list[UserRow]:
         async with self.read(session) as s:
-            statement = select(UserRow)
-            if query:
-                statement = statement.where(self.user_search(query))
-            return list(
-                (
-                    await s.scalars(
-                        statement.order_by(UserRow.id).offset(offset).limit(limit)
-                    )
-                ).all()
+            # Explicit NULLS LAST: PostgreSQL and SQLite disagree on the default.
+            statement = (
+                select(UserRow)
+                .where(*self.user_filter(query, exceptions_only))
+                .order_by(func.lower(UserRow.username).asc().nulls_last(), UserRow.id)
             )
+            return list((await s.scalars(statement.offset(offset).limit(limit))).all())
 
     async def add_exception(
         self, uid: UUID, actor: str, source: str, session: AsyncSession
@@ -212,11 +224,15 @@ class PlatformAccessStore:
             await session.flush()
             return row
 
-    async def user_count(self, query: str = "") -> int:
+    async def user_count(
+        self, query: str = "", *, exceptions_only: bool = False
+    ) -> int:
         async with self.read() as session:
-            statement = select(func.count()).select_from(UserRow)
-            if query:
-                statement = statement.where(self.user_search(query))
+            statement = (
+                select(func.count())
+                .select_from(UserRow)
+                .where(*self.user_filter(query, exceptions_only))
+            )
             return int((await session.scalar(statement)) or 0)
 
     async def team(self, team_id: str, session: AsyncSession) -> TeamMetadataRow | None:
