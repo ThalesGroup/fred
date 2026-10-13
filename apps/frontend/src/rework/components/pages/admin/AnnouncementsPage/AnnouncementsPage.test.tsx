@@ -155,6 +155,7 @@ function renderPatchNotes(): HTMLDivElement {
 }
 const ROW = "rework.announcements.row";
 const NOTE_ROW = "rework.announcements.patchNote.row";
+const NOTE_CHECKBOX = '[data-kind="patch_note"] input[type="checkbox"]';
 
 beforeEach(() => {
   listMock.mockReturnValue({ data: [], isLoading: false, refetch: refetchMock });
@@ -331,18 +332,20 @@ describe("AnnouncementsPage", () => {
 
     expect(row.textContent).toContain("What's new in 3.4");
     expect(row.textContent).not.toContain("Release 3.4");
-    expect(row.textContent).toContain(`${NOTE_ROW}.statusVisible`);
+    expect(row.textContent).toContain(`${NOTE_ROW}.statusIncluded`);
+    // The checkbox has no label of its own: the title and status beside it name it.
     expect([...row.querySelectorAll("button, input")].map((control) => control.getAttribute("aria-label"))).toEqual([
       `${NOTE_ROW}.move`,
-      `${NOTE_ROW}.enabled`,
+      null,
       `${NOTE_ROW}.preview`,
       `${NOTE_ROW}.edit`,
       `${NOTE_ROW}.delete`,
     ]);
-    expect(row.querySelector<HTMLInputElement>(`[aria-label="${NOTE_ROW}.enabled"]`)!.checked).toBe(true);
-    // No banner is rendered for a patch note, and no count of users who hid it.
+    expect(row.querySelector<HTMLInputElement>(NOTE_CHECKBOX)!.checked).toBe(true);
+    const checkbox = row.querySelector<HTMLInputElement>(NOTE_CHECKBOX)!;
+    expect(row.querySelector(`label[for="${checkbox.id}"]`)!.textContent).toContain("What's new in 3.4");
+    // No banner is rendered for a patch note.
     expect(row.querySelector("[data-severity]")).toBeNull();
-    expect(row.textContent).not.toContain("dismissalCount");
   });
 
   it("includes a second patch note at once, without asking and without touching the first", () => {
@@ -352,7 +355,7 @@ describe("AnnouncementsPage", () => {
       refetch: refetchMock,
     });
     const el = renderPatchNotes();
-    const switches = el.querySelectorAll<HTMLInputElement>(`[aria-label="${NOTE_ROW}.enabled"]`);
+    const switches = el.querySelectorAll<HTMLInputElement>(NOTE_CHECKBOX);
 
     act(() => switches[1].click());
 
@@ -394,7 +397,7 @@ describe("AnnouncementsPage", () => {
     setEnabledMock.mockReturnValue({ unwrap: () => new Promise<void>((resolve) => (settle = resolve)) });
     listMock.mockReturnValue({ data: [patchNote()], isLoading: false });
     const el = renderPatchNotes();
-    const toggle = () => el.querySelector<HTMLInputElement>(`[aria-label="${NOTE_ROW}.enabled"]`)!;
+    const toggle = () => el.querySelector<HTMLInputElement>(NOTE_CHECKBOX)!;
     act(() => el.querySelector<HTMLButtonElement>(`[aria-label="${NOTE_ROW}.edit"]`)!.click());
 
     await act(async () => patchNoteEditor.props!.onSave({ kind: "patch_note" }, true));
@@ -422,7 +425,7 @@ describe("AnnouncementsPage", () => {
       announcementId: "p2",
       setAnnouncementEnabledRequest: { enabled: true },
     });
-    expect(showSuccess).toHaveBeenCalledWith({ summary: "rework.announcements.patchNote.savedActive" });
+    expect(showSuccess).toHaveBeenCalledWith({ summary: "rework.announcements.patchNote.savedIncluded" });
   });
 
   it("creates a patch note hidden, and tells the admin users do not see it", async () => {
@@ -434,7 +437,7 @@ describe("AnnouncementsPage", () => {
 
     expect(createMock).toHaveBeenCalledWith({ announcementWriteRequest: { kind: "patch_note", enabled: false } });
     expect(setEnabledMock).not.toHaveBeenCalled();
-    expect(showSuccess).toHaveBeenCalledWith({ summary: "rework.announcements.patchNote.savedInactive" });
+    expect(showSuccess).toHaveBeenCalledWith({ summary: "rework.announcements.patchNote.savedNotIncluded" });
   });
 
   it("preview opens the user dialog with that single note and records nothing as seen", () => {
@@ -460,7 +463,7 @@ describe("AnnouncementsPage", () => {
     setEnabledMock.mockReturnValue({ unwrap: () => Promise.reject({ status: 500, data: { detail: "boom" } }) });
     const el = renderPatchNotes();
 
-    await act(async () => el.querySelector<HTMLInputElement>(`[aria-label="${NOTE_ROW}.enabled"]`)!.click());
+    await act(async () => el.querySelector<HTMLInputElement>(NOTE_CHECKBOX)!.click());
 
     expect(showError).toHaveBeenCalledWith(expect.objectContaining({ summary: "rework.announcements.toggleFailed" }));
     // RTK Query invalidates the LIST tag on a rejected mutation too.

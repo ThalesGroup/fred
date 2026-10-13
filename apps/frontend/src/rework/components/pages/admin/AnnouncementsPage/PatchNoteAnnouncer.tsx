@@ -128,7 +128,7 @@ export default function PatchNoteAnnouncer({ includedNotes, settling, onSelectio
       <p className={styles.lastUse} aria-live="polite">
         {tooMany
           ? t(`${KEYS}.tooMany`, { max: MAX_PATCH_NOTES_PER_ANNOUNCEMENT })
-          : lastUse || (includedNotes.length === 0 && t(`${KEYS}.noneVisible`))}
+          : lastUse || (includedNotes.length === 0 && t(`${KEYS}.noneIncluded`))}
       </p>
       {announcement && (
         <div className={styles.withdraw}>

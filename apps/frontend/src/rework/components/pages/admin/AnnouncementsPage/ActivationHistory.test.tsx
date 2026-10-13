@@ -29,6 +29,7 @@ const usersMock = vi.fn();
 const packageMock = vi.fn();
 const seenMock = vi.fn();
 const showError = vi.fn();
+const showInfo = vi.fn();
 
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useAnnouncementExposureHistoryQuery: () => historyMock(),
@@ -38,7 +39,7 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
   useMarkPatchNoteAnnouncementSeenMutation: () => [seenMock],
 }));
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
-  useToast: () => ({ showError, showSuccess: vi.fn() }),
+  useToast: () => ({ showError, showInfo, showSuccess: vi.fn() }),
 }));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -216,6 +217,19 @@ describe("ActivationHistory", () => {
     await act(async () => openButton(rows(el)[0])!.click());
 
     expect(showError).toHaveBeenCalledExactlyOnceWith({ summary: `${HISTORY}.packageFailed` });
+    expect(document.body.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it("says so when a package holds nothing readable", async () => {
+    historyMock.mockReturnValue({ data: [announcement()], isLoading: false });
+    packageMock.mockReturnValue({
+      unwrap: () => Promise.resolve([{ id: "p1", title: {}, description_long: {} }]),
+    });
+    const el = render();
+
+    await act(async () => openButton(rows(el)[0])!.click());
+
+    expect(showInfo).toHaveBeenCalledExactlyOnceWith({ summary: `${HISTORY}.packageEmpty` });
     expect(document.body.querySelector('[role="dialog"]')).toBeNull();
   });
 

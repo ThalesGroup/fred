@@ -172,6 +172,19 @@ describe("PatchNoteGate", () => {
     expect(seenMock).toHaveBeenCalledExactlyOnceWith({ announcementId: "ann-1" });
   });
 
+  it("keeps showing, and records, the announcement it opened on when a newer one is read meanwhile", () => {
+    deliver([patchNote()]);
+    mount();
+
+    deliver([older()], "ann-2");
+    act(() => root!.render(<PatchNoteGate />));
+    expect(dialog()!.textContent).toContain("What's new in 3.4");
+    act(() => closeButton().click());
+
+    // "ann-2" was never shown: it stays pending for the next load.
+    expect(seenMock).toHaveBeenCalledExactlyOnceWith({ announcementId: "ann-1" });
+  });
+
   it("stays closed for the page view when the record fails", async () => {
     // RTK's trigger resolves with the error rather than rejecting.
     seenMock.mockReturnValue(Promise.resolve({ error: { status: 500 } }));

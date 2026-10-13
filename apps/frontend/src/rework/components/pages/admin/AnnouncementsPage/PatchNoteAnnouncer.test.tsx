@@ -197,7 +197,7 @@ describe("PatchNoteAnnouncer", () => {
     render([]);
 
     expect(announceButton().disabled).toBe(true);
-    expect(line()).toBe(`${KEYS}.noneVisible`);
+    expect(line()).toBe(`${KEYS}.noneIncluded`);
   });
 
   it("shows no last use and no withdraw action when no announcement is in effect", () => {

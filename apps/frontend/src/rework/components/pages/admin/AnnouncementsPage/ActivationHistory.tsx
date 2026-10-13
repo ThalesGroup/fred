@@ -44,7 +44,7 @@ const KINDS: ExposureKind[] = ["banner", "patch_note"];
  */
 export default function ActivationHistory() {
   const { t, i18n } = useTranslation();
-  const { showError } = useToast();
+  const { showError, showInfo } = useToast();
   const { data: exposures = [], isLoading, isError } = useAnnouncementExposureHistoryQuery();
   const [loadPackage] = useLazyPatchNotePackageQuery();
   const [loadingId, setLoadingId] = useState<string | null>(null);
@@ -86,7 +86,10 @@ export default function ActivationHistory() {
     setLoadingId(exposure.id);
     try {
       const snapshots = await loadPackage({ announcementId: exposure.id }, true).unwrap();
-      setOpened(resolvePatchNotes(snapshots, i18n.language));
+      const readable = resolvePatchNotes(snapshots, i18n.language);
+      // Nothing readable: say so, the dialog would stay closed without a word.
+      if (readable.length === 0) showInfo({ summary: t("rework.announcements.history.packageEmpty") });
+      setOpened(readable);
     } catch {
       showError({ summary: t("rework.announcements.history.packageFailed") });
     } finally {

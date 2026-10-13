@@ -3515,37 +3515,36 @@
           "confirm": "Discard changes",
           "cancel": "Keep writing"
         },
-        "savedActive": "Patch note saved. It is included in the next announcement.",
-        "savedInactive": "Patch note saved. It is not included in the next announcement.",
+        "savedIncluded": "Patch note saved. It is included in the next announcement.",
+        "savedNotIncluded": "Patch note saved. It is not included in the next announcement.",
         "row": {
-          "enabled": "Include this patch note in the next announcement",
           "enableHint": "Include in the next announcement",
           "disableHint": "Leave out of the next announcement",
-          "statusVisible": "Included in the next announcement",
-          "statusHidden": "Not included",
+          "statusIncluded": "Included in the next announcement",
+          "statusNotIncluded": "Not included",
           "preview": "Preview as users see it",
           "edit": "Edit this patch note",
           "delete": "Delete this patch note",
-          "move": "Move “{{title}}”"
+          "move": "Move \"{{title}}\""
         },
         "delete": {
           "title": "Delete this patch note?",
-          "message": "“{{title}}” will be removed for good. The current announcement is not changed."
+          "message": "\"{{title}}\" will be removed for good. The current announcement is not changed."
         },
         "deleted": "Patch note deleted.",
         "reorder": {
           "instructions": "To move this patch note, press Space or Enter, use the up and down arrows, then press Space or Enter again to drop it, or Escape to cancel.",
-          "picked": "“{{title}}” picked up, at position {{position}} of {{total}}.",
-          "moved": "“{{title}}” moved to position {{position}} of {{total}}.",
-          "dropped": "“{{title}}” dropped at position {{position}} of {{total}}.",
-          "cancelled": "Move cancelled. “{{title}}” stays at position {{position}} of {{total}}.",
+          "picked": "\"{{title}}\" picked up, at position {{position}} of {{total}}.",
+          "moved": "\"{{title}}\" moved to position {{position}} of {{total}}.",
+          "dropped": "\"{{title}}\" dropped at position {{position}} of {{total}}.",
+          "cancelled": "Move cancelled. \"{{title}}\" stays at position {{position}} of {{total}}.",
           "failed": "The new order was not saved.",
           "role": "sortable item"
         },
         "announce": {
           "action": "Announce the update",
           "lastUse": "Last announced on {{date}}, by {{name}}",
-          "noneVisible": "Include at least one patch note to announce the update.",
+          "noneIncluded": "Include at least one patch note to announce the update.",
           "tooMany": "An announcement holds at most {{max}} patch notes. Deselect some to announce.",
           "confirm": {
             "title": "Send this list to users?",
@@ -3578,6 +3577,7 @@
         "more_other": "{{title}} + {{count}} others",
         "openPackage": "View the announced patch notes",
         "packageFailed": "Could not open this announcement's patch notes.",
+        "packageEmpty": "This announcement has no readable patch note.",
         "column": {
           "type": "Type",
           "title": "Title",

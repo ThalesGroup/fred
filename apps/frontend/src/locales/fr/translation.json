@@ -3515,41 +3515,40 @@
           "confirm": "Abandonner les modifications",
           "cancel": "Continuer la rédaction"
         },
-        "savedActive": "Patch note enregistré. Il est inclus dans la prochaine annonce.",
-        "savedInactive": "Patch note enregistré. Il n'est pas inclus dans la prochaine annonce.",
+        "savedIncluded": "Patch note enregistré. Il est inclus dans la prochaine annonce.",
+        "savedNotIncluded": "Patch note enregistré. Il n'est pas inclus dans la prochaine annonce.",
         "row": {
-          "enabled": "Inclure ce patch note dans la prochaine annonce",
           "enableHint": "Inclure dans la prochaine annonce",
           "disableHint": "Retirer de la prochaine annonce",
-          "statusVisible": "Inclus dans la prochaine annonce",
-          "statusHidden": "Non inclus",
+          "statusIncluded": "Inclus dans la prochaine annonce",
+          "statusNotIncluded": "Non inclus",
           "preview": "Prévisualiser comme les utilisateurs",
           "edit": "Modifier ce patch note",
           "delete": "Supprimer ce patch note",
-          "move": "Déplacer « {{title}} »"
+          "move": "Déplacer \"{{title}}\""
         },
         "delete": {
           "title": "Supprimer ce patch note ?",
-          "message": "« {{title}} » sera définitivement supprimé. L'annonce en cours n'est pas modifiée."
+          "message": "\"{{title}}\" sera définitivement supprimé. L'annonce en cours n'est pas modifiée."
         },
         "deleted": "Patch note supprimé.",
         "reorder": {
           "instructions": "Pour déplacer ce patch note, appuyez sur Espace ou Entrée, utilisez les flèches haut et bas, puis appuyez de nouveau sur Espace ou Entrée pour le déposer, ou sur Échap pour annuler.",
-          "picked": "« {{title}} » saisi, en position {{position}} sur {{total}}.",
-          "moved": "« {{title}} » déplacé en position {{position}} sur {{total}}.",
-          "dropped": "« {{title}} » déposé en position {{position}} sur {{total}}.",
-          "cancelled": "Déplacement annulé. « {{title}} » reste en position {{position}} sur {{total}}.",
+          "picked": "\"{{title}}\" saisi, en position {{position}} sur {{total}}.",
+          "moved": "\"{{title}}\" déplacé en position {{position}} sur {{total}}.",
+          "dropped": "\"{{title}}\" déposé en position {{position}} sur {{total}}.",
+          "cancelled": "Déplacement annulé. \"{{title}}\" reste en position {{position}} sur {{total}}.",
           "failed": "Le nouvel ordre n'a pas été enregistré.",
           "role": "élément déplaçable"
         },
         "announce": {
           "action": "Annoncer la mise à jour",
           "lastUse": "Dernière annonce le {{date}}, par {{name}}",
-          "noneVisible": "Incluez au moins un patch note pour annoncer la mise à jour.",
+          "noneIncluded": "Incluez au moins un patch note pour annoncer la mise à jour.",
           "tooMany": "Une annonce contient au plus {{max}} patch notes. Désélectionnez-en pour annoncer.",
           "confirm": {
             "title": "Envoyer cette liste aux utilisateurs ?",
-            "message": "Les utilisateurs verront exactement cette liste, dans cet ordre, à leur prochaine connexion et dans « Nouveautés ». Vos modifications ultérieures ne leur parviendront qu'à la prochaine annonce.",
+            "message": "Les utilisateurs verront exactement cette liste, dans cet ordre, à leur prochaine connexion et dans \"Nouveautés\". Vos modifications ultérieures ne leur parviendront qu'à la prochaine annonce.",
             "list": "Patch notes inclus dans l'annonce",
             "confirm": "Annoncer"
           },
@@ -3559,7 +3558,7 @@
           "withdraw": {
             "action": "Retirer l'annonce en cours",
             "title": "Retirer l'annonce en cours ?",
-            "message": "« Nouveautés » sera vide pour tous les utilisateurs et plus personne ne verra la fenêtre s'ouvrir, jusqu'à la prochaine annonce. Vos patch notes ne sont pas modifiés.",
+            "message": "\"Nouveautés\" sera vide pour tous les utilisateurs et plus personne ne verra la fenêtre s'ouvrir, jusqu'à la prochaine annonce. Vos patch notes ne sont pas modifiés.",
             "confirm": "Retirer l'annonce",
             "done": "Annonce retirée.",
             "failed": "L'annonce n'a pas été retirée."
@@ -3578,6 +3577,7 @@
         "more_other": "{{title}} + {{count}} autres",
         "openPackage": "Voir les patch notes annoncés",
         "packageFailed": "Impossible d'ouvrir les patch notes de cette annonce.",
+        "packageEmpty": "Cette annonce ne contient aucun patch note lisible.",
         "column": {
           "type": "Type",
           "title": "Titre",

@@ -124,8 +124,8 @@ export default function AnnouncementsPage() {
           payload.kind !== "patch_note"
             ? t("rework.announcements.saved")
             : live
-              ? t("rework.announcements.patchNote.savedActive")
-              : t("rework.announcements.patchNote.savedInactive"),
+              ? t("rework.announcements.patchNote.savedIncluded")
+              : t("rework.announcements.patchNote.savedNotIncluded"),
       });
     } catch (error: unknown) {
       // A 422 names the field that was refused: it belongs in the form, where

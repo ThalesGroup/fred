@@ -17,7 +17,7 @@
 // (see App.tsx), above the router, so it never remounts on navigation.
 
 import { useState } from "react";
-import { PatchNoteDialog } from "@shared/molecules/PatchNoteDialog/PatchNoteDialog";
+import { PatchNoteDialog, type PatchNote } from "@shared/molecules/PatchNoteDialog/PatchNoteDialog";
 import { useMarkPatchNoteAnnouncementSeenMutation } from "../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { usePatchNoteHistory } from "./usePatchNoteHistory";
 
@@ -26,11 +26,14 @@ export default function PatchNoteGate() {
   const [markSeen] = useMarkPatchNoteAnnouncementSeenMutation();
   // Decided on the first read only: an announcement made later in this page
   // view waits for the next load, as it does for every other user.
-  const [pendingAtLoad, setPendingAtLoad] = useState<string | null>();
+  // The notes are kept with their id: a later refetch must not change what
+  // is shown under the id that gets recorded.
+  const [atLoad, setAtLoad] = useState<{ pendingId: string | null; notes: PatchNote[] }>();
   const [closed, setClosed] = useState(false);
-  if (loaded && pendingAtLoad === undefined) setPendingAtLoad(pendingAnnouncementId);
+  if (loaded && atLoad === undefined) setAtLoad({ pendingId: pendingAnnouncementId, notes });
 
-  if (!pendingAtLoad || closed || notes.length === 0) return null;
+  const pendingAtLoad = atLoad?.pendingId;
+  if (!pendingAtLoad || closed || atLoad.notes.length === 0) return null;
 
   const onClose = () => {
     // Closed for this page view whatever the write does; a failed one only
@@ -39,5 +42,5 @@ export default function PatchNoteGate() {
     void markSeen({ announcementId: pendingAtLoad });
   };
 
-  return <PatchNoteDialog open notes={notes} onClose={onClose} />;
+  return <PatchNoteDialog open notes={atLoad.notes} onClose={onClose} />;
 }

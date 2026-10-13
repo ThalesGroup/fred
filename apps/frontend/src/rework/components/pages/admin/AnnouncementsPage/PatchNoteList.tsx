@@ -98,15 +98,14 @@ function PatchNoteCard({ note, pending, state, handle, onPreview, onToggle, onEd
           checked={note.enabled}
           disabled={pending}
           onChange={(event) => onToggle(note, event.target.checked)}
-          aria-label={t("rework.announcements.patchNote.row.enabled")}
         />
       </Tooltip>
       <label className={styles.text} htmlFor={checkboxId}>
         <span className={styles.title}>{title}</span>
-        <span className={styles.status} data-visible={note.enabled || undefined}>
+        <span className={styles.status} data-included={note.enabled || undefined}>
           {note.enabled
-            ? t("rework.announcements.patchNote.row.statusVisible")
-            : t("rework.announcements.patchNote.row.statusHidden")}
+            ? t("rework.announcements.patchNote.row.statusIncluded")
+            : t("rework.announcements.patchNote.row.statusNotIncluded")}
         </span>
       </label>
       <div className={styles.controls}>
