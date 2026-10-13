@@ -1373,7 +1373,11 @@ const injectedRtkApi = api.injectEndpoints({
       AnnouncePatchNotesControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementPostApiResponse,
       AnnouncePatchNotesControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementPostApiArg
     >({
-      query: () => ({ url: `/control-plane/v1/admin/platform/announcements/patch-notes/announcement`, method: "POST" }),
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/announcements/patch-notes/announcement`,
+        method: "POST",
+        body: queryArg.patchNoteAnnounceRequest,
+      }),
     }),
     withdrawPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementDelete: build.mutation<
       WithdrawPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementDeleteApiResponse,
@@ -2819,7 +2823,9 @@ export type GetPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatc
 export type GetPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementGetApiArg = void;
 export type AnnouncePatchNotesControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementPostApiResponse =
   /** status 201 Successful Response */ PatchNoteAnnouncement;
-export type AnnouncePatchNotesControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementPostApiArg = void;
+export type AnnouncePatchNotesControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementPostApiArg = {
+  patchNoteAnnounceRequest: PatchNoteAnnounceRequest;
+};
 export type WithdrawPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementDeleteApiResponse =
   unknown;
 export type WithdrawPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementDeleteApiArg =
@@ -4924,6 +4930,10 @@ export type PatchNoteAnnouncement = {
   announced_at: string;
   /** Uid of the administrator who announced. */
   announced_by?: string | null;
+};
+export type PatchNoteAnnounceRequest = {
+  /** The ids of the included patch notes, in order, as the confirmation listed them. Refused with `409` unless they are exactly the currently included ones, in that order, and at most 10. */
+  ids: string[];
 };
 export type AnnouncementExposure = {
   /** For a patch-note line: the announcement's id. */
