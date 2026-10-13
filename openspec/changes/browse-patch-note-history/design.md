@@ -37,12 +37,12 @@ generated API client, existing design tokens and components only.
 
 **Goals:**
 
-- Three independent controls: visibility (`enabled`), order (a position),
-  announcement (an explicit event).
-- No new table beyond the one that replaces the dismissal table; no new
-  frontend dependency.
+- Three independent controls: inclusion in the next announcement (`enabled`),
+  order (a position), announcement (an explicit action freezing a package).
+- Users read a frozen package, never the live rows.
+- One history line per exposure, the same table for banners and announcements.
 - Remove more than is added: the one-active rule, the per-note dismissals, the
-  browser memory, the kind chooser, the checkbox, the user count.
+  browser memory, the kind chooser, the checkbox, the user count, the events.
 
 **Non-Goals:**
 
@@ -53,14 +53,14 @@ generated API client, existing design tokens and components only.
 
 ## Decisions
 
-**1. Visibility is `enabled`.** A patch note's `enabled` column keeps its
-route, its switch, its activation events and its audit records; it just stops
-meaning "shown at sign-in". The partial unique index goes, and with it
-`disable_other_patch_notes`, the `409` branch, `auto_disabled_ids` and the
+**1. Inclusion is `enabled`.** A patch note's `enabled` column keeps its
+route, its switch and its audit records; it means "included in the next
+announcement" and writes no history. The partial unique index goes, and with
+it `disable_other_patch_notes`, the `409` branch, `auto_disabled_ids` and the
 frontend confirmation naming the replaced note. A patch note's
 `content_version` no longer keys anything; the shared toggle code that bumps
-it is left alone. Alternative: a separate `visible` column. Rejected: two
-flags for one decision.
+it is left alone. Alternative: a separate column. Rejected: two flags for one
+decision.
 
 **2. Order is a nullable integer `position` on `platform_announcement`.**
 Set for patch notes, null for banners. A new patch note takes the top place
@@ -73,65 +73,68 @@ a stale page cannot silently drop or misplace a note. Alternative: a
 requests. Alternative: fractional positions. Rejected: the list is small.
 The admin list returns banners as today and patch notes by position.
 
-**3. The announcement is an event in the existing activation history.**
-Announcing appends one `platform_announcement_activation_event` row with
-`action = "announced"`, `kind = "patch_note"`, the acting administrator and
-the time; `announcement_id` and `label` snapshot the visible patch note at
-position 1, which is what users will open on. "Last use and who" is the
-newest `announced` row (one query on the indexed `occurred_at`). This needs
-no schema change to that table and no new store, and the announcement shows
-up in the history tab for free. Alternative: a dedicated one-row
-"last announcement" table. Rejected: a second place recording who did what
-and when. Trade-off: the event's `announcement_id` describes the note at
-position 1 rather than "the" subject of the event; the history view shows it
-as "Announced to users" with that title.
+**3. One table of exposures, which is also the history and the packages.**
+`platform_announcement_exposure` replaces
+`platform_announcement_activation_event`. One row per exposure: `id`, `kind`,
+`announcement_id` (the banner; the first note for a package), `label` (title
+per locale at the time), `severity` (banner), `actor_uid`, `activated_at`,
+`deactivated_at` (null while it lasts), and for an announcement `note_count`
+and `package`, a JSON list of `{id, title, description_long}` snapshots.
+Enabling a banner inserts a row; disabling or deleting it sets
+`deactivated_at`. Announcing ends every open patch-note row and inserts a new
+one with its package, in one transaction; withdrawing only ends the open row.
+
+The *announcement in effect* is the open patch-note row that holds a package.
+That one definition feeds the users' read, the pending marker, the admin "last
+announcement" read and the withdrawal, so they cannot disagree. The history is
+a plain read of the table: nothing is derived or paired at read time. `package`
+is a deferred column, so listing 100 lines does not load 100 packages.
+
+Alternatives. A package table beside an events table, exposures derived by
+pairing events at read time: rejected, two tables and a derivation for what
+one row states directly, and "replaced" or "withdrawn" would need two more
+event kinds. A package table beside the exposure table: rejected, a package
+has exactly one line and no life of its own. Snapshot rows per note instead of
+JSON: rejected, a package is only ever read whole. Trade-off: the table is no
+longer append-only, since ending an exposure updates its row.
 
 **4. "Seen" is one row per user, replacing the dismissal table.**
 `platform_announcement_dismissal` (per user and note) is dropped and replaced
-by a table keyed by `user_id` holding the id of the last announcement event
-that user has seen and when. An announcement is pending for a user when a
-newest `announced` event exists and the user's row does not name it. Rows are
-removed with the user, where `delete_dismissals_for_user` is called today.
+by `platform_announcement_seen`, keyed by `user_id` and holding the id of the
+last announcement (exposure row) that user has seen and when. An announcement
+is pending for a user when one is in effect, it opens the dialog (see the
+migration plan for the one that does not) and the user's row does not name it.
+Rows are removed with the user, where `delete_dismissals_for_user` was called.
 The client records the id it was shown, not "the latest", so an announcement
 made between the read and the close stays pending; the server ignores a record
-that would move a user back to an older announcement. Alternative: keep the
-per-note table and write a row for position 1. Rejected: it breaks when that
-note is deleted (cascade) or reordered. Alternative: a column on a user table.
-Rejected: control-plane has no user table of its own to extend.
-
-**4b. Hiding the last visible patch note cancels the announcement (owner
-decision).** When a toggle-off or a delete leaves no visible patch note and
-the newest announcement event is `announced`, the same transaction appends one
-`action = "unannounced"` event (the hidden note's id and title, the acting
-administrator). The *current announcement* is the newest event among
-`announced` and `unannounced` when that event is `announced`, else none. That
-one computation feeds `pending_announcement_id`, the admin "last use" read and
-the cancel check, so they cannot disagree. Nothing stays pending: after a
-cancellation only a new click on "Announce the update" opens the dialog, and
-the last-use text is empty until then. Per-user rows are not touched; a row
-naming a cancelled announcement is simply never current again. Alternative:
-delete the `announced` row. Rejected: the history is append-only.
-Alternative: keep it pending until a note is visible again (the first draft).
-Rejected by the owner: a dialog would open long after the click, on content
-the administrator never announced. `unannounced` fits the 16-character
-`action` column, so the events table still needs no schema change.
+that would move a user back to an older announcement. Alternative: a column on
+a user table. Rejected: control-plane has no user table of its own to extend.
 
 **5. Routes.** Replacing, not adding beside:
 
 | Method | Path | Permission | Purpose |
 | --- | --- | --- | --- |
-| GET | `/announcements/patch-notes` | authenticated | `PatchNoteHistory { patch_notes: Announcement[], pending_announcement_id: str \| null }`, visible notes in order |
-| PUT | `/announcements/patch-note-announcements/{id}/seen` | authenticated | `204`, idempotent; `404` when the id is not an `announced` event |
+| GET | `/announcements/patch-notes` | authenticated | `PatchNoteHistory { patch_notes: PatchNoteSnapshot[], pending_announcement_id: str \| null }`: the package in effect (empty when none) |
+| PUT | `/announcements/patch-note-announcements/{id}/seen` | authenticated | `204`, idempotent; `404` when the id is not an announced package |
 | PUT | `/admin/platform/announcements/patch-notes/order` | `can_manage_platform` | full ordered id list; `409` when stale |
-| GET | `/admin/platform/announcements/patch-notes/announcement` | `can_manage_platform` | the current announcement (`id`, `announced_at`, `announced_by`) or null when none was made or the last one was cancelled |
-| POST | `/admin/platform/announcements/patch-notes/announcement` | `can_manage_platform` | announce; `409` when no patch note is visible |
+| GET | `/admin/platform/announcements/patch-notes/announcement` | `can_manage_platform` | the announcement in effect (`id`, `announced_at`, `announced_by`) or null |
+| POST | `/admin/platform/announcements/patch-notes/announcement` | `can_manage_platform` | announce; `409` when no patch note is included |
+| DELETE | `/admin/platform/announcements/patch-notes/announcement` | `can_manage_platform` | withdraw, `204`; `404` when none is in effect |
+| GET | `/admin/platform/announcements/patch-notes/announcements/{id}` | `can_manage_platform` | `PatchNoteSnapshot[]`: the package of a history line; `404` when the line is unknown or keeps none |
+| GET | `/admin/platform/announcements/activation-history` | `can_manage_platform` | `AnnouncementExposure[]`, 100 newest first |
+
+`AnnouncementExposure` is `{ id, kind, announcement_id, label, severity,
+note_count, activated_at, deactivated_at, actor_uid }`. `note_count` is the
+size of the package and null for a banner or a line without package, so it
+also tells the client whether a package can be opened; the client formats
+"first title + N others" from `label` and `note_count`.
 
 Deleted: `GET /announcements/patch-note`, `ActivePatchNote`,
 `PUT /announcements/{id}/dismissal`, `AdminAnnouncement.dismissal_count`
-(the admin list returns `Announcement[]`, which gains `position`).
-`AnnouncementActivationAction` gains `announced` and `unannounced`. The
-history read stays once per application load, so "next sign-in" is in practice
-"next load". `pending_announcement_id` is null when no patch note is visible.
+(the admin list returns `Announcement[]`, which gains `position`),
+`AnnouncementActivationEvent` and `AnnouncementActivationAction`. The package
+read stays once per application load, so "next sign-in" is in practice "next
+load".
 
 **6. Dialog navigation in `footerStart`.** `PatchNoteDialog` takes the ordered
 list of notes instead of one title and body, keeps the current position in
@@ -156,11 +159,13 @@ dependency is an owner and reviewer decision; if it is preferred, only task
 **8. Admin tabs and editor.** `VIEWS` becomes `banners | patchNotes |
 history`; the one admin list query is split by kind. Each tab's header button
 creates its own kind, so `AnnouncementKindChooser` is deleted. The announce
-button sits in the Patch notes tab with its last-use text beside it, uses the
-existing `ConfirmationDialog`, and is disabled when no patch note is visible.
-The editor keeps its two saves, plain (toggle untouched; off on create) and
-"save and make visible"; only `replacesTitle` and its confirmation go. The
-history view's action filter gains the `announced` action.
+button sits in the Patch notes tab with its last-announcement text beside it,
+uses the existing `ConfirmationDialog` listing the included patch notes, and
+is disabled when none is included; the withdraw action sits beside it while an
+announcement is in effect. The editor keeps its two saves, plain (toggle
+untouched; off on create) and "save and include"; only `replacesTitle` and its
+confirmation go. The history view filters by type and opens a line's package
+in `PatchNoteDialog`.
 
 ## Risks / Trade-offs
 
@@ -174,35 +179,59 @@ history view's action filter gains the `announced` action.
   feedback] → the admin page is a desktop surface and the keyboard path covers
   the rest; the library alternative is listed for the owner.
 - [An administrator announces before ordering or toggling as intended] → the
-  confirmation says how many patch notes users will see and which one opens
-  first.
-- [An administrator hides the last visible patch note by mistake and loses
-  the announcement for users who had not seen it] → intended (decision 4b);
-  the cancellation is in the history and one click announces again.
-- [The history view receives a fourth action, `unannounced`] → it needs a
-  label and a filter entry beside `announced` (task 6.6).
+  confirmation lists the included patch notes in their order; a mistake is
+  fixed by announcing again or withdrawing.
+- [Fixing a typo re-opens the dialog for everyone] → intended by the owner: an
+  announcement is never replaced silently.
+- [Two administrators announce at the same moment and leave two open rows] →
+  the newest is the one in effect, and the next announcement or withdrawal
+  ends every open patch-note row.
+- [The exposure table is updated in place, so a wrong end time cannot be
+  traced] → every change still emits its audit record.
 - [A user created after the last announcement gets the dialog at first
   sign-in] → intended: it is new to them.
-- [The history is loaded whole at every application load] → bounded by what
-  the administrator keeps visible.
+- [The package is loaded whole at every application load] → bounded by what
+  the administrator announced; one indexed row.
 
 ## Migration Plan
 
-One linear Alembic migration:
+Two linear Alembic migrations. The first is unchanged since it already ran on
+a development database; the second sits on top of it.
+
+`e5ff6d80cc9f`:
 
 1. Drop `uq_platform_announcement_active_patch_note`.
 2. Add `platform_announcement.position` and backfill patch notes, most
    recently created first.
 3. Drop `platform_announcement_dismissal`; create the per-user table.
 
-No `announced` event is created, so nothing is pending and no user gets a
-dialog after the upgrade. The patch note enabled before the upgrade stays the
-only visible one. No operator action, configuration or chart value; the
-migration note still declares `impact: minor`, which the migration-note check
-requires of any new Alembic revision. Downgrade recreates the dismissal table
-empty, keeps the top enabled patch note and disables the others before
-recreating the index, drops the position column and the per-user table, and
-deletes the `announced` and `unannounced` events the older code cannot read.
+`a6c1d94e27b3`, exposures and packages:
+
+1. Create `platform_announcement_exposure`.
+2. Convert the events. Each `activated` event opens a line that the next
+   `deactivated` event of the same announcement ends; the line keeps the
+   opening event's id, title, severity, author and time. Patch-note
+   activations become patch-note lines without package. `announced` events,
+   which only a development database can hold, become lines without package
+   too, ended by the next `announced` or `unannounced` event.
+3. End every patch-note line still open, then, when at least one patch note is
+   enabled, insert the first package from the enabled patch notes in position
+   order, with `opens_dialog = false`.
+4. Rename `platform_announcement_seen.announcement_event_id` to
+   `announcement_id`; drop `platform_announcement_activation_event`.
+
+`opens_dialog` is the one column that exists for the upgrade: "everybody
+counted as having seen it" cannot be written as per-user rows, because users
+who have not signed in yet have no row anywhere in this database. A package
+with `opens_dialog = false` is in effect and readable, and pending for nobody.
+
+No operator action, configuration or chart value; the migration note declares
+`impact: minor`, which the migration-note check requires of any new Alembic
+revision. Downgrading `a6c1d94e27b3` recreates the events table from the
+lines (`activated`, and `deactivated` when ended; a package line becomes an
+`announced` event, followed by `unannounced` when it was withdrawn and is the
+newest), renames the column back and drops the exposure table; packages are
+lost.
 
 ## Owner Decisions
 
@@ -211,16 +240,21 @@ Closed by the owner; written into the specs and tasks.
 - Button label: "Annoncer la mise à jour" / "Announce the update", with the
   date of its last use and the administrator's name beside it.
 - Arrows: left towards newer (position 1), right towards older.
-- After upgrade: only the currently enabled patch note has its toggle on, the
-  others are off, and no announcement is pending.
+- After upgrade: the currently enabled patch note becomes the first package,
+  pending for nobody; its toggle stays on and the others are off.
 - Per-note user counter: removed.
 - One create button per tab; the kind chooser is removed.
 - Drag handle at the left of each card; the order is also changeable by
   keyboard.
-- Turning off (or deleting) the last visible patch note cancels the pending
-  announcement: users who had not seen it get nothing, and a new click on
-  "Announce the update" is needed. Announcing is refused while no patch note
-  is visible.
+- Rework (final): an announcement is a frozen package of the included patch
+  notes; the live list is a working area that never reaches users. Announcing
+  always creates a new package and re-opens the dialog for everyone. A
+  "Withdraw the current announcement" action leaves no package in effect.
+- The earlier rule "hiding the last visible patch note cancels the
+  announcement" and its `unannounced` event are removed.
+- History is one line per exposure (banner activation, patch-note
+  announcement) with activation, deactivation and author; no action, filter by
+  type; a patch-note line keeps its package, openable by the administrator.
 
 ## Divergences From The First Draft
 
@@ -234,17 +268,19 @@ Closed by the owner; written into the specs and tasks.
   `make migration-check` refuses `none` for a new Alembic revision.
 - The contract entry is subsection 61.1, not a new numbered section, to stay
   out of the section-number collisions between open pull requests.
-- The seen route is declared as `{announcement_event_id}` and the reorder
-  route answers `204`; the per-user table is `platform_announcement_seen`.
-- `GET /announcements/patch-notes` also checks that a patch note is visible
-  before reporting a pending announcement: two administrators hiding the last
-  two notes at the same moment can each miss the cancellation of decision 4b.
-- The migration also updates the comment of the events table's `action`
-  column, so that table is touched after all (comment only).
+- The reorder route answers `204`; the per-user table is
+  `platform_announcement_seen`.
+- The first migration also updates the comment of the events table's `action`
+  column; the second migration drops that table.
 - New routes are listed in `docs/swift/platform/authz-endpoint-matrix.yaml`,
   which a backend test requires; the plan did not name that file.
 
 ## Frontend Divergences
+
+Written before the rework to packages and exposures; the points about the
+`announced` and `unannounced` history filters and about "What's new"
+refreshing on the administrator's own edits no longer apply once section 10 of
+tasks.md is done.
 
 - **Decision 7 is superseded and the "no new frontend dependency" goal is
   dropped**: the owner chose `@dnd-kit/core`, `@dnd-kit/sortable` and

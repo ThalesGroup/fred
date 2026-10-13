@@ -1,47 +1,47 @@
 ## ADDED Requirements
 
-### Requirement: Patch-note visibility
+### Requirement: Patch-note working area
 
-Each patch note SHALL carry a visibility toggle, independent of every other
-patch note; any number of patch notes SHALL be visible at once. The toggle
-SHALL only decide whether the patch note appears in the users' patch-note
-dialog and its history: a visible patch note appears there, a patch note that
-is not visible appears nowhere on the user side.
+The patch notes an administrator manages SHALL be a working area that users
+never read directly. Creating, editing, reordering, deleting a patch note or
+changing its toggle SHALL NOT change what any user reads and SHALL NOT make
+the dialog open for any user; only announcing or withdrawing does.
 
-A patch note SHALL be created with the toggle off. Editing a patch note's
-title or body SHALL NOT change its toggle, and SHALL be possible whatever the
-patch note's age and whether or not it is visible. Changing a toggle SHALL NOT
-change any banner or any other patch note, and SHALL NOT make the dialog open
-on its own for any user.
+Each patch note SHALL carry a toggle, independent of every other patch note,
+that decides whether it is included in the next announcement. Any number of
+patch notes SHALL be included at once. A patch note SHALL be created with the
+toggle off. Editing a patch note's title or body SHALL NOT change its toggle
+and SHALL be possible whatever its age. Changing a toggle SHALL NOT change any
+banner or any other patch note.
 
-#### Scenario: A new patch note is not visible
+#### Scenario: A new patch note is not included
 
 - **WHEN** an administrator creates a patch note
-- **THEN** it is listed with its toggle off and users cannot read it
+- **THEN** it is listed with its toggle off
 
-#### Scenario: Several patch notes visible at once
+#### Scenario: Several patch notes included at once
 
-- **GIVEN** patch note A is visible
+- **GIVEN** patch note A is included
 - **WHEN** an administrator turns on the toggle of patch note B
-- **THEN** A and B are both visible, with no confirmation and no change to A
+- **THEN** A and B are both included, with no confirmation and no change to A
 
-#### Scenario: Turning the toggle off removes it from what users read
+#### Scenario: Toggling reaches no user
 
-- **GIVEN** patch notes A and B are visible
-- **WHEN** an administrator turns off A's toggle
-- **THEN** users' dialog and history hold B only
+- **GIVEN** an announced package holding A and B
+- **WHEN** an administrator turns off A's toggle and turns on C's
+- **THEN** users still read A and B, and no dialog opens on its own
 
-#### Scenario: An old patch note stays editable
+#### Scenario: Editing reaches no user
 
-- **GIVEN** a visible patch note that is not at the top of the list
-- **WHEN** an administrator changes its body and saves
-- **THEN** the change is stored, the patch note stays visible, and users read the new text in the history
+- **GIVEN** an announced package holding patch note A
+- **WHEN** an administrator corrects A's body and saves
+- **THEN** the change is stored in the working area and users still read the announced text
 
-#### Scenario: Making a patch note visible does not open the dialog
+#### Scenario: Deleting reaches no user
 
-- **GIVEN** a user for whom no announcement is pending
-- **WHEN** an administrator makes a patch note visible and the user loads the application
-- **THEN** no patch-note dialog opens on its own, and the patch note is readable from "What's new"
+- **GIVEN** an announced package holding patch note A
+- **WHEN** an administrator deletes A
+- **THEN** users still read A in the package
 
 ### Requirement: Ordering patch notes
 
@@ -52,11 +52,10 @@ stored on the server and SHALL be the same for every administrator. It SHALL
 NOT depend on any date. A newly created patch note SHALL be placed at the top
 of the list.
 
-The users' dialog SHALL present the visible patch notes in that same order:
-position 1 SHALL be the visible patch note nearest the top of the list.
-Reordering SHALL NOT change any toggle and SHALL NOT make the dialog open on
-its own for any user. A reorder request that does not name exactly the
-existing patch notes SHALL be refused and SHALL change nothing.
+An announcement SHALL take the included patch notes in that order. Reordering
+SHALL NOT change any toggle nor the order of a package already announced. A
+reorder request that does not name exactly the existing patch notes SHALL be
+refused and SHALL change nothing.
 
 #### Scenario: Reordering by drag and drop
 
@@ -70,12 +69,6 @@ existing patch notes SHALL be refused and SHALL change nothing.
 - **WHEN** an administrator moves B up one place using the keyboard only
 - **THEN** the list holds B, A, C and the new place is announced to assistive technology
 
-#### Scenario: The dialog follows the list order
-
-- **GIVEN** the list holds A (visible), B (not visible), C (visible) in that order
-- **WHEN** a user opens the patch-note dialog
-- **THEN** A is at position 1 and C at position 2, out of 2
-
 #### Scenario: A new patch note goes to the top
 
 - **GIVEN** the list holds A, B
@@ -88,49 +81,50 @@ existing patch notes SHALL be refused and SHALL change nothing.
 - **WHEN** the first administrator submits the order B, A
 - **THEN** the request is refused and the stored order is unchanged
 
-#### Scenario: Reordering does not open the dialog
+#### Scenario: Reordering after an announcement reaches no user
 
-- **GIVEN** a user for whom no announcement is pending
-- **WHEN** an administrator reorders the patch notes and the user loads the application
-- **THEN** no patch-note dialog opens on its own
+- **GIVEN** an announced package holding A then B
+- **WHEN** an administrator moves B above A
+- **THEN** users still read A at position 1 and B at position 2
 
-### Requirement: Announcing patch notes to users
+### Requirement: Announcing a package of patch notes
 
 The Patch notes tab SHALL offer an action, labelled "Announce the update"
-("Annoncer la mise à jour" in French), that announces the patch notes to
-users. The action SHALL ask the administrator to confirm before anything
-happens. Once confirmed, the system SHALL record an announcement with its time
-and the acting administrator, and from then on every user SHALL get the
-patch-note dialog at their next application load, once per user for that
-announcement.
+("Annoncer la mise à jour" in French), that announces the included patch
+notes. The action SHALL show the included patch notes in their order and ask
+the administrator to confirm before anything happens.
 
-The action SHALL be unavailable while no patch note is visible, and a request
+Once confirmed, the system SHALL freeze the included patch notes, in list
+order, with their title and body in every language they hold, as a package
+recorded with its time and the acting administrator. That package, and only
+it, SHALL be what users read until the next announcement or a withdrawal.
+Every announcement SHALL create a new package and SHALL make the dialog open
+for every user at their next application load, once per user for that
+announcement, including users who had seen the previous one. There SHALL be no
+way to change a package once announced.
+
+The action SHALL be unavailable while no patch note is included, and a request
 to announce in that state SHALL be refused. Next to the action, the page SHALL
-show the date and time of the most recent announcement and the display name of
-the administrator who made it, or nothing when none was ever made. Each
-announcement SHALL emit an audit record and SHALL appear in the activation
-history.
-
-Announcing SHALL be the only thing that makes the dialog open on its own.
-
-When the last visible patch note stops being visible, because its toggle is
-turned off or because it is deleted, the system SHALL cancel the most recent
-announcement: users who had not seen it SHALL NOT get the dialog for it, even
-once a patch note is visible again, and nothing SHALL stay pending. A new
-announcement SHALL be needed for the dialog to open on its own again. A
-cancelled announcement SHALL no longer be shown next to the action, and the
-cancellation SHALL appear in the activation history.
+show the date and time of the announcement in effect and the display name of
+the administrator who made it, or nothing when none is in effect. Each
+announcement SHALL emit an audit record.
 
 #### Scenario: Announcing asks for confirmation
 
-- **GIVEN** at least one visible patch note
+- **GIVEN** patch notes A and B are included, in that order
 - **WHEN** an administrator activates the announce action
-- **THEN** a confirmation is shown, and nothing is recorded until it is confirmed
+- **THEN** a confirmation lists A then B, and nothing is recorded until it is confirmed
 
 #### Scenario: Cancelling the confirmation announces nothing
 
 - **WHEN** an administrator activates the announce action and cancels the confirmation
-- **THEN** no announcement is recorded and no user gets the dialog
+- **THEN** no package is recorded and no user gets the dialog
+
+#### Scenario: The package is what users read
+
+- **GIVEN** the list holds A (included), B (not included), C (included) in that order
+- **WHEN** an administrator confirms an announcement
+- **THEN** users read A at position 1 and C at position 2, out of 2
 
 #### Scenario: Every user gets the dialog once
 
@@ -139,11 +133,11 @@ cancellation SHALL appear in the activation history.
 - **THEN** the dialog opens for each of them
 - **AND** it does not open on its own again for a user who closed it, until another announcement is made
 
-#### Scenario: A second announcement shows the dialog again
+#### Scenario: Correcting a typo means announcing again
 
-- **GIVEN** Alice closed the dialog opened by a first announcement
-- **WHEN** an administrator confirms a second announcement and Alice loads the application
-- **THEN** the dialog opens for Alice once more
+- **GIVEN** an announced package holding A, seen by Alice
+- **WHEN** an administrator corrects A, confirms a new announcement, and Alice loads the application
+- **THEN** Alice reads the corrected text and the dialog opens for her once more
 
 #### Scenario: Last use is shown next to the action
 
@@ -151,74 +145,71 @@ cancellation SHALL appear in the activation history.
 - **WHEN** an administrator opens the Patch notes tab
 - **THEN** the page shows, next to the action, that date and time and Alice's display name
 
-#### Scenario: No visible patch note, no announcement
+#### Scenario: Nothing included, no announcement
 
-- **GIVEN** no patch note is visible
+- **GIVEN** no patch note is included
 - **WHEN** an administrator opens the Patch notes tab
 - **THEN** the announce action is disabled
 - **AND** a request to announce sent anyway is refused and records nothing
 
-#### Scenario: Hiding the last visible patch note cancels the announcement
+### Requirement: Withdrawing the current announcement
 
-- **GIVEN** one visible patch note, an announcement seen by Alice and not yet by Bob
-- **WHEN** an administrator turns off that patch note's toggle, then turns it on again, and Bob loads the application
-- **THEN** no patch-note dialog opens for Bob
-- **AND** the page shows no last announcement next to the action
+The Patch notes tab SHALL offer an action, "Withdraw the current
+announcement", available while an announcement is in effect. It SHALL tell the
+administrator what will happen and ask for confirmation. Once confirmed, no
+package SHALL be in effect: users SHALL read no patch note, the dialog SHALL
+NOT open for anyone, and the page SHALL show no last announcement, until the
+next announcement. Withdrawing SHALL NOT change the working area. A request to
+withdraw while no announcement is in effect SHALL be refused. Each withdrawal
+SHALL emit an audit record.
 
-#### Scenario: Deleting the last visible patch note cancels the announcement
+#### Scenario: Withdrawing empties what users read
 
-- **GIVEN** one visible patch note and an announcement not yet seen by Bob
-- **WHEN** an administrator deletes that patch note, makes another one visible, and Bob loads the application
-- **THEN** no patch-note dialog opens for Bob
+- **GIVEN** an announced package not yet seen by Bob
+- **WHEN** an administrator confirms the withdrawal and Bob loads the application
+- **THEN** no dialog opens for Bob and "What's new" is not offered
 
-#### Scenario: Hiding one of several visible patch notes cancels nothing
+#### Scenario: Announcing after a withdrawal
 
-- **GIVEN** two visible patch notes and an announcement not yet seen by Bob
-- **WHEN** an administrator turns off one toggle and Bob loads the application
-- **THEN** the dialog opens for Bob with the remaining patch note
-
-#### Scenario: Announcing again after a cancellation
-
-- **GIVEN** an announcement was cancelled and a patch note is visible again
+- **GIVEN** an announcement was withdrawn
 - **WHEN** an administrator confirms a new announcement
-- **THEN** every user gets the dialog once, including those who had seen the cancelled one
+- **THEN** every user gets the dialog once, with the new package
 
-#### Scenario: The announcement is in the history
+#### Scenario: Nothing to withdraw
 
-- **WHEN** administrator Alice confirms an announcement
-- **THEN** the activation history lists it with its time and Alice as the author
+- **WHEN** a withdrawal is requested while no announcement is in effect
+- **THEN** the request is refused and nothing changes
 
-### Requirement: Browsing patch-note history in the dialog
+### Requirement: Browsing the announced package in the dialog
 
-The system SHALL deliver to any authenticated user the visible patch notes in
-the administrator's order, together with whether an announcement is pending
-for that user.
+The system SHALL deliver to any authenticated user the patch notes of the
+package in effect, in the package's order, together with whether that
+announcement is pending for that user. When no package is in effect it SHALL
+deliver no patch note.
 
 The patch-note dialog SHALL be the same component when it opens at application
 load and when it is opened from "What's new". It SHALL open on position 1.
-When more than one patch note is visible, the left of its action bar SHALL
-hold a navigation made of an icon button, a position indicator such as
+When the package holds more than one patch note, the left of its action bar
+SHALL hold a navigation made of an icon button, a position indicator such as
 `1 / 4`, and a second icon button, moving through the positions and back. The
 left button SHALL move towards position 1 and the right button towards the
-following, older positions. The
-button that cannot move further SHALL be disabled. Moving SHALL replace the
-dialog's title and body with the patch note at the new position, shown from
-its top. With a single visible patch note the dialog SHALL show no navigation.
-The dialog SHALL NOT offer any "Don't show again" control.
+following positions. The button that cannot move further SHALL be disabled.
+Moving SHALL replace the dialog's title and body with the patch note at the
+new position, shown from its top. With a single patch note the dialog SHALL
+show no navigation. The dialog SHALL NOT offer any "Don't show again" control.
 
-A patch note with no text in the viewer's locale nor in the fallback locale
-SHALL be left out of that viewer's history and of the position count.
+A patch note with no text at all for the viewer SHALL be left out of that
+viewer's dialog and of the position count.
 
-While at least one patch note is visible, the user's profile menu SHALL offer
-a "What's new" entry opening that dialog, whether or not an announcement is
-pending for the user. The entry SHALL NOT appear when no patch note is
-visible.
+While a package is in effect, the user's profile menu SHALL offer a "What's
+new" entry opening that dialog, whether or not the announcement is pending for
+the user. The entry SHALL NOT appear when no package is in effect.
 
 #### Scenario: The dialog opens on position 1
 
-- **GIVEN** four visible patch notes
+- **GIVEN** a package of four patch notes
 - **WHEN** a user picks "What's new" in the profile menu
-- **THEN** the dialog shows the one at the top of the administrator's list and the indicator reads `1 / 4`
+- **THEN** the dialog shows the first one and the indicator reads `1 / 4`
 - **AND** the button towards position 1 is disabled
 
 #### Scenario: Navigating to the next patch note
@@ -234,19 +225,13 @@ visible.
 
 #### Scenario: A single patch note has no navigation
 
-- **GIVEN** exactly one visible patch note
+- **GIVEN** a package of exactly one patch note
 - **WHEN** the dialog opens
 - **THEN** it shows that patch note with a Close button and no navigation
 
-#### Scenario: Edited text is what users read
+#### Scenario: No package in effect, no entry
 
-- **GIVEN** a visible patch note at position 2
-- **WHEN** an administrator corrects its body and a user opens "What's new"
-- **THEN** position 2 shows the corrected text
-
-#### Scenario: No visible patch note, no entry
-
-- **WHEN** no patch note is visible
+- **WHEN** no announcement was ever made, or the last one was withdrawn
 - **THEN** the profile menu offers no "What's new" entry
 
 ### Requirement: Recording that an announcement was seen
@@ -254,11 +239,11 @@ visible.
 Any authenticated user SHALL be able to record, for themselves only, that they
 have seen an announcement. The record SHALL be kept on the server, one per
 user, so it holds on every browser and device. Recording SHALL be idempotent.
-A request naming something that is not an announcement SHALL be refused as not
-found. Recording an announcement older than the most recent one SHALL NOT mark
-the most recent one as seen. A user's record SHALL be removed when the user is
-deleted. Creating, editing, deleting, reordering or toggling patch notes SHALL
-NOT change any user's record.
+A request naming something that is not an announced package SHALL be refused
+as not found. Recording an announcement older than the most recent one SHALL
+NOT mark the most recent one as seen. A user's record SHALL be removed when
+the user is deleted. Creating, editing, deleting, reordering or toggling patch
+notes SHALL NOT change any user's record.
 
 #### Scenario: Repeated record is accepted
 
@@ -267,7 +252,7 @@ NOT change any user's record.
 
 #### Scenario: An unknown announcement is refused
 
-- **WHEN** a user records as seen an identifier that is not an announcement
+- **WHEN** a user records as seen an identifier that is not an announced package
 - **THEN** the request is refused as not found and nothing is stored
 
 #### Scenario: A newer announcement made meanwhile stays pending
@@ -316,57 +301,55 @@ whatever the other holds.
 ### Requirement: Authorization for patch notes, announcing and history
 
 Creating, editing, deleting, reordering and toggling patch notes, announcing
-them to users, reading the most recent announcement and its author, and
-reading the activation history, SHALL require the same platform-administration
-authority as banners. Reading the visible patch notes with whether an
-announcement is pending for the caller, and recording that the caller has seen
-an announcement, SHALL require authentication only. Patch notes that are not
-visible SHALL only be returned to platform administrators. No request SHALL
-record or read what another user has seen.
+them, withdrawing the current announcement, reading the announcement in effect
+and its author, reading the exposure history and reading the package of any
+history line SHALL require the same platform-administration authority as
+banners. Reading the package in effect with whether it is pending for the
+caller, and recording that the caller has seen an announcement, SHALL require
+authentication only. The working area SHALL only be returned to platform
+administrators. No request SHALL record or read what another user has seen.
 
 #### Scenario: Non-administrator cannot read the history
 
-- **WHEN** an authenticated user without platform-administration authority requests the activation history
-- **THEN** the request is refused and no event is returned
+- **WHEN** an authenticated user without platform-administration authority requests the exposure history or the package of one of its lines
+- **THEN** the request is refused and nothing is returned
 
 #### Scenario: Non-administrator cannot manage patch notes
 
 - **WHEN** an authenticated user without platform-administration authority tries to create, edit, delete, reorder or toggle a patch note
 - **THEN** the request is refused and nothing changes
 
-#### Scenario: Non-administrator cannot announce
+#### Scenario: Non-administrator cannot announce or withdraw
 
-- **WHEN** an authenticated user without platform-administration authority tries to announce the patch notes
-- **THEN** the request is refused and no announcement is recorded
+- **WHEN** an authenticated user without platform-administration authority tries to announce the patch notes or withdraw the current announcement
+- **THEN** the request is refused and nothing changes
 
 #### Scenario: Unauthenticated client cannot read or record
 
-- **WHEN** an unauthenticated client requests the visible patch notes or records an announcement as seen
+- **WHEN** an unauthenticated client requests the package in effect or records an announcement as seen
 - **THEN** the request is refused
 
-#### Scenario: Hidden patch notes are not delivered to users
+#### Scenario: The working area is not delivered to users
 
-- **GIVEN** patch note A is visible and patch note B is not
-- **WHEN** an authenticated user's client requests the visible patch notes
+- **GIVEN** a package holding A, and a patch note B created since
+- **WHEN** an authenticated user's client requests the package in effect
 - **THEN** only A is returned
 
 ### Requirement: Patch-note dialog after an announcement
 
-When an authenticated user loads the application, an announcement is pending
-for that user and at least one patch note is visible, the client SHALL open
-the patch-note dialog on position 1: a large dialog showing the note's title
-and its body rendered as markdown in the viewer's locale, with a Close button
-and the history navigation. The dialog SHALL open with focus on the dialog
-itself, at the top of the note, and its links SHALL open in a new tab. The
-dialog SHALL NOT open on pre-authentication screens.
+When an authenticated user loads the application and an announcement is
+pending for that user, the client SHALL open the patch-note dialog on position
+1: a large dialog showing the note's title and its body rendered as markdown
+in the viewer's locale, with a Close button and the navigation. The dialog
+SHALL open with focus on the dialog itself, at the top of the note, and its
+links SHALL open in a new tab. The dialog SHALL NOT open on pre-authentication
+screens.
 
-An announcement SHALL be pending for a user when an administrator made one and
-that user has not recorded the most recent one as seen. The dialog SHALL NOT
-open on its own for any other reason: creating, editing, reordering, deleting
-a patch note or changing its visibility SHALL NOT open it. An announcement
-SHALL NOT be pending for anyone once it has been cancelled, which happens when
-the last visible patch note stops being visible; so no announcement is ever
-pending while no patch note is visible.
+An announcement SHALL be pending for a user when its package is in effect and
+that user has not recorded it as seen. The dialog SHALL NOT open on its own
+for any other reason: creating, editing, reordering, deleting or toggling a
+patch note SHALL NOT open it, and a withdrawn announcement SHALL NOT be
+pending for anyone.
 
 Closing the dialog, whether through Close, Escape or a click outside, SHALL
 record the announcement that opened it as seen by that user, whichever
@@ -378,13 +361,13 @@ later load.
 
 #### Scenario: Dialog opens at load after an announcement
 
-- **GIVEN** two visible patch notes and an announcement pending for the user
+- **GIVEN** a package of two patch notes pending for the user
 - **WHEN** the user signs in and the application loads
 - **THEN** the patch-note dialog opens on position 1, with its body rendered as markdown, the navigation, a Close button and no "Don't show again" control
 
 #### Scenario: No announcement, no dialog
 
-- **GIVEN** visible patch notes and no announcement ever made
+- **GIVEN** included patch notes and no announcement ever made
 - **WHEN** the user loads the application
 - **THEN** no patch-note dialog opens
 
@@ -395,24 +378,11 @@ later load.
 - **THEN** that announcement is recorded as seen by that user on the server
 - **AND** the dialog does not open on its own at later loads, including after a new sign-in and from another browser or device
 
-#### Scenario: Creating a patch note does not open the dialog
+#### Scenario: Working on patch notes does not open the dialog
 
-- **GIVEN** a user who has seen the most recent announcement
-- **WHEN** an administrator creates a patch note, makes it visible and moves it to the top, and the user loads the application
+- **GIVEN** a user who has seen the announcement in effect
+- **WHEN** an administrator creates, edits, reorders and toggles patch notes, and the user loads the application
 - **THEN** no patch-note dialog opens on its own
-
-#### Scenario: Editing a patch note does not open the dialog
-
-- **GIVEN** a user who has seen the most recent announcement
-- **WHEN** an administrator edits a visible patch note and the user loads the application
-- **THEN** no patch-note dialog opens on its own
-
-#### Scenario: Nothing visible, nothing pending
-
-- **GIVEN** an announcement pending for the user
-- **WHEN** an administrator turns off every toggle and the user loads the application
-- **THEN** no patch-note dialog opens
-- **AND** it does not open at a later load once a patch note is visible again, until an administrator announces again
 
 #### Scenario: A user who navigated still records the announcement
 
@@ -434,115 +404,157 @@ later load.
 ### Requirement: Patch notes in the Patch notes tab
 
 Patch notes SHALL be listed in the Patch notes tab of the administration page,
-in a neutral style, in the administrator's order. Each row SHALL show, at
-its left, a handle to move it, the patch note's title in the administrator's locale, its
-visibility toggle, and Preview, Edit and Delete actions. Changing a toggle
+in a neutral style, in the administrator's order. Each row SHALL show, at its
+left, a handle to move it, the patch note's title in the administrator's
+locale, its toggle, and Preview, Edit and Delete actions. Changing a toggle
 SHALL take effect without confirmation.
 
 #### Scenario: Patch-note row content
 
-- **GIVEN** a visible patch note titled `What's new in 3.4` in `en`
+- **GIVEN** an included patch note titled `What's new in 3.4` in `en`
 - **WHEN** an administrator whose locale is `en` opens the Patch notes tab
 - **THEN** its row shows a move control, `What's new in 3.4`, a toggle that is on, and Preview, Edit and Delete actions
 
 #### Scenario: Toggling from the list
 
-- **GIVEN** patch note A is visible and patch note B is not
+- **GIVEN** patch note A is included and patch note B is not
 - **WHEN** an administrator turns on B's toggle
-- **THEN** B is visible at once, A stays visible, and no confirmation is shown
+- **THEN** B is included at once, A stays included, and no confirmation is shown
 
-### Requirement: Announcement activation and announcing history
+### Requirement: Exposure history
 
-The system SHALL record an event every time any announcement, of either type,
-goes from disabled to enabled or from enabled to disabled; for a patch note,
-enabled means visible. This includes an announcement created already enabled
-and an enabled announcement that is deleted. A request that does not change
-the enabled state SHALL NOT record an event. The system SHALL also record an
-event every time an administrator announces the patch notes to users, and
-every time an announcement is cancelled because the last visible patch note
-stopped being visible.
+The system SHALL keep one history line per exposure: each time a banner goes
+from disabled to enabled (including a banner created enabled), and each time
+patch notes are announced. A line SHALL carry its type, a title, the time the
+exposure started, the time it ended (empty while it lasts) and the identifier
+of the administrator who started it. Toggling a patch note SHALL NOT write any
+line, and no line SHALL carry an action.
 
-Each event SHALL carry the announcement's identifier, its type, a snapshot of
-its title per locale taken at the time of the
-event, the action (`activated`, `deactivated`, `announced` or `unannounced`),
-the time, and the identifier of the acting user. An `announced` event SHALL
-carry the identifier and title of the patch note at position 1 at that time;
-an `unannounced` event SHALL carry those of the patch note that stopped being
-visible. Events
-SHALL be written in the same transaction as the
-state change they describe, SHALL never be updated or deleted by the
-application, and SHALL remain readable after the announcement is deleted.
+A banner's line SHALL carry the banner's title per locale and its severity as
+they were when it was enabled, and SHALL end when the banner is disabled or
+deleted. A request that does not change a banner's enabled state SHALL NOT
+write or end a line.
 
-Platform administrators SHALL be able to read the 100 most recent events,
-newest first, and the administration page SHALL show them with the acting
-user's display name. The page SHALL let them narrow the table to one action,
-and SHALL remember that choice in the browser.
+A patch-note line SHALL carry the title of the first patch note of its package
+and the number of patch notes the package holds, SHALL keep the package, and
+SHALL end when the next announcement replaces it or when it is withdrawn.
 
-#### Scenario: Showing only activations
+Lines SHALL be written in the same transaction as the change they describe and
+SHALL remain readable after the banner or the patch notes are deleted.
 
-- **GIVEN** the history holds activations and deactivations
-- **WHEN** an administrator picks the "Activations" filter and later reopens the history
-- **THEN** only `activated` events are listed, both times
+Platform administrators SHALL be able to read the 100 most recent lines,
+newest first, and the administration page SHALL show them with the type, the
+title, the activation, the deactivation and the author's display name. The
+page SHALL let them narrow the table to one type, banner or patch note, and
+SHALL remember that choice in the browser. For a patch-note line that keeps a
+package, the page SHALL let the administrator open that package in the dialog
+as users saw it; a line without a package SHALL be shown without that action.
 
-#### Scenario: Activation and deactivation are recorded with the author
+#### Scenario: A banner exposure is one line
 
 - **WHEN** administrator Alice enables banner X and later administrator Bob disables it
-- **THEN** the history lists, newest first, a `deactivated` event for X by Bob and an `activated` event for X by Alice, each with its time and X's title
+- **THEN** the history holds one line for X, with its activation time, its deactivation time, X's title and Alice as the author
 
-#### Scenario: Making a patch note visible records one event
+#### Scenario: A banner still on air has no deactivation
 
-- **GIVEN** patch note A is visible
-- **WHEN** administrator Alice makes patch note B visible
-- **THEN** the history records an `activated` event for B by Alice and no event for A
+- **WHEN** an administrator enables banner X
+- **THEN** X's line shows an activation time and no deactivation
 
-#### Scenario: Announcing is recorded
+#### Scenario: Re-enabling a banner starts a new line
 
-- **GIVEN** the visible patch note at position 1 is titled `Version 3.4`
+- **GIVEN** banner X was enabled then disabled
+- **WHEN** an administrator enables X again
+- **THEN** the history holds two lines for X, the newer one without deactivation
+
+#### Scenario: An announcement is one line
+
+- **GIVEN** the included patch notes are `Version 3.4`, then two others
 - **WHEN** administrator Alice confirms an announcement
-- **THEN** the history records an `announced` event by Alice, labelled `Version 3.4`
+- **THEN** the history holds a patch-note line titled `Version 3.4` with two others, by Alice, without deactivation
 
-#### Scenario: Cancelling is recorded
+#### Scenario: The next announcement ends the previous line
 
-- **GIVEN** an announcement was made and `Version 3.4` is the only visible patch note
-- **WHEN** administrator Bob turns off its toggle
-- **THEN** the history records a `deactivated` event then an `unannounced` event, both by Bob and labelled `Version 3.4`
+- **GIVEN** an announcement in effect
+- **WHEN** an administrator confirms a new announcement
+- **THEN** the previous line's deactivation is the time of the new one
 
-#### Scenario: Nothing to cancel records nothing
+#### Scenario: Withdrawing ends the line
 
-- **GIVEN** no announcement was ever made, or the most recent one is already cancelled
-- **WHEN** an administrator turns off the last visible patch note
-- **THEN** the history records the `deactivated` event only
+- **WHEN** an administrator withdraws the current announcement
+- **THEN** its line's deactivation is the time of the withdrawal
 
-#### Scenario: Reordering records nothing
+#### Scenario: Opening a package from the history
 
-- **WHEN** an administrator reorders the patch notes
-- **THEN** no event is recorded
+- **GIVEN** a patch-note line whose patch notes were since edited and deleted
+- **WHEN** an administrator opens it from the history
+- **THEN** the dialog shows the patch notes as they were announced
+
+#### Scenario: Toggling a patch note writes nothing
+
+- **WHEN** an administrator turns a patch note's toggle on, then off
+- **THEN** the history is unchanged
+
+#### Scenario: Filtering by type
+
+- **GIVEN** the history holds banner and patch-note lines
+- **WHEN** an administrator picks the "Patch notes" filter and later reopens the history
+- **THEN** only patch-note lines are listed, both times
 
 #### Scenario: History survives deletion
 
 - **GIVEN** banner X was enabled then disabled
 - **WHEN** an administrator deletes X
-- **THEN** the history still lists both events for X with its title and type
+- **THEN** the history still lists X's line with its title and type
 
-#### Scenario: Deleting an enabled announcement is recorded
+#### Scenario: Deleting an enabled banner ends its line
 
-- **WHEN** an administrator deletes a visible patch note
-- **THEN** the history records a `deactivated` event for it by that administrator
+- **WHEN** an administrator deletes an enabled banner
+- **THEN** its line's deactivation is the time of the deletion
 
-#### Scenario: No-op toggle records nothing
+#### Scenario: No-op toggle writes nothing
 
-- **WHEN** an administrator enables an announcement that is already enabled
-- **THEN** no event is recorded
+- **WHEN** an administrator enables a banner that is already enabled
+- **THEN** no line is written
 
-#### Scenario: Concurrent toggles record one event
+#### Scenario: Concurrent toggles write one change
 
-- **WHEN** two administrators disable the same enabled announcement at the same moment
-- **THEN** exactly one `deactivated` event is recorded
+- **WHEN** two administrators disable the same enabled banner at the same moment
+- **THEN** its line is ended once
 
-#### Scenario: A failed change records nothing
+#### Scenario: A failed change writes nothing
 
 - **WHEN** an activation fails and its transaction is rolled back
-- **THEN** no event for it is stored
+- **THEN** no line for it is stored
+
+### Requirement: Existing patch notes and history after upgrade
+
+On upgrade, the patch note that was enabled SHALL become the first package, in
+effect and pending for no user, so "What's new" is not empty and no dialog
+opens until an administrator announces. Its toggle SHALL stay on. When no
+patch note was enabled, no package SHALL be in effect.
+
+Earlier history SHALL be converted to lines: each banner activation with the
+deactivation that followed it becomes one line. Earlier patch-note activations
+SHALL become patch-note lines that are ended and keep no package, since the
+content of the time was not kept; reading the history SHALL tolerate them.
+
+#### Scenario: The enabled patch note is readable after upgrade
+
+- **GIVEN** patch note A was enabled before the upgrade
+- **WHEN** a user loads the application after the upgrade
+- **THEN** no dialog opens on its own, and "What's new" shows A
+
+#### Scenario: Earlier banner events become lines
+
+- **GIVEN** banner X was activated by Alice, then deactivated, before the upgrade
+- **WHEN** an administrator opens the history after the upgrade
+- **THEN** it shows one line for X with both times and Alice as the author
+
+#### Scenario: An earlier patch-note line has no package
+
+- **GIVEN** a patch note was activated and replaced before the upgrade
+- **WHEN** an administrator opens the history after the upgrade
+- **THEN** its line shows both times and offers no package to open
 
 ## MODIFIED Requirements
 
@@ -578,9 +590,9 @@ being edited, updated as the administrator types.
 The patch-note editor SHALL NOT discard unsaved changes silently: closing it
 with Escape, a click outside or Cancel while title or body differ from what
 was saved SHALL ask the administrator to confirm. On a patch note that is not
-visible, the editor SHALL offer to save it and make it visible in one action,
-and a plain save SHALL tell the administrator that users do not see it. Neither
-save SHALL announce anything to users.
+included in the next announcement, the editor SHALL offer to save it and
+include it in one action, and a plain save SHALL tell the administrator that
+it is not included. Neither save SHALL announce anything to users.
 
 #### Scenario: Closing with unsaved changes asks first
 
@@ -588,16 +600,16 @@ save SHALL announce anything to users.
 - **WHEN** they press Escape
 - **THEN** a confirmation asks whether to discard the changes, and the editor keeps them if they decline
 
-#### Scenario: Plain save keeps a new patch note out of sight
+#### Scenario: Plain save keeps a new patch note out of the next announcement
 
 - **WHEN** an administrator saves a new patch note with the plain save
-- **THEN** it is stored with its toggle off, and the administrator is told that users do not see it
+- **THEN** it is stored with its toggle off, and the administrator is told that it is not included in the next announcement
 
 #### Scenario: Save and activate
 
-- **GIVEN** a patch note that is not visible, open in the editor
-- **WHEN** the administrator picks the action that saves and makes it visible
-- **THEN** the patch note is saved and visible, with no confirmation and no change to other patch notes
+- **GIVEN** a patch note that is not included, open in the editor
+- **WHEN** the administrator picks the action that saves and includes it
+- **THEN** the patch note is saved and included, with no confirmation, no change to other patch notes and nothing announced
 
 ## REMOVED Requirements
 
@@ -611,18 +623,18 @@ longer describe anything, and a modified requirement cannot drop scenarios.
 
 ### Requirement: One active patch note at a time
 
-**Reason**: Any number of patch notes can now be visible at once; the visible
-set is the history users browse. See "Patch-note visibility".
+**Reason**: A patch note's toggle now means "included in the next
+announcement", and any number can be included. See "Patch-note working area".
 
-**Migration**: The single patch note enabled before the upgrade stays visible
-and the others stay hidden; an administrator turns on the older ones to put
-them in the history. Clients no longer receive a `409` on concurrent
-activation.
+**Migration**: The single patch note enabled before the upgrade becomes the
+first announced package (see "Existing patch notes and history after
+upgrade"). Clients no longer receive a `409` on concurrent activation.
 
 ### Requirement: Reopening the active patch note
 
-**Reason**: Replaced by "Browsing patch-note history in the dialog": "What's
-new" opens the whole visible history instead of one active patch note.
+**Reason**: Replaced by "Browsing the announced package in the dialog":
+"What's new" opens the last announced package instead of one active patch
+note.
 
 **Migration**: None for users; the entry keeps its place and label.
 
@@ -632,8 +644,9 @@ new" opens the whole visible history instead of one active patch note.
 has seen is tracked per announcement, not per patch note. Replaced by
 "Recording that an announcement was seen".
 
-**Migration**: Existing dismissals are discarded. No announcement is pending
-after the upgrade, so no user gets a dialog until an administrator announces.
+**Migration**: Existing dismissals are discarded. The package created by the
+upgrade is pending for nobody, so no user gets a dialog until an administrator
+announces.
 
 ### Requirement: Patch-note dialog at application load
 
@@ -651,7 +664,9 @@ cannot drop scenarios, so it is replaced under a new name.
 
 ### Requirement: Announcement activation history
 
-**Reason**: Replaced by "Announcement activation and announcing history": the history also holds `announced` and `unannounced` events, and enabling a patch note no longer deactivates another. A modified requirement
-cannot drop scenarios, so it is replaced under a new name.
+**Reason**: Replaced by "Exposure history": the history holds one line per
+exposure (a banner activation, a patch-note announcement) instead of one line
+per event. A modified requirement cannot drop scenarios, so it is replaced
+under a new name.
 
 **Migration**: None beyond what the replacing requirement states.

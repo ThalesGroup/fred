@@ -20,7 +20,6 @@
 - [x] 4.2 Replace `GET /announcements/patch-note` and `ActivePatchNote` with `GET /announcements/patch-notes` returning `PatchNoteHistory { patch_notes, pending_announcement_id }`; verify with tests for order, hidden notes left out, no announcement, pending per caller, null when nothing is visible, and `401` when unauthenticated
 - [x] 4.3 Replace `PUT /announcements/{id}/dismissal` with `PUT /announcements/patch-note-announcements/{id}/seen` (idempotent, `404` on an id that is not an `announced` event, never moves a user back to an older announcement); verify with tests, including "a newer announcement made meanwhile stays pending" and "a record applies to the caller only"
 - [x] 4.4 Verify with tests that creating, editing, deleting, reordering and toggling patch notes leave every caller's `pending_announcement_id` unchanged, as long as one patch note stays visible
-- [x] 4.7 When a toggle-off or a delete leaves no visible patch note and an announcement is current, append an `unannounced` event in the same transaction (design.md decision 4b); verify with tests that nothing is pending afterwards for any user, including once a patch note is visible again, that the admin read returns null, that a new announcement is pending for everyone, that hiding one of several visible notes cancels nothing, and that nothing is appended when there is nothing to cancel
 - [x] 4.5 Swap the user-deletion cleanup in `users/api.py` to the per-user row; verify `test_user_delete_route.py` passes
 - [x] 4.6 Run `make code-quality` and `make test` in `apps/control-plane-backend`, plus `ruff --select I` and basedpyright as CI does; verify all are green
 
@@ -61,3 +60,23 @@
 - [ ] 9.1 Warn the owner, then run the root `make code-quality` and the frontend `make test`; restart Vite afterwards; verify all are green
 - [ ] 9.2 Manual check on a local stack: create three patch notes (off), turn two on, reorder by mouse and by keyboard, confirm no dialog at sign-in, announce, confirm the dialog opens once per user on position 1 with navigation, confirm editing and toggling do not reopen it, turn all off and confirm "What's new" disappears, the button is disabled and its last-use text is gone, then turn one on again and confirm no dialog opens for a user who had not seen the announcement
 - [ ] 9.3 Run the author review from `AGENTS.md` and record exact test evidence in `verification.md`; verify every spec scenario maps to a test or a recorded manual check
+
+## 10. Rework: announced packages and exposure history
+
+Supersedes, where they differ, tasks 4.1, 4.2, 4.4, 5.3, 6.4, 6.6, 7.2 and 8.4
+(owner decisions in design.md): the cancellation on hiding the last visible
+patch note and its `unannounced` event are removed.
+
+- [ ] 10.1 Model: replace `AnnouncementActivationEventRow` by the exposure row (`platform_announcement_exposure`, design.md decision 3) and rename the seen row's column to `announcement_id`; verify the model and ownership tests pass
+- [ ] 10.2 Add the second linear migration `a6c1d94e27b3` on `e5ff6d80cc9f` as in design.md "Migration Plan", leaving `e5ff6d80cc9f` untouched; verify `alembic heads` shows one head and add migration tests on SQLite for the banner pairing, the lines without package, the first package pending for nobody, the seen column, and a downgrade/upgrade round trip
+- [ ] 10.3 Banners: enabling inserts an exposure line, disabling or deleting ends it; toggling, creating or deleting a patch note writes none; verify with tests, including no-op toggle, re-enable starting a second line and a rolled-back change
+- [ ] 10.4 Announce: freeze the included patch notes in order (title and body, every language) as a package on a new line and end the previous one, in one transaction; `409` when nothing is included; verify with tests that the package survives edits, reorders, toggles and deletions of the live notes, and that a second announcement is pending for users who saw the first
+- [ ] 10.5 Add `DELETE /admin/platform/announcements/patch-notes/announcement` (withdraw: ends the line in effect, audit record, `404` when none); verify with tests that nothing is delivered or pending afterwards and that the admin read returns null
+- [ ] 10.6 `GET /announcements/patch-notes` returns the package in effect as `PatchNoteSnapshot[]` with the caller's `pending_announcement_id`; the seen route accepts announced packages only; verify with tests for per-user pending, a late record, an unknown id and a line without package
+- [ ] 10.7 History: `GET /admin/platform/announcements/activation-history` returns `AnnouncementExposure[]`; add `GET /admin/platform/announcements/patch-notes/announcements/{id}` returning the package of a line (`404` when unknown or without package); verify with tests, including `403` for a non-administrator
+- [ ] 10.8 Delete the event log, the cancellation and the `announced` / `unannounced` actions; run ruff, ruff format, `ruff --select I`, basedpyright and the offline tests; verify all are green
+- [ ] 10.9 Regenerate the client, update subsection 61.1 of `CONTROL-PLANE-PRODUCT-CONTRACT.md`, the migration note and `authz-endpoint-matrix.yaml`; verify the migration-note check and the endpoint-matrix test pass
+- [ ] 10.10 Frontend: read `PatchNoteSnapshot[]` in the dialog, gate and "What's new"; rename the seen argument; reword the toggle ("included in the next announcement") and the announce confirmation (list of included notes); verify with the existing component tests
+- [ ] 10.11 Frontend: "Withdraw the current announcement" with its confirmation, shown while an announcement is in effect; verify with tests for confirm, cancel and absence when none is in effect
+- [ ] 10.12 Frontend: history table by exposure (type, title with "+ N others", activation, deactivation, author), filter by type, and opening a line's package in the dialog; no action column; verify with `ActivationHistory.test.tsx`, including a line without package
+- [ ] 10.13 Update Help Center, `COMPONENT-UX.md` and the locales for the wording above; verify `fr` and `en` match
