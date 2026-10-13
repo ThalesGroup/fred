@@ -41,7 +41,7 @@ interface UserTurnProps {
   /** Takes the turn's own values rather than a closure, so the caller can
    *  hand down one stable callback for every row — an arrow built per message
    *  would defeat this component's memo on every streamed frame. */
-  onOpenCommand?: (turn: { text: string; command: CommandDescriptor }) => void;
+  onOpenCommand?: (turn: { text: string; command: CommandDescriptor; promptIndex?: number }) => void;
 }
 
 // Memoized alongside AssistantTurn — see #2221.
@@ -61,9 +61,12 @@ export const UserTurn = memo(function UserTurn({
   const { copied, confirmCopied } = useCopyConfirmation();
   const invocationText = skillInvocationsText(text, skillNames ?? (skillName ? [skillName] : []), command);
 
-  const openCommand = useCallback(() => {
-    if (command && onOpenCommand) onOpenCommand({ text, command });
-  }, [command, onOpenCommand, text]);
+  const openCommand = useCallback(
+    (promptIndex?: number) => {
+      if (command && onOpenCommand) onOpenCommand({ text, command, promptIndex });
+    },
+    [command, onOpenCommand, text],
+  );
 
   const copyAction = useCallback(() => {
     // Same call AssistantTurn makes when it has no rendered node to serialise:

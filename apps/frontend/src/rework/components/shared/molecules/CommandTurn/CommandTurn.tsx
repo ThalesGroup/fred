@@ -19,7 +19,8 @@ import badgeStyles from "../SkillBadge/SkillBadge.module.css";
 import styles from "./CommandTurn.module.css";
 
 interface CommandTurnProps {
-  command: CommandDescriptor;
+  /** The turn's descriptor, or one entry of its prompt list. */
+  command: Pick<CommandDescriptor, "command" | "appended_text">;
   inline?: boolean;
   /** Opens the prompt this turn actually sent. Omit to render it inert. */
   onOpen?: () => void;
@@ -36,7 +37,7 @@ export function CommandTurn({ command, onOpen, inline = false }: CommandTurnProp
     <button
       type="button"
       className={styles.command}
-      onClick={onOpen}
+      onClick={onOpen && (() => onOpen())}
       disabled={!onOpen}
       aria-label={
         appended

@@ -22,7 +22,7 @@
 import { act, useRef, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { selectedSkillText } from "@rework/utils/skillInvocation";
+import { assemblePromptTurn, selectedSkillText } from "@rework/utils/skillInvocation";
 import { useAssistantCopyInterception } from "@hooks/useAssistantCopyInterception";
 import { UserTurn } from "./UserTurn";
 
@@ -236,6 +236,88 @@ describe("UserTurn copy affordance (#2359)", () => {
       expect(onEdit).toHaveBeenCalledWith(draft);
     },
   );
+
+  describe("a turn listing several prompt commands", () => {
+    const draft = "First /summary then /tone please /verify-answer";
+    const sent = assemblePromptTurn(draft, [
+      { command: "summary", promptId: "p-s", promptName: "Summary", from: 6, to: 14, text: "Summarise the document." },
+      { command: "tone", promptId: "p-t", promptName: "Tone", from: 20, to: 25, text: "Use a formal tone." },
+    ]);
+    const promptBadges = () =>
+      Array.from(container.querySelectorAll<HTMLButtonElement>("[data-skill-message] button[class*=command]"));
+
+    it("shows one badge per prompt at its position, with the skill badge, and never the prompt text", () => {
+      render(<UserTurn text={sent.text} command={sent.command} skillNames={["verify-answer"]} />);
+      const body = container.querySelector("[data-skill-message]")!;
+      expect(body.textContent).toBe("First edit_note/summary then edit_note/tone please /verify-answer");
+      expect(
+        Array.from(body.querySelectorAll<HTMLElement>("[data-surface=bubble]")).map((badge) => badge.dataset.kind),
+      ).toEqual(["prompt", "prompt", "skill"]);
+      expect(promptBadges().map((badge) => badge.getAttribute("aria-label"))).toEqual([
+        "chatbot.commandTurn.open",
+        "chatbot.commandTurn.open",
+      ]);
+      expect(container.textContent).not.toContain("Summarise the document.");
+      expect(container.textContent).not.toContain("Use a formal tone.");
+    });
+
+    it("opens each badge with its own place in the list", async () => {
+      const onOpenCommand = vi.fn();
+      render(<UserTurn text={sent.text} command={sent.command} onOpenCommand={onOpenCommand} />);
+      await click(promptBadges()[1]);
+      expect(onOpenCommand).toHaveBeenLastCalledWith({ text: sent.text, command: sent.command, promptIndex: 1 });
+      await click(promptBadges()[0]);
+      expect(onOpenCommand).toHaveBeenLastCalledWith({ text: sent.text, command: sent.command, promptIndex: 0 });
+    });
+
+    it("copies and edits the typed line", async () => {
+      const onEdit = vi.fn();
+      render(<UserTurn text={sent.text} command={sent.command} skillNames={["verify-answer"]} onEdit={onEdit} />);
+      await click(copyButton());
+      expect(writeText).toHaveBeenCalledWith(draft);
+      await click(buttons()[0]);
+      expect(onEdit).toHaveBeenCalledWith(draft);
+      const range = document.createRange();
+      range.selectNodeContents(container.querySelector("[data-skill-message]")!);
+      expect(selectedSkillText(range, container)).toBe(draft);
+    });
+
+    it("shows the same command twice as two badges", () => {
+      const line = "/summary of A, /summary of B";
+      const twice = assemblePromptTurn(line, [
+        { command: "summary", promptId: "p-s", promptName: "Summary", from: 0, to: 8, text: "Summarise." },
+        { command: "summary", promptId: "p-s", promptName: "Summary", from: 15, to: 23, text: "Summarise." },
+      ]);
+      render(<UserTurn text={twice.text} command={twice.command} />);
+      expect(container.querySelector("[data-skill-message]")!.textContent).toBe(
+        "edit_note/summary of A, edit_note/summary of B",
+      );
+    });
+
+    it("renders from the single fields when the list does not fit the stored text", async () => {
+      const onOpenCommand = vi.fn();
+      const command = {
+        ...sent.command,
+        prompts: sent.command.prompts!.map((entry) => ({ ...entry, text_offset: entry.text_offset + 500 })),
+      };
+      render(<UserTurn text={sent.text} command={command} onOpenCommand={onOpenCommand} />);
+      expect(container.querySelector("[data-skill-message]")!.textContent).toBe(
+        "First edit_note/summary then /tone please /verify-answer",
+      );
+      expect(promptBadges()).toHaveLength(1);
+      await click(promptBadges()[0]);
+      expect(onOpenCommand).toHaveBeenCalledWith({ text: sent.text, command });
+      expect(onOpenCommand.mock.calls[0][0].promptIndex).toBeUndefined();
+    });
+
+    it("renders a turn stored with the single fields only as one badge", () => {
+      const { prompts: _prompts, ...single } = sent.command;
+      render(<UserTurn text={sent.text} command={single} />);
+      expect(container.querySelector("[data-skill-message]")!.textContent).toBe(
+        "First edit_note/summary then /tone please /verify-answer",
+      );
+    });
+  });
 
   it("leaves an unattributed skill mention as ordinary text", () => {
     render(<UserTurn text="/skill verify-answer" />);
