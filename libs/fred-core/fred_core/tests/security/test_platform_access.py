@@ -35,7 +35,7 @@ from fred_core.security.platform_access.rules import (
 )
 from fred_core.security.platform_access.store import PlatformAccessStore
 from fred_core.security.rebac.noop_engine import NoopRebacEngine
-from fred_core.security.rebac.rebac_engine import RebacReference
+from fred_core.security.rebac.rebac_engine import OrganizationPermission, RebacReference
 from fred_core.teams.team_metatada_models import TeamMetadataRow
 from fred_core.users.user_models import UserRow
 
@@ -68,11 +68,14 @@ class MembershipEngine(NoopRebacEngine):
     def __init__(self):
         super().__init__()
         self.members: dict[str, set[str]] = {}
+        self.admins: set[str] = set()
         self.unavailable = False
 
     async def _has_permission_raw(self, subject, permission, resource, **kwargs):
         if self.unavailable:
             raise RuntimeError("unavailable")
+        if permission == OrganizationPermission.CAN_MANAGE_PLATFORM:
+            return subject.id in self.admins
         return resource.id in self.members.get(subject.id, set())
 
     async def _lookup_resources_raw(self, subject, permission, resource_type, **kwargs):
@@ -154,7 +157,6 @@ def test_administration_availability_and_bounded_authority(monkeypatch, director
     from fred_pod.security.structure import SecurityConfiguration
 
     from fred_core.security.platform_access import access_control
-    from fred_core.security.whitelist_access_control import access_control as legacy
 
     security = SecurityConfiguration.model_validate(
         {
@@ -179,7 +181,6 @@ def test_administration_availability_and_bounded_authority(monkeypatch, director
     )
     monkeypatch.setattr(access_control, "_available", access_control._available)
     monkeypatch.setattr(access_control, "_installed", access_control._installed)
-    monkeypatch.setattr(legacy, "is_whitelist_active", lambda: False)
     access_control.configure_platform_access(security)
     security.m2m.enabled = False
     access_control.configure_platform_access(security)
@@ -190,7 +191,6 @@ def test_administration_availability_and_bounded_authority(monkeypatch, director
     with pytest.raises(ValueError, match="timeout_millisec"):
         access_control.configure_platform_access(security)
     security.rebac.timeout_millisec = 1000
-    monkeypatch.setattr(legacy, "is_whitelist_active", lambda: True)
     access_control.configure_platform_access(security)
     assert access_control.platform_access_available()
 
@@ -276,6 +276,19 @@ async def test_live_independent_sources_and_revocation_across_instances(access):
 
 
 @pytest.mark.asyncio
+async def test_platform_admin_remains_admitted_until_live_role_removal(access):
+    user = person("other")
+    asserted = cast(Principal, SimpleNamespace(uid=user.uid))
+    assert not await access.admitted(user)
+    access.rebac.admins.add(user.uid)
+    assert await access.admitted(user)
+    assert await access.admitted(asserted)
+    access.rebac.admins.remove(user.uid)
+    assert not await access.admitted(user)
+    assert not await access.admitted(asserted)
+
+
+@pytest.mark.asyncio
 async def test_authority_failure_is_unavailable_not_denial(access):
     user = person("other")
     async with access.store.mutation() as session:
@@ -313,10 +326,8 @@ async def test_normal_cached_and_query_only_principal_resolution_cannot_skip_gat
     monkeypatch.setattr(oidc, "decode_jwt", lambda token: user)
     active = AsyncMock()
     monkeypatch.setattr(oidc, "require_active_subject", active)
-    monkeypatch.setattr(
-        oidc, "resolve_delegated_principal", AsyncMock(return_value=None)
-    )
-    monkeypatch.setattr(oidc, "is_whitelist_active", lambda: False)
+    resolve = AsyncMock(return_value=None)
+    monkeypatch.setattr(oidc, "resolve_delegated_principal", resolve)
     request = Request(
         {
             "type": "http",
@@ -338,6 +349,16 @@ async def test_normal_cached_and_query_only_principal_resolution_cannot_skip_gat
     with pytest.raises(HTTPException):
         await oidc.get_current_user_without_gcu(request, "cached-token")
     assert active.await_count == 4
+    async with access.store.mutation() as session:
+        (await access.store.settings(session)).filtering_enabled = False
+    assert await oidc.resolve_request_principal(request, user) is user
+    from fred_core.security.delegation import AssertedUser
+
+    delegated = AssertedUser(
+        uid=str(uuid4()), client_id="backend", run_id="run", agent_id="agent"
+    )
+    resolve.return_value = delegated
+    assert await oidc.resolve_request_principal(request, user) is delegated
 
 
 @pytest.mark.asyncio
@@ -554,7 +575,6 @@ async def test_pure_workload_mount_defers_account_status_but_tool_request_does_n
     monkeypatch.setattr(
         oidc, "resolve_delegated_principal", AsyncMock(return_value=None)
     )
-    monkeypatch.setattr(oidc, "is_whitelist_active", lambda: False)
     active = AsyncMock(side_effect=HTTPException(503, "account_status_unavailable"))
     monkeypatch.setattr(oidc, "require_active_subject", active)
     request = Request(

@@ -270,6 +270,26 @@ class BaseInputProcessor(ABC):
         """
 
 
+def read_text_with_fallback(file_path: Path) -> str:
+    """
+    Read a plain-text file whose encoding is not guaranteed to be UTF-8.
+
+    Windows tools still write cp1252 ("ANSI"), invalid as UTF-8 as soon as it
+    holds an accent; latin-1 decodes any byte, so this never fails. Newlines are
+    normalised as text-mode `open()` would.
+    """
+    raw = file_path.read_bytes()
+    for encoding in ("utf-8-sig", "cp1252"):
+        try:
+            text = raw.decode(encoding)
+            break
+        except UnicodeDecodeError:
+            continue
+    else:
+        text = raw.decode("latin-1")
+    return text.replace("\r\n", "\n").replace("\r", "\n")
+
+
 class BaseMarkdownProcessor(BaseInputProcessor):
     """For processors that convert to Markdown."""
 

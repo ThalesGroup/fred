@@ -45,8 +45,9 @@ still reopens it. Existing banners still show as before.
 
 ## Rollback
 
-With traffic paused and updated readers stopped, downgrade the control plane
-to `c82f6a91d043` and restart the previous images. The downgrade deletes every
+Follow the coordinated release rollback first. With traffic paused and updated
+readers stopped, a downgrade to `c82f6a91d043` also removes all later revisions,
+including creation-assistant settings, before the previous images restart. The downgrade deletes every
 patch note, then drops the new columns, the index, the dismissals and the
 activation history.
 

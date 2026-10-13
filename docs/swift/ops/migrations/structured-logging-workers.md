@@ -2,6 +2,7 @@
 schema: 1
 title: "Use scoped diagnostic context in ingestion workers"
 impact: minor
+after: [structured-logging-propagation]
 configuration: none
 configuration_reason: "Workers now honor the existing app.log_format setting; reference values already select JSON and omitted local values remain text. No new configuration is required."
 ---
@@ -11,7 +12,7 @@ Knowledge Flow and Control Plane worker entrypoints, durable ingestion submissio
 
 ## Prerequisites
 
-Deploy the preceding logging layers. Keep existing shared-storage, scheduler authorization and Temporal namespace/queue configuration. No database schema change is required.
+Prepare the shared logging configuration and collectors first. Follow the coordinated release sequence: upgrade workers before API submissions, even though the API logging contracts are described earlier in this guide. Keep existing shared-storage, scheduler authorization and Temporal namespace/queue configuration. No database schema change is required.
 
 ## Configuration
 

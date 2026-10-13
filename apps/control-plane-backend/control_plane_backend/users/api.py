@@ -39,12 +39,18 @@ from fred_core import (
 )
 from fred_core.common import personal_team_id
 from fred_core.security.oidc import get_current_user_before_gcu
+from fred_core.security.platform_access.access_control import (
+    get_platform_access,
+    platform_access_available,
+)
+from fred_core.security.platform_access.store import PlatformAccessStore
 from fred_core.users.store.postgres_user_store import get_user_store
 from pydantic import BaseModel
 
 from control_plane_backend.announcements.store import AnnouncementStore
 from control_plane_backend.app.dependencies import get_application_container
 from control_plane_backend.bootstrap.store import PlatformBootstrapStore
+from control_plane_backend.platform_access.service import mark_user_join_history_deleted
 from control_plane_backend.prompts.store import PromptStore
 from control_plane_backend.teams.dependencies import (
     TeamServiceDependencies,
@@ -121,6 +127,16 @@ TeamDependencies = Annotated[
 
 def _get_rebac_engine(request: Request) -> RebacEngine:
     return get_application_container(request).get_rebac_engine()
+
+
+async def _mark_user_join_history_deleted(request: Request, user_id: str) -> None:
+    if platform_access_available():
+        await mark_user_join_history_deleted(get_platform_access().store, user_id)
+    else:
+        store = PlatformAccessStore(
+            get_application_container(request).get_pg_async_engine()
+        )
+        await mark_user_join_history_deleted(store, user_id, table_may_be_missing=True)
 
 
 def _get_platform_bootstrap_store(request: Request) -> PlatformBootstrapStore:
@@ -411,6 +427,7 @@ async def create_user(
 )
 async def delete_user(
     user_id: Annotated[str, Path(min_length=1)],
+    request: Request,
     deps: UserDependencies,
     rebac: Annotated[RebacEngine, Depends(_get_rebac_engine)],
     bootstrap_store: Annotated[
@@ -433,6 +450,7 @@ async def delete_user(
         if not rebac.requires_active_accounts:
             raise AccountSuspensionDisabledError()
         await rebac.suspend_account(user_id)
+        await _mark_user_join_history_deleted(request, user_id)
         return
 
     admin = _get_keycloak_admin_for_user_operations(deps)
@@ -445,7 +463,12 @@ async def delete_user(
     await prompt_store.delete_favorites_for_user(user_id)
     await announcement_store.delete_dismissals_for_user(user_id)
     await remove_user_avatar(user_id, deps)
-    await delete_user_from_service(admin, user_id)
+    try:
+        await delete_user_from_service(admin, user_id)
+    except UserNotFoundError:
+        await _mark_user_join_history_deleted(request, user_id)
+        raise
+    await _mark_user_join_history_deleted(request, user_id)
 
 
 @router.post(

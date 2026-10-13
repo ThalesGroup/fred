@@ -2,6 +2,7 @@
 schema: 1
 title: "Make agent names unique within each team"
 impact: minor
+after: [2965-platform-access-planning]
 configuration: none
 configuration_reason: "No configuration key, chart value or permission changes; the rule is enforced by a database index and the control-plane API."
 ---

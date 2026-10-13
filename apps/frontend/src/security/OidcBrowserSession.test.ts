@@ -314,7 +314,7 @@ describe("OIDC renewal with real user storage", () => {
 });
 
 it("preserves a Free enrollment route through the OIDC round trip", async () => {
-  const target = "/fred/join-free/opaque-link";
+  const target = "/fred/join/opaque-link";
   window.history.replaceState({}, "", target);
   const session = newSession();
   const signin = vi.spyOn(session.manager, "signinRedirect").mockResolvedValue();
@@ -370,7 +370,7 @@ it("rejects external callback destinations", async () => {
 
 it("keeps invitation capabilities out of the provider authorization state", async () => {
   const capability = "synthetic-capability-token".padEnd(43, "x");
-  const target = `/fred/join-free/${capability}?source=invitation#terms`;
+  const target = `/fred/join/${capability}?source=invitation#terms`;
   window.history.replaceState({}, "", target);
   const session = newSession();
   const signin = vi.spyOn(session.manager, "signinRedirect").mockResolvedValue();

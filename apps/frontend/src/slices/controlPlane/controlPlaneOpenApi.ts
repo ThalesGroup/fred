@@ -175,6 +175,19 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    listPlatformEnrollmentJoinersControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdJoinersGet:
+      build.query<
+        ListPlatformEnrollmentJoinersControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdJoinersGetApiResponse,
+        ListPlatformEnrollmentJoinersControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdJoinersGetApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/control-plane/v1/admin/platform/access/teams/${queryArg.teamId}/enrollment-links/${queryArg.linkId}/joiners`,
+          params: {
+            offset: queryArg.offset,
+            limit: queryArg.limit,
+          },
+        }),
+      }),
     deleteInactivePlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksInactiveDelete:
       build.mutation<
         DeleteInactivePlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksInactiveDeleteApiResponse,
@@ -2088,6 +2101,15 @@ export type ListPlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTea
   limit?: number;
   status?: ("active" | "suspended" | "expired" | "revoked") | null;
 };
+export type ListPlatformEnrollmentJoinersControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdJoinersGetApiResponse =
+  /** status 200 Successful Response */ PlatformEnrollmentJoinersPage;
+export type ListPlatformEnrollmentJoinersControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdJoinersGetApiArg =
+  {
+    teamId: string;
+    linkId: string;
+    offset?: number;
+    limit?: number;
+  };
 export type DeleteInactivePlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksInactiveDeleteApiResponse =
   /** status 200 Successful Response */ DeletedPlatformEnrollmentLinks;
 export type DeleteInactivePlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksInactiveDeleteApiArg =
@@ -3375,7 +3397,7 @@ export type SetPlatformFiltering = {
   expected_revision?: number | null;
 };
 export type AdmissionSource = {
-  kind: "attribute" | "manual" | "t0" | "team" | "free";
+  kind: "admin" | "attribute" | "manual" | "t0" | "team" | "free";
   team_id?: string | null;
   team_name?: string | null;
   granted_by?: string | null;
@@ -3467,6 +3489,18 @@ export type PlatformEnrollmentLinksPage = {
   items: PlatformEnrollmentLinkInfo[];
   total: number;
   inactive_count: number;
+};
+export type PlatformEnrollmentJoiner = {
+  user_id: string;
+  username: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  joined_at: string;
+  deleted: boolean;
+};
+export type PlatformEnrollmentJoinersPage = {
+  items: PlatformEnrollmentJoiner[];
+  total: number;
 };
 export type DeletedPlatformEnrollmentLinks = {
   deleted_count: number;
@@ -5423,6 +5457,8 @@ export const {
   useGeneratePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinkPostMutation,
   useListPlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksGetQuery,
   useLazyListPlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksGetQuery,
+  useListPlatformEnrollmentJoinersControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdJoinersGetQuery,
+  useLazyListPlatformEnrollmentJoinersControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdJoinersGetQuery,
   useDeleteInactivePlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksInactiveDeleteMutation,
   useRevealPlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdRevealPostMutation,
   useRevokePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdDeleteMutation,

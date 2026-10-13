@@ -20,7 +20,7 @@ export function SkillBadge({ name, description, onOpen }: SkillBadgeProps) {
     <>
       <Icon category="outlined" type="customPlatformSkill" />
       <span className={styles.name} data-skill-name={name}>
-        {name}
+        /{name}
       </span>
     </>
   );
@@ -29,6 +29,8 @@ export function SkillBadge({ name, description, onOpen }: SkillBadgeProps) {
       <button
         type="button"
         className={`${styles.badge} ${styles.action}`}
+        data-kind="skill"
+        data-surface="bubble"
         onClick={() => onOpen(name)}
         aria-label={t("chatbot.skills.open", { name })}
         title={hint}
@@ -38,7 +40,14 @@ export function SkillBadge({ name, description, onOpen }: SkillBadgeProps) {
     );
   }
   return (
-    <span className={styles.badge} role="group" aria-label={t("chatbot.skills.badge", { name })} title={hint}>
+    <span
+      className={styles.badge}
+      data-kind="skill"
+      data-surface="bubble"
+      role="group"
+      aria-label={t("chatbot.skills.badge", { name })}
+      title={hint}
+    >
       {content}
     </span>
   );

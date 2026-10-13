@@ -2,6 +2,7 @@
 schema: 1
 title: "Use request and operation references in API diagnostics"
 impact: minor
+after: [structured-logging-output]
 configuration: none
 configuration_reason: "Existing logging configuration is retained; HTTP completion fields and response reference headers change."
 ---
@@ -45,4 +46,4 @@ Roll back this layer to restore previous access logging. No database migration o
 
 ## Limitations
 
-No deployment or collector canary was performed. This layer does not propagate context across services or persist ingestion context for workers; the following layers add those boundaries.
+No deployment or collector canary was performed. The following procedures cover cross-service propagation and persisted ingestion context, both included in this release.
