@@ -8,7 +8,7 @@ Run from `apps/frontend` on 2026-10-13, branch
 | `npx tsc --noEmit -p .` | exit 0 |
 | `npx eslint` on the 11 touched `.ts`/`.tsx` files | exit 0, no warning |
 | `npx prettier --check` on the 19 touched frontend files | all formatted |
-| `npx vitest run` (full suite) | 329 files passed, 1 skipped; 3966 tests passed, 7 skipped |
+| `npx vitest run` (full suite) | 329 files passed, 1 skipped; 3968 tests passed, 7 skipped |
 | `openspec validate section-composer-command-menu --strict` | valid |
 | `scripts/migration_guides.py check-pr --base origin/swift --worktree` | valid, 1 new declaration |
 
@@ -78,8 +78,18 @@ prompt one character at a time, at the start and in the middle of a draft,
 with and without text after: no token while the name is being typed
 (Backspace edits one character), then Backspace down to the token keeps it,
 one arrow press crosses it, Backspace removes it whole, and Delete before it
-does the same. With the token at the very end of the draft the command menu is
-open again above it, as it already was for a picked prompt.
+does the same.
+
+Menu on a token at the end of the draft (owner decision: always closed): the
+panel now closes on any rendered prompt token, as it did for skills.
+`useComposerCommands.test.tsx` covers a picked and a typed prompt: Backspace
+on the trailing space keeps the token and the menu closed, a space or text
+typed again keeps it closed, and ` /re` opens the menu with `review` only.
+The recall test host in `useComposerRecall.test.tsx` was rewired to
+`composerValue` / `onComposerChange`, as `ManagedChatPage` wires the field; it
+passed the raw `input` / `setInput`, which kept a recalled selection alive
+across edits and so showed a token the page would not. Its assertions are
+unchanged: a recalled command keeps the menu shut, and editing it opens it.
 
 Not proven: clicking on either side of a token and mouse selection (no layout
 in the test environment), and the caret sitting between a token and the

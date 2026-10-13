@@ -137,7 +137,7 @@ When the chat composer is empty and focused, the text caret SHALL be fully visib
 
 ### Requirement: Composer tokens behave as one block
 
-In the chat composer, a completed prompt command or platform skill token SHALL behave as a single unit of text. The Left and Right arrow keys SHALL move the caret across a token in one press, and extending a selection SHALL take a token as a whole. Backspace with the caret right after a token, and Delete with the caret right before it, SHALL remove the whole invocation, leaving no stray slash and no doubled or leading space, and SHALL NOT reopen the command menu. Undo SHALL restore the removed token with its selection identity. Tokens next to each other SHALL each behave independently. Away from a token, the same keys SHALL keep their ordinary one-character behaviour.
+In the chat composer, a completed prompt command or platform skill token SHALL behave as a single unit of text. The Left and Right arrow keys SHALL move the caret across a token in one press, and extending a selection SHALL take a token as a whole. Backspace with the caret right after a token, and Delete with the caret right before it, SHALL remove the whole invocation, leaving no stray slash and no doubled or leading space, and SHALL NOT reopen the command menu. Undo SHALL restore the removed token with its selection identity. Tokens next to each other SHALL each behave independently. The command menu SHALL stay closed while the caret sits right after a rendered token, prompt or skill alike, picked or typed by hand, including a token at the very end of the draft; it SHALL open as usual for a new `/` typed elsewhere or for a name still being typed with no token yet. Away from a token, the same keys SHALL keep their ordinary one-character behaviour.
 
 #### Scenario: Arrow keys jump over a token
 
@@ -165,6 +165,14 @@ In the chat composer, a completed prompt command or platform skill token SHALL b
 - **WHEN** the user presses Backspace once
 - **THEN** only the space is removed and the token is still shown
 - **AND** a second Backspace removes the whole token
+
+#### Scenario: The menu stays closed on a token at the end of the draft
+
+- **GIVEN** a prompt token, picked in the menu or typed by hand, followed by a single space
+- **WHEN** the user removes that space with Backspace
+- **THEN** the token is still shown and the command menu is closed
+- **AND** typing a space or text after it keeps the menu closed
+- **AND** typing a new `/re` further on opens the menu for that new command only
 
 #### Scenario: Two tokens side by side
 
