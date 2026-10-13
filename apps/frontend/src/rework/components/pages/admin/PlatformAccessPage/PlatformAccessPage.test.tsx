@@ -18,6 +18,9 @@ const state = vi.hoisted(() => ({
     },
   ] as PlatformAccessUser[],
   searchUsers: vi.fn(),
+  teamQueries: vi.fn(),
+  translated: vi.fn(),
+  importQueries: vi.fn(),
   teams: [{ team_id: "demo", name: "Demo", allowed: false, free: true }] as PlatformAccessTeam[],
   picked: ["first", "second"] as string[],
   usersTotal: undefined as number | undefined,
@@ -49,7 +52,10 @@ const state = vi.hoisted(() => ({
 // Keys only, plus the team names a string is given so grouped lines can be told apart.
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string, options?: { teams?: string }) => (options?.teams ? `${key}[${options.teams}]` : key),
+    t: (key: string, options?: { teams?: string }) => {
+      state.translated(key, options);
+      return options?.teams ? `${key}[${options.teams}]` : key;
+    },
     i18n: { language: "en" },
   }),
 }));
@@ -94,15 +100,21 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
         : { total: state.usersTotal ?? state.users.length, items: state.users },
     };
   },
-  usePlatformAccessT0Query: () => ({
-    isFetching: state.importFetching,
-    isError: state.importError,
-    refetch: state.retryImport,
-    data: state.importMissing
-      ? undefined
-      : { candidates: 1, matching: 0, completed_at: state.completed ? "2026-01-01" : null },
-  }),
-  usePlatformAccessTeamsQuery: () => ({ data: state.teams }),
+  usePlatformAccessT0Query: (_args: unknown, options: { skip: boolean }) => {
+    state.importQueries(options);
+    return {
+      isFetching: state.importFetching,
+      isError: state.importError,
+      refetch: state.retryImport,
+      data: state.importMissing
+        ? undefined
+        : { candidates: 1, matching: 0, completed_at: state.completed ? "2026-01-01" : null },
+    };
+  },
+  usePlatformAccessTeamsQuery: (_args: unknown, options: { skip: boolean }) => {
+    state.teamQueries(options);
+    return options.skip ? {} : { data: state.teams };
+  },
   useSetPlatformFilteringMutation: () => [state.filter],
   useGrantPlatformUsersMutation: () => [state.bulk],
   useRevokePlatformUserMutation: () => [state.revoke],
@@ -242,6 +254,20 @@ it("lists individual exceptions without a search and requests them only while th
   expect(state.searchUsers.mock.lastCall?.[1]).toEqual({ skip: true });
 });
 
+it("requests the teams listing and the import preview only for the tab that shows them", () => {
+  act(() => root.render(<PlatformAccessPage />));
+  const skipped = (query: typeof state.teamQueries) => query.mock.lastCall?.[0].skip;
+  expect(state.teamQueries.mock.calls.every(([options]) => options.skip)).toBe(true);
+  expect(state.importQueries.mock.calls.every(([options]) => options.skip)).toBe(true);
+  openTab("users");
+  expect([skipped(state.teamQueries), skipped(state.importQueries)]).toEqual([true, false]);
+  openTab("teams");
+  expect([skipped(state.teamQueries), skipped(state.importQueries)]).toEqual([false, true]);
+  expect(host.querySelector('[id$="-teams-panel"]')?.textContent).toContain("Demo");
+  openTab("rules");
+  expect([skipped(state.teamQueries), skipped(state.importQueries)]).toEqual([true, true]);
+});
+
 it("waits for a pause in typing, trims the search and restarts at the first page", () => {
   state.usersTotal = 60;
   render("");
@@ -341,7 +367,11 @@ it("shows when and how each individual access was added, and one chip detailing 
     "rework.platformAccess.otherAccess.team[Demo, Labs]",
     "rework.platformAccess.otherAccess.free[Open]",
   ];
-  expect(trigger.getAttribute("aria-label")).toBe(`rework.platformAccess.otherAccess.label : ${grouped.join(" ; ")}`);
+  // The mocked translation returns keys, so the localized separator and sentence show up as their keys.
+  expect(state.translated).toHaveBeenCalledWith("rework.platformAccess.otherAccess.summary", {
+    details: grouped.join("rework.platformAccess.otherAccess.separator"),
+  });
+  expect(trigger.getAttribute("aria-label")).toBe("rework.platformAccess.otherAccess.summary");
   expect(document.querySelector('[role="tooltip"]')).toBeNull();
   act(() => {
     trigger.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
@@ -355,9 +385,10 @@ it("shows when and how each individual access was added, and one chip detailing 
 
   // Only the groups that apply are listed.
   const chloe = cells("Chloe")[5].querySelector<HTMLElement>('[role="note"]')!;
-  expect(chloe.getAttribute("aria-label")).toBe(
-    "rework.platformAccess.otherAccess.label : rework.platformAccess.otherAccess.free[Open]",
-  );
+  expect(chloe.getAttribute("aria-label")).toBe("rework.platformAccess.otherAccess.summary");
+  expect(state.translated).toHaveBeenCalledWith("rework.platformAccess.otherAccess.summary", {
+    details: "rework.platformAccess.otherAccess.free[Open]",
+  });
 
   const [, , , bobDate, bobOrigin, bobOthers] = cells("Bob");
   expect(bobDate.textContent).toBe(new Date("2025-12-31T08:00:00Z").toLocaleString("en"));
@@ -383,15 +414,45 @@ it("confirms a removal and stays silent on failure", async () => {
   expect(state.success).toHaveBeenCalledTimes(1);
 });
 
-it("steps back a page when a removal empties a later page", () => {
-  state.usersTotal = 26;
+it("steps back a single page when a removal empties the last page", () => {
+  const next = () =>
+    act(() => host.querySelector<HTMLButtonElement>('button[aria-label="dataTable.pagination.next"]')!.click());
+  state.usersTotal = 41;
   render("");
-  act(() => host.querySelector<HTMLButtonElement>('button[aria-label="dataTable.pagination.next"]')!.click());
-  expect(state.searchUsers.mock.lastCall?.[0]).toMatchObject({ offset: 20 });
+  next();
+  next();
+  expect(state.searchUsers.mock.lastCall?.[0]).toMatchObject({ offset: 40 });
+  // The only row of page 3 is removed: the list lands on page 2, not back on page 1.
   state.users = [];
+  state.usersTotal = 40;
+  act(() => root.render(<PlatformAccessPage />));
+  expect(state.searchUsers.mock.lastCall?.[0]).toMatchObject({ offset: 20 });
+  // Same from page 2 of 2: page 1.
   state.usersTotal = 20;
   act(() => root.render(<PlatformAccessPage />));
   expect(state.searchUsers.mock.lastCall?.[0]).toMatchObject({ offset: 0 });
+});
+
+it("changes the users page size from the first page, asking for the new limit", () => {
+  state.usersTotal = 120;
+  render("");
+  act(() => host.querySelector<HTMLButtonElement>('button[aria-label="dataTable.pagination.next"]')!.click());
+  expect(state.searchUsers.mock.lastCall?.[0]).toMatchObject({ offset: 20, limit: 20 });
+  const panel = host.querySelector<HTMLElement>('[id$="-users-panel"]')!;
+  const pageSize = panel.querySelector<HTMLButtonElement>('[aria-label="dataTable.pagination.itemsPerPage"]')!;
+  act(() => pageSize.click());
+  const options = [...document.querySelectorAll<HTMLElement>('[role="option"]')];
+  expect(options.map((option) => option.textContent)).toEqual(["20", "50", "100"]);
+  act(() => options[1].click());
+  expect(state.searchUsers.mock.lastCall?.[0]).toEqual({ offset: 0, limit: 50, query: "", exceptionsOnly: true });
+  expect(pageSize.textContent).toContain("50");
+  // The chosen size survives a visit to another tab.
+  openTab("teams");
+  openTab("users");
+  expect(state.searchUsers.mock.lastCall).toEqual([
+    { offset: 0, limit: 50, query: "", exceptionsOnly: true },
+    { skip: false },
+  ]);
 });
 
 const dialog = () => host.querySelector<HTMLElement>('[data-testid="add-users-dialog"]');
@@ -406,6 +467,34 @@ it("opens the add dialog, grants its selection in one call, confirms and closes"
   expect(state.bulk).toHaveBeenCalledWith({ grantPlatformAccessUsers: { user_ids: ["first", "second"] } });
   expect(state.success).toHaveBeenCalledWith({ summary: "rework.platformAccess.grantedSelected" });
   expect(dialog()).toBeNull();
+});
+
+it("returns to the first page of the unfiltered list after an add, where the newest are listed", async () => {
+  state.usersTotal = 60;
+  render("Al");
+  act(() => host.querySelector<HTMLButtonElement>('button[aria-label="dataTable.pagination.next"]')!.click());
+  expect(state.searchUsers.mock.lastCall?.[0]).toMatchObject({ offset: 20, query: "Al" });
+  act(() => addUsersButton().click());
+  await act(async () => pageButton("Confirm selection").click());
+  expect(state.searchUsers.mock.lastCall?.[0]).toEqual({ offset: 0, limit: 20, query: "", exceptionsOnly: true });
+  expect(host.querySelector<HTMLInputElement>('[id$="-users-panel"] input[type="text"]')!.value).toBe("");
+  // No delayed search brings the old text back.
+  act(() => vi.advanceTimersByTime(300));
+  expect(state.searchUsers.mock.lastCall?.[0]).toMatchObject({ offset: 0, query: "" });
+});
+
+it("keeps the page and the search after a failed add", async () => {
+  state.usersTotal = 60;
+  state.bulk.mockImplementationOnce(() => ({
+    unwrap: async () => {
+      throw new Error("Unsuccessful grant");
+    },
+  }));
+  render("Al");
+  act(() => host.querySelector<HTMLButtonElement>('button[aria-label="dataTable.pagination.next"]')!.click());
+  act(() => addUsersButton().click());
+  await act(async () => pageButton("Confirm selection").click());
+  expect(state.searchUsers.mock.lastCall?.[0]).toMatchObject({ offset: 20, query: "Al" });
 });
 
 it("keeps the add dialog open and stays silent after a failed grant", async () => {
@@ -479,17 +568,17 @@ it("states next to the title whether filtering is on", () => {
 
 it("titles each whitelist tab and describes it above its controls", () => {
   render();
-  expect(host.querySelectorAll("h2")).toHaveLength(0);
+  expect(host.querySelectorAll("h3")).toHaveLength(0);
   for (const [tab, title, hint] of [
     ["users", "rework.platformAccess.whitelistedUsers", "rework.platformAccess.whitelistedUsersHint"],
     ["teams", "rework.platformAccess.whitelistedTeams", "rework.platformAccess.whitelistedTeamsHint"],
   ]) {
     const panel = host.querySelector<HTMLElement>(`[id$="-${tab}-panel"]`)!;
-    expect([...panel.querySelectorAll("h3")].map((node) => node.textContent)).toEqual([title]);
+    expect([...panel.querySelectorAll("h2")].map((node) => node.textContent)).toEqual([title]);
     // Title then description head the block, before any control.
     const header = panel.firstElementChild!;
     expect([...header.children].map((node) => [node.tagName, node.textContent])).toEqual([
-      ["H3", title],
+      ["H2", title],
       ["P", hint],
     ]);
     expect(header.querySelector("input, button")).toBeNull();
@@ -575,6 +664,9 @@ it("narrows the teams table ignoring accents and case, says when nothing matches
   searchTeams("zzz");
   expect(listed()).toEqual([]);
   expect(panel.textContent).toContain("rework.platformAccess.noTeams");
+  // No empty table is left under the line: neither its header nor its pagination.
+  expect(panel.querySelector('[class*="datatable"]')).toBeNull();
+  expect(panel.textContent).not.toContain("rework.platformAccess.teamAllowed");
   act(() => panel.querySelector<HTMLButtonElement>('button[aria-label="rework.platformAccess.clearSearch"]')!.click());
   expect(input.value).toBe("");
   expect(listed()).toHaveLength(4);

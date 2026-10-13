@@ -3883,7 +3883,9 @@
         "team_one": "Authorized team: {{teams}}",
         "team_other": "Authorized teams: {{teams}}",
         "free_one": "Link access: {{teams}}",
-        "free_other": "Link access: {{teams}}"
+        "free_other": "Link access: {{teams}}",
+        "summary": "Other access: {{details}}",
+        "separator": "; "
       }
     }
   },

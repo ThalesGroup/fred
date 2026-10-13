@@ -90,13 +90,11 @@ export default function PlatformAccessPage() {
   // Rows of another page or search are never shown; the total keeps the pagination in place meanwhile.
   const userRows = users.isError ? undefined : users.currentData?.items;
   const userTotal = users.isError ? 0 : (users.currentData?.total ?? users.data?.total ?? 0);
-  // Removing the last row of a later page would leave an empty page with people still listed before it.
-  const pageEmptied = !users.isFetching && offset > 0 && users.currentData?.items.length === 0;
-  useEffect(() => {
-    if (pageEmptied) setOffset((current) => Math.max(0, current - pageSize));
-  }, [pageEmptied, pageSize]);
-  const t0 = usePlatformAccessT0Query(undefined, { skip: !enabled });
-  const teams = usePlatformAccessTeamsQuery(undefined, { skip: !enabled });
+  // A removal that empties the last page needs nothing here: the table snaps the offset back to the last page.
+  // Each tab requests only what it shows: the import preview with Users, the teams listing with Teams.
+  const t0 = usePlatformAccessT0Query(undefined, { skip: !usersShown });
+  const teamsShown = enabled && tabIndex === 2;
+  const teams = usePlatformAccessTeamsQuery(undefined, { skip: !teamsShown });
   // Teams arrive in one response, so the search only narrows what is already loaded.
   const teamNeedle = foldForSearch(teamQuery.trim());
   const teamRows = (teams.data ?? []).filter((team) => foldForSearch(team.name || team.team_id).includes(teamNeedle));
@@ -165,9 +163,10 @@ export default function PlatformAccessPage() {
         <p>{t("rework.platformAccess.disabled")}</p>
       ) : (
         <>
-          {(state.isError || (usersShown && users.isError) || teams.isError || t0.isError) && (
-            <p role="alert">{t("rework.platformAccess.failed")}</p>
-          )}
+          {(state.isError ||
+            (usersShown && users.isError) ||
+            (teamsShown && teams.isError) ||
+            (usersShown && t0.isError)) && <p role="alert">{t("rework.platformAccess.failed")}</p>}
           <div className={styles.navigation}>
             <ButtonGroup
               size="small"
@@ -208,7 +207,7 @@ export default function PlatformAccessPage() {
             tabIndex={0}
           >
             <div className={styles.sectionHeader}>
-              <h3 className={styles.sectionTitle}>{t("rework.platformAccess.whitelistedUsers")}</h3>
+              <h2 className={styles.sectionTitle}>{t("rework.platformAccess.whitelistedUsers")}</h2>
               <p className={styles.hint}>{t("rework.platformAccess.whitelistedUsersHint")}</p>
             </div>
             <div className={styles.toolbar}>
@@ -334,7 +333,9 @@ export default function PlatformAccessPage() {
                             className={styles.otherAccess}
                             role="note"
                             tabIndex={0}
-                            aria-label={`${t("rework.platformAccess.otherAccess.label")} : ${lines.join(" ; ")}`}
+                            aria-label={t("rework.platformAccess.otherAccess.summary", {
+                              details: lines.join(t("rework.platformAccess.otherAccess.separator")),
+                            })}
                           >
                             <Chip label={t("rework.platformAccess.otherAccess.label")} title="" />
                           </span>
@@ -379,7 +380,7 @@ export default function PlatformAccessPage() {
             tabIndex={0}
           >
             <div className={styles.sectionHeader}>
-              <h3 className={styles.sectionTitle}>{t("rework.platformAccess.whitelistedTeams")}</h3>
+              <h2 className={styles.sectionTitle}>{t("rework.platformAccess.whitelistedTeams")}</h2>
               <p className={styles.hint}>{t("rework.platformAccess.whitelistedTeamsHint")}</p>
             </div>
             <div className={styles.toolbar}>
@@ -395,7 +396,7 @@ export default function PlatformAccessPage() {
               </div>
             </div>
             {teamNeedle && teamRows.length === 0 && <p className={styles.hint}>{t("rework.platformAccess.noTeams")}</p>}
-            <div className={styles.group} hidden={!!teamNeedle && teamRows.length === 0}>
+            {(!teamNeedle || teamRows.length > 0) && (
               <DataTable
                 size="small"
                 data={teamRows}
@@ -429,7 +430,7 @@ export default function PlatformAccessPage() {
                   },
                 ]}
               />
-            </div>
+            )}
           </div>
           <PlatformAccessAddUsersDialog
             open={adding}
@@ -440,6 +441,10 @@ export default function PlatformAccessPage() {
                 await grantUsers({ grantPlatformAccessUsers: { user_ids: userIds } }).unwrap();
                 showSuccess({ summary: t("rework.platformAccess.grantedSelected", { count: userIds.length }) });
                 setAdding(false);
+                // Newest first: the people just added head the first page of the unfiltered list.
+                setQuery("");
+                setSearchQuery("");
+                setOffset(0);
               })
             }
           />
