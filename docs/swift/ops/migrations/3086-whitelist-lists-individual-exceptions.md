@@ -33,7 +33,7 @@ The response shape does not change.
 
 ## Validation
 
-As a platform administrator, open Platform access > Users: the table lists only people holding an individual access, the most recently added first, each with the date it was added, its origin and the person's other access sources. Use "Add users" to search for a person who is not listed, add them, and check that they appear in the table.
+As a platform administrator, open Platform access > Users: the table lists only the whitelisted users (people holding an individual exception), the most recently added first, each with the date they were added, the origin of that entry and, behind an "Other access" chip, what else gives the person access. Use "Add users" to search for a person who is not listed, add them, and check that they appear at the top of the table.
 
 ## Rollback
 

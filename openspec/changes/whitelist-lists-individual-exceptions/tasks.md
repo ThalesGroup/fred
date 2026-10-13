@@ -9,7 +9,7 @@
 
 ## 3. Whitelist list
 
-- [x] 3.1 Make the Users sub-tab list individual exceptions only (filter on, 25 per page, real total, debounced search), with "Remove" and its toast, without row selection or bulk bar; verify with page tests (query arguments, removal, loading and failed states).
+- [x] 3.1 Make the Users sub-tab list individual exceptions only (filter on, 20 per page by default with a 20/50/100 selector, real total, debounced search), with "Remove" and its toast, without row selection or bulk bar; verify with page tests (query arguments, removal, loading and failed states).
 - [x] 3.2 Add the empty-whitelist state distinct from "no match"; verify with a page test for each.
 - [x] 3.3 Check the rule tester still calls the users query without the filter; verify by its existing tests and by reading the call.
 
@@ -33,21 +33,21 @@
 
 - [x] 7.1 Return each user with their exception row from the page query and order by grant date (newest first) under the filter; verify with fred-core tests (order with the filter, order unchanged without it, search with the filter, pagination stability, ties alphabetical).
 - [x] 7.2 Use that row in the service projection instead of a per-row read; verify with control-plane tests that the individual source carries its grant date, that users without an exception carry none, and that no per-row exception read remains.
-- [x] 7.3 Show "Added on", "Origin" and "Other access" in the whitelist table; verify with page tests for the date cell and origin of both origins, the filtered chips and the empty-cell marker.
+- [x] 7.3 Show "Added on", "Origin" and "Other access" in the whitelist table; verify with page tests for the date cell and origin of both origins and the other access limited to the other sources (shown since section 8 as one chip, with an empty cell when there is none).
 - [x] 7.4 Add the French and English strings and delete the unused ones; verify key parity and that no deleted key is referenced.
 - [x] 7.5 Update the contract entry, `COMPONENT-UX.md` and the migration note; record the evidence below and re-run `openspec validate whitelist-lists-individual-exceptions --strict`.
-- [x] 7.6 Title the Users block with an `h3` above the toolbar and reword the search; verify with a page test that the heading is the panel's first element and the only `h3` in it.
+- [x] 7.6 Title the Users block with a heading above the toolbar and reword the search (an `h3` at the time, an `h2` since section 10); verify with a page test that the heading is the panel's first element and the only heading in it.
 
 ## 8. One navigation level, whitelist wording, compact other access
 
-- [x] 8.1 Replace the Whitelist tab and its sub-tabs by top-level Users and Teams tabs, each with an `h3` title and a description above its controls; verify with page tests (three tabs, one exposed panel, keyboard navigation, users request skipped on other tabs, draft/search/page/page size preserved, header action present on each tab).
+- [x] 8.1 Replace the Whitelist tab and its sub-tabs by top-level Users and Teams tabs, each with a title (an `h2` since section 10) and a description above its controls; verify with page tests (three tabs, one exposed panel, keyboard navigation, users request skipped on other tabs, draft/search/page preserved, header action present on each tab). The page-size part had no test until section 10 added "changes the users page size from the first page, asking for the new limit".
 - [x] 8.2 Show other access as one chip with a grouped tooltip and an empty cell otherwise; verify with page tests (one chip per row with other access, none without, grouped content for each kind and several teams, focusable trigger with an accessible name).
 - [x] 8.3 Reword the French strings to "de la liste blanche" and delete unused keys; verify key parity and that no deleted key is referenced.
 - [x] 8.4 Update `COMPONENT-UX.md`, record the evidence and re-run `openspec validate whitelist-lists-individual-exceptions --strict`.
 
 ## 9. Accent-insensitive searches
 
-- [x] 9.1 Fold accents and case in the server-side user search with a shared SQL construct and its Python twin; verify with fred-core tests (accent on either side and both, mixed case, with the exception filter, symbols and other scripts unchanged, PostgreSQL expression compiled).
+- [x] 9.1 Fold accents and case in the server-side user search with a shared SQL construct (the typed text is folded by the same construct since section 10); verify with fred-core tests (accent on either side and both, mixed case, with the exception filter, symbols and other scripts unchanged, PostgreSQL expression compiled).
 - [x] 9.2 Fold accents and case in the teams filter and the account-field picker with the existing `stripDiacritics`; verify with page tests (match, no-match line, clear) and a picker test.
 - [x] 9.3 Update the contract entry, `COMPONENT-UX.md` and the migration note; record the evidence and re-run `openspec validate whitelist-lists-individual-exceptions --strict`.
 
@@ -64,7 +64,7 @@ Backend, from `apps/control-plane-backend`:
 
 - `make test`: 1788 passed, 9 skipped (the PostgreSQL-backed platform access tests, which need a database), 11 deselected. New test `test_users_listing_restricts_to_individual_exceptions_in_username_order` (service page in both modes, sources, pagination, search with the filter, and the HTTP route with and without `exceptions_only`).
 - `ruff check`, `ruff check --select I`, `ruff format --check`: all pass. `basedpyright --baseline-file .baseline/basedpyright-baseline.json`: 0 errors.
-- The ordering and the filter ran on SQLite only. `lower(username) ASC NULLS LAST` and the `EXISTS` filter are standard SQL, but the result on PostgreSQL (whose text order follows the database collation) was not run.
+- The ordering and the filter ran on SQLite only. `lower(username) ASC NULLS LAST` and the filter (an `EXISTS` at that date, an inner join since section 7) are standard SQL, but the result on PostgreSQL (whose text order follows the database collation) was not run.
 
 Generated contract:
 
@@ -82,7 +82,7 @@ Frontend, from `apps/frontend` (no make target was run):
 Docs:
 
 - Help Center content (`apps/frontend/src/rework/features/helpCenter/content`, fr and en): no page describes this screen; nothing to update.
-- `make migration-check` (repository root): "Migration notes valid: 2 new declaration(s)" (this note and the entry-pages note carried by the same local branch).
+- `make migration-check` (repository root): "Migration notes valid: 2 new declaration(s)". At that date the second note was the entry-pages one, then carried by the same local branch; the branch is now stacked on #3087 only and the second declaration is that change's note (see the section 10 evidence).
 - `openspec validate whitelist-lists-individual-exceptions --strict`: valid.
 
 Divergence from the proposal: none. The scenario "Return to an unsaved rule or selected users" keeps its name because a MODIFIED requirement cannot drop a scenario; its body now covers the user search.
@@ -125,3 +125,29 @@ Not run: anything in a browser, and the PostgreSQL path against a real server (t
 - `apps/frontend`, no make target: `npx tsc --noEmit` exit 0; `npx eslint src/rework/components/pages/admin/PlatformAccessPage` exit 0; prettier check passes on that folder; `npx vitest run`, one file at a time: `PlatformAccessPage.test.tsx` 34 passed (one added: teams filter with accents either side, case, unnamed team, no-match line, clear), `PlatformAccessRuleEditor.test.tsx` 34 passed (picker search extended with an accented query), `PlatformAccessAddUsersDialog.test.tsx` 9 and `PlatformAccessLinkManager.test.tsx` 27 passed, unmodified.
 - No response shape change: the generated client was not regenerated.
 - `openspec validate whitelist-lists-individual-exceptions --strict`: valid.
+
+## 10. Pre-PR review fixes
+
+- [x] 10.1 Keep one "page emptied" mechanism: the page-level step back is removed and the shared `DataTable` clamp alone moves the offset; verify with the page test "steps back a single page when a removal empties the last page" (three pages: page 3 lands on page 2).
+- [x] 10.2 Render the teams table only when there is something to show, instead of a `hidden` attribute its flex class overrode; verify with "narrows the teams table ignoring accents and case, says when nothing matches, and clears" (no table under the no-match line).
+- [x] 10.3 Fold the typed search text in SQL through the same construct as the columns, as bind parameters; Python only composes it (NFC) and adds the lower-case spelling of a query holding a capital an ASCII-only `lower()` would keep. Verify with `test_user_search_finds_stored_capitals_outside_the_folding_table`, `test_search_spellings_leave_the_folding_to_the_database` and the updated `test_accent_folding_table_and_postgresql_expression`.
+- [x] 10.4 Request the teams listing on the Teams tab only and the initial-import preview on the Users tab only, so the spec sentence "no listing SHALL be requested for a tab that is not shown" is true; verify with "requests the teams listing and the import preview only for the tab that shows them". Nothing else on the page reads teams data: the Users table takes team names from its own rows, and the activation dialog issues its own queries.
+- [x] 10.5 After a successful add, clear the search and return to the first page; verify with "returns to the first page of the unfiltered list after an add, where the newest are listed" and "keeps the page and the search after a failed add".
+- [x] 10.6 Build the "Other access" accessible name from a localized sentence and separator (fr, en); verify with the assertions added to "shows when and how each individual access was added, and one chip detailing the other access".
+- [x] 10.7 Make the two block titles `h2`, like Conditions after #3087's review fix; verify with "titles each whitelist tab and describes it above its controls".
+- [x] 10.8 Add the missing test of the users table page size ("changes the users page size from the first page, asking for the new limit": options 20/50/100, first page, new limit, size kept across tabs) and make design.md, this file, the delta spec, the migration note and `COMPONENT-UX.md` describe the shipped state.
+- [x] 10.9 Record four reviewer questions in design.md (cost of a 100-row page, removal without confirmation, the hand-rolled dialog shell, a disabled first suggestion in the shared `Autocomplete`). Not implemented.
+
+## Verification evidence for section 10 (2026-10-14)
+
+Run on the branch restacked on `feat/platform-access-ui-condense` (plain `git rebase`, after that branch's own review fixes). Not run: anything in a browser; the PostgreSQL path against a real server (the PostgreSQL-backed tests need `FRED_PLATFORM_ACCESS_TEST_DATABASE_URL` and were skipped), so the SQL-side folding of the search text ran on SQLite and was only compiled for PostgreSQL.
+
+- `apps/frontend`: `make code-quality` (tsc, prettier, eslint) exit 0; `make test` (full vitest suite with coverage) 331 files passed, 1 skipped; 4139 tests passed, 7 skipped. `npx vitest run src/rework/components/pages/admin/PlatformAccessPage`: 4 files, 111 tests passed.
+- `libs/fred-core`: `make test` 1252 passed, 1 skipped, 42 deselected; `ruff check`, `ruff check --select I`, `ruff format --check` pass; `basedpyright --baseline-file .baseline/basedpyright-baseline.json` 0 errors.
+- `apps/control-plane-backend`: `make test` 1788 passed, 10 skipped (PostgreSQL-backed), 11 deselected; the same four lint and type checks clean.
+- `rework.platformAccess` exposes the same keys in French and English (221 leaf keys each by a recursive count, plural forms included).
+- `make migration-check` (repository root): "Migration notes valid: 2 new declaration(s)", this note and #3087's, which this branch is stacked on.
+- `openspec validate whitelist-lists-individual-exceptions --strict`: valid.
+- No response shape change: the generated client was not regenerated.
+
+Behaviour to know about 10.3, on a database whose `lower()` is ASCII-only (SQLite; PostgreSQL under a C/POSIX `LC_CTYPE`): a letter outside ASCII and the folding table (Ł, Ø, Cyrillic, Greek) stored as a capital is found when typed as a capital, not when typed in lower case; stored in lower case it is found in either case. With a Unicode-aware `lower()` both cases match, as the PostgreSQL-backed test expects.
