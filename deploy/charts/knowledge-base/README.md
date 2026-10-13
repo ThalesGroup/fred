@@ -76,11 +76,13 @@ What the Fred platform must provide; the addresses go in `configuration`.
 | `configuration.app.runtime_id` | The pod's identity in metrics and logs; one per release. |
 | `configuration.knowledge_base.prefix`, `.control_plane_url` | The Knowledge Base's name prefix in Fred, and where it declares itself. |
 | `configuration.security.m2m` | The pod's own client (`realm_url`, `client_id`, `secret_env_var`). |
-| Credentials | `secret.existingSecret`, `secret.create` or `extraEnvVars`; the chart refuses to render without one. |
+| Credentials | `secret.existingSecret`, `secret.create`, or an `extraEnvVars` entry named after `configuration.security.m2m.secret_env_var`; the chart refuses to render without one. |
 
 `configuration` is the pod's configuration file, fred-sdk's Knowledge Base
-`PodConfiguration`. `values.schema.json` embeds that model: a misspelled or misplaced key
-fails at `helm install`, with its path.
+`PodConfiguration`. `values.schema.json` embeds that model: a misspelled or misplaced key in
+one of its sections (`app`, `knowledge_base`, `security`, `scheduler`, `observability`) fails
+at `helm install`, with its path. A Knowledge Base that extends `PodConfiguration` keeps its
+own top-level section in the same file (e.g. `webdav:`); the chart passes it through.
 
 ### Credentials
 

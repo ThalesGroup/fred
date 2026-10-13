@@ -23,7 +23,6 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- define "knowledge-base.labels" -}}
 helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{ include "knowledge-base.selectorLabels" . }}
-app.kubernetes.io/version: {{ .Values.image.tag | quote }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 app.kubernetes.io/component: knowledge-base
 {{- end -}}
@@ -76,16 +75,14 @@ configuration the pod reads. Empty when both are disabled.
 
 {{/*
 One container, for the `run` worker and the `publish` Job alike: the image, its
-command, the configuration file and the credentials. The pod reaches Fred with its
-M2M client, so a release without any Secret source cannot work: refuse it here.
+command, the configuration file and the credentials. The M2M secret must reach it
+(knowledge-base.requireM2MSecret).
 Called with (dict "root" $ "command" "run|publish" "resources" ...).
 */}}
 {{- define "knowledge-base.container" -}}
 {{- $root := .root -}}
+{{- include "knowledge-base.requireM2MSecret" $root -}}
 {{- $secretName := include "knowledge-base.secretName" $root -}}
-{{- if not (or $secretName $root.Values.extraEnvVars) -}}
-{{- fail "credentials are required: set secret.existingSecret, secret.create, or extraEnvVars (the M2M client secret at least)" -}}
-{{- end -}}
 - name: {{ .command }}
   image: {{ include "knowledge-base.image" $root | quote }}
   imagePullPolicy: {{ $root.Values.image.pullPolicy }}
@@ -157,4 +154,24 @@ affinity:
 tolerations:
   {{- toYaml . | nindent 2 }}
 {{- end }}
+{{- end -}}
+
+{{/*
+The pod authenticates to Fred with its M2M client: the variable that
+configuration.security.m2m.secret_env_var names must reach it. A whole Secret cannot
+be inspected at render time; an extraEnvVars list must name that variable.
+*/}}
+{{- define "knowledge-base.requireM2MSecret" -}}
+{{- if dig "security" "m2m" "enabled" true .Values.configuration -}}
+{{- $variable := dig "security" "m2m" "secret_env_var" "M2M_CLIENT_SECRET" .Values.configuration -}}
+{{- if not (include "knowledge-base.secretName" .) -}}
+{{- $named := false -}}
+{{- range .Values.extraEnvVars -}}
+{{- if eq .name $variable -}}{{- $named = true -}}{{- end -}}
+{{- end -}}
+{{- if not $named -}}
+{{- fail (printf "credentials are required: set secret.existingSecret or secret.create, or an extraEnvVars entry named %s (configuration.security.m2m.secret_env_var)" $variable) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
 {{- end -}}

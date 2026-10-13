@@ -133,6 +133,9 @@ def agent_pod(configuration: dict) -> dict:
 
 
 def knowledge_base(configuration: dict) -> dict:
+    # PodConfiguration.load() builds the subclass it is called on, so a Knowledge Base
+    # may add its own top-level sections; the SDK's sections stay strict.
+    configuration = {**configuration, "additionalProperties": True}
     return _chart(
         "Fred Knowledge Base pod chart values",
         {

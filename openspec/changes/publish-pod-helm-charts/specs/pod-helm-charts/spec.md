@@ -37,12 +37,20 @@ missing value when the image repository or tag is not set.
 
 `configuration` SHALL be mounted unchanged as the pod's configuration file. The chart's values
 schema SHALL validate it against the configuration model of the library the pod is built on,
-so that a misspelled or misplaced key fails before anything is deployed.
+so that a misspelled or misplaced key fails before anything is deployed. The `knowledge-base`
+chart SHALL also accept top-level sections the model does not declare, because the SDK loads a
+pod's subclass of its model from the same file; every section the model declares stays strict.
 
 #### Scenario: Misspelled configuration key
 
 - **WHEN** a values file sets a key the pod configuration model does not define
 - **THEN** `helm install` and `helm template` refuse the values and name the key
+
+#### Scenario: Knowledge Base section of its own
+
+- **WHEN** a Knowledge Base values file adds a top-level `webdav` section next to the SDK's
+- **THEN** the chart renders it into the configuration file, and a misspelled key inside
+  `knowledge_base` is still refused
 
 #### Scenario: Valid configuration
 
@@ -53,8 +61,8 @@ so that a misspelled or misplaced key fails before anything is deployed.
 
 The charts SHALL read credentials only from Kubernetes Secrets, either a Secret the operator
 names or environment variables read from existing Secrets. No credential SHALL be rendered
-into a ConfigMap. Rendering SHALL fail when the configuration names a credential variable and
-no Secret source is given.
+into a ConfigMap. Rendering SHALL fail when M2M is enabled and neither a Secret is named nor
+an environment variable of the name the configuration gives the M2M secret is provided.
 
 #### Scenario: Credentials missing
 

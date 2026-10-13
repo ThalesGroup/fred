@@ -347,7 +347,7 @@
       ],
       "title": "PodConfiguration",
       "type": "object",
-      "additionalProperties": false
+      "additionalProperties": true
     },
     "secret": {
       "type": "object",

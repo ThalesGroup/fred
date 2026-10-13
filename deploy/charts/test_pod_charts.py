@@ -108,6 +108,41 @@ class PodChartTests(unittest.TestCase):
                     "credentials are required",
                 )
 
+    def test_extra_env_vars_must_carry_the_m2m_secret(self):
+        reference = {"secretKeyRef": {"name": "platform", "key": "k"}}
+        unrelated = [{"name": "UNRELATED", "value": "x"}]
+        named = [{"name": "POD_SECRET", "valueFrom": reference}]
+        for chart, values in (("agent-pod", AGENT), ("knowledge-base", KNOWLEDGE_BASE)):
+            with self.subTest(chart=chart):
+                without = merged(values, {"secret": {"existingSecret": ""}})
+                self.assert_refused(
+                    chart,
+                    merged(without, {"extraEnvVars": unrelated}),
+                    "named POD_SECRET",
+                )
+                result = self.render(chart, merged(without, {"extraEnvVars": named}))
+                self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_agent_pod_base_url_is_canonical(self):
+        for path in ("foo", "/foo/", "/a//b", "/a/../b"):
+            with self.subTest(path=path):
+                values = merged(AGENT, {"configuration": {"app": {"base_url": path}}})
+                self.assert_refused("agent-pod", values, "canonical root-relative path")
+
+    def test_long_image_tag(self):
+        tag = "a" * 64
+        for chart, values in (("agent-pod", AGENT), ("knowledge-base", KNOWLEDGE_BASE)):
+            with self.subTest(chart=chart):
+                result = self.render(chart, merged(values, {"image": {"tag": tag}}))
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertNotIn(f": {tag}\n", result.stdout.replace('"', ""))
+
+    def test_knowledge_base_accepts_pod_owned_sections(self):
+        own = {"configuration": {"webdav": {"concurrency": 4}}}
+        result = self.render("knowledge-base", merged(KNOWLEDGE_BASE, own))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("concurrency: 4", result.stdout)
+
     def test_agent_pod_without_m2m_needs_no_secret(self):
         values = merged(
             AGENT,

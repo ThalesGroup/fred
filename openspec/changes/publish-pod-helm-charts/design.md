@@ -43,9 +43,12 @@ current.
 
 **The schema embeds the library model, strictly.** The values schema's `configuration` is the
 generated schema of `AgentPodConfig` or `PodConfiguration`, generated with the existing
-script and checked for drift by the existing workflow. A pod that extends the configuration
-model with its own keys cannot use the published chart unchanged; such keys belong in a file
-of its own (`extraConfigFiles`), which keeps the pod's configuration file the library's.
+script and checked for drift by the existing workflow. One exception follows the SDK's own
+contract: `PodConfiguration.load()` builds the subclass it is called on, and a Knowledge Base
+adds its own section to the same file (webdav's `webdav:`), so the knowledge-base schema
+leaves the top level of `configuration` open while every SDK section stays strict. No agent
+pod extends `AgentPodConfig`; agent-pod stays strict throughout, and a pod's other files go
+in `extraConfigFiles`.
 
 **No default image.** The chart deploys someone else's image: `image.repository` and
 `image.tag` are `required`, which also keeps the chart free of any pod's name.
@@ -78,8 +81,10 @@ and the publish Job; run them where the `fred` chart is already rendered in CI.
 - [A breaking change to a configuration model breaks the chart for older pods] → the chart's
   `appVersion` names the library version; a pod stays on the chart release matching its
   libraries until it moves.
-- [The strict schema refuses a key a pod reads but the model does not declare] → by design;
-  the error names the key, and `extraConfigFiles` is the place for pod-specific files.
+- [The strict schema refuses a key a pod reads but the model does not declare] → by design for
+  agent pods (the error names the key; `extraConfigFiles` holds pod-specific files). For a
+  Knowledge Base, a misspelled optional SDK section name at the top level (`observabilty`)
+  passes; a misspelled required one is still refused, and keys inside SDK sections are checked.
 - [ghcr.io is public; Thales-internal pods use internal registries] → the charts hold no
   registry: `image.repository` and `imagePullSecrets` are the operator's.
 

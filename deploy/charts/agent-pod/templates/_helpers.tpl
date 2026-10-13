@@ -23,7 +23,6 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- define "agent-pod.labels" -}}
 helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{ include "agent-pod.selectorLabels" . }}
-app.kubernetes.io/version: {{ .Values.image.tag | quote }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 app.kubernetes.io/component: agent-pod
 {{- end -}}
@@ -43,8 +42,13 @@ app.kubernetes.io/component: agent-pod
 {{- .Values.configuration.app.port | default 8000 -}}
 {{- end -}}
 
+{{/* The pod's path, also its ingress_prefix: canonical, as the Control Plane requires. */}}
 {{- define "agent-pod.basePath" -}}
-{{- required "configuration.app.base_url is required: the path the pod serves, and its ingress_prefix in Fred" .Values.configuration.app.base_url -}}
+{{- $path := required "configuration.app.base_url is required: the path the pod serves, and its ingress_prefix in Fred" .Values.configuration.app.base_url -}}
+{{- if or (not (hasPrefix "/" $path)) (hasSuffix "/" $path) (contains "//" $path) (regexMatch "(^|/)\\.\\.?(/|$)" $path) -}}
+{{- fail (printf "configuration.app.base_url must be a canonical root-relative path such as /my/agents/v2 (leading /, no trailing /, no // or . segments), got %q" $path) -}}
+{{- end -}}
+{{- $path -}}
 {{- end -}}
 
 {{/*
@@ -75,15 +79,29 @@ to 127.0.0.1 unless told otherwise, which no scraper reaches: refuse to expose t
 {{- end -}}
 
 {{/*
-The container's environment: the configuration file, then the credentials. The pod
-authenticates to Fred with its M2M client, so a pod with M2M enabled and no Secret
-source would only fail at its first call: refuse it here.
+The pod authenticates to Fred with its M2M client: the variable that
+configuration.security.m2m.secret_env_var names must reach it. A whole Secret cannot
+be inspected at render time; an extraEnvVars list must name that variable.
 */}}
-{{- define "agent-pod.env" -}}
-{{- $secretName := include "agent-pod.secretName" . -}}
-{{- if and (dig "security" "m2m" "enabled" true .Values.configuration) (not (or $secretName .Values.extraEnvVars)) -}}
-{{- fail "credentials are required: set secret.existingSecret, secret.create, or extraEnvVars (the M2M client secret at least)" -}}
+{{- define "agent-pod.requireM2MSecret" -}}
+{{- if dig "security" "m2m" "enabled" true .Values.configuration -}}
+{{- $variable := dig "security" "m2m" "secret_env_var" "M2M_CLIENT_SECRET" .Values.configuration -}}
+{{- if not (include "agent-pod.secretName" .) -}}
+{{- $named := false -}}
+{{- range .Values.extraEnvVars -}}
+{{- if eq .name $variable -}}{{- $named = true -}}{{- end -}}
 {{- end -}}
+{{- if not $named -}}
+{{- fail (printf "credentials are required: set secret.existingSecret or secret.create, or an extraEnvVars entry named %s (configuration.security.m2m.secret_env_var)" $variable) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/* The container's environment: the configuration file, then the credentials. */}}
+{{- define "agent-pod.env" -}}
+{{- include "agent-pod.requireM2MSecret" . -}}
+{{- $secretName := include "agent-pod.secretName" . -}}
 env:
   - name: CONFIG_FILE
     value: /app/config/configuration.yaml

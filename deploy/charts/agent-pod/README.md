@@ -78,9 +78,9 @@ What the Fred platform must provide; the addresses go in `configuration`.
 | --- | --- |
 | `image.repository`, `image.tag` | The pod's image. There is no default. |
 | `configuration.app.runtime_id` | The pod's identity in Fred, its logs and its metrics. |
-| `configuration.app.base_url` | The path the pod serves, and its `ingress_prefix` in Fred. |
+| `configuration.app.base_url` | The path the pod serves, and its `ingress_prefix` in Fred: canonical, as the Control Plane requires (`/my/agents/v2`: leading `/`, no trailing `/`, no `//`, `.` or `..`). |
 | `configuration.security.m2m`, `configuration.security.user` | The pod's own client and the users' realm (`realm_url`, `client_id`). |
-| Credentials | `secret.existingSecret`, `secret.create` or `extraEnvVars`; the chart refuses to render without one while M2M is enabled. |
+| Credentials | `secret.existingSecret`, `secret.create`, or an `extraEnvVars` entry named after `configuration.security.m2m.secret_env_var`; the chart refuses to render without one while M2M is enabled. |
 
 `configuration` is the pod's configuration file, fred-runtime's `AgentPodConfig`.
 `values.schema.json` embeds that model: a misspelled or misplaced key fails at
