@@ -47,7 +47,7 @@ See proposal.md for motivation. Current state, read from the code:
    walks the fixed order `team`, `personal`, `platform`, and for each takes the
    entries of that source together with their index in `entries`. That index
    still feeds `optionId(index)`, `aria-selected`, `data-active`, `onActivate`
-   and `onFocusEntry`, so the hook's flat `activeIndex` and arrow-key wrap need
+   and `onFocusEntry`, so the hook's flat `activeIndex` and arrow-key navigation need
    no change. A source with no entry renders nothing. Alternative: the hook
    returns pre-built sections. Rejected: it duplicates the list and moves
    indexes into two places.

@@ -5190,8 +5190,10 @@ looking active.
 Prompt and skill rows share the same two-line layout: command or skill name
 (without `/skill`) above, description in italics directly below, with no gap
 between the two. The description stays on one line and is cut with an ellipsis.
-Prompts use a distinct prompt icon in a blue information tile; skills keep the
-platform pictogram. A skill's argument hint is not shown in the menu: it only
+Prompts use a distinct prompt icon in a `--primary-container` tile
+(`--on-primary-container` glyph); skills keep the platform pictogram on its
+`--secondary-container` tile. The arrow keys stop at the first and last row,
+they do not wrap. A skill's argument hint is not shown in the menu: it only
 appears in the composer once the skill is selected. The list scrolls within
 its existing limit. A row's native tooltip gives its full description (the
 name when there is none): the section heading already says where it comes from.

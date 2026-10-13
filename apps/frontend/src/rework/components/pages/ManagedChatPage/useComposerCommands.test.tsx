@@ -280,15 +280,17 @@ describe("the command menu", () => {
     expect(container.querySelector('[role="listbox"]')).toBeNull();
   });
 
-  it("walks every entry with the arrows, wrapping at either end", () => {
+  it("walks every entry with the arrows and stops at either end", () => {
     type("/");
 
     press("ArrowUp");
-    expect(focusedLabel()).toBe("/summary");
-    press("ArrowDown");
     expect(focusedLabel()).toBe("/search");
     press("ArrowDown");
     expect(focusedLabel()).toBe("/summary");
+    press("ArrowDown");
+    expect(focusedLabel()).toBe("/summary");
+    press("ArrowUp");
+    expect(focusedLabel()).toBe("/search");
   });
 
   it("keeps the caret in the composer while the focus moves through the menu", () => {
@@ -1216,11 +1218,12 @@ describe("personal and team prompt commands", () => {
     expect(container.textContent).not.toContain("chatbot.commandMenu.sources.");
     type("/sea");
     expect(sections()).toEqual([["chatbot.commandMenu.sections.teamFallback", ["/search"]]]);
+    // The arrows cross section boundaries and stop on the last row.
     type("/");
-    press("ArrowUp");
+    for (let step = 0; step < 4; step += 1) press("ArrowDown");
     expect(focusedLabel()).toBe("review");
-    press("ArrowDown");
-    expect(focusedLabel()).toBe("/search");
+    press("ArrowUp");
+    expect(options()[2].getAttribute("aria-selected")).toBe("true");
   });
   it.each(["Tab", "pointer", "Enter"])(
     "runs the selected personal homonym through %s using its owning library",

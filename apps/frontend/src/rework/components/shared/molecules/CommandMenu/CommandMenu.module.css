@@ -78,8 +78,8 @@
 }
 
 .promptIcon {
-  background: var(--info-container);
-  color: var(--on-info-container);
+  background: var(--primary-container);
+  color: var(--on-primary-container);
 }
 
 .rowText {

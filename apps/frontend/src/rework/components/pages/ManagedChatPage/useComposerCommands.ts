@@ -583,11 +583,12 @@ export function useComposerCommands(params: {
       switch (event.key) {
         case "ArrowDown":
           event.preventDefault();
-          setActiveIndex((index) => (Math.min(index, count - 1) + 1) % count);
+          // The focus stops at either end of the list instead of wrapping.
+          setActiveIndex((index) => Math.min(index + 1, count - 1));
           return true;
         case "ArrowUp":
           event.preventDefault();
-          setActiveIndex((index) => (Math.min(index, count - 1) + count - 1) % count);
+          setActiveIndex((index) => Math.max(Math.min(index, count - 1) - 1, 0));
           return true;
         case "Tab":
           event.preventDefault();
