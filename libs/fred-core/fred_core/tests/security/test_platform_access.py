@@ -37,6 +37,7 @@ from fred_core.security.platform_access.rules import (
 from fred_core.security.platform_access.store import PlatformAccessStore
 from fred_core.security.rebac.noop_engine import NoopRebacEngine
 from fred_core.security.rebac.rebac_engine import OrganizationPermission, RebacReference
+from fred_core.sql.accent_folding import FOLDED_LETTERS, fold_text
 from fred_core.teams.team_metatada_models import TeamMetadataRow
 from fred_core.users.user_models import UserRow
 
@@ -687,3 +688,87 @@ async def test_user_listing_filters_individual_exceptions_and_orders_each_mode(
     ]
     filtered = await store.users_with_exceptions(0, 25, exceptions_only=True)
     assert all(row is not None and row.user_id == user.id for user, row in filtered)
+
+
+@pytest.mark.asyncio
+async def test_user_search_ignores_accents_and_case_on_both_sides(access):
+    store = access.store
+    people = [
+        ("lea", "Léa", "Martin", "lea.martin@example.org"),
+        ("ELODIE", "Élodie", "Petit", None),
+        ("aicha", "Aïcha", "Moreau", None),
+        ("helene", "Helene", "Dupont", None),
+        ("francois", "François", "Nuñez", None),
+        ("zoe", "ZOË", "ÅSTRÖM", None),
+        ("olga", "ольга", "C++ & 50%", None),
+        ("oeuvre", "œuvre", "straße", None),
+    ]
+    ids = [UUID(int=index + 1) for index in range(len(people))]
+    async with store.mutation() as session:
+        session.add_all(
+            [
+                UserRow(
+                    id=uid,
+                    username=username,
+                    first_name=first,
+                    last_name=last,
+                    email=email,
+                )
+                for uid, (username, first, last, email) in zip(ids, people)
+            ]
+        )
+        await session.flush()
+        await store.add_exception(ids[1], "actor", "manual", session)
+        await store.add_exception(ids[3], "actor", "manual", session)
+
+    async def found(query: str, **options) -> set[str]:
+        rows = await store.users(0, 25, query, **options)
+        assert await store.user_count(query, **options) == len(rows)
+        return {row.username for row in rows}
+
+    # Accent on the stored side, on the query side, on both, and in either case.
+    assert await found("lea") == {"lea"}
+    assert await found("LÉA") == {"lea"}
+    assert await found("hélène") == {"helene"}
+    assert await found("HELENE") == {"helene"}
+    assert await found("élodie") == {"ELODIE"}
+    assert await found("elodie") == {"ELODIE"}
+    assert await found("aicha") == await found("AÏCHA") == {"aicha"}
+    assert await found("francois") == await found("nunez") == {"francois"}
+    assert await found("astrom") == await found("zoe") == {"zoe"}
+    # A letter typed as base + combining mark matches too.
+    assert await found("e\u0301lodie") == {"ELODIE"}
+    # Every column is still searched, and an unknown text still finds nothing.
+    assert await found("EXAMPLE.org") == {"lea"}
+    assert await found("zzz") == set()
+
+    # Combined with the exception filter.
+    assert await found("élo", exceptions_only=True) == {"ELODIE"}
+    assert await found("hel", exceptions_only=True) == {"helene"}
+    assert await found("lea", exceptions_only=True) == set()
+
+    # Symbols, wildcards and other scripts behave as before; ligatures are not split.
+    assert await found("c++ &") == {"olga"}
+    assert await found("50%") == {"olga"}
+    assert await found("Ольга") == await found("ольга") == {"olga"}
+    assert await found("œuvre") == await found("straße") == {"oeuvre"}
+    assert await found("oeuvre") == {"oeuvre"}  # the username, not the ligature
+    assert await found("strasse") == set()
+
+
+def test_accent_folding_table_and_postgresql_expression():
+    from sqlalchemy import select
+    from sqlalchemy.dialects import postgresql
+
+    listed = "àâäáãåçéèêëíìîïñóòôöõúùûüýÿ"
+    assert fold_text(listed) == "aaaaaaceeeeiiiinooooouuuuyy"
+    assert fold_text(listed.upper()) == "aaaaaaceeeeiiiinooooouuuuyy"
+    assert fold_text("Šárka Łukasz Þór æœßø") == "sarka łukasz þor æœßø"
+    assert all(len(plain) == 1 and plain.isascii() for plain in FOLDED_LETTERS.values())
+    # PostgreSQL folds in one pass, with the same letters as the Python side.
+    statement = select(UserRow.id).where(PlatformAccessStore.user_search("Hé"))
+    compiled = statement.compile(dialect=postgresql.dialect())
+    assert str(compiled).count("translate(lower(users.") == 4
+    assert "replace(" not in str(compiled)
+    assert "".join(FOLDED_LETTERS) in compiled.params.values()
+    assert "%he%" in compiled.params.values()

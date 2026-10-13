@@ -1777,3 +1777,31 @@ async def test_users_listing_restricts_to_individual_exceptions_newest_first(
         assert item["username"] == "zoe"
         assert [source["kind"] for source in item["sources"]] == ["manual", "team"]
         assert item["sources"][0]["granted_at"].startswith("2026-01-02T00:00:00")
+
+
+@pytest.mark.asyncio
+async def test_pg_user_search_ignores_accents_and_case(pg_access):
+    names = [
+        ("lea", "Léa"),
+        ("elodie", "ÉLODIE"),
+        ("helene", "Helene"),
+        ("olga", "Ольга"),
+    ]
+    async with pg_access.store.mutation() as session:
+        session.add_all(
+            [
+                UserRow(id=UUID(int=index + 1), username=username, first_name=first)
+                for index, (username, first) in enumerate(names)
+            ]
+        )
+
+    async def found(query: str) -> list[str | None]:
+        page = await service.users_page(pg_access, 0, 25, query)
+        assert page.total == len(page.items)
+        return [item.username for item in page.items]
+
+    assert await found("LEA") == await found("léa") == ["lea"]
+    assert await found("élodie") == await found("elodie") == ["elodie"]
+    assert await found("hélène") == ["helene"]
+    assert await found("ольга") == ["olga"]
+    assert await found("zzz") == []

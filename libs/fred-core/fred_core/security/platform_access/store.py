@@ -18,6 +18,7 @@ from fred_core.security.platform_access.models import (
 )
 from fred_core.security.platform_access.rules import Fact, path_key
 from fred_core.sql import make_session_factory, use_session
+from fred_core.sql.accent_folding import fold_accents, fold_text
 from fred_core.sql.base_sql import advisory_lock_key
 from fred_core.teams.team_metatada_models import TeamMetadataRow
 from fred_core.users.user_models import UserRow
@@ -99,9 +100,11 @@ class PlatformAccessStore:
 
     @staticmethod
     def user_search(query: str) -> ColumnElement[bool]:
+        # Accents and case are ignored on both sides: "helene" finds "Hélène" and back.
+        pattern = f"%{fold_text(query)}%"
         return or_(
             *(
-                column.ilike(f"%{query}%")
+                fold_accents(column).like(pattern)
                 for column in (
                     UserRow.username,
                     UserRow.email,
