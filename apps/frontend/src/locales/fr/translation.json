@@ -3593,11 +3593,8 @@
         "rules": "Règles",
         "users": "Liste blanche"
       },
-      "bulkHint": "Sélectionnez les utilisateurs sur plusieurs recherches et pages pour ajouter des exceptions indépendantes. L'accès par équipe suit ses membres actuels.",
-      "allowSelected": "Autoriser les utilisateurs sélectionnés ({{count}})",
+      "allowSelected": "Autoriser la sélection",
       "clearSelection": "Effacer la sélection",
-      "select": "Sélectionner",
-      "selectUser": "Sélectionner {{user}}",
       "title": "Accès plateforme",
       "description": "Contrôlez l'accès avec l'attribut d'identité configuré, les exceptions individuelles et l'appartenance aux équipes.",
       "disabled": "L'administration des accès nécessite une instance Fred authentifiée avec une autorisation effective.",
@@ -3791,7 +3788,12 @@
       },
       "whitelistHint": "Les exceptions individuelles et les équipes autorisées permettent toujours l'accès.",
       "filteringOn": "Filtrage actif",
-      "filteringOff": "Filtrage inactif"
+      "filteringOff": "Filtrage inactif",
+      "clearSearch": "Effacer la recherche",
+      "selectedCount_one": "{{count}} utilisateur sélectionné",
+      "selectedCount_other": "{{count}} utilisateurs sélectionnés",
+      "noUsers": "Aucun utilisateur ne correspond à cette recherche.",
+      "teamAllowed": "Autorisée"
     }
   },
   "runtime": {

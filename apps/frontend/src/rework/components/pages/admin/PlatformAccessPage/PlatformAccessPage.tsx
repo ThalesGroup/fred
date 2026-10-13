@@ -5,11 +5,12 @@ import { useTranslation } from "react-i18next";
 import { normalizeApiError } from "@core/errors/normalizeApiError";
 import Button from "@shared/atoms/Button/Button";
 import Chip from "@shared/atoms/Chip/Chip";
-import Checkbox from "@shared/atoms/Checkbox/Checkbox";
+import IconButton from "@shared/atoms/IconButton/IconButton";
+import { Spinner } from "@shared/atoms/Spinner/Spinner";
 import StatusBadge from "@shared/atoms/StatusBadge/StatusBadge";
 import Switch from "@shared/atoms/Switch/Switch";
-import TextInput from "@shared/atoms/TextInput/TextInput";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader";
+import SearchInput from "@shared/molecules/SearchInput/SearchInput";
 import DataTable from "@shared/molecules/DataTable/LocalizedDataTable";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { getConfig } from "../../../../../common/config";
@@ -182,49 +183,55 @@ export default function PlatformAccessPage() {
               hidden={whitelistTabIndex !== 0}
               tabIndex={0}
             >
-              {t0.data?.completed_at ? (
-                <p className={styles.importCompleted} role="status">
-                  {t("rework.platformAccess.t0Done")}
-                </p>
-              ) : (
-                <div className={styles.importRow}>
+              <div className={styles.toolbar}>
+                <div className={styles.search}>
+                  <SearchInput
+                    size="small"
+                    value={query}
+                    placeholder={t("rework.platformAccess.search")}
+                    ariaLabel={t("rework.platformAccess.search")}
+                    clearAriaLabel={t("rework.platformAccess.clearSearch")}
+                    onChange={(value) => {
+                      setQuery(value);
+                      setOffset(0);
+                    }}
+                  />
+                </div>
+                {t0.data?.completed_at ? (
+                  <p className={styles.importCompleted} role="status">
+                    {t("rework.platformAccess.t0Done")}
+                  </p>
+                ) : (
+                  <div className={styles.importRow}>
+                    {t0.data && (
+                      <span>
+                        {t("rework.platformAccess.t0Preview", {
+                          count: t0.data.candidates,
+                          matching: t0.data.matching,
+                        })}
+                      </span>
+                    )}
+                    <Button
+                      color="primary"
+                      variant="outlined"
+                      size="small"
+                      title={t("rework.platformAccess.t0Hint")}
+                      disabled={locked || !t0.data || t0.isFetching || t0.isError}
+                      onClick={() => void run(() => importT0().unwrap())}
+                    >
+                      {t("rework.platformAccess.t0Import")}
+                    </Button>
+                  </div>
+                )}
+              </div>
+              {selected.length > 0 && (
+                <div className={styles.selectionBar}>
+                  <span>{t("rework.platformAccess.selectedCount", { count: selected.length })}</span>
                   <Button
                     color="primary"
                     variant="outlined"
                     size="small"
-                    title={t("rework.platformAccess.t0Hint")}
-                    disabled={locked || !t0.data || t0.isFetching || t0.isError}
-                    onClick={() => void run(() => importT0().unwrap())}
-                  >
-                    {t("rework.platformAccess.t0Import")}
-                  </Button>
-                  {t0.data && (
-                    <span>
-                      {t("rework.platformAccess.t0Preview", {
-                        count: t0.data.candidates,
-                        matching: t0.data.matching,
-                      })}
-                    </span>
-                  )}
-                </div>
-              )}
-              <div className={styles.group}>
-                <TextInput
-                  size="small"
-                  label={t("rework.platformAccess.search")}
-                  value={query}
-                  onChange={(event) => {
-                    setQuery(event.target.value);
-                    setOffset(0);
-                  }}
-                />
-                <p className={styles.hint}>{t("rework.platformAccess.bulkHint")}</p>
-                <div className={styles.row}>
-                  <Button
-                    color="primary"
-                    variant="filled"
-                    size="small"
-                    disabled={locked || selected.length === 0}
+                    disabled={locked}
                     onClick={() =>
                       void run(async () => {
                         await grantUsers({ grantPlatformAccessUsers: { user_ids: selected } }).unwrap();
@@ -232,110 +239,98 @@ export default function PlatformAccessPage() {
                       })
                     }
                   >
-                    {t("rework.platformAccess.allowSelected", { count: selected.length })}
+                    {t("rework.platformAccess.allowSelected")}
                   </Button>
-                  <Button
-                    color="primary"
-                    variant="outlined"
+                  <IconButton
+                    color="on-surface-retreat"
+                    variant="icon"
                     size="small"
-                    disabled={locked || selected.length === 0}
+                    icon={{ category: "outlined", type: "close" }}
+                    title={t("rework.platformAccess.clearSelection")}
+                    aria-label={t("rework.platformAccess.clearSelection")}
+                    disabled={locked}
                     onClick={() => setSelected([])}
-                  >
-                    {t("rework.platformAccess.clearSelection")}
-                  </Button>
-                </div>
-                {searching && !users.isFetching && !users.isError && (
-                  <DataTable
-                    size="small"
-                    data={users.currentData?.items ?? []}
-                    rowKey={(user) => user.user_id}
-                    serverPagination={{
-                      offset,
-                      limit: 25,
-                      totalCount: users.currentData?.total ?? 0,
-                      onOffsetChange: setOffset,
-                    }}
-                    columns={[
-                      {
-                        label: t("rework.platformAccess.select"),
-                        size: "0.5fr",
-                        cellRenderer: (user) => (
-                          <Checkbox
-                            aria-label={t("rework.platformAccess.selectUser", {
-                              user: user.username || user.user_id,
-                            })}
-                            checked={selected.includes(user.user_id)}
-                            disabled={locked || users.isFetching}
-                            onChange={(event) => {
-                              const checked = event.target.checked;
-                              setSelected((current) =>
-                                checked
-                                  ? current.includes(user.user_id)
-                                    ? current
-                                    : [...current, user.user_id]
-                                  : current.filter((id) => id !== user.user_id),
-                              );
-                            }}
-                          />
-                        ),
-                      },
-                      {
-                        label: t("rework.teamSettings.members.table.identifiant"),
-                        size: "2fr",
-                        cellRenderer: (user) => user.username || user.email || "-",
-                      },
-                      {
-                        label: t("rework.teamSettings.members.table.firstName"),
-                        size: "1fr",
-                        cellRenderer: (user) => user.first_name || "-",
-                      },
-                      {
-                        label: t("rework.teamSettings.members.table.lastName"),
-                        size: "1fr",
-                        cellRenderer: (user) => user.last_name || "-",
-                      },
-                      {
-                        label: t("rework.platformAccess.sources"),
-                        size: "3fr",
-                        cellRenderer: (user) => (
-                          <div className={styles.accessSources}>
-                            {user.sources.length
-                              ? user.sources.map((source, index) => (
-                                  <Chip
-                                    key={index}
-                                    label={`${t(`rework.platformAccess.source.${source.kind}`)}${source.team_name ? `: ${source.team_name}` : ""}`}
-                                  />
-                                ))
-                              : "-"}
-                          </div>
-                        ),
-                      },
-                      {
-                        label: t("rework.platformAccess.exception"),
-                        size: "1.5fr",
-                        cellRenderer: (user) => {
-                          const hasIndividual = user.sources.some(
-                            (source) => source.kind === "manual" || source.kind === "t0",
-                          );
-                          return (
-                            <Button
-                              color="primary"
-                              variant="filled"
-                              size="small"
-                              disabled={locked || users.isFetching}
-                              onClick={() =>
-                                void run(() => (hasIndividual ? revoke : grant)({ userId: user.user_id }).unwrap())
-                              }
-                            >
-                              {t(hasIndividual ? "rework.platformAccess.remove" : "rework.platformAccess.allow")}
-                            </Button>
-                          );
-                        },
-                      },
-                    ]}
                   />
-                )}
-              </div>
+                </div>
+              )}
+              {searching && users.isFetching && <Spinner statusText={t("rework.platformAccess.loading")} />}
+              {searching && !users.isFetching && !users.isError && !users.currentData?.total && (
+                <p className={styles.hint}>{t("rework.platformAccess.noUsers")}</p>
+              )}
+              {searching && !users.isFetching && !users.isError && !!users.currentData?.total && (
+                <DataTable
+                  size="small"
+                  data={users.currentData.items}
+                  rowKey={(user) => user.user_id}
+                  selectable
+                  selectedKeys={new Set(selected)}
+                  // Selection stays frozen while a change is being saved, as the row checkboxes were.
+                  onSelectionChange={(keys) => {
+                    if (!locked) setSelected([...keys].map(String));
+                  }}
+                  serverPagination={{
+                    offset,
+                    limit: 25,
+                    totalCount: users.currentData.total,
+                    onOffsetChange: setOffset,
+                  }}
+                  columns={[
+                    {
+                      label: t("rework.teamSettings.members.table.identifiant"),
+                      size: "2fr",
+                      cellRenderer: (user) => user.username || user.email || "-",
+                    },
+                    {
+                      label: t("rework.teamSettings.members.table.firstName"),
+                      size: "1fr",
+                      cellRenderer: (user) => user.first_name || "-",
+                    },
+                    {
+                      label: t("rework.teamSettings.members.table.lastName"),
+                      size: "1fr",
+                      cellRenderer: (user) => user.last_name || "-",
+                    },
+                    {
+                      label: t("rework.platformAccess.sources"),
+                      size: "3fr",
+                      cellRenderer: (user) => (
+                        <div className={styles.accessSources}>
+                          {user.sources.length
+                            ? user.sources.map((source, index) => (
+                                <Chip
+                                  key={index}
+                                  label={`${t(`rework.platformAccess.source.${source.kind}`)}${source.team_name ? `: ${source.team_name}` : ""}`}
+                                />
+                              ))
+                            : "-"}
+                        </div>
+                      ),
+                    },
+                    {
+                      label: t("rework.platformAccess.exception"),
+                      size: "9rem",
+                      cellRenderer: (user) => {
+                        const hasIndividual = user.sources.some(
+                          (source) => source.kind === "manual" || source.kind === "t0",
+                        );
+                        return (
+                          <Button
+                            color={hasIndividual ? "error" : "primary"}
+                            variant="outlined"
+                            size="small"
+                            disabled={locked || users.isFetching}
+                            onClick={() =>
+                              void run(() => (hasIndividual ? revoke : grant)({ userId: user.user_id }).unwrap())
+                            }
+                          >
+                            {t(hasIndividual ? "rework.platformAccess.remove" : "rework.platformAccess.allow")}
+                          </Button>
+                        );
+                      },
+                    },
+                  ]}
+                />
+              )}
             </div>
             <div
               className={styles.panel}
@@ -359,8 +354,8 @@ export default function PlatformAccessPage() {
                       cellRenderer: (team) => team.name || team.team_id,
                     },
                     {
-                      label: t("rework.platformAccess.allowTeam"),
-                      size: "1fr",
+                      label: t("rework.platformAccess.teamAllowed"),
+                      size: "8rem",
                       cellRenderer: (team) => (
                         <Switch
                           size="small"

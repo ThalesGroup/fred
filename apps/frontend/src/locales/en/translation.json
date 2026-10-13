@@ -3593,11 +3593,8 @@
         "rules": "Rules",
         "users": "Whitelist"
       },
-      "bulkHint": "Select users across searches and pages to add independent exceptions. Team access follows current membership.",
-      "allowSelected": "Allow selected users ({{count}})",
+      "allowSelected": "Allow selection",
       "clearSelection": "Clear selection",
-      "select": "Select",
-      "selectUser": "Select {{user}}",
       "title": "Platform access",
       "description": "Control admission using the configured identity attribute, individual exceptions and team membership.",
       "disabled": "Platform access administration requires authenticated Fred with enforced authorization.",
@@ -3791,7 +3788,12 @@
       },
       "whitelistHint": "Individual exceptions and authorized teams always allow access.",
       "filteringOn": "Filtering on",
-      "filteringOff": "Filtering off"
+      "filteringOff": "Filtering off",
+      "clearSearch": "Clear search",
+      "selectedCount_one": "{{count}} user selected",
+      "selectedCount_other": "{{count}} users selected",
+      "noUsers": "No user matches this search.",
+      "teamAllowed": "Allowed"
     }
   },
   "runtime": {
