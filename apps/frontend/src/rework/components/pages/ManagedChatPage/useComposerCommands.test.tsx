@@ -18,7 +18,7 @@
 // model only exists as the three of them — the field consumes a key only when
 // the hook claims it, and the hook claims it only when the menu is open.
 
-import { deleteCharBackward, undo, redo } from "@codemirror/commands";
+import { cursorCharLeft, cursorCharRight, deleteCharBackward, undo, redo } from "@codemirror/commands";
 import { EditorView } from "@codemirror/view";
 import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -721,6 +721,68 @@ describe("platform skills", () => {
     });
     await act(async () => renders[renders.length - 1]!.submit());
     expect(onRunCommand.mock.calls[1][0].command.prompt_id).toBe("p-review");
+  });
+  // One transaction per character, as the keyboard does, never a menu pick.
+  function cmTypeByHand(text: string) {
+    for (const character of text)
+      act(() => {
+        const head = cm().state.selection.main.head;
+        cm().dispatch({
+          changes: { from: head, insert: character },
+          selection: { anchor: head + 1 },
+          userEvent: "input.type",
+        });
+      });
+  }
+  const promptShown = () => container.querySelector("[data-kind=prompt]") !== null;
+  const skillShown = () => container.querySelector("[data-kind=skill]") !== null;
+  it.each([
+    { kind: "skill", name: "review", shown: skillShown },
+    { kind: "prompt", name: "summary", shown: promptShown },
+  ])("removes a hand-typed $kind token as one block", ({ name, shown }) => {
+    activateSkills(true);
+    act(() => cm().contentDOM.focus());
+    const token = `/${name}`;
+    for (const [before, after] of [
+      ["", ""],
+      ["", "notes"],
+      ["Before ", ""],
+      ["Before ", "after"],
+    ]) {
+      cmTypeByHand(before + token);
+      // Still a name being typed: no token, and Backspace edits one character.
+      expect(shown()).toBe(false);
+      cmPress("Backspace");
+      expect(cm().state.doc.toString()).toBe(before + token.slice(0, -1));
+      cmTypeByHand(token.slice(-1) + " " + after);
+      expect(shown()).toBe(true);
+      const to = (before + token).length;
+
+      // Backspace from the end: the text after, the space, then the whole token.
+      for (let index = 0; index < after.length + 1; index++) cmPress("Backspace");
+      expect(cm().state.doc.toString()).toBe(before + token);
+      expect(shown()).toBe(true);
+      act(() => {
+        cursorCharLeft(cm());
+      });
+      expect(cm().state.selection.main.head).toBe(before.length);
+      act(() => {
+        cursorCharRight(cm());
+      });
+      expect(cm().state.selection.main.head).toBe(to);
+      cmPress("Backspace");
+      expect(cm().state.doc.toString()).toBe(before);
+      expect(shown()).toBe(false);
+      expect(renders[renders.length - 1].menu).toBeNull();
+
+      // Delete from just before it, with the same draft typed again.
+      cmTypeByHand(token + " " + after);
+      act(() => cm().dispatch({ selection: { anchor: before.length } }));
+      cmPress("Delete");
+      expect(cm().state.doc.toString()).toBe(before + after);
+      expect(shown()).toBe(false);
+      act(() => cm().dispatch({ changes: { from: 0, to: cm().state.doc.length }, selection: { anchor: 0 } }));
+    }
   });
   it("deletes one of two adjacent tokens without touching the other", () => {
     activateSkills(true);

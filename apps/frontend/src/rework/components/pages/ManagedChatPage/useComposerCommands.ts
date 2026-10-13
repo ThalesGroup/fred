@@ -194,13 +194,19 @@ export function useComposerCommands(params: {
                 (!currentPromptChoice.promptTeamId || entry.promptTeamId === currentPromptChoice.promptTeamId))),
         )
       : undefined;
+  // A typed prompt has no choice behind it, so once shown it is remembered:
+  // deleting the text after it must not turn the token back into raw text.
+  const shownPromptRef = useRef<{ from: number; name: string } | null>(null);
   const selectedPrompt =
     promptEntry &&
     promptRange &&
-    (promptRange.to < params.input.length || currentPromptChoice) &&
+    (promptRange.to < params.input.length ||
+      currentPromptChoice ||
+      (shownPromptRef.current?.from === promptRange.from && shownPromptRef.current.name === promptRange.name)) &&
     (promptEntry.promptTeamId === teamId || currentPromptChoice || prompts !== undefined)
       ? { ...promptEntry, from: promptRange.from, to: promptRange.to }
       : null;
+  shownPromptRef.current = selectedPrompt && { from: selectedPrompt.from, name: selectedPrompt.command };
   const selectedSummary = skills.find((skill) => skill.name === selectedSkills[0]?.name);
 
   const mapChoices = useCallback((value: string) => {
