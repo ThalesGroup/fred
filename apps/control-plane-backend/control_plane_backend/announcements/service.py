@@ -386,6 +386,8 @@ async def announce_patch_notes(
     await _require_manage_platform(deps, user)
     store = deps.get_announcement_store()
     async with store.transaction() as session:
+        # One announce or withdraw at a time: never two announcements in effect.
+        await store.lock_patch_notes(session=session)
         included = await store.list_included_patch_notes(session=session)
         if not included:
             raise HTTPException(
@@ -437,6 +439,7 @@ async def withdraw_patch_note_announcement(
     await _require_manage_platform(deps, user)
     store = deps.get_announcement_store()
     async with store.transaction() as session:
+        await store.lock_patch_notes(session=session)
         current = await store.get_announcement_in_effect(session=session)
         if current is None:
             raise HTTPException(

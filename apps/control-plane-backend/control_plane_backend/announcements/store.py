@@ -21,7 +21,8 @@ from datetime import datetime
 from typing import Any, cast
 
 from fred_core.sql import make_session_factory, use_session
-from sqlalchemy import CursorResult, delete, select, update
+from fred_core.sql.base_sql import advisory_lock_key
+from sqlalchemy import CursorResult, delete, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from sqlalchemy.orm import undefer
@@ -32,6 +33,8 @@ from control_plane_backend.models.announcement_models import (
     AnnouncementSeenRow,
 )
 from control_plane_backend.models.base import utcnow
+
+_PATCH_NOTES_LOCK = "platform_announcement:patch_notes"
 
 
 @dataclass(frozen=True)
@@ -124,6 +127,7 @@ class AnnouncementStore:
     """
 
     def __init__(self, engine: AsyncEngine) -> None:
+        self._engine = engine
         self._sessions = make_session_factory(engine)
 
     @asynccontextmanager
@@ -131,6 +135,16 @@ class AnnouncementStore:
         """One committed-or-rolled-back session to pass to several calls."""
         async with use_session(self._sessions) as s:
             yield s
+
+    async def lock_patch_notes(self, *, session: AsyncSession) -> None:
+        """Serialize the writes that order or announce patch notes, until the
+        transaction ends. Postgres advisory lock; a no-op on SQLite, which
+        already allows one writer at a time."""
+        if self._engine.dialect.name == "postgresql":
+            await session.execute(
+                text("SELECT pg_advisory_xact_lock(:key)"),
+                {"key": advisory_lock_key(_PATCH_NOTES_LOCK)},
+            )
 
     async def list_all(
         self, *, session: AsyncSession | None = None
@@ -204,6 +218,8 @@ class AnnouncementStore:
         async with use_session(self._sessions, session) as s:
             position = None
             if kind == "patch_note":
+                # Locked so a reorder under way cannot reuse the top place.
+                await self.lock_patch_notes(session=s)
                 # A new patch note takes the top place; the others move down.
                 await s.execute(
                     update(AnnouncementRow)
@@ -340,6 +356,7 @@ class AnnouncementStore:
         patch note exactly once.
         """
         async with use_session(self._sessions, session) as s:
+            await self.lock_patch_notes(session=s)
             rows = {
                 row.id: row
                 for row in (

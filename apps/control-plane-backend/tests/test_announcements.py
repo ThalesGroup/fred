@@ -1203,6 +1203,25 @@ def test_patch_note_id_lists_are_bounded() -> None:
 
 
 @pytest.mark.asyncio
+async def test_announce_and_withdraw_take_the_patch_note_lock(
+    store: AnnouncementStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    deps = _deps(store, _platform_admin())
+    await _titled(deps, "A", enabled=True)
+    locked: list[bool] = []
+
+    async def _spy(*, session):
+        locked.append(session.in_transaction())
+
+    monkeypatch.setattr(store, "lock_patch_notes", _spy)
+
+    await _announce(user=_user(), deps=deps)
+    await withdraw_patch_note_announcement(user=_user(), deps=deps)
+
+    assert locked == [True, True]
+
+
+@pytest.mark.asyncio
 async def test_announcing_again_replaces_the_package_for_everyone(
     store: AnnouncementStore,
 ) -> None:
