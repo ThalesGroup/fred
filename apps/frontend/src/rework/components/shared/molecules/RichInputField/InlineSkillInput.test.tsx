@@ -28,6 +28,7 @@ const onOpenPrompt = vi.fn();
 const onChange = vi.fn();
 const onFiles = vi.fn();
 const recallKey = vi.fn<(event: import("./RichInputField").CommandKeyEvent) => boolean>(() => false);
+const onDraftEdit = vi.fn();
 const claimKey = vi.fn<(event: import("./RichInputField").CommandKeyEvent) => boolean>(() => false);
 function Host({
   disabled = false,
@@ -100,6 +101,7 @@ function Host({
         onQueryChange: vi.fn(),
         onFocusChange: vi.fn(),
         onKeyDown: claimKey,
+        onDraftEdit,
         listboxId: "commands",
         open: false,
         activeDescendantId: null,
@@ -157,6 +159,23 @@ it.each([
   });
   expect(editor().state.doc.toString()).toBe("Before /meeting-minutes after\nAction");
   expect(container.querySelector('[aria-label="chatbot.skills.open"]')).not.toBeNull();
+});
+it("reports each edit as the exact span it replaced, before the new text", () => {
+  // Removing "Before " and typing over "after": two spans in one transaction.
+  act(() =>
+    editor().dispatch({
+      changes: [
+        { from: 0, to: 7 },
+        { from: 24, to: 29, insert: "now" },
+      ],
+    }),
+  );
+  expect(onDraftEdit).toHaveBeenCalledExactlyOnceWith([
+    { from: 0, to: 7, insert: 0 },
+    { from: 24, to: 29, insert: 3 },
+  ]);
+  expect(onChange).toHaveBeenCalledExactlyOnceWith("/meeting-minutes now\nAction");
+  expect(onDraftEdit.mock.invocationCallOrder[0]).toBeLessThan(onChange.mock.invocationCallOrder[0]);
 });
 it("moves the caret and extends a selection over a token in one step", () => {
   const head = () => editor().state.selection.main.head;

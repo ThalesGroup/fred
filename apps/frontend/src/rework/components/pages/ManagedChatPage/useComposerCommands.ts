@@ -20,6 +20,7 @@ import {
   type CommandChoice,
   type CommandKeyEvent,
   type CommandTriggerBinding,
+  type DraftEdit,
 } from "@shared/molecules/RichInputField/RichInputField";
 import {
   type PromptCommandSummary,
@@ -30,6 +31,7 @@ import {
 import {
   assemblePromptTurn,
   findSkillInvocations,
+  isCommandTokenAt,
   MAX_TURN_PROMPTS,
   usablePromptList,
 } from "@rework/utils/skillInvocation";
@@ -49,8 +51,9 @@ export function parseCommandLine(value: string): { command: string; appended: st
   return match ? { command: match[1], appended: (match[2] ?? "").trim() } : null;
 }
 
+// The rest of the name under the caret, in any case like the menu's filter.
 function completionRange(input: string, range: { start: number; end: number }) {
-  return { ...range, end: range.end + (/^[a-z0-9_-]+/.exec(input.slice(range.end))?.[0].length ?? 0) };
+  return { ...range, end: range.end + (/^[a-z0-9_-]+/i.exec(input.slice(range.end))?.[0].length ?? 0) };
 }
 
 /** Entries whose name contains the query; names starting with it come first. */
@@ -61,9 +64,10 @@ function matchByName<T extends { command: string }>(entries: readonly T[], query
   return [...hits.filter(starts), ...hits.filter((entry) => !starts(entry))];
 }
 
-/** The span one edit replaced: positions before `from` stay, those from `end`
- *  on shift by `delta`, anything in between was rewritten. */
-function editBetween(old: string, value: string) {
+/** The span one edit replaced, guessed from the two texts. Only for a change
+ *  the editor did not report (recall, voice, a programmatic insert): where the
+ *  removed text repeats, the guess can name the wrong occurrence. */
+function editBetween(old: string, value: string): DraftEdit[] {
   let from = 0;
   while (from < old.length && from < value.length && old[from] === value[from]) from++;
   let tail = 0;
@@ -73,7 +77,18 @@ function editBetween(old: string, value: string) {
     old[old.length - tail - 1] === value[value.length - tail - 1]
   )
     tail++;
-  return { from, end: old.length - tail, delta: value.length - old.length };
+  return [{ from, to: old.length - tail, insert: value.length - tail - from }];
+}
+
+/** A range after the edits: unmoved before them, shifted after them, and
+ *  gone (`null`) when an edit reaches into it. */
+function mapRange<T extends { from: number; to: number }>(range: T, edits: readonly DraftEdit[]): T | null {
+  let shift = 0;
+  for (const edit of edits) {
+    if (edit.to <= range.from) shift += edit.insert - (edit.to - edit.from);
+    else if (edit.from < range.to) return null;
+  }
+  return shift ? { ...range, from: range.from + shift, to: range.to + shift } : range;
 }
 
 /** A deleted or forbidden prompt will not come back by retrying. */
@@ -152,6 +167,10 @@ export function useComposerCommands(params: {
   const choicesRef = useRef(choices);
   choicesRef.current = choices;
   const draftReplaceRef = useRef(false);
+  // The exact spans of the change the editor is reporting, and the last change
+  // applied: both replace a guess from the two texts wherever they are known.
+  const pendingEditsRef = useRef<readonly DraftEdit[] | null>(null);
+  const lastEditRef = useRef<{ old: string; value: string; edits: readonly DraftEdit[] } | null>(null);
   const restoredChoicesRef = useRef<readonly Choice[] | null>(null);
   const { currentData: catalog, isFetching: skillsFetching } = useGetAgentInstanceSkillsQuery(
     { teamId, agentInstanceId: agentInstanceId ?? "" },
@@ -207,7 +226,7 @@ export function useComposerCommands(params: {
   );
   const commandsRef = useRef(commands);
   commandsRef.current = commands;
-  const matchedChoices = choices.filter((choice) => params.input.slice(choice.from, choice.to) === `/${choice.name}`);
+  const matchedChoices = choices.filter((choice) => isCommandTokenAt(params.input, choice.from, choice.name));
   const promptChoices = matchedChoices.flatMap((choice) => (choice.kind === "prompt" ? [{ ...choice, choice }] : []));
   const allSkillRanges = findSkillInvocations(params.input, skillNames);
   // A name picked as a prompt is never also a skill, wherever it sits.
@@ -219,18 +238,17 @@ export function useComposerCommands(params: {
   );
   // A typed prompt has no choice behind it, so once shown it is remembered:
   // deleting the text after it must not turn the token back into raw text.
-  const shownPromptsRef = useRef<{ input: string; tokens: { from: number; name: string }[] }>({
+  const shownPromptsRef = useRef<{ input: string; tokens: { from: number; to: number; name: string }[] }>({
     input: params.input,
     tokens: [],
   });
-  const shownEdit = editBetween(shownPromptsRef.current.input, params.input);
-  const shownBefore = shownPromptsRef.current.tokens.flatMap((token) =>
-    token.from + token.name.length + 1 <= shownEdit.from
-      ? [token]
-      : token.from >= shownEdit.end
-        ? [{ ...token, from: token.from + shownEdit.delta }]
-        : [],
-  );
+  const remembered = shownPromptsRef.current;
+  const lastEdit = lastEditRef.current;
+  const shownEdits =
+    lastEdit?.old === remembered.input && lastEdit.value === params.input
+      ? lastEdit.edits
+      : editBetween(remembered.input, params.input);
+  const shownBefore = remembered.tokens.flatMap((token) => mapRange(token, shownEdits) ?? []);
   const selectedPrompts = [
     ...promptChoices,
     ...findSkillInvocations(
@@ -264,15 +282,19 @@ export function useComposerCommands(params: {
         (entry.promptTeamId === teamId || choice || prompts !== undefined);
       return shown ? [{ ...entry, from: range.from, to: range.to }] : [];
     });
-  shownPromptsRef.current = {
-    input: params.input,
-    tokens: selectedPrompts.map((prompt) => ({ from: prompt.from, name: prompt.command })),
-  };
+  // Committed after the render, so a render React discards remembers nothing.
+  useEffect(() => {
+    shownPromptsRef.current = {
+      input: params.input,
+      tokens: selectedPrompts.map((prompt) => ({ from: prompt.from, to: prompt.to, name: prompt.command })),
+    };
+  });
   const selectedSummary = skills.find((skill) => skill.name === selectedSkills[0]?.name);
 
-  const mapChoices = useCallback((value: string) => {
+  const mapChoices = useCallback((value: string, known?: readonly DraftEdit[] | null) => {
     const old = paramsRef.current.input;
-    const { from, end, delta } = editBetween(old, value);
+    const edits = known ?? editBetween(old, value);
+    lastEditRef.current = { old, value, edits };
     const replacing = draftReplaceRef.current;
     draftReplaceRef.current = false;
     const previous = replacing ? [] : [...choicesRef.current];
@@ -283,14 +305,11 @@ export function useComposerCommands(params: {
     ))
       if (!replacing && !previous.some((choice) => choice.from === token.from))
         previous.push({ ...token, kind: "skill", scope: scopeRef.current.version });
+    // A choice whose token an edit reached into, or glued a character to, is
+    // dropped for good: the text left behind is ordinary typed text.
     const mappedChoices = previous.flatMap((choice) => {
-      const mapped =
-        choice.to <= from
-          ? choice
-          : choice.from >= end
-            ? { ...choice, from: choice.from + delta, to: choice.to + delta }
-            : null;
-      return mapped && value.slice(mapped.from, mapped.to) === `/${mapped.name}` ? [mapped] : [];
+      const mapped = mapRange(choice, edits);
+      return mapped && isCommandTokenAt(value, mapped.from, mapped.name) ? [mapped] : [];
     });
     for (const token of findSkillInvocations(
       value,
@@ -305,7 +324,10 @@ export function useComposerCommands(params: {
     (value: string) => {
       const restored = restoredChoicesRef.current;
       restoredChoicesRef.current = null;
-      setChoices(restored ? [...restored] : mapChoices(value));
+      const edits = pendingEditsRef.current;
+      pendingEditsRef.current = null;
+      const mapped = mapChoices(value, edits);
+      setChoices(restored ? [...restored] : mapped);
       paramsRef.current.setInput(value);
     },
     [mapChoices],
@@ -420,7 +442,7 @@ export function useComposerCommands(params: {
         scope: scopeRef.current.version,
       }));
     for (const { promptId, ...range } of sent) {
-      if (!promptId || line.slice(range.from, range.to) !== `/${range.name}`) continue;
+      if (!promptId || !isCommandTokenAt(line, range.from, range.name)) continue;
       const entry = commandsRef.current.find((entry) => entry.promptId === promptId && entry.command === range.name);
       restored.push({
         ...range,
@@ -467,7 +489,9 @@ export function useComposerCommands(params: {
       const trailing = input.slice(range.end);
       const separator = /^\s/.test(trailing) ? "" : " ";
       const value = input.slice(0, range.start) + token + separator + trailing;
-      const preserved = mapChoices(value).filter((choice) => choice.from !== range.start);
+      const preserved = mapChoices(value, [
+        { from: range.start, to: range.end, insert: token.length + separator.length },
+      ]).filter((choice) => choice.from !== range.start);
       const choice: Choice = {
         name,
         from: range.start,
@@ -561,7 +585,7 @@ export function useComposerCommands(params: {
     // Legacy prefix normalization must preserve the chosen prompt's owner.
     const active = choicesRef.current
       .map((choice) => ({ ...choice, from: choice.from + choiceOffset, to: choice.to + choiceOffset }))
-      .filter((choice) => input.slice(choice.from, choice.to) === `/${choice.name}`)
+      .filter((choice) => isCommandTokenAt(input, choice.from, choice.name))
       .sort((a, b) => a.from - b.from);
     const explicitPrompts = active.flatMap((choice) =>
       choice.kind === "prompt" ? [{ ...choice, explicit: choice }] : [],
@@ -707,6 +731,10 @@ export function useComposerCommands(params: {
     setChoices([]);
   }, []);
 
+  const onDraftEdit = useCallback((edits: readonly DraftEdit[]) => {
+    pendingEditsRef.current = edits;
+  }, []);
+
   const onChoicesRestore = useCallback((restored: readonly Choice[]) => {
     restoredChoicesRef.current = restored;
     draftReplaceRef.current = false;
@@ -718,6 +746,7 @@ export function useComposerCommands(params: {
     inlineCommandNames: [...skillNames, ...commands.map((entry) => entry.command)],
     selectionRequest,
     onDraftReplace,
+    onDraftEdit,
     onQueryChange,
     onKeyDown,
     onFocusChange,

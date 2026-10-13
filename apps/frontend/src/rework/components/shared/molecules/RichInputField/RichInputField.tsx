@@ -42,12 +42,19 @@ export type CommandChoice = { name: string; from: number; to: number; scope: num
   | { kind: "prompt"; promptId: string; promptTeamId: string }
 );
 
+/** One replaced span of the draft, in the positions of the text before the
+ *  edit: `insert` characters took the place of `from`..`to`. */
+export type DraftEdit = { from: number; to: number; insert: number };
+
 /** The host's side of the command trigger — see `commandTrigger`. */
 export interface CommandTriggerBinding {
   /** The active command at the caret, with its replaceable range. */
   onQueryChange: (query: string | null, range?: { start: number; end: number }) => void;
   selectionRequest?: { id: number; caret: number };
   onDraftReplace?: () => void;
+  /** What the editor is about to report through `onChange`, as exact spans:
+   *  the host then moves its choices without guessing from the two texts. */
+  onDraftEdit?: (edits: readonly DraftEdit[]) => void;
   choices?: readonly CommandChoice[];
   onChoicesRestore?: (choices: readonly CommandChoice[]) => void;
   /** Additional command names eligible for completion inside existing text. */

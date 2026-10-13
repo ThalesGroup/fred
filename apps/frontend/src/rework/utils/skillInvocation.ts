@@ -102,16 +102,32 @@ export function usablePromptList(
   return list;
 }
 
-/** Resolve only complete, whitespace-delimited names in the current catalog. */
-export function findSkillInvocations(value: string, names: readonly string[], requireDelimiter = false) {
+/** Every `/name`-shaped word: a name delimited by whitespace or a text boundary. */
+export function findCommandWords(value: string) {
   const result: { name: string; from: number; to: number }[] = [];
-  const tokens = value.matchAll(/(?:^|\s)\/([a-z0-9_-]+)(?=\s|$)/g);
-  for (const match of tokens) {
+  for (const match of value.matchAll(/(?:^|\s)\/([a-z0-9_-]+)(?=\s|$)/g)) {
     const from = match.index + match[0].length - match[1].length - 1;
-    const to = from + match[1].length + 1;
-    if (names.includes(match[1]) && (!requireDelimiter || to < value.length)) result.push({ name: match[1], from, to });
+    result.push({ name: match[1], from, to: from + match[1].length + 1 });
   }
   return result;
+}
+
+/** The one rule for a token: `/name` at `from`, delimited on both sides by
+ *  whitespace or a text boundary. A character glued to it makes it plain text. */
+export function isCommandTokenAt(value: string, from: number, name: string): boolean {
+  const to = from + name.length + 1;
+  return (
+    value.slice(from, to) === `/${name}` &&
+    (from === 0 || /\s/.test(value[from - 1])) &&
+    (to === value.length || /\s/.test(value[to]))
+  );
+}
+
+/** Resolve only complete, whitespace-delimited names in the current catalog. */
+export function findSkillInvocations(value: string, names: readonly string[], requireDelimiter = false) {
+  return findCommandWords(value).filter(
+    (word) => names.includes(word.name) && (!requireDelimiter || word.to < value.length),
+  );
 }
 
 export function findSkillInvocation(value: string, names: readonly string[], requireDelimiter = false) {

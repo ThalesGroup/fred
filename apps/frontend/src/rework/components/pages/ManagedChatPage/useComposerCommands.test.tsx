@@ -360,6 +360,13 @@ describe("the command menu", () => {
     expect(onSend).not.toHaveBeenCalled();
   });
 
+  it("replaces the whole name under the caret, whatever its case", () => {
+    type("hello /MAR", 9);
+    expect(labels()).toEqual(["/summary"]);
+    press("Tab");
+    expect(textarea().value).toBe("hello /summary ");
+  });
+
   it("completes the same way on a pointer activation", () => {
     type("/");
     act(() => {
@@ -2130,6 +2137,159 @@ describe("several prompt commands in one message", () => {
       ["summary", "team-1", 0],
       ["tone", "personal-1", 19],
     ]);
+  });
+
+  describe("a character glued to a token", () => {
+    const SUM = { ...TONE, prompt_id: "p-sum", command: "sum", name: "Somme" };
+    const cmInsert = (at: number, text: string) =>
+      act(() => cm().dispatch({ changes: { from: at, insert: text }, selection: { anchor: at + text.length } }));
+    const pickSum = () => {
+      listResult = { data: [SUM, ...PROMPTS] };
+      mount([]);
+      cmAppend("/sum");
+      expect(labels()).toEqual(["/sum", "/summary"]);
+      cmPress("Tab");
+      expect(cm().state.doc.toString()).toBe("/sum ");
+      expect(latest().selectedPrompts.map((prompt) => prompt.promptId)).toEqual(["p-sum"]);
+    };
+
+    it("turns a picked prompt back into text when letters are typed right after it", async () => {
+      pickSum();
+      cmPress("Backspace");
+      expect(cm().state.doc.toString()).toBe("/sum");
+      expect(latest().selectedPrompts.map((prompt) => prompt.promptId)).toEqual(["p-sum"]);
+      cmAppend("mary x");
+
+      // The line now reads as the other command, typed by hand.
+      expect(latest().trigger.choices).toEqual([]);
+      expect(latest().selectedPrompts.map((prompt) => prompt.promptId)).toEqual(["p-summary"]);
+      await submit();
+      expect(onRunCommand.mock.calls[0][0].command).toMatchObject({
+        draft_text: "/summary x",
+        prompts: [expect.objectContaining({ command: "summary", prompt_id: "p-summary" })],
+      });
+    });
+
+    it("does not pin the prompt again when the glued letter is removed", () => {
+      pickSum();
+      cmPress("Backspace");
+      cmAppend("x");
+      expect(latest().selectedPrompts).toEqual([]);
+      cmPress("Backspace");
+      expect(cm().state.doc.toString()).toBe("/sum");
+      expect(latest().trigger.choices).toEqual([]);
+      expect(container.querySelector(".cm-content [data-kind=prompt]")).toBeNull();
+    });
+
+    it("turns a picked prompt back into text when a character is typed right before it", async () => {
+      pickSum();
+      cmInsert(0, "x");
+      expect(cm().state.doc.toString()).toBe("x/sum ");
+      expect(latest().trigger.choices).toEqual([]);
+      expect(latest().selectedPrompts).toEqual([]);
+      expect(container.querySelector(".cm-content [data-kind=prompt]")).toBeNull();
+      await submit();
+      expect(onSend).toHaveBeenCalledOnce();
+      expect(onRunCommand).not.toHaveBeenCalled();
+    });
+
+    it.each(["after", "before"])(
+      "turns a picked skill back into text when a character is typed right %s it",
+      (side) => {
+        mount([], ["review"]);
+        cmAppend("/rev");
+        cmPress("Tab");
+        cmPress("Backspace");
+        expect(cm().state.doc.toString()).toBe("/review");
+        expect(latest().selectedSkills.map((skill) => skill.name)).toEqual(["review"]);
+
+        cmInsert(side === "after" ? 7 : 0, "s");
+        expect(latest().trigger.choices).toEqual([]);
+        expect(latest().selectedSkills).toEqual([]);
+        expect(container.querySelector(".cm-content [data-kind=skill]")).toBeNull();
+
+        // Back to the bare name: a name being typed, like any other.
+        act(() => cm().dispatch({ changes: side === "after" ? { from: 7, to: 8 } : { from: 0, to: 1 } }));
+        expect(cm().state.doc.toString()).toBe("/review");
+        expect(latest().selectedSkills).toEqual([]);
+      },
+    );
+  });
+
+  describe("deleting one of two tokens with the same name", () => {
+    const MINE = { ...TONE, prompt_id: "personal-summary", command: "summary", name: "Mine" };
+    const pickBoth = (before: string) => {
+      mount([MINE]);
+      cmAppend(`${before}/summ`);
+      cmPress("Tab");
+      cmAppend("/summ");
+      cmPress("ArrowDown");
+      cmPress("Tab");
+      cmAppend("x");
+      expect(cm().state.doc.toString()).toBe(`${before}/summary /summary x`);
+      expect(latest().selectedPrompts.map((prompt) => prompt.promptId)).toEqual(["p-summary", "personal-summary"]);
+    };
+
+    it.each(["", "a "])("keeps the second token's own prompt when the first is removed after %j", async (before) => {
+      pickBoth(before);
+      act(() => cm().dispatch({ selection: { anchor: before.length + "/summary".length } }));
+      cmPress("Backspace");
+      expect(cm().state.doc.toString()).toBe(`${before}/summary x`);
+      expect(latest().selectedPrompts.map((prompt) => [prompt.promptId, prompt.from])).toEqual([
+        ["personal-summary", before.length],
+      ]);
+      await submit();
+      expect(onRunCommand.mock.calls[0][0].command.prompts).toEqual([
+        expect.objectContaining({ prompt_id: "personal-summary", draft_offset: before.length }),
+      ]);
+    });
+
+    it("keeps the first token's own prompt when the second is removed", () => {
+      pickBoth("");
+      act(() => cm().dispatch({ selection: { anchor: "/summary ".length } }));
+      cmPress("Delete");
+      expect(cm().state.doc.toString()).toBe("/summary x");
+      expect(latest().selectedPrompts.map((prompt) => prompt.promptId)).toEqual(["p-summary"]);
+    });
+
+    it("gives both tokens their prompt back on undo, and removes the same one on redo", () => {
+      pickBoth("");
+      act(() => cm().dispatch({ selection: { anchor: "/summary".length } }));
+      cmPress("Backspace");
+      act(() => {
+        undo(cm());
+      });
+      expect(cm().state.doc.toString()).toBe("/summary /summary x");
+      expect(latest().selectedPrompts.map((prompt) => prompt.promptId)).toEqual(["p-summary", "personal-summary"]);
+      act(() => {
+        redo(cm());
+      });
+      expect(cm().state.doc.toString()).toBe("/summary x");
+      expect(latest().selectedPrompts.map((prompt) => prompt.promptId)).toEqual(["personal-summary"]);
+    });
+
+    it("leaves the skill when the prompt of the same name before it is removed", async () => {
+      listResult = { data: [{ ...TONE, prompt_id: "p-review", command: "review", name: "Review" }] };
+      mount([], ["review"]);
+      cmAppend("/rev");
+      cmPress("Tab");
+      cmAppend("/rev");
+      cmPress("ArrowDown");
+      cmPress("Tab");
+      cmAppend("x");
+      expect(cm().state.doc.toString()).toBe("/review /review x");
+      expect(latest().selectedPrompts.map((prompt) => prompt.from)).toEqual([0]);
+      expect(latest().selectedSkills.map((skill) => skill.from)).toEqual([8]);
+
+      act(() => cm().dispatch({ selection: { anchor: "/review".length } }));
+      cmPress("Backspace");
+      expect(cm().state.doc.toString()).toBe("/review x");
+      expect(latest().selectedPrompts).toEqual([]);
+      expect(latest().selectedSkills.map((skill) => skill.from)).toEqual([0]);
+      await submit();
+      expect(onRunSkill).toHaveBeenCalledWith({ text: "/review x", skills: [{ name: "review" }] });
+      expect(onRunCommand).not.toHaveBeenCalled();
+    });
   });
 
   describe("recalled", () => {

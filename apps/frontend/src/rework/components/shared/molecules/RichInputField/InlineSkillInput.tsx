@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 import { Annotation, Compartment, EditorState, StateEffect, StateField, Transaction, Prec } from "@codemirror/state";
 import { defaultKeymap, history, historyKeymap, invertedEffects } from "@codemirror/commands";
 import { Decoration, EditorView, keymap, WidgetType } from "@codemirror/view";
-import type { CommandChoice, CommandKeyEvent, CommandTriggerBinding } from "./RichInputField";
+import type { CommandChoice, CommandKeyEvent, CommandTriggerBinding, DraftEdit } from "./RichInputField";
 import badgeStyles from "../SkillBadge/SkillBadge.module.css";
 import iconStyles from "../../atoms/Icon/Icon.module.scss";
 import styles from "./InlineSkillInput.module.css";
@@ -246,6 +246,11 @@ export function InlineSkillInput(props: Props) {
             if (update.docChanged && !update.transactions.some((tr) => tr.annotation(externalSync))) {
               if (update.transactions.some((tr) => tr.isUserEvent("undo") || tr.isUserEvent("redo")))
                 propsRef.current.commandTrigger?.onChoicesRestore?.(update.state.field(choiceHistory));
+              const edits: DraftEdit[] = [];
+              update.changes.iterChanges((from, to, _fromB, _toB, inserted) =>
+                edits.push({ from, to, insert: inserted.length }),
+              );
+              propsRef.current.commandTrigger?.onDraftEdit?.(edits);
               propsRef.current.onChange(update.state.doc.toString());
             }
             if (update.docChanged || update.selectionSet)
