@@ -189,7 +189,7 @@ export default function PlatformAccessRuleEditor({
         <Button
           color="primary"
           variant="filled"
-          size="medium"
+          size="small"
           disabled={locked || !valid || !dirty || conflict}
           onClick={() => void persist()}
         >
@@ -207,7 +207,7 @@ export default function PlatformAccessRuleEditor({
       </p>
       <Select
         label={t("rework.platformAccess.rule.mode")}
-        size="medium"
+        size="small"
         value={draft.mode ?? "allow"}
         disabled={locked}
         options={(["allow", "block"] as const).map((mode) => ({
@@ -253,7 +253,7 @@ export default function PlatformAccessRuleEditor({
                 <Tooltip text={t("rework.platformAccess.rule.removeConditionNumber", { number: index + 1 })}>
                   <IconButton
                     variant="icon"
-                    size="medium"
+                    size="small"
                     icon={{ category: "outlined", type: "delete" }}
                     disabled={locked}
                     aria-label={t("rework.platformAccess.rule.removeConditionNumber", { number: index + 1 })}
@@ -327,7 +327,7 @@ export default function PlatformAccessRuleEditor({
         <Button
           color="primary"
           variant="outlined"
-          size="medium"
+          size="small"
           disabled={locked || draft.conditions.length >= 16}
           onClick={() => setPicking("add")}
         >
@@ -335,20 +335,14 @@ export default function PlatformAccessRuleEditor({
         </Button>
       </div>
       <div className={`${styles.row} ${styles.ruleActions}`}>
-        <Button
-          color="primary"
-          variant="outlined"
-          size="medium"
-          disabled={locked || !valid}
-          onClick={() => void test()}
-        >
+        <Button color="primary" variant="outlined" size="small" disabled={locked || !valid} onClick={() => void test()}>
           {t("rework.platformAccess.rule.test")}
         </Button>
         {(dirty || conflict) && (
           <Button
             color="primary"
             variant="outlined"
-            size="medium"
+            size="small"
             disabled={locked}
             onClick={() => void discardAndReload()}
           >

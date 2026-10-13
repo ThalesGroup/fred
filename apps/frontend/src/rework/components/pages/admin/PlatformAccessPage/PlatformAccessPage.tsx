@@ -198,6 +198,7 @@ export default function PlatformAccessPage() {
                 )}
                 <section className={styles.section}>
                   <TextInput
+                    size="small"
                     label={t("rework.platformAccess.search")}
                     value={query}
                     onChange={(event) => {
@@ -210,7 +211,7 @@ export default function PlatformAccessPage() {
                     <Button
                       color="primary"
                       variant="filled"
-                      size="medium"
+                      size="small"
                       disabled={locked || selected.length === 0}
                       onClick={() =>
                         void run(async () => {
@@ -224,7 +225,7 @@ export default function PlatformAccessPage() {
                     <Button
                       color="primary"
                       variant="outlined"
-                      size="medium"
+                      size="small"
                       disabled={locked || selected.length === 0}
                       onClick={() => setSelected([])}
                     >
@@ -233,6 +234,7 @@ export default function PlatformAccessPage() {
                   </div>
                   {searching && !users.isFetching && !users.isError && (
                     <DataTable
+                      size="small"
                       data={users.currentData?.items ?? []}
                       rowKey={(user) => user.user_id}
                       serverPagination={{
@@ -307,7 +309,7 @@ export default function PlatformAccessPage() {
                               <Button
                                 color="primary"
                                 variant="filled"
-                                size="medium"
+                                size="small"
                                 disabled={locked || users.isFetching}
                                 onClick={() =>
                                   void run(() => (hasIndividual ? revoke : grant)({ userId: user.user_id }).unwrap())
@@ -335,6 +337,7 @@ export default function PlatformAccessPage() {
                   <h2>{t("rework.platformAccess.teams")}</h2>
                   <p>{t("rework.platformAccess.teamHint")}</p>
                   <DataTable
+                    size="small"
                     data={teams.data ?? []}
                     rowKey={(team) => team.team_id}
                     pageSize={20}
@@ -349,6 +352,7 @@ export default function PlatformAccessPage() {
                         size: "1fr",
                         cellRenderer: (team) => (
                           <Switch
+                            size="small"
                             aria-label={`${t("rework.platformAccess.allowTeam")} ${team.name || team.team_id}`}
                             disabled={locked || teams.isFetching}
                             checked={team.allowed}

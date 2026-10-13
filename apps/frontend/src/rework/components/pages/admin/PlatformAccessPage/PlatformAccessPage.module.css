@@ -1,12 +1,14 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 .page {
-  --font-body-small: var(--font-body-medium);
   display: flex;
   flex-direction: column;
   gap: var(--spacing-m);
+  margin: 0 auto;
   padding: var(--spacing-m);
+  width: 100%;
+  max-width: 1080px;
   overflow: auto;
-  font: var(--font-body-large);
+  font: var(--font-body-medium);
 }
 .navigation {
   flex-shrink: 0;
@@ -24,8 +26,7 @@
   display: none;
 }
 .dialogBody {
-  --font-body-small: var(--font-body-medium);
-  font: var(--font-body-large);
+  font: var(--font-body-medium);
 }
 .section {
   display: flex;
@@ -56,27 +57,22 @@
 }
 .ruleEditor {
   container-type: inline-size;
-  max-width: 72rem;
 }
 .section > h2 {
   margin: 0;
-  font: var(--font-title-large);
+  font: var(--font-title-medium);
 }
 .ruleEditor > p,
 .condition > p {
   margin: 0;
   color: var(--on-surface-retreat);
-  font: var(--font-body-large);
-}
-.ruleEditor > .hint {
-  font: var(--font-body-medium);
 }
 .conditionHeader {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: var(--spacing-s);
-  font: var(--font-title-medium);
+  font: var(--font-title-small);
 }
 .conditionGrid {
   display: grid;
@@ -96,7 +92,6 @@
   background: color-mix(in srgb, var(--result-accent) 8%, var(--surface-container));
   padding: var(--spacing-m);
   color: var(--on-surface);
-  font: var(--font-body-large);
 }
 .testResult[data-outcome="denied"] {
   --result-accent: var(--error);
@@ -104,7 +99,7 @@
 .testResult h3 {
   margin: 0 0 var(--spacing-s);
   color: var(--result-accent);
-  font: var(--font-title-large);
+  font: var(--font-title-medium);
 }
 .testResult p {
   margin: var(--spacing-xs) 0 0;
@@ -221,7 +216,7 @@
 }
 .ruleHeader h2 {
   margin: 0;
-  font: var(--font-title-large);
+  font: var(--font-title-medium);
 }
 .accountField {
   display: flex;
@@ -246,7 +241,7 @@
   max-width: 100%;
   min-height: 2.5rem;
   color: var(--primary);
-  font: var(--font-body-large);
+  font: var(--font-body-medium);
   text-align: start;
 }
 .fieldName {
@@ -305,7 +300,6 @@
 }
 .tokenValue {
   color: var(--on-surface);
-  font: var(--font-body-large);
   overflow-wrap: anywhere;
 }
 .tokenValue > span {
@@ -405,7 +399,6 @@
 }
 .unverifiedUsers > summary {
   cursor: pointer;
-  font: var(--font-body-large);
 }
 
 .accessSources {
