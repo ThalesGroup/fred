@@ -50,7 +50,8 @@ The list comes in three parts, each under its own title:
 3. **Platform skills**: the skills the agent can use.
 
 A part with nothing to offer does not appear. In your personal space, your
-commands are listed once, under **Personal space**.
+commands are listed once, under **Personal space**. If the commands cannot be
+loaded, the list says so: type `/` again to retry.
 
 If the team and you have a command with the same name, it appears in both
 parts: pick the row you want, and that exact prompt is the one that runs. If
@@ -67,7 +68,9 @@ So it takes two presses of Enter to run a command picked from the list: the
 first adds it, the second sends. In between, you can complete your message.
 
 The added command shows as a small label in your message. Click it to read the
-prompt's text again before sending.
+prompt's text again before sending. The label holds as long as the command
+stands on its own, with a space or a line break on each side: if you type a
+character right against it, it becomes ordinary text again.
 
 You can place several prompt commands and several platform skills anywhere in
 a message, in the order you like; the list keeps offering your commands after

@@ -142,8 +142,8 @@ Proven by tests:
 - Run errors (`useComposerCommands.test.tsx`): `stale` after a team, agent or
   personal-space change, for a prompt gone from its catalog, for a recalled
   prompt that no longer exists and for a 403 or 404 read; `unreadable` for a
-  thrown read and for a typed personal command while the team's catalog is
-  pending.
+  thrown read. A typed personal command while the team's catalog is pending
+  is no longer an error: see "Independent review fixes" below.
 - Token hint and preview (`InlineSkillInput.test.tsx`,
   `ManagedChatPage.test.tsx`): the token is a `button` with the shared action
   class and the "open the prompt" label; its hint's second line is the
@@ -165,6 +165,55 @@ widget's element.
 Not done, reported to the owner: a hand-typed name shared by a prompt and a
 platform skill still resolves as before (see design.md), and a command typed
 in full in another case is not recognised.
+
+## Independent review fixes
+
+Run from `apps/frontend` after the fixes, on the branch tip:
+`npx --no-install tsc --noEmit -p .` clean; `npx --no-install eslint` and
+`npx --no-install prettier --check` clean on every changed file;
+`npx --no-install vitest run`: 331 files passed, 1 skipped; 4092 tests
+passed, 7 skipped. `openspec validate section-composer-command-menu --strict`
+valid. Each new case was first seen failing against the code before its fix.
+
+- Enter while sending is blocked (`RichInputField.trigger.test.tsx`): with
+  `sendDisabled`, Enter reaches the menu's handler, its default is prevented
+  and nothing is sent; with a menu that leaves the key, Enter still does not
+  send. The former case asserting that Enter was withheld is replaced.
+- Sending waits for the catalogs (`useComposerCommands.test.tsx`, "sending
+  while a catalog has not answered"): the personal catalog pending and
+  `/summary and /tone now` sends nothing until it answers, then both prompts;
+  both prompt catalogs pending and `/summary report` waits for the two, and a
+  second Enter meanwhile sends one turn only; the skill catalog pending and
+  `/review notes` runs the skill once it answers; `see /etc and /nosuch
+  please` is sent as plain text with no error once the catalog answered; `see
+  /etc/hosts and a/b` is sent at once with no catalog asked; a change of team
+  during the wait sends nothing. After a failure: the catalog is asked once
+  more on submit and the turn goes out when it answers; when it fails again
+  `["unreadable", "summary"]` is reported and nothing is sent; text with no
+  command word is sent at once. A typed personal fallback and a typed name
+  next to a picked personal prompt wait for the team's catalog (two former
+  cases that expected an error, rewritten).
+- Failed catalog in the menu (same file): the status line is the `error` key
+  for `/` and for `/zzz`, never "no command" or "no match"; the catalog is
+  asked again once per started command, not per character; rows of a catalog
+  that answered are still listed with no error line.
+- One rule for a token (same file, "a character glued to a token", and
+  `skillInvocation.test.ts`): `mary x` typed after a picked `/sum` leaves no
+  choice, shows the `summary` command as typed and sends the `summary` prompt
+  under `draft_text: "/summary x"`; removing a glued letter does not pin the
+  prompt again; a character before a picked prompt makes the draft plain text,
+  sent as typed; the same on both sides for a picked skill. `isCommandTokenAt`
+  on its own for both boundaries, tabs and line breaks; a stored list whose
+  command has a glued character in the typed line is refused.
+- Completion and case (same file): `hello /MA|R` completed gives `hello
+  /summary `.
+- Empty preview (`CommandPromptPanel.test.tsx`, new): an empty or blank text
+  shows the `previewEmpty` key as a status; loading and error lines unchanged.
+
+Not proven: nothing was looked at in a browser. Not covered by a test: the
+real RTK Query `refetch()` joining a request in flight and retrying a failed
+one (the tests stand in for it with a promise), and the fr and en wording of
+the two new strings in place.
 
 ## Divergence from the plan
 

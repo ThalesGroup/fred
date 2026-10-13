@@ -103,7 +103,19 @@ The slash menu SHALL group its entries in up to three sections, always in this o
 
 ### Requirement: Picking a menu row inserts the command and never sends
 
-In the slash menu, Enter, Tab and a pointer activation on a row SHALL all do the same thing, for a prompt command and for a platform skill alike: insert the row's command in the composer at the command being typed, keep the surrounding text, close the menu and send nothing. A turn SHALL only be sent by the ordinary submit, with the menu closed: Enter again, or the send button. That submit SHALL resolve a picked prompt command to the exact prompt of the picked row (its id and its owning library) and send the same expanded text and the same command attribution whichever way the row was picked. Shift+Enter SHALL keep its ordinary composer behaviour while the menu is open.
+In the slash menu, Enter, Tab and a pointer activation on a row SHALL all do the same thing, for a prompt command and for a platform skill alike: insert the row's command in the composer at the command being typed, keep the surrounding text, close the menu and send nothing. A turn SHALL only be sent by the ordinary submit, with the menu closed: Enter again, or the send button. That submit SHALL resolve a picked prompt command to the exact prompt of the picked row (its id and its owning library) and send the same expanded text and the same command attribution whichever way the row was picked. Shift+Enter SHALL keep its ordinary composer behaviour while the menu is open. Because Enter on a row sends nothing, the menu SHALL receive it whether or not sending is possible at that moment (an attachment still uploading, a draft over the length limit): the row is inserted and no line break is added. Picking a row SHALL replace the whole name under the caret, whatever its case, including the part of the name that follows the caret.
+
+#### Scenario: Enter inserts while sending is blocked
+
+- **GIVEN** an attachment is still uploading, or the draft is over the length limit, and the menu is open on `/su` with `/summary` focused
+- **WHEN** the user presses Enter
+- **THEN** the composer reads `/summary ` with the command shown as a token, no line break is added and no turn is sent
+
+#### Scenario: The whole name under the caret is replaced
+
+- **GIVEN** the draft `hello /MAR` with the caret between `A` and `R`, and the menu listing `/summary`
+- **WHEN** the user picks `/summary`
+- **THEN** the draft reads `hello /summary ` with nothing left of the typed name
 
 #### Scenario: Enter on a prompt row inserts it
 
@@ -148,7 +160,7 @@ The slash menu SHALL match the typed text against the command name only, never a
 
 ### Requirement: The empty slash menu says why it is empty
 
-When the slash menu has no row to show, it SHALL stay visible and show one status line. While a command catalog it reads has not answered yet, the line SHALL say that the commands are loading and SHALL NOT say that there is no command or no match. When every catalog has answered and none holds a command or a skill, the line SHALL say that there is no command yet and what the user can do, in words that hold in a team chat and in the personal space: add a command to one of their personal prompts, and, in a team, an editor can add one to a team prompt. When commands exist but none matches the typed text, the line SHALL say that no command matches. Rows from a catalog that has already answered SHALL be shown while another one is loading.
+When the slash menu has no row to show, it SHALL stay visible and show one status line. While a command catalog it reads has not answered yet, the line SHALL say that the commands are loading and SHALL NOT say that there is no command or no match. When every catalog has answered and none holds a command or a skill, the line SHALL say that there is no command yet and what the user can do, in words that hold in a team chat and in the personal space: add a command to one of their personal prompts, and, in a team, an editor can add one to a team prompt. When commands exist but none matches the typed text, the line SHALL say that no command matches. Rows from a catalog that has already answered SHALL be shown while another one is loading. When a catalog could not be read and has never answered, and no catalog is loading, the line SHALL say that the commands could not be loaded and how to retry, and SHALL NOT say that there is no command or no match; the failed catalog SHALL be asked again each time the user starts a new command, not on each character of its name.
 
 #### Scenario: Catalogs still loading
 
@@ -168,9 +180,64 @@ When the slash menu has no row to show, it SHALL stay visible and show one statu
 - **WHEN** the user types `/zzz`
 - **THEN** the menu says that no command matches
 
+#### Scenario: A catalog could not be read
+
+- **GIVEN** reading the team's command catalog failed and nothing else is available
+- **WHEN** the user types `/`
+- **THEN** the menu says that the commands could not be loaded and to type `/` again to retry, and the catalog is asked again once
+- **AND** typing further characters of the name does not ask it again
+
+### Requirement: Sending waits for the command catalogs
+
+Submitting a message SHALL never race the command catalogs (the team's prompt commands, the personal prompt commands and the agent's platform skills). A `/name`-shaped word is a slash followed by a name, delimited on both sides by whitespace or a text boundary. When the draft holds at least one such word that the user did not pick from the menu, and a catalog has not answered yet, the submit SHALL wait for every such catalog before resolving the message, then resolve it as usual; it SHALL NOT send the draft as typed in the meantime and SHALL NOT show an error for the wait. A catalog whose read had failed SHALL be asked once more at that moment. Only when a catalog still has no answer after that SHALL the message be held back, with the "try again in a moment" message naming the first typed command. A word that matches no command once the catalogs have answered SHALL be sent as plain text, with no message to the user. A draft with no such word, or whose commands were all picked from the menu, SHALL NOT wait. A second submit while one is waiting SHALL send nothing more, and a wait that ends after the chat's team, agent or personal space changed SHALL send nothing.
+
+#### Scenario: A typed personal command while the personal catalog loads
+
+- **GIVEN** a team chat where `/summary` is a team command and `/tone` a personal one, and the personal catalog has not answered yet
+- **WHEN** the user submits `/summary and /tone now`
+- **THEN** nothing is sent until the personal catalog answers
+- **AND** the turn then expands both prompts, and the model never receives the literal `/tone`
+
+#### Scenario: Right after the page loads
+
+- **GIVEN** neither prompt catalog has answered yet
+- **WHEN** the user submits `/summary report`
+- **THEN** nothing is sent until both have answered, and the turn then carries the `summary` prompt
+- **AND** pressing Enter a second time while waiting does not send a second turn
+
+#### Scenario: A typed skill while the skill catalog loads
+
+- **GIVEN** the agent's skill catalog has not answered yet
+- **WHEN** the user submits `/review notes`
+- **THEN** nothing is sent until it answers, and the turn then requires the `review` skill
+
+#### Scenario: Ordinary text that starts with a slash
+
+- **GIVEN** a catalog that has not answered yet, and no command named `nosuch`
+- **WHEN** the user submits `see /etc and /nosuch please`
+- **THEN** once the catalog has answered the message is sent as typed, and no error is shown
+
+#### Scenario: No command-shaped word
+
+- **GIVEN** catalogs that have not answered yet
+- **WHEN** the user submits `see /etc/hosts and a/b`
+- **THEN** the message is sent at once
+
+#### Scenario: A failed catalog answers when asked again
+
+- **GIVEN** reading the team's command catalog failed
+- **WHEN** the user submits `/summary report`
+- **THEN** the catalog is asked once more, it answers, and the turn carries the `summary` prompt
+
+#### Scenario: A failed catalog fails again
+
+- **GIVEN** reading the team's command catalog failed and fails again when asked
+- **WHEN** the user submits `hello /summary report`
+- **THEN** nothing is sent, the draft is kept and the message says that `/summary` could not be read and to try again in a moment
+
 ### Requirement: A command that cannot run says why
 
-When a prompt command cannot be run on submit, the user SHALL be told which of two cases applies, and nothing SHALL be sent. When the picked prompt is no longer in its catalog (deleted, or its command renamed), when reading it is refused or it is not found, or when the token was picked for another agent, team or personal space, the message SHALL say that the command is no longer available and tell the user to remove it from the message and choose it again. When the read fails for another reason, or the catalog needed to resolve the command has not answered yet, the message SHALL tell the user to try again in a moment.
+When a prompt command cannot be run on submit, the user SHALL be told which of two cases applies, and nothing SHALL be sent. When the picked prompt is no longer in its catalog (deleted, or its command renamed), when reading it is refused or it is not found, or when the token was picked for another agent, team or personal space, the message SHALL say that the command is no longer available and tell the user to remove it from the message and choose it again. When the read fails for another reason, or a catalog needed to resolve a typed command still has no answer after the submit waited for it and asked it again, the message SHALL tell the user to try again in a moment.
 
 #### Scenario: The prompt was deleted or renamed
 
@@ -257,6 +324,8 @@ When the chat composer is empty and focused, the text caret SHALL be fully visib
 
 In the chat composer, a completed prompt command or platform skill token SHALL behave as a single unit of text. The Left and Right arrow keys SHALL move the caret across a token in one press, and extending a selection SHALL take a token as a whole. Backspace with the caret right after a token, and Delete with the caret right before it, SHALL remove the whole invocation, leaving no stray slash and no doubled or leading space, and SHALL NOT reopen the command menu. Undo SHALL restore the removed token with its selection identity. Tokens next to each other SHALL each behave independently. The command menu SHALL stay closed while the caret sits right after a rendered token, prompt or skill alike, picked or typed by hand, including a token at the very end of the draft; it SHALL open as usual for a new `/` typed elsewhere or for a name still being typed with no token yet. Away from a token, the same keys SHALL keep their ordinary one-character behaviour.
 
+One rule SHALL decide what a token is, in the composer, on submit, when a stored message is rendered and on recall: a `/name` is a token only while whitespace or a text boundary delimits it on both sides. A character typed right before or right after a token SHALL dissolve it into plain text, which then follows the rules of a name typed by hand; removing that character SHALL NOT bring back the prompt or skill the token had been picked as. When an edit removes one token, every other token SHALL keep the prompt or skill it was picked as, including when the removed token and the one next to it read the same: the composer SHALL move tokens by the edit the editor made, not by comparing the text before and after.
+
 #### Scenario: Arrow keys jump over a token
 
 - **GIVEN** a draft `Before /meeting-minutes after` whose skill is shown as a token
@@ -297,6 +366,38 @@ In the chat composer, a completed prompt command or platform skill token SHALL b
 - **GIVEN** a draft `/review /meeting-minutes notes` showing two tokens
 - **WHEN** the user removes the second token with Delete
 - **THEN** the draft reads `/review notes` and the first token is still selected
+
+#### Scenario: Removing the first of two tokens with the same name
+
+- **GIVEN** a draft `/summary /summary x` whose first token was picked from the team and the second from the personal space
+- **WHEN** the user removes the first token with Backspace
+- **THEN** the draft reads `/summary x` and its token is the personal prompt, for the hint, the preview and the submit
+- **AND** the same holds for `a /summary /summary x`, and undo restores both tokens with their own prompt
+
+#### Scenario: A picked prompt before a skill of the same name
+
+- **GIVEN** a draft `/review /review x` whose first token was picked as a prompt and the second as a platform skill
+- **WHEN** the user removes the first token with Backspace
+- **THEN** the draft reads `/review x` and its token is the skill
+
+#### Scenario: Letters typed right after a token
+
+- **GIVEN** the prompt token `/sum` at the end of the draft, picked from the menu, and another command `/summary`
+- **WHEN** the user types `mary x` right after it
+- **THEN** the draft reads `/summary x`, the `sum` prompt is no longer selected and the line is read as the `summary` command typed by hand
+- **AND** submitting it sends the `summary` prompt, and the sent message shows its badge and is recalled as `/summary`
+
+#### Scenario: A character typed right before a token
+
+- **GIVEN** a prompt or skill token at the start of the draft
+- **WHEN** the user types `x` right before it
+- **THEN** the token is plain text again and submitting sends the draft as typed
+
+#### Scenario: Removing the glued character
+
+- **GIVEN** a picked token that a glued character turned back into text
+- **WHEN** the user removes that character
+- **THEN** the name is a name being typed like any other, with no token until it is delimited, and it is not bound to the prompt or skill picked earlier
 
 ## MODIFIED Requirements
 

@@ -256,7 +256,8 @@ that the other two specs come out unchanged.
   becomes a list, the menu filter loses the condition that hid prompts, and
   the menu stays closed on any rendered prompt token. `submit` collects every
   prompt range (picked ones by id and owning team, typed ones by name with the
-  existing team-then-personal rule and pending-catalog guard), checks the cap,
+  existing team-then-personal rule; the submit first waits for a catalog that
+  has not answered, see section 15), checks the cap,
   reads each distinct prompt once in parallel, then sends or reports the first
   failing command. `run`'s single-range signature goes away.
   `onResolveError` gains the command name.
@@ -399,8 +400,9 @@ apps/control-plane-backend/.venv/bin/python scripts/migration_guides.py check-pr
   the widget hands the opener its identity (ids, name, command), never a
   position, since a widget outlives the edits made before it.
 - The remembered hand-typed tokens are mapped through each edit at render
-  time (common prefix and suffix of the previous and current draft), so a
-  token left at the very end of the line survives text inserted before it.
+  time, so a token left at the very end of the line survives text inserted
+  before it. The edit is the one the editor reported (section 15); the common
+  prefix and suffix of the two drafts is only the fallback.
 - No existing case of `useComposerCommands.test.tsx` asserted that the menu
   hides prompts after a first one: the 121 cases pass with a rename
   (`selectedPrompt` to `selectedPrompts`), the command name added to seven
@@ -427,6 +429,54 @@ Divergences from the artifacts as first written:
   client is covered by a test, not by a run of the skill, which reviews the
   runtime: every read starts before any is awaited, one per distinct prompt.
 
+### 15. What the independent review showed
+
+- **Tokens move by the real edit.** Choices were remapped from a text diff
+  (common prefix and suffix). When the removed text equals the text after it,
+  the diff names the later occurrence: deleting the first of `/summary
+  /summary x` kept the first choice and dropped the second, so the surviving
+  token ran the team's prompt although the user had kept the personal one.
+  The editor knows what changed, so it now says so: `InlineSkillInput` reports
+  each transaction's changed spans (`DraftEdit`: `from`, `to` in the text
+  before, `insert` length) through `commandTrigger.onDraftEdit`, just before
+  `onChange`, and completion passes the span it replaces. The hook maps each
+  choice through those spans: unmoved before an edit, shifted after it,
+  dropped when an edit reaches into it. The diff remains for changes that do
+  not come from the editor (recall, voice, a programmatic insert, the plain
+  textarea of hosts without the inline editor). Undo and redo still restore
+  the choices the editor's history holds, which now hold the right ones.
+- **Submit reads fresh.** `run` called the lazy prompt query cache-first, so
+  a prompt prefetched when its row was focused, then edited or deleted by a
+  teammate, was sent as it was at prefetch time. Submit now forces the read.
+  The prefetch stays: it serves the menu's latency and the connection.
+- **Remembered tokens are committed in an effect.** The list of hand-typed
+  tokens shown was written to a ref during render; a render React discards
+  could have left it describing a draft that was never shown. It is derived
+  during render and written after commit. No behaviour change.
+- **Catalogs.** A typed name whose catalog has not answered is waited for
+  rather than refused: see `section-composer-command-menu`, design.md,
+  "Independent review". The scenario "Team catalog still loading" follows.
+
+### 16. Known limitations and reviewer notes
+
+Not fixed here, on purpose:
+
+- Edits made to the draft while the submit's reads (or its wait for a
+  catalog) are in flight are not sent: the turn is built from the draft as it
+  was on Enter. The window is narrow and predates this branch.
+- Searching inside names opens the menu on more ordinary prose: a message
+  ending in ` /or` while `/report` exists shows the menu, and Enter then
+  inserts `/report` instead of sending. Esc closes the menu and the next
+  Enter sends.
+- The older changes `add-prompt-command-trigger`, `add-prompt-command-field`
+  and `add-command-turn-rendering` are not archived and still state
+  requirements this branch supersedes (the menu only at the start of an empty
+  composer, a single section, arrows that wrap, Enter running the focused
+  command, the panel showing the whole stored content). Their deltas target
+  another capability, `prompt-commands`. Archiving everything as it stands
+  would leave two capability specs that contradict each other. This needs the
+  reviewer's or the owner's decision and is out of scope here.
+
 ## Risks / Trade-offs
 
 - [Offsets are only right if the stored text is the sent text] -> it is today
@@ -443,8 +493,9 @@ Divergences from the artifacts as first written:
   stated in the migration note; avoided by the order.
 - [A user can no longer see their own words in the panel] -> intended; they
   are in the bubble.
-- [Each distinct prompt is one more read on send] -> reads run in parallel and
-  the focused menu row is already prefetched; capped at 16.
+- [Each distinct prompt is one more read on send] -> reads run in parallel,
+  capped at 16. The prefetch of the focused row no longer saves that read
+  (section 15): what is sent is read at submit.
 - [The two constants (fred-sdk, fred-core) and the client one can drift] -> a
   fred-runtime test builds a 16-entry and a 17-entry descriptor through both
   models; the client constant names its source in a comment.

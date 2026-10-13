@@ -5172,7 +5172,7 @@ and send nothing.
 Entries preserve their owning team and id; choosing either
 homonymous prompt runs that exact prompt after completion. A typed prompt
 command without an explicit row prefers the chat team's match, then the personal
-one, once the team's command catalog has resolved. An invalidated completed
+one; the submit waits for the team's command catalog to answer first. An invalidated completed
 prompt requires command editing or reselection rather than dispatching a homonym.
 Explicit personal selections are usable while team discovery is pending.
 In the managed-chat composer, a completed recognized prompt command uses the same
@@ -5213,9 +5213,10 @@ sent-message badges reuse that pictogram with a localized platform-origin hint; 
 tooltip includes the current runtime catalog description when available. Missing
 catalog entries retain the name, origin and preview action without a new fetch.
 
-The focused entry's prompt detail is prefetched as the focus moves: the listing
-carries only a preview, so running a command needs the detail endpoint, and the
-prefetch keeps that round trip off the critical path without making it optional.
+The focused entry's prompt detail is prefetched as the focus moves, which
+warms the connection and the preview. It is not what gets sent: submit reads
+each prompt again, so the turn carries the text its library holds at that
+moment.
 The focused row is scrolled into view on every move (the list passes 40vh and
 the caret never moves, so nothing would bring it back on its own).
 
@@ -5225,9 +5226,11 @@ activation suppresses its own default, so clicking an entry is not a focus loss.
 `Esc` outlives a focus round trip — a menu dismissed stays dismissed for that
 query.
 
-With nothing to offer, the panel still appears and says why, in one of three
+With nothing to offer, the panel still appears and says why, in one of four
 lines: the commands are loading (a catalog has not answered yet, so nothing is
-claimed about what exists), there is no command at all (true in a team and in
+claimed about what exists), the commands could not be loaded (a catalog failed
+and has never answered; it is asked again each time a command is started, so
+typing `/` again is the retry), there is no command at all (true in a team and in
 the personal space: anyone can add one to a personal prompt, an editor to a
 team prompt), or the query matches none of the existing ones. Rows that have
 already arrived are shown while another catalog loads.
@@ -5238,7 +5241,7 @@ typed token still submits as ordinary text and `Tab` still moves focus.
 
 ### Inline skill invocation
 
-A completed `/<name>` stays at its invocation position within the editable text. The full name with its leading slash (`/name`, for prompts and platform skills alike, in the menu, the composer and sent messages) and its icon form a small clickable container: `--secondary-container` fill with `--on-secondary-container` icon and name, for a platform skill and for a prompt (team or personal) alike, so that every command has one colour and the two differ by their icon only; `--radius-xs`, `--spacing-2xs` horizontal padding and no vertical padding, so a line holding one is exactly as tall as a plain line. No border, removal cross or separate row. Chat uses a CodeMirror plain-text document with an inline replacement decoration; ordinary textarea consumers are unchanged. Wrapped lines and explicit newlines start at the normal text inset, and the label scrolls with its line. A token is one block (a CodeMirror atomic range): Left/Right and a selection cross it in one step, Backspace right after it or Delete right before it removes the whole `/name` together with the space that would otherwise be left doubled or leading, and undo brings it back. The command menu does not reopen on that deletion, and it stays closed whenever the caret sits right after a rendered token, prompt or skill, picked or typed by hand, even at the very end of the draft: the text under a token is no longer a command being typed. A new `/` further on opens it for that new command only. A programmatic edit that breaks the name still drops recognition while preserving surrounding text. A message can hold several prompt tokens, up to 16, the same command more than once included; each is its own block with its own source hint, and removing or editing one leaves the other prompt and skill tokens recognised. A skill can be sent alone. Its advisory argument hint appears after a bare selected invocation without becoming document content. The placeholder is not part of the editable line: it is an `aria-hidden` element sharing the editor's grid cell, under it, with the same inset, font and line height, shown while the document is empty (`aria-placeholder` carries it for assistive technology). The empty line then holds only its line break, so the native caret is drawn at its normal height with nothing against it; a long placeholder still wraps and sizes the field.
+A completed `/<name>` stays at its invocation position within the editable text. The full name with its leading slash (`/name`, for prompts and platform skills alike, in the menu, the composer and sent messages) and its icon form a small clickable container: `--secondary-container` fill with `--on-secondary-container` icon and name, for a platform skill and for a prompt (team or personal) alike, so that every command has one colour and the two differ by their icon only; `--radius-xs`, `--spacing-2xs` horizontal padding and no vertical padding, so a line holding one is exactly as tall as a plain line. No border, removal cross or separate row. Chat uses a CodeMirror plain-text document with an inline replacement decoration; ordinary textarea consumers are unchanged. Wrapped lines and explicit newlines start at the normal text inset, and the label scrolls with its line. A token is one block (a CodeMirror atomic range): Left/Right and a selection cross it in one step, Backspace right after it or Delete right before it removes the whole `/name` together with the space that would otherwise be left doubled or leading, and undo brings it back. The command menu does not reopen on that deletion, and it stays closed whenever the caret sits right after a rendered token, prompt or skill, picked or typed by hand, even at the very end of the draft: the text under a token is no longer a command being typed. A new `/` further on opens it for that new command only. A programmatic edit that breaks the name still drops recognition while preserving surrounding text. A `/name` is a token only while whitespace or a text boundary delimits it on both sides: a character typed right before or right after it turns it back into plain text for good, which then reads like any name typed by hand (removing the character does not bring back the prompt or skill that had been picked). Tokens follow the edit the editor made, not a comparison of the text before and after, so removing one of two tokens that read the same leaves the other with its own prompt. A message can hold several prompt tokens, up to 16, the same command more than once included; each is its own block with its own source hint, and removing or editing one leaves the other prompt and skill tokens recognised. A skill can be sent alone. Its advisory argument hint appears after a bare selected invocation without becoming document content. The placeholder is not part of the editable line: it is an `aria-hidden` element sharing the editor's grid cell, under it, with the same inset, font and line height, shown while the document is empty (`aria-placeholder` carries it for assistive technology). The empty line then holds only its line break, so the native caret is drawn at its normal height with nothing against it; a long placeholder still wraps and sizes the field.
 
 Skill suggestions use the command range at the caret, including before, after or within existing text. Completion replaces only that range and preserves its position. An exact catalog name followed by whitespace also imports on typing or paste. Neither action sends. Available prompt commands also complete inline without erasing surrounding text, before or after selected skills in every managed execution family, and the menu keeps offering them, from the team and from the personal space, when the message already holds one or more prompt commands. A complete delimited skill name takes precedence, while choosing the prompt entry explicitly preserves prompt dispatch.
 
@@ -5301,8 +5304,11 @@ prompt holds is sent as typed: the user may genuinely have meant to write it.
 When a command cannot run, the toast names it (`/command`) and says which case
 it is. If its prompt was deleted or renamed, or the token was picked for
 another agent or team, it asks the user to remove the command and choose it
-again. "Try again in a moment" is kept for a read that failed or a catalog that
-has not answered yet. With several prompt commands the message is sent whole or
+again. "Try again in a moment" is kept for a read that failed. A catalog that
+has not answered yet is no error: when the draft holds a `/name` that was not
+picked from the menu, the submit waits for it, then sends. Only a catalog that
+still fails after being asked once more holds the message back, with that same
+toast. A `/name` no catalog knows is sent as typed, silently. With several prompt commands the message is sent whole or
 not at all: one command that cannot run holds everything back, the draft is
 kept, and the toast names the first such command of the line. A message with
 more than 16 prompt commands is refused with a toast stating the limit.

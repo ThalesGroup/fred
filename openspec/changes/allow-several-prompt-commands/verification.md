@@ -196,9 +196,9 @@ Proven by tests, by requirement of the delta spec:
 - **Hand-typed names.** Three typed occurrences resolve one by one, the team
   first, the personal one when the team has none, one read per distinct
   prompt; a picked personal homonym and the same name typed run two different
-  prompts; the pending-team-catalog guard holds back a typed personal-only
-  name next to a picked personal prompt and lets it run once the team has
-  answered; a typed name that is also a skill stays a skill next to a prompt,
+  prompts; a typed personal-only name next to a picked personal prompt waits
+  for the team's catalog and runs once it has answered that it holds no such
+  command (rewritten after the independent review, it expected an error); a typed name that is also a skill stays a skill next to a prompt,
   and becomes a prompt, and no longer a skill, when its prompt row is picked;
   hand-typed tokens survive deleting the text after them and an edit before
   them.
@@ -214,8 +214,64 @@ Proven by tests, by requirement of the delta spec:
 Client performance point left open by the contract part: confirmed by the test
 "starts every read before waiting for any of them" (both reads are issued
 before the first answer) and by "expands the same command at each occurrence
-and reads its prompt once". `fetchPrompt` is called with `preferCacheValue`,
-so a prompt prefetched when its row was focused costs no request on send.
+and reads its prompt once". Since the independent review `fetchPrompt` is
+called without `preferCacheValue` on submit: see the performance note below.
+
+### Independent review fixes
+
+Run after the fixes, on the branch tip. From `apps/frontend`:
+`npx --no-install tsc --noEmit -p .` clean; eslint and prettier clean on the
+changed files; `npx --no-install vitest run`: 331 files passed, 1 skipped;
+4092 tests passed, 7 skipped. From `libs/fred-runtime`: `VIRTUAL_ENV=
+.venv/bin/pytest -q -p no:cacheprovider -m "not integration" --disable-socket
+--allow-unix-socket`: 2116 passed, 11 skipped, 22 deselected; `ruff check .`,
+`ruff check --select I .`, `ruff format --check .` clean; `basedpyright
+--baseline-file .baseline/basedpyright-baseline.json`: 0 errors, 5 warnings,
+baseline unchanged. `scripts/migration_guides.py check-pr --base origin/swift
+--worktree`: valid, 1 new declaration. `openspec validate
+allow-several-prompt-commands --strict` valid.
+
+- **Same-named tokens** (`useComposerCommands.test.tsx`, "deleting one of two
+  tokens with the same name"): in `/summary /summary x` and `a /summary
+  /summary x` with the team's prompt first and the personal one second,
+  Backspace after the first leaves the personal prompt, on the token and on
+  the sent descriptor; Delete on the second leaves the team's; undo gives
+  both back and redo removes the same one; in `/review /review x`, a picked
+  prompt then a picked skill, removing the prompt leaves the skill, which is
+  what is sent. All four failed before the fix (the survivor was the team's
+  prompt, or the prompt instead of the skill).
+- **Exact edits** (`InlineSkillInput.test.tsx`): one transaction with two
+  changes reports two spans, in the positions of the text before, and before
+  `onChange`.
+- **Fresh read** (`useComposerCommands.test.tsx`): a prompt whose prefetched
+  detail differs from the server's answer is sent with the server's text; the
+  submit call carries `preferCacheValue: false`. Four existing assertions on
+  that argument follow.
+- **Coverage added** (`skillInvocation.test.ts`): a list holding a null entry
+  or a string is refused; a prompt text with CRLF line breaks keeps them and
+  its slice reads back, with a CRLF before the token in the typed line; every
+  delimited `/name` is found and nothing inside a path. Overlapping entries,
+  out-of-order entries, `text_length` 0 and an emoji before a token were
+  already covered. "Rows of a catalog that answered are shown while another
+  loads" was already pinned by the loading case.
+- **Endpoint limit** (`libs/fred-runtime/tests/test_agent_app.py`,
+  `test_a_turn_listing_more_prompt_commands_than_the_limit_is_refused`): the
+  execute endpoint answers 422 for 17 entries and 200 for 16. The harness
+  already existed in that file.
+
+Performance note. Submit now issues one request per distinct prompt even when
+its detail was prefetched: at most 16, started together, as before for a
+prompt that was typed or not focused in the menu. The prefetch on focus is
+kept, so a picked prompt costs two reads over its life instead of one. A
+submit that has to wait for a catalog adds no request of its own for one in
+flight (the query's `refetch()` joins it) and one request for a catalog that
+had failed. Nothing here is on the runtime's turn path.
+
+Known limitations, not fixed (design.md, section 16): edits made while the
+submit's reads are in flight are not sent; searching inside names opens the
+menu on more ordinary prose, where Enter inserts and Esc closes; the three
+older unarchived changes still state superseded requirements under another
+capability and need the reviewer's or the owner's decision before any archive.
 
 ### Not verified
 

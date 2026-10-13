@@ -233,13 +233,16 @@ inserts the exact name.
 
 **Empty states.** The menu takes one `empty` reason instead of
 `teamHasCommands`: `loading` while a catalog it reads is in flight without
-data, `none` when nothing exists, `noMatch` otherwise. Keys: `loading` and
+data, `error` when one could not be read and has never answered (added after
+the independent review, see below), `none` when nothing exists, `noMatch`
+otherwise. Keys: `loading` and
 `none` added, `noneInTeam` removed (its text was only true in a team).
 
 **Run errors.** `onResolveError` carries a reason. `stale`: the pick's scope
 changed, the picked prompt is no longer in a catalog that has answered, or its
 read answers 403 or 404. `unreadable`: any other read failure, an empty prompt
-text, or a catalog that has not answered. Key `runErrorStale` added;
+text, or a catalog that still has no answer after the submit waited for it
+(see "Independent review" below). Key `runErrorStale` added;
 `runErrorDetail` keeps the retry wording.
 
 **Token hint.** The composer token's hint builds its source line from the
@@ -265,6 +268,88 @@ take precedence for typing/paste") and is not a small change: a delimited
 skill name gets a skill selection as soon as it is typed, which the token
 rendering, undo, recall and submit all read, and that selection is created
 before the prompt catalogs are known to have answered.
+
+### Independent review
+
+Fixes made after an independent review of the branch. Each has its scenario
+in the delta spec.
+
+**Enter while sending is blocked.** The field withheld Enter from the menu
+while an attachment uploaded or the draft was over the limit, a gate written
+when Enter on a row sent the command. Since Enter only inserts, the gate is
+gone: the menu gets Enter whatever the send state. The field's own send on
+Enter is still refused while sending is blocked.
+
+**Sending waits for the catalogs.** A typed command whose catalog had not
+answered, or had failed, went out as raw text (`/tone` reached the model). The
+rule, kept to one sentence: a draft holding a `/name`-shaped word that was not
+picked from the menu waits for every catalog (team prompts, personal prompts,
+agent skills) that has no answer yet, then resolves as usual. In detail:
+
+- `/name`-shaped means a slash and a name delimited by whitespace or a text
+  boundary, the same test as for a token. `/etc/hosts` and `a/b` are not.
+- A catalog "has no answer" when it has no data for the current chat: still
+  loading, or failed. One that answered once and failed a later refresh keeps
+  its data and is not waited for.
+- The wait is the query's own `refetch()`: RTK Query does not start a second
+  request for one already in flight and resolves with its result, and it
+  retries one that had failed. So a failed catalog is asked exactly once more.
+- The answers are read from the awaited results, not from the hook's state,
+  which React may not have re-rendered yet.
+- If a waited catalog still has no answer, the message is held back with the
+  existing `runErrorDetail` toast naming the first typed command. Otherwise
+  the ordinary resolution runs: a word no catalog knows is sent as plain text,
+  with no toast (the owner does not want one for text that merely starts with
+  a slash).
+- No wait when the draft has no such word or when every command was picked:
+  a picked token carries its prompt's id and library already.
+- A second submit during the wait is ignored; a wait that ends after the
+  team, agent or personal space changed sends nothing.
+
+Alternatives. An error toast asking to retry while a catalog loads (the
+previous behaviour for one case): rejected, the user did nothing wrong and the
+answer is a moment away. Waiting only for the catalogs that could hold the
+typed name: not knowable before they answer, since the team's command wins
+over the personal one and a skill over both. Holding back only the words the
+answered catalogs do not resolve: rejected for the same reason.
+
+Cost accepted: with a catalog down, a message holding a typed `/name` is held
+back even when it was ordinary text. Picking the command from the menu, or
+sending without the slash word, still works.
+
+**A failed catalog in the menu.** The empty menu claimed "No command yet" or
+"No command matches" when a catalog had failed. It now shows the `error` line,
+and the failed catalog is asked again each time a command is started (the
+composer gets a command query while focused), not on each character. No retry
+button: typing `/` again is the retry, and the line says so. When another
+catalog did answer, its rows are listed and no error line is shown, as for a
+catalog still loading. Key `chatbot.commandMenu.error` added.
+
+**One rule for a token.** A picked choice stayed bound to its prompt while the
+text under it still read `/name`, with no look at what surrounded it, whereas
+a stored prompt list is usable only for delimited commands. Typing `mary`
+after a picked `/sum` sent the `sum` prompt under the draft `/summary x`, which
+then rendered with no badge and was recalled as another command. The rule is
+now `isCommandTokenAt` (`utils/skillInvocation.ts`): `/name` at its position,
+with whitespace or a text boundary on both sides. It decides which choices
+show as tokens and are atomic, which are kept when the draft changes, which
+are sent, and which are restored on recall; the stored list was already
+checked the same way. A choice that fails it is dropped for good, so removing
+the glued character leaves a name typed by hand, as for any typed name.
+
+**Completion and case.** Completing a row extended the replaced range over
+lowercase characters only, while the filter ignores case: `/MA|R` left
+`/summary R`. The range now covers the name in any case.
+
+**Empty preview.** A previewed prompt with no text showed a blank panel; it
+shows `chatbot.commandTurn.previewEmpty`.
+
+New strings:
+
+| Key | fr | en |
+| --- | --- | --- |
+| `chatbot.commandMenu.error` | `Les commandes n'ont pas pu être chargées. Tapez / à nouveau pour réessayer.` | `The commands could not be loaded. Type / again to retry.` |
+| `chatbot.commandTurn.previewEmpty` | `Ce prompt est vide.` | `This prompt is empty.` |
 
 ## Risks / Trade-offs
 
@@ -298,7 +383,8 @@ before the prompt catalogs are known to have answered.
   called out for the owner check.
 - [With non-ReAct agents a typed command the team does not hold now falls back
   to the personal library] -> intended consequence of the agreed scope; the
-  existing precedence and pending-catalog guard apply unchanged.
+  existing precedence applies unchanged, and the submit waits for the team's
+  catalog before falling back (see "Independent review").
 - [Team prompts are tagged `team` until the bootstrap gives the personal team
   id, so a personal chat could briefly show a team header] -> the bootstrap is
   loaded by the shell before the page; no extra guard is added.

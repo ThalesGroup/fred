@@ -57,3 +57,11 @@ starts only when group 3 is green. Commands are in design.md, section 11; no
 - [x] 7.4 (S) Reconcile this change with what was built: record exact verification evidence in `verification.md`, note any divergence in design.md, and list in the pull request the open questions for the reviewer (cap of 16, migration impact `minor` or `none`); verify `openspec validate allow-several-prompt-commands --strict` passes
 - [ ] 7.5 (M) Owner check in the app, in Firefox and Chrome, fr and en: two and three prompts picked from both sections, the same one twice, prompts mixed with skills, typed names, each composer preview, send, badges, each panel, reload, recall, copy, a deleted prompt among several, the limit, an old conversation, and a new conversation's title; verify each point is ticked in `verification.md`
 - [ ] 7.6 (S) After the merge, archive `section-composer-command-menu` first, then this change; verify `openspec validate --specs --strict` passes after each archive
+
+## 8. Independent review fixes
+
+- [x] 8.1 (M) Report the editor's exact edits (`onDraftEdit`) and map choices and remembered tokens through them, keeping the text diff as the fallback; verify with `useComposerCommands.test.tsx` ("deleting one of two tokens with the same name") and `InlineSkillInput.test.tsx`
+- [x] 8.2 (S) Read every prompt fresh on submit; verify with `useComposerCommands.test.tsx` ("sends the prompt as its library holds it now")
+- [x] 8.3 (S) Commit the remembered hand-typed tokens in an effect instead of during render; verify the existing hand-typed token cases still pass
+- [x] 8.4 (S) Add the missing coverage: null entry, CRLF, the token rule, and the execute endpoint refusing 17 entries; verify with `skillInvocation.test.ts` and `libs/fred-runtime/tests/test_agent_app.py`
+- [x] 8.5 (S) Record the fixes, the extra reads and the known limitations in design.md (sections 15 and 16) and verification.md; verify `openspec validate allow-several-prompt-commands --strict`

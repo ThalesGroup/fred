@@ -51,6 +51,16 @@
 - [x] 8.7 Make the composer's prompt token a button opening its prompt in `CommandPromptPanel` (name, command, current text, loading and error lines); verify with `InlineSkillInput.test.tsx` and `ManagedChatPage.test.tsx`
 - [x] 8.8 Update the Help Center pages (`commands.md`, `chat.md`, fr and en), `COMPONENT-UX.md` and this change's artifacts; verify `openspec validate section-composer-command-menu --strict`
 
+## 9. Independent review fixes
+
+- [x] 9.1 Let the menu receive Enter while sending is blocked; verify with `RichInputField.trigger.test.tsx`
+- [x] 9.2 Make submit wait for the catalogs that have not answered when the draft holds an unpicked `/name`, ask a failed one once more, hold back only if it still fails; verify with `useComposerCommands.test.tsx` ("sending while a catalog has not answered")
+- [x] 9.3 Add the `error` empty reason and its fr and en line, and ask a failed catalog again when a command is started; verify with `useComposerCommands.test.tsx`
+- [x] 9.4 Apply one token rule (`isCommandTokenAt`) to the composer, the submit and the recall; verify with `useComposerCommands.test.tsx` ("a character glued to a token") and `skillInvocation.test.ts`
+- [x] 9.5 Complete over the whole name under the caret whatever its case; verify with `useComposerCommands.test.tsx`
+- [x] 9.6 Show a line for an empty previewed prompt; verify with `CommandPromptPanel.test.tsx`
+- [x] 9.7 Update `COMPONENT-UX.md`, the Help Center commands pages and this change's artifacts; verify `openspec validate section-composer-command-menu --strict`
+
 ## 6. Verification
 
 - [x] 6.1 From `apps/frontend`, run `npx tsc --noEmit -p .`; verify it exits 0

@@ -23,6 +23,12 @@ In managed chat, the slash menu SHALL keep offering prompt commands, from the ch
 - **WHEN** the user deletes the `/summary` token with one Backspace
 - **THEN** `/tone` is still a token, picked from the same library as before
 
+#### Scenario: Removing one of two tokens with the same name
+
+- **GIVEN** a message holding `/summary` picked from the team, then `/summary` picked from the personal space
+- **WHEN** the user deletes the first token with one Backspace
+- **THEN** the remaining token is still the personal prompt
+
 #### Scenario: Too many prompt commands
 
 - **GIVEN** a message holding 17 prompt commands
@@ -31,7 +37,7 @@ In managed chat, the slash menu SHALL keep offering prompt commands, from the ch
 
 ### Requirement: Every prompt command expands in place when the message is sent
 
-On submit, the web client SHALL read every prompt behind a prompt command of the message from its owning library and SHALL replace each command by that prompt's text at the command's position, keeping the order of the message and the user's own text on its side of each prompt. The model SHALL receive that assembled text and nothing about commands. Platform skills selected in the same message SHALL be requested together, as before. Resolution SHALL be all or nothing: when any prompt cannot be read, is empty, is no longer in its catalog or was picked for another agent, team or personal space, no turn SHALL be sent, no skills-only turn SHALL be sent, the draft SHALL be kept, and the error SHALL name the command it is about and say whether to choose it again or to retry. The message length limit SHALL apply to the assembled text.
+On submit, the web client SHALL read every prompt behind a prompt command of the message from its owning library, at that moment and never from a copy read earlier for the menu or a preview, one read per distinct prompt and all reads started together, and SHALL replace each command by that prompt's text at the command's position, keeping the order of the message and the user's own text on its side of each prompt. The model SHALL receive that assembled text and nothing about commands. Platform skills selected in the same message SHALL be requested together, as before. Resolution SHALL be all or nothing: when any prompt cannot be read, is empty, is no longer in its catalog or was picked for another agent, team or personal space, no turn SHALL be sent, no skills-only turn SHALL be sent, the draft SHALL be kept, and the error SHALL name the command it is about and say whether to choose it again or to retry. The message length limit SHALL apply to the assembled text.
 
 #### Scenario: Two prompts expand in order
 
@@ -39,6 +45,12 @@ On submit, the web client SHALL read every prompt behind a prompt command of the
 - **WHEN** the user submits `First /summary then /tone please`
 - **THEN** the turn's text reads, in this order: `First`, `Summarise the document.`, `then`, `Use a formal tone.`, `please`
 - **AND** neither `/summary` nor `/tone` appears in the text the model receives
+
+#### Scenario: A prompt edited since the menu showed it
+
+- **GIVEN** a prompt whose text was read when its row was focused in the menu, and that a teammate edited since
+- **WHEN** the user submits the message
+- **THEN** the turn carries the text the library holds now
 
 #### Scenario: Prompts and skills in one message
 
@@ -162,7 +174,7 @@ Recalling a sent message SHALL put the typed line back in the composer and SHALL
 
 ### Requirement: Hand-typed prompt commands resolve one by one
 
-A prompt command typed in full without picking a row SHALL be recognised and resolved for each occurrence on its own, with the rules that hold for a single one: the chat team's command first, then the personal one; no personal fallback while the team catalog has not answered; exact, case-sensitive name. A typed name that is also a platform skill SHALL keep the existing precedence: delimited, it is a skill selection, unless the user picked the prompt row for that token. Picked and typed prompt commands SHALL mix freely in one message.
+A prompt command typed in full without picking a row SHALL be recognised and resolved for each occurrence on its own, with the rules that hold for a single one: the chat team's command first, then the personal one; no personal fallback before the team catalog has answered, the submit waiting for it as the requirement "Sending waits for the command catalogs" states; exact, case-sensitive name. A typed name that is also a platform skill SHALL keep the existing precedence: delimited, it is a skill selection, unless the user picked the prompt row for that token. Picked and typed prompt commands SHALL mix freely in one message.
 
 #### Scenario: Two typed names from two libraries
 
@@ -180,7 +192,8 @@ A prompt command typed in full without picking a row SHALL be recognised and res
 
 - **GIVEN** a message with a picked personal prompt and a typed `/tone` known only in the personal space, while the team catalog has not answered
 - **WHEN** the user submits
-- **THEN** nothing is sent and the error says that `/tone` could not be read and to try again
+- **THEN** nothing is sent until the team catalog answers
+- **AND** once it has answered that it holds no `/tone`, the turn is sent with the picked prompt and the personal `tone` prompt
 
 #### Scenario: A typed skill homonym stays a skill
 

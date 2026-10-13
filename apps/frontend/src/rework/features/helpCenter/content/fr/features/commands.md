@@ -55,7 +55,8 @@ La liste est rangée en trois parties, chacune sous son titre :
 
 Une partie qui n'a rien à proposer n'apparaît pas. Dans votre espace
 personnel, vos commandes ne sont listées qu'une fois, sous **Espace
-personnel**.
+personnel**. Si les commandes ne peuvent pas être chargées, la liste le dit :
+tapez `/` à nouveau pour réessayer.
 
 Si l'équipe et vous avez une commande du même nom, elle apparaît dans les deux
 parties : choisissez la ligne voulue, c'est ce prompt précis qui sera lancé. Si
@@ -73,7 +74,10 @@ la liste : la première fois l'ajoute, la seconde envoie. Entre les deux, vous
 pouvez compléter votre message.
 
 La commande ajoutée s'affiche comme une petite étiquette dans votre message.
-Cliquez dessus pour relire le texte du prompt avant d'envoyer.
+Cliquez dessus pour relire le texte du prompt avant d'envoyer. L'étiquette
+tient tant que la commande reste isolée, avec un espace ou un retour à la
+ligne de chaque côté : si vous tapez un caractère collé à elle, elle redevient
+du texte ordinaire.
 
 Vous pouvez placer plusieurs commandes de prompt et plusieurs skills
 plateforme n'importe où dans un message, dans l'ordre que vous voulez ; la
