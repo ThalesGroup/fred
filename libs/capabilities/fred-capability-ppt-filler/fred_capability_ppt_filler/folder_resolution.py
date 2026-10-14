@@ -22,20 +22,16 @@ from __future__ import annotations
 
 import io
 from pathlib import Path
-from typing import Dict, List, Optional, Protocol, Set, Union
+from typing import Dict, List, Optional, Protocol, Union
 
 from pptx import Presentation
-from pptx.presentation import Presentation as PresentationObject
 
 from fred_capability_ppt_filler.parser import (
     KeyField,
     ParseResult,
     SlideSchema,
     TemplateError,
-    parse_presentation,
-)
-from fred_capability_ppt_filler.traversal import (
-    list_image_anchors_on_slide,
+    parse_presentation_with_locations,
 )
 
 # Resolution / geometry error codes (RFC "Image support"). The metadata codes live in
@@ -88,8 +84,7 @@ def analyze_template(pptx_source: Union[bytes, str, Path]) -> ParseResult:
         presentation = Presentation(io.BytesIO(pptx_source))
     else:
         presentation = Presentation(str(pptx_source))
-    result = parse_presentation(presentation)
-    invalid_locations = _scan_invalid_location_keys(presentation)
+    result, invalid_locations = parse_presentation_with_locations(presentation)
     for slide_schema in result.slides:
         keys = [
             field.key
@@ -109,22 +104,6 @@ def analyze_template(pptx_source: Union[bytes, str, Path]) -> ParseResult:
                 for key in keys
             )
     return result
-
-
-def _scan_invalid_location_keys(
-    presentation: PresentationObject,
-) -> Dict[int, Set[str]]:
-    """Scan the same open deck used for field extraction, within its worker."""
-    invalid_location_keys_by_slide: Dict[int, Set[str]] = {}
-    for index, slide in enumerate(presentation.slides):
-        slide_number = index + 1
-        invalid_keys: Set[str] = set()
-        for anchor in list_image_anchors_on_slide(slide):
-            if anchor.invalid_location:
-                invalid_keys.add(anchor.key)
-        if invalid_keys:
-            invalid_location_keys_by_slide[slide_number] = invalid_keys
-    return invalid_location_keys_by_slide
 
 
 async def resolve_image_folders(

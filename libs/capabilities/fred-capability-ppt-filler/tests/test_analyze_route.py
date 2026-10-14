@@ -272,7 +272,7 @@ def test_selection_and_save_each_open_one_reclaimable_presentation(client, monke
         assert all(ref() is None for ref in refs)
 
 
-def test_geometry_failure_reclaims_deck_and_returns_safe_error(client, monkeypatch):
+def test_validation_failure_reclaims_deck_and_returns_safe_error(client, monkeypatch):
     import weakref
 
     from fred_capability_ppt_filler import folder_resolution
@@ -283,7 +283,7 @@ def test_geometry_failure_reclaims_deck_and_returns_safe_error(client, monkeypat
         refs.append(weakref.ref(presentation))
         raise ValueError("private internal details")
 
-    monkeypatch.setattr(folder_resolution, "_scan_invalid_location_keys", fail)
+    monkeypatch.setattr(folder_resolution, "parse_presentation_with_locations", fail)
     deck = build_deck([("{{name}}", "{{name}}:\nThe name")])
     body = _post_deck(client, deck).json()
     assert body["errors"][0]["code"] == "invalid_upload"

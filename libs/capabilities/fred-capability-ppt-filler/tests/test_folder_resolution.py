@@ -280,3 +280,81 @@ async def test_image_key_in_textbox_is_valid_location():
     result = await resolve_image_folders(analyze_template(deck), resolver)
 
     assert CODE_IMAGE_KEY_INVALID_LOCATION not in _codes(result)
+
+
+@pytest.mark.parametrize("double_braces", [False, True])
+def test_single_validation_walk_handles_nested_groups_tables_and_duplicate_markers(
+    monkeypatch: pytest.MonkeyPatch, double_braces: bool
+) -> None:
+    from fred_capability_ppt_filler import traversal
+    from fred_capability_ppt_filler.parser import parse
+
+    def marker(key: str) -> str:
+        return "{{" + key + "}}" if double_braces else "{" + key + "}"
+
+    presentation = Presentation()
+    fixed = presentation.slides.add_slide(presentation.slide_layouts[6])
+    fixed.shapes.add_textbox(
+        Inches(1), Inches(1), Inches(4), Inches(1)
+    ).text = "Fixed content without fields"
+    slide = presentation.slides.add_slide(presentation.slide_layouts[6])
+    box = slide.shapes.add_textbox(Inches(1), Inches(1), Inches(4), Inches(1))
+    body = f"{marker(' title ')} {marker('logo')} {marker('missing')}"
+    for piece in (body[:4], body[4:10], body[10:]):
+        box.text_frame.paragraphs[0].add_run().text = piece
+    group = slide.shapes.add_group_shape().shapes.add_group_shape()
+    group.shapes.add_textbox(
+        Inches(1), Inches(1), Inches(4), Inches(1)
+    ).text = f"{marker('logo')} {marker('label')}"
+    table_shape = slide.shapes.add_table(
+        1, 2, Inches(1), Inches(1), Inches(4), Inches(1)
+    )
+    table_body = f"{marker('logo')} {marker('logo')}"
+    for piece in (table_body[:3], table_body[3:]):
+        table_shape.table.cell(0, 0).text_frame.paragraphs[0].add_run().text = piece
+    table_shape.table.cell(0, 1).text = marker("label")
+    group.element.append(table_shape.element)
+    notes_frame = slide.notes_slide.notes_text_frame
+    assert notes_frame is not None
+    notes_frame.text = (
+        "{title}, {{label}}:\nText instructions\n"
+        "{{logo}}:\n- type: image\n- folder: Brand/Logos\nAn image\n"
+        "{ghost}:\nAn absent field\n---\n{hidden}:\nPresenter notes"
+    )
+    buffer = io.BytesIO()
+    presentation.save(buffer)
+    deck = buffer.getvalue()
+    base = parse(deck)
+    assert [field.key for field in base.slides[0].keys] == [
+        "title",
+        "logo",
+        "missing",
+        "label",
+    ]
+    assert [error.code for error in base.errors] == [
+        "key_without_description",
+        "described_but_not_in_slide",
+    ]
+
+    paragraph_visits = 0
+    original = traversal._keys_of_paragraph
+
+    def counted(paragraph):
+        nonlocal paragraph_visits
+        paragraph_visits += 1
+        return original(paragraph)
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("Validation must not allocate anchors or compute geometry")
+
+    monkeypatch.setattr(traversal, "_keys_of_paragraph", counted)
+    for name in ("ImageAnchor", "_apply_transform", "_group_child_transform"):
+        monkeypatch.setattr(traversal, name, forbidden)
+    result = analyze_template(deck)
+
+    assert paragraph_visits == 5
+    assert result.slides == base.slides
+    assert result.errors[:-1] == base.errors
+    assert result.errors[-1].code == CODE_IMAGE_KEY_INVALID_LOCATION
+    assert result.errors[-1].slide == 2
+    assert result.errors[-1].key == "logo"

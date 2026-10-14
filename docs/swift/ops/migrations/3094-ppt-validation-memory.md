@@ -3,7 +3,7 @@ schema: 1
 title: "Reduce PowerPoint validation memory and clarify transport failures"
 impact: none
 configuration: none
-configuration_reason: "Validation reuses one parsed deck and collects worker cycles; the existing four-job limit, API routes, and deployment values are unchanged."
+configuration_reason: "Validation uses one parsed deck and one marker walk, with worker cycle collection; the existing four-job limit, API routes, and deployment values are unchanged."
 no_action_reason: "The validation fix and translated transport messages apply during normal deployment; stored templates, agent configuration, and permissions remain compatible."
 ---
 ## Applicability

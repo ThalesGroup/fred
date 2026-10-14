@@ -41,9 +41,11 @@ the capability at boot via the `fred.capabilities` entry point declared in
 
 ## Validation memory and admission
 
-Selection and save each independently open the deck once for field extraction and
-image placement checks. Only the schema survives into asynchronous folder lookup;
-worker cleanup collects cyclic presentation objects after validation and generation,
+Selection and save each independently open the deck once. One marker walk supplies
+field discovery and table-cell image checks, without allocating image anchors or
+computing coordinates. Generation retains its geometry path. Only the schema survives
+into asynchronous folder lookup; worker cleanup collects cyclic presentation objects
+after validation and generation,
 including failed processing. Collection runs in the worker but can pause other Python
 threads while holding the GIL. The existing per-pod limit remains four heavy jobs with
 fail-fast busy feedback. This count is not a memory budget: four large decks can still
