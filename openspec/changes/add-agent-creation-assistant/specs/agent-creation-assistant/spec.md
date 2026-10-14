@@ -139,7 +139,7 @@ For every draft, whatever its outcome, the pod SHALL emit `agent.creation_assist
 
 ### Requirement: Applying a draft in the agent form
 
-The agent form header SHALL offer one **Assistant** button in create and edit modes, shown only once a template is chosen (never on the template step). The description step's Suggest button SHALL show the outlined `auto_awesome` icon. The review step SHALL let the user tick each proposal separately (system prompt, name, role, description, each recommended capability, and all capabilities at once), all ticked by default, and Apply SHALL be disabled when nothing is ticked. Wherever the form offers reasoning, the capabilities column SHALL always propose it first, ticked by default and counted in the column's select-all, even when no capability is recommended. Applying SHALL write only the ticked items; ticked capabilities SHALL replace the selection with those the team may enable, keeping the reasoning setting; ticked reasoning SHALL turn reasoning on as the form's reasoning switch does (new conversations start in it when reasoning was off), a recommended `document_access` SHALL turn on both document sources (attachments and team documents), and unticked reasoning SHALL leave the reasoning settings unchanged. Turning reasoning on SHALL NOT require an overwrite confirmation. When a ticked item would replace a non-empty, different value in the form, the user SHALL confirm in a critical confirmation listing what will be replaced; cancelling SHALL return to the review unchanged. Nothing SHALL be saved until the user saves the agent.
+The agent form header SHALL offer one **Assistant** button in create and edit modes, shown only once a template is chosen (never on the template step). The description step's Suggest button SHALL show the outlined `auto_awesome` icon. The review step SHALL let the user tick each proposal separately (system prompt, name, role, description, each recommended capability, and all capabilities at once), all ticked by default, and Apply SHALL be disabled when nothing is ticked. The review SHALL NOT propose reasoning: the agent form has no reasoning setting, reasoning follows the conversation's model (OpenSpec `chat-model-and-reasoning-picker`). Applying SHALL write only the ticked items; ticked capabilities SHALL replace the selection with those the team may enable, and a recommended `document_access` SHALL turn on both document sources (attachments and team documents). When a ticked item would replace a non-empty, different value in the form, the user SHALL confirm in a critical confirmation listing what will be replaced; cancelling SHALL return to the review unchanged. Nothing SHALL be saved until the user saves the agent.
 
 #### Scenario: No template yet
 
@@ -149,17 +149,12 @@ The agent form header SHALL offer one **Assistant** button in create and edit mo
 #### Scenario: Apply into an empty form
 
 - **WHEN** the user applies a draft recommending one capability the team may enable and one it may not, into a form whose name, role, description and prompt are empty
-- **THEN** no confirmation is shown, the fields hold the draft, only the first capability is selected, reasoning is turned on with conversations starting in it, and the agent is not saved
+- **THEN** no confirmation is shown, the fields hold the draft, only the first capability is selected, and the agent is not saved
 
-#### Scenario: Reasoning always proposed
+#### Scenario: Reasoning is not proposed
 
-- **WHEN** the form offers reasoning and the draft recommends no capability
-- **THEN** the capabilities column holds a ticked reasoning tile and its header can select or clear it, and no "no capability recommended" hint is shown
-
-#### Scenario: Reasoning unticked
-
-- **WHEN** the user unticks reasoning and applies
-- **THEN** the form's reasoning settings are unchanged
+- **WHEN** the draft recommends no capability
+- **THEN** the capabilities column shows the "no capability recommended" hint and no reasoning tile
 
 #### Scenario: Only ticked items
 

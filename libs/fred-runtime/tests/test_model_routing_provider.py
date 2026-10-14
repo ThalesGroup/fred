@@ -226,16 +226,14 @@ class TestSelectPlatformBindingBypass:
         # confirm it did not.
         assert selection.model.name != "static-override"
 
-    def test_platform_binding_wins_over_matching_team_policy_override(self) -> None:
-        # Resolver falls through to DEFAULT (no static override), which is
-        # exactly the case where `resolve_team_override` would normally kick
-        # in and win — the team-level `agent_profile_overrides`/
-        # `chat_default_profile_id` on RuntimeContext.
+    def test_platform_binding_wins_over_user_choice_and_team_levels(self) -> None:
+        # No static override: the user choice, the recommendation and the team
+        # default would each resolve if the binding did not short-circuit.
         resolver = ModelRoutingResolver(_policy())
         platform_binding = ModelBinding(provider="ollama", name="internal-model")
         runtime_context = RuntimeContext(
-            chat_default_profile_id="default.chat",  # would resolve if reached
-            agent_profile_overrides={"rico": "default.chat"},
+            chat_default_profile_id="default.chat",
+            chat_profile_id="default.chat",
         )
         factory = _factory(resolver=resolver)
 
@@ -364,7 +362,10 @@ class TestBuildForChatUsableModelIdsGateSkip:
             definition=_agent_definition(),
             binding=_binding(
                 runtime_context=RuntimeContext(
-                    reasoning_enabled_model_ids=[model_capability_id("openai", "gpt-5")]
+                    reasoning_enabled_model_ids=[
+                        model_capability_id("openai", "gpt-5")
+                    ],
+                    reasoning=True,
                 ),
                 platform_chat_model_binding=binding_model,
             ),

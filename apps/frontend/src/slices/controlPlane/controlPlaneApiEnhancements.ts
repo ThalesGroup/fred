@@ -304,15 +304,14 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     getTeamApplicationsControlPlaneV1TeamsTeamIdApplicationsGet: {
       providesTags: [{ type: "ControlPlaneCapability" as const, id: "LIST" }],
     },
-    // Enablement changes suspend or revive agents server-side, so the agent
-    // lists must be read again (one team's, or all for platform-wide switches),
-    // and a suspended agent leaves the marketplace and its team's published count.
+      // Enablement changes agent state, marketplace entries and usable models.
     putTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPut: {
       invalidatesTags: (_, __, arg) => [
         { type: "ControlPlaneCapability", id: "LIST" },
         { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
         { type: "ControlPlaneAgentMarketplace", id: "LIST" },
         { type: "ControlPlaneTeam", id: arg.teamId },
+        { type: "ControlPlaneRoutingPolicy", id: arg.teamId },
       ],
     },
     deleteTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdDelete: {
@@ -321,6 +320,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
         { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
         { type: "ControlPlaneAgentMarketplace", id: "LIST" },
         { type: "ControlPlaneTeam", id: arg.teamId },
+        { type: "ControlPlaneRoutingPolicy", id: arg.teamId },
       ],
     },
     putCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPut: {
@@ -329,6 +329,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
         { type: "ControlPlaneAgentInstance", id: "ALL" },
         { type: "ControlPlaneAgentMarketplace", id: "LIST" },
         "ControlPlaneTeam",
+        "ControlPlaneRoutingPolicy",
       ],
     },
     putCapabilityPersonalScopeControlPlaneV1AdminCapabilitiesCapabilityIdPersonalScopePut: {
@@ -337,10 +338,12 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
         { type: "ControlPlaneAgentInstance", id: "ALL" },
         { type: "ControlPlaneAgentMarketplace", id: "LIST" },
         "ControlPlaneTeam",
+        "ControlPlaneRoutingPolicy",
       ],
     },
+    // Reasoning availability shows in every team's Models section and composer.
     patchCapabilityReasoningControlPlaneV1AdminCapabilitiesCapabilityIdReasoningPatch: {
-      invalidatesTags: [{ type: "ControlPlaneCapability", id: "LIST" }],
+      invalidatesTags: [{ type: "ControlPlaneCapability", id: "LIST" }, "ControlPlaneRoutingPolicy"],
     },
     getTeamSessionsControlPlaneV1TeamsTeamIdSessionsGet: {
       providesTags: (_, __, arg) => [{ type: "ControlPlaneSession" as const, id: `LIST-${arg.teamId}` }],
@@ -615,12 +618,16 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
               { type: "ControlPlaneAgentMarketplace" as const, id: "LIST" },
             ]
           : []),
+        // The recommended model may change, and the composer names it.
+        { type: "ControlPlaneRoutingPolicy", id: arg.teamId },
       ],
     },
     patchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatch: {
       invalidatesTags: (_, __, arg) => [
         { type: "ControlPlaneAgentInstance", id: arg.agentInstanceId },
         { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
+        // The recommended model may change, and the composer names it.
+        { type: "ControlPlaneRoutingPolicy", id: arg.teamId },
       ],
     },
     deleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDelete: {
@@ -764,8 +771,31 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     getTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGet: {
       providesTags: (_, __, arg) => [{ type: "ControlPlaneRoutingPolicy" as const, id: arg.teamId }],
     },
+    // A disable clears agents' recommended models, which the agent list shows.
+    // The response goes straight into the cache so switches never snap back.
     updateTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyPatch: {
-      invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneRoutingPolicy", id: arg.teamId }],
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneRoutingPolicy", id: arg.teamId },
+        { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
+      ],
+      onQueryStarted: async ({ teamId }, { dispatch, queryFulfilled }) => {
+        try {
+          const { data } = await queryFulfilled;
+          dispatch(
+            api.util.updateQueryData(
+              "getTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGet",
+              { teamId },
+              () => data,
+            ),
+          );
+        } catch {
+          // The caller reports the failed write.
+        }
+      },
+    },
+    // Its effective default follows the stored policy, so a save refetches it.
+    getAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGet: {
+      providesTags: (_, __, arg) => [{ type: "ControlPlaneRoutingPolicy" as const, id: arg.teamId }],
     },
     // The composer's model label (#2387). Tagged under the same
     // ControlPlaneRoutingPolicy/teamId entity the policy read and write already
@@ -945,6 +975,8 @@ export const {
     useAvailableModelProfilesQuery,
   // The model a chat turn will actually route to — the composer label (#2387).
   useGetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetQuery: useEffectiveChatModelQuery,
+  useLazyGetRoutingPolicyDisableImpactControlPlaneV1TeamsTeamIdRoutingPolicyDisableImpactGetQuery:
+    useLazyDisableImpactQuery,
   useHandlerControlPlaneV1KpiPresetsSkillUsageGetQuery: useSkillUsageQuery,
   useHandlerControlPlaneV1KpiPresetsUserSkillUsageGetQuery: useUserSkillUsageQuery,
   useHandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetQuery: useActiveUsersOverTimeQuery,
