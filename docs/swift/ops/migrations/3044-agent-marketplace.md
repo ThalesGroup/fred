@@ -2,6 +2,7 @@
 schema: 1
 title: "Agents marketplace: publication settings, browsing, likes and imports"
 impact: minor
+after: [chat-model-and-reasoning-picker]
 configuration: none
 configuration_reason: "Adds one control-plane migration, two team permissions and a pod endpoint; no configuration key or chart value changes."
 ---
@@ -57,9 +58,11 @@ teams can then publish agents.
 
 ## Rollback
 
-Roll back the images, then run `alembic downgrade e9026d8e4db6` on the
-control plane if the schema must go back. This drops marketplace settings,
-entries, likes and import history. All marketplace data and overrides are lost.
+For a full release rollback, use the consolidated v3.5.0 rollback plan. If a
+schema downgrade is required, stop affected readers and writers and use the
+new migration image before starting old services. Downgrading to
+`e9026d8e4db6` drops marketplace settings, entries, likes and import history;
+all marketplace data and overrides are lost.
 
 ## Limitations
 

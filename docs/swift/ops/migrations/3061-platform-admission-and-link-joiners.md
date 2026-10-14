@@ -16,7 +16,8 @@ changes before upgrading.
 
 Back up the shared control-plane database. Review any existing file whitelist and
 prepare equivalent rules or individual/team exceptions in Platform access. Check
-the intended policy with the administrator preview before enabling filtering.
+the intended policy with the administrator preview and enable filtering before
+removing the file whitelist, so admission remains restricted throughout rollout.
 
 ## Configuration
 
@@ -28,12 +29,12 @@ remain available while its filtering switch is off.
 ## Upgrade
 
 1. Apply the control-plane Alembic head before deploying the new control plane
-   and readers. The single new revision, `9f6d3c2a1b08`, adds per-link join
-   history without changing existing links or admission state.
-2. Deploy the chart and services together after removing retired whitelist
-   values. If restrictions were previously supplied only by `users.txt`, enable
-   the equivalent Platform access policy as part of the rollout; the file no
-   longer limits admission.
+   and readers. This contribution's revision, `9f6d3c2a1b08`, adds per-link
+   join history without changing existing links or admission state. The release
+   also includes later control-plane revisions; run the chain once to its head.
+2. After equivalent Platform access filtering is enabled where needed, remove
+   retired whitelist values and mounts. Stage the chart and services using the
+   consolidated v3.5.0 sequence; the file no longer limits admission.
 
 If a disposable preview database already applied an earlier draft of this
 unmerged revision, recreate it from the current migrations before testing.
