@@ -36,3 +36,12 @@ Not proven:
 - The samples' client id `kb-fred.samples` is taken from the spec; not checked
   against the fred-samples deployment.
 - No live publication on k3d or a deployment, and no upgrade or rollback rehearsal.
+
+## Review follow-up
+
+- A registered prefix now carries the publication request's own constraints (`PREFIX_PATTERN`,
+  at most 256 characters), so a registration publication would refuse fails at configuration
+  validation, in the Control Plane and in the chart's values schema.
+  `test_a_prefix_publication_would_refuse_is_refused_at_startup` (`Fred Samples`,
+  `fred..samples`, 257 characters): `tests/test_knowledge_base_enablement.py` 38 passed; schema
+  drift, config files and chart values checks pass after regeneration.

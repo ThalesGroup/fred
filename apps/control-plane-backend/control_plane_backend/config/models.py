@@ -29,7 +29,7 @@ from fred_core.common import (
     TemporalSchedulerConfig,
 )
 from fred_core.scheduler import SchedulerBackend
-from fred_pod.common.naming import prefix_covers
+from fred_pod.common.naming import PREFIX_PATTERN, prefix_covers
 from fred_pod.common.structures import LogOutputFormat
 from fred_sdk.contracts.models import TuningValue
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -357,8 +357,12 @@ class KnowledgeBasePublisher(BaseModel):
         min_length=1,
         description="The publishing client, as the token's `azp` names it.",
     )
+    # The publication request's own constraints: a registration it would refuse
+    # must fail at startup, not at every publication.
     prefix: str = Field(
         min_length=1,
+        max_length=256,
+        pattern=PREFIX_PATTERN,
         description=(
             "The prefix this client owns: it may publish only definitions "
             "named under it, and must present exactly it when publishing."

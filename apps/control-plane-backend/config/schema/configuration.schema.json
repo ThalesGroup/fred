@@ -385,7 +385,9 @@
         },
         "prefix": {
           "description": "The prefix this client owns: it may publish only definitions named under it, and must present exactly it when publishing.",
+          "maxLength": 256,
           "minLength": 1,
+          "pattern": "^[a-z0-9]+(?:[_-][a-z0-9]+)*(?:\\.[a-z0-9]+(?:[_-][a-z0-9]+)*)*$",
           "title": "Prefix",
           "type": "string"
         }

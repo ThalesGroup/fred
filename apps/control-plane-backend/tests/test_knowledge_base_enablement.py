@@ -897,3 +897,11 @@ def test_overlapping_registrations_are_refused_naming_both(
 
     assert "'fred' (kb-a)" in str(refused.value)
     assert f"{second[1]!r} ({second[0]})" in str(refused.value)
+
+
+@pytest.mark.parametrize("prefix", ["Fred Samples", "fred..samples", "a" * 257])
+def test_a_prefix_publication_would_refuse_is_refused_at_startup(prefix: str) -> None:
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        _knowledge_bases(("kb-a", prefix))
