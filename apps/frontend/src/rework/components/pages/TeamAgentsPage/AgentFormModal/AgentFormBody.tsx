@@ -468,6 +468,7 @@ export function AgentFormBody({
                 />
                 <RecommendedModelField
                   teamId={teamId}
+                  agentInstanceId={editInstance?.agent_instance_id}
                   value={recommendedChatProfileId}
                   onChange={onRecommendedChatProfileIdChange}
                   disabled={isSubmitting}

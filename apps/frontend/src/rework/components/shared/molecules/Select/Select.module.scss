@@ -108,9 +108,10 @@
 
 .select-container[data-compact="false"] .error-message {
   padding: 0 var(--spacing-xs);
-  height: 1rem;
+  min-height: 1rem;
   color: var(--error);
   font: var(--font-body-small);
+  overflow-wrap: anywhere;
 }
 
 .menu-popover {

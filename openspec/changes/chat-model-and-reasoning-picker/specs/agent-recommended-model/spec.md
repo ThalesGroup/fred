@@ -28,7 +28,10 @@ model", with a helper line naming today's default and saying it follows the
 team admin's changes; saving it SHALL store no recommendation. Every enabled
 model SHALL also be listed on its own, today's default included, and picking
 one SHALL pin it. A stored recommendation that is no longer selectable SHALL be
-shown flagged as unavailable.
+shown flagged as unavailable, using its catalog display name when known. The
+error message SHALL wrap within the form and not overlap the helper line. If
+the catalog no longer knows the profile, the form SHALL use a localized generic
+label instead of exposing the raw profile id.
 
 #### Scenario: Editor picks another model
 
@@ -39,6 +42,12 @@ shown flagged as unavailable.
 
 - **WHEN** the editor saves with "Default model" selected
 - **THEN** no recommendation is stored
+
+#### Scenario: Stored model becomes unavailable
+
+- **GIVEN** an agent recommends a model whose catalog display name is "GPT-6 Sol"
+- **WHEN** that model is no longer selectable and the editor opens the agent form
+- **THEN** the select and its wrapped error name "GPT-6 Sol", while the model remains unavailable for new selection
 
 ### Requirement: A recommendation is validated when it is written
 

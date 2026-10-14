@@ -68,11 +68,7 @@ class UpdateTeamRoutingPolicyRequest(BaseModel):
 
 
 class AvailableModelProfile(BaseModel):
-    """One chat profile this team may reference from its routing policy.
-
-    It is `can_use`-enabled and advertised by every model-capable pod; the
-    server derives this set from declared capability, never the profile id.
-    """
+    """Catalog metadata for a chat profile. Only entries in `profiles` are selectable."""
 
     profile_id: str
     capability_id: str
@@ -92,6 +88,13 @@ class AvailableModelProfile(BaseModel):
 
 class AvailableModelProfileList(BaseModel):
     profiles: list[AvailableModelProfile] = Field(default_factory=list)
+    unavailable_profile: AvailableModelProfile | None = Field(
+        default=None,
+        description=(
+            "Catalog metadata for the requested team's agent recommendation when it "
+            "is no longer selectable. This profile is not a picker option."
+        ),
+    )
     effective_default_profile_id: str | None = Field(
         default=None,
         description=(

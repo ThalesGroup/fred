@@ -1111,7 +1111,12 @@ const injectedRtkApi = api.injectEndpoints({
       GetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetApiResponse,
       GetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetApiArg
     >({
-      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/routing-policy/available-models` }),
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/routing-policy/available-models`,
+        params: {
+          agent_instance_id: queryArg.agentInstanceId,
+        },
+      }),
     }),
     getEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGet: build.query<
       GetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetApiResponse,
@@ -2816,6 +2821,7 @@ export type GetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvail
   /** status 200 Successful Response */ AvailableModelProfileList;
 export type GetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetApiArg = {
   teamId: string;
+  agentInstanceId?: string | null;
 };
 export type GetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetApiResponse =
   /** status 200 Successful Response */ EffectiveChatModel;
@@ -4940,6 +4946,8 @@ export type AvailableModelProfile = {
 };
 export type AvailableModelProfileList = {
   profiles?: AvailableModelProfile[];
+  /** Catalog metadata for the requested team's agent recommendation when it is no longer selectable. This profile is not a picker option. */
+  unavailable_profile?: AvailableModelProfile | null;
   /** The profile shown as the team's Default: the stored team default, else the pod default of the team's pods when they agree. Its model cannot be disabled. */
   effective_default_profile_id?: string | null;
 };
