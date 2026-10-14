@@ -5,8 +5,7 @@
 releases:
   - name: fred-manager
     # fred's chart through symlinks, minus values.schema.json: the schema lists fred's
-    # applications only, and helm lint enforces it even with --skip-schema-validation.
-    # Temporary, until fred-manager joins the chart.
+    # other applications only, and helm lint enforces it even with --skip-schema-validation.
     chart: ./chart
     values:
       - values.yaml

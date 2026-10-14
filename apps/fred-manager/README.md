@@ -1,9 +1,8 @@
 # fred-manager
 
-The Rust service that takes over spaces, folders, documents and their authorization
-from the Python backends, topic by topic. Its design, invariants and decisions are in
-the architecture dossier: [docs/architecture](../../docs/architecture/README.md). This
-file only says how to work on it.
+Fred's service for spaces, folders, documents and their authorization. Its design,
+invariants and decisions are in the architecture dossier:
+[docs/architecture](../../docs/architecture/README.md). This file says how to work on it.
 
 ## Develop
 

@@ -1,16 +1,12 @@
 # Fred architecture dossier
 
-The design of Fred as it is rebuilt, one topic at a time, in `fred-manager` (Rust).
-Each chapter covers the whole system and grows a section per component or topic as it
-is ported. What is not described here is not yet part of the new architecture; the
-Python backends keep their own documents under `docs/swift/` until their topic moves.
-
-Structure follows [arc42](https://arc42.org), reduced to the chapters that carry
-decisions. Diagrams are Mermaid, rendered by GitHub.
+The architecture of Fred's `fred-manager` service, as implemented. Structure follows
+[arc42](https://arc42.org), reduced to the chapters that carry decisions. Diagrams are
+Mermaid, rendered by GitHub.
 
 | # | Chapter | Answers |
 | --- | --- | --- |
-| 1 | [Goals and scope](01-goals-and-scope.md) | What is built, what is not yet, and the vocabulary |
+| 1 | [Introduction and goals](01-goals-and-scope.md) | Responsibilities, constraints, vocabulary |
 | 2 | [Context](02-context.md) | Who talks to whom |
 | 3 | [Building blocks](03-building-blocks.md) | Modules and their dependencies |
 | 4 | [Runtime](04-runtime.md) | The flows that matter, step by step |
@@ -19,12 +15,12 @@ decisions. Diagrams are Mermaid, rendered by GitHub.
 | 7 | [Deployment](07-deployment.md) | Host run and k3d |
 | 8 | [Decisions](08-decisions.md) | Why, one entry per decision |
 | 9 | [Quality](09-quality.md) | Invariants and the tests proving them |
-| 10 | [Risks and open points](10-risks-and-open-points.md) | What is known to be missing |
 
 ## Keeping it true
 
 - **Same commit.** A change to code described here updates its chapter in the same
-  commit. A topic ported to Rust adds its sections to every chapter it touches.
+  commit. The dossier describes what is implemented, in the present tense; plans,
+  progress and status belong elsewhere.
 - **Generated, never copied.** Anything derivable from code sits in a generated block
   (`<!-- generated: ... -->`): routes, the SQL schema (tbls, from the migrations), the
   OpenFGA model, the reference configuration, the invariant-to-test table.

@@ -34,13 +34,13 @@ flowchart LR
 | Addresses | `localhost` ports | `postgres`, `openfga:9080`, `temporal:7233`, `keycloak:8080` |
 | Token issuer accepted | `http://localhost:8080/realms/app` | `http://keycloak:8080/realms/app` (hosts entry `127.0.0.1 keycloak`) |
 | Public URL | `http://localhost:8400/fred-manager/v1` | `http://localhost:8088/fred-manager/v1` |
-| Bootstrap secret | `FRED_BOOTSTRAP_TOKEN` in `.env` | control-plane's, regenerated with each cluster |
+| Bootstrap secret | `FRED_BOOTSTRAP_TOKEN` in `.env` | `CONTROL_PLANE_BOOTSTRAP_TOKEN` of `fred-secrets`, generated with the cluster |
 
 The release uses fred's own chart (`deploy/charts/fred`) with every other application
 disabled, through `apps/fred-manager/deploy/k3d/` (factory contract: `helmfile.yaml.gotmpl`,
 `values.yaml`, `build`). `deploy/k3d/chart` links to that chart without its
 `values.schema.json`, whose closed application list `helm lint` enforces even with
-`--skip-schema-validation`; it goes once fred-manager joins the chart and its schema.
+`--skip-schema-validation`.
 
 The image (`dockerfiles/Dockerfile-prod`) builds the release binary with `protoc` and
 `libprotobuf-dev`, then runs it as user 1000 on Debian slim; migrations and the OpenFGA

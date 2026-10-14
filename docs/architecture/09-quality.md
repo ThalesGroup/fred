@@ -9,7 +9,6 @@
 | `make code-quality` | clippy with warnings as errors, rustfmt |
 
 Concurrency tests hold the relevant advisory lock to force the interleaving they prove.
-A regression test is accepted once it fails on the code before its fix.
 
 ## Invariants and their proofs
 
@@ -32,8 +31,3 @@ Generated from the `// Proves:` markers.
 | I12 | `apps/fred-manager/tests/integration.rs::pagination_survives_deleting_the_cursor_row` |
 | I13 | `apps/fred-manager/src/logging.rs::requests_carry_ids_and_end_with_one_http_event` |
 <!-- end generated -->
-
-## Review
-
-Each step goes through an independent read-only review, given the requirements and the
-diff, before it is considered done; its findings are fixed with a regression test.

@@ -36,12 +36,12 @@ document, its metadata, a page of a folder.
 
 ```mermaid
 sequenceDiagram
-    participant UI
+    participant C as Client
     participant M as fred-manager
     participant KC as Keycloak
     participant PG as Postgres
     participant FGA as OpenFGA
-    UI->>M: GET /documents/{id}, Bearer token
+    C->>M: GET /documents/{id}, Bearer token
     Note over M: request span: request_id, correlation_id
     opt unknown kid, at most once per 30 s
         M->>KC: GET realm certs
@@ -50,28 +50,30 @@ sequenceDiagram
     M->>PG: select document
     M->>FGA: check user can_read space:{document.space_id}
     alt allowed
-        M-->>UI: 200 document
+        M-->>C: 200 document
     else denied
-        M-->>UI: 403
+        M-->>C: 403
     end
     Note over M: one completion event on logger http
 ```
 
-## Agent search scope
+## Search scope
 
-The agent calls with the user's own token. The scope is the space and its ancestors,
-never its descendants (I7): a team conversation never sees its projects' content.
+A service acting for a user calls with that user's own token. The scope is the space
+and its ancestors, never its descendants (I7): from a team, a project's content is out
+of scope. The caller filters indexed content with `space_id` in the returned ids, and
+narrows to a folder with a `folder_path` prefix.
 
 ```mermaid
 sequenceDiagram
-    participant A as fred-agents
+    participant S as Service acting for a user
     participant M as fred-manager
+    participant PG as Postgres
     participant FGA as OpenFGA
-    participant OS as OpenSearch
-    A->>M: POST /authorize/scope {space_id}, user's token
+    S->>M: POST /authorize/scope {space_id}, user's token
+    M->>PG: select space
     M->>FGA: check user can_read space:{space_id}
-    M-->>A: {space_ids: path of the space}
-    A->>OS: query, filter space_id in space_ids,<br/>optionally folder_path prefix
+    M-->>S: {space_ids: path of the space}
 ```
 
 ## Role and space mutations
@@ -142,23 +144,26 @@ stateDiagram-v2
 ## Ingestion submission
 
 `POST /documents` registers a document and returns its `storage_prefix`
-(`<space_id>/<document_id>/`) and `source_key` (`<prefix>source`). Uploading the source
-is not built yet. Workflow ids are `ingest-<document_id>` and `delete-<document_id>`:
-a second ingestion while one runs answers 409.
+(`<space_id>/<document_id>/`) and `source_key` (`<prefix>source`). Workflow ids are
+`ingest-<document_id>` and `delete-<document_id>`: a second ingestion while one runs
+answers 409.
 
 ```mermaid
 sequenceDiagram
-    participant UI
+    participant C as Client
     participant M as fred-manager
+    participant FGA as OpenFGA
     participant T as Temporal
-    participant W as worker
-    UI->>M: POST /documents/{id}/ingest {profile}
-    M->>M: check can_write on the document's space
+    C->>M: POST /documents/{id}/ingest {profile}
+    M->>FGA: check user can_write on the document's space
     M->>T: start IngestDocument, id ingest-{id}, queue fred-ingestion
-    M-->>UI: 202, or 409 when already running
-    T->>W: IngestDocument {document_id, space_id, folder_path,<br/>storage_prefix, source_key, mime, profile, requested_by}
-    Note over W: not implemented yet
+    M-->>C: 202, or 409 when already running
 ```
+
+| Workflow | Input |
+| --- | --- |
+| `IngestDocument` | `document_id`, `space_id`, `folder_path`, `storage_prefix`, `source_key`, `mime`, `profile` (default `medium`), `requested_by` |
+| `DeleteDocument` | `document_id`, `space_id`, `storage_prefix` |
 
 Deletion submits `DeleteDocument {document_id, space_id, storage_prefix}` before
 deleting the row, so a failure leaves a retryable document rather than orphaned chunks.

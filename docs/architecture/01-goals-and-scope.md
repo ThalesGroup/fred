@@ -1,29 +1,36 @@
-# 1. Goals and scope
+# 1. Introduction and goals
 
-## Goal
+## Responsibilities
 
-Replace the control-plane and knowledge-flow backends by one Rust service,
-`fred-manager`, built beside them topic by topic, with no migration in scope. The agents
-(`fred-agents`) and the knowledge-flow ingestion workers stay in Python. `fred-manager`
-is the UI's interface.
+`fred-manager` owns Fred's spaces, folders and documents, and decides who may read,
+write or manage them.
 
-## Ported so far
+| Responsibility | Chapter |
+| --- | --- |
+| Spaces: organizations, teams, projects, personal spaces | 4, 5 |
+| Folders and documents: placement, names, pages | 5 |
+| Roles on spaces, with the parent rule | 4, 5 |
+| One-check content access, and the search scope of a space | 4, 5 |
+| Bearer authentication against the Keycloak realm | 6 |
+| The one-time root platform admin | 4 |
+| Submission of ingestion and deletion work to Temporal | 4 |
+| Structured stdout logging, request correlation | 6 |
 
-| Topic | Status | Where |
-| --- | --- | --- |
-| Spaces: organization, team, project, personal space | built | chapters 4, 5 |
-| Folders and documents, placement and pagination | built | chapter 5 |
-| Space roles and their parent invariant | built | chapters 4, 5 |
-| Content access check and agent search scope | built | chapters 4, 5 |
-| Bearer authentication (fred-core `security/oidc.py`) | built | chapter 6 |
-| Root platform-admin bootstrap (control-plane) | built | chapter 4 |
-| Structured logging (fred-core `logs/`) | built | chapter 6 |
-| Ingestion submission to Temporal | client only, no worker | chapter 4 |
-| Provisioning bundle import | next | chapter 10 |
+## Quality goals
 
-Not yet ported: source upload to object storage, search, conversations, agents and
-capabilities, teams' product settings, quotas, KPIs, post-authentication admission
-gates (chapter 6).
+| Goal | Means |
+| --- | --- |
+| An access decision costs one OpenFGA check | Rights live on spaces only; the tree is in SQL (D1, D3) |
+| Rights stay consistent under concurrency | Check and write under one lock per organization (I4, I5) |
+| Governance never implies reading | Admin roles carry no content permission (I8) |
+| The design and the code never diverge | Generated blocks, invariants proved by tests (chapter 9) |
+
+## Constraints
+
+- Runs on Fred's shared infrastructure: Postgres database `fred`, Keycloak realm `app`,
+  OpenFGA, Temporal.
+- Configuration, secrets and log output follow the conventions of Fred's other
+  services (chapter 6).
 
 ## Vocabulary
 
@@ -31,9 +38,9 @@ gates (chapter 6).
 | --- | --- |
 | Space | An organization, a team or a project. Holds folders and documents. |
 | Personal space | A team with `personal_owner` set: one member, no project. |
-| Path | A space's ancestors then itself, as ids. Also the search scope. |
+| Path | A space's ancestors then itself, as ids. Also its search scope. |
 | Role | `member`, `editor` or `admin`, held directly on one space in OpenFGA. |
 | Content role | `member` or `editor`: the roles that read content. |
 | Platform admin | `admin` on `platform:root`. Governs, reads no content. |
-| Folder path | `/<id>/<id>/`: a folder's ancestors then itself, copied into every chunk. |
-| Derived artefact | Anything built from a document: markdown, chunks, tables, previews. |
+| Folder path | `/<id>/<id>/`: a folder's ancestors then itself. |
+| Storage prefix | `<space_id>/<document_id>/`: where a document's artefacts are stored. |

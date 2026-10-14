@@ -2,33 +2,38 @@
 
 ## Authentication
 
-`fred-manager` ports fred-core `security/oidc.py` (`decode_jwt`,
-`get_current_user_without_gcu`) and fred-pod `oidc_endpoints.py`. The `CurrentUser`
-extractor is the `Depends(get_current_user)` of every route.
+The `CurrentUser` extractor authenticates every route but the health probe.
 
-| Aspect | Behaviour |
+| Aspect | Rule |
 | --- | --- |
-| Token | `Authorization: Bearer`, RS256 only, key by `kid` from the realm JWKS (signing keys only) |
-| Endpoints | Keycloak: `<realm>/protocol/openid-connect/certs`; OIDC: discovery, issuer must match |
-| Claims | `sub` is the user id (OpenFGA subject); roles from `resource_access.<client_id>.roles` or `roles_claim`; client from `azp` or `client_id` |
-| OIDC subjects | A non-UUID `sub` becomes `uuid5(NAMESPACE_URL, "<issuer>#<sub>")` |
+| Token | `Authorization: Bearer`, RS256 only, key chosen by `kid` among the realm's signing keys |
+| Endpoints | Keycloak: `<realm>/protocol/openid-connect/certs`; OIDC: discovery, issuer must match the configured one |
+| Identity | `sub` is the user id and the OpenFGA subject; roles from `resource_access.<client_id>.roles` or `roles_claim`; client from `azp` or `client_id`; service account recognised by `preferred_username = service-account-<client>` |
+| OIDC subjects | A non-UUID `sub` becomes `uuid5(NAMESPACE_URL, "<issuer>#<sub>")`; an empty `sub` is refused |
 | Strict mode | `profile: c3`, or `FRED_STRICT_ISSUER` / `FRED_STRICT_AUDIENCE`: exact issuer (user and m2m realms), audience `audience` or `client_id` |
-| Times | `exp` and `iat` required, `iat` an integer not in the future, `exp - iat` at most `FRED_JWT_MAX_LIFETIME_SECONDS` (3600), leeway `FRED_JWT_CLOCK_SKEW` (0) |
-| JWKS refresh | Set kept 300 s; an unknown `kid` refetches at most once per 30 s, failures included, one fetch at a time, cached keys readable meanwhile |
-| Disabled | `security.user.enabled: false`: every caller is the mock `admin` (client `local-dev`) |
-| 401 answers | fred-core's `detail` and `WWW-Authenticate` values, unchanged |
+| Times | `exp` and an integer `iat` required, `iat` not in the future, `exp - iat` at most `FRED_JWT_MAX_LIFETIME_SECONDS` (3600), leeway `FRED_JWT_CLOCK_SKEW` (0) |
+| Key cache | Keys kept 300 s; an unknown `kid` refetches at most once per 30 s, failures included, one fetch at a time, cached keys readable meanwhile; tokens are verified on every request |
+| Disabled | `security.user.enabled: false`: every caller is the mock `admin`, client `local-dev`; `profile: c3` refuses to start that way |
 
-Stricter than fred-core: no token cache, `exp` and `iat` required, empty subject refused
-for every provider. Not ported yet, each a decision of its own: GCU acceptance, local
-identity snapshot, account status, platform access rules, whitelist, delegated callers.
+401 answers carry a `WWW-Authenticate` header:
+
+| Detail | `WWW-Authenticate` |
+| --- | --- |
+| `No authentication token provided` | `Bearer` |
+| `Invalid token signature` | `Bearer error='invalid_token'` |
+| `Token has expired` | `Bearer error='invalid_token', error_description='token expired'` |
+| `Invalid token` | `Bearer error='invalid_token'` |
+| `Token has invalid iat/exp claims` | `Bearer error='invalid_token', error_description='exp before iat'` |
+| `Token lifetime exceeds the maximum permitted duration` | `Bearer error='invalid_token', error_description='token lifetime too long'` |
+| `Invalid token claims` | `Bearer error='invalid_token'` |
 
 ## Logging
 
-Same stdout output as fred-core `logs/processors.py` and `logs/http.py`.
+Structured stdout, in the format shared by Fred's services.
 
 | `app.log_format` | Output |
 | --- | --- |
-| `json` | One object per line: `severity`, `message`, `timestamp` `{seconds, nanos}`, `logger`, `service` (`fred-manager`), `service_role` (`api`), `category`, `logging.googleapis.com/sourceLocation`, `process`, `thread` |
+| `json` | One object per line: `severity`, `message`, `timestamp` `{seconds, nanos}`, `logger`, `service` (`fred-manager`), `service_role` (`api`), `category`, `logging.googleapis.com/sourceLocation` (`file`, `line`, `function` = module path), `process`, `thread` |
 | `text` | `<rfc3339> <SEVERITY> fred-manager/<logger> <message> key=value ...`, no wrapping, colors only on a terminal without `NO_COLOR` |
 
 - Event fields and request context are top-level and never replace core fields.
@@ -43,8 +48,7 @@ Same stdout output as fred-core `logs/processors.py` and `logs/http.py`.
   (template), `http_status`, `duration_ms`, `outcome`; INFO below 400, WARNING for
   other 4xx, ERROR for 5xx; omitted for a successful `/healthz`; `cancelled` when the
   client goes away (I13).
-- Differences forced by Rust: `sourceLocation.function` is the module path; no
-  `task_name`.
+- A fatal error after startup is one ERROR event, `fred-manager stopped`.
 
 ## Errors
 
@@ -53,7 +57,7 @@ Every error body is `{"detail": "<message>"}`, as FastAPI.
 | Status | When |
 | --- | --- |
 | 400 | Unknown role name, placement rule broken (I1) |
-| 401 | Missing or invalid bearer (fred-core messages) |
+| 401 | Missing or invalid bearer (details above) |
 | 403 | Permission denied (`forbidden`), wrong bootstrap secret |
 | 404 | Unknown id |
 | 409 | Unique or foreign-key violation, invariant refusal, bootstrap completed, ingestion already running |
@@ -63,8 +67,8 @@ Every error body is `{"detail": "<message>"}`, as FastAPI.
 
 ## Configuration
 
-As in the Python backends: `CONFIG_FILE` (default `./config/configuration.yaml`) holds
-settings with their section and field names; `ENV_FILE` (default `./config/.env`) holds
+`CONFIG_FILE` (default `./config/configuration.yaml`) holds the settings, in sections
+`app`, `security`, `storage`, `scheduler`; `ENV_FILE` (default `./config/.env`) holds
 secrets only and never overrides the process environment.
 
 | Secret | Read from |
@@ -77,8 +81,8 @@ Local reference configuration:
 
 <!-- generated: include apps/fred-manager/config/configuration.yaml yaml -->
 ```yaml
-# fred-manager on the host, against the local k3d stack (fred-deployment-factory).
-# Same sections and names as the Python backends; secrets come from config/.env.
+# fred-manager on the host, against the local stack of fred-deployment-factory.
+# Secrets come from config/.env.
 
 app:
   name: Fred Manager

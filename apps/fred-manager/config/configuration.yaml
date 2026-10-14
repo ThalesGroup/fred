@@ -1,5 +1,5 @@
-# fred-manager on the host, against the local k3d stack (fred-deployment-factory).
-# Same sections and names as the Python backends; secrets come from config/.env.
+# fred-manager on the host, against the local stack of fred-deployment-factory.
+# Secrets come from config/.env.
 
 app:
   name: Fred Manager
