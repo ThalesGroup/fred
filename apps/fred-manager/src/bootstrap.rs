@@ -74,6 +74,7 @@ pub async fn grant_root(pool: &PgPool, fga: &Fga, uid: &str) -> Result<(), AppEr
         _ => return Err(AppError::Conflict(COMPLETED.into())),
     }
     fga.grant_platform_admin(uid).await?;
+    crate::logging::audit_relation(Some(uid), uid, "admin", "platform:root", true);
     sqlx::query("update platform_bootstrap set granted_at = now()")
         .execute(&mut *tx)
         .await?;
@@ -81,7 +82,7 @@ pub async fn grant_root(pool: &PgPool, fga: &Fga, uid: &str) -> Result<(), AppEr
     Ok(())
 }
 
-async fn locked(pool: &PgPool) -> Result<Transaction<'static, Postgres>, AppError> {
+pub(crate) async fn locked(pool: &PgPool) -> Result<Transaction<'static, Postgres>, AppError> {
     let mut tx = pool.begin().await?;
     sqlx::query("select pg_advisory_xact_lock($1)")
         .bind(LOCK_KEY)
@@ -91,7 +92,9 @@ async fn locked(pool: &PgPool) -> Result<Transaction<'static, Postgres>, AppErro
 }
 
 /// The claimant, and whether their grant is recorded.
-async fn marker(tx: &mut Transaction<'_, Postgres>) -> Result<Option<(String, bool)>, AppError> {
+pub(crate) async fn marker(
+    tx: &mut Transaction<'_, Postgres>,
+) -> Result<Option<(String, bool)>, AppError> {
     Ok(
         sqlx::query_as("select completed_by, granted_at is not null from platform_bootstrap")
             .fetch_optional(&mut **tx)

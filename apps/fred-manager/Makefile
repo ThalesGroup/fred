@@ -97,3 +97,10 @@ docker-build: ## Build the Docker image
 .PHONY: docker-push
 docker-push: ## Push the Docker image
 	docker push $(IMAGE_FULL)
+
+.PHONY: model check-model
+model: ## Generate OpenFGA JSON from the service's direct-role DSL
+	python3 tools/model.py
+check-model:
+	python3 tools/model.py --check
+code-quality: check-model

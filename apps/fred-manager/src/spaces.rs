@@ -20,10 +20,11 @@ use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
 use crate::{
-    db,
+    bootstrap, db,
     domain::{self, Permission, Role, Space, SpaceKind},
     error::{AppError, AppResult},
     fga::{Fga, Tuple},
+    roles::PlatformPermission,
 };
 
 const PARENT_REQUIRED: &str = "the user must first be able to read the parent space";
@@ -39,7 +40,10 @@ async fn require(fga: &Fga, user: &str, permission: Permission, space: Uuid) -> 
 }
 
 /// Locks the organization `space` belongs to, until the transaction ends.
-async fn lock_organization(tx: &mut Transaction<'_, Postgres>, space: &Space) -> AppResult<()> {
+pub(crate) async fn lock_organization(
+    tx: &mut Transaction<'_, Postgres>,
+    space: &Space,
+) -> AppResult<()> {
     let org = space.path[0].as_bytes();
     let key = i64::from_be_bytes(org[..8].try_into().expect("a uuid has 16 bytes"));
     sqlx::query("select pg_advisory_xact_lock($1)")
@@ -56,9 +60,19 @@ async fn persist(
     fga: &Fga,
     space: &Space,
     tuples: &[Tuple<'_>],
+    caller: Option<&str>,
 ) -> AppResult<()> {
     db::insert_space(&mut tx, space).await?;
     fga.write(tuples, &[]).await?;
+    for tuple in tuples {
+        crate::logging::audit_relation(
+            caller,
+            tuple.user,
+            tuple.role.as_str(),
+            &format!("space:{}", tuple.space),
+            true,
+        );
+    }
     tx.commit().await?;
     Ok(())
 }
@@ -91,7 +105,7 @@ pub async fn create_organization(
             space: id,
         },
     ];
-    persist(pool.begin().await?, fga, &org, &tuples).await?;
+    persist(pool.begin().await?, fga, &org, &tuples, None).await?;
     Ok(org)
 }
 
@@ -107,9 +121,22 @@ pub async fn create_space(
 ) -> AppResult<Space> {
     let parent = db::space(pool, parent_id).await?;
     domain::check_parent(kind, Some(&parent))?;
-    let mut tx = pool.begin().await?;
+    // Always take the platform lock first when a delegated creation can authorize us.
+    let mut tx = if kind == SpaceKind::Team {
+        bootstrap::locked(pool).await?
+    } else {
+        pool.begin().await?
+    };
     lock_organization(&mut tx, &parent).await?;
-    require(fga, caller, Permission::Manage, parent.id).await?;
+    let local = fga.check(caller, Permission::Manage, parent.id).await?;
+    if !local
+        && !(kind == SpaceKind::Team
+            && fga
+                .check_platform(caller, PlatformPermission::CreateTeam)
+                .await?)
+    {
+        return Err(AppError::Forbidden);
+    }
     if !fga.check(admin, Permission::Read, parent.id).await? {
         return Err(AppError::Conflict(PARENT_REQUIRED.into()));
     }
@@ -131,6 +158,7 @@ pub async fn create_space(
             role: Role::Admin,
             space: id,
         }],
+        Some(caller),
     )
     .await?;
     Ok(space)
@@ -168,7 +196,7 @@ pub async fn create_personal_space(
             space: id,
         },
     ];
-    persist(tx, fga, &space, &tuples).await?;
+    persist(tx, fga, &space, &tuples, Some(caller)).await?;
     Ok(space)
 }
 
@@ -201,7 +229,15 @@ pub async fn grant(
         &[],
     )
     .await?;
+    crate::logging::audit_relation(
+        Some(caller),
+        target,
+        role.as_str(),
+        &format!("space:{}", space.id),
+        true,
+    );
     tx.commit().await?;
+    tracing::info!(actor_uid = caller, subject = target, ?role, space_id = %space.id, outcome = "granted", "authz.relation.granted");
     Ok(())
 }
 
@@ -229,6 +265,14 @@ pub async fn revoke(
         .filter(|(s, _)| *s == space.id)
         .map(|(_, r)| *r)
         .collect();
+    if role == Role::Admin && space.personal_owner.is_none() && on_space.contains(&Role::Admin) {
+        let admins = fga.space_admins(space.id).await?;
+        if !admins.iter().any(|admin| admin != target) {
+            return Err(AppError::Conflict(
+                "a non-personal space must retain an administrator".into(),
+            ));
+        }
+    }
     let children = db::child_space_ids(&mut *tx, space.id).await?;
     let in_child = held.iter().any(|(s, _)| children.contains(s));
     if domain::revocation_blocked(role, &on_space, in_child) {
@@ -243,6 +287,14 @@ pub async fn revoke(
         }],
     )
     .await?;
+    crate::logging::audit_relation(
+        Some(caller),
+        target,
+        role.as_str(),
+        &format!("space:{}", space.id),
+        false,
+    );
     tx.commit().await?;
+    tracing::info!(actor_uid = caller, subject = target, ?role, space_id = %space.id, outcome = "revoked", "authz.relation.revoked");
     Ok(())
 }

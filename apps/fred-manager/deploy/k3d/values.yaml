@@ -43,6 +43,9 @@ applications:
       - name: CONFIG_FILE
         value: "/app/config/configuration.yaml"
     extraEnvVars:                          # secret
+      - name: KEYCLOAK_FRED_MANAGER_CLIENT_SECRET
+        valueFrom:
+          secretKeyRef: { name: fred-secrets, key: KEYCLOAK_FRED_MANAGER_CLIENT_SECRET, optional: false }
       - name: FRED_POSTGRES_PASSWORD
         valueFrom:
           secretKeyRef: { name: fred-secrets, key: POSTGRES_FRED_PASSWORD, optional: false }
@@ -146,7 +149,11 @@ applications:
         bootstrap_token_env_var: "FRED_BOOTSTRAP_TOKEN"
       security:
         profile: c3                        # posture
-        m2m: { realm_url: "http://keycloak:8080/realms/app" }   # address
+        m2m:
+          realm_url: "http://keycloak:8080/realms/app"
+          enabled: true
+          client_id: fred-manager
+          secret_env_var: KEYCLOAK_FRED_MANAGER_CLIENT_SECRET
         user:
           realm_url: "http://keycloak:8080/realms/app"         # address
           client_id: app

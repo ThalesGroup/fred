@@ -9,7 +9,7 @@ write or manage them.
 | --- | --- |
 | Spaces: organizations, teams, projects, personal spaces | 4, 5 |
 | Folders and documents: placement, names, pages | 5 |
-| Roles on spaces, with the parent rule | 4, 5 |
+| Platform roles and roles on spaces, with the parent rule | 4, 5 |
 | One-check content access, and the search scope of a space | 4, 5 |
 | Bearer authentication against the Keycloak realm | 6 |
 | The one-time root platform admin | 4 |
@@ -39,8 +39,8 @@ write or manage them.
 | Space | An organization, a team or a project. Holds folders and documents. |
 | Personal space | A team with `personal_owner` set: one member, no project. |
 | Path | A space's ancestors then itself, as ids. Also its search scope. |
-| Role | `member`, `editor` or `admin`, held directly on one space in OpenFGA. |
-| Content role | `member` or `editor`: the roles that read content. |
+| Role | `member`, `editor`, `analyst` or `admin`, held directly on one space in OpenFGA. |
+| Content role | `member`, `editor` or `analyst`: the roles that read content. |
 | Platform admin | `admin` on `platform:root`. Governs, reads no content. |
 | Folder path | `/<id>/<id>/`: a folder's ancestors then itself. |
 | Storage prefix | `<space_id>/<document_id>/`: where a document's artefacts are stored. |

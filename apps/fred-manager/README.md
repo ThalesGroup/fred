@@ -10,11 +10,11 @@ Same targets as the other apps (`make help` lists them). Building needs `protoc`
 `PROTOC` defaults to `~/bin/tools/protoc/bin/protoc`.
 
 ```
-cp config/.env.template config/.env   # once: the three secrets
+cp config/.env.template config/.env   # once: the four secrets
 make run                              # http://localhost:8400/fred-manager/v1
 make test                             # offline unit tests
 make test-integration                 # throwaway Postgres and OpenFGA containers
-make code-quality                     # clippy + rustfmt
+make code-quality                     # model parity + clippy + rustfmt
 make -C ../../docs/architecture check # the dossier still matches the code
 ```
 
@@ -53,3 +53,22 @@ make bootstrap-local BOOTSTRAP_USER=<you> BOOTSTRAP_PASSWORD=<pw> \
 A change described in the dossier updates its chapter in the same commit. A test that
 proves an invariant carries `// Proves: I<n>` above it. Applied migrations are never
 edited; add a new one.
+
+## Platform and space roles
+
+`GET /me` reports effective platform roles. Platform administrators list direct grants
+with `GET /users/platform-roles`, and grant/revoke with
+`PUT`/`DELETE /users/{subject}/platform-roles/{role}`. Only the bootstrap root changes
+`platform_admin`; its own grant is protected. `platform_observer`, `team_manager`,
+`feature_manager` and `prompt_editor` are also supported.
+
+Space roles are `member`, `editor`, `analyst` and `admin`. They are cumulative;
+admin alone does not read content. The last admin of a non-personal space cannot be
+revoked. Capability checks and their contracts are in the
+[runtime chapter](../../docs/architecture/04-runtime.md#platform-administration-and-self-checks).
+
+Directory-backed platform grants require the manager's service client. The factory
+consumes `deploy/k3d/identities.yaml` during `k3d-app`; copy its generated
+`KEYCLOAK_FRED_MANAGER_CLIENT_SECRET` from `fred-secrets` to the host `.env` when
+running locally against that realm. `docker-up` alone does not provision this client.
+The [deployment chapter](../../docs/architecture/07-deployment.md) describes configuration.

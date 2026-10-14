@@ -23,7 +23,10 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-use crate::domain::{Permission, Role};
+use crate::{
+    domain::{Permission, Role},
+    roles::{PlatformPermission, PlatformRole, SpacePermission},
+};
 
 /// The single platform object holding platform roles.
 const PLATFORM: &str = "platform:root";
@@ -117,11 +120,11 @@ impl Fga {
         Self::parse(path, req.send().await.context("openfga unreachable")?).await
     }
 
-    async fn parse(path: &str, resp: reqwest::Response) -> Result<Value> {
+    async fn parse(_path: &str, resp: reqwest::Response) -> Result<Value> {
         let status = resp.status();
         let body: Value = resp.json().await.unwrap_or(Value::Null);
         if !status.is_success() {
-            bail!("openfga {path} returned {status}: {body}");
+            bail!("openfga request failed ({status})");
         }
         Ok(body)
     }
@@ -145,6 +148,7 @@ impl Fga {
     async fn check_object(&self, user: &str, relation: &str, object: &str) -> Result<bool> {
         let mut body = json!({
             "tuple_key": { "user": format!("user:{user}"), "relation": relation, "object": object },
+            "consistency": "HIGHER_CONSISTENCY",
         });
         self.pin_model(&mut body);
         let resp = self
@@ -176,17 +180,89 @@ impl Fga {
         Ok(())
     }
 
-    /// Every direct role of a user, across all spaces. Bounded by that user's memberships,
-    /// never by documents or folders.
-    pub async fn roles_of(&self, user: &str) -> Result<Vec<(Uuid, Role)>> {
-        #[derive(Deserialize)]
-        struct Key {
-            relation: String,
-            object: String,
+    pub async fn check_platform(&self, user: &str, permission: PlatformPermission) -> Result<bool> {
+        self.check_object(user, permission.relation(), PLATFORM)
+            .await
+    }
+
+    pub async fn check_space(
+        &self,
+        user: &str,
+        permission: SpacePermission,
+        space: Uuid,
+    ) -> Result<bool> {
+        self.check_object(user, permission.relation(), &format!("space:{space}"))
+            .await
+    }
+
+    pub async fn effective_platform_roles(&self, user: &str) -> Result<Vec<PlatformRole>> {
+        let [a, b, c, d, e] = PlatformRole::ALL;
+        let (a, b, c, d, e) = tokio::try_join!(
+            self.check_object(user, a.relation(), PLATFORM),
+            self.check_object(user, b.relation(), PLATFORM),
+            self.check_object(user, c.relation(), PLATFORM),
+            self.check_object(user, d.relation(), PLATFORM),
+            self.check_object(user, e.relation(), PLATFORM),
+        )?;
+        Ok(PlatformRole::ALL
+            .into_iter()
+            .zip([a, b, c, d, e])
+            .filter_map(|(role, allowed)| allowed.then_some(role))
+            .collect())
+    }
+
+    /// Low-level writer; callers must hold the platform lock and authorize the mutation.
+    pub async fn write_platform(&self, user: &str, role: PlatformRole, grant: bool) -> Result<()> {
+        let key = json!({ "user": format!("user:{user}"), "relation": role.relation(), "object": PLATFORM });
+        if grant {
+            self.write_keys(vec![key], vec![]).await
+        } else {
+            self.write_keys(vec![], vec![key]).await
         }
+    }
+
+    pub async fn platform_grants(&self) -> Result<Vec<(String, PlatformRole)>> {
+        Ok(self
+            .read_keys(json!({ "object": PLATFORM }))
+            .await?
+            .into_iter()
+            .filter_map(|k| {
+                Some((
+                    k.user.strip_prefix("user:")?.to_owned(),
+                    PlatformRole::parse(&k.relation)?,
+                ))
+            })
+            .collect())
+    }
+
+    pub async fn space_admins(&self, space: Uuid) -> Result<Vec<String>> {
+        Ok(self
+            .read_keys(json!({ "object": format!("space:{space}"), "relation": "admin" }))
+            .await?
+            .into_iter()
+            .filter_map(|k| k.user.strip_prefix("user:").map(str::to_owned))
+            .collect())
+    }
+
+    /// Direct roles only; no derived role is represented as a stored grant.
+    pub async fn roles_of(&self, user: &str) -> Result<Vec<(Uuid, Role)>> {
+        Ok(self
+            .read_keys(json!({ "user": format!("user:{user}"), "object": "space:" }))
+            .await?
+            .into_iter()
+            .filter_map(|k| {
+                Some((
+                    k.object.strip_prefix("space:")?.parse().ok()?,
+                    Role::parse(&k.relation)?,
+                ))
+            })
+            .collect())
+    }
+
+    async fn read_keys(&self, key: Value) -> Result<Vec<StoredKey>> {
         #[derive(Deserialize)]
         struct Item {
-            key: Key,
+            key: StoredKey,
         }
         #[derive(Deserialize)]
         struct Page {
@@ -194,31 +270,20 @@ impl Fga {
             #[serde(default)]
             continuation_token: String,
         }
-
         let mut out = Vec::new();
         let mut token = String::new();
         loop {
-            let mut body =
-                json!({ "tuple_key": { "user": format!("user:{user}"), "object": "space:" } });
-            if !token.is_empty() {
-                body["continuation_token"] = json!(token);
-            }
+            let body = json!({ "tuple_key": key, "continuation_token": token, "consistency": "HIGHER_CONSISTENCY" });
             let page: Page = serde_json::from_value(
                 self.post(&format!("/stores/{}/read", self.store), body)
                     .await?,
             )?;
-            for t in page.tuples {
-                let id = t
-                    .key
-                    .object
-                    .strip_prefix("space:")
-                    .and_then(|s| s.parse().ok());
-                if let (Some(id), Some(role)) = (id, Role::parse(&t.key.relation)) {
-                    out.push((id, role));
-                }
-            }
+            out.extend(page.tuples.into_iter().map(|t| t.key));
             if page.continuation_token.is_empty() {
                 return Ok(out);
+            }
+            if page.continuation_token == token {
+                bail!("OpenFGA repeated a continuation token");
             }
             token = page.continuation_token;
         }
@@ -229,4 +294,11 @@ impl Fga {
             body["authorization_model_id"] = json!(model);
         }
     }
+}
+
+#[derive(Deserialize)]
+struct StoredKey {
+    user: String,
+    relation: String,
+    object: String,
 }

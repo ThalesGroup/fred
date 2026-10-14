@@ -13,7 +13,7 @@ flowchart LR
     client -- "bearer token" --> manager
     caller -- "authorize document,<br/>authorize scope" --> manager
     client -- "login" --> keycloak
-    manager -- "signing keys" --> keycloak
+    manager -- "signing keys,<br/>service-account directory lookup" --> keycloak
     manager -- "one check per access,<br/>role writes" --> openfga
     manager -- "spaces, folders, documents" --> postgres
     manager -- "IngestDocument,<br/>DeleteDocument" --> temporal
@@ -21,7 +21,7 @@ flowchart LR
 
 | Partner | What fred-manager uses | Contract |
 | --- | --- | --- |
-| Keycloak | Access tokens, signing keys (JWKS) | chapter 6, Authentication |
+| Keycloak | Access tokens, signing keys (JWKS), user lookup with its own service account | chapter 6, Authentication |
 | OpenFGA | `check`, `write`, `read` on its own store | chapter 5, OpenFGA model |
 | Postgres | Its tables in the `fred` database | chapter 5, Schema |
 | Temporal | Starting `IngestDocument` and `DeleteDocument` | chapter 4, Ingestion submission |

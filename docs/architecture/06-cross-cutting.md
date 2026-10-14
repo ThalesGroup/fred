@@ -48,6 +48,11 @@ Structured stdout, in the format shared by Fred's services.
   (template), `http_status`, `duration_ms`, `outcome`; INFO below 400, WARNING for
   other 4xx, ERROR for 5xx; omitted for a successful `/healthz`; `cancelled` when the
   client goes away (I13).
+- Acknowledged role writes emit `authz.relation.granted` or `authz.relation.revoked`
+  on `fred.security.audit`, with `actor_uid` when known, `subject`, `relation`,
+  `resource` and `outcome: succeeded`. This stream is always JSON and includes INFO
+  even when the application threshold is WARNING or ERROR. Events precede SQL commit:
+  an acknowledged FGA write remains auditable when SQL commit fails (I16).
 - A fatal error after startup is one ERROR event, `fred-manager stopped`.
 
 ## Errors
@@ -62,7 +67,7 @@ Every error body is `{"detail": "<message>"}`, as FastAPI.
 | 404 | Unknown id |
 | 409 | Unique or foreign-key violation, invariant refusal, bootstrap completed, ingestion already running |
 | 422 | Invalid JSON body (optional ones included), short bootstrap token, half a cursor |
-| 503 | Bootstrap with authentication disabled |
+| 503 | Bootstrap or platform-role administration with authentication disabled; grant with no directory or incompatible subject/realm mapping |
 | 500 | Anything else, logged, answered `internal error` |
 
 ## Configuration
@@ -75,6 +80,7 @@ secrets only and never overrides the process environment.
 | --- | --- |
 | `FRED_POSTGRES_PASSWORD` | process or `.env` |
 | `OPENFGA_API_TOKEN` | the variable `security.rebac.token_env_var` names |
+| `KEYCLOAK_FRED_MANAGER_CLIENT_SECRET` | the variable `security.m2m.secret_env_var` names |
 | `FRED_BOOTSTRAP_TOKEN` | the variable `app.bootstrap_token_env_var` names |
 
 Local reference configuration:
@@ -97,6 +103,9 @@ app:
 security:
   profile: c3
   m2m:
+    enabled: true
+    client_id: fred-manager
+    secret_env_var: KEYCLOAK_FRED_MANAGER_CLIENT_SECRET
     realm_url: http://localhost:8080/realms/app
   user:
     enabled: true
@@ -123,3 +132,16 @@ scheduler:
     task_queue: fred-ingestion
 ```
 <!-- end generated -->
+
+## Outbound Keycloak directory
+
+`security.m2m.enabled` enables the manager's own client-credentials identity, configured
+by `realm_url`, `client_id` and `secret_env_var`. An issuer-only legacy m2m section does
+not enable directory access. User bearer verification and service credentials remain
+separate. Platform grants require Keycloak authentication with `claims.uid: sub` and
+the same normalized user/directory realm; revocations remain available for stale grants.
+
+The shared client rejects redirects and uses a five-second request timeout. A synchronized
+process-local cache renews the service token five seconds before expiry; a 401 invalidates
+that token and retries once. Errors expose operation and status, never upstream bodies,
+credentials or raw transport diagnostics. User lookup encodes the subject as a path segment.

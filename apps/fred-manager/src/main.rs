@@ -84,6 +84,7 @@ async fn fga(config: &Config) -> Result<Fga> {
 
 async fn serve(config: Config) -> Result<()> {
     let state = api::AppState {
+        directory: fred_manager::keycloak::Directory::configured(config.security.m2m.as_ref())?,
         auth: std::sync::Arc::new(auth::Authenticator::start(config.security()?).await?),
         pool: pool(&config).await?,
         fga: fga(&config).await?,

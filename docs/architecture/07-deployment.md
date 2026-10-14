@@ -23,7 +23,7 @@ flowchart LR
     end
     run --> pg & kc & fga & tmp
     browser --> traefik --> pod
-    secrets -. "POSTGRES_FRED_PASSWORD,<br/>OPENFGA_API_TOKEN,<br/>CONTROL_PLANE_BOOTSTRAP_TOKEN" .-> pod
+    secrets -. "POSTGRES_FRED_PASSWORD,<br/>OPENFGA_API_TOKEN,<br/>CONTROL_PLANE_BOOTSTRAP_TOKEN,<br/>KEYCLOAK_FRED_MANAGER_CLIENT_SECRET" .-> pod
 ```
 
 | | Host run | k3d release |
@@ -45,3 +45,12 @@ disabled, through `apps/fred-manager/deploy/k3d/` (factory contract: `helmfile.y
 The image (`dockerfiles/Dockerfile-prod`) builds the release binary with `protoc` and
 `libprotobuf-dev`, then runs it as user 1000 on Debian slim; migrations and the OpenFGA
 model are compiled into the binary.
+
+`deploy/k3d/identities.yaml` declares the `fred-manager` confidential service client and
+its `realm-management/query-users`, `view-users` and `manage-users` grants. The factory's
+`k3d-app` identity reconciliation populates `KEYCLOAK_FRED_MANAGER_CLIENT_SECRET` in
+`fred-secrets`; the release consumes it through `extraEnvVars`.
+For a host process using this realm, the same client secret goes in `config/.env`.
+`docker-up` alone does not consume the application's identity declaration: the directory
+requires a provisioned client with these grants, or `security.m2m.enabled: false` to
+run without directory-based role grants.

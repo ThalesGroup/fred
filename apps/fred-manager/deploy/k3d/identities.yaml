@@ -1,0 +1,7 @@
+clients:
+  - id: fred-manager
+    secret: KEYCLOAK_FRED_MANAGER_CLIENT_SECRET
+    grants:
+      - realm-management/query-users
+      - realm-management/view-users
+      - realm-management/manage-users

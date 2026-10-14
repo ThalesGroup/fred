@@ -64,6 +64,7 @@ pub enum Role {
     Member,
     Editor,
     Admin,
+    Analyst,
 }
 
 impl Role {
@@ -72,6 +73,7 @@ impl Role {
             Role::Member => "member",
             Role::Editor => "editor",
             Role::Admin => "admin",
+            Role::Analyst => "analyst",
         }
     }
 
@@ -80,13 +82,14 @@ impl Role {
             "member" => Some(Role::Member),
             "editor" => Some(Role::Editor),
             "admin" => Some(Role::Admin),
+            "analyst" => Some(Role::Analyst),
             _ => None,
         }
     }
 
     /// Admin is governance only: it grants no access to content.
     pub fn grants_content(self) -> bool {
-        matches!(self, Role::Member | Role::Editor)
+        matches!(self, Role::Member | Role::Editor | Role::Analyst)
     }
 }
 

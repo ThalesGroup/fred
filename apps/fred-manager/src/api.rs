@@ -35,7 +35,10 @@ use crate::{
     error::{ApiJson, AppError, AppResult},
     fga::Fga,
     ingestion::{DeleteDocument, IngestDocument, Ingestion, Submitted},
-    logging, spaces,
+    keycloak::Directory,
+    logging, platform,
+    roles::{PlatformPermission, PlatformRole, SpacePermission},
+    spaces,
 };
 
 #[derive(Clone)]
@@ -45,6 +48,7 @@ pub struct AppState {
     pub fga: Fga,
     pub bootstrap_token_env_var: Option<String>,
     pub ingestion: Ingestion,
+    pub directory: Option<Directory>,
 }
 
 impl FromRef<AppState> for Arc<Authenticator> {
@@ -75,13 +79,18 @@ pub fn router(state: AppState, base_url: &str, authorized_origins: &[String]) ->
             header::HeaderName::from_static("x-request-id"),
             header::HeaderName::from_static("x-correlation-id"),
         ]);
+    let governance = governance_router(GovernanceState {
+        auth: state.auth.clone(),
+        pool: state.pool.clone(),
+        fga: state.fga.clone(),
+        directory: state.directory.clone(),
+    });
     let api = Router::new()
         .route(
             "/healthz",
             get(|| async { Json(serde_json::json!({ "status": "ok" })) }),
         )
         .route("/bootstrap/platform-admin", post(bootstrap_platform_admin))
-        .route("/me", get(me))
         .route("/me/spaces", get(my_spaces))
         .route("/me/personal-space", post(create_personal_space))
         .route("/spaces", post(create_space))
@@ -107,7 +116,8 @@ pub fn router(state: AppState, base_url: &str, authorized_origins: &[String]) ->
         .route("/authorize/document", post(authorize_document))
         .route("/authorize/scope", post(authorize_scope))
         .route_layer(axum::middleware::from_fn(logging::expose_route))
-        .with_state(state);
+        .with_state(state)
+        .merge(governance);
     // Request logging is outermost, as in fred-core: it also sees CORS and 404 answers.
     Router::new()
         .nest(base_url, api)
@@ -171,17 +181,12 @@ async fn bootstrap_platform_admin(
 struct Me {
     user_id: String,
     username: String,
-    platform_roles: Vec<&'static str>,
+    platform_roles: Vec<PlatformRole>,
 }
 
-async fn me(State(s): State<AppState>, user: CurrentUser) -> AppResult<Json<Me>> {
-    let admin = s.fga.is_platform_admin(&user.uid).await?;
+async fn me(State(s): State<GovernanceState>, user: CurrentUser) -> AppResult<Json<Me>> {
     Ok(Json(Me {
-        platform_roles: if admin {
-            vec!["platform_admin"]
-        } else {
-            Vec::new()
-        },
+        platform_roles: s.fga.effective_platform_roles(&user.uid).await?,
         user_id: user.uid,
         username: user.username,
     }))
@@ -597,4 +602,138 @@ mod tests {
             Err(AppError::Unprocessable(_))
         ));
     }
+}
+
+// Platform mutation entry points require a real authenticated actor, even in dev mode.
+fn require_directory_actor(s: &GovernanceState) -> AppResult<()> {
+    if !s.auth.enabled() {
+        return Err(AppError::Unavailable(
+            "authentication must be enabled".into(),
+        ));
+    }
+    Ok(())
+}
+async fn list_platform_roles(
+    State(s): State<GovernanceState>,
+    user: CurrentUser,
+) -> AppResult<Json<Vec<platform::Grant>>> {
+    require_directory_actor(&s)?;
+    Ok(Json(platform::list(&s.fga, &user.uid).await?))
+}
+fn platform_role(name: &str) -> AppResult<PlatformRole> {
+    PlatformRole::parse(name).ok_or_else(|| AppError::BadRequest("unknown platform role".into()))
+}
+async fn grant_platform_role(
+    State(s): State<GovernanceState>,
+    user: CurrentUser,
+    Path((target, role)): Path<(String, String)>,
+) -> AppResult<StatusCode> {
+    require_directory_actor(&s)?;
+    let directory = s
+        .directory
+        .as_ref()
+        .ok_or_else(|| AppError::Unavailable("Keycloak directory is not configured".into()))?;
+    if !s.auth.directory_subjects_match(directory.realm()) {
+        return Err(AppError::Unavailable(
+            "directory grants require Keycloak sub mapping in the configured realm".into(),
+        ));
+    }
+    platform::grant(
+        &s.pool,
+        &s.fga,
+        s.directory.as_ref(),
+        &user.uid,
+        &target,
+        platform_role(&role)?,
+    )
+    .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+async fn revoke_platform_role(
+    State(s): State<GovernanceState>,
+    user: CurrentUser,
+    Path((target, role)): Path<(String, String)>,
+) -> AppResult<StatusCode> {
+    require_directory_actor(&s)?;
+    platform::revoke(&s.pool, &s.fga, &user.uid, &target, platform_role(&role)?).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+#[derive(Deserialize)]
+struct PlatformCheck {
+    permission: PlatformPermission,
+}
+async fn authorize_platform(
+    State(s): State<GovernanceState>,
+    user: CurrentUser,
+    ApiJson(req): ApiJson<PlatformCheck>,
+) -> AppResult<Json<Allowed>> {
+    Ok(Json(Allowed {
+        allowed: s.fga.check_platform(&user.uid, req.permission).await?,
+    }))
+}
+#[derive(Deserialize)]
+struct SpaceCheck {
+    space_id: Uuid,
+    permission: SpacePermission,
+}
+async fn authorize_space(
+    State(s): State<GovernanceState>,
+    user: CurrentUser,
+    ApiJson(req): ApiJson<SpaceCheck>,
+) -> AppResult<Json<Allowed>> {
+    db::space(&s.pool, req.space_id).await?;
+    Ok(Json(Allowed {
+        allowed: s
+            .fga
+            .check_space(&user.uid, req.permission, req.space_id)
+            .await?,
+    }))
+}
+#[derive(Deserialize)]
+struct RegistryQuery {
+    after: Option<Uuid>,
+}
+async fn team_registry(
+    State(s): State<GovernanceState>,
+    user: CurrentUser,
+    Query(query): Query<RegistryQuery>,
+) -> AppResult<Json<Vec<Space>>> {
+    if !s
+        .fga
+        .check_platform(&user.uid, PlatformPermission::ListAllTeams)
+        .await?
+    {
+        return Err(AppError::Forbidden);
+    }
+    // Registry metadata only, bounded independently of content and FGA memberships.
+    Ok(Json(sqlx::query_as("select id, kind, name, parent_id, personal_owner, path from space where kind = 'team' and personal_owner is null and ($1::uuid is null or id > $1) order by id limit 100")
+        .bind(query.after).fetch_all(&s.pool).await?))
+}
+
+/// Governance routes are usable without an ingestion client; all require CurrentUser.
+#[derive(Clone)]
+pub struct GovernanceState {
+    pub auth: Arc<Authenticator>,
+    pub pool: PgPool,
+    pub fga: Fga,
+    pub directory: Option<Directory>,
+}
+impl FromRef<GovernanceState> for Arc<Authenticator> {
+    fn from_ref(state: &GovernanceState) -> Self {
+        state.auth.clone()
+    }
+}
+pub fn governance_router(state: GovernanceState) -> Router {
+    Router::new()
+        .route("/me", get(me))
+        .route("/users/platform-roles", get(list_platform_roles))
+        .route(
+            "/users/{user}/platform-roles/{role}",
+            put(grant_platform_role).delete(revoke_platform_role),
+        )
+        .route("/admin/teams", get(team_registry))
+        .route("/authorize/platform", post(authorize_platform))
+        .route("/authorize/space", post(authorize_space))
+        .route_layer(axum::middleware::from_fn(logging::expose_route))
+        .with_state(state)
 }

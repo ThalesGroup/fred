@@ -14,6 +14,9 @@ app:
 security:
   profile: c3
   m2m:
+    enabled: true
+    client_id: fred-manager
+    secret_env_var: KEYCLOAK_FRED_MANAGER_CLIENT_SECRET
     realm_url: http://localhost:8080/realms/app
   user:
     enabled: true

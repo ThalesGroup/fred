@@ -7,6 +7,20 @@ type user
 type platform
   relations
     define admin: [user]
+    define observer: [user] or admin
+    define team_manager: [user] or admin
+    define feature_manager: [user] or admin
+    define prompt_editor: [user] or admin
+    define can_create_team: team_manager
+    define can_list_all_teams: team_manager or feature_manager
+    define can_delete_team: admin
+    define can_rescue_team_admin: admin
+    define can_edit_agent_class_path: admin
+    define can_observe_platform: observer
+    define can_administer_users: admin
+    define can_manage_platform: admin
+    define can_manage_capabilities: feature_manager
+    define can_edit_platform_prompt: prompt_editor
 
 # One type, direct roles only, no parent relation: the tree lives in SQL.
 # A role on a space requires a content role on its parent (enforced by fred-manager).
@@ -15,6 +29,10 @@ type space
     define member: [user]
     define editor: [user]
     define admin: [user]
-    define can_read: member or editor
+    define analyst: [user]
+    define can_read: member or editor or analyst
     define can_write: editor
     define can_manage: admin
+    define can_run_evaluations: analyst or admin
+    define can_manage_evaluation_corpus: analyst or admin
+    define can_read_conversations_for_evaluation: analyst

@@ -24,5 +24,8 @@ pub mod domain;
 pub mod error;
 pub mod fga;
 pub mod ingestion;
+pub mod keycloak;
 pub mod logging;
+pub mod platform;
+pub mod roles;
 pub mod spaces;

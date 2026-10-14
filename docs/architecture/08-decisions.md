@@ -16,3 +16,6 @@ stays, marked so.
 | D9 | Configuration, secrets and log output follow Fred's service conventions. | One way to operate every Fred service. | `sourceLocation.function` holds the module path. |
 | D10 | Shared infrastructure, own OpenFGA store. | No dedicated infrastructure to run. | Table names are unique in `fred`; the store is `fred-manager`. |
 | D11 | Deployed with fred's chart as a separate release. | One chart for every Fred service. | The release references the chart without its `values.schema.json` (chapter 7). |
+| D12 | All assignable Fred roles have explicit typed equivalents; space admin and content roles remain orthogonal. | Silent role loss and implicit content grants change authorization meaning. | Analyst is a content role; revocation never adds a fallback role. |
+| D13 | Platform mutations and delegated team creation share the bootstrap lock, acquired before the organization lock. | Platform revocation must serialize with dependent writes. | A revoked administrator cannot finish a waiting mutation; the root grant is protected. |
+| D14 | Directory operations use a dedicated service client and raw Keycloak subjects in the same realm as callers. | Caller tokens do not carry directory administration privileges. | Grants validate identity existence; revocation tolerates deleted identities. |

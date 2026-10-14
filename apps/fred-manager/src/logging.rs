@@ -105,17 +105,21 @@ pub fn init(level: &str, format: LogFormat) -> anyhow::Result<()> {
         .map_err(|_| anyhow::anyhow!("invalid log_level {level}"))?;
     let colors = std::io::stdout().is_terminal() && std::env::var_os("NO_COLOR").is_none();
     let layer = StdoutLayer::new(format, colors, std::io::stdout).with_filter(
-        tracing_subscriber::filter::filter_fn(move |m| {
-            // Spans carry request context for every level, so they are always recorded.
-            if m.is_span() {
-                return true;
-            }
-            let own = m.target().starts_with("fred_manager") || m.target() == HTTP_TARGET;
-            *m.level() <= if own { level } else { Level::WARN.min(level) }
-        }),
+        tracing_subscriber::filter::filter_fn(move |m| enabled(m, level)),
     );
     tracing_subscriber::registry().with(layer).try_init()?;
     Ok(())
+}
+
+fn enabled(m: &tracing::Metadata<'_>, level: Level) -> bool {
+    if m.is_span() {
+        return true;
+    }
+    if m.target() == "fred.security.audit" {
+        return *m.level() <= Level::INFO;
+    }
+    let own = m.target().starts_with("fred_manager") || m.target() == HTTP_TARGET;
+    *m.level() <= if own { level } else { Level::WARN.min(level) }
 }
 
 /// Fields recorded on a span, kept in its extensions for every event inside it.
@@ -220,7 +224,9 @@ fn render(
     format: LogFormat,
     colors: bool,
 ) -> String {
-    let own = meta.target().starts_with("fred_manager") || meta.target() == HTTP_TARGET;
+    let own = meta.target().starts_with("fred_manager")
+        || meta.target() == HTTP_TARGET
+        || meta.target() == "fred.security.audit";
     let message = match fields.remove("message") {
         _ if !own => "Dependency diagnostic".to_string(),
         Some(Value::String(m)) => m,
@@ -238,7 +244,7 @@ fn render(
         _ => "DEBUG",
     };
     let since = at.duration_since(UNIX_EPOCH).unwrap_or_default();
-    if format == LogFormat::Text {
+    if format == LogFormat::Text && meta.target() != "fred.security.audit" {
         return text_line(
             since.as_secs(),
             severity,
@@ -421,6 +427,24 @@ impl Drop for Completion {
     }
 }
 
+/// Fred's security stream, emitted when OpenFGA acknowledges the durable write,
+/// independently of a later SQL commit. No fabricated actor for operator-only calls.
+pub(crate) fn audit_relation(
+    actor: Option<&str>,
+    target: &str,
+    relation: &str,
+    resource: &str,
+    grant: bool,
+) {
+    let event = if grant {
+        "authz.relation.granted"
+    } else {
+        "authz.relation.revoked"
+    };
+    tracing::info!(target: "fred.security.audit", audit_event = event, actor_uid = actor,
+        subject = format!("user:{target}"), relation, resource, outcome = "succeeded", "[SECURITY] {event}");
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -453,6 +477,33 @@ mod tests {
         let lines = capture(LogFormat::Json, emit);
         assert_eq!(lines.len(), 1, "one line per event: {lines:?}");
         serde_json::from_str(&lines[0]).unwrap()
+    }
+
+    // Proves: I16
+    #[test]
+    fn audit_records_survive_warning_application_threshold() {
+        for format in [LogFormat::Json, LogFormat::Text] {
+            let buffer = Buffer::default();
+            let sink = buffer.clone();
+            let layer = StdoutLayer::new(format, false, move || sink).with_filter(
+                tracing_subscriber::filter::filter_fn(|m| enabled(m, Level::WARN)),
+            );
+            let subscriber = tracing_subscriber::registry().with(layer);
+            tracing::subscriber::with_default(subscriber, || {
+                tracing::info!("ordinary application event");
+                audit_relation(Some("actor-sub"), "target-sub", "analyst", "space:s1", true);
+            });
+            let output = String::from_utf8(buffer.0.lock().unwrap().clone()).unwrap();
+            assert_eq!(output.lines().count(), 1);
+            let line: Value = serde_json::from_str(output.trim()).unwrap();
+            assert_eq!(line["logger"], "fred.security.audit");
+            assert_eq!(line["audit_event"], "authz.relation.granted");
+            assert_eq!(line["actor_uid"], "actor-sub");
+            assert_eq!(line["subject"], "user:target-sub");
+            assert_eq!(line["relation"], "analyst");
+            assert_eq!(line["resource"], "space:s1");
+            assert_eq!(line["outcome"], "succeeded");
+        }
     }
 
     #[test]

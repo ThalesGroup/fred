@@ -64,10 +64,14 @@ pub struct SecurityConfig {
     pub rebac: RebacConfig,
 }
 
-/// Only the realm matters here: strict mode accepts tokens it issued.
+/// Issuer plus optional outbound directory credentials; legacy issuer-only configs remain valid.
 #[derive(Debug, Clone, Deserialize)]
 pub struct M2mConfig {
     pub realm_url: String,
+    #[serde(default)]
+    pub enabled: bool,
+    pub client_id: Option<String>,
+    pub secret_env_var: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

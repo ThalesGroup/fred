@@ -109,6 +109,20 @@ type user
 type platform
   relations
     define admin: [user]
+    define observer: [user] or admin
+    define team_manager: [user] or admin
+    define feature_manager: [user] or admin
+    define prompt_editor: [user] or admin
+    define can_create_team: team_manager
+    define can_list_all_teams: team_manager or feature_manager
+    define can_delete_team: admin
+    define can_rescue_team_admin: admin
+    define can_edit_agent_class_path: admin
+    define can_observe_platform: observer
+    define can_administer_users: admin
+    define can_manage_platform: admin
+    define can_manage_capabilities: feature_manager
+    define can_edit_platform_prompt: prompt_editor
 
 # One type, direct roles only, no parent relation: the tree lives in SQL.
 # A role on a space requires a content role on its parent (enforced by fred-manager).
@@ -117,9 +131,13 @@ type space
     define member: [user]
     define editor: [user]
     define admin: [user]
-    define can_read: member or editor
+    define analyst: [user]
+    define can_read: member or editor or analyst
     define can_write: editor
     define can_manage: admin
+    define can_run_evaluations: analyst or admin
+    define can_manage_evaluation_corpus: analyst or admin
+    define can_read_conversations_for_evaluation: analyst
 ```
 <!-- end generated -->
 
@@ -134,9 +152,24 @@ type space
 | I5 | A caller's right is evaluated at the moment of its write: a request authorized before a revocation cannot finish after it. | caller check under the lock |
 | I6 | A personal space never gains a member, and its organization can always remove its owner. | `spaces::grant`, `spaces::revoke` |
 | I7 | A space's search scope is its ancestors and itself, never its descendants. | `space.path` |
-| I8 | Space admin and platform admin roles read no content. | OpenFGA `can_read = member or editor` |
+| I8 | Space admin and platform admin roles read no content. | OpenFGA `can_read = member or editor or analyst` |
 | I9 | Root bootstrap promotes one caller, once; it never reopens, not even for its own admin after removal. | `bootstrap::grant_root`, marker |
 | I10 | Only an RS256 token from the realm, unexpired, with an integer past `iat` and a lifetime within the ceiling, authenticates. | `auth` |
 | I11 | Log lines never carry credential- or content-named fields; dependencies never log their own text. | `logging` |
 | I12 | A document page continues after its cursor's sort values, even when that document is gone. | keyset cursor |
 | I13 | Every line of a request carries its request id, and the request ends with one `http` event. | `logging::request_logging` |
+| I14 | Every non-personal space retains at least one administrator after role revocation. | `spaces::revoke`, organization lock |
+| I15 | Only the completed bootstrap root changes platform-admin grants; its own grant is protected. New platform grants target an existing Keycloak subject. | `platform`, platform lock, directory lookup |
+| I16 | Every acknowledged role mutation emits a security audit event before SQL commit, independently of application severity and text/JSON format. | `logging::audit_relation`, mutation services |
+
+Roles are cumulative and scoped to one space. Analyst grants content read and the capabilities
+`run_evaluations`, `manage_evaluation_corpus` and `read_conversations_for_evaluation`.
+Admin grants space management and the first two evaluation capabilities, without
+content read or evaluation-conversation read.
+No space or platform role propagates to another space.
+
+Platform admin implies all platform capabilities. Team manager grants team creation and listing;
+feature manager grants `manage_capabilities`; prompt editor grants
+`edit_platform_prompt`; observer grants `observe_platform`. These grants do not imply space membership or content access.
+`openfga/model.fga` is the authoritative permission matrix; `make model` compiles its
+supported direct/union expressions to `model.json`, and `make check-model` checks parity.

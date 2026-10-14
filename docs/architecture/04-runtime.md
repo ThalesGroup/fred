@@ -9,7 +9,6 @@ Every route but the health probe requires a bearer token (chapter 6).
 | --- | --- | --- |
 | GET | `/fred-manager/v1/healthz` | `inline` |
 | POST | `/fred-manager/v1/bootstrap/platform-admin` | `bootstrap_platform_admin` |
-| GET | `/fred-manager/v1/me` | `me` |
 | GET | `/fred-manager/v1/me/spaces` | `my_spaces` |
 | POST | `/fred-manager/v1/me/personal-space` | `create_personal_space` |
 | POST | `/fred-manager/v1/spaces` | `create_space` |
@@ -27,6 +26,13 @@ Every route but the health probe requires a bearer token (chapter 6).
 | POST | `/fred-manager/v1/documents/{id}/ingest` | `ingest_document` |
 | POST | `/fred-manager/v1/authorize/document` | `authorize_document` |
 | POST | `/fred-manager/v1/authorize/scope` | `authorize_scope` |
+| GET | `/fred-manager/v1/me` | `me` |
+| GET | `/fred-manager/v1/users/platform-roles` | `list_platform_roles` |
+| PUT | `/fred-manager/v1/users/{user}/platform-roles/{role}` | `grant_platform_role` |
+| DELETE | `/fred-manager/v1/users/{user}/platform-roles/{role}` | `revoke_platform_role` |
+| GET | `/fred-manager/v1/admin/teams` | `team_registry` |
+| POST | `/fred-manager/v1/authorize/platform` | `authorize_platform` |
+| POST | `/fred-manager/v1/authorize/space` | `authorize_space` |
 <!-- end generated -->
 
 ## Content access
@@ -99,7 +105,8 @@ sequenceDiagram
 
 Revocation also reads the target's roles and the space's children under the lock, and
 refuses with 409 when the target would keep a role in a child without reading its
-parent. A personal space is managed from its organization: an organization admin may
+parent. Removing the last administrator of a non-personal space is refused with 409 (I14).
+Removing a role never grants a replacement content role. A personal space is managed from its organization: an organization admin may
 revoke its owner's roles, nobody may grant any (I6).
 
 ## Root platform-admin bootstrap
@@ -167,3 +174,32 @@ sequenceDiagram
 
 Deletion submits `DeleteDocument {document_id, space_id, storage_prefix}` before
 deleting the row, so a failure leaves a retryable document rather than orphaned chunks.
+
+## Platform administration and self checks
+
+`GET /me` returns effective platform roles, including the roles implied by platform
+admin. `GET /users/platform-roles` returns direct grants only, to platform admins.
+`PUT` and `DELETE /users/{user}/platform-roles/{role}` acquire the bootstrap/platform
+lock and recheck the caller's platform-admin permission. Only the completed bootstrap
+root can grant or revoke platform admin, and its own admin grant cannot be removed.
+Granting requires a Keycloak subject that exists in the configured directory; revoking
+a stale direct grant does not require the identity to still exist (I15).
+
+Platform roles use canonical names `platform_admin`, `platform_observer`, `team_manager`,
+`feature_manager` and `prompt_editor`; mutation paths also accept `admin` and `observer`.
+Deleting an absent direct grant returns 404, even when the role is effective through admin.
+
+`POST /authorize/platform` accepts `{ "permission": "create_team" }`;
+`POST /authorize/space` accepts `{ "space_id": "<uuid>", "permission": "run_evaluations" }`.
+Both return `{ "allowed": true|false }` for the authenticated caller only. The typed
+capabilities are defined in `roles.rs` and the model in chapter 5. Space checks first
+resolve the space, returning 404 for an unknown id.
+
+`GET /admin/teams` requires `can_list_all_teams` and returns at most 100 non-personal
+team metadata records ordered by UUID. `?after=<uuid>` continues after the last id;
+it confers no content access.
+
+Team creation accepts either management of the parent organization or the platform
+`can_create_team` capability. It takes the platform lock before the organization lock,
+then checks authorization. The nominated team administrator must read the parent.
+The caller receives no implicit role; project creation still requires local governance.

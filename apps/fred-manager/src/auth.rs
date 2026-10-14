@@ -314,6 +314,16 @@ impl Authenticator {
         self.verifier.is_some()
     }
 
+    /// Directory grants use raw Keycloak subjects. Refuse a different identity mapping
+    /// or realm rather than writing a tuple the authenticated target cannot hold.
+    pub fn directory_subjects_match(&self, realm: &str) -> bool {
+        self.verifier.as_ref().is_some_and(|v| {
+            v.settings.provider == Provider::Keycloak
+                && v.settings.claims.uid == "sub"
+                && same_realm(&v.settings.realm_url, realm)
+        })
+    }
+
     pub async fn authenticate(&self, token: Option<&str>) -> Result<CurrentUser, AuthError> {
         let Some(v) = &self.verifier else {
             return Ok(mock_admin());
@@ -323,6 +333,17 @@ impl Authenticator {
             return Err(AuthError::MissingToken);
         };
         v.decode(token).await
+    }
+}
+
+// Parse both sides so equivalent origins (including explicit default ports) match.
+fn same_realm(left: &str, right: &str) -> bool {
+    match (
+        reqwest::Url::parse(left.trim_end_matches('/')),
+        reqwest::Url::parse(right.trim_end_matches('/')),
+    ) {
+        (Ok(left), Ok(right)) => left == right,
+        _ => false,
     }
 }
 
@@ -649,6 +670,27 @@ mod tests {
 
     async fn decode(s: SecuritySettings, claims: Value) -> Result<CurrentUser, AuthError> {
         verifier(s).decode(&token(claims)).await
+    }
+
+    #[test]
+    fn directory_realms_compare_normalized_urls() {
+        assert!(same_realm(
+            "https://host:443/realms/app/",
+            "https://host/realms/app"
+        ));
+        assert!(same_realm(
+            "http://host:80/realms/app",
+            "http://host/realms/app"
+        ));
+        assert!(!same_realm(
+            "https://host/realms/app",
+            "https://host/realms/other"
+        ));
+        assert!(!same_realm(
+            "https://host:8443/realms/app",
+            "https://host/realms/app"
+        ));
+        assert!(!same_realm("invalid", "invalid"));
     }
 
     #[test]

@@ -1,5 +1,7 @@
 ## Why
 
+Tracking: [#3092](https://github.com/ThalesGroup/fred/issues/3092).
+
 fred-manager cannot provision Fred users and spaces from a bundle, and its role
 catalog omits existing Python roles. A faithful import requires the complete
 assignable role model, enforced permissions and replayable identity provisioning,

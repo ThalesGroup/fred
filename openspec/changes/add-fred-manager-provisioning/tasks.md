@@ -1,12 +1,12 @@
 ## 1. Complete role foundation
 
-- [ ] 1.1 Add all platform/space roles and typed capabilities, preserving stored tuple names; verify an exhaustive positive/negative matrix against real OpenFGA and DSL/JSON parity.
-- [ ] 1.2 Extend space role parsing, listing and grant/revoke for analyst; verify parent/child and personal-space invariants, cumulative grants, no implicit member fallback, last-admin protection and concurrent revocations with `// Proves: I<n>` annotations.
-- [ ] 1.3 Add service-account configuration, the Keycloak directory lookup client and factory identities/secret wiring; validate config and factory rendering, and verify unknown identities, directory outages and secret-safe diagnostics with an HTTP fixture.
-- [ ] 1.4 Add direct platform-role list/grant/revoke and effective `/me` reporting, sharing the platform lock with bootstrap; verify target existence before grants, stale-grant removal, root-only admin changes, root protection, absent direct grant errors and authorization-after-lock races.
-- [ ] 1.5 Add authenticated self capability checks, delegated team creation and metadata-only registry listing; verify team-manager/feature-manager boundaries, no caller role side effects, and denial of project/content/governance escalation.
-- [ ] 1.6 Run author review and independent review of the complete role delta; fix every actionable finding with a regression test, then obtain review of the corrections and record dispositions in the task response.
-- [ ] 1.7 After review, update applicable arc42 chapters and component usage docs with implemented behavior only; regenerate blocks, then run all three manager Make checks and the architecture check. Commit this complete role step on chore/rust-rebac without pushing.
+- [x] 1.1 Add all platform/space roles and typed capabilities, preserving stored tuple names; verify an exhaustive positive/negative matrix against real OpenFGA and DSL/JSON parity.
+- [x] 1.2 Extend space role parsing, listing and grant/revoke for analyst; verify parent/child and personal-space invariants, cumulative grants, no implicit member fallback, last-admin protection and concurrent revocations with `// Proves: I<n>` annotations.
+- [x] 1.3 Add service-account configuration, the Keycloak directory lookup client and factory identities/secret wiring; validate config and factory rendering, and verify unknown identities, directory outages and secret-safe diagnostics with an HTTP fixture.
+- [x] 1.4 Add direct platform-role list/grant/revoke and effective `/me` reporting, sharing the platform lock with bootstrap; verify target existence before grants, stale-grant removal, root-only admin changes, root protection, absent direct grant errors and authorization-after-lock races.
+- [x] 1.5 Add authenticated self capability checks, delegated team creation and metadata-only registry listing; verify team-manager/feature-manager boundaries, no caller role side effects, and denial of project/content/governance escalation.
+- [x] 1.6 Run author review and independent review of the complete role delta; fix every actionable finding with a regression test, then obtain review of the corrections and record dispositions in the task response.
+- [x] 1.7 After review, update applicable arc42 chapters and component usage docs with implemented behavior only; regenerate blocks, then run all three manager Make checks and the architecture check. Commit this complete role step on chore/rust-rebac without pushing.
 
 ## 2. Authenticated provisioning import
 
@@ -24,3 +24,16 @@
 ## 3. Close out the coherent change
 
 - [ ] 3.1 Reconcile requirements and tasks against the implemented behavior and review evidence; sync and archive through the repository OpenSpec procedure, validating the resulting spec and keeping the dossier free of plans/status.
+
+## Review and verification evidence
+
+Role foundation: independent read-only review of baseline `624f6e5` through the
+step-1 working tree covers role parity, governance routes, locking, directory
+configuration and client, deployment, tests and final arc42 documentation. Identity
+mapping, audit stream/timing, URL normalization and concurrent audit-test precision
+findings are corrected with regressions and re-reviewed. Final docs corrections
+clarify capabilities versus operations and repair Markdown table continuity.
+Verification: 29 unit tests, 20 real Postgres/OpenFGA integration tests, manager
+code-quality and architecture check pass. Factory identity check and app lint/render
+pass. Review is scoped to this manager step; unrelated branch changes and Python/UI
+implementation are excluded. No push.
