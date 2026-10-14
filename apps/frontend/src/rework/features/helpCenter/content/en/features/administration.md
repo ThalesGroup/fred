@@ -70,8 +70,12 @@ Each change is saved at once.
 
 A user whose theme is no longer offered moves to the default theme. Their choice is kept: it comes back if the theme is offered again. Picking a theme in
 the profile, even the one already shown, keeps it afterwards if the default
-theme changes. When a single theme is offered, the profile only shows the mode. Changes apply
-the next time each user loads the application.
+theme changes. When a single theme is offered, the profile only shows the mode. Changes apply at once
+for the administrator, and for other users when they return to the
+application or within a minute.
+
+To add a theme in your organization's colors, see
+[Create a custom theme](/help/en/guides/custom-theme).
 
 ## Marketplaces
 

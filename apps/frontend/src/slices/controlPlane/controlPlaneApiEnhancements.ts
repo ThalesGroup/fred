@@ -838,6 +838,9 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     deleteCreationAssistantPromptControlPlaneV1AdminPlatformCreationAssistantDelete: {
       invalidatesTags: [{ type: "ControlPlaneCreationAssistantSettings", id: "LIST" }],
     },
+    getFrontendConfigControlPlaneV1FrontendConfigGet: {
+      providesTags: [{ type: "ControlPlanePlatformUiSettings", id: "LIST" }],
+    },
     // Platform UI theme settings: a single row, one LIST tag.
     getPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGet: {
       providesTags: [{ type: "ControlPlanePlatformUiSettings" as const, id: "LIST" }],
@@ -925,6 +928,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
 });
 
 export const {
+  useGetFrontendConfigControlPlaneV1FrontendConfigGetQuery: useFrontendConfigQuery,
   useAddTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoritePutMutation: useAddPromptFavoriteMutation,
   useRemoveTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoriteDeleteMutation:
     useRemovePromptFavoriteMutation,

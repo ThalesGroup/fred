@@ -4242,7 +4242,7 @@ about prompts.
 
 **What it is.** A platform admin sets the UI theme users get by default and the
 themes withdrawn from their choice. Theme ids are opaque to the control plane:
-the frontend owns the theme catalog and ignores ids it does not ship.
+the frontend owns the theme catalog (shipped themes plus valid deployment ZIP entries) and ignores ids outside it.
 
 **Model.** One `platform_ui_settings` row at most (`id = 'default'`, CHECK
 constraint): `default_theme` (nullable), `hidden_themes` (JSON list),
@@ -4264,8 +4264,10 @@ constraint): `default_theme` (nullable), `hidden_themes` (JSON list),
 `hidden_themes`) on the unauthenticated `GET /frontend/config`, omitted while
 no row exists, `default_theme` omitted when null (`exclude_none`). Ids only, no
 admin-authored content. The frontend caches it so its boot script can apply the
-theme before the next load's config arrives; a change applies to each user at
-their next load. Full behavior: OpenSpec `platform-ui-theme-settings`.
+theme before the next load's config arrives. A running client refreshes the
+public config after its own admin save, on window focus and every 60 seconds,
+keeping the last good settings on failure. Full behavior: OpenSpec
+`platform-ui-theme-settings`.
 
 ## 58. Contract Notes — copy an agent to other teams (2026-10-04, #2949)
 
