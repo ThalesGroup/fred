@@ -38,6 +38,7 @@ from typing import cast
 import pytest
 from fred_runtime.react.middleware.tool_call_recovery import (
     RECOVERED_TOOL_CALL_TEXT_METADATA_KEY,
+    ToolCallTextRecoveryMiddleware,
 )
 from fred_runtime.react.react_runtime import _TransportBackedReActExecutor
 from fred_sdk.contracts.context import RuntimeContext
@@ -50,7 +51,10 @@ from fred_sdk.contracts.runtime import (
     ThoughtDeltaEvent,
     ToolCallRuntimeEvent,
 )
+from langchain.agents.middleware.types import ModelRequest, ModelResponse
+from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, AIMessageChunk, ToolMessage
+from langchain_core.tools import BaseTool, tool
 
 
 class _FakePortable:
@@ -371,6 +375,65 @@ async def test_split_tool_name_is_held_without_streaming_recovered_syntax() -> N
         for event in collected
         if isinstance(event, ToolCallRuntimeEvent)
     ] == ["read_query"]
+
+
+@tool
+def ls(path: str) -> str:
+    """List a fake directory."""
+
+    return "fake-file.md"
+
+
+@pytest.mark.asyncio
+async def test_call_after_hundreds_of_streamed_thinking_deltas_runs_unseen() -> None:
+    deltas: list[str | dict[str, object]] = [
+        *(
+            {"type": "thinking", "thinking": [{"type": "text", "text": "x"}]}
+            for _ in range(300)
+        ),
+        {"type": "text", "text": "l"},
+        {"type": "text", "text": "s"},
+        {"type": "reference", "reference_ids": []},
+        *({"type": "text", "text": part} for part in ('{"path"', ': "/"}', "}")),
+    ]
+    aggregated = AIMessageChunk(content="")
+    for delta in deltas:
+        aggregated += AIMessageChunk(content=[delta])
+    completed = AIMessage(
+        content=aggregated.content,
+        response_metadata={"model_name": "mistral-medium-latest"},
+    )
+
+    async def handler(_: ModelRequest) -> ModelResponse:
+        return ModelResponse(result=[completed])
+
+    recovered = (
+        await ToolCallTextRecoveryMiddleware().awrap_model_call(
+            ModelRequest(
+                model=cast(BaseChatModel, None),
+                messages=[],
+                tools=cast(list[BaseTool | dict[str, object]], [ls]),
+            ),
+            handler,
+        )
+    ).result[0]
+    events = [
+        *(("messages", (AIMessageChunk(content=[delta]), {})) for delta in deltas),
+        ("updates", {"agent": {"messages": [recovered]}}),
+    ]
+
+    collected = await _run_stream(events)
+
+    assert not [e for e in collected if isinstance(e, AssistantDeltaRuntimeEvent)]
+    thoughts = "".join(
+        event.delta for event in collected if isinstance(event, ThoughtDeltaEvent)
+    )
+    assert thoughts == "x" * 300
+    assert [
+        event.tool_name
+        for event in collected
+        if isinstance(event, ToolCallRuntimeEvent)
+    ] == ["ls"]
 
 
 @pytest.mark.asyncio
