@@ -35,6 +35,7 @@ from builder_decks import (
     add_loose_figures_slide,
     add_three_column_bodies_slide,
     build_layouts_only_template,
+    build_library_template,
     build_showcase_template,
     build_slides,
     build_spaced_template,
@@ -46,6 +47,7 @@ from fred_capability_ppt_filler.builder.analysis import (
     estimate_capacity,
 )
 from fred_capability_ppt_filler.builder.lexicon import (
+    is_library_title,
     is_sample_text,
     role_from_shape_name,
 )
@@ -177,15 +179,47 @@ def test_shape_names_and_kind_note_override_heuristics(showcase):
     assert declared.kind == "quote"
 
 
-def test_icon_bank_chart_and_table_are_excluded_by_default(showcase):
+def test_library_chart_and_table_are_excluded_by_default(showcase):
     by_reason = {
         p.exclusion_reason: p
         for p in showcase.patterns
         if not p.included and p.source == "slide"
     }
-    assert set(by_reason) == {"icon_bank", "chart", "table"}
+    assert set(by_reason) == {"library", "chart", "table"}
     assert by_reason["chart"].label == "Chart"
     assert by_reason["table"].label == "Table"
+
+
+def test_library_slides_are_excluded_and_designs_with_icons_kept():
+    inventory = analyze_template(build_library_template()).inventory
+    assert inventory is not None
+    for label in ("Nature icons", "Fonts"):
+        sheet = _slide(inventory, label)
+        assert not sheet.included and sheet.exclusion_reason == "library"
+    for label in ("Our strengths", "Milestones"):
+        design = _slide(inventory, label)
+        assert design.included and design.exclusion_reason is None
+    assert _slide(inventory, "Thank you").included
+
+
+@pytest.mark.parametrize(
+    "title, library",
+    [
+        ("Fonts", True),
+        ("Color palette", True),
+        ("Attributions", True),
+        ("Instructions for use (premium users)", True),
+        ("Use our editable graphic resources...", True),
+        ("Contents of this template", True),
+        ("Resources", True),
+        ("Human resources", False),
+        ("3 icônes + texte", False),
+        ("Nature icons", False),
+        ("Thank you", False),
+    ],
+)
+def test_library_titles(title, library):
+    assert is_library_title(title) is library
 
 
 def test_title_only_over_graphics_is_decoration(showcase):
@@ -457,7 +491,7 @@ def test_two_sibling_groups_are_columns_not_a_list(showcase):
 def test_summary_counts(showcase):
     summary = showcase.summary()
     assert summary.layouts == 10  # Title and Content stands as its copy
-    assert summary.excluded == 4  # Blank layout + icon bank + chart + table
+    assert summary.excluded == 4  # Blank layout + library + chart + table
     assert summary.fixed == 1
     assert (
         summary.patterns
@@ -553,7 +587,7 @@ def test_reference_template_free_form_slides():
     assert layouts["Contact"] == "closing"
     assert layouts["Merci"] == "closing"
     excluded = {p.exclusion_reason for p in inventory.patterns if not p.included}
-    assert excluded == {"chart", "table", "icon_bank"}
+    assert excluded == {"chart", "table", "library"}
 
 
 @_reference

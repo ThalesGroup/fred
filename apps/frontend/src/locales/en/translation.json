@@ -463,6 +463,7 @@
         "exclusion": {
           "chart": "Chart",
           "table": "Table",
+          "library": "Resource sheet",
           "icon_bank": "Icon bank",
           "no_placeholder": "No placeholder",
           "unsupported_parts": "Cannot be copied",

@@ -463,6 +463,7 @@
         "exclusion": {
           "chart": "Graphique",
           "table": "Tableau",
+          "library": "Planche de ressources",
           "icon_bank": "Banque d'icônes",
           "no_placeholder": "Aucun espace réservé",
           "unsupported_parts": "Non copiable",

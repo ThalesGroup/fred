@@ -106,7 +106,10 @@ _REPLACEABLE_PICTURE_AREA = 0.25
 _MAIN_CONTENT_AREA = 0.15
 # A content placeholder this large may host a chart in place of its text.
 _CHART_MIN_AREA = 0.25
-_ICON_BANK_PICTURES = 20
+# A library sheet lays out this many small text-free icons (pictures, groups,
+# freeform glyphs); a design with a few icons beside its text is far below.
+_LIBRARY_ITEMS = 20
+_LIBRARY_ITEM_AREA = 0.02
 # A layout/master shape under this share of the slide is a frame, not a background.
 _FRAME_MAX_AREA = 0.5
 # Loose text shapes read as one row of items: per-mille limits
@@ -170,7 +173,7 @@ _TITLE_PLACEHOLDERS = ("TITLE", "CENTER_TITLE", "VERTICAL_TITLE")
 
 # Bumped whenever the rules below change what an inventory holds, so agents
 # saved with an older analysis are recomputed from their stored template.
-ANALYSIS_VERSION = 12
+ANALYSIS_VERSION = 13
 
 
 def theme_fonts(presentation) -> Tuple[Optional[str], Optional[str]]:
@@ -1266,11 +1269,9 @@ class _Analyzer:
                 pattern.included = False
                 pattern.exclusion_reason = rec.kind  # type: ignore[assignment]
                 return
-        pictures = sum(1 for rec in records if rec.kind == "picture")
-        text_zones = [z for z in pattern.zones if z.role in ("body", "heading")]
-        if pictures >= _ICON_BANK_PICTURES and not text_zones and not pattern.groups:
+        if lexicon.is_library_title(pattern.label) or _icons(records) >= _LIBRARY_ITEMS:
             pattern.included = False
-            pattern.exclusion_reason = "icon_bank"
+            pattern.exclusion_reason = "library"
             return
         for rId, rel in slide.part.rels.items():
             if rel.is_external or rId in chart_rids:
@@ -1282,6 +1283,23 @@ class _Analyzer:
                     f"Slide holds a part that cannot be copied: {rel.reltype.rsplit('/', 1)[-1]}."
                 )
                 return
+
+
+def _icons(records: List[_Rec]) -> int:
+    """Small top-level items bearing no text that read as icons: pictures,
+    groups or freeform glyphs, not preset dots, arrows or lines."""
+    texty = {rec.path[0] for rec in records if rec.words}
+    return sum(
+        1
+        for rec in records
+        if len(rec.path) == 1
+        and rec.path[0] not in texty
+        and rec.area < _LIBRARY_ITEM_AREA
+        and (
+            rec.kind in ("picture", "group")
+            or rec.shape._element.find(f".//{qn('a:custGeom')}") is not None
+        )
+    )
 
 
 def _slot_role(rec: _Rec) -> Optional[ZoneRole]:

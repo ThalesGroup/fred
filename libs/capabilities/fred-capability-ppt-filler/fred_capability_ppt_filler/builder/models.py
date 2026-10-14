@@ -84,9 +84,12 @@ LabelSource = Literal["heuristic", "vision"]
 PatternSource = Literal["layout", "slide"]
 
 # `chart`: two or more charts share the slide's main area, so none is its zone.
+# `library`: a resource sheet (icons, fonts, palette, credits), never a design;
+# `icon_bank` is only read from analyses stored before version 13.
 ExclusionReason = Literal[
     "chart",
     "table",
+    "library",
     "icon_bank",
     "no_placeholder",
     "unsupported_parts",

@@ -470,3 +470,13 @@ Owns: `assign.py` (`_sections`, `_caps`, `_beam`, `_runs`, `_repeats`, `SECTION_
 - [x] 42.3 `repeat_layout`: the slide keeps the previous slide's template slide when it fits, is outside the cap and never ends a run; notes to the agent and `layout_repeated` / `layout_not_repeated` in the summary; `edit` path, shorthand and loose names/values. Tests: the run with the field accepted and noted; kept outside a cap of 1; content that cannot keep it noted; the edit forms; the summary codes; fr/en wordings
 - [x] 42.4 Package `make test`, `ruff check`, `ruff check --select I`, `ruff format --check`, basedpyright with baseline; frontend `tsc`, vitest, prettier, eslint; `verification.md`; `openspec validate --strict`
 - Not covered: a live re-run with a real model
+
+## WP43. Library slides excluded from design choice (owner decision 2026-10-14, D28)
+
+Owns: `analysis.py` (`_apply_exclusions`, `ANALYSIS_VERSION`), `lexicon.py` (`is_library_title`), `models.py` (`ExclusionReason`), frontend ppt_builder client + fr/en exclusion labels, delta spec, `design.md` D28, tests, `verification.md`.
+
+- [x] 43.1 A resource-page title or twenty-plus small text-free pictures, groups or freeform glyphs exclude an example slide with the reason `library`; the `icon_bank` rule folded in; `ANALYSIS_VERSION` bumped. Tests: a synthetic icon sheet and fonts sheet excluded as `library`, a content slide with four icons and a dotted row kept as designs, the closing slide kept
+- [ ] 43.2 The ppt_builder client regenerated and fr/en labels for `library` (labels done; `make update-ppt-builder-capability-api` pending, not run while Vite serves the owner)
+- [x] 43.3 Run on the owner's Paintress Cyan template: library slides before/after
+- [x] 43.4 Package `make test`, `ruff check`, `ruff check --select I`, `ruff format --check`, basedpyright with baseline; `verification.md`; `openspec validate --strict`
+- Not in scope: listing or reusing a library slide's icons (later change)

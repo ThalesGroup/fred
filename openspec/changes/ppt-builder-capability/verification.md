@@ -1434,3 +1434,22 @@ src/rework/features/helpCenter`: 15 files, 108 tests passed; prettier and eslint
 touched files. `openspec validate ppt-builder-capability --strict` valid.
 
 Not covered: a live re-run with a real model.
+
+## Results: WP43 (library slides excluded, D28)
+
+Owner decision 2026-10-14: a library slide is never a design; reusing its icons is a later change.
+
+| Rule | Evidence |
+| --- | --- |
+| Icon and fonts sheets excluded as `library`; four icons beside text, a row of 24 preset dots and a "Thank you" asking for attribution kept | `test_library_slides_are_excluded_and_designs_with_icons_kept` (synthetic deck, `build_library_template`) |
+| Resource-page titles, not "Human resources" nor "3 icônes + texte" | `test_library_titles` (11 cases) |
+| The former icon bank is a library slide | `test_library_chart_and_table_are_excluded_by_default`, the showcase summary test |
+
+Owner templates (read-only copies of the stored `.pptx`, analysed locally at version 13):
+
+- Paintress Cyan (Slidesgo, 32 slides): before, only three table slides (12, 22, 24) excluded; `Fonts` (cards), `Nature`/`Educational`/`Business`/`Help & support`/`SEO & marketing icons` (section), `Creative process icons` (process) and the instructions pages were designs. After, 16 slides excluded as `library`: 2 `Contents of this template`, 15-16 `Instructions for use`, 17 `Fonts`, 18 `Presentation Maker`, 19 `Use our editable graphic resources...`, 25-31 icon sheets (51 to 100 icons each). Slide 14 `Thank you` stays `closing`; slides 1-13 keep their kinds. Summary: 22 patterns, 21 excluded.
+- The second stored template (37 slides): slides 29-33 (`Base d'icônes`) move from `icon_bank` to `library`; `3 icônes + texte` and `6 icônes + texte` stay `cards` designs; nothing else changes.
+
+Commands (package root): `make test`: 691 passed, 5 skipped; `ruff check`, `ruff check --select I`, `ruff format --check` clean; `basedpyright --baseline-file .baseline/basedpyright-baseline.json`: 0 errors (existing `builder_decks.py` `__all__` warning). `make builtin-inventory` (version bump only). `openspec validate ppt-builder-capability --strict` valid.
+
+Not covered: the regenerated frontend client (pending, see 43.2); the label renders without it (`t()` on the reason). Slidesgo's untitled resource pages (infographics, maps; Paintress 20-24, 32) stay `other`, not reusable, so never chosen, but are not marked `library`.

@@ -17,7 +17,7 @@
 Each builder returns ``.pptx`` bytes. ``build_showcase_template`` assembles the
 example-slide cases the analysis rules are written for: an agenda of numbered
 groups, KPI cards, a team roster, a process, sample-text boxes, shared
-footers, an icon bank, a chart, a table, declared shape names, an ``intent:``
+footers, an icon bank (a library slide), a chart, a table, declared shape names, an ``intent:``
 note and a purely decorative divider.
 """
 
@@ -31,6 +31,7 @@ from fred_capability_ppt_filler.builder.models import Box, Pattern, RepeatGroup,
 from pptx import Presentation
 from pptx.chart.data import CategoryChartData
 from pptx.enum.chart import XL_CHART_TYPE
+from pptx.enum.shapes import MSO_SHAPE
 from pptx.oxml.ns import qn
 from pptx.util import Emu, Inches, Pt
 
@@ -391,6 +392,103 @@ def add_three_column_bodies_slide(presentation):
             FONT_BODY,
         )
     return slide
+
+
+def _glyph(shapes, x: float, y: float, size: float = 0.4):
+    """A small freeform icon (custom geometry), as Slidesgo draws its icons."""
+    builder = shapes.build_freeform(Inches(x), Inches(y + size), scale=1.0)
+    builder.add_line_segments(
+        [
+            (Inches(x + size / 2), Inches(y)),
+            (Inches(x + size), Inches(y + size)),
+        ]
+    )
+    return builder.convert_to_shape()
+
+
+def add_icon_sheet_slide(presentation, title: str = "Nature icons", icons: int = 30):
+    """A resource sheet: grouped freeform icons under one title."""
+    slide = _titled(presentation, title)
+    for index in range(icons):
+        col, row = index % 10, index // 10
+        group = slide.shapes.add_group_shape()
+        _glyph(group.shapes, 0.5 + col * 0.9, 2.0 + row * 1.2)
+        _glyph(group.shapes, 0.6 + col * 0.9, 2.1 + row * 1.2, 0.2)
+    return slide
+
+
+def add_fonts_sheet_slide(presentation):
+    """A font and palette sheet: font names, then hex swatches."""
+    slide = _titled(presentation, "Fonts")
+    _textbox(slide.shapes, 0.5, 1.6, 4.0, 0.5, "Titles: Montserrat", FONT_BODY)
+    _textbox(slide.shapes, 0.5, 2.2, 4.0, 0.5, "Body: Open Sans", FONT_BODY)
+    for index, colour in enumerate(("#083c77", "#ebfcff", "#93c4e0", "#ffffff")):
+        swatch = slide.shapes.add_shape(
+            MSO_SHAPE.OVAL, Inches(0.5 + index * 1.5), Inches(4.0), Inches(1), Inches(1)
+        )
+        swatch.text_frame.text = colour
+    return slide
+
+
+def add_icon_cards_slide(presentation):
+    """A design: four icons each over its own text, never a library."""
+    slide = _titled(presentation, "Our strengths")
+    for index in range(4):
+        _glyph(slide.shapes, 0.8 + index * 2.3, 1.8)
+        _textbox(
+            slide.shapes,
+            0.5 + index * 2.3,
+            2.6,
+            2.0,
+            1.2,
+            "Une force de l'entreprise en une phrase",
+            FONT_BODY,
+        )
+    return slide
+
+
+def add_dotted_timeline_slide(presentation):
+    """A design: a row of 24 small preset dots under dated labels."""
+    slide = _titled(presentation, "Milestones")
+    for index in range(24):
+        slide.shapes.add_shape(
+            MSO_SHAPE.OVAL,
+            Inches(0.5 + index * 0.38),
+            Inches(3.5),
+            Inches(0.15),
+            Inches(0.15),
+        )
+    for index, year in enumerate(("2021", "2022", "2023")):
+        _textbox(slide.shapes, 0.5 + index * 3.0, 2.8, 1.5, 0.5, year, FONT_BODY)
+        _textbox(
+            slide.shapes,
+            0.5 + index * 3.0,
+            4.0,
+            2.5,
+            1.0,
+            "Un jalon atteint",
+            FONT_BODY,
+        )
+    return slide
+
+
+def add_attribution_closing_slide(presentation):
+    """A closing slide asking to keep an attribution: still a closing slide."""
+    slide = _titled(presentation, "Thank you")
+    _textbox(slide.shapes, 0.5, 5.5, 6.0, 0.5, "Please keep this slide for attribution")
+    return slide
+
+
+def build_library_template() -> bytes:
+    return build_slides(
+        [
+            add_icon_sheet_slide,
+            add_fonts_sheet_slide,
+            add_icon_cards_slide,
+            add_dotted_timeline_slide,
+            add_attribution_closing_slide,
+        ]
+    )
 
 
 def build_showcase_template() -> bytes:

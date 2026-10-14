@@ -211,6 +211,17 @@ LEGACY_KINDS = {
 }
 LABEL_NOTE = re.compile(r"^\s*label\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
 
+# Titles of resource pages (Slidesgo/SlidesCarnival font, palette, credits
+# sheets). Not "icons": "3 icons + text" is a design, icon sheets are found
+# by their layout. Bare "resources" only alone.
+_LIBRARY_TITLE = re.compile(
+    r"\b(fonts|typography|typographie|palettes?"
+    r"|attributions?|credits|instructions for use|presentation maker|this template"
+    r"|ce modele|(graphic|alternative|editable) resources|ressources graphiques)\b"
+    r"|^(resources|ressources)$"
+)
+_LIBRARY_TITLE_WORDS = 7
+
 # PowerPoint's own naming: any words followed by a space and a counter.
 _AUTO_NAME = re.compile(r"^.*\s\d+$")
 
@@ -281,6 +292,15 @@ def kind_from_name(name: str) -> str | None:
 def name_matches(name: str, prefixes: tuple[str, ...]) -> bool:
     norm = normalize(name)
     return any(norm.startswith(prefix) or f" {prefix}" in norm for prefix in prefixes)
+
+
+def is_library_title(title: str) -> bool:
+    """A short title naming a resource page ("Nature icons", "Fonts")."""
+    norm = normalize(title)
+    return (
+        len(norm.split()) <= _LIBRARY_TITLE_WORDS
+        and _LIBRARY_TITLE.search(norm) is not None
+    )
 
 
 def has_contact_words(texts: list[str]) -> bool:
