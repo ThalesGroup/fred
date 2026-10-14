@@ -66,7 +66,7 @@ The `team_publisher` role was dropped after this review: editors publish, editor
 | frontend `npx vitest run` (full) | 338 files passed, 1 skipped; 4051 tests passed, 7 skipped |
 | `scripts/migration_guides.py check-pr --base origin/swift --worktree` | valid, 1 declaration |
 
-The setting columns are renamed `agents_publishing_enabled` in revision `b5e1c9d3a7f2` itself (never deployed); the dev database was renamed in place. OpenFGA's Read parses every tuple's relation into `RelationType`, so a leftover `team_publisher` tuple would break team reads once the model changes: the dev store's only such tuple was deleted before the model change. No deployment ever received the role.
+The setting columns are renamed `agents_publishing_enabled` in revision `24c2f88374fe` itself (never deployed); the dev database was renamed in place. OpenFGA's Read parses every tuple's relation into `RelationType`, so a leftover `team_publisher` tuple would break team reads once the model changes: the dev store's only such tuple was deleted before the model change. No deployment ever received the role.
 
 ### Independent review (2026-10-12)
 

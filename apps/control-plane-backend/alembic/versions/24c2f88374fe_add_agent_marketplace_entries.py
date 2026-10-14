@@ -11,15 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""add agent marketplace entries
+"""Add agents marketplace settings and entries.
 
-One entry per published agent (snapshot, state, version), its configuration
-files, and dated likes and imports kept across removal and republication.
-Everything cascades with the agent; an import keeps its row when the agent it
-created is deleted.
+The platform publication default, per-team overrides, and the tables for
+published agent snapshots, files, likes and imports share one revision.
 
 Revision ID: 24c2f88374fe
-Revises: b5e1c9d3a7f2
+Revises: e9026d8e4db6
 Create Date: 2026-10-12 12:00:00.000000
 
 """
@@ -32,7 +30,7 @@ from alembic import op
 # revision identifiers, used by Alembic.
 revision: str = "24c2f88374fe"  # pragma: allowlist secret
 down_revision: Union[str, Sequence[str], None] = (
-    "b5e1c9d3a7f2"  # pragma: allowlist secret
+    "e9026d8e4db6"  # pragma: allowlist secret
 )
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -47,8 +45,39 @@ __all__ = [
 ]
 
 
+_QUOTA_CHECK = "ck_teammetadata_agents_publish_quota"
+
+
 def upgrade() -> None:
     """Upgrade schema."""
+    op.create_table(
+        "platform_marketplace_settings",
+        sa.Column("id", sa.String(), nullable=False, server_default="default"),
+        sa.Column("agents_publishing_enabled", sa.Boolean(), nullable=False),
+        sa.Column("agents_publish_quota", sa.Integer(), nullable=False),
+        sa.Column("updated_by", sa.String(), nullable=True),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("CURRENT_TIMESTAMP"),
+            nullable=False,
+        ),
+        sa.PrimaryKeyConstraint("id"),
+        sa.CheckConstraint(
+            "id = 'default'", name="ck_platform_marketplace_settings_singleton"
+        ),
+        sa.CheckConstraint(
+            "agents_publish_quota >= 1",
+            name="ck_platform_marketplace_settings_agents_publish_quota",
+        ),
+    )
+    # Batch mode so SQLite (migration checks) can add the CHECK constraint.
+    with op.batch_alter_table("teammetadata") as batch:
+        batch.add_column(
+            sa.Column("agents_publishing_enabled", sa.Boolean(), nullable=True)
+        )
+        batch.add_column(sa.Column("agents_publish_quota", sa.Integer(), nullable=True))
+        batch.create_check_constraint(_QUOTA_CHECK, "agents_publish_quota >= 1")
     op.create_table(
         "agent_marketplace_entry",
         sa.Column("entry_id", sa.String(), nullable=False),
@@ -172,3 +201,8 @@ def downgrade() -> None:
         table_name="agent_marketplace_entry",
     )
     op.drop_table("agent_marketplace_entry")
+    with op.batch_alter_table("teammetadata") as batch:
+        batch.drop_constraint(_QUOTA_CHECK, type_="check")
+        batch.drop_column("agents_publish_quota")
+        batch.drop_column("agents_publishing_enabled")
+    op.drop_table("platform_marketplace_settings")
