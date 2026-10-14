@@ -55,8 +55,20 @@ The system SHALL inventory an uploaded `.pptx` without requiring any marker, not
 
 #### Scenario: Resource slides are excluded by default
 
-- **WHEN** an example slide is an icon bank, or a chart or a table that is not a data table is its main content (merged cells, or per-cell fills that vary across the body, as in a Gantt grid)
+- **WHEN** an example slide is a library slide, or a chart or a table that is not a data table is its main content (merged cells, or per-cell fills that vary across the body, as in a Gantt grid)
 - **THEN** it is inventoried but excluded, and the summary counts it as excluded
+
+#### Scenario: Library slides are never a design
+
+- **GIVEN** an example slide that is a resource sheet rather than a design: an icon sheet (twenty or more small text-free pictures, groups or freeform glyphs), or a slide titled as a resource page (icons, fonts, typography, palette, attributions, credits, graphic resources, instructions for use, this template)
+- **WHEN** it is analysed
+- **THEN** it is excluded with the reason `library`, so no deck slide is ever built on it, and its shapes stay in the stored template for a later change to reuse
+
+#### Scenario: A few icons beside text stay a design
+
+- **GIVEN** an example slide with three or four icons next to its text, or a closing "Thank you" slide asking to keep an attribution
+- **WHEN** it is analysed
+- **THEN** it is not a library slide and keeps its kind
 
 #### Scenario: Data table becomes a table slot
 

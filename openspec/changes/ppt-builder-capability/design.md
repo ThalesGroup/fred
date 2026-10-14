@@ -308,6 +308,16 @@ Found live (session a9429766, `mistral-medium`): a 14-slide deck got a variety `
 
 Rejected: tolerating repetition only at the same place of mirrored sections (the first version of this decision: a section with one slide more, or in another order, was asked to vary); detecting parallel structure by comparing kind sequences (fragile); letting the model ask for repetition without the user (the field's description forbids it, and every use is reported).
 
+### D28. Library slides are excluded, their icons reused later
+
+Found live (Paintress Cyan, a Slidesgo template): the deck used the `Fonts` slide twice as a design, and `Nature icons`, `Business icons`… were offered as `section` variants. Owner decision 2026-10-14: a library slide (icon, font, palette, resources, credits or instructions sheet) is never a design; it is excluded now, and reusing its icons is a separate, later change.
+
+- **Rules only.** A slide is a library when its title (or label) names a resource page (`lexicon.is_library_title`: icons, fonts, typography, palette, attributions, credits, graphic/alternative/editable resources, instructions for use, presentation maker, this template; English and French), or when it lays out twenty or more small (< 2 % of the slide) top-level items bearing no text that are pictures, groups or freeform (`custGeom`) glyphs. Preset dots, arrows and lines do not count, so a dotted timeline is no icon sheet; three or four icons beside text stay a design. The earlier `icon_bank` rule (twenty pictures, no text) is folded in; `icon_bank` stays readable only in analyses stored before version 13.
+- **Reason `library`.** The pattern keeps `included=false` with `exclusion_reason="library"`, so a later change can list its elements. Vision never sees excluded slides; no prompt change.
+- A closing "Thank you" slide asking to keep an attribution is untouched: its title is not a resource page and its body text is not read.
+
+Rejected: asking the vision model (optional, and it never labels excluded slides); matching body text such as "attribution" (the closing slide carries it).
+
 ## Risks / Trade-offs
 
 - [Vision model mislabels] → the author relabels in the panel; deterministic geometry still bounds what can be filled; eval measures the effect.
