@@ -1166,7 +1166,11 @@ def _close_options(
     """The close kinds the template offers here, each with what it takes."""
     found = []
     for kind in _close(slide) or ():
-        mine = [pr for pr in own if pr[0].kind == kind]
+        mine = [
+            pr
+            for pr in own
+            if pr[0].kind == kind and not _wants_picture(pr[0], [slide.plan])
+        ]
         if kind != named and mine:
             best = min(mine, key=_fewest)[0]
             found.append(
@@ -1239,6 +1243,17 @@ def _caps(slides: List[_Slide], pool: List[Pattern], max_uses: int) -> _Caps:
         return max(max_uses, math.ceil(content / distinct)) if distinct else max_uses
 
     return _Caps(cap(len(variants)), cap(len(set(variants))))
+
+
+def _wants_picture(pattern: Pattern, plans: Sequence[SlidePlan]) -> bool:
+    """The pattern needs a picture (a framed zone) none of ``plans`` has: never
+    offered to recast them, as the model cannot invent one."""
+    zones = pattern.zones + [
+        z for g in pattern.groups for item in g.items for z in item
+    ]
+    return any(z.framed for z in zones) and not any(
+        p.image or p.images or any(i.image for i in p.items) for p in plans
+    )
 
 
 @dataclass
@@ -1390,7 +1405,11 @@ def _suggested(
         if shape is None:
             continue
         blocked = _same_problem(slide)
-        holds = [p for p in pool if p.id not in blocked]
+        holds = [
+            p
+            for p in pool
+            if p.id not in blocked and not _wants_picture(p, [slide.plan])
+        ]
         options = [
             (k, a)
             for k in shape.kinds
@@ -1462,7 +1481,10 @@ def _repeats(
         reused = len({p.id for _, p in group}) < len(group)
         # Left out: a variant that has the fit problem of every slide of the group.
         blocked = set.intersection(*(_same_problem(s) for s, _ in group))
-        offer = [p for p in unused if p.id not in blocked]
+        plans = [s.plan for s, _ in group]
+        offer = [
+            p for p in unused if p.id not in blocked and not _wants_picture(p, plans)
+        ]
         same = [f"{p.label}: {zone_summary(p)}" for p in offer if p.kind == kind]
         suggested = (
             _suggested([s for s, _ in group], kind, pool, budget, given)
