@@ -3457,13 +3457,10 @@
         "subtitle_one": "{{count}} banner is live for every user.",
         "subtitle_other": "{{count}} banners are live for every user.",
         "subtitle_zero": "No banner is showing right now.",
-        "empty": "No announcement yet.\nCreate a banner, shown at the top of the app, or a patch note, shown to users when they arrive.",
-        "create": "New announcement"
-      },
-      "chooser": {
-        "title": "New announcement",
-        "bannerDescription": "A short message shown at the top of the app.",
-        "patchNoteDescription": "What's new in a release, shown to users when they arrive."
+        "emptyBanners": "No banner yet.\nCreate one to show a message at the top of the app.",
+        "emptyPatchNotes": "No patch note yet.\nCreate one: users do not see it until you announce the update.",
+        "createBanner": "New banner",
+        "createPatchNote": "New patch note"
       },
       "severity": {
         "info": "Info",
@@ -3480,8 +3477,7 @@
         "enableHint": "Enable for all users",
         "disableHint": "Disable for all users",
         "edit": "Edit this announcement",
-        "delete": "Delete this announcement",
-        "preview": "Preview as users see it"
+        "delete": "Delete this announcement"
       },
       "editor": {
         "createTitle": "New announcement",
@@ -3506,13 +3502,11 @@
         "title": "Delete this announcement?",
         "message": "\"{{title}}\" will be removed for good. Users who can see it will stop seeing it."
       },
-      "kind": {
-        "banner": "Banner",
-        "patch_note": "Patch note"
-      },
       "patchNote": {
         "dialog": {
-          "dontShowAgain": "Don't show again"
+          "navigation": "Browse patch notes",
+          "newer": "Newer patch note",
+          "older": "Older patch note"
         },
         "editor": {
           "createTitle": "New patch note",
@@ -3528,49 +3522,96 @@
           "bodyRequired": "Write the content in this language.",
           "tooLong": "The content is longer than {{max}} characters in one language.",
           "incomplete": "The {{language}} version needs both a title and content, or neither.",
-          "saveAndActivate": "Save and activate"
+          "saveAndActivate": "Save and include"
         },
-        "dismissFailed": "Your choice was not saved. This note may show again next time.",
         "discard": {
           "title": "Discard your changes?",
           "message": "The patch note you are writing has not been saved.",
           "confirm": "Discard changes",
           "cancel": "Keep writing"
         },
-        "activate": {
-          "title": "Switch the active patch note?",
-          "message": "Only one patch note can be active at a time: “{{title}}” will be switched off.",
-          "confirm": "Activate"
+        "savedIncluded": "Patch note saved. It is included in the next announcement.",
+        "savedNotIncluded": "Patch note saved. It is not included in the next announcement.",
+        "row": {
+          "enableHint": "Include in the next announcement",
+          "disableHint": "Leave out of the next announcement",
+          "statusIncluded": "Included in the next announcement",
+          "statusNotIncluded": "Not included",
+          "preview": "Preview as users see it",
+          "edit": "Edit this patch note",
+          "delete": "Delete this patch note",
+          "move": "Move \"{{title}}\""
         },
-        "savedActive": "Patch note saved. Users see it when they arrive.",
-        "savedInactive": "Patch note saved. It is not active: switch it on for users to see it.",
-        "dismissalCount_zero": "No user has chosen to hide this patch note",
-        "dismissalCount_one": "{{count}} user chose to hide this patch note",
-        "dismissalCount_other": "{{count}} users chose to hide this patch note"
+        "delete": {
+          "title": "Delete this patch note?",
+          "message": "\"{{title}}\" will be removed for good. The current announcement is not changed."
+        },
+        "deleted": "Patch note deleted.",
+        "reorder": {
+          "instructions": "To move this patch note, press Space or Enter, use the up and down arrows, then press Space or Enter again to drop it, or Escape to cancel.",
+          "picked": "\"{{title}}\" picked up, at position {{position}} of {{total}}.",
+          "moved": "\"{{title}}\" moved to position {{position}} of {{total}}.",
+          "dropped": "\"{{title}}\" dropped at position {{position}} of {{total}}.",
+          "cancelled": "Move cancelled. \"{{title}}\" stays at position {{position}} of {{total}}.",
+          "failed": "The new order was not saved.",
+          "role": "sortable item"
+        },
+        "announce": {
+          "action": "Announce the update ({{included}}/{{max}})",
+          "lastUse": "Last announced on {{date}}, by {{name}}",
+          "noneIncluded": "Include at least one patch note to announce the update.",
+          "tooMany": "An announcement holds at most {{max}} patch notes. Deselect some to announce.",
+          "confirm": {
+            "title": "Send this list to users?",
+            "message": "Users will see exactly this list, in this order, at their next sign-in and in What's new. Your later changes will not reach them until the next announcement.",
+            "list": "Patch notes included in the announcement",
+            "confirm": "Announce"
+          },
+          "done": "Update announced. Users will see it at their next sign-in.",
+          "failed": "The update was not announced.",
+          "changed": "The patch notes changed meanwhile. Check the list, then announce again.",
+          "withdraw": {
+            "action": "Withdraw the current announcement",
+            "title": "Withdraw the current announcement?",
+            "message": "What's new will be empty for every user and nobody will get the dialog until the next announcement. Your patch notes are not changed.",
+            "confirm": "Withdraw the announcement",
+            "done": "Announcement withdrawn.",
+            "failed": "The announcement was not withdrawn."
+          }
+        }
       },
       "history": {
         "empty": "No activation yet.",
-        "activated": "Activated",
-        "deactivated": "Deactivated",
         "unknownActor": "Unknown author",
-        "error": "Could not load the activation history.",
+        "error": "Could not load the history.",
+        "type": {
+          "banner": "Banner",
+          "patch_note": "Patch notes"
+        },
+        "more_one": "{{title}} + {{count}} other",
+        "more_other": "{{title}} + {{count}} others",
+        "openPackage": "View the announced patch notes",
+        "packageFailed": "Could not open this announcement's patch notes.",
+        "packageEmpty": "This announcement has no readable patch note.",
         "column": {
-          "announcement": "Announcement",
           "type": "Type",
-          "action": "Action",
-          "date": "Date and time",
-          "by": "By"
+          "title": "Title",
+          "activation": "Activation",
+          "deactivation": "Deactivation",
+          "by": "By",
+          "open": "Open"
         },
         "filter": {
           "all": "All",
-          "activated": "Activations",
-          "deactivated": "Deactivations",
-          "group": "Filter by action"
+          "banner": "Banners",
+          "patch_note": "Patch notes",
+          "group": "Filter by type"
         }
       },
       "view": {
         "group": "Announcements page view",
-        "announcements": "Announcements",
+        "banners": "Banners",
+        "patchNotes": "Patch notes",
         "history": "History"
       }
     },

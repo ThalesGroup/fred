@@ -124,7 +124,7 @@ function FredUiContent() {
                           await writeRichClipboard("", text);
                         }}
                       >
-                        {/* Same guards as the banners; inside ToastProvider for its error toast. */}
+                        {/* Same guards as the banners, and above the router: it never remounts. */}
                         <PatchNoteGate />
                         <RouterProvider router={router} />
                       </ToastProvider>

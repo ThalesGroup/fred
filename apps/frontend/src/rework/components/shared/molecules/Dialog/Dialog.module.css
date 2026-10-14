@@ -96,6 +96,11 @@
   padding: var(--spacing-m);
 }
 
+.titleContainer.dense,
+.actions.dense {
+  padding-block: var(--spacing-xs);
+}
+
 .dividers .titleContainer {
   border-bottom: 1px solid var(--outline-variant);
 }

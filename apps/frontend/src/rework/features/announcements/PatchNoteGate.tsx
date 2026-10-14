@@ -12,40 +12,35 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Opens the active patch note once per sign-in, at app load, unless the user
-// ticked "Don't show again" on this edition. Mounted inside GcuGuard/BootstrapGuard
+// Opens the announced patch notes when an announcement is pending for this user at
+// app load, and records it as seen on close. Mounted inside GcuGuard/BootstrapGuard
 // (see App.tsx), above the router, so it never remounts on navigation.
 
 import { useState } from "react";
-import { useTranslation } from "react-i18next";
-import { PatchNoteDialog } from "@shared/molecules/PatchNoteDialog/PatchNoteDialog";
-import { useToast } from "@shared/molecules/Toast/ToastProvider";
-import { useDismissPatchNoteMutation } from "../../../slices/controlPlane/controlPlaneApiEnhancements";
-import { markClosedThisSession, wasClosedThisSession } from "./patchNoteSession";
-import { useActivePatchNote } from "./useActivePatchNote";
+import { PatchNoteDialog, type PatchNote } from "@shared/molecules/PatchNoteDialog/PatchNoteDialog";
+import { useMarkPatchNoteAnnouncementSeenMutation } from "../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { usePatchNoteHistory } from "./usePatchNoteHistory";
 
 export default function PatchNoteGate() {
-  const { t } = useTranslation();
-  const { showError } = useToast();
-  const active = useActivePatchNote();
-  const [dismissPatchNote] = useDismissPatchNoteMutation();
-  // Also held in state so failing storage cannot reopen it on rerender.
-  const [closedEdition, setClosedEdition] = useState<string | null>(null);
+  const { notes, pendingAnnouncementId, loaded } = usePatchNoteHistory();
+  const [markSeen] = useMarkPatchNoteAnnouncementSeenMutation();
+  // Decided on the first read only: an announcement made later in this page
+  // view waits for the next load, as it does for every other user.
+  // The notes are kept with their id: a later refetch must not change what
+  // is shown under the id that gets recorded.
+  const [atLoad, setAtLoad] = useState<{ pendingId: string | null; notes: PatchNote[] }>();
+  const [closed, setClosed] = useState(false);
+  if (loaded && atLoad === undefined) setAtLoad({ pendingId: pendingAnnouncementId, notes });
 
-  if (!active || active.dismissed) return null;
-  const { note, title, markdown } = active;
-  const edition = `${note.id}.${note.content_version}`;
-  if (edition === closedEdition || wasClosedThisSession(note)) return null;
+  const pendingAtLoad = atLoad?.pendingId;
+  if (!pendingAtLoad || closed || atLoad.notes.length === 0) return null;
 
-  const onClose = (dontShowAgain: boolean) => {
-    markClosedThisSession(note);
-    setClosedEdition(edition);
-    if (dontShowAgain) {
-      dismissPatchNote({ announcementId: note.id })
-        .unwrap()
-        .catch(() => showError({ summary: t("rework.announcements.patchNote.dismissFailed") }));
-    }
+  const onClose = () => {
+    // Closed for this page view whatever the write does; a failed one only
+    // means the dialog may open again at a later load.
+    setClosed(true);
+    void markSeen({ announcementId: pendingAtLoad });
   };
 
-  return <PatchNoteDialog open title={title} markdown={markdown} onClose={onClose} />;
+  return <PatchNoteDialog open notes={atLoad.notes} onClose={onClose} />;
 }

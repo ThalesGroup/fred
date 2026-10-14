@@ -23,17 +23,16 @@ call, and keeping it out of here is what stops the rule living in two places.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timezone
 
 import pytest
 import pytest_asyncio
 from control_plane_backend.announcements.store import (
     AnnouncementStore,
-    StoredActivationEvent,
+    StoredExposure,
 )
 from control_plane_backend.models.table_ownership import OWNED_TABLES
-from sqlalchemy import event
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 
@@ -199,7 +198,7 @@ async def test_delete_removes_the_row_and_reports_whether_it_did(
 
 
 # ---------------------------------------------------------------------------
-# Patch notes, dismissals and the activation history
+# Patch notes, their order, packages and the exposure history
 # ---------------------------------------------------------------------------
 
 
@@ -219,46 +218,57 @@ async def _make_patch_note(
     )
 
 
-def _event(
-    event_id: str, minute: int, severity: str | None = "error"
-) -> StoredActivationEvent:
-    return StoredActivationEvent(
-        id=event_id,
-        announcement_id="a1",
+def _exposure(exposure_id: str, minute: int, **overrides) -> StoredExposure:
+    exposure = StoredExposure(
+        id=exposure_id,
         kind="banner",
+        announcement_id="a1",
         label={"en": "Title"},
-        action="activated",
         actor_uid="admin",
-        occurred_at=datetime(2026, 10, 9, 12, minute, tzinfo=timezone.utc),
-        severity=severity,
+        activated_at=datetime(2026, 10, 9, 12, minute, tzinfo=timezone.utc),
+        severity="error",
+    )
+    return replace(exposure, **overrides)
+
+
+def _package(exposure_id: str, minute: int, **overrides) -> StoredExposure:
+    return _exposure(
+        exposure_id,
+        minute,
+        kind="patch_note",
+        severity=None,
+        note_count=1,
+        package=[{"id": "p1", "title": {"en": "A"}, "description_long": {"en": "#"}}],
+        **overrides,
     )
 
 
 def test_new_tables_are_owned_by_control_plane() -> None:
     assert {
         "platform_announcement",
-        "platform_announcement_dismissal",
-        "platform_announcement_activation_event",
+        "platform_announcement_seen",
+        "platform_announcement_exposure",
     } <= OWNED_TABLES
+    assert (
+        not {
+            "platform_announcement_dismissal",
+            "platform_announcement_activation_event",
+        }
+        & OWNED_TABLES
+    )
 
 
 @pytest.mark.asyncio
-async def test_second_enabled_patch_note_violates_the_unique_index(
-    store: AnnouncementStore,
-) -> None:
-    # The service disables the previous one first; the index is the backstop
-    # for two concurrent activations.
+async def test_several_patch_notes_can_be_enabled(store: AnnouncementStore) -> None:
     await _make_patch_note(store, "p1", enabled=True)
     await _make_patch_note(store, "p2", enabled=False)
-    await _make(store, "b1", enabled=True)
 
-    with pytest.raises(IntegrityError):
-        await store.set_enabled(
-            announcement_id="p2",
-            enabled=True,
-            content_version=2,
-            updated_by=None,
-        )
+    await store.set_enabled(
+        announcement_id="p2", enabled=True, content_version=2, updated_by=None
+    )
+
+    # Newest at the top: p2 was created last.
+    assert [n.id for n in await store.list_included_patch_notes()] == ["p2", "p1"]
 
 
 @pytest.mark.asyncio
@@ -267,120 +277,156 @@ async def test_list_enabled_returns_banners_only(store: AnnouncementStore) -> No
     await _make_patch_note(store, "note", enabled=True)
 
     assert [a.id for a in await store.list_enabled()] == ["banner"]
-    note = await store.get_enabled_patch_note()
-    assert note is not None and note.kind == "patch_note"
+    assert [a.id for a in await store.list_included_patch_notes()] == ["note"]
 
 
 @pytest.mark.asyncio
-async def test_disable_other_patch_notes_returns_what_it_disabled(
+async def test_list_all_puts_banners_first_then_patch_notes_by_position(
     store: AnnouncementStore,
 ) -> None:
-    await _make_patch_note(store, "p1", enabled=True)
-    await _make(store, "b1", enabled=True)
+    await _make_patch_note(store, "p1")
+    await _make(store, "b1", enabled=False)
+    await _make_patch_note(store, "p2")
 
-    async with store.transaction() as session:
-        disabled = await store.disable_other_patch_notes(
-            except_id="p2", updated_by="admin", session=session
+    assert await store.set_patch_note_order(["p1", "p2"]) is True
+
+    listed = await store.list_all()
+    assert [(a.id, a.position) for a in listed] == [("b1", None), ("p1", 1), ("p2", 2)]
+
+
+@pytest.mark.asyncio
+async def test_set_patch_note_order_refuses_anything_but_the_current_set(
+    store: AnnouncementStore,
+) -> None:
+    await _make_patch_note(store, "p1")
+    await _make_patch_note(store, "p2")
+    await _make(store, "b1", enabled=False)
+
+    for ordered in (["p1"], ["p1", "p1"], ["p1", "p2", "b1"], ["p1", "b1"]):
+        assert await store.set_patch_note_order(ordered) is False
+
+    assert [n.id for n in await store.list_all() if n.kind == "patch_note"] == [
+        "p2",
+        "p1",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_announcement_in_effect_is_the_open_package(
+    store: AnnouncementStore,
+) -> None:
+    assert await store.get_announcement_in_effect() is None
+    # A banner on air and an older patch-note line without package do not count.
+    await store.add_exposure(_exposure("banner", 1))
+    await store.add_exposure(_exposure("legacy", 2, kind="patch_note", severity=None))
+    assert await store.get_announcement_in_effect() is None
+
+    await store.add_exposure(_package("first", 3))
+    current = await store.get_announcement_in_effect()
+    assert current is not None and (current.id, current.package) == ("first", None)
+
+    current = await store.get_announcement_in_effect(with_package=True)
+    assert current is not None and current.package == _package("first", 3).package
+
+
+@pytest.mark.asyncio
+async def test_end_exposures_ends_only_the_open_ones_it_is_asked_for(
+    store: AnnouncementStore,
+) -> None:
+    at = datetime(2026, 10, 9, 13, 0, tzinfo=timezone.utc)
+    await store.add_exposure(_exposure("a1-old", 1, deactivated_at=at))
+    await store.add_exposure(_exposure("a1-open", 2))
+    await store.add_exposure(_exposure("a2-open", 3, announcement_id="a2"))
+    await store.add_exposure(_package("package", 4))
+    later = datetime(2026, 10, 9, 14, 0, tzinfo=timezone.utc)
+
+    assert await store.end_exposures(kind="banner", announcement_id="a1", at=later) == 1
+    assert await store.end_exposures(kind="banner", announcement_id="a1", at=later) == 0
+
+    ended = {
+        e.id: e.deactivated_at is not None for e in await store.list_exposures(limit=10)
+    }
+    assert ended == {
+        "a1-old": True,
+        "a1-open": True,
+        "a2-open": False,
+        "package": False,
+    }
+    assert await store.end_exposures(kind="patch_note", at=later) == 1
+    assert await store.get_announcement_in_effect() is None
+    # Ended, not deleted: the line and its package stay readable.
+    kept = await store.get_exposure("package", with_package=True)
+    assert kept is not None and kept.package and kept.deactivated_at is not None
+    assert await store.get_exposure("ghost") is None
+
+
+@pytest.mark.asyncio
+async def test_seen_announcement_is_one_row_per_user(store: AnnouncementStore) -> None:
+    await store.add_exposure(_package("first", 0))
+    await store.add_exposure(_package("second", 1))
+    assert await store.get_seen_announcement_id("alice") is None
+
+    written = [
+        await store.record_seen_announcement(user_id="alice", announcement_id=seen)
+        for seen in ("first", "first", "second")
+    ]
+    await store.record_seen_announcement(user_id="bob", announcement_id="first")
+
+    # The repeat writes nothing: the record is already there.
+    assert written == [True, False, True]
+    assert await store.get_seen_announcement_id("alice") == "second"
+    assert await store.get_seen_announcement_id("bob") == "first"
+
+
+@pytest.mark.asyncio
+async def test_seen_announcement_never_moves_back(store: AnnouncementStore) -> None:
+    for minute, announcement_id in enumerate(("first", "second", "third")):
+        await store.add_exposure(_package(announcement_id, minute))
+    await store.record_seen_announcement(user_id="alice", announcement_id="third")
+    await store.record_seen_announcement(user_id="bob", announcement_id="first")
+
+    assert not await store.record_seen_announcement(
+        user_id="alice", announcement_id="first"
+    )
+    # Alice's newer record holds nobody else back.
+    assert await store.record_seen_announcement(user_id="bob", announcement_id="second")
+
+    assert await store.get_seen_announcement_id("alice") == "third"
+    assert await store.get_seen_announcement_id("bob") == "second"
+
+
+@pytest.mark.asyncio
+async def test_seen_announcement_needs_an_announced_package(
+    store: AnnouncementStore,
+) -> None:
+    await store.add_exposure(_exposure("banner-line", 0))
+
+    for not_a_package in ("ghost", "banner-line"):
+        assert not await store.record_seen_announcement(
+            user_id="alice", announcement_id=not_a_package
         )
 
-    assert [a.id for a in disabled] == ["p1"]
-    assert disabled[0].enabled is True  # as stored before the change
-    assert (await store.get("p1")).enabled is False  # type: ignore[union-attr]
-    assert (await store.get("b1")).enabled is True  # type: ignore[union-attr]
+    assert await store.get_seen_announcement_id("alice") is None
 
 
 @pytest.mark.asyncio
-async def test_add_dismissal_is_idempotent(store: AnnouncementStore) -> None:
-    await _make_patch_note(store, "p1")
-
-    await store.add_dismissal(announcement_id="p1", user_id="alice")
-    await store.add_dismissal(announcement_id="p1", user_id="alice")
-
-    assert await store.is_dismissed(announcement_id="p1", user_id="alice")
-    assert not await store.is_dismissed(announcement_id="p1", user_id="bob")
-    assert await store.count_dismissals() == {"p1": 1}
-
-
-@pytest.mark.asyncio
-async def test_count_dismissals_per_note(store: AnnouncementStore) -> None:
-    await _make_patch_note(store, "p1")
-    await _make_patch_note(store, "p2")
+async def test_delete_seen_for_user(store: AnnouncementStore) -> None:
+    await store.add_exposure(_package("first", 0))
     for uid in ("alice", "bob"):
-        await store.add_dismissal(announcement_id="p1", user_id=uid)
-    await store.add_dismissal(announcement_id="p2", user_id="alice")
+        await store.record_seen_announcement(user_id=uid, announcement_id="first")
 
-    assert await store.count_dismissals() == {"p1": 2, "p2": 1}
+    await store.delete_seen_for_user("alice")
 
-
-@pytest.mark.asyncio
-async def test_delete_dismissals_spares_other_notes(store: AnnouncementStore) -> None:
-    await _make_patch_note(store, "p1")
-    await _make_patch_note(store, "p2")
-    for note in ("p1", "p2"):
-        await store.add_dismissal(announcement_id=note, user_id="alice")
-
-    await store.delete_dismissals("p1")
-
-    assert await store.count_dismissals() == {"p2": 1}
+    assert await store.get_seen_announcement_id("alice") is None
+    assert await store.get_seen_announcement_id("bob") == "first"
 
 
 @pytest.mark.asyncio
-async def test_add_dismissal_for_a_deleted_note_raises(
-    store: AnnouncementStore, control_plane_sql_engine: AsyncEngine
-) -> None:
-    # SQLite only enforces foreign keys per connection, when asked to.
-    event.listen(
-        control_plane_sql_engine.sync_engine,
-        "connect",
-        lambda conn, _record: conn.execute("PRAGMA foreign_keys=ON"),
-    )
-    await control_plane_sql_engine.dispose()
+async def test_exposures_newest_first_and_capped(store: AnnouncementStore) -> None:
+    for minute in range(5):
+        await store.add_exposure(_exposure(f"e{minute}", minute))
 
-    with pytest.raises(IntegrityError):
-        await store.add_dismissal(announcement_id="ghost", user_id="alice")
+    listed = await store.list_exposures(limit=3)
 
-
-@pytest.mark.asyncio
-async def test_delete_removes_dismissals(store: AnnouncementStore) -> None:
-    await _make_patch_note(store, "p1")
-    await store.add_dismissal(announcement_id="p1", user_id="alice")
-
-    deleted = await store.delete("p1")
-    assert deleted is True
-    assert not await store.is_dismissed(announcement_id="p1", user_id="alice")
-
-
-@pytest.mark.asyncio
-async def test_delete_dismissals_for_user(store: AnnouncementStore) -> None:
-    await _make_patch_note(store, "p1")
-    await _make_patch_note(store, "p2")
-    for note in ("p1", "p2"):
-        await store.add_dismissal(announcement_id=note, user_id="alice")
-    await store.add_dismissal(announcement_id="p1", user_id="bob")
-
-    await store.delete_dismissals_for_user("alice")
-
-    assert await store.count_dismissals() == {"p1": 1}
-    assert await store.is_dismissed(announcement_id="p1", user_id="bob")
-
-
-@pytest.mark.asyncio
-async def test_activation_events_newest_first_and_capped(
-    store: AnnouncementStore,
-) -> None:
-    await store.append_activation_events([_event(f"e{m}", m) for m in range(5)])
-
-    latest = await store.list_activation_events(limit=3)
-
-    assert [e.id for e in latest] == ["e4", "e3", "e2"]
-    assert latest[0].label == {"en": "Title"}
-    assert latest[0].severity == "error"
-
-
-@pytest.mark.asyncio
-async def test_activation_event_severity_may_be_null(store: AnnouncementStore) -> None:
-    await store.append_activation_events([_event("e1", 0, severity=None)])
-
-    [event] = await store.list_activation_events(limit=1)
-
-    assert event.severity is None
+    assert [exposure.id for exposure in listed] == ["e4", "e3", "e2"]
+    assert listed[0].severity == "error" and listed[0].note_count is None
