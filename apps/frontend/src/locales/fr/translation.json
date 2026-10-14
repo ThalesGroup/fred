@@ -2190,7 +2190,8 @@
         "agentFiles": "Cet agent n'a encore créé aucun fichier pour vous. Les fichiers qu'il génère pour vous apparaîtront ici.",
         "agents": "Aucun fichier d'agent pour l'instant. Les fichiers créés pour vous par vos agents apparaîtront ici, regroupés par agent.",
         "createLibrary": "Créez une bibliothèque (dossier) pour commencer à ajouter des documents.",
-        "folder": "Ce dossier est vide."
+        "folder": "Ce dossier est vide.",
+        "loadError": "Impossible de charger ce dossier. Rafraîchissez la vue pour réessayer."
       },
       "folder": {
         "docCount": "{{count}} docs",
