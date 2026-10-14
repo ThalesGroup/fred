@@ -202,6 +202,7 @@ _FIELDS: Dict[str, Dict[str, _Type]] = {
         "type": "text",
         "title": "text",
         "unit": "text",
+        "show": "text",
         "categories": ("list", "text"),
         "series": ("list", "series"),
     },

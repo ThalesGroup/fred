@@ -64,6 +64,7 @@ from fred_capability_ppt_filler.builder.models import (
 )
 from fred_capability_ppt_filler.builder.plan import (
     DeckPlan,
+    PlanChart,
     PlanItem,
     PlanTable,
     SlidePlan,
@@ -1571,6 +1572,7 @@ class _Renderer:
                 f"'column'. Nothing to do; to change it, edit chart.type to one of "
                 f"{', '.join(charts.XL_TYPES)}."
             )
+        self._tell_labels(chart, position)
         if chart.style_fields:
             self._tell(
                 f"Slide {position}: the chart's {', '.join(chart.style_fields)} "
@@ -1578,6 +1580,26 @@ class _Renderer:
                 "Nothing to do; never send them."
             )
         return host
+
+    def _tell_labels(self, chart: PlanChart, position: int) -> None:
+        """A label setting the chart cannot show: said, never dropped quietly."""
+        unit = (chart.unit or "").strip()
+        if chart.type in charts.ROUND:
+            if chart.show in (None, "share") and unit and unit != "%":
+                self.report.note("chart_shows_shares")
+                self._tell(
+                    f"Slide {position}: the {chart.type}'s labels show percentages, so "
+                    f"unit '{unit}' is not shown. To show the numbers with their unit, "
+                    "set chart.show to 'value' ('both' for the number and its percentage)."
+                )
+            return
+        show = chart.show or chart.asked_show
+        if show:
+            self._tell(
+                f"Slide {position}: chart.show '{show}' was not applied: it sets the slice "
+                f"labels of a pie or doughnut only; a '{chart.type}' chart shows its values. "
+                "Nothing to do; drop chart.show, or set chart.type to 'pie' or 'doughnut'."
+            )
 
     def _fill_table(
         self,

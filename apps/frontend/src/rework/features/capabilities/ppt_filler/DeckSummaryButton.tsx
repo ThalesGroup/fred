@@ -35,6 +35,7 @@ const PLAIN_NOTES = new Set([
   "text_overflows",
   "left_empty",
   "fixed_slide",
+  "chart_shows_shares",
 ]);
 
 function kindLabel(t: TFunction, kind: string): string {

@@ -61,7 +61,7 @@ _FROM_XL = {xl: name for name, xl in XL_TYPES.items()} | {
     XL_CHART_TYPE.PIE_EXPLODED: "pie",
     XL_CHART_TYPE.DOUGHNUT_EXPLODED: "doughnut",
 }
-_ROUND = ("pie", "doughnut")
+ROUND = ("pie", "doughnut")
 _ACCENTS = (
     MSO_THEME_COLOR.ACCENT_1,
     MSO_THEME_COLOR.ACCENT_2,
@@ -104,7 +104,7 @@ def _frame_pt(zone: Zone, size: Tuple[int, int]) -> Tuple[float, float]:
 
 
 def max_categories(zone: Zone, kind: str, size: Tuple[int, int]) -> int:
-    if kind in _ROUND:
+    if kind in ROUND:
         return MAX_SLICES
     width, height = _frame_pt(zone, size)
     pt = chart_pt(zone)
@@ -122,7 +122,7 @@ def label_room(
     """(chars per line, lines) of one category label among ``count``."""
     width, _ = _frame_pt(zone, size)
     plot = width * _PLOT_W
-    if kind in _ROUND:
+    if kind in ROUND:
         span, lines = plot / 3, 1
     elif kind == "bar":
         span, lines = plot * 0.4, 2
@@ -153,7 +153,14 @@ def data_problems(chart: PlanChart) -> List[Tuple[str, str]]:
                 "give `chart` {type, categories, series [{name, values}]}, or drop it",
             )
         ]
-    if chart.type in _ROUND and len(chart.series) > 1:
+    if chart.type in ROUND and chart.asked_show:
+        found.append(
+            (
+                f"chart.show '{chart.asked_show}' is not a label mode",
+                "use 'share' (percentages), 'value' (the numbers) or 'both'",
+            )
+        )
+    if chart.type in ROUND and len(chart.series) > 1:
         found.append(
             (
                 f"a '{chart.type}' chart shows one series, {len(chart.series)} given",
@@ -167,7 +174,7 @@ def data_problems(chart: PlanChart) -> List[Tuple[str, str]]:
                 f"keep the {MAX_SERIES} that matter, or split them over two charts",
             )
         )
-    if chart.type in _ROUND and count > MAX_SLICES:
+    if chart.type in ROUND and count > MAX_SLICES:
         found.append(
             (
                 f"a '{chart.type}' chart: {count} slices; at most {MAX_SLICES} stay readable",
@@ -193,7 +200,7 @@ def data_problems(chart: PlanChart) -> List[Tuple[str, str]]:
             )
         if len(chart.series) > 1 and not series.name:
             found.append((f"{at} has no name", "name each series: the legend shows it"))
-    if chart.type in _ROUND:
+    if chart.type in ROUND:
         values = [v for s in chart.series[:1] for v in s.values if v is not None]
         if any(v < 0 for v in values) or (values and not any(values)):
             found.append(
@@ -212,7 +219,7 @@ def fit_problems(
     found: List[Tuple[str, str]] = []
     count = len(chart.categories)
     most = max_categories(zone, chart.type, size)
-    if count > most and chart.type not in _ROUND:
+    if count > most and chart.type not in ROUND:
         found.append(
             (
                 f"chart: {count} categories; this chart holds {most}",
@@ -230,7 +237,7 @@ def fit_problems(
                 f"shorten every category label to {room}",
             )
         )
-    if len(chart.series) > 1 or chart.type in _ROUND:
+    if len(chart.series) > 1 or chart.type in ROUND:
         name_room = _name_room(zone, size, len(chart.series))
         for j, series in enumerate(chart.series):
             if len(series.name) > name_room:
@@ -289,7 +296,7 @@ def _text(font: Any, pt: float, bold: bool = False) -> None:
 
 def _colour(built: Any, chart: PlanChart) -> None:
     plot = built.plots[0]
-    if chart.type in _ROUND:
+    if chart.type in ROUND:
         plot.vary_by_categories = True
         for i, point in enumerate(plot.series[0].points):
             _theme_fill(point.format, _ACCENTS[i % len(_ACCENTS)])
@@ -318,16 +325,14 @@ def _labels(built: Any, chart: PlanChart, pt: float, fmt: str) -> None:
         and len(chart.series) == 1
         and len(chart.categories) <= _LABELLED_BARS
     )
-    if chart.type not in _ROUND and not single_bars:
+    if chart.type not in ROUND and not single_bars:
         return
     plot.has_data_labels = True
     labels = plot.data_labels
     labels.number_format_is_linked = False
     _text(labels.font, pt)
-    if chart.type in _ROUND:
-        labels.number_format = "0%"
-        labels.show_percentage = True
-        labels.show_value = False
+    if chart.type in ROUND:
+        _round_labels(labels, chart.show or "share", fmt)
         if chart.type == "pie":
             labels.position = XL_LABEL_POSITION.OUTSIDE_END
         else:
@@ -338,6 +343,31 @@ def _labels(built: Any, chart: PlanChart, pt: float, fmt: str) -> None:
     labels.number_format = fmt
     labels.show_value = True
     labels.position = XL_LABEL_POSITION.OUTSIDE_END
+
+
+def _round_labels(labels: Any, show: str, fmt: str) -> None:
+    labels.show_percentage = show != "value"
+    labels.show_value = show != "share"
+    labels.number_format = "0%" if show == "share" else fmt
+    if show == "both":
+        # One label format applies to every field: linked, the value keeps the
+        # series' format (its unit) and the percentage its own, on the next line.
+        labels.number_format_is_linked = True
+        _separator(labels._element, "\n")
+
+
+def _separator(dlbls: Any, text: str) -> None:
+    """``c:separator`` in its schema place: python-pptx has no accessor for it."""
+    node = dlbls.find(qn("c:separator"))
+    if node is None:
+        node = dlbls.makeelement(qn("c:separator"), {})
+        after = ("c:showLeaderLines", "c:leaderLines", "c:extLst")
+        anchor = next((n for t in after for n in dlbls.iterchildren(qn(t))), None)
+        if anchor is None:
+            dlbls.append(node)
+        else:
+            anchor.addprevious(node)
+    node.text = text
 
 
 def _axes(built: Any, fmt: str) -> None:
@@ -404,14 +434,14 @@ def draw(slide: Any, host: PlacedShape, zone: Zone, chart: PlanChart) -> Any:
         # Untitled, a one-series chart would show its series name as a title.
         built.has_title = False
     # A pie's slices are its categories: without a legend nothing says which is which.
-    built.has_legend = chart.type in _ROUND or len(chart.series) > 1
+    built.has_legend = chart.type in ROUND or len(chart.series) > 1
     if built.has_legend:
         built.legend.position = XL_LEGEND_POSITION.BOTTOM
         built.legend.include_in_layout = False
         _text(built.legend.font, pt)
     _colour(built, chart)
     _labels(built, chart, pt, fmt)
-    if chart.type in _ROUND:
+    if chart.type in ROUND:
         _hole(built)
     else:
         _axes(built, fmt)

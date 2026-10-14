@@ -22,7 +22,7 @@ from __future__ import annotations
 import math
 import re
 from collections import Counter
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Literal, Optional, Sequence, Tuple
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic.json_schema import SkipJsonSchema
@@ -312,6 +312,25 @@ _CHART_STYLE_KEYS = frozenset(
     ("color", "colors", "colour", "colours", "palette", "style", "theme", "legend")
     + ("position", "size", "width", "height", "font", "fonts", "x_axis", "y_axis")
 )
+# What a pie's or doughnut's slice labels show, and the words models use for it.
+PieShow = Literal["share", "value", "both"]
+_SHOW_NAMES: Dict[str, PieShow] = {
+    **dict.fromkeys(
+        ("share", "shares", "percent", "percents", "percentage", "percentages", "%")
+        + ("pct", "pourcentage", "pourcentages", "part", "parts", "ratio"),
+        "share",
+    ),
+    **dict.fromkeys(
+        ("value", "values", "number", "numbers", "count", "counts", "absolute")
+        + ("amount", "amounts", "valeur", "valeurs", "nombre", "nombres"),
+        "value",
+    ),
+    **dict.fromkeys(
+        ("both", "all", "value and share", "values and percentages")
+        + ("value and percentage", "les deux", "valeur et pourcentage"),
+        "both",
+    ),
+}
 _NUMBER = re.compile(r"^([^\d+\-.,]*?)\s*([+\-]?\d[\d\s.,']*)\s*(\D*)$")
 
 
@@ -326,6 +345,16 @@ def _chart_type(value: Any) -> Tuple[str, Optional[str]]:
         return name, None
     found = _CHART_TYPE_NAMES.get(text)
     return (found, None) if found else ("column", text[:30])
+
+
+def _show(value: Any) -> Tuple[Optional[PieShow], Optional[str]]:
+    """The labels mode and, for words that name none, the text sent."""
+    first = _seq(value)[0] if not _empty(value) else None
+    text = lexicon.normalize(_as_text(first) or "")
+    if not text:
+        return None, None
+    found = _SHOW_NAMES.get(text) or _SHOW_NAMES.get(text.replace("+", " and "))
+    return (found, None) if found else (None, text[:30])
 
 
 def _decimal(digits: str) -> Optional[float]:
@@ -433,8 +462,16 @@ class PlanChart(BaseModel):
     unit: Optional[str] = Field(
         default=None, description="Optional unit of the values: '%', 'M€', 'days'."
     )
+    show: Optional[PieShow] = Field(
+        default=None,
+        description="pie and doughnut only, what the slice labels show: share "
+        "(percentages, the default), value (the numbers, with `unit`) or both. To "
+        "display numbers instead of percentages on a pie, set show: 'value'.",
+    )
     # An unknown type built as a column chart: the type asked, for the note.
     asked_type: SkipJsonSchema[Optional[str]] = None
+    # A `show` naming no mode: the text sent, for the revision.
+    asked_show: SkipJsonSchema[Optional[str]] = None
     # Design keys the call carried (colours, position): the template decides them.
     style_fields: SkipJsonSchema[List[str]] = Field(default_factory=list)
     ignored_fields: SkipJsonSchema[List[str]] = Field(default_factory=list)
@@ -455,11 +492,15 @@ class PlanChart(BaseModel):
             "datasets": "series",
             "caption": "title",
             "units": "unit",
+            "display": "show",
+            "labels_as": "show",
+            "show_as": "show",
         }
         data = _with_aliases(value, aliases)
         kind, asked = _chart_type(data.get("type"))
         if kind == "column" and value.get("asked_type"):
             asked = value["asked_type"]
+        show, asked_show = _show(data.get("show"))
         title = _as_text(data.get("title"))
         categories = data.get("categories")
         series = data.get("series")
@@ -508,6 +549,8 @@ class PlanChart(BaseModel):
             "series": [s for s in series if s is not None],
             "title": title,
             "unit": _as_text(data.get("unit")),
+            "show": show,
+            "asked_show": None if show else asked_show or value.get("asked_show"),
             "asked_type": asked,
             "style_fields": sorted(set(value.get("style_fields") or []) | set(style)),
             "ignored_fields": _ignored(
@@ -552,7 +595,8 @@ class SlidePlan(BaseModel):
     )
     chart: Optional[PlanChart] = Field(
         default=None,
-        description="A data chart {type, categories, series [{name, values}], title, unit}: "
+        description="A data chart {type, categories, series [{name, values}], title, unit, "
+        "show}: "
         "numbers only, the template sets colours and fonts.",
     )
     notes: Optional[str] = Field(default=None, description="Speaker notes.")

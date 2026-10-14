@@ -946,7 +946,7 @@ def _description(
         'for), send only `changes`, numbered on that deck\'s slides: {"op": "replace", "slide": N, "slides": '
         '[...]}, {"op": "insert", "after": N (0 = at the start), "slides": [...]}, {"op": "remove", "slide": '
         'N}, {"op": "edit", "slide": N, "field": "title" | "bullets[1]" | "items[2].label"'
-        + (' | "chart.series[0].values[2]"' if charts else "")
+        + (' | "chart.series[0].values[2]" | "chart.show"' if charts else "")
         + ' (indexes from 0), "value": ...}. The other slides stay exactly as they were and the whole deck is rebuilt. '
         "To change text inside a slide, use `edit`: the slide keeps its design; `replace` is for "
         "a different slide (one of the same kind keeps the replaced slide's design when it fits). "
@@ -958,8 +958,10 @@ def _description(
         "heading, text, label, image}], image/images (document_ids from list_images_in_folder), "
         + ("table {header, rows} for tabular data, " if "table" in kinds else "")
         + (
-            "chart {type, categories, series [{name, values}], title, unit} for numbers "
-            "(data only: the template sets its colours, fonts and place), "
+            "chart {type, categories, series [{name, values}], title, unit, show} for numbers "
+            "(data only: the template sets its colours, fonts and place; a pie or doughnut "
+            "labels its slices with percentages: to display numbers instead of percentages "
+            "on a pie, set show: 'value', or 'both' for the two), "
             if charts
             else ""
         )

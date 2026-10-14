@@ -516,7 +516,8 @@
           "list_continues": "La liste continue sur la diapositive suivante.",
           "list_continuation": "Suite de la liste de la diapositive précédente.",
           "other_kind": "Construite en « {{built}} » au lieu de « {{asked}} ».",
-          "chart_type_changed": "Le graphique « {{asked}} » n'est pas disponible : les données sont affichées en histogramme."
+          "chart_type_changed": "Le graphique « {{asked}} » n'est pas disponible : les données sont affichées en histogramme.",
+          "chart_shows_shares": "Le graphique affiche des pourcentages : les nombres eux-mêmes ne sont pas affichés."
         }
       }
     }
