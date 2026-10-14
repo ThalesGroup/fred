@@ -29,6 +29,8 @@ def migrated_database():
         "agent_instance",
         metadata,
         sa.Column("id", sa.String(64), primary_key=True),
+        sa.Column("team_id", sa.String(64), nullable=True),
+        sa.Column("display_name", sa.String(255), nullable=True),
         sa.Column("suspension_reason", sa.VARCHAR(64), nullable=True),
     )
     with engine.begin() as connection:
@@ -77,3 +79,10 @@ def test_downgrade_lifts_capability_pending_suspensions(migrated_database):
     ]
     columns = {c["name"] for c in sa.inspect(engine).get_columns("agent_instance")}
     assert "suspension_detail" not in columns
+    # SQLite rebuilds the table: the unique agent-name index must survive it.
+    # Expression indexes are not reflected on SQLite: read the catalog.
+    with engine.connect() as connection:
+        indexes = connection.execute(
+            sa.text("SELECT name FROM sqlite_master WHERE type = 'index'")
+        ).scalars()
+        assert "uq_agent_instance_team_name" in set(indexes)

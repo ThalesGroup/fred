@@ -58,6 +58,18 @@ _DETAIL_COMMENT = (
 )
 
 
+def _restore_name_index() -> None:
+    # SQLite batch mode rebuilds the table, and its reflection omits the
+    # expression index enforcing unique agent names (a4d85307ea0e).
+    if op.get_bind().dialect.name == "sqlite":
+        op.create_index(
+            "uq_agent_instance_team_name",
+            "agent_instance",
+            ["team_id", sa.text("lower(display_name)")],
+            unique=True,
+        )
+
+
 def upgrade() -> None:
     with op.batch_alter_table("agent_instance") as batch_op:
         batch_op.add_column(
@@ -75,6 +87,7 @@ def upgrade() -> None:
             comment=_REASON_COMMENT_AFTER,
             existing_comment=_REASON_COMMENT_BEFORE,
         )
+    _restore_name_index()
 
 
 def downgrade() -> None:
@@ -95,3 +108,4 @@ def downgrade() -> None:
             existing_comment=_REASON_COMMENT_AFTER,
         )
         batch_op.drop_column("suspension_detail")
+    _restore_name_index()
