@@ -1,5 +1,5 @@
 {
- "template_sha256": "417acd04aaa958874b83021365ad895796fe6ce77dcc82dbee62efa5956db37b",
+ "template_sha256": "c64f30247f07d08c61622b571ca7f440ef2935c7efc58341133bec2f8b6c9ca3",
  "inventory": {
   "slide_width": 12192000,
   "slide_height": 6858000,
@@ -1312,8 +1312,8 @@
     "source": "slide",
     "source_index": 12,
     "name": "Fred Table",
-    "label": "Layout catalogue",
-    "kind": "section",
+    "label": "Compare options side by side",
+    "kind": "table",
     "zones": [
      {
       "key": "ph:100",
@@ -1324,7 +1324,7 @@
        "w": 910,
        "h": 127
       },
-      "sample": "Layout catalogue",
+      "sample": "Compare options side by side",
       "font_pt": 32.0,
       "chars_per_line": 56,
       "max_lines": 1,
@@ -1334,11 +1334,52 @@
       "framed": false,
       "chart_capable": false,
       "chart_type": null
+     },
+     {
+      "key": "sp:12",
+      "role": "table",
+      "box": {
+       "x": 45,
+       "y": 220,
+       "w": 910,
+       "h": 660
+      },
+      "sample": "",
+      "font_pt": 14.0,
+      "chars_per_line": null,
+      "max_lines": 10,
+      "grows": false,
+      "purpose": null,
+      "table": {
+       "header": true,
+       "columns": [
+        33,
+        22,
+        22,
+        22,
+        22
+       ],
+       "widths": [
+        2926080,
+        2042084,
+        2042084,
+        2042084,
+        2042083
+       ],
+       "margin": 274320,
+       "line_pt": 16.8,
+       "pad_pt": 11.52,
+       "row_pt": 31.68,
+       "height_pt": 356.4
+      },
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null
      }
     ],
     "groups": [],
-    "included": false,
-    "exclusion_reason": "table",
+    "included": true,
+    "exclusion_reason": null,
     "reusable": true,
     "labelled_by": "heuristic",
     "warnings": []
