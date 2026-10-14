@@ -41,6 +41,7 @@ from control_plane_backend.import_export.exporter import run_export
 from control_plane_backend.import_export.importer import MigrationReport, run_import
 from control_plane_backend.models.base import Base as CPBase
 from control_plane_backend.models.task_models import TASK_TABLES
+from fred_core.common import TeamId
 from fred_core.documents.document_models import DocumentMetadataRow
 from fred_core.models import Base as CoreBase
 from fred_core.scheduler import SchedulerBackend
@@ -205,6 +206,161 @@ async def test_export_populates_content_keys_and_import_resets_transported_stage
         assert stages["vector"] == "not_started"
         assert stages["sql"] == "not_started"
         assert stages["preview"] == "done"
+    finally:
+        await source.dispose()
+        await dest.dispose()
+
+
+def _bundle_with_tables(tables: dict[str, list[dict]]) -> bytes:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr(
+            "manifest.json",
+            json.dumps(
+                {
+                    "format_version": 1,
+                    "users_schema_version": 1,
+                    "source_platform": "swift",
+                    "created_at": "2026-07-16T00:00:00Z",
+                    "tables": {name: len(rows) for name, rows in tables.items()},
+                    "content_keys": [],
+                }
+            ),
+        )
+        for name, rows in tables.items():
+            zf.writestr(
+                f"postgres/{name}.jsonl", "\n".join(json.dumps(r) for r in rows)
+            )
+    return buf.getvalue()
+
+
+def _agent_row(agent_instance_id: str, team_id: str, tuning: dict) -> dict:
+    return {
+        "agent_instance_id": agent_instance_id,
+        "team_id": team_id,
+        "template_id": "runtime-a:rico",
+        "source_runtime_id": "runtime-a",
+        "source_agent_id": "rico",
+        "display_name": agent_instance_id,
+        "tuning_json": json.dumps(tuning),
+    }
+
+
+async def _tunings(engine: AsyncEngine) -> dict[str, dict]:
+    from control_plane_backend.models.agent_instance_models import AgentInstanceRow
+
+    async with make_session_factory(engine)() as session:
+        rows = (await session.execute(select(AgentInstanceRow))).scalars().all()
+    return {row.agent_instance_id: json.loads(row.tuning_json or "{}") for row in rows}
+
+
+@pytest.mark.asyncio
+async def test_old_bundle_with_retired_reasoning_keys_still_imports(
+    tmp_path: Path,
+) -> None:
+    """Agent tuning carrying the retired per-agent reasoning settings loads,
+    with the settings ignored."""
+
+    from control_plane_backend.agent_instances.store import AgentInstanceStore
+
+    dest = await _make_engine(tmp_path, "dest.sqlite3")
+    try:
+        legacy = {
+            "role": "r",
+            "description": "d",
+            "reasoning_enabled": True,
+            "reasoning_default_on": True,
+        }
+        report = await _import(
+            _bundle_with_tables({"agent_instance": [_agent_row("i1", "t", legacy)]}),
+            dest,
+        )
+
+        assert report.agents_imported == 1
+        record = await AgentInstanceStore(dest).get("i1")
+        assert record is not None
+        assert record.tuning.role == "r"
+        assert "reasoning_enabled" not in record.tuning.model_dump()
+    finally:
+        await dest.dispose()
+
+
+@pytest.mark.asyncio
+async def test_old_bundle_overrides_become_recommendations_of_imported_agents(
+    tmp_path: Path,
+) -> None:
+    """The mapping the importer runs after its phases, inside the import
+    transaction. Called directly: on SQLite the task-progress writes of a
+    multi-row import contend with the open import transaction."""
+
+    from control_plane_backend.import_export.importer import (
+        _map_legacy_template_overrides,
+    )
+    from control_plane_backend.models.agent_instance_models import AgentInstanceRow
+
+    dest = await _make_engine(tmp_path, "dest.sqlite3")
+    try:
+        tuning = {"role": "r", "description": "d"}
+        async with make_session_factory(dest)() as session:
+            async with session.begin():
+                for row in (
+                    _agent_row("i1", "team-1", tuning),
+                    _agent_row(
+                        "i2",
+                        "team-1",
+                        {**tuning, "recommended_chat_profile_id": "chat.q"},
+                    ),
+                    _agent_row("other-team", "team-2", tuning),
+                    _agent_row("pre-existing", "team-1", tuning),
+                ):
+                    session.add(AgentInstanceRow(**row))
+                mapped = await _map_legacy_template_overrides(
+                    session,
+                    policies=[
+                        {
+                            "team_id": "team-1",
+                            "agent_profile_overrides_json": json.dumps(
+                                {"rico": "chat.p"}
+                            ),
+                        }
+                    ],
+                    imported_agent_ids={"i1", "i2", "other-team"},
+                )
+
+        assert mapped == 1
+        tunings = await _tunings(dest)
+        assert tunings["i1"]["recommended_chat_profile_id"] == "chat.p"
+        assert tunings["i2"]["recommended_chat_profile_id"] == "chat.q"
+        assert "recommended_chat_profile_id" not in tunings["other-team"]
+        assert "recommended_chat_profile_id" not in tunings["pre-existing"]
+    finally:
+        await dest.dispose()
+
+
+@pytest.mark.asyncio
+async def test_new_bundle_round_trips_the_team_model_settings(tmp_path: Path) -> None:
+    from control_plane_backend.routing_policy.store import TeamRoutingPolicyStore
+
+    source = await _make_engine(tmp_path, "source.sqlite3")
+    dest = await _make_engine(tmp_path, "dest.sqlite3")
+    try:
+        await TeamRoutingPolicyStore(source).upsert(
+            team_id=TeamId("team-1"),
+            chat_default_profile_id="chat.d",
+            disabled_model_ids=["model__b"],
+            reasoning_default_off_model_ids=["model__a"],
+            updated_by="u1",
+        )
+
+        report = await _import(await run_export(source), dest)
+
+        assert report.routing_policies_imported == 1
+        assert report.legacy_overrides_mapped == 0
+        stored = await TeamRoutingPolicyStore(dest).get(team_id=TeamId("team-1"))
+        assert stored is not None
+        assert stored.chat_default_profile_id == "chat.d"
+        assert stored.disabled_model_ids == ("model__b",)
+        assert stored.reasoning_default_off_model_ids == ("model__a",)
     finally:
         await source.dispose()
         await dest.dispose()

@@ -39,10 +39,14 @@ vi.mock("../../../../../hooks/useFrontendProperties.ts", () => ({
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useDraftAgentMutation: () => [draftAgent],
   useUsersByIdsQuery: () => ({ data: [] }),
+  useTeamRoutingPolicyQuery: () => ({ data: undefined }),
+  useAvailableModelProfilesQuery: () => ({ data: undefined }),
 }));
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements.ts", () => ({
   useDraftAgentMutation: () => [draftAgent],
   useUsersByIdsQuery: () => ({ data: [] }),
+  useTeamRoutingPolicyQuery: () => ({ data: undefined }),
+  useAvailableModelProfilesQuery: () => ({ data: undefined }),
 }));
 vi.mock("../../../../../slices/controlPlane/controlPlaneOpenApi.ts", () => ({
   useGetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetQuery: () => ({ data: [] }),
@@ -78,8 +82,6 @@ const TEMPLATE = {
   template_id: "runtime:agent",
   display_name: "Template name",
   description: "Template description",
-  reasoning_enabled: false,
-  reasoning_default_on: false,
   default_capability_ids: [],
   available_capabilities: [
     { id: "team_wiki", name: "Wiki", description: "", route_base_url: "" },
@@ -204,7 +206,7 @@ describe("AgentFormModal + creation assistant (real body and dialog)", () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
-  it("keeps reasoning on when capabilities are applied with it", async () => {
+  it("submits the applied name and capabilities", async () => {
     const onSubmit = renderModal();
     await click("Template name");
     await applyDraftThroughDialog();
@@ -219,8 +221,6 @@ describe("AgentFormModal + creation assistant (real body and dialog)", () => {
     expect(onSubmit).toHaveBeenCalledTimes(1);
     expect(onSubmit.mock.calls[0][0]).toMatchObject({
       displayName: DRAFT.name,
-      reasoningEnabled: true,
-      reasoningDefaultOn: true,
       selectedCapabilityIds: ["team_wiki"],
     });
   });

@@ -138,7 +138,8 @@ def _team_routing_policy_to_dict(row: TeamRoutingPolicyRow) -> dict:
         "team_id": row.team_id,
         "version": row.version,
         "chat_default_profile_id": row.chat_default_profile_id,
-        "agent_profile_overrides_json": row.agent_profile_overrides_json,
+        "disabled_model_ids_json": row.disabled_model_ids_json,
+        "reasoning_default_off_model_ids_json": row.reasoning_default_off_model_ids_json,
         "updated_by": row.updated_by,
         "updated_at": _dt(row.updated_at),
     }

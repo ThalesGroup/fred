@@ -54,6 +54,7 @@ import PromptSelectionChatPanel from "@shared/molecules/PromptSelectionChatPanel
 import type { CommandDescriptor } from "../../../../slices/runtime/runtimeOpenApi";
 import { conversationTokenTotals } from "./toThreadMessages";
 import { useChatAutoScroll } from "../../../core/hooks/useChatAutoScroll";
+import { useRefetchOnWindowFocus } from "../../../core/hooks/crossSessionRefresh";
 import { useConversationJump } from "../../../core/hooks/useConversationJump";
 import { useOutlineScrollSpy } from "../../../core/hooks/useOutlineScrollSpy";
 import { hitlHoldsComposer } from "./hitlHoldsComposer";
@@ -149,6 +150,9 @@ type ActivePushDrawer =
   | { kind: "prompt-preview"; promptId: string; promptTeamId: string; command: string; promptName: string }
   | null;
 
+// A focus refetch of the composer's model list waits this long after the last read.
+const MODEL_READ_MIN_AGE_MS = 30_000;
+
 export default function ManagedChatPage() {
   const { t, i18n } = useTranslation();
   const { agentsNicknameSingular } = useFrontendProperties();
@@ -226,7 +230,37 @@ export default function ManagedChatPage() {
   const { canAdministerAdmins } = useTeamCapabilities(team);
   const isAdmin = isPersonalTeam || canAdministerAdmins;
 
-  const chat = useManagedChat({ teamId, agentInstanceId });
+  // The agent's recommended model and the models a member may pick. Its own
+  // read: prepare-execution runs on every send and stays free of pod-catalog
+  // fetches. Saving the team's models or the agent refetches it; an admin change
+  // made in another browser lands on window focus (at most every 30 s: each read
+  // also asks the pod for its catalog) or when a conversation opens.
+  // `currentData`: another agent's model list must never judge this agent's choice.
+  // A deleted agent has no model to read: its conversation is read-only.
+  const [agentDeleted, setAgentDeleted] = useState(false);
+  const {
+    currentData: effectiveChatModel,
+    fulfilledTimeStamp: modelReadAt,
+    refetch: refetchEffectiveChatModel,
+  } = useEffectiveChatModelQuery(
+    { teamId, agentInstanceId },
+    { skip: agentDeleted, refetchOnMountOrArgChange: MODEL_READ_MIN_AGE_MS / 1000 },
+  );
+  const refetchStaleModelRead = useCallback(() => {
+    if (modelReadAt !== undefined && Date.now() - modelReadAt < MODEL_READ_MIN_AGE_MS) return;
+    void refetchEffectiveChatModel();
+  }, [modelReadAt, refetchEffectiveChatModel]);
+  useRefetchOnWindowFocus(refetchStaleModelRead, agentDeleted);
+  const chat = useManagedChat({ teamId, agentInstanceId, effectiveChatModel });
+  // The chat hook needs the model read, so its verdict comes back through state.
+  if (chat.isReadOnly !== agentDeleted) setAgentDeleted(chat.isReadOnly);
+  const lastModelReadSessionId = useRef(chat.sessionId);
+  useEffect(() => {
+    if (lastModelReadSessionId.current === chat.sessionId) return;
+    lastModelReadSessionId.current = chat.sessionId;
+    // A skipped query cannot be refetched; it starts by itself once the agent is live.
+    if (!agentDeleted) void refetchEffectiveChatModel();
+  }, [chat.sessionId, agentDeleted, refetchEffectiveChatModel]);
 
   // Opening a push drawer is a statement about ONE conversation, so switching
   // conversations closes it: the panels (capability, attachments, document
@@ -311,16 +345,6 @@ export default function ManagedChatPage() {
     recordedPanelKeyRef.current = activeCapabilityKey;
   }, [chat.sessionId, activeCapabilityKey]);
 
-  // The model this agent's next turn will actually route to (#2387) — the
-  // composer's label. Its own read rather than part of prepare-execution:
-  // prepare runs on every send and is contractually free of pod-catalog
-  // fetches, while resolving the pod-owned precedence levels needs one.
-  // Tagged ControlPlaneRoutingPolicy/teamId, so saving a routing policy
-  // refetches this instead of leaving a stale model name on screen.
-  const { data: effectiveChatModel } = useEffectiveChatModelQuery(
-    { teamId, agentInstanceId },
-    { skip: chat.executionDisabled },
-  );
   const [transcribeAudio] = useTranscribeAudioKnowledgeFlowV1AudioTranscriptionsPostMutation();
   // Re-resolved every render from the live messages so the open drawer streams.
   const selectedTraceEntry = selectedTraceKey ? findTraceEntry(chat.messages, selectedTraceKey) : null;
@@ -737,6 +761,8 @@ export default function ManagedChatPage() {
           composer={composerState}
           disabled={composerControlsDisabled}
           effectiveModel={effectiveChatModel}
+          chatProfileId={chat.chatProfileId}
+          onChatProfileChange={chat.setChatProfileId}
         />
       }
       leftSlot={
