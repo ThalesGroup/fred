@@ -12,47 +12,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Resolution / geometry-dependent validation layer for the PPT Filler toolkit.
+"""Single-open offline template checks, followed by scoped async folder resolution.
 
-Story 01's :func:`fred_capability_ppt_filler.parser.parse` stays pure and
-offline: it never touches Knowledge Flow and has no slide-geometry opinion. This module
-adds the two validations that *do* need an outside lookup or the slide shapes, behind
-injected seams so callers (the analyze endpoint and the save processor in Story 05) can
-wire in a real, scoped resolver while tests pass a fake one.
-
-Two image-only checks are layered on top of a :class:`ParseResult`:
-
-- ``folder_not_found`` — a non-empty author ``folder`` that does not resolve to a folder
-  (DOCUMENT tag) in the current space. Resolving also writes the resolved
-  ``folder_tag_id`` back into the image :class:`KeyField` so downstream save/fill can use
-  it.
-- ``image_key_invalid_location`` — an image key whose ``{{key}}`` sits in a shape that
-  cannot hold a picture (a table cell), detected via
-  :func:`list_image_anchors_on_slide`.
-
-Both reuse the same ``{slide, key, code, message}`` :class:`TemplateError` contract and
-the same ``{schema, errors}`` :class:`ParseResult`, so a caller can hand the augmented
-result straight back (or raise on it) exactly like the bare parse result.
-
-Empty / missing folders are NOT handled here: those are already ``image_without_folder``
-from Story 01 and must not be double-reported. Text keys are skipped entirely (no folder,
-no geometry constraint).
+``analyze_template`` owns the presentation in a worker. ``resolve_image_folders``
+only receives lightweight schema/errors and performs no deck parsing.
 """
 
 from __future__ import annotations
 
-import asyncio
 import io
 from pathlib import Path
 from typing import Dict, List, Optional, Protocol, Set, Union
 
 from pptx import Presentation
+from pptx.presentation import Presentation as PresentationObject
 
 from fred_capability_ppt_filler.parser import (
     KeyField,
     ParseResult,
     SlideSchema,
     TemplateError,
+    parse_presentation,
 )
 from fred_capability_ppt_filler.traversal import (
     list_image_anchors_on_slide,
@@ -102,21 +82,39 @@ def _image_key_invalid_location_message(slide_number: int, keys: List[str]) -> s
     )
 
 
-def _scan_invalid_location_keys(
-    pptx_source: Union[bytes, str, Path],
-) -> Dict[int, Set[str]]:
-    """CPU-bound geometry scan: open the deck once and find, per slide, which
-    image keys have an anchor sitting in a table cell.
-
-    Split out from :func:`resolve_and_validate_images` so it can run via
-    ``asyncio.to_thread`` (#2183) — python-pptx parsing/traversal is
-    synchronous and must never run inline on the event loop.
-    """
+def analyze_template(pptx_source: Union[bytes, str, Path]) -> ParseResult:
+    """Open once for field and image checks; return only lightweight validation data."""
     if isinstance(pptx_source, bytes):
         presentation = Presentation(io.BytesIO(pptx_source))
     else:
         presentation = Presentation(str(pptx_source))
+    result = parse_presentation(presentation)
+    invalid_locations = _scan_invalid_location_keys(presentation)
+    for slide_schema in result.slides:
+        keys = [
+            field.key
+            for field in slide_schema.keys
+            if field.type == "image"
+            and field.key in invalid_locations.get(slide_schema.slide, set())
+        ]
+        if keys:
+            message = _image_key_invalid_location_message(slide_schema.slide, keys)
+            result.errors.extend(
+                TemplateError(
+                    slide=slide_schema.slide,
+                    key=key,
+                    code=CODE_IMAGE_KEY_INVALID_LOCATION,
+                    message=message,
+                )
+                for key in keys
+            )
+    return result
 
+
+def _scan_invalid_location_keys(
+    presentation: PresentationObject,
+) -> Dict[int, Set[str]]:
+    """Scan the same open deck used for field extraction, within its worker."""
     invalid_location_keys_by_slide: Dict[int, Set[str]] = {}
     for index, slide in enumerate(presentation.slides):
         slide_number = index + 1
@@ -129,42 +127,15 @@ def _scan_invalid_location_keys(
     return invalid_location_keys_by_slide
 
 
-async def resolve_and_validate_images(
-    pptx_source: Union[bytes, str, Path],
+async def resolve_image_folders(
     parse_result: ParseResult,
     resolver: Optional[FolderResolver],
 ) -> ParseResult:
-    """Augment ``parse_result`` with folder-resolution and image-location validation.
+    """Resolve image folders after offline checks have released the parsed deck.
 
-    ``resolver=None`` skips the folder→tag lookup entirely (no ``folder_not_found``
-    errors, ``folder_tag_id`` stays ``None``) while STILL running the pure geometry
-    check. The stateless analyze route uses this: it has no platform access, so it
-    reports every offline error immediately and leaves folder existence to the save
-    round-trip, which always resolves with a real resolver (#1903).
-
-    For every IMAGE key in ``parse_result.slides``:
-
-    - If its ``folder`` is non-empty, resolve it via ``resolver`` (each distinct folder
-      string is resolved at most once per call — see the ``resolved`` cache). On success
-      the resolved ``folder_tag_id`` is written back into the schema's :class:`KeyField`;
-      on ``None`` a ``folder_not_found`` ``(slide, key)`` error is appended and
-      ``folder_tag_id`` stays ``None``. Empty / missing folders are skipped (they are
-      already ``image_without_folder`` from Story 01 and must not be double-reported).
-    - If ANY anchor for that key on that slide reports ``invalid_location`` (i.e. the key
-      sits in a table cell), an ``image_key_invalid_location`` ``(slide, key)`` error is
-      appended.
-
-    Returns a NEW :class:`ParseResult` with the same ``{schema, errors}`` contract: the
-    original base errors first, then the appended resolution/location errors, and a schema
-    whose image keys carry their resolved ``folder_tag_id``. The input ``parse_result`` is
-    not mutated.
+    Returns a new result; resolver=None keeps the stateless analysis offline.
+    Each distinct folder is resolved once and existing errors are preserved.
     """
-    # Per-slide set of keys whose anchors (any occurrence) sit in an invalid location.
-    # The deck-opening/geometry scan is CPU-bound python-pptx work — off the loop (#2183).
-    invalid_location_keys_by_slide = await asyncio.to_thread(
-        _scan_invalid_location_keys, pptx_source
-    )
-
     # Resolve each DISTINCT non-empty folder once (several keys may share a folder).
     resolved: Dict[str, Optional[str]] = {}
 
@@ -174,13 +145,8 @@ async def resolve_and_validate_images(
     new_slides: List[SlideSchema] = []
     new_errors: List[TemplateError] = list(parse_result.errors)
 
-    # Track which (slide, key) image keys we have already errored on for location, so a
-    # multi-occurrence key is reported once; group keys per slide for the message order.
-    location_error_keys_by_slide: Dict[int, List[str]] = {}
-
     for slide_schema in parse_result.slides:
         slide_number = slide_schema.slide
-        invalid_keys = invalid_location_keys_by_slide.get(slide_number, set())
         new_keys: List[KeyField] = []
 
         for key_field in slide_schema.keys:
@@ -212,26 +178,6 @@ async def resolve_and_validate_images(
 
             new_keys.append(updated)
 
-            # --- invalid location (table cell) ---
-            if key_field.key in invalid_keys:
-                location_error_keys_by_slide.setdefault(slide_number, [])
-                if key_field.key not in location_error_keys_by_slide[slide_number]:
-                    location_error_keys_by_slide[slide_number].append(key_field.key)
-
         new_slides.append(SlideSchema(slide=slide_number, keys=new_keys))
-
-    # Emit one image_key_invalid_location error per (slide, key), in slide/key order,
-    # carrying a per-slide grouped message (matching how the UI groups).
-    for slide_number, keys in location_error_keys_by_slide.items():
-        message = _image_key_invalid_location_message(slide_number, keys)
-        for key in keys:
-            new_errors.append(
-                TemplateError(
-                    slide=slide_number,
-                    key=key,
-                    code=CODE_IMAGE_KEY_INVALID_LOCATION,
-                    message=message,
-                )
-            )
 
     return ParseResult(schema=new_slides, errors=new_errors)

@@ -27,11 +27,11 @@ import pytest
 from fred_capability_ppt_filler.folder_resolution import (
     CODE_FOLDER_NOT_FOUND,
     CODE_IMAGE_KEY_INVALID_LOCATION,
-    resolve_and_validate_images,
+    analyze_template,
+    resolve_image_folders,
 )
 from fred_capability_ppt_filler.parser import (
     CODE_IMAGE_WITHOUT_FOLDER,
-    parse,
 )
 from pptx import Presentation
 from pptx.util import Inches
@@ -107,7 +107,7 @@ async def test_existing_folder_writes_tag_id_and_no_error():
     deck = _build_deck([("{{flag}}", notes)])
     resolver = _FakeResolver({"images/flags": "tag-123"})
 
-    result = await resolve_and_validate_images(deck, parse(deck), resolver)
+    result = await resolve_image_folders(analyze_template(deck), resolver)
 
     assert _field(result, 1, "flag").folder_tag_id == "tag-123"
     assert CODE_FOLDER_NOT_FOUND not in _codes(result)
@@ -122,7 +122,7 @@ async def test_existing_folder_tag_id_is_reflected_in_serialized_schema():
     deck = _build_deck([("{{flag}}", notes)])
     resolver = _FakeResolver({"images/flags": "tag-123"})
 
-    result = await resolve_and_validate_images(deck, parse(deck), resolver)
+    result = await resolve_image_folders(analyze_template(deck), resolver)
 
     dumped = result.model_dump(by_alias=True)
     assert dumped["schema"] == [
@@ -147,7 +147,7 @@ async def test_missing_folder_reports_folder_not_found_and_leaves_tag_none():
     deck = _build_deck([("{{flag}}", notes)])
     resolver = _FakeResolver({"images/flags": "tag-123"})  # different folder
 
-    result = await resolve_and_validate_images(deck, parse(deck), resolver)
+    result = await resolve_image_folders(analyze_template(deck), resolver)
 
     matching = [e for e in result.errors if e.code == CODE_FOLDER_NOT_FOUND]
     assert len(matching) == 1
@@ -167,7 +167,7 @@ async def test_shared_folder_is_resolved_once_and_both_keys_get_tag():
     deck = _build_deck([("{{flag_a}} {{flag_b}}", notes)])
     resolver = _FakeResolver({"images/flags": "tag-shared"})
 
-    result = await resolve_and_validate_images(deck, parse(deck), resolver)
+    result = await resolve_image_folders(analyze_template(deck), resolver)
 
     assert resolver.calls == ["images/flags"]  # resolved once, not per key
     assert _field(result, 1, "flag_a").folder_tag_id == "tag-shared"
@@ -181,7 +181,7 @@ async def test_text_keys_are_skipped_entirely():
     deck = _build_deck([("{{name}}", "{{name}}:\nThe name.")])
     resolver = _FakeResolver({"images/flags": "tag-123"})
 
-    result = await resolve_and_validate_images(deck, parse(deck), resolver)
+    result = await resolve_image_folders(analyze_template(deck), resolver)
 
     assert resolver.calls == []
     assert result.errors == []
@@ -196,10 +196,10 @@ async def test_empty_folder_is_not_re_reported_as_folder_not_found():
     deck = _build_deck([("{{flag}}", notes)])
     resolver = _FakeResolver({"images/flags": "tag-123"})
 
-    base = parse(deck)
+    base = analyze_template(deck)
     assert CODE_IMAGE_WITHOUT_FOLDER in _codes(base)  # precondition from Story 01
 
-    result = await resolve_and_validate_images(deck, base, resolver)
+    result = await resolve_image_folders(base, resolver)
 
     assert resolver.calls == []  # empty folder is never resolved
     assert CODE_FOLDER_NOT_FOUND not in _codes(result)
@@ -216,10 +216,10 @@ async def test_base_errors_are_preserved_alongside_new_errors():
     deck = _build_deck([("{{flag}} {{lonely}}", notes)])
     resolver = _FakeResolver({})
 
-    base = parse(deck)
+    base = analyze_template(deck)
     base_codes = set(_codes(base))
 
-    result = await resolve_and_validate_images(deck, base, resolver)
+    result = await resolve_image_folders(base, resolver)
 
     assert base_codes.issubset(set(_codes(result)))  # nothing dropped
     assert CODE_FOLDER_NOT_FOUND in _codes(result)  # new error appended
@@ -235,7 +235,7 @@ async def test_image_key_in_table_cell_is_invalid_location(marker):
     deck = _build_table_deck(notes, [marker])
     resolver = _FakeResolver({"images/flags": "tag-123"})
 
-    result = await resolve_and_validate_images(deck, parse(deck), resolver)
+    result = await resolve_image_folders(analyze_template(deck), resolver)
 
     matching = [e for e in result.errors if e.code == CODE_IMAGE_KEY_INVALID_LOCATION]
     assert len(matching) == 1
@@ -253,7 +253,7 @@ async def test_image_key_in_table_cell_still_resolves_its_folder():
     deck = _build_table_deck(notes, ["{{flag}}"])
     resolver = _FakeResolver({"images/flags": "tag-123"})
 
-    result = await resolve_and_validate_images(deck, parse(deck), resolver)
+    result = await resolve_image_folders(analyze_template(deck), resolver)
 
     assert _field(result, 1, "flag").folder_tag_id == "tag-123"
     assert CODE_IMAGE_KEY_INVALID_LOCATION in _codes(result)
@@ -266,7 +266,7 @@ async def test_text_key_in_table_cell_is_not_invalid_location():
     deck = _build_table_deck("{{label}}:\nA label.", ["{{label}}"])
     resolver = _FakeResolver({})
 
-    result = await resolve_and_validate_images(deck, parse(deck), resolver)
+    result = await resolve_image_folders(analyze_template(deck), resolver)
 
     assert CODE_IMAGE_KEY_INVALID_LOCATION not in _codes(result)
 
@@ -277,6 +277,6 @@ async def test_image_key_in_textbox_is_valid_location():
     deck = _build_deck([("{{flag}}", notes)])
     resolver = _FakeResolver({"images/flags": "tag-123"})
 
-    result = await resolve_and_validate_images(deck, parse(deck), resolver)
+    result = await resolve_image_folders(analyze_template(deck), resolver)
 
     assert CODE_IMAGE_KEY_INVALID_LOCATION not in _codes(result)

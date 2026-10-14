@@ -38,3 +38,19 @@ Author help: [English](../../../apps/frontend/public/ppt-filler-help.md) and
 Installing this package *is* the registration: the fred-agents pod auto-discovers
 the capability at boot via the `fred.capabilities` entry point declared in
 `pyproject.toml` (`ppt_filler = "fred_capability_ppt_filler.capability:PptFillerCapability"`).
+
+## Validation memory and admission
+
+Selection and save each independently open the deck once for field extraction and
+image placement checks. Only the schema survives into asynchronous folder lookup;
+worker cleanup collects cyclic presentation objects after validation and generation,
+including failed processing. The existing per-pod limit remains four heavy jobs with
+fail-fast busy feedback. This count is not a memory budget: four large decks can still
+exceed a deployment's limit, and cancelling an awaiting request can release its slot
+before its worker stops.
+
+Save transport failures distinguish an unreachable runtime (503), operation timeout
+(504), and interrupted communication (502). The form translates their stable codes;
+transport logs include exception type and duration with the current request context,
+without service URLs or raw exception messages. A dropped connection does not identify
+an OOM kill or require Kubernetes access.

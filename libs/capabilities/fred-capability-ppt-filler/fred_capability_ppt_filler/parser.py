@@ -35,6 +35,7 @@ from typing import Dict, List, Literal, Optional, Tuple, Union
 from fred_sdk.contracts.capability import Public, ScopePrivate
 from pptx import Presentation
 from pptx.oxml.ns import qn
+from pptx.presentation import Presentation as PresentationObject
 from pydantic import BaseModel, ConfigDict, Field, model_serializer
 
 from fred_capability_ppt_filler.traversal import (
@@ -478,6 +479,11 @@ def parse(pptx_source: Union[bytes, str, Path]) -> ParseResult:
     else:
         presentation = Presentation(str(pptx_source))
 
+    return parse_presentation(presentation)
+
+
+def parse_presentation(presentation: PresentationObject) -> ParseResult:
+    """Extract fields from an already open deck so validation can reuse it."""
     schema: List[SlideSchema] = []
     errors: List[TemplateError] = []
 
