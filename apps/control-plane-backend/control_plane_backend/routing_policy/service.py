@@ -304,8 +304,6 @@ async def list_available_model_profiles(
     user: KeycloakUser,
     team_id: TeamId,
     deps: ProductServiceDependencies,
-    *,
-    agent_instance_id: str | None = None,
 ) -> AvailableModelProfileList:
     """RFC §13's picker option set: every `kind="model"` profile_id this team
     is `can_use`-enabled for. Same read gate as the routing policy itself
@@ -358,27 +356,6 @@ async def list_available_model_profiles(
         if profile_id in universal
     ]
     profiles.sort(key=lambda p: p.profile_id)
-    unavailable_profile = None
-    if agent_instance_id is not None:
-        agent = await deps.get_agent_instance_store().get_for_team(
-            agent_instance_id, team_id
-        )
-        recommended_id = agent.tuning.recommended_chat_profile_id if agent else None
-        if recommended_id and all(p.profile_id != recommended_id for p in profiles):
-            unavailable_profile = next(
-                (
-                    AvailableModelProfile(
-                        profile_id=recommended_id,
-                        capability_id=entry.id,
-                        name=entry.name,
-                        display_name=entry.model_display_name,
-                    )
-                    for entry in catalog.values()
-                    if entry.kind == "model"
-                    and recommended_id in entry.model_chat_profile_ids
-                ),
-                None,
-            )
     if stored is not None and stored.chat_default_profile_id is not None:
         effective_default = stored.chat_default_profile_id
     elif pod_defaults and len({cap for _, cap in pod_defaults}) == 1:
@@ -388,9 +365,7 @@ async def list_available_model_profiles(
     else:
         effective_default = None
     return AvailableModelProfileList(
-        profiles=profiles,
-        unavailable_profile=unavailable_profile,
-        effective_default_profile_id=effective_default,
+        profiles=profiles, effective_default_profile_id=effective_default
     )
 
 

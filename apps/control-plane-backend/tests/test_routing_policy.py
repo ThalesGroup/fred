@@ -480,7 +480,6 @@ def _model_entry(
     profile_ids: list[str],
     *,
     chat_profile_ids: list[str] | None = None,
-    display_name: str | None = None,
 ) -> CapabilityCatalogEntry:
     return CapabilityCatalogEntry(
         id=capability_id,
@@ -489,7 +488,6 @@ def _model_entry(
         description=capability_id,
         icon="neurology",
         kind="model",
-        model_display_name=display_name,
         model_profile_ids=tuple(profile_ids),
         model_chat_profile_ids=tuple(
             profile_ids if chat_profile_ids is None else chat_profile_ids
@@ -1184,47 +1182,6 @@ async def test_available_models_filtered_by_usable_capability_ids(monkeypatch) -
     )
 
     assert [p.profile_id for p in result.profiles] == ["chat.openai.gpt4o"]
-
-
-@pytest.mark.asyncio
-async def test_available_models_names_an_agents_unavailable_recommendation(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    async def _fake_usable(rebac, team_id):
-        return {"model__openai__gpt-4o"}
-
-    async def _fake_catalog(deps):
-        return {
-            "model__openai__gpt-4o": _model_entry(
-                "model__openai__gpt-4o", ["chat.openai.gpt4o"]
-            ),
-            "model__azure-apim__gpt-6-sol": _model_entry(
-                "model__azure-apim__gpt-6-sol",
-                ["chat.azure_apim.gpt6sol"],
-                display_name="GPT-6 Sol (Azure APIM)",
-            ),
-        }
-
-    monkeypatch.setattr(routing_policy_service, "usable_capability_ids", _fake_usable)
-    monkeypatch.setattr(
-        routing_policy_service, "aggregate_capability_catalog", _fake_catalog
-    )
-    agent = _make_record(agent_instance_id="agent-1", team_id="team-1")
-    agent.tuning.recommended_chat_profile_id = "chat.azure_apim.gpt6sol"
-    deps = _deps(store=_FakeStore(), rebac=_elevated_rebac(), instances=[agent])
-
-    result = await routing_policy_service.list_available_model_profiles(
-        _user(), TeamId("team-1"), deps, agent_instance_id="agent-1"
-    )
-
-    assert [profile.profile_id for profile in result.profiles] == ["chat.openai.gpt4o"]
-    assert result.unavailable_profile is not None
-    assert result.unavailable_profile.display_name == "GPT-6 Sol (Azure APIM)"
-
-    other_team = await routing_policy_service.list_available_model_profiles(
-        _user(), TeamId("other-team"), deps, agent_instance_id="agent-1"
-    )
-    assert other_team.unavailable_profile is None
 
 
 @pytest.mark.asyncio

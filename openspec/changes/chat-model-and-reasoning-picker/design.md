@@ -87,13 +87,6 @@ as today.
   `check_profile_usable_for_team` extended with the team's disabled set.
 - **Update semantics.** `UpdateAgentInstanceRequest` uses `model_fields_set` to
   tell "absent" from "clear".
-- **Unavailable label.** The team `available-models` read accepts an optional
-  agent instance id. For an instance in that team, it returns catalog metadata
-  for its stored recommendation when the profile is no longer selectable. This
-  metadata is never added to selectable options. If the catalog no longer knows
-  the profile, the form uses a generic unavailable label rather than a raw id.
-  The shared Select error grows with wrapped text instead of overlapping the
-  helper line.
 
 A separate column was rejected: tuning already owns per-instance runtime
 settings.

@@ -15,7 +15,6 @@
 import { useTranslation } from "react-i18next";
 import Select, { type SelectOption } from "@shared/molecules/Select/Select.tsx";
 import { rowForProfile, teamModelRows } from "@rework/features/capabilities/teamModelRows";
-import { modelLabel } from "@rework/features/capabilities/ReasoningChip";
 import {
   useAvailableModelProfilesQuery,
   useTeamRoutingPolicyQuery,
@@ -26,7 +25,6 @@ const TEAM_DEFAULT = "";
 
 interface RecommendedModelFieldProps {
   teamId?: string;
-  agentInstanceId?: string;
   /** Stored chat profile id; null follows the team default. */
   value: string | null;
   onChange: (value: string | null) => void;
@@ -38,17 +36,11 @@ interface RecommendedModelFieldProps {
  * later default changes) or one specific team-enabled model, pinned even if it is
  * today's default. A stored value no longer offered stays shown, flagged.
  */
-export function RecommendedModelField({
-  teamId,
-  agentInstanceId,
-  value,
-  onChange,
-  disabled,
-}: RecommendedModelFieldProps) {
+export function RecommendedModelField({ teamId, value, onChange, disabled }: RecommendedModelFieldProps) {
   const { t } = useTranslation();
   const skip = !teamId;
   const { data: policy } = useTeamRoutingPolicyQuery({ teamId: teamId ?? "" }, { skip });
-  const { data: availableModels } = useAvailableModelProfilesQuery({ teamId: teamId ?? "", agentInstanceId }, { skip });
+  const { data: availableModels } = useAvailableModelProfilesQuery({ teamId: teamId ?? "" }, { skip });
 
   const profiles = availableModels?.profiles ?? [];
   if (profiles.length === 0 && !value) return null;
@@ -60,13 +52,7 @@ export function RecommendedModelField({
   const disabledIds = new Set(policy?.disabled_model_ids ?? []);
   const rows = allRows.filter((row) => !disabledIds.has(row.capabilityId));
   const stale = value !== null && !rows.some((row) => row.profileId === value);
-  const unavailableProfile = availableModels?.unavailable_profile;
-  const staleLabel =
-    allRows.find((row) => row.profileId === value)?.label ??
-    (unavailableProfile?.profile_id === value
-      ? modelLabel(unavailableProfile.display_name, unavailableProfile.name, unavailableProfile.capability_id)
-      : null) ??
-    t("rework.teams.formAgent.fields.recommendedModel.unavailableName");
+  const staleLabel = allRows.find((row) => row.profileId === value)?.label ?? value;
 
   const options: SelectOption<string>[] = [
     {
@@ -83,7 +69,7 @@ export function RecommendedModelField({
           {
             value,
             key: value,
-            label: staleLabel,
+            label: staleLabel ?? value,
             description: t("rework.teams.formAgent.fields.recommendedModel.unavailableOption"),
           },
         ]

@@ -3061,7 +3061,6 @@
             "teamDefaultCurrent": "Actuellement {{model}}. Suit les changements faits par l'admin d'équipe.",
             "teamDefaultFollows": "Suit les changements faits par l'admin d'équipe.",
             "unavailableOption": "Plus disponible",
-            "unavailableName": "Modèle indisponible",
             "unavailable": "{{model}} n'est plus disponible pour cette équipe. Choisissez un autre modèle ou le modèle par défaut de l'équipe."
           }
         },

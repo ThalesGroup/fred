@@ -4599,10 +4599,6 @@ to that model. One instance query plus the shared catalog aggregation.
 profile, and `effective_default_profile_id`: the stored default, else the pod
 default of the team's pods when they agree. It now carries the routing-policy
 cache tag, invalidated by an agent `PATCH`.
-When given an agent instance id, the read may also return catalog metadata for
-that team's stored recommendation if it is no longer selectable. This metadata
-does not join the selectable `profiles` list; an unknown catalog profile has no
-metadata to return.
 
 **Platform revocation.** When a model loses `can_use` for a team (grant removal,
 personal-space scope revoke) or platform-wide (default-on switched off, for

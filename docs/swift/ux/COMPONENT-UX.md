@@ -4762,8 +4762,6 @@ shows a generic "no longer available" line.
 the team admin.") saves `null`; then every team-enabled model, today's default
 included, which pins it. A
 stored value no longer selectable is shown flagged "No longer available". The
-select and its wrapped error use the model's catalog display name when known;
-otherwise they use a generic unavailable label, never the raw profile id. The
 form's former Reasoning card is removed.
 
 ### `PlatformRolesPage` (`/admin/platform-roles`, 2026-08-21, #2405)

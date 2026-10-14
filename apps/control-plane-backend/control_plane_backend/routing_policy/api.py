@@ -130,12 +130,9 @@ async def get_team_routing_policy(
 async def get_available_model_profiles(
     team_id: Annotated[TeamId, Path()],
     deps: ProductDependencies,
-    agent_instance_id: str | None = Query(default=None),
     user: KeycloakUser = Depends(get_current_user),
 ) -> AvailableModelProfileList:
-    return await list_available_model_profiles_from_service(
-        user, team_id, deps, agent_instance_id=agent_instance_id
-    )
+    return await list_available_model_profiles_from_service(user, team_id, deps)
 
 
 @router.get(

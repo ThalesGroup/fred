@@ -33,7 +33,6 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const h = vi.hoisted(() => ({
   policy: undefined as TeamRoutingPolicy | undefined,
   availableModels: undefined as AvailableModelProfileList | undefined,
-  availableQueryArgs: undefined as { teamId: string; agentInstanceId?: string } | undefined,
 }));
 
 vi.mock("react-i18next", () => ({
@@ -44,10 +43,7 @@ vi.mock("react-i18next", () => ({
 
 vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useTeamRoutingPolicyQuery: () => ({ data: h.policy }),
-  useAvailableModelProfilesQuery: (args: { teamId: string; agentInstanceId?: string }) => {
-    h.availableQueryArgs = args;
-    return { data: h.availableModels };
-  },
+  useAvailableModelProfilesQuery: () => ({ data: h.availableModels }),
 }));
 
 // The Select molecule has its own tests; here only the options and error matter.
@@ -94,14 +90,12 @@ let container: HTMLDivElement;
 let root: Root;
 const onChange = vi.fn();
 
-function render(value: string | null, agentInstanceId?: string) {
+function render(value: string | null) {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
   act(() => {
-    root.render(
-      <RecommendedModelField teamId="team-1" agentInstanceId={agentInstanceId} value={value} onChange={onChange} />,
-    );
+    root.render(<RecommendedModelField teamId="team-1" value={value} onChange={onChange} />);
   });
 }
 
@@ -115,7 +109,6 @@ afterEach(() => {
   onChange.mockClear();
   h.policy = undefined;
   h.availableModels = undefined;
-  h.availableQueryArgs = undefined;
 });
 
 describe("RecommendedModelField", () => {
@@ -179,36 +172,5 @@ describe("RecommendedModelField", () => {
     expect(container.querySelector("[role=alert]")?.textContent).toBe(
       "rework.teams.formAgent.fields.recommendedModel.unavailable:Claude",
     );
-  });
-
-  it("names a stored unavailable model from its catalog display name", () => {
-    h.availableModels = {
-      profiles: MODELS.profiles,
-      unavailable_profile: {
-        profile_id: "chat.azure_apim.gpt6sol",
-        capability_id: "model__azure-apim__gpt-6-sol",
-        name: "gpt-6-sol",
-        display_name: "GPT-6 Sol (Azure APIM)",
-      },
-    };
-    render("chat.azure_apim.gpt6sol", "agent-1");
-
-    expect(h.availableQueryArgs).toEqual({ teamId: "team-1", agentInstanceId: "agent-1" });
-    expect(optionLabels()).toContain(
-      "GPT-6 Sol (Azure APIM) (rework.teams.formAgent.fields.recommendedModel.unavailableOption)",
-    );
-    expect(container.querySelector("[role=alert]")?.textContent).toBe(
-      "rework.teams.formAgent.fields.recommendedModel.unavailable:GPT-6 Sol (Azure APIM)",
-    );
-  });
-
-  it("uses a generic label when the catalog no longer knows the stored profile", () => {
-    h.availableModels = MODELS;
-    render("chat.azure_apim.gpt6sol", "agent-1");
-
-    expect(optionLabels()).toContain(
-      "rework.teams.formAgent.fields.recommendedModel.unavailableName (rework.teams.formAgent.fields.recommendedModel.unavailableOption)",
-    );
-    expect(container.textContent).not.toContain("chat.azure_apim.gpt6sol");
   });
 });
