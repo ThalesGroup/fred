@@ -96,6 +96,7 @@ function analysis(phase: AnalysisPhase, overrides: Partial<PptBuilderAnalysis> =
     canRerun: false,
     outdatedVision: false,
     isRerunning: false,
+    refreshing: false,
     rerun: vi.fn(async () => {}),
     effective: null,
     summary: null,
@@ -138,6 +139,12 @@ describe("AnalysisStatus", () => {
       expect(container.textContent).toContain("capability.ppt_builder.analysis.inProgress");
       expect(container.querySelector("button")).toBeNull();
     }
+  });
+
+  it("says an outdated analysis is being read again while it is refreshed", () => {
+    render(<AnalysisStatus analysis={analysis("succeeded", { refreshing: true })} disabled={false} />);
+    expect(container.textContent).toContain("capability.ppt_builder.analysis.refreshing");
+    expect(container.querySelector("button")).toBeNull();
   });
 
   it("shows the error and a re-run action when the analysis failed", () => {

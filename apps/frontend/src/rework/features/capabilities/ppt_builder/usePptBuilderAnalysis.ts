@@ -95,6 +95,8 @@ export interface PptBuilderAnalysis {
   /** Outdated and labelled by a vision model: only a save refreshes it with that model. */
   outdatedVision: boolean;
   isRerunning: boolean;
+  /** An outdated analysis is being re-read; its old inventory is shown meanwhile. */
+  refreshing: boolean;
   rerun: () => Promise<void>;
   /** The inventory with the overrides applied (what the agent will see). */
   effective: TemplateInventory | null;
@@ -130,12 +132,14 @@ export function usePptBuilderAnalysis({
   // neither hide the analysis nor stop the polling of one in progress.
   const status = statusQuery.data;
   const phase = analysisPhase({ stagedFile, templateSha, status });
+  const refreshing = phase === "succeeded" && status?.refreshing === true;
   const usesBuiltin = phase === "builtin";
   const { data: builtin } = useGetPptBuilderBuiltinQuery(undefined, { skip: !usesBuiltin || !routed });
 
+  // A refresh keeps the row succeeded: poll it too, so its new inventory shows when it ends.
   useEffect(() => {
-    setPollingInterval(isInProgress(phase) ? POLL_MS : 0);
-  }, [phase]);
+    setPollingInterval(isInProgress(phase) || refreshing ? POLL_MS : 0);
+  }, [phase, refreshing]);
 
   // Once the analysis has ended, one re-check lifts (or explains) the agent's
   // "preparing" suspension without waiting for the next listing.
@@ -187,6 +191,7 @@ export function usePptBuilderAnalysis({
     canRerun: Boolean(agentInstanceId) && canRerun(phase, status),
     outdatedVision: phase === "succeeded" && status?.current === false && status.labelling_key.startsWith("vision:"),
     isRerunning,
+    refreshing,
     rerun,
     effective,
     summary: effective ? summarize(effective) : null,

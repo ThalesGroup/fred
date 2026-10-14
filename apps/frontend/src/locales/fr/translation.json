@@ -441,6 +441,7 @@
         "interrupted": "La lecture du template a été interrompue. L'agent reste indisponible jusqu'à une nouvelle lecture.",
         "outdated": "Ce template a été lu avec une version plus ancienne. Relancez la lecture pour profiter des dernières améliorations.",
         "outdatedVision": "Ce template a été lu avec une version plus ancienne. L'agent continue de l'utiliser ; enregistrez l'agent pour le relire avec son modèle de vision et profiter des dernières améliorations.",
+        "refreshing": "Nouvelle lecture du template… L'agent garde la lecture précédente jusqu'à la fin.",
         "rerun": "Relancer l'analyse"
       },
       "review": {

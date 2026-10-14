@@ -15,12 +15,12 @@
 
 // The hook polls the analysis while it runs, keeps the last answer through a
 // failed poll, re-checks the agent once per finished analysis, and refetches
-// after a re-run.
+// after a re-run (also polling an outdated one while it is refreshed).
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AnalysisStatusResponse } from "./api/pptBuilderCapabilityOpenApi";
+import type { AnalysisStatusResponse, Pattern } from "./api/pptBuilderCapabilityOpenApi";
 
 interface QueryState {
   data?: AnalysisStatusResponse;
@@ -67,6 +67,15 @@ const status = (fields: Partial<AnalysisStatusResponse>): AnalysisStatusResponse
   updated_at: "t1",
   ...fields,
 });
+
+const PATTERN: Pattern = {
+  id: "slide:1",
+  source: "slide",
+  source_index: 1,
+  name: "Cover",
+  label: "Cover",
+  kind: "cover",
+};
 
 let container: HTMLDivElement;
 let root: Root;
@@ -145,6 +154,22 @@ describe("usePptBuilderAnalysis", () => {
     expect(analysis.readinessCheck).toHaveBeenCalledWith({ teamId: "team", agentInstanceId: "agent" });
     show({ data: status({ status: "failed", updated_at: "t3" }) });
     expect(analysis.readinessCheck).toHaveBeenCalledTimes(2);
+  });
+
+  it("polls an outdated analysis while it is refreshed, then shows the new inventory", () => {
+    const inventory = (id: string) => ({ slide_width: 1, slide_height: 1, patterns: [{ ...PATTERN, id }] });
+    show({ data: status({ status: "succeeded", current: false, inventory: inventory("old") }) });
+    expect(result.canRerun).toBe(true);
+    expect(polling()).toBe(0);
+    show({ data: status({ status: "succeeded", refreshing: true, inventory: inventory("old") }) });
+    expect(result.refreshing).toBe(true);
+    expect(result.canRerun).toBe(false);
+    expect(result.effective?.patterns?.[0].id).toBe("old");
+    expect(polling()).toBe(3000);
+    show({ data: status({ status: "succeeded", analysis_version: 2, updated_at: "t2", inventory: inventory("new") }) });
+    expect(result.refreshing).toBe(false);
+    expect(result.effective?.patterns?.[0].id).toBe("new");
+    expect(polling()).toBe(0);
   });
 
   it("refetches the status after a re-run, even a refused one", async () => {

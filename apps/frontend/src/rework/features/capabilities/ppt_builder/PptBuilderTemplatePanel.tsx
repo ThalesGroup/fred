@@ -177,10 +177,15 @@ export function AnalysisStatus({ analysis, disabled }: { analysis: PptBuilderAna
   const { phase } = analysis;
 
   if (phase === "staged") return <p className={styles.status}>{t("capability.ppt_builder.analysis.staged")}</p>;
-  if (isInProgress(phase) || (phase === "unknown" && analysis.statusLoading)) {
+  if (isInProgress(phase) || (phase === "unknown" && analysis.statusLoading) || analysis.refreshing) {
     return (
       <p className={styles.status} role="status">
-        <Spinner size={16} /> {t("capability.ppt_builder.analysis.inProgress")}
+        <Spinner size={16} />{" "}
+        {t(
+          analysis.refreshing
+            ? "capability.ppt_builder.analysis.refreshing"
+            : "capability.ppt_builder.analysis.inProgress",
+        )}
       </p>
     );
   }

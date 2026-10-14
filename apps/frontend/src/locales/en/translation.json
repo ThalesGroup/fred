@@ -441,6 +441,7 @@
         "interrupted": "Reading the template was interrupted. The agent stays unavailable until it is read again.",
         "outdated": "This template was read with an older version. Read it again to benefit from the latest improvements.",
         "outdatedVision": "This template was read with an older version. The agent keeps using it; save the agent to read it again with its vision model and benefit from the latest improvements.",
+        "refreshing": "Reading the template again… The agent keeps using the previous reading until it is done.",
         "rerun": "Re-run analysis"
       },
       "review": {
