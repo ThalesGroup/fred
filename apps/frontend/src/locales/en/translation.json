@@ -519,7 +519,11 @@
           "chart_type_changed": "A “{{asked}}” chart is not available: the data is shown as a column chart.",
           "chart_shows_shares": "The chart shows percentages: the numbers themselves are not displayed.",
           "layout_repeated": "Same layout as the previous slide, as you asked.",
-          "layout_not_repeated": "The previous slide's layout could not be kept: this content does not fit it."
+          "layout_not_repeated": "The previous slide's layout could not be kept: this content does not fit it.",
+          "intent_not_shown": "An emphasis you asked for could not be shown.",
+          "intent_not_shown_highlight": "The emphasis asked on one part of the chart could not be shown.",
+          "intent_not_shown_sort": "The chart keeps the order given: it could not be sorted as asked.",
+          "intent_not_shown_stacked_as": "The chart could not show its columns as percentages."
         }
       }
     }

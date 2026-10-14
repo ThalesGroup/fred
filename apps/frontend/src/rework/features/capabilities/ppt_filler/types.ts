@@ -53,6 +53,8 @@ export interface BuildNote {
   count?: number | null;
   /** The requested kind, for `other_kind`. */
   kind?: string | null;
+  /** The plan field an `intent_not_shown` note is about: "highlight", "sort"... */
+  field?: string | null;
 }
 
 /** One rendered slide; `number` is its place in the deck (each part of a split list counts). */

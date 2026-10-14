@@ -519,7 +519,11 @@
           "chart_type_changed": "Le graphique « {{asked}} » n'est pas disponible : les données sont affichées en histogramme.",
           "chart_shows_shares": "Le graphique affiche des pourcentages : les nombres eux-mêmes ne sont pas affichés.",
           "layout_repeated": "Même mise en page que la diapositive précédente, comme demandé.",
-          "layout_not_repeated": "La mise en page de la diapositive précédente n'a pas pu être gardée : ce contenu n'y tient pas."
+          "layout_not_repeated": "La mise en page de la diapositive précédente n'a pas pu être gardée : ce contenu n'y tient pas.",
+          "intent_not_shown": "Une mise en avant demandée n'a pas pu être affichée.",
+          "intent_not_shown_highlight": "La mise en avant demandée sur une partie du graphique n'a pas pu être affichée.",
+          "intent_not_shown_sort": "Le graphique garde l'ordre donné : il n'a pas pu être trié comme demandé.",
+          "intent_not_shown_stacked_as": "Le graphique n'a pas pu afficher ses colonnes en pourcentages."
         }
       }
     }

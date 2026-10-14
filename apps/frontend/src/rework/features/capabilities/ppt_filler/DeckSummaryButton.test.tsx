@@ -177,6 +177,29 @@ describe("DeckSummaryButton", () => {
     expect(items[1]).toContain("Le graphique affiche des pourcentages : les nombres eux-mêmes ne sont pas affichés.");
   });
 
+  it("words an intent the chart could not show by its field", async () => {
+    const slide: BuiltSlide = {
+      number: 1,
+      part: 1,
+      parts: 1,
+      title: "Revenue",
+      kind: "chart",
+      template: "Chart",
+      notes: [
+        { code: "intent_not_shown", field: "highlight" },
+        { code: "intent_not_shown", field: "sort" },
+        { code: "intent_not_shown", field: "target" },
+      ],
+    };
+    const dialog = open(await mount("en", [slide]));
+    const notes = [...dialog.querySelectorAll("ol > li li")].map((li) => li.textContent);
+    expect(notes).toEqual([
+      "The emphasis asked on one part of the chart could not be shown.",
+      "The chart keeps the order given: it could not be sorted as asked.",
+      "An emphasis you asked for could not be shown.",
+    ]);
+  });
+
   it("has a wording for every note code the backend sends", () => {
     const codes = [
       "text_shortened",
@@ -197,6 +220,10 @@ describe("DeckSummaryButton", () => {
       "chart_shows_shares",
       "layout_repeated",
       "layout_not_repeated",
+      "intent_not_shown",
+      "intent_not_shown_highlight",
+      "intent_not_shown_sort",
+      "intent_not_shown_stacked_as",
     ];
     for (const locale of [en, fr]) {
       expect(Object.keys(locale.capability.ppt_builder.summary.notes).sort()).toEqual([...codes].sort());

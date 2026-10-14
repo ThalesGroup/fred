@@ -40,6 +40,9 @@ const PLAIN_NOTES = new Set([
   "layout_not_repeated",
 ]);
 
+// Intent fields with their own wording; any other field gets the generic one.
+const INTENT_FIELDS = new Set(["highlight", "sort", "stacked_as"]);
+
 function kindLabel(t: TFunction, kind: string): string {
   return t(`capability.ppt_builder.kinds.${kind}`, { defaultValue: kind });
 }
@@ -54,6 +57,10 @@ function noteText(t: TFunction, note: BuildNote, slide: BuiltSlide): string | nu
   }
   if (note.code === "chart_type_changed") {
     return t(`${NOTES}.chart_type_changed`, { asked: note.kind ?? "" });
+  }
+  if (note.code === "intent_not_shown") {
+    const field = note.field && INTENT_FIELDS.has(note.field) ? `_${note.field}` : "";
+    return t(`${NOTES}.intent_not_shown${field}`);
   }
   if (!PLAIN_NOTES.has(note.code)) return null;
   return t(`${NOTES}.${note.code}`, note.count != null ? { count: note.count } : undefined);
