@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 from uuid import uuid4
@@ -44,6 +44,7 @@ from fred_core.security.rebac.rebac_engine import RebacDisabledResult
 from fred_sdk.contracts.capability import CapabilityConfigCopyRequest
 
 from control_plane_backend.agent_instances.names import (
+    CopyLocale,
     free_imported_name,
     normalize_agent_name,
 )
@@ -79,7 +80,7 @@ _MAX_CONCURRENT_DESTINATIONS = 4
 TeamAccess = Callable[[TeamId], Awaitable[TeamId]]
 
 
-def _runtime_base_url(
+def runtime_base_url(
     record: AgentInstanceRecord, deps: ProductServiceDependencies
 ) -> str:
     source = next(
@@ -109,7 +110,7 @@ def _template_enabled(record: AgentInstanceRecord, usable: set[str] | None) -> b
 
 
 @dataclass(frozen=True)
-class _CopySource:
+class CopySource:
     """What every destination of one copy request shares."""
 
     base_url: str
@@ -117,15 +118,33 @@ class _CopySource:
     names: dict[str, str]
 
 
+async def effective_capability_ids(
+    record: AgentInstanceRecord, template: Any, deps: ProductServiceDependencies
+) -> list[str]:
+    """
+    The capabilities the agent actually runs: its stored selection, else (never
+    saved, or a template without free selection) the defaults, as a save resolves them.
+    """
+    selected = record.tuning.selected_capability_ids
+    if selected is not None and template.supports_capabilities:
+        return list(selected)
+    return await product_service.template_default_capability_ids(
+        template.available_capabilities,
+        template.default_capability_ids or [],
+        record.team_id,
+        deps,
+    )
+
+
 async def _resolve_copy_source(
     user: KeycloakUser, record: AgentInstanceRecord, deps: ProductServiceDependencies
-) -> _CopySource:
+) -> CopySource:
     """
     The agent's template as the caller may see it, like enrollment: an internal
     (non-public) template is copied only by a platform admin, others get 404.
     """
 
-    base_url = _runtime_base_url(record, deps)
+    base_url = runtime_base_url(record, deps)
     can_see_non_public = await deps.team_dependencies.rebac.has_user_permission(
         user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
     )
@@ -141,19 +160,14 @@ async def _resolve_copy_source(
             f"{record.source_runtime_id!r}.",
             http_status=404,
         )
-    selected = record.tuning.selected_capability_ids
-    if selected is None:
-        # Never saved explicitly: the template defaults, as enrollment resolves them.
-        available = {entry.id for entry in template.available_capabilities}
-        selected = [c for c in template.default_capability_ids or [] if c in available]
-    return _CopySource(
+    return CopySource(
         base_url=base_url,
-        capability_ids=list(selected),
+        capability_ids=await effective_capability_ids(record, template, deps),
         names={entry.id: entry.name for entry in template.available_capabilities},
     )
 
 
-async def _destination_team_ids(
+async def destination_team_ids(
     user: KeycloakUser, deps: ProductServiceDependencies
 ) -> list[TeamId]:
     personal = resolve_system_team_id(user, TeamId("personal"))
@@ -178,6 +192,23 @@ async def list_agent_copy_targets(
     """Readiness of each destination the caller edits, the source team included."""
 
     source = await _resolve_copy_source(user, record, deps)
+    return await copy_targets(
+        record=record,
+        source=source,
+        team_ids=await destination_team_ids(user, deps),
+        deps=deps,
+    )
+
+
+async def copy_targets(
+    *,
+    record: AgentInstanceRecord,
+    source: CopySource,
+    team_ids: list[TeamId],
+    deps: ProductServiceDependencies,
+) -> list[AgentCopyTarget]:
+    """Per destination: template enabled, and the capabilities it cannot use."""
+
     semaphore = asyncio.Semaphore(_MAX_CONCURRENT_DESTINATIONS)
 
     async def target(team_id: TeamId) -> AgentCopyTarget:
@@ -193,11 +224,7 @@ async def list_agent_copy_targets(
             ],
         )
 
-    return list(
-        await asyncio.gather(
-            *(target(team_id) for team_id in await _destination_team_ids(user, deps))
-        )
-    )
+    return list(await asyncio.gather(*(target(team_id) for team_id in team_ids)))
 
 
 async def _copy_capability_config_via_pod(
@@ -254,14 +281,15 @@ async def _copy_name(
     record: AgentInstanceRecord,
     target_team_id: TeamId,
     deps: ProductServiceDependencies,
+    locale: CopyLocale | None,
 ) -> str:
-    """The source name when free in the destination, else the first free `_imported-N`."""
+    """The source name when free in the destination, else `<name> (copy N)` in `locale`."""
 
     taken = {
         normalize_agent_name(r.display_name)
         for r in await deps.get_agent_instance_store().list_by_team(target_team_id)
     }
-    return free_imported_name(record.display_name, taken)
+    return free_imported_name(record.display_name, taken, locale)
 
 
 async def _ensure_duplicate_name_free(
@@ -279,13 +307,19 @@ async def copy_agent_instance_to_team(
     *,
     user: KeycloakUser,
     record: AgentInstanceRecord,
-    source: _CopySource,
+    source: CopySource,
     target_team_id: TeamId,
     display_name: str | None,
     deps: ProductServiceDependencies,
     authorization: str | None,
+    asset_files: Mapping[str, dict[str, str]] | None = None,
+    locale: CopyLocale | None = None,
 ) -> AgentCopyResult:
-    """Create the copy of `record` in one destination the caller already edits."""
+    """Create the copy of `record` in one destination the caller already edits.
+
+    `asset_files` (capability id → files) copies from a stored snapshot: the
+    pod takes the files from there and never reads the source team.
+    """
 
     rebac = deps.team_dependencies.rebac
     usable = await usable_capability_ids(rebac, target_team_id)
@@ -315,6 +349,9 @@ async def copy_agent_instance_to_team(
                 "source_agent_instance_id": record.agent_instance_id,
                 "target_team_id": str(target_team_id),
                 "target_agent_instance_id": new_instance_id,
+                "asset_files": (
+                    asset_files.get(cap_id, {}) if asset_files is not None else None
+                ),
             }
         )
         return cap_id, await _copy_capability_config_via_pod(
@@ -354,7 +391,8 @@ async def copy_agent_instance_to_team(
         template_id=record.template_id,
         source_runtime_id=record.source_runtime_id,
         source_agent_id=record.source_agent_id,
-        display_name=display_name or await _copy_name(record, target_team_id, deps),
+        display_name=display_name
+        or await _copy_name(record, target_team_id, deps, locale),
         description=record.description,
         enabled=True,
         created_by=user.uid,
@@ -367,7 +405,7 @@ async def copy_agent_instance_to_team(
         if display_name is not None:
             raise agent_name_conflict(target_team_id, display_name) from exc
         # A concurrent copy took the name: pick the next free one, once.
-        copy.display_name = await _copy_name(record, target_team_id, deps)
+        copy.display_name = await _copy_name(record, target_team_id, deps, locale)
         try:
             created = await store.create(copy)
         except AgentNameAlreadyExistsError as again:
@@ -402,10 +440,20 @@ async def copy_agent_instance(
     deps: ProductServiceDependencies,
     authorization: str | None,
     require_editor: TeamAccess,
+    source: CopySource | None = None,
+    asset_files: Mapping[str, dict[str, str]] | None = None,
+    refused_team_id: TeamId | None = None,
+    on_copied: Callable[[AgentCopyResult], Awaitable[None]] | None = None,
+    locale: CopyLocale | None = None,
 ) -> list[AgentCopyResult]:
-    """Copy into every destination; a failed destination never stops the others."""
+    """Copy into every destination; a failed destination never stops the others.
 
-    source = await _resolve_copy_source(user, record, deps)
+    A marketplace import passes the snapshot as `source` and `asset_files`,
+    refuses the publishing team, and records each success with `on_copied`.
+    """
+
+    if source is None:
+        source = await _resolve_copy_source(user, record, deps)
     semaphore = asyncio.Semaphore(_MAX_CONCURRENT_DESTINATIONS)
 
     async def copy_into(raw_team_id: str) -> AgentCopyResult:
@@ -413,9 +461,15 @@ async def copy_agent_instance(
             target_team_id = await require_editor(TeamId(raw_team_id))
         except HTTPException as exc:
             return AgentCopyResult(team_id=raw_team_id, error=str(exc.detail))
+        if target_team_id == refused_team_id:
+            return AgentCopyResult(
+                team_id=str(target_team_id),
+                error="An agent cannot be imported into the team that published it.",
+                error_code="marketplace_publishing_team",
+            )
         try:
             async with semaphore:
-                return await copy_agent_instance_to_team(
+                result = await copy_agent_instance_to_team(
                     user=user,
                     record=record,
                     source=source,
@@ -423,6 +477,8 @@ async def copy_agent_instance(
                     display_name=display_name,
                     deps=deps,
                     authorization=authorization,
+                    asset_files=asset_files,
+                    locale=locale,
                 )
         except EnrollmentError as exc:
             return AgentCopyResult(
@@ -439,6 +495,16 @@ async def copy_agent_instance(
                 team_id=str(target_team_id),
                 error="Unexpected error while copying the agent into this team.",
             )
+        if on_copied is not None:
+            try:
+                await on_copied(result)
+            except Exception:
+                # The copy exists; losing its bookkeeping must not report a failure.
+                logger.exception(
+                    "[control-plane][agent-copy] recording the copy into %s failed",
+                    target_team_id,
+                )
+        return result
 
     unique_team_ids = list(dict.fromkeys(target_team_ids))
     return list(await asyncio.gather(*(copy_into(t) for t in unique_team_ids)))

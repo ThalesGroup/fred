@@ -205,6 +205,7 @@ async def test_get_agent_instances_requires_can_use_team_agents(
 ) -> None:
     get_team = AsyncMock(return_value=_FAKE_TEAM_ID)
     monkeypatch.setattr(product_api, "require_team_access", get_team)
+    monkeypatch.setattr(product_api, "attach_marketplace_states", AsyncMock())
 
     deps = cast(Any, SimpleNamespace(team_dependencies=SimpleNamespace()))
     await product_api.get_team_agent_instances(TeamId("t"), deps, _user())

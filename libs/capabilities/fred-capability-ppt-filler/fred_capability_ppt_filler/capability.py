@@ -412,6 +412,12 @@ class PptFillerCapability(
                 result = await resolve_image_folders(result, resolver)
             finally:
                 release_heavy_job_slot()
+            if not result.errors and not any(slide.keys for slide in result.slides):
+                raise ValueError(
+                    "No template fields found. This feature fills prepared templates. "
+                    "Add fields such as {{title}} and describe them in the slide notes. "
+                    "See /ppt-filler-help for the template guide."
+                )
             errors = list(result.errors)
             if ctx.copied_from_another_scope:
                 # A copy keeps the template even when the new space lacks its

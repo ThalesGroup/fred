@@ -1,0 +1,268 @@
+/*
+ * Copyright Thales 2026
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/* Information on the left, the (long) instructions on the right. The Dialog
+   runs in "children" scroll mode: the card fills it and the instructions take
+   the height left, scrolling on their own once the dialog hits its max-height.
+   One column below 720px, where the whole card scrolls instead. */
+.card {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  flex: 1;
+  align-items: stretch;
+  gap: var(--spacing-l);
+  padding-top: var(--spacing-xs);
+  width: 100%;
+  min-height: 0;
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+}
+
+.infoColumn,
+.instructionsColumn {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.infoColumn {
+  gap: 0;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.instructionsColumn {
+  gap: var(--spacing-xs);
+  min-height: 0;
+}
+
+@media (max-width: 720px) {
+  .card {
+    grid-template-rows: none;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    overflow-y: auto;
+  }
+
+  .infoColumn,
+  .capabilitiesSection .capabilities {
+    overflow-y: visible;
+  }
+
+  .instructionsColumn {
+    border-top: 1px solid var(--outline-muted);
+    padding-top: var(--spacing-s);
+  }
+}
+
+.card p,
+.card ul,
+.card h3 {
+  margin: 0;
+}
+
+/* General information in its own outlined card above the capability list. */
+.summary {
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-s);
+  padding: var(--spacing-s);
+}
+
+/* Same icon tile, name and role styles as an active AgentCard. */
+.identity {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
+}
+
+.icon {
+  display: flex;
+  flex-shrink: 0;
+  justify-content: center;
+  align-items: center;
+  border-radius: var(--radius-s);
+  background-color: var(--secondary-container);
+  width: 3rem;
+  height: 3rem;
+  color: var(--on-secondary-container);
+  font-size: 1.5rem;
+}
+
+.identityText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.name {
+  color: var(--secondary);
+  font: var(--font-body-large-emphasized);
+}
+
+.role {
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+}
+
+.meta,
+.muted {
+  color: var(--on-surface-muted);
+  font: var(--font-body-small);
+}
+
+.description {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.counters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-2xs);
+  padding: 0;
+  list-style: none;
+}
+
+.counters li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  border-radius: var(--radius-full);
+  background: var(--surface-container-high);
+  padding: var(--spacing-3xs) var(--spacing-xs);
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+}
+
+.counterContent {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  border-top: 1px solid var(--outline-muted);
+  padding-top: var(--spacing-s);
+}
+
+/* A quiet label that announces the section, so the capability names under it
+   stay the content. */
+.sectionTitle {
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+}
+
+.capabilities {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  padding: 0;
+  list-style: none;
+}
+
+/* Like the instructions: the capability list takes the height left in the
+   column and scrolls on its own once the dialog cannot grow any more. Its own
+   padding-top separates it from the summary card, no divider. */
+.capabilitiesSection {
+  flex: 1 1 auto;
+  border-top: none;
+  min-height: 0;
+}
+
+.section + .section {
+  margin-top: var(--spacing-s);
+}
+
+.capabilitiesSection .capabilities {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.capabilities li {
+  display: flex;
+  flex-direction: column;
+}
+
+.capabilityName {
+  font: var(--font-label-large-emphasized);
+}
+
+.capabilityDescription {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.instructions {
+  flex: 1 1 auto;
+  border-radius: var(--radius-xs);
+  background: var(--surface-container-low);
+  padding: var(--spacing-s);
+  min-height: 0;
+  overflow-y: auto;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.files {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  padding: 0;
+  list-style: none;
+}
+
+.files li {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.fileName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status {
+  display: flex;
+  justify-content: center;
+  padding: var(--spacing-l) 0;
+  width: 100%;
+  color: var(--on-surface-muted);
+}
+
+.removeBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  width: 100%;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
+
+.removeBody p {
+  margin: 0;
+}

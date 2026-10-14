@@ -32,6 +32,9 @@ export interface IconButtonProps extends ComponentPropsWithoutRef<"button"> {
   variant: IconButtonVariant;
   size: ButtonSize;
   icon: IconProps;
+  /** Icon tier when it differs from the button's, e.g. a larger hit area around a
+   *  smaller glyph. Defaults to `size`. */
+  iconSize?: ButtonSize;
   /** Swaps the icon for a spinner and disables the button — for an action
    *  whose async work (e.g. a network fetch) isn't instant, so a click
    *  reads as "in progress" instead of dead/unresponsive. */
@@ -53,6 +56,7 @@ export default function IconButton({
   variant,
   size,
   icon,
+  iconSize,
   loading = false,
   badgeCount,
   disabled,
@@ -61,6 +65,7 @@ export default function IconButton({
   ...props
 }: IconButtonProps) {
   const buttonClasses = [styles.btn, styles[`btn-${color}`], styles[`btn-${size}`], styles[`btn-${variant}`]];
+  if (iconSize) buttonClasses.push(styles[`icon-${iconSize}`]);
   if (className) buttonClasses.push(className);
 
   const button = (
@@ -71,7 +76,7 @@ export default function IconButton({
       {...props}
     >
       <div className={`${styles["state-layer"]}`}>
-        {loading ? <Spinner size={SPINNER_SIZE[size]} /> : <Icon {...icon} />}
+        {loading ? <Spinner size={SPINNER_SIZE[iconSize ?? size]} /> : <Icon {...icon} />}
       </div>
     </button>
   );

@@ -223,7 +223,7 @@ async def test_capability_rejected_by_the_destination_is_left_out(
 
 
 @pytest.mark.asyncio
-async def test_name_conflict_takes_the_first_free_imported_suffix(
+async def test_name_conflict_takes_the_first_free_numbered_name(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     taken = [
@@ -233,19 +233,51 @@ async def test_name_conflict_takes_the_first_free_imported_suffix(
         _make_record(
             agent_instance_id="b-2",
             team_id="team-b",
-            display_name="Echo Team Agent_imported-1",
+            display_name="Echo Team Agent (copie 1)",
         ),
     ]
     app, store, _calls, _audits = _wire(
         monkeypatch, {_SOURCE: _ALL, "team-b": _ALL}, records=[_source_record(), *taken]
     )
 
-    resp = await _post_copy(app, {"target_team_ids": ["team-b"]})
+    resp = await _post_copy(app, {"target_team_ids": ["team-b"], "locale": "fr"})
 
     assert (
         resp.json()["results"][0]["agent"]["display_name"]
-        == "Echo Team Agent_imported-2"
+        == "Echo Team Agent (copie 2)"
     )
+
+
+@pytest.mark.asyncio
+async def test_copy_name_word_follows_the_locale_english_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    taken = _make_record(
+        agent_instance_id="b-1", team_id="team-b", display_name="Echo Team Agent"
+    )
+    app, _store, _calls, _audits = _wire(
+        monkeypatch, {_SOURCE: _ALL, "team-b": _ALL}, records=[_source_record(), taken]
+    )
+
+    resp = await _post_copy(app, {"target_team_ids": ["team-b"], "locale": "en"})
+    assert (
+        resp.json()["results"][0]["agent"]["display_name"] == "Echo Team Agent (copy 1)"
+    )
+    resp = await _post_copy(app, {"target_team_ids": ["team-b"]})
+    assert (
+        resp.json()["results"][0]["agent"]["display_name"] == "Echo Team Agent (copy 2)"
+    )
+
+
+@pytest.mark.asyncio
+async def test_copy_refuses_a_locale_outside_the_fixed_words(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app, _store, _calls, _audits = _wire(monkeypatch, {_SOURCE: _ALL, "team-b": _ALL})
+
+    resp = await _post_copy(app, {"target_team_ids": ["team-b"], "locale": "de"})
+
+    assert resp.status_code == 422
 
 
 @pytest.mark.asyncio
@@ -322,8 +354,7 @@ async def test_name_conflict_ignores_case_and_spaces(
     resp = await _post_copy(app, {"target_team_ids": ["team-b"]})
 
     assert (
-        resp.json()["results"][0]["agent"]["display_name"]
-        == "Echo Team Agent_imported-1"
+        resp.json()["results"][0]["agent"]["display_name"] == "Echo Team Agent (copy 1)"
     )
 
 
@@ -373,8 +404,7 @@ async def test_copy_losing_a_name_race_takes_the_next_free_name(
     resp = await _post_copy(app, {"target_team_ids": ["team-b"]})
 
     assert (
-        resp.json()["results"][0]["agent"]["display_name"]
-        == "Echo Team Agent_imported-1"
+        resp.json()["results"][0]["agent"]["display_name"] == "Echo Team Agent (copy 1)"
     )
 
 
@@ -537,3 +567,43 @@ async def test_unsaved_selection_copies_the_template_defaults(
     assert resp.json()["results"][0]["agent"]["selected_capability_ids"] == [
         "demo_echo"
     ]
+
+
+@pytest.mark.asyncio
+async def test_graph_agent_saved_with_an_empty_selection_copies_its_included_defaults(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Older saves of a template without free selection stored `[]`; the runtime
+    # still runs the included defaults, so the copy must carry them.
+    record = _source_record()
+    record.tuning = record.tuning.model_copy(
+        update={"selected_capability_ids": [], "capability_config": {}}
+    )
+    fake = _CopyRebac({_SOURCE: _ALL, "team-b": _ALL}, [])
+    monkeypatch.setattr(
+        "control_plane_backend.app.context.ApplicationContext.get_rebac_engine",
+        lambda self: fake,
+    )
+    app, store = _setup(
+        monkeypatch,
+        records=[record],
+        default_capability_ids=["demo_echo"],
+        supports_capabilities=False,
+    )
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.require_team_access", _require_team_access
+    )
+    copied: list[str] = []
+
+    async def _fake_copy(*, base_url, capability_id, request, authorization):
+        copied.append(capability_id)
+        return {"schema_version": "0.1.0", "config": {}}
+
+    monkeypatch.setattr(agent_copy, "_copy_capability_config_via_pod", _fake_copy)
+
+    resp = await _post_copy(app, {"target_team_ids": ["team-b"]})
+
+    assert resp.json()["results"][0]["agent"]["selected_capability_ids"] == [
+        "demo_echo"
+    ]
+    assert copied == ["demo_echo"]

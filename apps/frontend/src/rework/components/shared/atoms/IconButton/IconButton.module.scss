@@ -132,6 +132,19 @@
   --icon-size: 1.5rem;
 }
 
+/* `iconSize` overrides the glyph tier; declared after the button tiers so it wins. */
+.icon-2xs {
+  --icon-size: 1rem;
+}
+
+.icon-small {
+  --icon-size: 1.25rem;
+}
+
+.icon-medium {
+  --icon-size: 1.5rem;
+}
+
 .btn:focus-visible {
   --btn-outline: var(--on-surface);
 }

@@ -329,7 +329,7 @@ async def test_import_renames_an_agent_whose_name_is_taken_in_its_team(
 
     assert names == {
         "ai-1": "SQL Expert",
-        "ai-2": "sql expert_imported-1",
-        "ai-3": "SQL EXPERT_imported-2",
+        "ai-2": "sql expert (2)",
+        "ai-3": "SQL EXPERT (3)",
         "ai-4": "SQL Expert",
     }

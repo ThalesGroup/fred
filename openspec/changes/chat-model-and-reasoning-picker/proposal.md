@@ -37,7 +37,8 @@ Tracking: #3029.
 - **Agent instance "Recommended model".** A new `recommended_chat_profile_id`
   field is stored in the instance tuning and edited in the form's General
   section. The form's "Default model (<name>)" option (null) names the current team default
-  and follows later changes to it.
+  and follows later changes to it. When an existing recommendation is no longer
+  selectable, the form selects the team default instead.
 - **Composer model picker.** The existing model chip becomes one menu. It shows
   the selectable models (`can_use` ∩ team-enabled ∩ served by the agent's pod),
   plus the reasoning row when the chosen model can reason. The row starts in the

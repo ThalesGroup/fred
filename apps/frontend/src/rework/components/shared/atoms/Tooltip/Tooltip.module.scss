@@ -24,6 +24,11 @@
   max-width: 100%;
 }
 
+.tooltip-wrapper[data-fill="true"] {
+  display: flex;
+  width: 100%;
+}
+
 /* Rendered in a portal on document.body (Tooltip.tsx) so it can pop above
  * its trigger without being clipped by an ancestor's `overflow: hidden` /
  * `scroll` (e.g. DataTable's scroll body) — `position: fixed` plus the

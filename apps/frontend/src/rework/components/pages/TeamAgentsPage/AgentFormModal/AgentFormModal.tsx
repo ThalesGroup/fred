@@ -17,6 +17,10 @@ import SettingsModal from "@shared/organisms/SettingsModal/SettingsModal.tsx";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
+import {
+  useAvailableModelProfilesQuery,
+  useTeamRoutingPolicyQuery,
+} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements.ts";
 import type {
   AgentTemplateSummary,
   ManagedAgentFieldSpec,
@@ -299,6 +303,15 @@ export default function AgentFormModal({
   // The name is checked when the field is left, never while typing; a name the
   // form filled in itself (template, edited agent) counts as checked.
   const [nameChecked, setNameChecked] = useState(false);
+  const skipModelRead = !isOpen || !teamId;
+  const { currentData: routingPolicy, isError: routingPolicyError } = useTeamRoutingPolicyQuery(
+    { teamId: teamId ?? "" },
+    { skip: skipModelRead },
+  );
+  const { currentData: availableModels, isError: availableModelsError } = useAvailableModelProfilesQuery(
+    { teamId: teamId ?? "" },
+    { skip: skipModelRead },
+  );
 
   useEffect(() => {
     setNameChecked(isOpen);
@@ -416,6 +429,21 @@ export default function AgentFormModal({
   // mandatory template is missing, #1903) — only ACTIVE capabilities count.
   const capabilityBlocked = isCapabilityBlocked(form, selectedTemplate);
   const nameTaken = nameChecked && isAgentNameTaken(form.displayName, takenNames);
+  const recommendedProfile = availableModels?.profiles?.find(
+    (profile) => profile.profile_id === form.recommendedChatProfileId,
+  );
+  const recommendationReadComplete =
+    !!routingPolicy && !!availableModels && !routingPolicyError && !availableModelsError;
+  const unavailableRecommendation =
+    recommendationReadComplete &&
+    form.recommendedChatProfileId !== null &&
+    (!recommendedProfile || (routingPolicy?.disabled_model_ids ?? []).includes(recommendedProfile.capability_id));
+  const recommendedChatProfileId = unavailableRecommendation ? null : form.recommendedChatProfileId;
+  const recommendationReadPending =
+    form.recommendedChatProfileId !== null &&
+    !recommendationReadComplete &&
+    !routingPolicyError &&
+    !availableModelsError;
   const isFormValid =
     !!form.templateId &&
     !!form.displayName.trim() &&
@@ -423,7 +451,8 @@ export default function AgentFormModal({
     !missingRequired &&
     reservedTagFields.length === 0 &&
     !capabilityBlocked &&
-    !nameTaken;
+    !nameTaken &&
+    !recommendationReadPending;
   const canSave = isFormValid && !isSubmitting;
 
   // Every section holding a blocking problem, computed once: the tab badges
@@ -446,7 +475,7 @@ export default function AgentFormModal({
       if (firstErrorSection) setActiveSection(firstErrorSection);
       return;
     }
-    await onSubmit(buildAgentFormSubmitPayload(form, selectedTemplate));
+    await onSubmit(buildAgentFormSubmitPayload({ ...form, recommendedChatProfileId }, selectedTemplate));
   };
 
   // The assistant drafts the template's main prompt field and picks among the
@@ -530,7 +559,7 @@ export default function AgentFormModal({
               color={submitAttempted && !isFormValid ? "warning" : "primary"}
               variant="filled"
               size="medium"
-              disabled={nameTaken}
+              disabled={nameTaken || recommendationReadPending}
               onClick={handleSubmit}
             >
               {mode === "edit" ? t("rework.save") : t("rework.create")}
@@ -557,7 +586,7 @@ export default function AgentFormModal({
           role={form.role}
           description={form.description}
           usageStatement={form.usageStatement}
-          recommendedChatProfileId={form.recommendedChatProfileId}
+          recommendedChatProfileId={recommendedChatProfileId}
           tuningFieldValues={form.tuningValues}
           selectedCapabilityIds={form.selectedCapabilityIds}
           capabilityConfigValues={form.capabilityConfigValues}
