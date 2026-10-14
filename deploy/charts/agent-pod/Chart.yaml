@@ -1,0 +1,16 @@
+apiVersion: v2
+name: agent-pod
+description: An agent pod built on Fred's fred-runtime, deployed from its own image and configuration
+type: application
+# version follows the fred chart; appVersion is the version of Fred's libraries whose
+# AgentPodConfig values.schema.json embeds.
+version: 1.5.0-post
+appVersion: "4.5.0"
+home: https://github.com/ThalesGroup/fred
+sources:
+  - https://github.com/ThalesGroup/fred/tree/swift/deploy/charts/agent-pod
+keywords:
+  - fred
+  - agents
+annotations:
+  artifacthub.io/license: Apache-2.0
