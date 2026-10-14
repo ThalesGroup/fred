@@ -37,7 +37,6 @@ from ..react_model_adapter import (
 
 RECOVERED_TOOL_CALL_TEXT_METADATA_KEY = "fred_tool_call_text_recovered"
 
-_MAX_RECOVERY_BLOCKS = 256
 MAX_TOOL_CALL_RECOVERY_CHARS = 16_384
 MAX_TOOL_CALL_RECOVERY_NAME_CHARS = 256
 _MAX_RECOVERED_CALLS = 16
@@ -135,9 +134,9 @@ def _trailing_registered_name(
 def _anchored_text(
     content: object, tools_by_name: dict[str, BaseTool]
 ) -> tuple[str, list[tuple[str, str]]] | None:
+    # No block-count cap: streaming leaves one block per delta (hundreds of
+    # thinking blocks in a long turn). The text and call caps bound the work.
     if not isinstance(content, list):
-        return None
-    if len(content) > _MAX_RECOVERY_BLOCKS:
         return None
 
     before: list[str] = []
