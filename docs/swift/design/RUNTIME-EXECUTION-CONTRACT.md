@@ -6407,7 +6407,7 @@ The exact empty sentinel is distinct from ordinary cited-answer blocks, which
 carry reference IDs. Native tool calls, including duplicates and their IDs, are
 preserved unchanged.
 
-Recovery is bounded, validates every call before allocating call IDs, and marks
+Recovery is bounded (by text size and call count, §8.117), validates every call before allocating call IDs, and marks
 the normalized message so the Mistral-gated streaming bridge withholds the typed
 marker and call syntax from assistant/reasoning SSE for the same mixed content
 shape. If a completed message already carries native calls and marked content,
@@ -7086,3 +7086,18 @@ establish identity. The existing tool names, table aliases and schema-before-SQL
 flow are retained. Unscoped listing excludes attachments; direct explicit-UID API
 access retains uploader authorization. Legacy text-only attachments remain on the
 text path. See the `tabular-chat-attachments` capability specification.
+
+### 8.117 Recovery of streamed Mistral tool-call text (2026-10-14, #3110)
+
+The §8.92 recovery no longer caps the number of content blocks. A streamed
+response is aggregated with one block per provider delta, so a long reasoning
+turn ends with hundreds of `thinking` blocks and the former 256-block cap
+rejected it before parsing. The 16k-character cap on recovered text and the
+16-call cap remain the bounds; thinking blocks before the tool name are skipped.
+
+`content_to_text` (transcript, history and replay rendering) drops dict blocks
+that carry no text instead of rendering their Python repr, so the empty
+`reference` sentinel never appears as `{'type': 'reference', ...}` in an answer,
+the stored history, or the context replayed to the model. Text blocks, plain
+strings and reasoning handling are unchanged.
+Migration note: `docs/swift/ops/migrations/3110-recover-streamed-mistral-tool-calls.md`.
