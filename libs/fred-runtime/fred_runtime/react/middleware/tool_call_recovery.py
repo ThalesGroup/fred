@@ -44,6 +44,13 @@ _TOOL_NAME_CHARS = frozenset(
     "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-"
 )
 _FOLLOWUP_CALL = re.compile(r"(?<![A-Za-z0-9_.-])([A-Za-z0-9_.-]{1,256})\s*(?=\{)")
+# Mistral can over-close the JSON it writes as text; a residue of closers alone
+# after a recovered call is not prose and must not reach the user as content.
+_CLOSER_RESIDUE = re.compile(r"\s*[\]}][\s\]}]*")
+
+
+def _without_closer_residue(text: str) -> str:
+    return "" if _CLOSER_RESIDUE.fullmatch(text) else text
 
 
 class _DuplicateJsonKey(ValueError):
@@ -249,12 +256,12 @@ def _parse_sequence(
                 next_call = name, candidate_args, candidate.start(), end
                 break
         if next_call is None:
-            retained.append(text[position:])
+            retained.append(_without_closer_residue(text[position:]))
             break
         if len(parsed) >= max_calls:
             return None
         name, args, start, end = next_call
-        retained.append(text[position:start])
+        retained.append(_without_closer_residue(text[position:start]))
         parsed.append((name, args))
         position = end
     return parsed, "".join(retained)

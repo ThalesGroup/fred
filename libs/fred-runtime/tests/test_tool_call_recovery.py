@@ -827,6 +827,8 @@ async def test_streamed_call_with_one_block_per_delta_is_recovered() -> None:
 
     recovered = response.result[0]
     assert isinstance(recovered, AIMessage)
+    # The over-closing brace after the first call is not shown as content.
+    assert recovered.content == ""
     assert [(call["name"], call["args"]) for call in recovered.tool_calls] == [
         ("build_presentation", json.loads(first_args)),
         (
