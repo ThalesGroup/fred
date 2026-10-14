@@ -1469,3 +1469,20 @@ Live case: "the 'bullets' slide does not fit (bullets: 3 entries, 59 chars; this
 The five new tests fail on the previous code (old message, no entry limit in the description). Commands (package root): `make test`: 696 passed, 5 skipped; `ruff check`, `ruff check --select I`, `ruff format --check` clean; `basedpyright --baseline-file .baseline/basedpyright-baseline.json`: 0 errors (existing `builder_decks.py` `__all__` warning). `openspec validate ppt-builder-capability --strict` valid.
 
 Not covered: a live re-run with a real model.
+
+## Results: WP45 (a re-run's new analysis reaches the review dialog)
+
+Live case: after "Re-run analysis" on an outdated analysis the dialog kept the old inventory. The status answered `succeeded`, `current: true` with the old inventory during the refresh, and the form polls only `pending`/`running`: its last GET came before the refresh ended, none after.
+
+| Rule | Evidence |
+| --- | --- |
+| `refreshing` during a refresh, false after it and after a failed one | `test_an_outdated_analysis_stays_ready_and_is_refreshed_once`, `test_a_failed_refresh_keeps_the_old_analysis_and_is_not_retried` (asserts added) |
+| Re-run route answers `refreshing: true`, then false with the new version | `test_rerun_restarts_a_failed_or_interrupted_analysis_only` |
+| The form polls while refreshing and swaps in the new inventory | `polls an outdated analysis while it is refreshed, then shows the new inventory` (usePptBuilderAnalysis.test.tsx) |
+| Status line while refreshing, no re-run button | `says an outdated analysis is being read again while it is refreshed` |
+| Excluded section unfolded for analysis exclusions, folded for author-only | PatternReviewDialog.test.tsx section tests |
+| Analysis reason kept under an author exclusion | `keeps the analysis' reason when the author excludes a slide it already set aside` |
+
+Commands: package `make test`: 696 passed, 5 skipped; `ruff check`, `--select I`, `format --check` clean; basedpyright on `analysis_job.py`: 0 errors. Frontend (no make target): `tsc --noEmit` clean, prettier and eslint clean on touched files, `vitest run` on the ppt_builder folder: 6 files, 43 tests passed.
+
+Not covered: a live re-run in the browser.

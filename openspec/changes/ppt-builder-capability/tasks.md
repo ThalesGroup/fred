@@ -489,3 +489,13 @@ Owns: `plan.py` (`MIN_FONT_SCALE` moved here, `max_entries`, `list_capacity_text
 - [x] 44.2 The description and schema hints quote `bullets` and `columns.bullets` with their lines and max entries (`≈101 chars × 1 line, max 1 entry`). Test: `zone_summary` for both fields
 - [x] 44.3 Package `make test`, `ruff check`, `ruff check --select I`, `ruff format --check`, basedpyright with baseline; `verification.md`; `openspec validate --strict`
 - Not covered: a live re-run with a real model
+
+## WP45. A re-run's new analysis reaches the review dialog (owner session 2026-10-14)
+
+Owns: `analysis_job.py` (`AnalysisStatusResponse.refreshing`), the frontend ppt_builder folder (`usePptBuilderAnalysis`, `AnalysisStatus`, `PatternReviewDialog`, `effectiveInventory`), the regenerated client, fr/en `analysis.refreshing`, delta spec, tests, `verification.md`.
+
+- [x] 45.1 The status reports `refreshing` while an outdated analysis is re-read (it stays `succeeded` and `current`, its old inventory served). Tests: the flag during and after a refresh, after a failed one, and on the re-run route
+- [x] 45.2 The form polls while `refreshing`, says the template is being read again, and shows the new inventory when the refresh ends. Tests: the hook's polling and inventory swap, the status line
+- [x] 45.3 The review's excluded section opens when the analysis set slides aside (`library`, `table`…); an author exclusion of such a slide keeps the analysis reason. Tests: dialog sections, `effectiveInventory`
+- [x] 45.4 Package `make test`, `ruff check`, `ruff check --select I`, `ruff format --check`, basedpyright; frontend tsc, prettier, eslint, the folder's vitest; `openspec validate --strict`
+- Not covered: an override copied from another agent keeps its label (author data, shown as is)

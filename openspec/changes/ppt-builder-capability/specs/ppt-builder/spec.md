@@ -239,7 +239,7 @@ The system SHALL complete the agent save without waiting for the template analys
 - **GIVEN** an agent whose succeeded analysis was produced by older analysis rules
 - **WHEN** its readiness is checked, a turn reads the analysis, or the agent is saved
 - **THEN** the agent stays available and its turns keep using the stored analysis, and one re-run starts in the background from the stored template, without a user token
-- **AND** concurrent checks on any replica start no second re-run while one is running, and the agent form shows the analysis as current meanwhile
+- **AND** concurrent checks on any replica start no second re-run while one is running, and the agent form shows the analysis as being read again meanwhile, without offering a re-run, then shows the new result when it ends, without a reload
 - **AND** once the re-run succeeds its result is used; when it fails, the stored analysis stays in use, no re-run starts automatically again, and the form offers the re-run action, which re-runs it the same way
 
 #### Scenario: Vision-labelled analysis refreshed only with its model
@@ -278,6 +278,7 @@ The system SHALL let the author review the analysis — a thumbnail, label and k
 
 - **WHEN** the author opens the review
 - **THEN** the example slides of the deck come first, the remaining layouts follow in a separate collapsed section marked as fallback, excluded patterns last, and each card's controls stay inside it
+- **AND** the excluded section opens by itself when the analysis set some of them aside, and a pattern the analysis set aside keeps its reason when the author excludes it too
 
 #### Scenario: Overrides after re-upload
 
