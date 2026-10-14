@@ -1,7 +1,7 @@
 ---
 schema: 1
 title: "Read theme CSS, branding properties and labels from the frontend ZIP"
-impact: operations
+impact: minor
 configuration: none
 configuration_reason: "The existing FRONTEND_THEME_URL and SeaweedFS object are reused."
 ---
