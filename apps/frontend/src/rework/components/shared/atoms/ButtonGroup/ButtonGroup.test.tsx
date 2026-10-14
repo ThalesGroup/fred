@@ -267,3 +267,21 @@ describe("ButtonGroup selected colour", () => {
     expect(def.hasAttribute("data-selected-color")).toBe(false);
   });
 });
+
+describe("ButtonGroup track surface", () => {
+  const base = { size: "small", color: "secondary", variant: "radio", "aria-label": "Mode" } as const;
+  const group = () => container.querySelector('[role="radiogroup"]');
+
+  it("defaults to surface-container and sets no inline style", () => {
+    render(<ButtonGroup {...base} items={[{ label: "A" }, { label: "B" }]} />);
+
+    expect(group()?.getAttribute("data-surface")).toBe("surface-container");
+    expect(group()?.getAttribute("style")).toBeNull();
+  });
+
+  it("carries the requested surface", () => {
+    render(<ButtonGroup {...base} surface="surface-container-lowest" items={[{ label: "A" }, { label: "B" }]} />);
+
+    expect(group()?.getAttribute("data-surface")).toBe("surface-container-lowest");
+  });
+});

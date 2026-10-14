@@ -174,7 +174,7 @@ export default function UserSettingsPage() {
               ]}
               size={"small"}
               color={"secondary"}
-              backgroundColor="var(--surface-container-lowest)"
+              surface="surface-container-lowest"
             ></ButtonGroup>
           </div>
         </section>

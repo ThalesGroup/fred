@@ -2269,6 +2269,13 @@ supports the `color` override prop, but no shipped consumer uses it — the
 plain group-level color pattern is what every `ButtonGroup` consumer
 follows now.
 
+2026-10-12: the track color of a `ButtonGroup` is the typed `surface` prop
+(`surface-container-lowest` to `-highest`, default `surface-container`), which
+replaces the free `backgroundColor` string and its inline custom property.
+Unselected items are transparent, so the track shows through on any surface.
+Both groups here use `surface-container-lowest`, because their `form-section`
+is already `surface-container`.
+
 **Visibility control (TEAM-10, 2026-07-26).** New `ButtonGroup`
 (`public`/`private`; default `public` at the time — new teams default to
 `private` since 2026-08-26, #2433) gating marketplace discoverability
@@ -3837,7 +3844,10 @@ The ppt_filler capability's custom agent-form widget (rendered inside its
 upload/replace control, instant per-slide schema preview through the
 capability's stateless `/analyze` pod route, slide-numbered template errors
 i18n'd by stable code, and Save gating while the mandatory template is missing
-or invalid. The staged file travels with the atomic save (multipart
+or invalid. Both Simple and Advanced forms reject analyzed decks with no template
+fields, explain the required markers and slide notes in English and French,
+and link to `/ppt-filler-help`. Fixed slides remain allowed alongside fields.
+The staged file travels with the atomic save (multipart
 `with-assets` endpoints); the preview never persists anything.
 
 #### Open UX issues
