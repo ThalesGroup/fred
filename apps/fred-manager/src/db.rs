@@ -36,6 +36,51 @@ macro_rules! document {
     };
 }
 
+/// Read-only migration verification for CLI commands that must never initialize state.
+pub async fn require_initialized(pool: &PgPool) -> anyhow::Result<()> {
+    use sqlx::migrate::Migrate;
+    let mut connection = pool.acquire().await?;
+    let applied = connection
+        .list_applied_migrations("_sqlx_migrations")
+        .await?;
+    let migrator = sqlx::migrate!();
+    anyhow::ensure!(
+        connection
+            .dirty_version("_sqlx_migrations")
+            .await?
+            .is_none(),
+        "incomplete schema migration"
+    );
+    anyhow::ensure!(
+        applied.len() == migrator.iter().count(),
+        "incompatible schema"
+    );
+    for migration in migrator.iter() {
+        anyhow::ensure!(
+            applied
+                .iter()
+                .any(|m| m.version == migration.version && m.checksum == migration.checksum),
+            "incompatible schema"
+        );
+    }
+    Ok(())
+}
+
+pub async fn named_space<'e>(
+    ex: impl sqlx::PgExecutor<'e>,
+    parent: Option<Uuid>,
+    name: &str,
+) -> sqlx::Result<Option<Space>> {
+    sqlx::query_as(concat!(
+        space!(),
+        " where parent_id is not distinct from $1 and name = $2"
+    ))
+    .bind(parent)
+    .bind(name)
+    .fetch_optional(ex)
+    .await
+}
+
 pub async fn space(pool: &PgPool, id: Uuid) -> sqlx::Result<Space> {
     sqlx::query_as(concat!(space!(), " where id = $1"))
         .bind(id)

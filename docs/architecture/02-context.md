@@ -3,17 +3,19 @@
 ```mermaid
 flowchart LR
     client["Client<br/>browser application"]
+    operator["Platform administrator<br/>CLI import + bearer file"]
     caller["Service acting for a user<br/>with the user's token"]
-    manager["fred-manager<br/>REST API /fred-manager/v1"]
+    manager["fred-manager<br/>CLI and REST /fred-manager/v1"]
     keycloak["Keycloak<br/>realm app"]
     openfga["OpenFGA<br/>store fred-manager"]
     postgres[("Postgres<br/>database fred")]
     temporal["Temporal<br/>queue fred-ingestion"]
 
+    operator -- "provisioning bundle" --> manager
     client -- "bearer token" --> manager
     caller -- "authorize document,<br/>authorize scope" --> manager
     client -- "login" --> keycloak
-    manager -- "signing keys,<br/>service-account directory lookup" --> keycloak
+    manager -- "signing keys,<br/>service-account directory lookup/create" --> keycloak
     manager -- "one check per access,<br/>role writes" --> openfga
     manager -- "spaces, folders, documents" --> postgres
     manager -- "IngestDocument,<br/>DeleteDocument" --> temporal
@@ -21,7 +23,7 @@ flowchart LR
 
 | Partner | What fred-manager uses | Contract |
 | --- | --- | --- |
-| Keycloak | Access tokens, signing keys (JWKS), user lookup with its own service account | chapter 6, Authentication |
+| Keycloak | Access tokens, signing keys (JWKS), user lookup/creation with its own service account | chapter 6, Authentication |
 | OpenFGA | `check`, `write`, `read` on its own store | chapter 5, OpenFGA model |
 | Postgres | Its tables in the `fred` database | chapter 5, Schema |
 | Temporal | Starting `IngestDocument` and `DeleteDocument` | chapter 4, Ingestion submission |

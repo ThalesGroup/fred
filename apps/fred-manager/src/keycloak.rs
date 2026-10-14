@@ -186,6 +186,80 @@ impl Directory {
         unreachable!("two attempts always return")
     }
 
+    /// Exact search with explicit pagination. Do not trust a provider ignoring `exact`.
+    pub async fn find_username(&self, username: &str) -> Result<Option<User>> {
+        let mut found = None;
+        let mut first = 0;
+        for _ in 0..1000 {
+            let mut url = self.users_url.clone();
+            url.query_pairs_mut()
+                .append_pair("username", username)
+                .append_pair("exact", "true")
+                .append_pair("first", &first.to_string())
+                .append_pair("max", "100");
+            let response = self.request(Method::GET, url, None).await?;
+            if !response.status().is_success() {
+                bail!("Keycloak username lookup rejected ({})", response.status());
+            }
+            let users: Vec<User> = response
+                .json()
+                .await
+                .map_err(|_| anyhow::anyhow!("invalid Keycloak username response"))?;
+            if users.is_empty() {
+                return Ok(found);
+            }
+            first += users.len();
+            for user in users {
+                if user.username != username || user.id.is_empty() || found.is_some() {
+                    bail!("Keycloak username lookup is ambiguous or inexact");
+                }
+                found = Some(user);
+            }
+        }
+        bail!("Keycloak username pagination did not terminate")
+    }
+
+    /// Re-resolve immediately before creation and after both success and conflict.
+    /// Existing profiles/passwords are never patched; a lost response is recovered by replay.
+    pub async fn ensure_user(
+        &self,
+        username: &str,
+        password: Option<&str>,
+        email: Option<&str>,
+        first_name: Option<&str>,
+        last_name: Option<&str>,
+    ) -> Result<(User, bool)> {
+        if let Some(user) = self.find_username(username).await? {
+            return Ok((user, false));
+        }
+        let password = password
+            .filter(|p| !p.is_empty())
+            .context("missing identity requires a password")?;
+        let mut body = serde_json::json!({
+            "username": username, "enabled": true,
+            "email": email.filter(|email| !email.is_empty()).map(str::to_owned).unwrap_or_else(|| format!("{username}@example.com")),
+            "credentials": [{"type":"password", "value":password, "temporary":false}],
+        });
+        if let Some(name) = first_name {
+            body["firstName"] = name.into();
+        }
+        if let Some(name) = last_name {
+            body["lastName"] = name.into();
+        }
+        let response = self
+            .request(Method::POST, self.users_url.clone(), Some(&body))
+            .await?;
+        let created = response.status() == StatusCode::CREATED;
+        if !created && response.status() != StatusCode::CONFLICT {
+            bail!("Keycloak user creation rejected ({})", response.status());
+        }
+        let user = self
+            .find_username(username)
+            .await?
+            .context("Keycloak created/conflicting identity cannot be resolved")?;
+        Ok((user, created))
+    }
+
     pub async fn exists(&self, subject: &str) -> Result<bool> {
         if subject.is_empty() {
             return Ok(false);

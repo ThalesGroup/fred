@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! fred-manager command line: serve the API, or create an organization.
+//! fred-manager CLI: serve, operator organization creation, authenticated provisioning.
 
 use anyhow::{Context, Result};
 use sqlx::postgres::PgPoolOptions;
@@ -21,16 +21,35 @@ use fred_manager::{
     api, auth, config::Configuration as Config, fga::Fga, ingestion, logging, spaces,
 };
 
-const USAGE: &str = "usage: fred-manager [serve | create-org <name> <admin-user>]";
+const USAGE: &str = "usage: fred-manager [serve | create-org <name> <admin-user> | import-provisioning <bundle.json> --token-file <path>]";
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if args == ["--help"] || args == ["-h"] {
+        println!(
+            "{USAGE}\nImport requires an operator bearer file and an initialized schema/model. Replay is additive."
+        );
+        return Ok(());
+    }
     // Same rule as fred-pod: ENV_FILE, default ./config/.env, never overriding the process.
     let env_file = std::env::var("ENV_FILE").unwrap_or_else(|_| "./config/.env".into());
     let env_loaded = dotenvy::from_path(&env_file).is_ok();
-    let (config_file, config) = Config::load()?;
+    let (config_file, config) = Config::load().map_err(|error| {
+        if args.first().is_some_and(|a| a == "import-provisioning") {
+            import_setup_error(error)
+        } else {
+            error
+        }
+    })?;
     // Startup events wait for the configured format, as fred-pod buffers them.
-    logging::init(&config.app.log_level, config.app.log_format)?;
+    logging::init(&config.app.log_level, config.app.log_format).map_err(|error| {
+        if args.first().is_some_and(|a| a == "import-provisioning") {
+            import_setup_error(error)
+        } else {
+            error
+        }
+    })?;
     if env_loaded {
         tracing::info!(env_file, "Environment configuration loaded");
     } else {
@@ -40,7 +59,6 @@ async fn main() -> Result<()> {
         );
     }
     tracing::info!(config_file, "Configuration loaded");
-    let args: Vec<String> = std::env::args().skip(1).collect();
     let outcome = match args
         .iter()
         .map(String::as_str)
@@ -49,6 +67,9 @@ async fn main() -> Result<()> {
     {
         [] | ["serve"] => serve(config).await,
         ["create-org", name, admin] => create_org(config, name, admin).await,
+        ["import-provisioning", bundle, "--token-file", token] => {
+            import(config, bundle, token).await
+        }
         _ => Err(anyhow::anyhow!(USAGE)),
     };
     // Once logging runs, a fatal error is one more structured event, not stray stderr.
@@ -117,4 +138,106 @@ async fn create_org(config: Config, name: &str, admin: &str) -> Result<()> {
         .map_err(|e| anyhow::anyhow!("{e}"))?;
     println!("{}", org.id);
     Ok(())
+}
+
+/// Authentication precedes all initialization. SQL/model verification is read-only;
+/// neither the API server nor Temporal participates in a provisioning command.
+async fn import(config: Config, bundle_file: &str, token_file: &str) -> Result<()> {
+    use fred_manager::{
+        db,
+        keycloak::Directory,
+        provisioning::{Bundle, Importer},
+    };
+    let prepared = async {
+        let bearer = tokio::fs::read_to_string(token_file)
+            .await
+            .map_err(|_| anyhow::anyhow!("cannot read operator token file"))?;
+        let auth = auth::Authenticator::start(config.security()?).await?;
+        let directory = Directory::configured(config.security.m2m.as_ref())?
+            .context("import requires configured Keycloak service credentials")?;
+        anyhow::ensure!(
+            auth.directory_subjects_match(directory.realm()),
+            "import requires enabled Keycloak subject authentication in the directory realm"
+        );
+        let caller = auth
+            .authenticate(Some(bearer.trim()))
+            .await
+            .map_err(|_| anyhow::anyhow!("invalid or expired operator bearer"))?;
+        let rebac = &config.security.rebac;
+        let fga = Fga::connect(
+            &rebac.api_url,
+            &rebac.store_name,
+            false,
+            false,
+            config.fga_token(),
+            config.fga_timeout(),
+        )
+        .await?
+        .require_compatible_model()
+        .await?;
+        anyhow::ensure!(
+            fga.is_platform_admin(&caller.uid).await?,
+            "import requires platform admin"
+        );
+        let pool = PgPoolOptions::new()
+            .max_connections(2)
+            .connect_with(config.postgres()?)
+            .await
+            .map_err(|_| anyhow::anyhow!("import database unavailable"))?;
+        db::require_initialized(&pool).await.map_err(|_| {
+            anyhow::anyhow!(
+                "initialize the compatible fred-manager schema with serve before import"
+            )
+        })?;
+        let bytes = tokio::fs::read(bundle_file)
+            .await
+            .map_err(|_| anyhow::anyhow!("cannot read provisioning bundle"))?;
+        let bundle = Bundle::parse(&bytes)?;
+        Ok::<_, anyhow::Error>((pool, fga, directory, auth, bearer, bundle))
+    }
+    .await;
+    let (pool, fga, directory, auth, bearer, bundle) = prepared.map_err(import_setup_error)?;
+    let report = Importer {
+        pool: &pool,
+        fga: &fga,
+        directory: &directory,
+        auth: &auth,
+        bearer: bearer.trim(),
+    }
+    .run(&bundle)
+    .await?;
+    println!("{}", serde_json::to_string(&report)?);
+    Ok(())
+}
+
+/// A setup failure has no provisioning effects. Keep dependency/configuration payloads
+/// out of the error chain while retaining actionable, known-static validation reasons.
+fn import_setup_error(error: anyhow::Error) -> anyhow::Error {
+    let message = error.to_string();
+    let reason = match message.as_str() {
+        "cannot read operator token file"
+        | "cannot read provisioning bundle"
+        | "invalid or expired operator bearer"
+        | "import requires platform admin"
+        | "import requires configured Keycloak service credentials"
+        | "import requires enabled Keycloak subject authentication in the directory realm"
+        | "import database unavailable"
+        | "initialize the compatible fred-manager schema with serve before import"
+        | "initialize fred-manager with serve before import"
+        | "initialize the compatible fred-manager model with serve before import"
+        | "invalid provisioning JSON or unknown field"
+        | "organization name must be nonempty"
+        | "organization admins must be nonempty"
+        | "username must be nonempty"
+        | "duplicate username"
+        | "team name must be nonempty"
+        | "unknown or non-assignable team role"
+        | "unknown or non-assignable platform role"
+        | "organization admin must name a bundle user" => message.as_str(),
+        _ => "configuration or dependency validation failed",
+    };
+    anyhow::anyhow!(
+        "provisioning initialization/validation failed: {reason}; {}; no provisioning writes; correct the cause and replay",
+        fred_manager::provisioning::Report::default()
+    )
 }

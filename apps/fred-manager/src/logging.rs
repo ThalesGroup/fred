@@ -104,10 +104,14 @@ pub fn init(level: &str, format: LogFormat) -> anyhow::Result<()> {
         .parse()
         .map_err(|_| anyhow::anyhow!("invalid log_level {level}"))?;
     let colors = std::io::stdout().is_terminal() && std::env::var_os("NO_COLOR").is_none();
-    let layer = StdoutLayer::new(format, colors, std::io::stdout).with_filter(
-        tracing_subscriber::filter::filter_fn(move |m| enabled(m, level)),
-    );
-    tracing_subscriber::registry().with(layer).try_init()?;
+    // One output stream needs a global filter. A per-layer filter can retain a
+    // disabled dependency `enabled!` probe and suppress the following cached event.
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::filter::filter_fn(move |m| {
+            enabled(m, level)
+        }))
+        .with(StdoutLayer::new(format, colors, std::io::stdout))
+        .try_init()?;
     Ok(())
 }
 
@@ -485,10 +489,11 @@ mod tests {
         for format in [LogFormat::Json, LogFormat::Text] {
             let buffer = Buffer::default();
             let sink = buffer.clone();
-            let layer = StdoutLayer::new(format, false, move || sink).with_filter(
-                tracing_subscriber::filter::filter_fn(|m| enabled(m, Level::WARN)),
-            );
-            let subscriber = tracing_subscriber::registry().with(layer);
+            let subscriber = tracing_subscriber::registry()
+                .with(tracing_subscriber::filter::filter_fn(|m| {
+                    enabled(m, Level::WARN)
+                }))
+                .with(StdoutLayer::new(format, false, move || sink));
             tracing::subscriber::with_default(subscriber, || {
                 tracing::info!("ordinary application event");
                 audit_relation(Some("actor-sub"), "target-sub", "analyst", "space:s1", true);

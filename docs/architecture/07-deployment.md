@@ -54,3 +54,23 @@ For a host process using this realm, the same client secret goes in `config/.env
 `docker-up` alone does not consume the application's identity declaration: the directory
 requires a provisioned client with these grants, or `security.m2m.enabled: false` to
 run without directory-based role grants.
+
+## Running provisioning
+
+Start the compatible service once to initialize SQL migrations and the extended FGA
+model, then complete root bootstrap. Import itself never migrates SQL, creates a store
+or synchronizes a model. It needs Postgres, OpenFGA and Keycloak; it does not need the
+HTTP server or Temporal to remain running. It pins the verified compatible model ID.
+
+From `apps/fred-manager`, with the directory client configured and an operator access
+token in a private file:
+
+```sh
+make import-provisioning BUNDLE=/path/to/bundle.json TOKEN_FILE=/path/to/operator-token
+```
+
+The bearer must identify a current platform admin. Only the bootstrap root imports a
+bundle containing platform-admin declarations, including declarations already granted.
+The operator token is never used to administer Keycloak: that traffic uses the manager's
+service identity from `identities.yaml`. Token validity and authority are rechecked during
+import; replay after expiry uses a fresh operator token.

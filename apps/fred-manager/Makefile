@@ -26,7 +26,7 @@ bootstrap-local: ## Become the root platform admin with FRED_BOOTSTRAP_TOKEN, gi
 		exit 1; \
 	fi
 	@if [ -t 0 ]; then \
-		echo "ℹ️  Fred never creates Keycloak accounts itself (Keycloak authenticates, Fred/OpenFGA authorizes)."; \
+		echo "ℹ️  Bootstrap authenticates an existing Keycloak account; import-provisioning creates bundle identities."; \
 		echo "   Register yourself now at: $(KEYCLOAK_REGISTER_URL)  (username: $(BOOTSTRAP_USER))"; \
 		read -p "   Press Enter once you've registered... " _unused; \
 	fi
@@ -104,3 +104,11 @@ model: ## Generate OpenFGA JSON from the service's direct-role DSL
 check-model:
 	python3 tools/model.py --check
 code-quality: check-model
+
+BUNDLE ?=
+TOKEN_FILE ?=
+export BUNDLE TOKEN_FILE
+.PHONY: import-provisioning
+import-provisioning: dev ## Import a bundle as platform admin (BUNDLE=<json path> TOKEN_FILE=<bearer file path>); replay is additive
+	@test -n "$$BUNDLE" && test -n "$$TOKEN_FILE" || { echo 'Usage: make import-provisioning BUNDLE=<path> TOKEN_FILE=<path>'; exit 1; }
+	$(CARGO) run -- import-provisioning "$$BUNDLE" --token-file "$$TOKEN_FILE"

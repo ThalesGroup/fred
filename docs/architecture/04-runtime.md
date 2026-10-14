@@ -203,3 +203,54 @@ Team creation accepts either management of the parent organization or the platfo
 `can_create_team` capability. It takes the platform lock before the organization lock,
 then checks authorization. The nominated team administrator must read the parent.
 The caller receives no implicit role; project creation still requires local governance.
+
+## Authenticated provisioning import
+
+`fred-manager import-provisioning <bundle.json> --token-file <path>` verifies the
+operator bearer, resolves an existing compatible FGA model and checks platform admin.
+It connects to SQL without migrating and verifies migration versions/checksums. A bundle
+that declares platform admin additionally requires the completed bootstrap root.
+
+```mermaid
+sequenceDiagram
+    participant C as CLI
+    participant KC as Keycloak
+    participant PG as Postgres
+    participant FGA as OpenFGA
+    C->>KC: verify operator bearer using signing keys
+    C->>FGA: read and pin compatible model, check platform admin
+    C->>PG: verify schema, lock platform then existing organization
+    C->>FGA: recheck authority and root-only declarations
+    C->>PG: validate space names, release read-only locks
+    C->>KC: preflight every exact username and missing password
+    loop each identity
+        C->>PG: lock platform
+        C->>FGA: recheck operator authority
+        C->>KC: resolve or create with service credentials
+        C->>PG: release lock
+    end
+    C->>PG: lock platform then organization, reread space names
+    C->>PG: insert missing organization row
+    C->>FGA: recheck bearer/authority, grant parent membership
+    C->>PG: insert missing team rows
+    C->>FGA: grant team and platform roles, audit acknowledgments
+    C->>PG: commit space rows, release locks
+```
+
+All predictable bundle, passwordless-identity and new-team-admin errors fail preflight
+before provisioning writes (I18). Read-only directory traversal holds no mutation lock.
+Each identity phase holds the platform lock; reconciliation holds platform then organization
+locks through its writes. Bearer verification and FGA authority checks repeat at mutation
+boundaries, including after lock waits. Space grants use batches of at most 100 tuples,
+with organization membership before dependent child roles (I4, I5).
+
+Organizations are resolved by root name, teams by organization and name. Existing IDs
+are reused; incompatible or personal-space name collisions are refused. Existing users
+are resolved by exact username without updating their profile/password. Lookup is paginated
+and rejects ambiguous or inexact replies; a creation conflict triggers a fresh lookup.
+
+Reconciliation is additive (I17). Undeclared roles remain; missing declared grants are
+repaired. A renamed declaration identifies a different space. There is no distributed
+rollback: identities and acknowledged FGA grants can survive a failed SQL transaction.
+New space rows commit after their initial grants; rolled-back UUIDs are never reused.
+Replay uses committed identities/spaces and repairs the requested state.

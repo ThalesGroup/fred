@@ -13,7 +13,7 @@ Same targets as the other apps (`make help` lists them). Building needs `protoc`
 cp config/.env.template config/.env   # once: the four secrets
 make run                              # http://localhost:8400/fred-manager/v1
 make test                             # offline unit tests
-make test-integration                 # throwaway Postgres and OpenFGA containers
+make test-integration                 # throwaway Postgres, OpenFGA and Keycloak containers
 make code-quality                     # model parity + clippy + rustfmt
 make -C ../../docs/architecture check # the dossier still matches the code
 ```
@@ -72,3 +72,47 @@ consumes `deploy/k3d/identities.yaml` during `k3d-app`; copy its generated
 `KEYCLOAK_FRED_MANAGER_CLIENT_SECRET` from `fred-secrets` to the host `.env` when
 running locally against that realm. `docker-up` alone does not provision this client.
 The [deployment chapter](../../docs/architecture/07-deployment.md) describes configuration.
+
+## Import a provisioning bundle
+
+After compatible service initialization and root bootstrap, save a platform administrator's
+access token in a private file and run:
+
+```sh
+make import-provisioning BUNDLE=/path/to/bundle.json TOKEN_FILE=/path/to/operator-token
+# Equivalent binary command:
+fred-manager import-provisioning /path/to/bundle.json --token-file /path/to/operator-token
+```
+
+The command reads the usual configuration and secrets. It needs the manager's service
+client described above, but neither the running HTTP server nor Temporal. It never creates
+or migrates the database schema or FGA model. A bundle declaring `admin`/`platform_admin`
+requires the bootstrap root, even when that grant already exists.
+
+```json
+{
+  "organization": { "name": "TSN", "admins": ["alice"] },
+  "users": [
+    {
+      "username": "alice",
+      "password": "<initial-password-for-a-new-user>",
+      "first_name": "Alice",
+      "last_name": "Example",
+      "teams": ["BID"],
+      "team_roles": { "team_admin": ["BID"] },
+      "platform_roles": ["observer"]
+    }
+  ]
+}
+```
+
+The user entries use the control-plane `users.json` fields. Existing identities need no
+password and keep their profile and credential. Missing identities require a nonempty
+password. The example gives Alice organization admin/member and team admin, without team
+content access. The [declaration rules](../../docs/architecture/05-data-and-authorization.md#provisioning-declarations)
+cover all roles, aliases and member fallback.
+
+Success prints JSON acknowledgment counts. Failure exits nonzero with the phase and safe
+counts; correct the cause and replay with a valid operator token. Replay preserves existing
+identities, committed space IDs and undeclared grants, and repairs requested grants. There
+is no cross-system rollback. Never treat a failed run as proof that nothing was written.

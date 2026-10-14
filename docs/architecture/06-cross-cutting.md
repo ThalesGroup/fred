@@ -53,7 +53,9 @@ Structured stdout, in the format shared by Fred's services.
   `resource` and `outcome: succeeded`. This stream is always JSON and includes INFO
   even when the application threshold is WARNING or ERROR. Events precede SQL commit:
   an acknowledged FGA write remains auditable when SQL commit fails (I16).
-- A fatal error after startup is one ERROR event, `fred-manager stopped`.
+- A single global filter applies the severity rules; a suppressed dependency probe
+  cannot suppress the next application event. A fatal error after startup is one
+  ERROR event, `fred-manager stopped`.
 
 ## Errors
 
@@ -145,3 +147,16 @@ The shared client rejects redirects and uses a five-second request timeout. A sy
 process-local cache renews the service token five seconds before expiry; a 401 invalidates
 that token and retries once. Errors expose operation and status, never upstream bodies,
 credentials or raw transport diagnostics. User lookup encodes the subject as a path segment.
+
+## CLI feedback
+
+Import reads the operator bearer from a file, separately from the service-client secret.
+Initialization and validation failures report zero counters and no provisioning writes,
+including configuration/file errors before logging starts. Bundle types do not implement
+Debug or Serialize. Parsing diagnostics do not echo input
+values; provisioning failures report a safe phase and acknowledgment counts, then exit
+nonzero. Counts cover resolved/created identities, committed reconciled spaces and
+acknowledged grants; a lost response can leave uncounted remote effects. Success prints
+these counts as one JSON object. The recovery action after a partial failure is replay
+with a valid operator token, after correcting the cause. Created identities are not deleted
+as compensation. `create-org` retains its operator/database trust boundary.

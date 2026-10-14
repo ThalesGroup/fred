@@ -7,13 +7,14 @@ drive the library against real Postgres and OpenFGA.
 
 ```mermaid
 flowchart TB
-    main["main.rs<br/>serve, create-org"]
+    main["main.rs<br/>serve, create-org, import-provisioning"]
     config["config.rs<br/>configuration.yaml + secrets"]
     logging["logging.rs<br/>stdout format, request ids"]
     api["api.rs<br/>routes, handlers"]
     auth["auth.rs<br/>bearer verification"]
     error["error.rs<br/>error contract"]
     spaces["spaces.rs<br/>space and role mutations"]
+    provisioning["provisioning.rs<br/>bundle validation and reconciliation"]
     platform["platform.rs<br/>platform-role administration"]
     roles["roles.rs<br/>roles and capabilities"]
     directory["keycloak.rs<br/>service-account directory"]
@@ -23,7 +24,8 @@ flowchart TB
     fga["fga.rs<br/>OpenFGA client"]
     ingestion["ingestion.rs<br/>Temporal client"]
 
-    main --> config & logging & api
+    main --> config & logging & api & provisioning
+    provisioning --> auth & platform & directory & db & fga & spaces
     api --> auth & error & spaces & bootstrap & db & fga & ingestion & logging
     spaces --> domain & db & fga
     api --> platform & roles & directory
@@ -51,3 +53,8 @@ flowchart TB
 role mutations with bootstrap. `keycloak` owns one shared HTTP client and a synchronized
 service-token cache. `api::governance_router` groups identity, platform administration
 and self-capability routes independently of the Temporal client.
+
+`provisioning::Bundle` validates and normalizes declarations without exposing credentials
+through Debug or serialization. `Importer` performs read-only preflight, per-identity
+mutations, then additive space/role reconciliation. The binary connects without SQL
+migration or FGA model synchronization, and does not initialize Temporal for import.

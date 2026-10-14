@@ -161,6 +161,8 @@ type space
 | I14 | Every non-personal space retains at least one administrator after role revocation. | `spaces::revoke`, organization lock |
 | I15 | Only the completed bootstrap root changes platform-admin grants; its own grant is protected. New platform grants target an existing Keycloak subject. | `platform`, platform lock, directory lookup |
 | I16 | Every acknowledged role mutation emits a security audit event before SQL commit, independently of application severity and text/JSON format. | `logging::audit_relation`, mutation services |
+| I17 | Provisioning replay preserves existing identities, committed space IDs and undeclared grants, and repairs requested grants without reusing rolled-back space IDs. | `provisioning`, exact directory lookup, SQL uniqueness |
+| I18 | Import requires a verified platform administrator and compatible initialized state; predictable preflight failures cause no provisioning or initialization writes. | CLI read-only initialization, `Importer::preflight`, root guard |
 
 Roles are cumulative and scoped to one space. Analyst grants content read and the capabilities
 `run_evaluations`, `manage_evaluation_corpus` and `read_conversations_for_evaluation`.
@@ -169,7 +171,32 @@ content read or evaluation-conversation read.
 No space or platform role propagates to another space.
 
 Platform admin implies all platform capabilities. Team manager grants team creation and listing;
-feature manager grants `manage_capabilities`; prompt editor grants
+feature manager grants `manage_capabilities` and team registry listing; prompt editor grants
 `edit_platform_prompt`; observer grants `observe_platform`. These grants do not imply space membership or content access.
 `openfga/model.fga` is the authoritative permission matrix; `make model` compiles its
 supported direct/union expressions to `model.json`, and `make check-model` checks parity.
+
+## Provisioning declarations
+
+The bundle has `organization: { name, admins }` and a `users` array. Organization name
+and admins are nonempty; admins reference usernames in that array. User fields match
+the control-plane `users.json`: `username`, optional `email`, `first_name`, `last_name`,
+`password`, and default-empty `teams`, `team_roles`, `platform_roles`.
+
+| Declaration | Direct grants |
+| --- | --- |
+| Organization admin | Organization `admin` and `member` |
+| Any team role | Organization `member`, plus the declared team role |
+| `team_member`, `team_editor`, `team_admin`, `team_analyst` | Team `member`, `editor`, `admin`, `analyst`, respectively |
+| `teams` entry without an explicit role for that team in the same user entry | Team `member` |
+| Platform role only | Platform grant, no space grant |
+
+Explicit team roles accumulate and suppress the `teams` member fallback for that user
+and team. Every new team requires a declared team admin. Platform aliases `admin` and
+`observer` normalize to `platform_admin` and `platform_observer`; equivalent declarations
+are deduplicated. Unknown fields/roles, duplicate usernames, duplicate role-object keys,
+empty names and non-assignable lifecycle roles are rejected, never ignored.
+
+Missing identities require a nonempty password and are created enabled with a
+non-temporary credential. Absent or empty email uses `<username>@example.com`;
+optional first/last names are passed when supplied. Existing identity fields remain intact.

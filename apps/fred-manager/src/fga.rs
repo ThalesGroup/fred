@@ -104,6 +104,38 @@ impl Fga {
         Ok(fga)
     }
 
+    /// Import never initializes or updates a model. Pin the compatible latest model
+    /// so later writes cannot switch to an unrelated concurrently published schema.
+    pub async fn require_compatible_model(mut self) -> Result<Self> {
+        let reply = self
+            .get(&format!(
+                "/stores/{}/authorization-models?page_size=1",
+                self.store
+            ))
+            .await?;
+        let current = reply["authorization_models"]
+            .as_array()
+            .and_then(|m| m.first())
+            .context("initialize fred-manager with serve before import")?;
+        let expected: Value = serde_json::from_str(include_str!("../openfga/model.json"))?;
+        if current["schema_version"] != expected["schema_version"]
+            || normalized_model(current["type_definitions"].clone())
+                != normalized_model(expected["type_definitions"].clone())
+            || current
+                .get("conditions")
+                .is_some_and(|v| !v.is_null() && v.as_object().is_none_or(|m| !m.is_empty()))
+        {
+            bail!("initialize the compatible fred-manager model with serve before import");
+        }
+        self.model = Some(
+            current["id"]
+                .as_str()
+                .context("missing model id")?
+                .to_owned(),
+        );
+        Ok(self)
+    }
+
     async fn get(&self, path: &str) -> Result<Value> {
         let mut req = self.http.get(format!("{}{}", self.base, path));
         if let Some(t) = &self.token {
@@ -301,4 +333,28 @@ struct StoredKey {
     user: String,
     relation: String,
     object: String,
+}
+
+/// OpenFGA protobuf JSON adds absent default values when reading a model back.
+/// Remove only representation defaults, retaining every nonempty authorization term.
+fn normalized_model(mut value: Value) -> Value {
+    match &mut value {
+        Value::Object(map) => {
+            map.retain(|key, value| {
+                !((matches!(key.as_str(), "object" | "condition" | "module") && value == "")
+                    || (matches!(key.as_str(), "metadata" | "source_info") && value.is_null())
+                    || (key == "relations" && value.as_object().is_some_and(|v| v.is_empty())))
+            });
+            for value in map.values_mut() {
+                *value = normalized_model(value.take());
+            }
+        }
+        Value::Array(values) => {
+            for value in values {
+                *value = normalized_model(value.take());
+            }
+        }
+        _ => {}
+    }
+    value
 }

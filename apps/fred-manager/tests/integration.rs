@@ -1111,3 +1111,1092 @@ async fn durable_grants_are_audited_even_when_sql_commit_fails() {
         1
     );
 }
+
+fn provisioning_bundle() -> fred_manager::provisioning::Bundle {
+    fred_manager::provisioning::Bundle::parse(br#"{
+      "organization":{"name":"Provisioned","admins":["alice"]},
+      "users":[
+        {"username":"alice","password":"private-password","first_name":"Alice","last_name":"Example","teams":["BID"],"team_roles":{"team_admin":["BID"]}},
+        {"username":"bob","password":"private-password","team_roles":{"team_member":["BID"],"team_editor":["BID"],"team_analyst":["BID"]},"platform_roles":["observer","team_manager","feature_manager","prompt_editor"]},
+        {"username":"platform-only","password":"private-password","platform_roles":["admin"]}
+      ]}"#).unwrap()
+}
+
+// Proves: I4, I8, I17
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn provisioning_replays_every_role_without_updating_identities_or_implicit_content() {
+    use fred_manager::{provisioning::Importer, roles::PlatformRole};
+    let e = env().await;
+    let server = support::IdentityServer::start().await;
+    let auth = server.auth().await;
+    let directory = server.directory();
+    let token = server.token("root");
+    bootstrap::grant_root(&e.pool, &e.fga, "root")
+        .await
+        .unwrap();
+    db::require_initialized(&e.pool).await.unwrap();
+    let fga = e.fga.clone().require_compatible_model().await.unwrap();
+    let bundle = provisioning_bundle();
+    let importer = Importer {
+        pool: &e.pool,
+        fga: &fga,
+        directory: &directory,
+        auth: &auth,
+        bearer: &token,
+    };
+    let first = importer.run(&bundle).await.unwrap();
+    assert_eq!(first.identities_created, 3);
+    let org = db::named_space(&e.pool, None, "Provisioned")
+        .await
+        .unwrap()
+        .unwrap();
+    let team = db::named_space(&e.pool, Some(org.id), "BID")
+        .await
+        .unwrap()
+        .unwrap();
+    let alice = directory.find_username("alice").await.unwrap().unwrap().id;
+    let bob = directory.find_username("bob").await.unwrap().unwrap().id;
+    let platform = directory
+        .find_username("platform-only")
+        .await
+        .unwrap()
+        .unwrap()
+        .id;
+    assert!(fga.roles_of("root").await.unwrap().is_empty());
+    assert!(fga.roles_of(&platform).await.unwrap().is_empty());
+    assert!(!fga.check(&alice, Permission::Read, team.id).await.unwrap());
+    assert!(
+        fga.roles_of(&alice)
+            .await
+            .unwrap()
+            .contains(&(org.id, Role::Member))
+    );
+    for role in [Role::Member, Role::Editor, Role::Analyst] {
+        assert!(fga.roles_of(&bob).await.unwrap().contains(&(team.id, role)));
+    }
+    for role in PlatformRole::ALL {
+        assert!(fga.platform_grants().await.unwrap().contains(&(
+            if role == PlatformRole::PlatformAdmin {
+                platform.clone()
+            } else {
+                bob.clone()
+            },
+            role
+        )));
+    }
+    // Undeclared roles survive; missing requested grants are repaired on committed IDs.
+    fga.write(
+        &[fred_manager::fga::Tuple {
+            user: "unrelated",
+            role: Role::Member,
+            space: org.id,
+        }],
+        &[],
+    )
+    .await
+    .unwrap();
+    delete_tuple(&e, &bob, "analyst", &format!("space:{}", team.id)).await;
+    let replay = importer.run(&bundle).await.unwrap();
+    assert_eq!(replay.identities_created, 0);
+    assert_eq!(server.control.lock().await.created.len(), 3);
+    let body = server.control.lock().await.created[0].clone();
+    assert_eq!(body["email"], "alice@example.com");
+    assert_eq!(body["enabled"], true);
+    assert_eq!(body["credentials"][0]["temporary"], false);
+    assert_eq!(
+        db::named_space(&e.pool, Some(org.id), "BID")
+            .await
+            .unwrap()
+            .unwrap()
+            .id,
+        team.id
+    );
+    assert!(
+        fga.roles_of(&bob)
+            .await
+            .unwrap()
+            .contains(&(team.id, Role::Analyst))
+    );
+    assert!(
+        fga.roles_of("unrelated")
+            .await
+            .unwrap()
+            .contains(&(org.id, Role::Member))
+    );
+}
+
+// Proves: I15, I18
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn provisioning_preflight_failures_have_no_identity_space_or_role_writes() {
+    use fred_manager::{
+        provisioning::{Bundle, Importer},
+        roles::PlatformRole,
+    };
+    let e = env().await;
+    let server = support::IdentityServer::start().await;
+    let auth = server.auth().await;
+    let directory = server.directory();
+    bootstrap::grant_root(&e.pool, &e.fga, "root")
+        .await
+        .unwrap();
+    e.fga
+        .write_platform("delegate", PlatformRole::PlatformAdmin, true)
+        .await
+        .unwrap();
+    e.fga
+        .write_platform("observer", PlatformRole::PlatformObserver, true)
+        .await
+        .unwrap();
+    let before = e.fga.platform_grants().await.unwrap();
+    for token in [
+        "invalid".into(),
+        server.token("observer"),
+        server.token("delegate"),
+        server
+            .sign(serde_json::json!({"sub":"root","iss":server.realm,"aud":"app","iat":1,"exp":2})),
+    ] {
+        let result = Importer {
+            pool: &e.pool,
+            fga: &e.fga,
+            directory: &directory,
+            auth: &auth,
+            bearer: &token,
+        }
+        .run(&provisioning_bundle())
+        .await;
+        assert!(result.is_err());
+    }
+    let token = server.token("root");
+    for users in [
+        serde_json::json!([{"username":"alice","password":"private-password"},{"username":"tail"}]),
+        serde_json::json!([{"username":"alice","password":"private-password","teams":["uncreatable"]}]),
+    ] {
+        let bundle = Bundle::parse(&serde_json::to_vec(&serde_json::json!({"organization":{"name":"Provisioned","admins":["alice"]},"users":users})).unwrap()).unwrap();
+        let error = Importer {
+            pool: &e.pool,
+            fga: &e.fga,
+            directory: &directory,
+            auth: &auth,
+            bearer: &token,
+        }
+        .run(&bundle)
+        .await
+        .err()
+        .unwrap();
+        assert!(!format!("{error:?}").contains("private-password"));
+    }
+    assert!(server.users.lock().await.is_empty());
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("select count(*) from space")
+            .fetch_one(&e.pool)
+            .await
+            .unwrap(),
+        0
+    );
+    assert_eq!(e.fga.platform_grants().await.unwrap(), before);
+}
+
+// Proves: I11, I17
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn directory_creation_conflict_pagination_preservation_and_failures() {
+    let server = support::IdentityServer::start().await;
+    let directory = server.directory();
+    server.control.lock().await.conflict_create = true;
+    let (user, created) = directory
+        .ensure_user(
+            "a&b",
+            Some("private-password"),
+            Some(""),
+            Some("First"),
+            Some("Last"),
+        )
+        .await
+        .unwrap();
+    assert!(!created); // Another writer's creation, resolved after 409.
+    let (again, created) = directory
+        .ensure_user(
+            "a&b",
+            Some("replacement"),
+            Some("changed@example.org"),
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+    assert_eq!(again.id, user.id);
+    assert!(!created);
+    assert_eq!(server.control.lock().await.created.len(), 1);
+    assert_eq!(
+        server.control.lock().await.created[0]["email"],
+        "a&b@example.com"
+    );
+    server.control.lock().await.lookup_ambiguous = true;
+    assert!(directory.find_username("a&b").await.is_err()); // Ambiguity is on second short page.
+    server.control.lock().await.lookup_ambiguous = false;
+    server.control.lock().await.lookup_inexact = true;
+    assert!(directory.find_username("a&b").await.is_err());
+    server.control.lock().await.lookup_inexact = false;
+    server.control.lock().await.fail_create = true;
+    let error = directory
+        .ensure_user("other", Some("private-password"), None, None, None)
+        .await
+        .err()
+        .unwrap();
+    assert!(!format!("{error:?}").contains("private-password"));
+    server.control.lock().await.lookup_slow = true;
+    assert!(directory.find_username("other").await.is_err());
+}
+
+// Proves: I17
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn provisioning_replay_after_identity_and_sql_failures_reuses_committed_state() {
+    use fred_manager::provisioning::Importer;
+    let e = env().await;
+    let server = support::IdentityServer::start().await;
+    let auth = server.auth().await;
+    let directory = server.directory();
+    let token = server.token("root");
+    bootstrap::grant_root(&e.pool, &e.fga, "root")
+        .await
+        .unwrap();
+    let bundle = provisioning_bundle();
+    let importer = Importer {
+        pool: &e.pool,
+        fga: &e.fga,
+        directory: &directory,
+        auth: &auth,
+        bearer: &token,
+    };
+    server.control.lock().await.fail_create = true;
+    assert!(importer.run(&bundle).await.is_err());
+    server.control.lock().await.fail_create = false;
+    sqlx::raw_sql("create function reject_space() returns trigger language plpgsql as $$ begin raise exception 'private-password'; end $$; create constraint trigger reject_space after insert on space deferrable initially deferred for each row execute function reject_space();").execute(&e.pool).await.unwrap();
+    let error = importer.run(&bundle).await.err().unwrap();
+    assert!(!format!("{error:?}").contains("private-password"));
+    assert_eq!(server.users.lock().await.len(), 3);
+    assert!(
+        db::named_space(&e.pool, None, "Provisioned")
+            .await
+            .unwrap()
+            .is_none()
+    );
+    sqlx::raw_sql("drop trigger reject_space on space")
+        .execute(&e.pool)
+        .await
+        .unwrap();
+    let report = importer.run(&bundle).await.unwrap();
+    assert_eq!(report.identities_created, 0);
+    assert_eq!(report.spaces_reconciled, 2);
+}
+
+// Proves: I5, I17
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn simultaneous_imports_reuse_usernames_and_space_names() {
+    use fred_manager::provisioning::Importer;
+    let e = env().await;
+    let server = support::IdentityServer::start().await;
+    let auth = server.auth().await;
+    let directory = server.directory();
+    let token = server.token("root");
+    bootstrap::grant_root(&e.pool, &e.fga, "root")
+        .await
+        .unwrap();
+    let bundle = provisioning_bundle();
+    let importer = Importer {
+        pool: &e.pool,
+        fga: &e.fga,
+        directory: &directory,
+        auth: &auth,
+        bearer: &token,
+    };
+    let (one, two) = tokio::join!(importer.run(&bundle), importer.run(&bundle));
+    one.unwrap();
+    two.unwrap();
+    assert_eq!(server.control.lock().await.created.len(), 3);
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("select count(*) from space")
+            .fetch_one(&e.pool)
+            .await
+            .unwrap(),
+        2
+    );
+}
+
+// Proves: I5, I18
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn provisioning_waiter_rechecks_revoked_or_expired_operator() {
+    use fred_manager::provisioning::{Bundle, Importer};
+    for expired in [false, true] {
+        let e = env().await;
+        let server = support::IdentityServer::start().await;
+        let auth = server.auth().await;
+        let directory = server.directory();
+        bootstrap::grant_root(&e.pool, &e.fga, "root")
+            .await
+            .unwrap();
+        let mut tx = e.pool.begin().await.unwrap();
+        sqlx::query("select pg_advisory_xact_lock($1)")
+            .bind(bootstrap::LOCK_KEY)
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+        let now = chrono::Utc::now().timestamp();
+        let token = if expired {
+            server.sign(serde_json::json!({"sub":"root","iss":server.realm,"aud":"app","iat":now,"exp":now+1}))
+        } else {
+            server.token("root")
+        };
+        let pool = e.pool.clone();
+        let fga = e.fga.clone();
+        let pending = tokio::spawn(async move {
+            let bundle = Bundle::parse(br#"{"organization":{"name":"new","admins":["alice"]},"users":[{"username":"alice","password":"private-password"}]}"#).unwrap();
+            Importer {
+                pool: &pool,
+                fga: &fga,
+                directory: &directory,
+                auth: &auth,
+                bearer: &token,
+            }
+            .run(&bundle)
+            .await
+        });
+        wait_for_advisory_waiter(&e.pool).await;
+        if expired {
+            tokio::time::sleep(Duration::from_secs(2)).await;
+        } else {
+            delete_tuple(&e, "root", "admin", "platform:root").await;
+        }
+        tx.commit().await.unwrap();
+        assert!(pending.await.unwrap().is_err());
+        assert!(server.users.lock().await.is_empty());
+    }
+}
+
+// Proves: I18
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn import_cli_is_read_only_until_authorized_and_requires_initialized_state() {
+    use fred_manager::config::Configuration;
+    let e = env().await;
+    let server = support::IdentityServer::start().await;
+    bootstrap::grant_root(&e.pool, &e.fga, "root")
+        .await
+        .unwrap();
+    let temp = std::env::temp_dir().join(format!("manager-cli-{}", Uuid::new_v4()));
+    std::fs::create_dir(&temp).unwrap();
+    let mut config: serde_json::Value =
+        serde_yaml_ng::from_str(include_str!("../config/configuration.yaml")).unwrap();
+    config["security"]["user"]["realm_url"] = server.realm.clone().into();
+    config["security"]["m2m"]["realm_url"] = server.realm.clone().into();
+    config["security"]["rebac"]["api_url"] = e.openfga.clone().into();
+    config["security"]["rebac"]["store_name"] = e.store.clone().into();
+    config["security"]["rebac"]["token_env_var"] = "FRED_MANAGER_IT_NO_TOKEN".into();
+    let address = reqwest::Url::parse(&std::env::var("FRED_MANAGER_IT_POSTGRES").unwrap()).unwrap();
+    let database: String = sqlx::query_scalar("select current_database()")
+        .fetch_one(&e.pool)
+        .await
+        .unwrap();
+    config["storage"]["postgres"]["host"] = address.host_str().unwrap().into();
+    config["storage"]["postgres"]["port"] = address.port().unwrap().into();
+    config["storage"]["postgres"]["username"] = "postgres".into();
+    config["storage"]["postgres"]["database"] = database.into();
+    let _: Configuration = serde_json::from_value(config.clone()).unwrap();
+    std::fs::write(temp.join("bundle.json"),br#"{"organization":{"name":"CLI","admins":["alice"]},"users":[{"username":"alice","password":"private-password"}]}"#).unwrap();
+    let http = reqwest::Client::new();
+    let store_list: serde_json::Value = http
+        .get(format!("{}/stores", e.openfga))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let store_id = store_list["stores"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["name"] == e.store)
+        .unwrap()["id"]
+        .as_str()
+        .unwrap();
+    let model_url = format!("{}/stores/{store_id}/authorization-models", e.openfga);
+    let models_before: serde_json::Value = http
+        .get(&model_url)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    for case in [
+        "invalid",
+        "expired",
+        "observer",
+        "disabled",
+        "mapping",
+        "schema",
+        "missing-token",
+        "missing-bundle",
+        "malformed",
+        "bad-config",
+        "bad-log-level",
+        "valid",
+    ] {
+        let mut current = config.clone();
+        let token = match case {
+            "invalid" => "private-bearer".into(),
+            "expired" => server.sign(
+                serde_json::json!({"sub":"root","iss":server.realm,"aud":"app","iat":1,"exp":2}),
+            ),
+            "observer" => server.token("observer"),
+            _ => server.token("root"),
+        };
+        if case == "disabled" {
+            current["security"]["profile"] = serde_json::Value::Null;
+            current["security"]["user"]["enabled"] = false.into();
+        }
+        if case == "mapping" {
+            current["security"]["user"]["claims"] = serde_json::json!({"uid":"preferred_username"});
+        }
+        if case == "schema" {
+            sqlx::query("alter table _sqlx_migrations rename to saved_migrations")
+                .execute(&e.pool)
+                .await
+                .unwrap();
+        }
+        if case == "bad-log-level" {
+            current["app"]["log_level"] = "private-secret".into();
+        }
+        std::fs::write(
+            temp.join("configuration.yaml"),
+            serde_yaml_ng::to_string(&current).unwrap(),
+        )
+        .unwrap();
+        std::fs::write(temp.join("token"), token).unwrap();
+        if case == "missing-token" {
+            std::fs::remove_file(temp.join("token")).unwrap();
+        }
+        if case == "malformed" {
+            std::fs::write(temp.join("bundle.json"), br#"{"private-password":true}"#).unwrap();
+        }
+        if case == "valid" {
+            std::fs::write(temp.join("bundle.json"), br#"{"organization":{"name":"CLI","admins":["alice"]},"users":[{"username":"alice","password":"private-password"}]}"#).unwrap();
+        }
+        if case == "bad-config" {
+            std::fs::write(temp.join("configuration.yaml"), "private-secret: [bad").unwrap();
+        }
+        let output = tokio::process::Command::new(env!("CARGO_BIN_EXE_fred-manager"))
+            .args(["import-provisioning"])
+            .arg(temp.join(if case == "missing-bundle" {
+                "absent.json"
+            } else {
+                "bundle.json"
+            }))
+            .arg("--token-file")
+            .arg(temp.join("token"))
+            .env("CONFIG_FILE", temp.join("configuration.yaml"))
+            .env("ENV_FILE", temp.join("absent.env"))
+            .env("FRED_POSTGRES_PASSWORD", "it")
+            .env("KEYCLOAK_FRED_MANAGER_CLIENT_SECRET", "private-secret")
+            .output()
+            .await
+            .unwrap();
+        let text = format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(
+            !text.contains("private-password")
+                && !text.contains("private-bearer")
+                && !text.contains("private-secret"),
+            "secret leaked"
+        );
+        assert_eq!(
+            output.status.success(),
+            case == "valid",
+            "case {case}: {text}"
+        );
+        let models_after: serde_json::Value = http
+            .get(&model_url)
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(
+            models_after, models_before,
+            "CLI must never sync model, including on success"
+        );
+        let stores_after: serde_json::Value = http
+            .get(format!("{}/stores?name={}", e.openfga, e.store))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(stores_after["stores"].as_array().unwrap().len(), 1);
+        if case == "schema" {
+            let exists: bool =
+                sqlx::query_scalar("select to_regclass('_sqlx_migrations') is not null")
+                    .fetch_one(&e.pool)
+                    .await
+                    .unwrap();
+            assert!(!exists, "CLI must not migrate");
+            sqlx::query("alter table saved_migrations rename to _sqlx_migrations")
+                .execute(&e.pool)
+                .await
+                .unwrap();
+        }
+        if case != "valid" {
+            assert!(
+                text.contains("provisioning initialization/validation failed"),
+                "case {case}, status {:?}: {text}",
+                output.status
+            );
+            for counter in [
+                "identities_resolved=0",
+                "identities_created=0",
+                "spaces_reconciled=0",
+                "grants_acknowledged=0",
+            ] {
+                assert!(text.contains(counter), "{text}");
+            }
+            assert!(server.users.lock().await.is_empty());
+        }
+    }
+    std::fs::remove_dir_all(temp).unwrap();
+}
+
+// Proves: I17
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn provisioning_batches_large_parent_and_child_grants_and_rejects_personal_collision() {
+    use fred_manager::provisioning::{Bundle, Importer};
+    let e = env().await;
+    let server = support::IdentityServer::start().await;
+    let auth = server.auth().await;
+    let directory = server.directory();
+    let token = server.token("root");
+    bootstrap::grant_root(&e.pool, &e.fga, "root")
+        .await
+        .unwrap();
+    let mut users = Vec::new();
+    for i in 0..105 {
+        let name = format!("user-{i}");
+        server.users.lock().await.insert(name.clone(), name.clone());
+        users.push(serde_json::json!({"username":name,"team_roles":{"team_admin":["BID"],"team_analyst":["BID"]}}));
+    }
+    let value =
+        serde_json::json!({"organization":{"name":"Many","admins":["user-0"]},"users":users});
+    let bundle = Bundle::parse(&serde_json::to_vec(&value).unwrap()).unwrap();
+    let importer = Importer {
+        pool: &e.pool,
+        fga: &e.fga,
+        directory: &directory,
+        auth: &auth,
+        bearer: &token,
+    };
+    let report = importer.run(&bundle).await.unwrap();
+    assert_eq!(report.grants_acknowledged, 316);
+    let org = db::named_space(&e.pool, None, "Many")
+        .await
+        .unwrap()
+        .unwrap();
+    spaces::create_personal_space(&e.pool, &e.fga, "user-0", org.id)
+        .await
+        .unwrap();
+    let collision=Bundle::parse(br#"{"organization":{"name":"Many","admins":["new"]},"users":[{"username":"new","password":"private-password","team_roles":{"team_admin":["user-0"]}}]}"#).unwrap();
+    assert!(importer.run(&collision).await.is_err());
+    assert!(directory.find_username("new").await.unwrap().is_none());
+}
+
+// Proves: I5, I17, I18
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn preflight_does_not_block_revocation_and_cancelled_identity_creation_replays() {
+    use fred_manager::provisioning::Importer;
+    use std::sync::Arc;
+    for cancel in [false, true] {
+        let e = env().await;
+        let server = support::IdentityServer::start().await;
+        let auth = server.auth().await;
+        let directory = server.directory();
+        let token = server.token("root");
+        bootstrap::grant_root(&e.pool, &e.fga, "root")
+            .await
+            .unwrap();
+        let gate = Arc::new(support::Gate::default());
+        if cancel {
+            server.control.lock().await.create_gate = Some(gate.clone());
+        } else {
+            server.control.lock().await.lookup_gate = Some(gate.clone());
+        }
+        let pool = e.pool.clone();
+        let fga = e.fga.clone();
+        let pending = tokio::spawn(async move {
+            Importer {
+                pool: &pool,
+                fga: &fga,
+                directory: &directory,
+                auth: &auth,
+                bearer: &token,
+            }
+            .run(&provisioning_bundle())
+            .await
+        });
+        tokio::time::timeout(Duration::from_secs(3), gate.entered.notified())
+            .await
+            .unwrap();
+        if cancel {
+            pending.abort();
+            assert!(pending.await.unwrap_err().is_cancelled());
+            gate.release.notify_one();
+            let auth = server.auth().await;
+            let directory = server.directory();
+            let token = server.token("root");
+            let result = Importer {
+                pool: &e.pool,
+                fga: &e.fga,
+                directory: &directory,
+                auth: &auth,
+                bearer: &token,
+            }
+            .run(&provisioning_bundle())
+            .await
+            .unwrap();
+            assert_eq!(result.identities_created, 2);
+            assert_eq!(server.control.lock().await.created.len(), 3);
+        } else {
+            // Acquire the actual platform mutation lock while the directory request is paused.
+            let tx = tokio::time::timeout(Duration::from_secs(1), async {
+                let mut tx = e.pool.begin().await.unwrap();
+                sqlx::query("select pg_advisory_xact_lock($1)")
+                    .bind(bootstrap::LOCK_KEY)
+                    .execute(&mut *tx)
+                    .await
+                    .unwrap();
+                tx
+            })
+            .await
+            .expect("read-only directory preflight must not hold platform lock");
+            e.fga
+                .write_platform(
+                    "root",
+                    fred_manager::roles::PlatformRole::PlatformAdmin,
+                    false,
+                )
+                .await
+                .unwrap();
+            tx.commit().await.unwrap();
+            gate.release.notify_one();
+            assert!(pending.await.unwrap().is_err());
+            assert!(server.users.lock().await.is_empty());
+        }
+    }
+}
+
+// Proves: I17, I18
+#[tokio::test]
+#[ignore = "needs Postgres, OpenFGA and disposable Keycloak: make test-integration"]
+async fn real_keycloak_service_account_provisions_complete_bundle() {
+    use fred_manager::{
+        auth::Authenticator, config::Configuration, keycloak::Directory, provisioning::Importer,
+    };
+    let e = env().await;
+    let kc = support::real_keycloak::Keycloak::start().await;
+    let realm = kc.configure().await;
+    let mut config: Configuration =
+        serde_yaml_ng::from_str(include_str!("../config/configuration.yaml")).unwrap();
+    config.security.user.realm_url = realm.clone();
+    config.security.m2m = None;
+    let auth = Authenticator::start(config.security().unwrap())
+        .await
+        .unwrap();
+    let token = kc.password_token("app", "app", "root", "it-root").await;
+    let root = auth.authenticate(Some(&token)).await.unwrap();
+    bootstrap::grant_root(&e.pool, &e.fga, &root.uid)
+        .await
+        .unwrap();
+    let directory = Directory::new(&realm, "fred-manager", "it-manager".into()).unwrap();
+    let importer = Importer {
+        pool: &e.pool,
+        fga: &e.fga,
+        directory: &directory,
+        auth: &auth,
+        bearer: &token,
+    };
+    let report = importer.run(&provisioning_bundle()).await.unwrap();
+    assert_eq!(report.identities_created, 3);
+    let alice = directory.find_username("alice").await.unwrap().unwrap();
+    let bob = directory.find_username("bob").await.unwrap().unwrap();
+    let org = db::named_space(&e.pool, None, "Provisioned")
+        .await
+        .unwrap()
+        .unwrap();
+    let team = db::named_space(&e.pool, Some(org.id), "BID")
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        !e.fga
+            .check(&alice.id, Permission::Read, team.id)
+            .await
+            .unwrap()
+    );
+    for role in [Role::Member, Role::Editor, Role::Analyst] {
+        assert!(
+            e.fga
+                .roles_of(&bob.id)
+                .await
+                .unwrap()
+                .contains(&(team.id, role))
+        );
+    }
+    assert_eq!(
+        importer
+            .run(&provisioning_bundle())
+            .await
+            .unwrap()
+            .identities_created,
+        0
+    );
+    // Password is real, non-temporary, and replay preserves it.
+    assert!(
+        !kc.password_token("app", "app", "alice", "private-password")
+            .await
+            .is_empty()
+    );
+    let grants = e.fga.platform_grants().await.unwrap();
+    for role in fred_manager::roles::PlatformRole::ALL {
+        let subject = if role == fred_manager::roles::PlatformRole::PlatformAdmin {
+            directory
+                .find_username("platform-only")
+                .await
+                .unwrap()
+                .unwrap()
+                .id
+        } else {
+            bob.id.clone()
+        };
+        assert!(grants.contains(&(subject, role)));
+    }
+}
+
+// Proves: I4, I17
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn provisioning_repairs_every_fga_boundary_including_ambiguous_acknowledgments() {
+    use fred_manager::provisioning::Importer;
+    for nth in 1..=7 {
+        let e = env().await;
+        let server = support::IdentityServer::start().await;
+        bootstrap::grant_root(&e.pool, &e.fga, "root")
+            .await
+            .unwrap();
+        let proxy = support::fga_proxy::Proxy::start(&e.openfga).await;
+        let fga = Fga::connect(
+            &proxy.base,
+            &e.store,
+            false,
+            false,
+            None,
+            Some(Duration::from_secs(5)),
+        )
+        .await
+        .unwrap();
+        {
+            let mut fault = proxy.fault.lock().await;
+            fault.fail_at = nth;
+            fault.after = nth % 2 == 0;
+        }
+        let auth = server.auth().await;
+        let directory = server.directory();
+        let token = server.token("root");
+        let importer = Importer {
+            pool: &e.pool,
+            fga: &fga,
+            directory: &directory,
+            auth: &auth,
+            bearer: &token,
+        };
+        let error = importer
+            .run(&provisioning_bundle())
+            .await
+            .expect_err("injected write failure");
+        assert!(!format!("{error:?}").contains("private-password"));
+        assert!(
+            db::named_space(&e.pool, None, "Provisioned")
+                .await
+                .unwrap()
+                .is_none()
+        );
+        let old = proxy.fault.lock().await.written[0]["writes"]["tuple_keys"][0]["object"].clone();
+        proxy.fault.lock().await.fail_at = 0;
+        let report = importer.run(&provisioning_bundle()).await.unwrap();
+        assert_eq!(report.identities_created, 0);
+        let org = db::named_space(&e.pool, None, "Provisioned")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_ne!(
+            old,
+            serde_json::json!(format!("space:{}", org.id)),
+            "never reuse rolled-back UUID"
+        );
+        let team = db::named_space(&e.pool, Some(org.id), "BID")
+            .await
+            .unwrap()
+            .unwrap();
+        for name in ["alice", "bob"] {
+            let user = directory.find_username(name).await.unwrap().unwrap();
+            assert!(
+                e.fga
+                    .check(&user.id, Permission::Read, org.id)
+                    .await
+                    .unwrap()
+            );
+            assert!(
+                e.fga
+                    .roles_of(&user.id)
+                    .await
+                    .unwrap()
+                    .iter()
+                    .any(|(id, _)| *id == team.id)
+            );
+        }
+    }
+}
+
+// Proves: I17
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn cancellation_after_fga_write_rolls_back_new_space_and_replays() {
+    use fred_manager::provisioning::Importer;
+    use std::sync::Arc;
+    let e = env().await;
+    let server = support::IdentityServer::start().await;
+    bootstrap::grant_root(&e.pool, &e.fga, "root")
+        .await
+        .unwrap();
+    let proxy = support::fga_proxy::Proxy::start(&e.openfga).await;
+    let gate = Arc::new(support::Gate::default());
+    proxy.fault.lock().await.gate = Some(gate.clone());
+    let fga = Fga::connect(
+        &proxy.base,
+        &e.store,
+        false,
+        false,
+        None,
+        Some(Duration::from_secs(5)),
+    )
+    .await
+    .unwrap();
+    let pool = e.pool.clone();
+    let auth = server.auth().await;
+    let directory = server.directory();
+    let token = server.token("root");
+    let pending = tokio::spawn(async move {
+        Importer {
+            pool: &pool,
+            fga: &fga,
+            directory: &directory,
+            auth: &auth,
+            bearer: &token,
+        }
+        .run(&provisioning_bundle())
+        .await
+    });
+    tokio::time::timeout(Duration::from_secs(3), gate.entered.notified())
+        .await
+        .unwrap();
+    assert_eq!(proxy.fault.lock().await.acknowledged, vec![200]);
+    let old = proxy.fault.lock().await.written[0]["writes"]["tuple_keys"][0]["object"].clone();
+    pending.abort();
+    assert!(pending.await.unwrap_err().is_cancelled());
+    assert!(
+        db::named_space(&e.pool, None, "Provisioned")
+            .await
+            .unwrap()
+            .is_none()
+    );
+    gate.release.notify_one();
+    let auth = server.auth().await;
+    let directory = server.directory();
+    let token = server.token("root");
+    let report = Importer {
+        pool: &e.pool,
+        fga: &e.fga,
+        directory: &directory,
+        auth: &auth,
+        bearer: &token,
+    }
+    .run(&provisioning_bundle())
+    .await
+    .unwrap();
+    let org = db::named_space(&e.pool, None, "Provisioned")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_ne!(old, serde_json::json!(format!("space:{}", org.id)));
+    assert_eq!(report.identities_created, 0);
+    assert_eq!(report.spaces_reconciled, 2);
+}
+
+// Proves: I4, I5, I17
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn import_rechecks_parent_after_wait_and_repairs_existing_space_grants() {
+    use fred_manager::{
+        provisioning::{Bundle, Importer},
+        roles::PlatformRole,
+    };
+    let e = env().await;
+    let server = support::IdentityServer::start().await;
+    bootstrap::grant_root(&e.pool, &e.fga, "root")
+        .await
+        .unwrap();
+    e.fga
+        .write_platform("delegate", PlatformRole::PlatformAdmin, true)
+        .await
+        .unwrap();
+    server
+        .users
+        .lock()
+        .await
+        .insert("alice".into(), "alice".into());
+    server.users.lock().await.insert("bob".into(), "bob".into());
+    let org = spaces::create_organization(&e.pool, &e.fga, "Existing", "alice")
+        .await
+        .unwrap();
+    e.fga
+        .write(
+            &[fred_manager::fga::Tuple {
+                user: "bob",
+                space: org.id,
+                role: Role::Member,
+            }],
+            &[],
+        )
+        .await
+        .unwrap();
+    let held = hold_organization_lock(&e, org.id).await;
+    let pool = e.pool.clone();
+    let fga = e.fga.clone();
+    let auth = server.auth().await;
+    let directory = server.directory();
+    let token = server.token("delegate");
+    let bytes=br#"{"organization":{"name":"Existing","admins":["alice"]},"users":[{"username":"alice","team_roles":{"team_admin":["New"]}},{"username":"bob","team_roles":{"team_analyst":["New"]},"platform_roles":["observer"]}]}"#;
+    let pending = tokio::spawn(async move {
+        Importer {
+            pool: &pool,
+            fga: &fga,
+            directory: &directory,
+            auth: &auth,
+            bearer: &token,
+        }
+        .run(&Bundle::parse(bytes).unwrap())
+        .await
+    });
+    wait_for_advisory_waiter(&e.pool).await;
+    delete_tuple(&e, "bob", "member", &format!("space:{}", org.id)).await;
+    held.commit().await.unwrap();
+    pending.await.unwrap().unwrap();
+    // Import explicitly regrants the parent before granting the child, preserving I4.
+    assert!(e.fga.check("bob", Permission::Read, org.id).await.unwrap());
+    let team = db::named_space(&e.pool, Some(org.id), "New")
+        .await
+        .unwrap()
+        .unwrap();
+    let proxy = support::fga_proxy::Proxy::start(&e.openfga).await;
+    let fga = Fga::connect(
+        &proxy.base,
+        &e.store,
+        false,
+        false,
+        None,
+        Some(Duration::from_secs(5)),
+    )
+    .await
+    .unwrap();
+    delete_tuple(&e, "bob", "analyst", &format!("space:{}", team.id)).await;
+    proxy.fault.lock().await.fail_at = 2;
+    let auth = server.auth().await;
+    let directory = server.directory();
+    let token = server.token("delegate");
+    let importer = Importer {
+        pool: &e.pool,
+        fga: &fga,
+        directory: &directory,
+        auth: &auth,
+        bearer: &token,
+    };
+    assert!(importer.run(&Bundle::parse(bytes).unwrap()).await.is_err());
+    proxy.fault.lock().await.fail_at = 0;
+    importer.run(&Bundle::parse(bytes).unwrap()).await.unwrap();
+    assert_eq!(
+        db::named_space(&e.pool, Some(org.id), "New")
+            .await
+            .unwrap()
+            .unwrap()
+            .id,
+        team.id
+    );
+    assert!(
+        e.fga
+            .roles_of("bob")
+            .await
+            .unwrap()
+            .contains(&(team.id, Role::Analyst))
+    );
+}
+
+// Proves: I18
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn import_rejects_incompatible_model_without_syncing_it() {
+    let e = env().await;
+    let http = reqwest::Client::new();
+    let stores: serde_json::Value = http
+        .get(format!("{}/stores?name={}", e.openfga, e.store))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let store = stores["stores"][0]["id"].as_str().unwrap();
+    let url = format!("{}/stores/{store}/authorization-models", e.openfga);
+    let mut model: serde_json::Value =
+        serde_json::from_str(include_str!("../openfga/model.json")).unwrap();
+    model["type_definitions"][2]["relations"]["can_read"] =
+        serde_json::json!({"computedUserset":{"relation":"admin"}});
+    http.post(&url)
+        .json(&model)
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    let fga = Fga::connect(
+        &e.openfga,
+        &e.store,
+        false,
+        false,
+        None,
+        Some(Duration::from_secs(5)),
+    )
+    .await
+    .unwrap();
+    assert!(fga.require_compatible_model().await.is_err());
+    let after: serde_json::Value = http.get(&url).send().await.unwrap().json().await.unwrap();
+    assert_eq!(after["authorization_models"].as_array().unwrap().len(), 2);
+}
