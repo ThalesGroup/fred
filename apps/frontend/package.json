@@ -17,8 +17,9 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint --config eslint.config.mjs --no-error-on-unmatched-pattern \"src/**/*.{ts,tsx}\"",
     "format": "prettier --config .prettierrc --ignore-path .prettierignore --ignore-path .gitignore --check .",
-    "test": "npm run applications:test && vitest run",
-    "test:coverage": "npm run applications:test && vitest run --coverage",
+    "test": "npm run applications:test && npm run themes:test && vitest run",
+    "test:coverage": "npm run applications:test && npm run themes:test && vitest run --coverage",
+    "themes:test": "node --test scripts/theme-overlay.test.mjs",
     "applications:test": "node --test scripts/application-proxy.test.mjs && sh tests/application-proxy-smoke.sh"
   },
   "dependencies": {

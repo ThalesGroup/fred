@@ -96,6 +96,44 @@ async def test_upload_valid_stores_blob_recomputes_schema_and_keeps_no_bytes():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("slides", [[], [("A regular presentation", "Speaker notes")]])
+async def test_upload_without_fields_rejects_before_storage(slides):
+    assets = FakeAssets()
+    # A client-supplied valid schema cannot bypass parsing the uploaded bytes.
+    config = PptFillerConfig(
+        schema_slides=[SlideSchema(slide=1, keys=[KeyField(key="title")])]
+    )
+
+    with pytest.raises(ValueError, match="No template fields found") as excinfo:
+        await PptFillerCapability().validate_config(
+            config, _uploads(build_deck(slides)), _save_ctx(assets=assets)
+        )
+
+    assert "{{title}}" in str(excinfo.value)
+    assert "slide notes" in str(excinfo.value)
+    assert "/ppt-filler-help" in str(excinfo.value)
+    assert assets.store_calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("marker", ["{title}", "{{title}}"])
+async def test_upload_with_fields_and_fixed_slides_still_saves(marker):
+    deck = build_deck(
+        [("Fixed introduction", "Speaker notes"), (marker, f"{marker}:\nThe title")]
+    )
+    assets = FakeAssets()
+
+    result = await PptFillerCapability().validate_config(
+        PptFillerConfig(), _uploads(deck), _save_ctx(assets=assets)
+    )
+
+    assert len(assets.store_calls) == 1
+    assert [(s.slide, [key.key for key in s.keys]) for s in result.schema_slides] == [
+        (2, ["title"])
+    ]
+
+
+@pytest.mark.asyncio
 async def test_upload_with_template_errors_raises_valueerror_with_messages():
     # {{age}} appears on slide 1 but is not described -> key_without_description.
     deck = build_deck([("Hi {{name}} aged {{age}}", "{{name}}:\nThe name")])

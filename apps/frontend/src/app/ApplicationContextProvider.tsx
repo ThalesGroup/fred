@@ -16,7 +16,10 @@ import { createContext, PropsWithChildren, useEffect, useState } from "react";
 import { useLocalStorageState } from "../hooks/useLocalStorageState";
 import { ApplicationContextStruct, ThemeMode } from "./ApplicationContextStruct.tsx";
 import { getPlatformUiThemes } from "../common/config.tsx";
+import { useFrontendConfigQuery } from "../slices/controlPlane/controlPlaneApiEnhancements";
+import { crossSessionRefreshOptions, useRefetchOnWindowFocus } from "../rework/core/hooks/crossSessionRefresh";
 import {
+  cachePlatformUiThemes,
   computeDarkMode,
   offeredUiThemes,
   resolveUiTheme,
@@ -47,7 +50,10 @@ export const ApplicationContextProvider = (props: PropsWithChildren<{}>) => {
   const [themeMode, setThemeMode] = useLocalStorageState<ThemeMode>(THEME_MODE_STORAGE_KEY, "system");
   // null = no choice yet, so the platform default can apply (see resolveUiTheme).
   const [storedUiTheme, setUiTheme] = useLocalStorageState<UiTheme | null>(UI_THEME_STORAGE_KEY, null);
-  const platformUiThemes = getPlatformUiThemes();
+  const { data: publicConfig, refetch } = useFrontendConfigQuery(undefined, crossSessionRefreshOptions(false));
+  useRefetchOnWindowFocus(refetch, false);
+  const platformUiThemes = publicConfig ? (publicConfig.ui_themes ?? null) : getPlatformUiThemes();
+  useEffect(() => cachePlatformUiThemes(platformUiThemes), [platformUiThemes]);
   const uiTheme = resolveUiTheme(storedUiTheme, platformUiThemes);
   const offered = offeredUiThemes(platformUiThemes);
   const [systemDarkMode, setSystemDarkMode] = useState(getSystemDarkMode());

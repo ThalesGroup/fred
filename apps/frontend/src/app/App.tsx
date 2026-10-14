@@ -26,6 +26,7 @@ import { ToastProvider } from "@shared/molecules/Toast/ToastProvider";
 import { useFrontendProperties } from "../hooks/useFrontendProperties";
 import { AuthProvider } from "../security/AuthContext";
 import { ApplicationContext, ApplicationContextProvider } from "./ApplicationContextProvider";
+import { uiThemeBase, uiThemeTab } from "./uiThemes";
 import GcuGuard from "@core/guards/GcuGuard.tsx";
 import BootstrapGuard from "@core/guards/BootstrapGuard.tsx";
 import styles from "./App.module.css";
@@ -60,7 +61,7 @@ function FredUiContent() {
   const [router, setRouter] = useState<any>(null);
   const { siteDisplayName, faviconName, logoName, faviconNameDark, logoNameDark } = useFrontendProperties();
   const { t } = useTranslation();
-  const { darkMode } = useContext(ApplicationContext);
+  const { darkMode, uiTheme } = useContext(ApplicationContext);
   const favicon = faviconName || logoName || "fred";
   const faviconDark = faviconNameDark || logoNameDark || "fred-dark";
   const baseUrl = (import.meta.env.BASE_URL ?? "/").endsWith("/")
@@ -68,11 +69,12 @@ function FredUiContent() {
     : `${import.meta.env.BASE_URL ?? "/"}/`;
 
   useEffect(() => {
-    // Browser tab name follows the configured app display name.
-    document.title = siteDisplayName;
+    // Browser tab name follows the active ZIP theme, else the app display name.
+    const tab = uiThemeTab(uiTheme, darkMode, siteDisplayName, favicon, faviconDark);
+    document.title = tab.title;
     const faviconElement = document.getElementById("favicon") as HTMLLinkElement;
-    faviconElement.href = `${baseUrl}images/${darkMode ? faviconDark : favicon}.svg`;
-  }, [baseUrl, siteDisplayName, favicon, faviconDark, darkMode]);
+    faviconElement.href = `${baseUrl}images/${tab.icon}.svg`;
+  }, [baseUrl, siteDisplayName, favicon, faviconDark, darkMode, uiTheme]);
 
   useEffect(() => {
     import("../common/router").then((mod) => {
@@ -148,6 +150,7 @@ function AppWithTheme() {
   // up the right palette — set it synchronously during render instead.
   document.documentElement.setAttribute("data-theme", darkMode ? "dark" : "light");
   document.documentElement.setAttribute("data-ui-theme", uiTheme);
+  document.documentElement.setAttribute("data-ui-base-theme", uiThemeBase(uiTheme));
 
   useEffect(() => {
     // Chrome derives 12h/24h for datetime-local from <html lang>.

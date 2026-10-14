@@ -1,0 +1,3 @@
+{
+  "themes": [{ "id": "acme", "label": "Acme", "base": "pebble" }]
+}
