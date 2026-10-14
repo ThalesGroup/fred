@@ -29,6 +29,14 @@ The system SHALL inventory an uploaded `.pptx` without requiring any marker, not
 - **WHEN** it is analysed
 - **THEN** they form one repeated group (the rows giving each item its fields), the tool description says `items max N`, and unused items are removed and the rest recentred
 
+#### Scenario: Repeated heading and text pairs become a list, whatever their placeholder types
+
+- **GIVEN** a slide or layout where no group or row was found, holding two size classes of text shapes as many each (placeholders typed TITLE or SUBTITLE included, as Google Slides exports type them), every bigger-font shape with its own text right of it, or above or under it in its column
+- **WHEN** it is analysed
+- **THEN** three or more (heading, text) pairs form one repeated group read row by row, a staircase left to right: `cards`, or `figures` when the headings are figures ("333,000", "386,000 km", "xx%") captioned by a `label`, `timeline` when they are years or "20XX", `cards` again for numbered texts laid out in a grid of rows and columns, `process` for numbered texts along one line
+- **AND** two plain pairs stay separate slots, the column headings and bodies of a `two_columns` slide, and a lone big figure with its caption is a one-item `figures` slide
+- **AND** a SUBTITLE placeholder covering a fifth of the slide or more is a body, so a paragraph slide is never a cover, and a text repeated on other slides stays a slot when its slide holds two same-size slots beside it
+
 #### Scenario: Column bodies stay columns
 
 - **GIVEN** a two- or three-column layout whose bodies are wider than 35 % or taller than 40 % of the slide
@@ -60,7 +68,7 @@ The system SHALL inventory an uploaded `.pptx` without requiring any marker, not
 
 #### Scenario: Library slides are never a design
 
-- **GIVEN** an example slide that is a resource sheet rather than a design: an icon sheet (twenty or more small text-free pictures, groups or freeform glyphs), or a slide titled as a resource page (icons, fonts, typography, palette, attributions, credits, graphic resources, instructions for use, this template)
+- **GIVEN** an example slide that is a resource sheet rather than a design: an icon sheet (twenty or more small text-free pictures, groups or freeform glyphs), a slide titled as a resource page (icons, fonts, typography, palette, attributions, credits, graphic resources, instructions for use, this template), or a slide with no placeholder and no text but links that draws eight or more shapes (editable graphics) or a linked picture (a promotion)
 - **WHEN** it is analysed
 - **THEN** it is excluded with the reason `library`, so no deck slide is ever built on it, and its shapes stay in the stored template for a later change to reuse
 

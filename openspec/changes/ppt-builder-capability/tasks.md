@@ -499,3 +499,14 @@ Owns: `analysis_job.py` (`AnalysisStatusResponse.refreshing`), the frontend ppt_
 - [x] 45.3 The review's excluded section opens when the analysis set slides aside (`library`, `table`…); an author exclusion of such a slide keeps the analysis reason. Tests: dialog sections, `effectiveInventory`
 - [x] 45.4 Package `make test`, `ruff check`, `ruff check --select I`, `ruff format --check`, basedpyright; frontend tsc, prettier, eslint, the folder's vitest; `openspec validate --strict`
 - Not covered: an override copied from another agent keeps its label (author data, shown as is)
+
+## WP46. Heuristic kinds for Google Slides exports (owner decision 2026-10-14)
+
+Owns: `analysis.py` (`_pair_group`, `_pairs`, `_lone_figure`, `_item_order`, `_resource_sheet`, `_placeholder_role`, `_group_kind`, `_kind`, `_sequential`, `ANALYSIS_VERSION` 14), `lexicon.py` (`is_figure`, `is_date_sample`, `is_url`), the built-in inventory, delta spec, tests, `verification.md`.
+
+- [x] 46.1 Repeated (heading, text) pairs of two size classes, placeholders typed TITLE/SUBTITLE included, become one repeated group: `cards`, `figures` (figure headings, `label` captions), `timeline` (years, "20XX"); numbered texts on a grid are `cards`. Two plain pairs stay a `two_columns` slide's headings and bodies; a lone big figure is a one-item `figures` slide. Tests: synthetic Google-style cards, two ideas, big figures, big number, numbered grid, staircase timeline
+- [x] 46.2 A SUBTITLE placeholder covering a fifth of the slide is a body (no paragraph slide is a cover); a text repeated on other slides stays a slot beside two same-size slots. Tests: paragraph subtitle slide, a timeline entry reused on another slide
+- [x] 46.3 A slide with no placeholder and no text but links that draws eight or more shapes, or a linked picture, is excluded as `library`; an empty slide stays `other`. Tests: graphic sheet, promo, empty slide
+- [x] 46.4 Before/after classification of Paintress Cyan, Paintress, the built-in template and the corporate reference; a Thales Italy/Spain deck rendered on Cyan before/after; `make builtin-inventory`
+- [x] 46.5 Package `make test`, `ruff check`, `ruff check --select I`, `ruff format --check`, basedpyright with baseline; `verification.md`; `openspec validate --strict`
+- Not in scope: why vision did not run on these templates (a re-run after a restart has no model port, see verification), the capacity of Cyan's timeline texts (1 line)

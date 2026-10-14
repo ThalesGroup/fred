@@ -1486,3 +1486,32 @@ Live case: after "Re-run analysis" on an outdated analysis the dialog kept the o
 Commands: package `make test`: 696 passed, 5 skipped; `ruff check`, `--select I`, `format --check` clean; basedpyright on `analysis_job.py`: 0 errors. Frontend (no make target): `tsc --noEmit` clean, prettier and eslint clean on touched files, `vitest run` on the ppt_builder folder: 6 files, 43 tests passed.
 
 Not covered: a live re-run in the browser.
+
+## Results: WP46 (heuristic kinds for Google Slides exports)
+
+Why vision did not label Paintress Cyan (and Paintress): both agents have `use_vision: true`, `labelling_model: chat.mistral.medium`, and vision did label Cyan at its creation (2026-10-14 15:29 UTC, 30/31 slides). The stored rows carry `labelling_key = rules` because the version-13 refresh was started from the form's "Re-run analysis" (`POST /analysis/{id}/rerun`, 16:21 UTC) after a fred-agents restart: that route has no save context, the per-process model port cache was empty, so `run_analysis` ran with no port and stored `rules` (Paintress's row was already `rules` when a chat turn refreshed it at 16:27). A save with the port (or a restart-free re-run) relabels. The heuristics below make the rules result usable on their own.
+
+Synthetic Google-style deck, old rules → new: cards slide `cover` → `cards` 3×[heading, body]; two ideas `cover` → `two_columns` (heading, body ×2); big figures `cover` → `figures` 2×[number, label]; big number `cover` → `figures` 1 item; numbered grid `cover` → `cards` 6×[number, body]; staircase `bullets` → `timeline` 5×[number, body]; paragraph subtitle `cover` → `bullets`; graphic sheet and promo `other` → excluded `library`; empty slide stays `other`.
+
+| Rule | Evidence |
+| --- | --- |
+| TITLE/SUBTITLE pairs become cards | `test_repeated_title_subtitle_pairs_are_cards` |
+| Two pairs stay headed columns | `test_two_stacked_pairs_are_headed_columns` |
+| Figures paired with the caption in their column, `label` role | `test_big_figures_pair_with_the_caption_in_their_column` |
+| Lone big number | `test_a_lone_big_number_is_a_one_item_figures_slide` |
+| Numbered grid is cards, not process | `test_numbered_texts_on_a_grid_are_cards_not_a_process`; `test_pairing_leaves_the_existing_designs_alone` (process kept) |
+| Staircase of dates, left to right; reused entry kept | `test_a_staircase_of_dates_is_a_timeline_read_left_to_right` |
+| Paragraph subtitle is a body | `test_a_paragraph_sized_subtitle_is_a_body_not_a_cover` |
+| Graphic sheet and promo are `library`, empty slide not | `test_text_free_graphic_and_promo_slides_are_library` |
+| Figure lexicon | `test_figures_lexicon` |
+
+Per-template classification, HEAD rules vs new (every pattern compared):
+
+- Paintress Cyan: `Three ideas` cover → cards 3×[heading, body]; `Six different ideas` cover → cards 6×[number, body]; `333,000` cover → figures 2×[number, label]; layout `BIG_NUMBER` cover → figures 1 item; `Let's have a look` cover → bullets (body); `Our history` bullets → timeline 5×[number, body]; `Two ideas` stays two_columns with heading/body roles instead of four subtitles; `Table of contents` stays agenda, now 8×[number, heading]; slides 20, 21, 23, 32 `other` → excluded `library`. Excluded slides 2, 12, 15-17 only change zones.
+- Paintress, the built-in Fred template and the corporate reference deck: no change (kinds, zones, groups, exclusions identical). The built-in inventory changes only by its version (`make builtin-inventory`).
+
+Render evidence (no LLM, `assign` then `render_deck` on the Cyan template; a Thales Italy/Spain plan: cover, agenda, two bullets, figures, cards, timeline, two columns, closing). Old rules: four problems ("no 'figures' / 'cards' / 'timeline' slide", "columns: 2 given, max 0"), then once rewritten as bullets every list falls back to `image_text`/`two_columns` ("at most 1 entry"). New rules: one problem (the figures slide has no title zone, "drop title"), then every slide on its kind: agenda 4 of 8 entries, cards, staircase timeline, headed columns. PDFs: `scratchpad/charts-evidence/cyan-classification.pdf` (new), `cyan-classification-before.pdf` (old).
+
+Commands (package root): `make test`: 713 passed, 5 skipped; `ruff check`, `ruff check --select I`, `ruff format --check` clean; `basedpyright --baseline-file .baseline/basedpyright-baseline.json`: 0 errors (existing `builder_decks.py` `__all__` warning). `openspec validate ppt-builder-capability --strict` valid. The reference-template tests fail on Paintress and the corporate deck before and after alike (they expect a `chart` exclusion neither holds).
+
+Not covered: the vision run itself; the 1-line capacity of Cyan's timeline texts; Cyan's figures slide has no title zone.
