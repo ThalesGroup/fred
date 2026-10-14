@@ -89,6 +89,7 @@ from fred_capability_ppt_filler.builder.preview import build_patterns_deck
 from fred_capability_ppt_filler.builder.tools import (
     BUILD_TOOL_NAME,
     PPT_BUILDER_CAPABILITY_ID,
+    _answer,
     _error,
     build_builder_tools,
     build_list_images_tool,
@@ -297,8 +298,10 @@ _BUILD_INSTRUCTIONS = (
     "say what the presentation is about. Ground the content in "
     "the documents when the agent has document tools and the request refers to them. Keep every text "
     "SLIDE-READABLE: short titles, a few short bullets, never paragraphs; respect the room each field and "
-    "the catalogue state. If the tool returns needs_revision, apply one option per listed slide and call again with only "
-    "`changes` for those slides; if it reports cuts that matter, fix them the same way. When the "
+    "the catalogue state. If the tool returns needs_revision, nothing was built yet: your very next message MUST be a "
+    "new 'build_presentation' call with the fixes applied (one option per listed slide, only `changes` for those "
+    "slides), never a final answer, unless the user must decide something. If it reports cuts that matter, fix "
+    "them the same way. When the "
     "user asks to change the deck, send only `changes` (the other slides stay exactly as they are); "
     "send the whole deck in `slides` only for a new presentation."
 )
@@ -441,7 +444,8 @@ class _PptBuilderMiddleware(AgentMiddleware):
         request: ToolCallRequest,
         handler: Callable[[ToolCallRequest], Awaitable[Any]],
     ) -> Any:
-        """Builds sent together in one model round: the first one only."""
+        """Builds sent together in one model round: the first one only; the
+        others are answered, not failed, as the round still runs one build."""
         call = request.tool_call
         if call.get("name") == BUILD_TOOL_NAME:
             state = request.state
@@ -452,7 +456,7 @@ class _PptBuilderMiddleware(AgentMiddleware):
                 messages if isinstance(messages, Sequence) else (), call.get("id")
             )
             if refusal is not None:
-                text, artifact = _error(refusal)
+                text, artifact = _answer(refusal)
                 return ToolMessage(
                     content=text,
                     artifact=artifact,

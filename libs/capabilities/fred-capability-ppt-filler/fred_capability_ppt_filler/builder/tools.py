@@ -23,8 +23,9 @@ shared PDF preview part.
 The model sends content only; :func:`assign.assign` picks the template slide
 for each entry. A malformed call never fails validation (the arguments are
 coerced), a slide that fits nothing builds nothing and returns a structured
-``needs_revision`` error, and every error result carries its text so the user
-sees it instead of an opaque failure.
+``needs_revision`` result (not an error: the model revises and calls again),
+and every error result carries its text so the user sees it instead of an
+opaque failure.
 """
 
 from __future__ import annotations
@@ -204,6 +205,13 @@ def _already_delivered(file_name: str, slide_count: int) -> str:
     )
 
 
+# Ends every revision: models planned the fix, then ended the turn without the call.
+_NEXT_CALL = (
+    " Your very next message MUST be a new build_presentation call with these fixes applied, "
+    "never a final answer, unless the user must decide something first."
+)
+
+
 def _same_call(problems: str, from_changes: bool) -> str:
     """A call identical to one refused this turn gets the same answer: say so,
     and offer what breaks the loop rather than evaluate it again."""
@@ -212,7 +220,7 @@ def _same_call(problems: str, from_changes: bool) -> str:
         "No deck was built: this call is identical to one already refused in this answer, so "
         f"it is refused again ({problems}). Do not resend it: apply one of the options given "
         'then, or send each listed slide whole with {"op": "replace", "slide": N, "slides": '
-        f"[...]}} in `changes` (numbers as listed), or {other}."
+        f"[...]}} in `changes` (numbers as listed), or {other}." + _NEXT_CALL
     )
 
 
@@ -221,10 +229,19 @@ def _jsonable(value: Any) -> Any:
 
 
 def _error(message: str) -> tuple[str, ToolInvocationResult]:
-    """An error result whose text is Fred-owned, so the runtime shows it."""
+    """A failure (bad call, storage, render): Fred-owned text, so the runtime shows it."""
     return message, ToolInvocationResult(
         tool_ref=_TOOL_REF,
         is_error=True,
+        blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=message),),
+    )
+
+
+def _answer(message: str) -> tuple[str, ToolInvocationResult]:
+    """An expected outcome that built nothing (a revision, nothing to rebuild):
+    never an error, or the runtime would end the turn on its text."""
+    return message, ToolInvocationResult(
+        tool_ref=_TOOL_REF,
         blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=message),),
     )
 
@@ -643,7 +660,7 @@ def _needs_revision(
             " If the slides under `variety` must stay alike, keep them: the next deck that "
             "fits is built as is."
         )
-    return _error(text + "\n" + json.dumps(payload, ensure_ascii=False))
+    return _answer(text + _NEXT_CALL + "\n" + json.dumps(payload, ensure_ascii=False))
 
 
 _VARIETY_ASK = (
@@ -680,7 +697,7 @@ def _variety_revision(
         if i + 1 < len(kinds)
     )
     payload = {"status": "needs_revision", "variety": _variety(repeats)}
-    return _error(
+    return _answer(
         "No deck was built yet: several slides would look the same: "
         + _VARIETY_ASK.format(
             restated=", and do not restate a table's content as columns on the slide "
@@ -690,7 +707,10 @@ def _variety_revision(
         )
         + " Then call build_presentation again with `changes` replacing those slides, or the "
         "whole deck in `slides`. If these slides must stay alike, send the same call again: it "
-        "will be built as is.\n" + json.dumps(payload, ensure_ascii=False)
+        "will be built as is."
+        + _NEXT_CALL
+        + "\n"
+        + json.dumps(payload, ensure_ascii=False)
     )
 
 
@@ -1081,13 +1101,13 @@ def build_builder_tools(
                 and plan.file_name == base.file_name
                 and unchanged(base, plan, _kinds(inventory))
             ):
-                return _error(_UNCHANGED)
+                return _answer(_UNCHANGED)
 
         call_key = json.dumps(kwargs, sort_keys=True, default=_jsonable) + (
             base.model_dump_json() if base is not None else ""
         )
         if call_key in refused_calls:
-            return _error(_same_call(refused_calls[call_key], base is not None))
+            return _answer(_same_call(refused_calls[call_key], base is not None))
 
         def refused(stored: DeckPlan) -> None:
             turn_base[:] = [stored]
@@ -1172,7 +1192,7 @@ def build_builder_tools(
             if delivered.file_name == deck.file_name and unchanged(
                 delivered, deck, _kinds(inventory)
             ):
-                return _error(_already_delivered(delivered_name, len(deck.slides)))
+                return _answer(_already_delivered(delivered_name, len(deck.slides)))
 
         if workspace is None:
             raise RuntimeError(
