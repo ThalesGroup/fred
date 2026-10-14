@@ -15,16 +15,14 @@
 Regression tests for the tool-error final-response policy (issue #2244).
 
 Why this exists:
-- the ReAct stream loop surfaces an `is_error=True` tool result verbatim as
-  the final response and discards the LLM's own synthesis ("the LLM is NOT
-  trusted to relay it"). That is right when the whole round of tool calls
-  failed — but observed live, one 403 out of six parallel summarize calls
-  (a folder tag id mistaken for a document uid) threw away five successful
-  summaries and showed the user only the raw error text.
-- policy under test: an error claims the final response only while no call
-  of the same round has succeeded; any success — a parallel sibling or a
-  later round's recovery — hands the final response back to the LLM's
-  synthesis, with the error still visible to it as an ordinary tool result.
+- observed live, one 403 out of six parallel summarize calls threw away five
+  successful summaries; later, a wholly-failed round (the per-turn tool-call
+  cap, Deep's filesystem gate, a tool's revision request) threw away the
+  model's own honest answer and showed a generic error instead.
+- policy under test: the model's non-empty answer after a failure is the
+  final response and streams normally; a wholly-failed round's error text is
+  only the fallback when the model wrote nothing after it. Failed calls stay
+  `is_error=True` on their tool rows, whose text never leaks raw content.
 """
 
 from __future__ import annotations
@@ -47,12 +45,13 @@ from fred_sdk.contracts.context import (
 )
 from fred_sdk.contracts.react_contract import ReActInput, ReActMessage, ReActMessageRole
 from fred_sdk.contracts.runtime import (
+    AssistantDeltaRuntimeEvent,
     AwaitingHumanRuntimeEvent,
     ExecutionConfig,
     FinalRuntimeEvent,
     ToolResultRuntimeEvent,
 )
-from langchain_core.messages import AIMessage, ToolMessage
+from langchain_core.messages import AIMessage, AIMessageChunk, ToolMessage
 
 
 class _FakePortable:
@@ -263,7 +262,7 @@ async def test_read_query_error_event_keeps_engine_detail_and_drops_http_wrapper
     events = [
         ("updates", {"agent": {"messages": [tool_call]}}),
         ("updates", {"tools": {"messages": [_read_query_error_result("c1")]}}),
-        ("updates", {"agent": {"messages": [AIMessage(content="ignored")]}}),
+        ("updates", {"agent": {"messages": [AIMessage(content="")]}}),
     ]
 
     collected = await _run_stream(events)
@@ -348,10 +347,9 @@ async def test_partial_round_failure_error_after_success_keeps_synthesis() -> No
 
 
 @pytest.mark.asyncio
-async def test_wholly_failed_round_still_surfaces_error_as_final() -> None:
-    """The pre-#2244 guarantee stays: when every call of the round failed, the
-    LLM is not trusted to relay the failure — the error text IS the final
-    response (with the LLM-facing "Tool error:" prefix stripped)."""
+async def test_wholly_failed_round_keeps_the_model_answer() -> None:
+    """A typed error (e.g. a tool's revision request) followed by the model's
+    own answer: that answer is the final response, not the tool's text."""
 
     events = [
         ("updates", {"agent": {"messages": [_tool_calls_message("c1")]}}),
@@ -364,7 +362,98 @@ async def test_wholly_failed_round_still_surfaces_error_as_final() -> None:
 
     collected = await _run_stream(events)
 
+    assert _final(collected).content == "I could not do it, sorry!"
+    errored = [e for e in collected if isinstance(e, ToolResultRuntimeEvent)]
+    assert errored[0].is_error is True
+    assert errored[0].content == "403 Forbidden"
+
+
+@pytest.mark.asyncio
+async def test_wholly_failed_round_without_model_answer_surfaces_error() -> None:
+    """No answer after the failure (blank text): the error text, with the
+    LLM-facing "Tool error:" prefix stripped, is the final response."""
+
+    events = [
+        ("updates", {"agent": {"messages": [_tool_calls_message("c1")]}}),
+        ("updates", {"tools": {"messages": [_error_result("c1", "403 Forbidden")]}}),
+        ("updates", {"agent": {"messages": [AIMessage(content="  \n")]}}),
+    ]
+
+    collected = await _run_stream(events)
+
     assert _final(collected).content == "403 Forbidden"
+
+
+@pytest.mark.asyncio
+async def test_wholly_failed_round_with_no_model_turn_surfaces_error() -> None:
+    """The stream ends right after the failed round, with no model message
+    at all: the generic error is still a clear final response."""
+
+    events = [
+        ("updates", {"agent": {"messages": [_tool_calls_message("c1")]}}),
+        (
+            "updates",
+            {"tools": {"messages": [_raw_status_error_result("c1", "boom")]}},
+        ),
+    ]
+
+    collected = await _run_stream(events)
+
+    assert _final(collected).content == _GENERIC_TOOL_FAILURE_MESSAGE
+
+
+@pytest.mark.asyncio
+async def test_tool_call_cap_refusal_keeps_the_model_answer() -> None:
+    """ToolCallLimitMiddleware's refusal (`status="error"`, no artifact) is an
+    untyped failure; the model's answer after it is the final response, and
+    the refused call's row shows only the generic message."""
+
+    refusal = ToolMessage(
+        content="Tool call limit exceeded. Do not call 'build_presentation' again.",
+        tool_call_id="c13",
+        name="build_presentation",
+        status="error",
+    )
+    events = [
+        ("updates", {"agent": {"messages": [_tool_calls_message("c13")]}}),
+        ("updates", {"tools": {"messages": [refusal]}}),
+        (
+            "updates",
+            {"agent": {"messages": [AIMessage(content="Here is the deck outline.")]}},
+        ),
+    ]
+
+    collected = await _run_stream(events)
+
+    assert _final(collected).content == "Here is the deck outline."
+    [row] = [e for e in collected if isinstance(e, ToolResultRuntimeEvent)]
+    assert row.is_error is True
+    assert row.content == _GENERIC_TOOL_FAILURE_MESSAGE
+
+
+@pytest.mark.asyncio
+async def test_answer_deltas_stream_after_a_failed_round() -> None:
+    """Deltas are no longer suppressed after a failure: the streamed text and
+    the final content are the same answer."""
+
+    def _chunk(text: str) -> tuple[str, tuple[AIMessageChunk, dict[str, str]]]:
+        return ("messages", (AIMessageChunk(content=text), {"langgraph_node": "agent"}))
+
+    events = [
+        ("updates", {"agent": {"messages": [_tool_calls_message("c1")]}}),
+        ("updates", {"tools": {"messages": [_error_result("c1", "needs revision")]}}),
+        _chunk("Partial "),
+        _chunk("answer."),
+        ("updates", {"agent": {"messages": [AIMessage(content="Partial answer.")]}}),
+    ]
+
+    collected = await _run_stream(events)
+
+    streamed = "".join(
+        e.delta for e in collected if isinstance(e, AssistantDeltaRuntimeEvent)
+    )
+    assert streamed == "Partial answer."
+    assert _final(collected).content == "Partial answer."
 
 
 @pytest.mark.asyncio
@@ -600,14 +689,14 @@ async def test_parallel_human_pauses_keep_each_request_without_double_counting()
 @pytest.mark.asyncio
 async def test_success_then_wholly_failed_round_surfaces_error() -> None:
     """A success in an EARLIER round must not shield a later wholly-failed
-    round: each round's outcome is judged on its own results."""
+    round: with no answer after it, that round's error is the fallback."""
 
     events = [
         ("updates", {"agent": {"messages": [_tool_calls_message("c1")]}}),
         ("updates", {"tools": {"messages": [_ok_result("c1", "info")]}}),
         ("updates", {"agent": {"messages": [_tool_calls_message("c2")]}}),
         ("updates", {"tools": {"messages": [_error_result("c2", "boom")]}}),
-        ("updates", {"agent": {"messages": [AIMessage(content="babble")]}}),
+        ("updates", {"agent": {"messages": [AIMessage(content="")]}}),
     ]
 
     collected = await _run_stream(events)
@@ -617,9 +706,9 @@ async def test_success_then_wholly_failed_round_surfaces_error() -> None:
 
 @pytest.mark.asyncio
 async def test_raw_status_error_with_no_artifact_still_surfaces_as_final() -> None:
-    """The untyped shape (`status="error"`, `artifact=None`) still engages
-    whole-round suppression, but its raw content must never reach either
-    user-facing event — both collapse to the bounded generic message."""
+    """The untyped shape (`status="error"`, `artifact=None`) with no model
+    answer after it: its raw content must never reach either user-facing
+    event — both collapse to the bounded generic message."""
 
     events = [
         ("updates", {"agent": {"messages": [_tool_calls_message("c1")]}}),
@@ -629,11 +718,7 @@ async def test_raw_status_error_with_no_artifact_still_surfaces_as_final() -> No
         ),
         (
             "updates",
-            {
-                "agent": {
-                    "messages": [AIMessage(content="I published it successfully!")]
-                }
-            },
+            {"agent": {"messages": [AIMessage(content="")]}},
         ),
     ]
 
@@ -665,11 +750,7 @@ async def test_status_error_with_non_erroring_artifact_still_classified_as_error
         ),
         (
             "updates",
-            {
-                "agent": {
-                    "messages": [AIMessage(content="I published it successfully!")]
-                }
-            },
+            {"agent": {"messages": [AIMessage(content="")]}},
         ),
     ]
 
@@ -734,7 +815,7 @@ async def test_untyped_status_error_never_leaks_secret_or_langgraph_instruction(
             "updates",
             {"tools": {"messages": [_raw_status_error_result("c1", secret_repr)]}},
         ),
-        ("updates", {"agent": {"messages": [AIMessage(content="Done, no issues!")]}}),
+        ("updates", {"agent": {"messages": [AIMessage(content="")]}}),
     ]
 
     collected = await _run_stream(events)
@@ -779,7 +860,7 @@ async def test_typed_error_ignores_divergent_message_content() -> None:
                 }
             },
         ),
-        ("updates", {"agent": {"messages": [AIMessage(content="I handled it fine!")]}}),
+        ("updates", {"agent": {"messages": [AIMessage(content="")]}}),
     ]
 
     collected = await _run_stream(events)
@@ -810,7 +891,7 @@ async def test_typed_error_with_empty_blocks_shows_generic_message_not_empty() -
             "updates",
             {"tools": {"messages": [_blocks_empty_error_result("c1", real_message)]}},
         ),
-        ("updates", {"agent": {"messages": [AIMessage(content="Done!")]}}),
+        ("updates", {"agent": {"messages": [AIMessage(content="")]}}),
     ]
 
     collected = await _run_stream(events)

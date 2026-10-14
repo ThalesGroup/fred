@@ -506,19 +506,11 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
         # which re-counts the history once per model call.
         context_tokens: int | None = None
         last_finish_reason: str | None = None
-        # When a whole round of tool calls fails (every call errored, no
-        # success anywhere in the batch), the error is surfaced directly as the
-        # final response. The LLM is NOT trusted to relay a bare failure: its
-        # subsequent turn is consumed but discarded, and its streaming deltas
-        # are suppressed. But a PARTIAL failure — some calls of the round
-        # succeeded, or a later call recovered — hands the turn back to the
-        # LLM: it has real results to synthesize, and discarding them for one
-        # failed sibling call threw away 5/6 good summaries live (issue #2244;
-        # also contradicted the §8.27 tool-failure-recovery prompt suffix that
-        # tells the model to answer from what succeeded).
+        # A wholly-failed round's error is only the fallback final response, used
+        # when the model writes no answer after it; the failed rows stay marked
+        # as errors. Full rationale: RUNTIME-EXECUTION-CONTRACT.md §8.115.
         last_tool_error: str | None = None
         awaiting_requests: list[HumanInputRequest] = []
-        suppress_assistant_deltas: bool = False
         # Tracks whether the current round (the batch of tool calls requested
         # by the latest AIMessage) has produced at least one successful result.
         # Reset on every new tool-calling AIMessage; parallel results within a
@@ -557,7 +549,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
             nonlocal sequence
             nonlocal round_preamble_chars, round_preamble_started_at
 
-            if not text or suppress_assistant_deltas:
+            if not text:
                 return None
             event = AssistantDeltaRuntimeEvent(sequence=sequence, delta=text)
             sequence += 1
@@ -871,32 +863,14 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                         if is_error:
                             if not round_had_tool_success:
                                 last_tool_error = tool_result_content
-                                suppress_assistant_deltas = True
-                                if delegation_enabled():
-                                    logger.debug(
-                                        "[V2][REACT] tool error intercepted — "
-                                        "suppressing LLM turn, surfacing error directly"
-                                    )
-                                else:
-                                    logger.debug(
-                                        "[V2][REACT] tool error intercepted tool=%s — "
-                                        "suppressing LLM turn, surfacing error directly",
-                                        message.name,
-                                    )
+                                # Only an answer written after this failure
+                                # may replace it.
+                                last_assistant_message = None
                         else:
                             round_had_tool_success = True
-                            if last_tool_error is not None:
-                                # A sibling (or later round's) call succeeded:
-                                # the turn is a partial failure, not a dead
-                                # end — the LLM's synthesis is the final
-                                # answer again, with the error visible to it
-                                # as an ordinary tool result.
-                                last_tool_error = None
-                                suppress_assistant_deltas = False
-                                logger.debug(
-                                    "[V2][REACT] tool success after error — "
-                                    "restoring LLM synthesis as final response",
-                                )
+                            # A sibling (or later round's) call succeeded: the
+                            # round is a partial failure, not a dead end.
+                            last_tool_error = None
                         thought_id = active_thought_ids.pop(message.tool_call_id, None)
                         thought_started_at = active_thought_started_at.pop(
                             message.tool_call_id, None
@@ -1095,11 +1069,18 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                         usage=to_langfuse_usage(total_token_usage),
                     )
             elif last_tool_error is not None or last_assistant_message is not None:
-                final_content = (
-                    last_tool_error
-                    if last_tool_error is not None
-                    else last_assistant_message.content  # type: ignore[union-attr]
+                answer = (
+                    last_assistant_message.content
+                    if last_assistant_message is not None
+                    else ""
                 )
+                if last_tool_error is not None and not answer.strip():
+                    final_content = last_tool_error
+                    logger.info(
+                        "[V2][REACT] event=final_from_tool_error reason=no_model_answer"
+                    )
+                else:
+                    final_content = answer
                 yield FinalRuntimeEvent(
                     sequence=sequence,
                     content=final_content,
