@@ -354,16 +354,31 @@ async def activation_preview(access: PlatformAccess) -> PlatformAccessActivation
 async def _t0_with_import_count(
     access: PlatformAccess, actor: KeycloakUser | None = None
 ) -> tuple[PlatformT0Preview, int | None]:
+    """Count existing users; pass an actor to perform the one-time T0 import."""
+    rows: list[UserRow] = []
     async with access.store.read() as session:
         state = await access.state(session)
-        rows = list((await session.scalars(select(UserRow))).all())
+        if actor is not None:
+            rows = list((await session.scalars(select(UserRow))).all())
     revision = state.revision
     policy = access.policy(state)
-    matches = await asyncio.to_thread(
-        lambda: [access.observed_match(row, policy) for row in rows]
-    )
-    matching, candidates = sum(matches), len(rows) - sum(matches)
     if actor is None:
+        matching = candidates = 0
+        async with access.store.read(timeout=None) as session:
+            result = await asyncio.wait_for(
+                session.stream_scalars(
+                    select(UserRow)
+                    .order_by(UserRow.id)
+                    .execution_options(yield_per=500)
+                ),
+                timeout=5,
+            )
+            while page := await asyncio.wait_for(result.fetchmany(500), timeout=5):
+                page_matches = await asyncio.to_thread(
+                    lambda: sum(access.observed_match(row, policy) for row in page)
+                )
+                matching += page_matches
+                candidates += len(page) - page_matches
         return (
             PlatformT0Preview(
                 candidates=candidates,
@@ -372,6 +387,10 @@ async def _t0_with_import_count(
             ),
             None,
         )
+    matches = await asyncio.to_thread(
+        lambda: [access.observed_match(row, policy) for row in rows]
+    )
+    matching, candidates = sum(matches), len(rows) - sum(matches)
     async with access.store.mutation() as session:
         state = await access.state(session)
         if state.t0_completed_at is not None:

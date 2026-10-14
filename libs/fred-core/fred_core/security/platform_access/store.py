@@ -40,10 +40,11 @@ class PlatformAccessStore:
 
     @asynccontextmanager
     async def read(
-        self, session: AsyncSession | None = None
+        self, session: AsyncSession | None = None, *, timeout: float | None = 5
     ) -> AsyncIterator[AsyncSession]:
+        """Allow a cursor to span CPU work while callers bound each database fetch."""
         try:
-            async with asyncio.timeout(5):
+            async with asyncio.timeout(timeout):
                 async with use_session(self.sessions, session) as active:
                     yield active
         except HTTPException:

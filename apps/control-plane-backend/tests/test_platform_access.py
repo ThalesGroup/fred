@@ -158,6 +158,49 @@ async def test_t0_once_and_deleted_entries_never_return(access):
 
 
 @pytest.mark.asyncio
+async def test_t0_preview_streams_large_population_from_one_snapshot(
+    access, monkeypatch
+):
+    matching = user("accepted")
+    await access.observe(matching)
+    async with access.store.mutation() as session:
+        session.add_all(
+            [
+                UserRow(id=UUID(int=index + 10000), username=f"person{index}")
+                for index in range(1001)
+            ]
+        )
+
+    reads: list[str] = []
+
+    def record_user_page(
+        _connection, _cursor, statement, _parameters, _context, _executemany
+    ):
+        if "FROM users" in statement and "ORDER BY users.id" in statement:
+            reads.append(statement)
+
+    event.listen(
+        access.store.engine.sync_engine, "before_cursor_execute", record_user_page
+    )
+    original_match = access.observed_match
+
+    def slow_match(row, policy):
+        time.sleep(0.006)
+        return original_match(row, policy)
+
+    monkeypatch.setattr(access, "observed_match", slow_match)
+    try:
+        preview = await service.t0(access)
+    finally:
+        event.remove(
+            access.store.engine.sync_engine, "before_cursor_execute", record_user_page
+        )
+
+    assert (preview.candidates, preview.matching) == (1001, 1)
+    assert len(reads) == 1
+
+
+@pytest.mark.asyncio
 async def test_t0_audit_reports_actual_import_once(access, monkeypatch):
     actor, candidate, matching = user(), user(), user("accepted")
     for person in (actor, candidate, matching):
