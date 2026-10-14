@@ -123,6 +123,16 @@ _SAME_BAND = 20
 _SAME_COLUMN = 30
 _FIELD_GAP = 120
 _MAX_FIELDS = 4
+# A SUBTITLE placeholder this large (share of the slide) holds paragraphs.
+_SUBTITLE_BODY_AREA = 0.2
+# A (heading, text) pair: the text sits beside or under its heading, overlapping
+# it by half the smaller side, at most this far (per mille; overlaps allowed).
+_PAIR_GAP = 120
+_PAIR_OVERLAP = -40
+# A figure placeholder alone with its caption is a one-item figures slide.
+_FIGURE_MIN_PT = 40
+# A text-free slide drawing this many shapes is a graphic resource sheet.
+_RESOURCE_SHAPES = 8
 
 
 @dataclass
@@ -173,7 +183,7 @@ _TITLE_PLACEHOLDERS = ("TITLE", "CENTER_TITLE", "VERTICAL_TITLE")
 
 # Bumped whenever the rules below change what an inventory holds, so agents
 # saved with an older analysis are recomputed from their stored template.
-ANALYSIS_VERSION = 13
+ANALYSIS_VERSION = 14
 
 
 def theme_fonts(presentation) -> Tuple[Optional[str], Optional[str]]:
@@ -623,7 +633,9 @@ def _placeholder_role(rec: _Rec) -> Optional[ZoneRole]:
     if ph in ("TITLE", "CENTER_TITLE"):
         return "title"
     if ph == "SUBTITLE":
-        return "subtitle"
+        # Google Slides exports type every text box SUBTITLE: one sized for
+        # paragraphs is a body, not the line under a title.
+        return "body" if rec.area >= _SUBTITLE_BODY_AREA else "subtitle"
     if ph in ("BODY", "OBJECT"):
         # A body placeholder on the top band is a column heading (some
         # templates type their headings as BODY), not a bullet area.
@@ -864,15 +876,17 @@ class _Analyzer:
                 if _placeholder_role(rec) in ("body", "heading", "image")
             ]
         )
+        paired: Dict[str, ZoneRole] = {}
+        if not groups:
+            groups, in_rows, paired = self._pair_group(
+                [rec for rec in slotted if _placeholder_role(rec) in _PAIR_ROLES]
+            )
         zones: List[Zone] = []
         for rec in slotted:
             if rec.key in in_rows:
                 continue
-            zones.append(
-                _zone(
-                    rec, cast(ZoneRole, _placeholder_role(rec)), self.width, self.height
-                )
-            )
+            role = paired.get(rec.key) or cast(ZoneRole, _placeholder_role(rec))
+            zones.append(_zone(rec, role, self.width, self.height))
         _promote_headings(zones)
         self._chart_zones(zones, records)
         name = layout.name or f"Layout {index + 1}"
@@ -908,17 +922,29 @@ class _Analyzer:
 
         # 1. Repeated sibling groups, else rows of loose same-size shapes.
         groups, grouped_paths = self._repeat_groups(records)
-        free_text = [
+        loose = [
             rec
             for rec in records
             if rec.kind == "text"
             and rec.ph_idx is None
             and rec.text
             and not rec.is_field
-            and (rec.text not in self.shared_texts or lexicon.is_sample_text(rec.text))
             and rec.path[0] not in grouped_paths
         ]
+        slots = [
+            rec
+            for rec in loose
+            if rec.text not in self.shared_texts or lexicon.is_sample_text(rec.text)
+        ]
+        # Text repeated on other slides is chrome, unless it is one of a row of
+        # same-size slots here (a timeline entry reused elsewhere).
+        free_text = [
+            rec
+            for rec in loose
+            if rec in slots or sum(_same_class(rec, slot) for slot in slots) >= 2
+        ]
         in_rows: set[str] = set()
+        paired: Dict[str, ZoneRole] = {}
         if not groups:
             groups, in_rows = self._row_group(
                 [
@@ -927,6 +953,17 @@ class _Analyzer:
                     if rec.ph_idx is not None
                     and _slot_role(rec)
                     in ("body", "heading", "label", "caption", "image")
+                ]
+                + [rec for rec in free_text if _declared_role(rec) != "keep"]
+            )
+        if not groups:
+            groups, in_rows, paired = self._pair_group(
+                [
+                    rec
+                    for rec in records
+                    if rec.ph_idx is not None
+                    and rec.kind == "text"
+                    and _slot_role(rec) in _PAIR_ROLES
                 ]
                 + [rec for rec in free_text if _declared_role(rec) != "keep"]
             )
@@ -941,7 +978,7 @@ class _Analyzer:
                 continue
             if _declared_role(rec) == "keep":
                 continue
-            role = _slot_role(rec)
+            role = paired.get(rec.key) or _slot_role(rec)
             if role is None:
                 continue
             if role == "title" and not title_text:
@@ -962,7 +999,7 @@ class _Analyzer:
         has_title = any(z.role == "title" for z in zones)
         zones.extend(
             self._free_text_zones(
-                [rec for rec in free_text if rec.key not in in_rows], has_title
+                [rec for rec in free_text if rec.key not in in_rows], has_title, paired
             )
         )
         if not title_text:
@@ -1193,6 +1230,49 @@ class _Analyzer:
         )
         return [group], {rec.key for item in best for rec in item}
 
+    def _pair_group(
+        self, recs: List[_Rec]
+    ) -> Tuple[List[RepeatGroup], set[str], Dict[str, ZoneRole]]:
+        """Repeated (heading, text) pairs, whatever their placeholder types, as
+        one repeat group, its keys, and roles for zones outside any group: two
+        plain pairs stay the columns' headings and bodies."""
+        if lexicon.has_contact_words([rec.text for rec in recs]):
+            return [], set(), {}
+        items = _pairs(recs) or _lone_figure(recs)
+        if not items:
+            return [], set(), {}
+        heads = [item[0].text for item in items]
+        texts = [item[1] for item in items]
+        roles: List[ZoneRole] = ["heading", "body"]
+        if all(lexicon.is_figure(text) for text in heads):
+            if _sequential(heads) or all(lexicon.is_date_sample(t) for t in heads):
+                # Numbered entries and dates: a short text names the entry.
+                short = max(rec.words for rec in texts) <= 4
+                roles = ["number", "heading" if short else "body"]
+            else:
+                # A figure's caption: a label shows the plan's label or heading.
+                roles = ["number", "label"]
+        elif len(items) == 2:
+            return (
+                [],
+                set(),
+                {rec.key: role for item in items for rec, role in zip(item, roles)},
+            )
+        group = RepeatGroup(
+            key=items[0][0].key,
+            count=len(items),
+            item_zones=roles,
+            items=[
+                [
+                    _zone(rec, role, self.width, self.height)
+                    for rec, role in zip(item, roles)
+                ]
+                for item in items
+            ],
+            item_keys=[item[0].key for item in items],
+        )
+        return [group], {rec.key for item in items for rec in item}, {}
+
     @staticmethod
     def _item_roles(children: List[_Rec]) -> List[ZoneRole]:
         roles: List[Optional[ZoneRole]] = [None] * len(children)
@@ -1226,11 +1306,16 @@ class _Analyzer:
 
     # -- free text ---------------------------------------------------------------------
 
-    def _free_text_zones(self, free_text: List[_Rec], has_title: bool) -> List[Zone]:
+    def _free_text_zones(
+        self,
+        free_text: List[_Rec],
+        has_title: bool,
+        paired: Optional[Dict[str, ZoneRole]] = None,
+    ) -> List[Zone]:
         zones: List[Zone] = []
         ranked = sorted(free_text, key=lambda r: -(r.font_pt or 0))
         for rank, rec in enumerate(ranked):
-            declared = _declared_role(rec)
+            declared = _declared_role(rec) or (paired or {}).get(rec.key)
             if declared == "keep":
                 continue
             marker = KEY_PATTERN.search(rec.text)
@@ -1269,7 +1354,11 @@ class _Analyzer:
                 pattern.included = False
                 pattern.exclusion_reason = rec.kind  # type: ignore[assignment]
                 return
-        if lexicon.is_library_title(pattern.label) or _icons(records) >= _LIBRARY_ITEMS:
+        if (
+            lexicon.is_library_title(pattern.label)
+            or _icons(records) >= _LIBRARY_ITEMS
+            or _resource_sheet(records, slide)
+        ):
             pattern.included = False
             pattern.exclusion_reason = "library"
             return
@@ -1437,6 +1526,121 @@ def _rows_of_items(recs: List[_Rec]) -> List[List[List[_Rec]]]:
     return found
 
 
+# Placeholder roles that may hold one field of a (heading, text) pair: Google
+# Slides exports type a card's heading TITLE and its text SUBTITLE.
+_PAIR_ROLES = ("title", "subtitle", "body", "heading", "label", "caption")
+
+
+def _pair_gap(head: _Rec, text: _Rec, beside: bool) -> Optional[int]:
+    """How far ``text`` sits right of ``head`` (``beside``), else above or
+    under it, sharing half the smaller side; None when it is not its field."""
+    a, b = head.box, text.box
+    if beside:
+        shared = min(a.y + a.h, b.y + b.h) - max(a.y, b.y)
+        gap = b.x - (a.x + a.w)
+        ok = shared * 2 >= min(a.h, b.h)
+    else:
+        shared = min(a.x + a.w, b.x + b.w) - max(a.x, b.x)
+        gap = max(b.y - (a.y + a.h), a.y - (b.y + b.h))
+        ok = shared * 2 >= min(a.w, b.w)
+    return gap if ok and _PAIR_OVERLAP <= gap <= _PAIR_GAP else None
+
+
+def _matched(
+    heads: List[_Rec], texts: List[_Rec], beside: bool
+) -> Optional[Tuple[int, List[List[_Rec]]]]:
+    """Each head with its nearest free text, all in one arrangement, and the
+    summed distance; None when a head has none."""
+    free = list(texts)
+    items: List[List[_Rec]] = []
+    total = 0
+    for head in heads:
+        near = [
+            (abs(gap), t)
+            for t in free
+            if (gap := _pair_gap(head, t, beside)) is not None
+        ]
+        if not near:
+            return None
+        distance, text = min(near, key=lambda pair: pair[0])
+        free.remove(text)
+        items.append([head, text])
+        total += distance
+    return total, items
+
+
+def _pairs(recs: List[_Rec]) -> List[List[_Rec]]:
+    """The most (heading, text) pairs: two size classes as many each, the
+    bigger-font one's every shape with its own text beside or above/under it."""
+    classes: List[List[_Rec]] = []
+    for rec in recs:
+        cls = next((c for c in classes if _same_class(rec, c[0])), None)
+        if cls is None:
+            classes.append([rec])
+        else:
+            cls.append(rec)
+    best: List[List[_Rec]] = []
+    for heads in classes:
+        for texts in classes:
+            n = len(heads)
+            if n < 2 or len(texts) != n or n <= len(best):
+                continue
+            if (heads[0].font_pt or 0) <= (texts[0].font_pt or 0):
+                continue
+            found = [m for m in (_matched(heads, texts, b) for b in (True, False)) if m]
+            if found:
+                best = min(found, key=lambda m: m[0])[1]
+    return _item_order(best)
+
+
+def _lone_figure(recs: List[_Rec]) -> List[List[_Rec]]:
+    """A big figure and its caption alone on the slide (a "big number" layout)."""
+    if len(recs) != 2:
+        return []
+    figure, caption = sorted(recs, key=lambda r: -(r.font_pt or 0))
+    if (
+        (figure.font_pt or 0) < _FIGURE_MIN_PT
+        or not lexicon.is_figure(figure.text)
+        or _pair_gap(figure, caption, beside=False) is None
+    ):
+        return []
+    return [[figure, caption]]
+
+
+def _item_order(items: List[List[_Rec]]) -> List[List[_Rec]]:
+    """Rows top to bottom, left to right; a staircase (one item per row, each
+    further right) reads left to right."""
+
+    def top(item: List[_Rec]) -> int:
+        return min(rec.box.y for rec in item)
+
+    def left(item: List[_Rec]) -> int:
+        return min(rec.box.x for rec in item)
+
+    rows: List[List[List[_Rec]]] = []
+    for item in sorted(items, key=top):
+        if rows and top(item) - top(rows[-1][0]) <= 2 * _SAME_BAND:
+            rows[-1].append(item)
+        else:
+            rows.append([item])
+    columns = {left(item) // _SAME_COLUMN for item in items}
+    if len(rows) == len(items) and len(columns) == len(items):
+        return sorted(items, key=left)
+    return [item for row in rows for item in sorted(row, key=left)]
+
+
+def _resource_sheet(records: List[_Rec], slide) -> bool:
+    """A slide with no placeholder and no text but links: many drawn shapes
+    (an editable-graphics sheet) or a linked picture (a promotion)."""
+    if any(rec.ph_idx is not None for rec in records):
+        return False
+    if any(rec.words and not lexicon.is_url(rec.text) for rec in records):
+        return False
+    top_level = sum(1 for rec in records if len(rec.path) == 1)
+    linked = any(rel.is_external for rel in slide.part.rels.values())
+    return top_level >= _RESOURCE_SHAPES or (linked and top_level > 0)
+
+
 def _mark_framed(pattern: Pattern, frames: List[Box]) -> None:
     """An image zone at least half covered by a frame shows that frame when
     left empty: the fit check then asks for a picture."""
@@ -1529,12 +1733,19 @@ def _hinted_kind(
 def _group_kind(group: RepeatGroup, samples: List[str]) -> SlideKind:
     roles = set(group.item_zones)
     numbers = [z.sample for item in group.items for z in item if z.role == "number"]
-    if numbers and all(lexicon.is_year(n) for n in numbers):
+    if numbers and all(lexicon.is_date_sample(n) for n in numbers):
         return "timeline"
     if "number" in roles:
         if not _sequential(numbers):
             return "figures"
-        return "process" if roles & {"body", "label"} else "agenda"
+        if not roles & {"body", "label"}:
+            return "agenda"
+        # Steps run along one line; numbered texts laid out in a grid are cards.
+        firsts = [item[0].box for item in group.items if item]
+        rows = len({b.y // 40 for b in firsts})
+        columns = len({b.x // 40 for b in firsts})
+        grid = 1 < rows < len(firsts) and 1 < columns < len(firsts)
+        return "cards" if grid else "process"
     if lexicon.has_contact_words(samples):
         return "team"
     return "cards"
@@ -1601,6 +1812,8 @@ def _kind(
         same_band = max(b.box.y for b in bodies) - min(b.box.y for b in bodies) < 100
         if same_band:
             return "comparison" if len(headings) >= 2 else "two_columns"
+        if len(bodies) == 2 and len(headings) == 2:
+            return "two_columns"  # two headed blocks stacked
     if images and (bodies or headings):
         return "image_text"
     if len(bodies) == 1 and not titles and not headings:
@@ -1619,6 +1832,8 @@ def _sequential(numbers: List[str]) -> bool:
         values.append(int(digits))
     if len(values) < 2:
         return False
+    # In any order: a grid of steps lists them row by row.
+    values.sort()
     return all(b - a == 1 for a, b in zip(values, values[1:])) or all(
         lexicon.is_year(n) for n in numbers
     )

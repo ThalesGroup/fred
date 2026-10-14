@@ -479,6 +479,187 @@ def add_attribution_closing_slide(presentation):
     return slide
 
 
+# --- Google Slides exports: every text box a TITLE or SUBTITLE placeholder -------------
+
+
+def _placeholder(slide, kind: str, idx: int, x, y, w, h, text: str, size) -> None:
+    """A ``kind`` (title/subTitle) placeholder at an explicit position, as
+    Slidesgo templates type their card headings and texts."""
+    shape = slide.shapes.add_textbox(Inches(x), Inches(y), Inches(w), Inches(h))
+    shape.text_frame.text = text
+    for paragraph in shape.text_frame.paragraphs:
+        for run in paragraph.runs:
+            run.font.size = size
+    nv_pr = shape._element.find(qn("p:nvSpPr")).find(qn("p:nvPr"))
+    ph = nv_pr.makeelement(qn("p:ph"), {"type": kind, "idx": str(idx)})
+    nv_pr.insert(0, ph)
+    c_nv = shape._element.find(qn("p:nvSpPr")).find(qn("p:cNvSpPr"))
+    c_nv.attrib.pop("txBox", None)
+
+
+def _blank_titled(presentation, title: str):
+    slide = presentation.slides.add_slide(presentation.slide_layouts[L_BLANK])
+    _placeholder(slide, "title", 90, 0.3, 0.3, 9.4, 0.9, title, Pt(28))
+    return slide
+
+
+def add_placeholder_cards_slide(presentation):
+    """Three (TITLE heading, SUBTITLE text) pairs, heading left of its text."""
+    slide = _blank_titled(presentation, "Three ideas")
+    for index, (x, y) in enumerate(((0.3, 1.8), (5.2, 1.8), (5.2, 4.6))):
+        _placeholder(
+            slide, "title", 10 + index, x, y, 1.7, 1.7, "Pourquoi Venus", Pt(16)
+        )
+        _placeholder(
+            slide,
+            "subTitle",
+            20 + index,
+            x + 1.8,
+            y,
+            2.5,
+            1.7,
+            "Venus porte un beau nom et reste la deuxieme planete",
+            Pt(12),
+        )
+    return slide
+
+
+def add_placeholder_two_ideas_slide(presentation):
+    """Two (heading, text) pairs stacked: the two columns of a two_columns slide."""
+    slide = _blank_titled(presentation, "Two ideas")
+    for index, y in enumerate((2.0, 4.6)):
+        _placeholder(
+            slide, "subTitle", 10 + index, 0.3, y, 1.6, 1.4, "Sur Saturne", Pt(16)
+        )
+        _placeholder(
+            slide,
+            "subTitle",
+            20 + index,
+            2.0,
+            y,
+            3.8,
+            2.0,
+            "Saturne est une geante gazeuse entouree de plusieurs anneaux",
+            Pt(12),
+        )
+    return slide
+
+
+def add_big_figures_slide(presentation):
+    """Two big figures, the first captioned above, the second below."""
+    slide = presentation.slides.add_slide(presentation.slide_layouts[L_BLANK])
+    _placeholder(
+        slide, "subTitle", 1, 0.7, 2.7, 4.2, 1.1, "Masse du Soleil rapportee", Pt(12)
+    )
+    _placeholder(slide, "title", 2, 0.7, 4.4, 4.2, 1.3, "333,000", Pt(44))
+    _placeholder(slide, "title", 3, 5.1, 2.7, 4.2, 1.3, "386,000 km", Pt(44))
+    _placeholder(
+        slide, "subTitle", 4, 5.1, 4.6, 4.2, 1.1, "Distance Terre Lune", Pt(12)
+    )
+    return slide
+
+
+def add_big_number_slide(presentation):
+    """A lone stand-in figure and its caption: a "big number" design."""
+    slide = presentation.slides.add_slide(presentation.slide_layouts[L_BLANK])
+    _placeholder(slide, "title", 1, 1.4, 2.8, 7.2, 1.2, "xx%", Pt(60))
+    _placeholder(slide, "subTitle", 2, 1.4, 4.1, 7.2, 0.6, "", Pt(16))
+    return slide
+
+
+def add_numbered_grid_slide(presentation):
+    """Six numbered texts in two columns: cards, not a process."""
+    slide = _blank_titled(presentation, "Six ideas")
+    for index in range(6):
+        x, y = 0.3 + (index // 3) * 4.7, 2.4 + (index % 3) * 1.3
+        _placeholder(
+            slide, "title", 10 + index, x, y, 0.6, 1.0, f"0{index + 1}", Pt(20)
+        )
+        _placeholder(
+            slide,
+            "subTitle",
+            20 + index,
+            x + 0.5,
+            y + 0.15,
+            3.3,
+            1.2,
+            "Mercure est la plus petite planete du systeme solaire",
+            Pt(12),
+        )
+    return slide
+
+
+TIMELINE_ENTRY = "Saturne est une geante gazeuse avec des anneaux"
+
+
+def add_staircase_timeline_slide(presentation):
+    """Five "20XX" dates each over its text, climbing left to right."""
+    slide = _titled(presentation, "Our history")
+    for index in range(5):
+        x, y = 0.4 + index * 1.8, 5.7 - index * 1.0
+        _textbox(slide.shapes, x, y, 1.6, 0.8, "20XX", Pt(16))
+        text = TIMELINE_ENTRY if index == 1 else f"Etape numero {index} du parcours"
+        _textbox(slide.shapes, x, y + 0.75, 1.6, 0.7, text, Pt(12))
+    return slide
+
+
+def add_reused_entry_slide(presentation):
+    """Another slide repeating a timeline entry's text."""
+    slide = _titled(presentation, "Elsewhere")
+    _textbox(slide.shapes, 0.5, 5.0, 4.0, 0.7, TIMELINE_ENTRY, Pt(12))
+    return slide
+
+
+def add_paragraph_subtitle_slide(presentation):
+    """A SUBTITLE placeholder sized for paragraphs: a text slide, not a cover."""
+    slide = _blank_titled(presentation, "Let's have a look")
+    _placeholder(
+        slide,
+        "subTitle",
+        1,
+        0.3,
+        2.5,
+        6.9,
+        4.6,
+        "Mercure est la planete la plus proche du Soleil et la plus petite",
+        Pt(14),
+    )
+    return slide
+
+
+def add_graphic_sheet_slide(presentation):
+    """Editable graphics: grouped shapes, no text, no placeholder."""
+    slide = presentation.slides.add_slide(presentation.slide_layouts[L_BLANK])
+    for index in range(10):
+        group = slide.shapes.add_group_shape()
+        x, y = 0.5 + (index % 5) * 1.8, 1.0 + (index // 5) * 3.0
+        group.shapes.add_shape(
+            MSO_SHAPE.OVAL, Inches(x), Inches(y), Inches(1.5), Inches(1.5)
+        )
+        group.shapes.add_shape(
+            MSO_SHAPE.RECTANGLE, Inches(x), Inches(y + 1.6), Inches(1.5), Inches(0.5)
+        )
+    return slide
+
+
+def add_promo_slide(presentation):
+    """A linked banner picture alone: a promotion, not a design."""
+    slide = presentation.slides.add_slide(presentation.slide_layouts[L_BLANK])
+    picture = slide.shapes.add_picture(
+        io.BytesIO(png_bytes(64, 16)),
+        Inches(3.8),
+        Inches(3.5),
+        Inches(2.4),
+        Inches(0.5),
+    )
+    picture.click_action.hyperlink.address = "http://bit.ly/example"
+    return slide
+
+
+def add_empty_slide(presentation):
+    presentation.slides.add_slide(presentation.slide_layouts[L_BLANK])
+
+
 def build_library_template() -> bytes:
     return build_slides(
         [

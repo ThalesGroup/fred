@@ -229,6 +229,12 @@ _NUMBERISH = re.compile(
     r"^[\s#]*[0-9]{1,4}([.,][0-9]+)?\s*(%|€|\$|k|m|x|/[0-9]+)?\s*$", re.IGNORECASE
 )
 _YEAR = re.compile(r"^(19|20)[0-9]{2}$")
+# Template stand-ins for a figure or a year ("xx%", "20XX").
+_FIGURE_SAMPLE = re.compile(r"^[\s#]*x{2,4}\s*%?\s*$", re.IGNORECASE)
+_YEAR_SAMPLE = re.compile(r"^(19|20)xx$", re.IGNORECASE)
+# A figure shown big: a number with at most a short unit ("386,000 km", "+12 %").
+_FIGURE = re.compile(r"^[+\-~<>$€£]?\s*[0-9][0-9\s.,]*\s*[^\s0-9]{0,6}$")
+_URL = re.compile(r"^(https?://|www\.|bit\.ly/)\S+$", re.IGNORECASE)
 
 
 def normalize(text: str) -> str:
@@ -257,6 +263,27 @@ def is_numberish(text: str) -> bool:
 
 def is_year(text: str) -> bool:
     return bool(_YEAR.match(text.strip()))
+
+
+def is_date_sample(text: str) -> bool:
+    """A year in a template, the designer's "20XX" stand-in included."""
+    return is_year(text) or bool(_YEAR_SAMPLE.match(text.strip()))
+
+
+def is_figure(text: str) -> bool:
+    """A value a slide shows big: a numberish text, a number with a short unit
+    ("386,000 km"), or a template stand-in ("xx%", "20XX")."""
+    text = text.strip()
+    return (
+        is_numberish(text)
+        or is_date_sample(text)
+        or bool(_FIGURE_SAMPLE.match(text))
+        or (len(text) <= 14 and bool(_FIGURE.match(text)))
+    )
+
+
+def is_url(text: str) -> bool:
+    return bool(_URL.match(text.strip()))
 
 
 def role_from_shape_name(name: str) -> str | None:

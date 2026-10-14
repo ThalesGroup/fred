@@ -30,9 +30,21 @@ from builder_decks import (
     L_PICTURE,
     L_TITLE,
     L_TITLE_ONLY,
+    TIMELINE_ENTRY,
     add_agenda_slide,
+    add_big_figures_slide,
+    add_big_number_slide,
     add_divider_slide,
+    add_empty_slide,
+    add_graphic_sheet_slide,
     add_loose_figures_slide,
+    add_numbered_grid_slide,
+    add_paragraph_subtitle_slide,
+    add_placeholder_cards_slide,
+    add_placeholder_two_ideas_slide,
+    add_promo_slide,
+    add_reused_entry_slide,
+    add_staircase_timeline_slide,
     add_three_column_bodies_slide,
     build_layouts_only_template,
     build_library_template,
@@ -47,6 +59,7 @@ from fred_capability_ppt_filler.builder.analysis import (
     estimate_capacity,
 )
 from fred_capability_ppt_filler.builder.lexicon import (
+    is_figure,
     is_library_title,
     is_sample_text,
     role_from_shape_name,
@@ -840,3 +853,123 @@ def test_reference_template_offers_every_cards_variant_and_icon_cards_win():
         for run in inner.text_frame.paragraphs[0].runs
     ]
     assert any(run.text == "Agilité" and run.font.bold for run in texts)
+
+
+# --- Google Slides exports: cards, figures and timelines without groups ----------------
+
+
+def _google_deck():
+    inventory = analyze_template(
+        build_slides(
+            [
+                add_placeholder_cards_slide,
+                add_placeholder_two_ideas_slide,
+                add_big_figures_slide,
+                add_big_number_slide,
+                add_numbered_grid_slide,
+                add_staircase_timeline_slide,
+                add_reused_entry_slide,
+                add_paragraph_subtitle_slide,
+                add_graphic_sheet_slide,
+                add_promo_slide,
+                add_empty_slide,
+            ]
+        )
+    ).inventory
+    assert inventory is not None
+    return {p.source_index: p for p in inventory.patterns if p.source == "slide"}
+
+
+@pytest.fixture(scope="module")
+def google() -> dict:
+    return _google_deck()
+
+
+def _texts(group) -> list:
+    return [[z.sample for z in item] for item in group.items]
+
+
+def test_repeated_title_subtitle_pairs_are_cards(google):
+    cards = google[1]
+    assert cards.kind == "cards"
+    assert [z.role for z in cards.zones] == ["title"]
+    group = cards.groups[0]
+    assert group.count == 3 and group.item_zones == ["heading", "body"]
+
+
+def test_two_stacked_pairs_are_headed_columns(google):
+    columns = google[2]
+    assert columns.kind == "two_columns" and not columns.groups
+    roles = sorted(z.role for z in columns.zones)
+    assert roles == ["body", "body", "heading", "heading", "title"]
+
+
+def test_big_figures_pair_with_the_caption_in_their_column(google):
+    figures = google[3]
+    assert figures.kind == "figures"
+    assert figures.groups[0].item_zones == ["number", "label"]
+    assert _texts(figures.groups[0]) == [
+        ["333,000", "Masse du Soleil rapportee"],
+        ["386,000 km", "Distance Terre Lune"],
+    ]
+
+
+def test_a_lone_big_number_is_a_one_item_figures_slide(google):
+    figures = google[4]
+    assert figures.kind == "figures" and figures.groups[0].count == 1
+
+
+def test_numbered_texts_on_a_grid_are_cards_not_a_process(google):
+    grid = google[5]
+    assert grid.kind == "cards"
+    assert grid.groups[0].count == 6
+    assert grid.groups[0].item_zones == ["number", "body"]
+
+
+def test_a_staircase_of_dates_is_a_timeline_read_left_to_right(google):
+    timeline = google[6]
+    assert timeline.kind == "timeline"
+    group = timeline.groups[0]
+    assert group.count == 5 and group.item_zones == ["number", "body"]
+    xs = [item[0].box.x for item in group.items]
+    assert xs == sorted(xs)
+    # The entry repeated on another slide is still one of the row.
+    assert _texts(group)[1][1] == TIMELINE_ENTRY
+
+
+def test_a_paragraph_sized_subtitle_is_a_body_not_a_cover(google):
+    text = google[8]
+    assert text.kind == "bullets"
+    assert sorted(z.role for z in text.zones) == ["body", "title"]
+
+
+def test_text_free_graphic_and_promo_slides_are_library(google):
+    for number in (9, 10):
+        assert google[number].exclusion_reason == "library"
+    empty = google[11]
+    assert empty.included and empty.kind == "other"
+
+
+def test_pairing_leaves_the_existing_designs_alone(showcase):
+    """Grouped agenda, KPI and step designs keep their groups and kinds."""
+    kinds = {p.label: p.kind for p in showcase.patterns if p.source == "slide"}
+    assert kinds["Agenda"] == "agenda"
+    assert kinds["Process"] == "process"
+    assert not _slide(showcase, "Two columns").groups
+
+
+@pytest.mark.parametrize(
+    "text, figure",
+    [
+        ("333,000", True),
+        ("386,000 km", True),
+        ("xx%", True),
+        ("20XX", True),
+        ("+12 %", True),
+        ("01", True),
+        ("Here is the title", False),
+        ("2 planètes sur 8 dans le système", False),
+    ],
+)
+def test_figures_lexicon(text, figure):
+    assert is_figure(text) is figure
