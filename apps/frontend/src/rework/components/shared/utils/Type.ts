@@ -58,6 +58,7 @@ const customIcons = ["customAgent", "customPlatformSkill"] as const;
  */
 export const materialIcons = [
   "add",
+  "drag_indicator",
   "add_comment",
   "crown",
   "remove",

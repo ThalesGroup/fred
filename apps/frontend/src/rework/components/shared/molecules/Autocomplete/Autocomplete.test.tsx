@@ -76,6 +76,24 @@ function options(): OptionModel<Candidate>[] {
   ];
 }
 
+describe("Autocomplete empty menu", () => {
+  it("shows the caller's message instead of the default one when there is no option", () => {
+    render(
+      <Autocomplete<Candidate>
+        textInput={{ placeholder: "Search" }}
+        noOptionsMessage="Searching..."
+        options={[]}
+        onSelect={vi.fn()}
+      />,
+    );
+    act(() => {
+      input().focus();
+    });
+
+    expect(container.querySelector('[role="status"]')?.textContent).toBe("Searching...");
+  });
+});
+
 describe("Autocomplete keyboard navigation", () => {
   it("focuses the first option by default once the menu is open with results", () => {
     render(

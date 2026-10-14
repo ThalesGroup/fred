@@ -461,7 +461,7 @@ async def delete_user(
         await rebac.suspend_account(user_id)
     # Before the account, so a failure here is retried rather than orphaned.
     await prompt_store.delete_favorites_for_user(user_id)
-    await announcement_store.delete_dismissals_for_user(user_id)
+    await announcement_store.delete_seen_for_user(user_id)
     await remove_user_avatar(user_id, deps)
     try:
         await delete_user_from_service(admin, user_id)

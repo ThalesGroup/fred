@@ -2,6 +2,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
+import { Spinner } from "@shared/atoms/Spinner/Spinner";
 import PlatformAccessExpirationPicker from "./PlatformAccessExpirationPicker";
 import TextInput from "@shared/atoms/TextInput/TextInput";
 import { useCopyConfirmation } from "@hooks/useCopyConfirmation";
@@ -83,7 +84,6 @@ export default function PlatformAccessLinkManager({
   const busy = generating.isLoading || revoking.isLoading || deleting.isLoading;
   const history = !links.isFetching && !links.isError ? links.currentData : undefined;
   const inactiveCount = links.currentData?.inactive_count ?? 0;
-  const linkTableHeight = Math.min(26, 7.5 + Math.max(1, links.currentData?.items.length ?? 0) * 3.75);
   const date = (value: string | null) =>
     value ? new Date(value).toLocaleString(i18n.language) : t("rework.platformAccess.links.never");
   const run = async (action: () => Promise<void>) => {
@@ -197,6 +197,21 @@ export default function PlatformAccessLinkManager({
         hideCancel
         confirmLabel={t("common.close")}
         confirmDisabled={busy}
+        footerStart={
+          <Button
+            color="error"
+            variant="outlined"
+            size="small"
+            disabled={busy || links.isFetching || links.isError || !inactiveCount}
+            onClick={(event) => {
+              rememberFocus(event.currentTarget);
+              setFailed(false);
+              setConfirmCleanup(true);
+            }}
+          >
+            {t("rework.platformAccess.links.cleanup")}
+          </Button>
+        }
         onConfirm={() => {
           if (!busy) {
             copyAttemptRef.current += 1;
@@ -212,23 +227,7 @@ export default function PlatformAccessLinkManager({
       >
         <div className={styles.dialogBody}>
           {copyAnnouncement}
-          <div className={styles.linkToolbar}>
-            <p>{t("rework.platformAccess.links.hint")}</p>
-            <Button
-              color="primary"
-              variant="filled"
-              size="medium"
-              disabled={busy || !linkAccessEnabled}
-              onClick={(event) => {
-                rememberFocus(event.currentTarget);
-                setFailed(false);
-                setCopyStatus(undefined);
-                setView("create");
-              }}
-            >
-              {t("rework.platformAccess.createLink")}
-            </Button>
-          </div>
+          <p className={styles.hint}>{t("rework.platformAccess.links.hint")}</p>
           {!linkAccessEnabled && (
             <p className={styles.linkSuspendedNotice} role="status">
               <span className="material-symbols-outlined" aria-hidden="true">
@@ -238,10 +237,10 @@ export default function PlatformAccessLinkManager({
             </p>
           )}
           <div className={styles.linkControls}>
-            <div className={styles.linkFilter}>
+            <div>
               <Select<LinkStatusFilter>
                 compact
-                size="medium"
+                size="small"
                 label={t("rework.platformAccess.links.statusLabel")}
                 value={status}
                 disabled={busy}
@@ -259,23 +258,24 @@ export default function PlatformAccessLinkManager({
               />
             </div>
             <Button
-              color="error"
-              variant="outlined"
-              size="medium"
-              disabled={busy || links.isFetching || links.isError || !inactiveCount}
+              color="primary"
+              variant="filled"
+              size="small"
+              disabled={busy || !linkAccessEnabled}
               onClick={(event) => {
                 rememberFocus(event.currentTarget);
                 setFailed(false);
-                setConfirmCleanup(true);
+                setCopyStatus(undefined);
+                setView("create");
               }}
             >
-              {t("rework.platformAccess.links.cleanup")}
+              {t("rework.platformAccess.createLink")}
             </Button>
           </div>
           {deletedCount !== undefined && (
             <p role="status">{t("rework.platformAccess.links.deleted", { count: deletedCount })}</p>
           )}
-          {links.isFetching && <p role="status">{t("rework.platformAccess.links.loading")}</p>}
+          {links.isFetching && <Spinner statusText={t("rework.platformAccess.links.loading")} />}
           {failed && <p role="alert">{t("rework.platformAccess.failed")}</p>}
           {links.isError && (
             <div role="alert">
@@ -285,8 +285,9 @@ export default function PlatformAccessLinkManager({
               </Button>
             </div>
           )}
-          <div className={styles.linkTable} style={{ height: `${linkTableHeight}rem` }}>
+          <div className={styles.boundedTable}>
             <DataTable
+              size="small"
               data={history?.items ?? []}
               rowKey={(link) => link.id}
               rowClassName={(link) =>
@@ -300,7 +301,7 @@ export default function PlatformAccessLinkManager({
               }}
               columns={[
                 {
-                  label: t("rework.platformAccess.links.note"),
+                  label: t("rework.platformAccess.links.noteColumn"),
                   size: "2fr",
                   cellRenderer: (link) => <span className={styles.exampleValue}>{link.note}</span>,
                 },
@@ -310,7 +311,7 @@ export default function PlatformAccessLinkManager({
                   cellRenderer: (link) => date(link.created_at),
                 },
                 {
-                  label: t("rework.platformAccess.links.expiry"),
+                  label: t("rework.platformAccess.links.expiryColumn"),
                   size: "1.5fr",
                   cellRenderer: (link) => date(link.expires_at),
                 },
@@ -396,7 +397,7 @@ export default function PlatformAccessLinkManager({
           onConfirm={() => setJoinersLink(undefined)}
         >
           <div className={styles.dialogBody}>
-            {joiners.isFetching && <p role="status">{t("rework.platformAccess.links.loading")}</p>}
+            {joiners.isFetching && <Spinner statusText={t("rework.platformAccess.links.loading")} />}
             {joiners.isError && (
               <div role="alert">
                 <p>{t("rework.platformAccess.links.joinersFailed")}</p>
@@ -410,6 +411,7 @@ export default function PlatformAccessLinkManager({
             )}
             {!joiners.isFetching && !joiners.isError && !!joiners.currentData?.total && (
               <DataTable
+                size="small"
                 data={joiners.currentData.items}
                 rowKey={(person) => person.user_id}
                 rowClassName={(person) => (person.deleted ? styles.deletedJoiner : undefined)}
@@ -537,6 +539,7 @@ export default function PlatformAccessLinkManager({
         <Dialog
           open
           title={t("rework.platformAccess.links.revokeTitle")}
+          confirmColor="error"
           confirmLabel={t("rework.platformAccess.links.revoke")}
           confirmDisabled={busy}
           onCancel={() => {

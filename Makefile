@@ -46,7 +46,7 @@ clean: ## Clean all submodules
 ##@ Tests
 
 .PHONY: test
-test: k3d-tests libs-version-tests publish-libs-tests ## Run non-integration test suites in all submodules and print coverage summary
+test: k3d-tests pod-chart-tests libs-version-tests publish-libs-tests ## Run non-integration test suites in all submodules and print coverage summary
 	@set -e; \
 	for dir in $(TEST_DIRS); do \
 		echo "************ Running tests in $$dir ************"; \
@@ -199,10 +199,15 @@ PYPI_PACKAGES := \
 	libs/capabilities/fred-capability-web-research \
 	libs/capabilities/fred-capability-writable-document
 
+# Fred's generic pod charts, released with the fred chart.
+POD_CHARTS := agent-pod knowledge-base
+
 .PHONY: libs-version
 libs-version: ## Set one version on every PyPI package, their floors on each other, and relock (usage: make libs-version VERSION=x.y.z)
 	@test -n "$(VERSION)" || { echo "Usage: make libs-version VERSION=x.y.z"; exit 1; }
 	python3 scripts/libs_version.py --version "$(VERSION)" $(PYPI_PACKAGES)
+	@# The pod charts' appVersion is the libraries' version whose configuration models they embed.
+	sed -i 's/^appVersion: .*/appVersion: "$(VERSION)"/' $(POD_CHARTS:%=deploy/charts/%/Chart.yaml)
 
 .PHONY: libs-version-tests
 libs-version-tests: ## Test the libs-version rewrite offline
@@ -263,6 +268,7 @@ set-version: ## Update the chart and application versions; the PyPI packages hav
 	@echo "--- Helm chart ---"
 	sed -i 's/^version: .*/version: $(VERSION)/' deploy/charts/fred/Chart.yaml
 	sed -i 's/^appVersion: .*/appVersion: $(VERSION)/' deploy/charts/fred/Chart.yaml
+	sed -i 's/^version: .*/version: $(VERSION)/' $(POD_CHARTS:%=deploy/charts/%/Chart.yaml)
 	@echo "--- fred-agents ---"
 	sed -i 's/^version = .*/version = "$(PY_VERSION)"/' apps/fred-agents/pyproject.toml
 	cd apps/fred-agents && uv lock
@@ -370,6 +376,10 @@ include scripts/makefiles/chart-schema.mk
 .PHONY: k3d-tests
 k3d-tests: ## Test local k3d image preparation and configuration without a cluster
 	python3 -m unittest discover -s deploy/k3d -p 'test_*.py'
+
+.PHONY: pod-chart-tests
+pod-chart-tests: ## Render the agent-pod and knowledge-base charts with helm (skipped without helm)
+	python3 -m unittest deploy/charts/test_pod_charts.py
 
 ##@ Migration notes and release preparation
 

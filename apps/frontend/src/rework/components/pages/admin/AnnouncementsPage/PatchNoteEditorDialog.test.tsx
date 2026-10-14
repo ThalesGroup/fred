@@ -244,28 +244,18 @@ describe("PatchNoteEditorDialog", () => {
     expect(onCancel).toHaveBeenCalledOnce();
   });
 
-  it("offers save and activate on an inactive note only", () => {
+  it("offers to save and make visible on a hidden note only, without asking", () => {
     const onSave = vi.fn();
     render({ onSave, announcement: existing({ enabled: false }) });
 
     act(() => button("rework.announcements.patchNote.editor.saveAndActivate").click());
-    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ kind: "patch_note" }), true);
+    // Other notes stay as they are, so there is nothing to confirm.
+    expect(onSave).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ kind: "patch_note" }), true);
+    expect(document.body.querySelectorAll('[role="dialog"]')).toHaveLength(1);
 
     act(() => root!.unmount());
     render({ announcement: existing({ enabled: true }) });
     expect(button("rework.announcements.patchNote.editor.saveAndActivate")).toBeUndefined();
-  });
-
-  it("names the active patch note save and activate would switch off", () => {
-    const onSave = vi.fn();
-    render({ onSave, announcement: existing({ enabled: false }), replacesTitle: "Version 3.2" });
-
-    act(() => button("rework.announcements.patchNote.editor.saveAndActivate").click());
-    expect(onSave).not.toHaveBeenCalled();
-    expect(document.body.textContent).toContain("rework.announcements.patchNote.activate.message");
-
-    act(() => button("rework.announcements.patchNote.activate.confirm").click());
-    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ kind: "patch_note" }), true);
   });
 
   it("editor preview shows the unsaved title and body in the user dialog", () => {
@@ -280,6 +270,8 @@ describe("PatchNoteEditorDialog", () => {
     expect(dialogs).toHaveLength(1);
     expect(dialogs[0].textContent).toContain("Unsaved title");
     expect(dialogs[0].querySelector("h1")?.textContent).toBe("Unsaved release");
+    // A single note: the history navigation has nothing to move through.
+    expect(dialogs[0].querySelector("nav")).toBeNull();
 
     act(() => button("rework.announcements.dialog.close").click());
 

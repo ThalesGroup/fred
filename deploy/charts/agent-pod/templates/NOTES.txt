@@ -1,0 +1,15 @@
+{{- $base := include "agent-pod.basePath" . -}}
+The agent pod `{{ .Values.configuration.app.runtime_id }}` is deployed in namespace {{ .Release.Namespace }}.
+
+Fred learns about it from the Control Plane's configuration. Add this entry to
+`runtime_catalog_sources` in the Fred chart's values
+(applications.control-plane-backend.configuration.platform), then restart the
+Control Plane:
+
+    - runtime_id: {{ .Values.configuration.app.runtime_id }}
+      base_url: http://{{ include "agent-pod.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}{{ $base }}
+      enabled: true
+      ingress_prefix: {{ $base }}
+
+runtime_id must stay equal to configuration.app.runtime_id: that equality joins
+the pod's logs to its metrics.

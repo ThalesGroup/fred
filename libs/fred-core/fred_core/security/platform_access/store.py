@@ -8,7 +8,7 @@ from uuid import UUID
 from fastapi import HTTPException
 from fred_pod.security.platform_access import PlatformAccessPolicy
 from fred_pod.security.structure import KeycloakUser
-from sqlalchemy import ColumnElement, func, or_, select, text
+from sqlalchemy import ColumnElement, func, literal, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from fred_core.security.platform_access.models import (
@@ -18,6 +18,7 @@ from fred_core.security.platform_access.models import (
 )
 from fred_core.security.platform_access.rules import Fact, path_key
 from fred_core.sql import make_session_factory, use_session
+from fred_core.sql.accent_folding import fold_accents, search_spellings
 from fred_core.sql.base_sql import advisory_lock_key
 from fred_core.teams.team_metatada_models import TeamMetadataRow
 from fred_core.users.user_models import UserRow
@@ -99,17 +100,63 @@ class PlatformAccessStore:
 
     @staticmethod
     def user_search(query: str) -> ColumnElement[bool]:
+        # Accents and case are ignored on both sides: "helene" finds "Hélène" and back.
+        # The typed text is bound and folded by the database, exactly like the columns.
+        patterns = [
+            fold_accents(literal(spelling)) for spelling in search_spellings(query)
+        ]
         return or_(
             *(
-                column.ilike(f"%{query}%")
+                fold_accents(column).contains(pattern)
                 for column in (
                     UserRow.username,
                     UserRow.email,
                     UserRow.first_name,
                     UserRow.last_name,
                 )
+                for pattern in patterns
             )
         )
+
+    @staticmethod
+    def user_filter(query: str) -> list[ColumnElement[bool]]:
+        return [PlatformAccessStore.user_search(query)] if query else []
+
+    async def users_with_exceptions(
+        self,
+        offset: int,
+        limit: int,
+        query: str = "",
+        session: AsyncSession | None = None,
+        *,
+        exceptions_only: bool = False,
+    ) -> list[tuple[UserRow, PlatformAccessUserRow | None]]:
+        """One page of users, each with their individual exception when they hold one."""
+        async with self.read(session) as s:
+            # Explicit NULLS LAST: PostgreSQL and SQLite disagree on the default.
+            alphabetical = (
+                func.lower(UserRow.username).asc().nulls_last(),
+                UserRow.id,
+            )
+            statement = (
+                select(UserRow, PlatformAccessUserRow)
+                .join(
+                    PlatformAccessUserRow,
+                    PlatformAccessUserRow.user_id == UserRow.id,
+                    isouter=not exceptions_only,
+                )
+                .where(*self.user_filter(query))
+            )
+            # The whitelist reads newest grant first; a batch shares one date and stays alphabetical.
+            statement = (
+                statement.order_by(
+                    PlatformAccessUserRow.granted_at.desc(), *alphabetical
+                )
+                if exceptions_only
+                else statement.order_by(*alphabetical)
+            )
+            result = await s.execute(statement.offset(offset).limit(limit))
+            return [(user, exception) for user, exception in result.all()]
 
     async def users(
         self,
@@ -117,18 +164,13 @@ class PlatformAccessStore:
         limit: int,
         query: str = "",
         session: AsyncSession | None = None,
+        *,
+        exceptions_only: bool = False,
     ) -> list[UserRow]:
-        async with self.read(session) as s:
-            statement = select(UserRow)
-            if query:
-                statement = statement.where(self.user_search(query))
-            return list(
-                (
-                    await s.scalars(
-                        statement.order_by(UserRow.id).offset(offset).limit(limit)
-                    )
-                ).all()
-            )
+        page = await self.users_with_exceptions(
+            offset, limit, query, session, exceptions_only=exceptions_only
+        )
+        return [user for user, _ in page]
 
     async def add_exception(
         self, uid: UUID, actor: str, source: str, session: AsyncSession
@@ -212,12 +254,18 @@ class PlatformAccessStore:
             await session.flush()
             return row
 
-    async def user_count(self, query: str = "") -> int:
+    async def user_count(
+        self, query: str = "", *, exceptions_only: bool = False
+    ) -> int:
         async with self.read() as session:
             statement = select(func.count()).select_from(UserRow)
-            if query:
-                statement = statement.where(self.user_search(query))
-            return int((await session.scalar(statement)) or 0)
+            if exceptions_only:
+                statement = statement.join(
+                    PlatformAccessUserRow, PlatformAccessUserRow.user_id == UserRow.id
+                )
+            return int(
+                (await session.scalar(statement.where(*self.user_filter(query)))) or 0
+            )
 
     async def team(self, team_id: str, session: AsyncSession) -> TeamMetadataRow | None:
         return await session.get(TeamMetadataRow, team_id)

@@ -97,7 +97,6 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     "PlatformAccessLinks",
     "PlatformAccessJoiners",
     "ControlPlaneAnnouncement",
-    "ControlPlanePatchNote",
   ],
   endpoints: {
     validateGcuControlPlaneV1GcuPost: { invalidatesTags: ["PlatformAccess"] },
@@ -161,16 +160,25 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     deleteAnnouncementControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdDelete: {
       invalidatesTags: [{ type: "ControlPlaneAnnouncement" as const, id: "LIST" }],
     },
-    // The history moves with every admin mutation, so it rides the LIST tag. The
-    // patch-note read is per user and read once per load: only a dismissal refreshes it.
-    listActivationHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGet: {
+    // The activation history, the users' patch-note history and the current
+    // announcement all move with admin mutations, so they ride the LIST tag.
+    listExposureHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGet: {
       providesTags: [{ type: "ControlPlaneAnnouncement" as const, id: "LIST" }],
     },
-    getActivePatchNoteControlPlaneV1AnnouncementsPatchNoteGet: {
-      providesTags: [{ type: "ControlPlanePatchNote" as const, id: "ACTIVE" }],
+    getPatchNoteHistoryControlPlaneV1AnnouncementsPatchNotesGet: {
+      providesTags: [{ type: "ControlPlaneAnnouncement" as const, id: "LIST" }],
     },
-    dismissPatchNoteControlPlaneV1AnnouncementsAnnouncementIdDismissalPut: {
-      invalidatesTags: [{ type: "ControlPlanePatchNote" as const, id: "ACTIVE" }],
+    getPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementGet: {
+      providesTags: [{ type: "ControlPlaneAnnouncement" as const, id: "LIST" }],
+    },
+    setPatchNoteOrderControlPlaneV1AdminPlatformAnnouncementsPatchNotesOrderPut: {
+      invalidatesTags: [{ type: "ControlPlaneAnnouncement" as const, id: "LIST" }],
+    },
+    announcePatchNotesControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementPost: {
+      invalidatesTags: [{ type: "ControlPlaneAnnouncement" as const, id: "LIST" }],
+    },
+    withdrawPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementDelete: {
+      invalidatesTags: [{ type: "ControlPlaneAnnouncement" as const, id: "LIST" }],
     },
     // Team wiki (WIKI-01/02). One tag per team carries the tree; one per PAGE ID
     // carries a page's content and its history.
@@ -1079,10 +1087,20 @@ export const {
     useSetAnnouncementEnabledMutation,
   useDeleteAnnouncementControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdDeleteMutation:
     useDeleteAnnouncementMutation,
-  useGetActivePatchNoteControlPlaneV1AnnouncementsPatchNoteGetQuery: useActivePatchNoteQuery,
-  useDismissPatchNoteControlPlaneV1AnnouncementsAnnouncementIdDismissalPutMutation: useDismissPatchNoteMutation,
-  useListActivationHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetQuery:
-    useAnnouncementActivationHistoryQuery,
+  useGetPatchNoteHistoryControlPlaneV1AnnouncementsPatchNotesGetQuery: usePatchNoteHistoryQuery,
+  useMarkPatchNoteAnnouncementSeenControlPlaneV1AnnouncementsPatchNoteAnnouncementsAnnouncementIdSeenPutMutation:
+    useMarkPatchNoteAnnouncementSeenMutation,
+  useSetPatchNoteOrderControlPlaneV1AdminPlatformAnnouncementsPatchNotesOrderPutMutation: useSetPatchNoteOrderMutation,
+  useGetPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementGetQuery:
+    usePatchNoteAnnouncementQuery,
+  useAnnouncePatchNotesControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementPostMutation:
+    useAnnouncePatchNotesMutation,
+  useWithdrawPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementDeleteMutation:
+    useWithdrawPatchNoteAnnouncementMutation,
+  useLazyGetPatchNotePackageControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementsAnnouncementIdGetQuery:
+    useLazyPatchNotePackageQuery,
+  useListExposureHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetQuery:
+    useAnnouncementExposureHistoryQuery,
   // Team administrator charter acceptance.
   useAcceptTeamAdminCharterControlPlaneV1TeamAdminCharterPostMutation: useAcceptTeamAdminCharterMutation,
   useGetTeamAdminCharterAcceptanceControlPlaneV1TeamAdminCharterGetQuery: useGetTeamAdminCharterAcceptanceQuery,
