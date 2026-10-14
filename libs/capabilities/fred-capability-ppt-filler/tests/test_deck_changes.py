@@ -280,7 +280,7 @@ async def test_a_partial_fix_after_needs_revision_rebuilds_the_whole_deck(monkey
     workspace = FakeWorkspace()
     turn = _Turn(monkeypatch, workspace)
     text, result = await turn.build(slides=_DECK)
-    assert result.is_error and _payload(text)["slides"][0]["slide"] == 3
+    assert not result.is_error and _payload(text)["slides"][0]["slide"] == 3
     assert "call build_presentation again with only `changes` for these slides" in text
     split = [
         {"title": "Method 1/2", "kind": "process", "items": _STEPS[:3]},
@@ -459,7 +459,7 @@ async def test_a_refused_plan_is_never_the_next_turns_base(
     text, result = await first.build(
         changes=[{"op": "insert", "after": 2, "slides": [_TOO_LONG]}]
     )
-    assert result.is_error and deck_plan_store.plans == stored
+    assert not result.is_error and deck_plan_store.plans == stored
     # The next turn changes the delivered deck, not the refused plan.
     second = _Turn(monkeypatch, workspace)
     text, result = await second.build(changes=[{"op": "remove", "slide": 2}])
@@ -590,7 +590,7 @@ async def test_a_corrected_resend_of_refused_changes_replaces_them(
     text, result = await second.build(
         changes=[{"op": "insert", "after": 1, "slides": [_TOO_LONG]}]
     )
-    assert result.is_error and _payload(text)["slides"][0]["slide"] == 2
+    assert not result.is_error and _payload(text)["slides"][0]["slide"] == 2
     assert "with the same `changes`, corrected (all of them" in text
     fixed = {"title": "Method", "kind": "process", "items": _STEPS[:3]}
     text, result = await second.build(
@@ -852,7 +852,7 @@ async def test_a_design_the_slide_cannot_take_is_a_revision(
             {"op": "edit", "slide": 7, "field": "like", "value": 5},
         ],
     )
-    assert result.is_error and len(workspace.writes) == 1
+    assert not result.is_error and len(workspace.writes) == 1
     (problem,) = _payload(text)["slides"]
     assert problem["slide"] == 7
     assert problem["problem"].startswith("the slide does not fit slide 5's design")
@@ -943,7 +943,9 @@ async def test_changes_that_leave_the_deck_as_is_build_nothing(
         text, result, used = await _delivered_patterns(
             monkeypatch, workspace, changes=changes
         )
-        assert result.is_error and text.startswith("No deck was built: nothing changed")
+        assert not result.is_error and text.startswith(
+            "No deck was built: nothing changed"
+        )
         assert not text.startswith(tools_mod._DELIVERED)
         assert (
             '"field": "like"' in text and "Do not tell the user it was changed" in text
@@ -962,7 +964,7 @@ async def test_changes_that_leave_the_deck_as_is_build_nothing(
         workspace,
         changes=[{"op": "edit", "slide": 7, "field": "like", "value": 5}],
     )
-    assert result.is_error and text.startswith("No deck was built: nothing changed")
+    assert not result.is_error and text.startswith("No deck was built: nothing changed")
     # A new file name is a change.
     text, result, _ = await _delivered_patterns(
         monkeypatch,
@@ -1068,7 +1070,8 @@ async def test_a_call_identical_to_a_refused_one_is_not_evaluated_again(monkeypa
     monkeypatch.setattr(tools_mod, "assign", counting)
     await turn.build(slides=_DECK)
     text, result = await turn.build(slides=_DECK)
-    assert result.is_error and len(evaluated) == 1
+    # The loop breaker: answered without a second evaluation, still not a failure.
+    assert not result.is_error and len(evaluated) == 1
     assert text.startswith("No deck was built: this call is identical to one already")
     assert "slide 3: " in text and '"op": "replace", "slide": N' in text
     assert "leave that slide out" in text

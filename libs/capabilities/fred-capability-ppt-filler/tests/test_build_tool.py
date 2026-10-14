@@ -374,7 +374,9 @@ async def test_a_slide_that_fits_nothing_builds_nothing_and_says_what_to_change(
     text, result = await tools[BUILD_TOOL_NAME].coroutine(
         slides=[COVER, {"title": "Method", "kind": "process", "items": steps}]
     )
-    assert result.is_error
+    # A revision, not a failure: the runtime hands it to the model, never ends the turn.
+    assert not result.is_error and result.blocks[0].text == text
+    assert "Your very next message MUST be a new build_presentation call" in text
     assert workspace.writes == []
     payload = json.loads(text[text.index("{") :])
     assert payload["status"] == "needs_revision"
@@ -412,7 +414,7 @@ async def test_the_corrected_plan_is_built_as_a_whole(monkeypatch):
         workspace=workspace,
         slides=[COVER, {"title": "Method", "kind": "process", "items": steps}],
     )
-    assert first.is_error and workspace.writes == []
+    assert not first.is_error and workspace.writes == []
     text, second = await _build(
         monkeypatch,
         workspace=workspace,
@@ -439,7 +441,7 @@ async def test_a_parallel_copy_of_a_call_is_not_built_twice(monkeypatch):
         build.coroutine(slides=plan), build.coroutine(slides=plan)
     )
     assert text_a.startswith(tools_mod._DELIVERED) and not a.is_error
-    assert text_b.startswith("No deck was built: unchanged") and b.is_error
+    assert text_b.startswith("No deck was built: unchanged") and not b.is_error
     assert len(workspace.writes) == 1
     # A different plan sent in parallel is built too, one after the other.
     (_, c), (_, d) = await asyncio.gather(
@@ -469,7 +471,9 @@ async def test_the_first_deck_is_asked_to_vary_once_and_a_resend_is_built(monkey
     config, assets = _configured()
     build = _tools(_ctx(config, assets=assets, workspace=workspace))[BUILD_TOOL_NAME]
     text, result = await build.coroutine(slides=_REPEATED)
-    assert result.is_error and workspace.writes == []
+    assert not result.is_error and workspace.writes == []
+    assert "Your very next message MUST be a new build_presentation call" in text
+    assert "may reuse a slide at the same place in each section" in text
     payload = json.loads(text[text.index("{") :])
     assert payload["status"] == "needs_revision"
     (repeat,) = payload["variety"]
@@ -497,7 +501,7 @@ async def test_a_malformed_first_call_does_not_use_up_the_variety_ask(monkeypatc
     text, result = await build.coroutine(slides=[{"kind": "bullets"}])
     assert result.is_error and "every slide of the plan is empty" in text
     text, result = await build.coroutine(slides=_REPEATED)
-    assert result.is_error and '"variety": [' in text
+    assert not result.is_error and '"variety": [' in text
 
 
 _TOO_MANY = {
@@ -516,7 +520,7 @@ async def test_no_variety_ask_after_a_fit_repair(monkeypatch):
     config, assets = _configured()
     build = _tools(_ctx(config, assets=assets, workspace=workspace))[BUILD_TOOL_NAME]
     text, result = await build.coroutine(slides=[COVER, _TOO_MANY])
-    assert result.is_error and "variety" not in text
+    assert not result.is_error and "variety" not in text
     # The repaired deck repeats a kind: built, the repetition only noted.
     text, result = await build.coroutine(slides=_REPEATED)
     assert not result.is_error, text
@@ -530,7 +534,7 @@ async def test_a_first_call_with_fit_problems_carries_the_variety_ask(monkeypatc
     config, assets = _configured()
     build = _tools(_ctx(config, assets=assets, workspace=workspace))[BUILD_TOOL_NAME]
     text, result = await build.coroutine(slides=_REPEATED + [_TOO_MANY])
-    assert result.is_error and workspace.writes == []
+    assert not result.is_error and workspace.writes == []
     payload = json.loads(text[text.index("{") :])
     assert [p["slide"] for p in payload["slides"]] == [6]
     (repeat,) = payload["variety"]
@@ -563,7 +567,7 @@ async def test_slides_to_fix_that_repeat_are_asked_to_vary_in_the_same_round(
     text, result = await build.coroutine(
         slides=[COVER, _labelled_steps(1), _labelled_steps(2)]
     )
-    assert result.is_error and workspace.writes == []
+    assert not result.is_error and workspace.writes == []
     payload = json.loads(text[text.index("{") :])
     assert [p["slide"] for p in payload["slides"]] == [2, 3]
     assert all(
@@ -667,7 +671,7 @@ async def test_a_history_without_a_delivered_deck_is_still_a_first_deck(monkeypa
     history = _turn(asked) + _turn(unread) + _turn("Delivered: 'x.pptx'", "other")
     build = await _later_turn(monkeypatch, history)
     text, result = await build.coroutine(slides=_REPEATED)
-    assert result.is_error and '"variety": [' in text
+    assert not result.is_error and '"variety": [' in text
 
 
 def test_both_success_texts_count_as_a_delivered_deck():
@@ -691,7 +695,7 @@ async def test_one_kind_on_different_slides_is_asked_once_with_content_advice(
     config, assets = _configured(with_item_slides, "kind")
     build = _tools(_ctx(config, assets=assets, workspace=workspace))[BUILD_TOOL_NAME]
     text, result = await build.coroutine(slides=EVIDENCE_SLIDES)
-    assert result.is_error and workspace.writes == []
+    assert not result.is_error and workspace.writes == []
     (repeat,) = json.loads(text[text.index("{") :])["variety"]
     assert repeat["kind"] == "bullets" and repeat["slides"] == [3, 5, 7, 9, 10]
     suggested = repeat["suggested"]
@@ -735,8 +739,8 @@ async def test_each_variety_check_mode_asks_for_its_own_repeat(monkeypatch):
         text, result = await _build(
             monkeypatch, extend=extend, variety=variety, slides=plan
         )
-        assert result.is_error is asked, (variety, text)
-        assert not asked or '"variety": [' in text
+        assert not result.is_error, (variety, text)
+        assert asked is ('"variety": [' in text), (variety, text)
         if variety == "off":  # no ask, the passive note stays
             assert "all use the template slide" in text or "are all" in text
 
@@ -789,7 +793,7 @@ async def test_a_heading2_column_is_returned_for_revision_not_dropped(monkeypatc
             },
         ],
     )
-    assert result.is_error and workspace.writes == []
+    assert not result.is_error and workspace.writes == []
     (problem,) = json.loads(text[text.index("{") :])["slides"]
     assert problem["slide"] == 2
     assert "heading2 'Italie' is not a column field" in problem["problem"]
@@ -1078,7 +1082,8 @@ async def test_parallel_build_calls_of_one_round_build_only_the_first(monkeypatc
     assert first.content.startswith(tools_mod._DELIVERED), first.content
     assert len(workspace.writes) == 1
     for position, (refused, ran) in enumerate(others, start=2):
-        assert ran == [] and refused.artifact.is_error
+        # Not a failure: the round still runs its first call.
+        assert ran == [] and not refused.artifact.is_error
         assert refused.tool_call_id == calls[position - 1]["id"]
         assert refused.content == (
             "No deck was built: build_presentation was called 3 times at once in this "
@@ -1111,7 +1116,7 @@ async def test_a_single_build_call_or_a_copy_in_parallel_is_handled_once(monkeyp
         _through_middleware(middleware, message, a),
         _through_middleware(middleware, message, b),
     )
-    assert ran_a == [a["id"]] and ran_b == [] and copy.artifact.is_error
+    assert ran_a == [a["id"]] and ran_b == [] and not copy.artifact.is_error
     assert len(workspace.writes) == 1
     # A call missing from the state (another path) runs as before.
     assert tools_mod.round_refusal([], "call-x") is None
@@ -1130,7 +1135,7 @@ async def test_a_fragment_after_a_delivered_deck_is_pointed_to_changes(monkeypat
         {"title": "Method", "columns": [{"heading": "A", "bullets": ["x"]}] * 2}
     ]
     text, result = await build.coroutine(slides=fragment)
-    assert result.is_error
+    assert not result.is_error
     (problem,) = json.loads(text[text.index("{") :])["slides"]
     assert problem["problem"].startswith(
         "the first slide is always the template's cover"
@@ -1140,7 +1145,7 @@ async def test_a_fragment_after_a_delivered_deck_is_pointed_to_changes(monkeypat
     text, result = await build.coroutine(slides=[COVER, fragment[0]])
     assert text.startswith(tools_mod._DELIVERED), text
     text, result = await build.coroutine(slides=fragment)
-    assert result.is_error
+    assert not result.is_error
     (problem,) = json.loads(text[text.index("{") :])["slides"]
     assert problem["options"] == [
         "a deck was already delivered in this conversation: to add these slides to it, "
@@ -1173,7 +1178,7 @@ async def test_resending_the_delivered_deck_rebuilds_nothing(monkeypatch):
     text, result = await build.coroutine(
         slides=json.loads(json.dumps(plan)), file_name="Kick-off"
     )
-    assert result.is_error and not result.ui_parts
+    assert not result.is_error and not result.ui_parts
     assert text == (
         "No deck was built: unchanged, deck already delivered as 'Kick-off.pptx' "
         "(2 slides). This plan is exactly that deck, so nothing was rebuilt and the "

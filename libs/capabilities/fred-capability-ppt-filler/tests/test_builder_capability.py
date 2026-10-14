@@ -379,6 +379,11 @@ async def test_a_succeeded_analysis_gives_the_model_the_templates_catalogue(
     assert "- process:" in shown.description
     assert "optionally its kind" in update["system_message"].content
     assert "Build directly" in update["system_message"].content
+    # After a revision the turn must go on with the fixed call, not end on prose.
+    assert (
+        "If the tool returns needs_revision, nothing was built yet: your very next message "
+        "MUST be a new 'build_presentation' call with the fixes applied"
+    ) in update["system_message"].content
 
     # The registered tool executes with the template's tool, from validated args.
     monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)

@@ -1525,3 +1525,146 @@ def test_an_item_led_by_its_figure_is_not_half_written():
         for p in assign(INVENTORY, _plan(COVER, figures)).problems
         if p.index == 2 and "incomplete" in p.problem
     ]
+
+
+# --- parallel sections, alternatives the content can fill ----------------------------------
+
+
+def _section_inventory() -> TemplateInventory:
+    """A section slide, one bullets slide, one quote slide and three slides no
+    plan below uses: the cap stays at the author's max (ceil(n / 5))."""
+    section = Pattern(
+        id="slide:50",
+        source="slide",
+        source_index=50,
+        name="S",
+        label="Section",
+        kind="section",
+        zones=[_title_zone()],
+    )
+    others = [
+        _bullets(f"slide:{60 + n}", f"Cols {n}", source="slide").model_copy(
+            update={"kind": "two_columns"}
+        )
+        for n in range(3)
+    ]
+    quote = _bullets("slide:2", "Q", source="slide").model_copy(
+        update={"kind": "quote"}
+    )
+    return _inventory(section, _bullets("slide:1", "A", source="slide"), quote, *others)
+
+
+def _quoted(n: int) -> SlidePlan:
+    return SlidePlan(title=f"Quote {n}", bullets=["one key line"], kind="quote")
+
+
+def _part(name: str) -> SlidePlan:
+    return SlidePlan(title=name, kind="section")
+
+
+def test_parallel_sections_repeating_one_structure_are_not_a_repeat():
+    """Live: Italy then Spain then France with the same kinds in the same order."""
+    inventory = _section_inventory()
+    sections = []
+    for n, name in enumerate(("Italie", "Espagne", "France")):
+        sections += [_part(name), _points(n), _quoted(n)]
+    assignment = assign(inventory, _plan(*sections), "template_slide", 1)
+    assert not assignment.problems
+    assert not [r for r in assignment.repeats if r.revisable]
+    # Each section's slides keep the first section's design.
+    labels = [p.label if p else "-" for p in assignment.patterns]
+    assert labels == ["Section", "A", "Q"] * 3
+    # Without the section slides, the same six slides are a repeat.
+    flat = [s for s in sections if s.kind != "section"]
+    (repeat, _) = assign(inventory, _plan(*flat), "template_slide", 1).repeats
+    assert repeat.slides == [1, 3, 5] and repeat.revisable
+
+
+def test_a_repetition_inside_one_section_is_still_a_repeat():
+    inventory = _section_inventory()
+    one = [_part("Italie"), _points(1), _points(2), _points(3)]
+    (repeat,) = assign(inventory, _plan(*one), "template_slide", 1).repeats
+    assert repeat.slides == [2, 3, 4] and repeat.revisable
+    # Mirrored by a second section, its three places still count three times.
+    two = one + [_part("Espagne"), _points(4), _points(5), _points(6)]
+    (repeat,) = assign(inventory, _plan(*two), "template_slide", 1).repeats
+    assert repeat.slides == [2, 3, 4, 6, 7, 8]
+    # At another place in the other section, a use counts on its own.
+    shifted = [_part("Italie"), _points(1), _quoted(1)]
+    shifted += [_part("Espagne"), _quoted(2), _points(2), _points(3)]
+    (repeat,) = [
+        r
+        for r in assign(inventory, _plan(*shifted), "template_slide", 1).repeats
+        if r.kind == "bullets"
+    ]
+    assert repeat.slides == [2, 6, 7]
+
+
+def test_an_agenda_splits_the_deck_into_sections_without_section_slides():
+    inventory = _section_inventory()
+    agenda = SlidePlan(
+        title="Sommaire", kind="agenda", bullets=["1. Italie", "2. Espagne", "France"]
+    )
+    slides = [agenda]
+    for n, name in enumerate(("Italie", "Espagne", "France")):
+        slides += [
+            SlidePlan(title=name, bullets=["a", "b"], kind="bullets"),
+            _quoted(n),
+        ]
+
+    def revisable(plan: List[SlidePlan]) -> List[Any]:
+        found = assign(inventory, _plan(*plan), "template_slide", 1).repeats
+        return [r for r in found if r.revisable]
+
+    assert revisable(slides) == []
+    # Titles that name no agenda entry: one deck, a repeat.
+    renamed = [agenda] + [
+        s.model_copy(update={"title": f"{s.title} x"}) for s in slides[1:]
+    ]
+    assert revisable(renamed)
+
+
+def _framed_cards(pid: str, label: str) -> Pattern:
+    """A cards slide whose items each show a framed picture: it needs pictures."""
+    cards = with_item_slides(INVENTORY, kinds=("cards",)).patterns[-1]
+    pattern = cards.model_copy(deep=True, update={"id": pid, "label": label})
+    for n, item in enumerate(pattern.groups[0].items):
+        item.append(Zone(key=f"pic{n}", role="image", box=item[0].box, framed=True))
+    return pattern
+
+
+def test_variety_never_offers_a_variant_needing_pictures_the_slides_lack():
+    labelled = SlidePlan(title="T", bullets=["Coût : élevé", "Délai : court"])
+    slides = [labelled.model_copy(update={"title": f"T{n}"}) for n in range(3)]
+    photo_cards = _framed_cards("slide:970", "Photo cards")
+    inventory = _inventory(_bullets("slide:1", "A", source="slide"), photo_cards)
+    (repeat,) = assign(inventory, _plan(*slides), "template_slide", 1).repeats
+    assert not any("Photo cards" in o for o in repeat.others)
+    assert not any("cards" in s for s in repeat.suggested)
+    # A cards slide without pictures is offered and suggested instead.
+    plain = with_item_slides(INVENTORY, kinds=("cards",)).patterns[-1]
+    inventory = _inventory(_bullets("slide:1", "A", source="slide"), photo_cards, plain)
+    (repeat,) = assign(inventory, _plan(*slides), "template_slide", 1).repeats
+    assert not any("Photo cards" in o for o in repeat.others)
+    (advice,) = [s for s in repeat.suggested if "cards holds" in s]
+    assert "image" not in advice
+
+
+def test_a_fit_remedy_never_names_a_kind_needing_a_missing_picture():
+    photo = _bullets("slide:3", "Photo", source="slide")
+    image = Zone(
+        key="pic", role="image", box=Box(x=500, y=200, w=400, h=600), framed=True
+    )
+    photo = photo.model_copy(
+        update={"kind": "image_text", "zones": photo.zones + [image]}
+    )
+    two = _bullets("slide:2", "Two cols", source="slide").model_copy(
+        update={"kind": "two_columns"}
+    )
+    inventory = _inventory(_bullets("slide:1", "A", source="slide"), two, photo)
+    too_long = SlidePlan(title="T", bullets=["x" * 2000], kind="bullets")
+    (problem,) = assign(inventory, _plan(too_long)).problems
+    assert not any("'image_text'" in o for o in problem.options), problem.options
+    pictured = too_long.model_copy(update={"image": "doc"})
+    (problem,) = assign(inventory, _plan(pictured)).problems
+    assert any("'image_text'" in o for o in problem.options), problem.options
