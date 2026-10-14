@@ -3060,8 +3060,7 @@
             "teamDefault": "Modèle par défaut de l'équipe",
             "teamDefaultCurrent": "Actuellement {{model}}. Suit les changements faits par l'admin d'équipe.",
             "teamDefaultFollows": "Suit les changements faits par l'admin d'équipe.",
-            "unavailableOption": "Plus disponible",
-            "unavailable": "{{model}} n'est plus disponible pour cette équipe. Choisissez un autre modèle ou le modèle par défaut de l'équipe."
+            "loadError": "Impossible de vérifier le modèle conseillé. La sauvegarde le laissera inchangé."
           }
         },
         "noTemplates": "Aucun modèle d'agent disponible — demandez à un administrateur d'activer une capability d'agent, ou vérifiez le runtime d'agents.",

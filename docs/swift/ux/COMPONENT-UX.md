@@ -4760,9 +4760,10 @@ shows a generic "no longer available" line.
 "Recommended model" `Select` in the agent form's General section. First option
 "Team default model" (helper line: "Currently <name>. Follows changes made by
 the team admin.") saves `null`; then every team-enabled model, today's default
-included, which pins it. A
-stored value no longer selectable is shown flagged "No longer available". The
-form's former Reasoning card is removed.
+included, which pins it. If the stored model is no longer selectable, the
+form selects the team default and saves `null` when edited. The form's former
+Reasoning card is removed. Saving waits for model reads when a recommendation
+is stored; a failed read is shown explicitly and leaves that value unchanged.
 
 ### `PlatformRolesPage` (`/admin/platform-roles`, 2026-08-21, #2405)
 

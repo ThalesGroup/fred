@@ -3060,8 +3060,7 @@
             "teamDefault": "Team default model",
             "teamDefaultCurrent": "Currently {{model}}. Follows changes made by the team admin.",
             "teamDefaultFollows": "Follows changes made by the team admin.",
-            "unavailableOption": "No longer available",
-            "unavailable": "{{model}} is no longer available to this team. Pick another model or the team default model."
+            "loadError": "The recommended model could not be checked. Saving will leave it unchanged."
           }
         },
         "noTemplates": "No agent templates available — ask a platform admin to enable an agent capability, or check the agent runtime.",
