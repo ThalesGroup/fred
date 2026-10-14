@@ -36,7 +36,7 @@ let root: Root;
 const onPublish = vi.fn();
 const onIgnore = vi.fn();
 
-function render(blockedReason?: string) {
+function render(blockedReason?: string, cause: "saved" | "reactivated" = "reactivated") {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -45,7 +45,7 @@ function render(blockedReason?: string) {
       <RepublishProposalDialog
         open
         agentName="Helper"
-        cause="reactivated"
+        cause={cause}
         blockedReason={blockedReason}
         onPublish={onPublish}
         onIgnore={onIgnore}
@@ -79,10 +79,19 @@ describe("RepublishProposalDialog", () => {
 
   it("closes only through Publish or Ignore", () => {
     render();
+    expect(document.body.textContent).toContain("rework.agentMarketplace.proposal.titleReactivated");
     expect(document.body.textContent).toContain("rework.agentMarketplace.proposal.reactivated");
     act(() => button("proposal.ignore").click());
     expect(onIgnore).toHaveBeenCalledOnce();
     act(() => button("proposal.publish").click());
+    expect(onPublish).toHaveBeenCalledOnce();
+  });
+
+  it("offers an update after a saved change", () => {
+    render(undefined, "saved");
+    expect(document.body.textContent).toContain("rework.agentMarketplace.proposal.title");
+    expect(document.body.textContent).toContain("rework.agentMarketplace.proposal.saved");
+    act(() => button("proposal.update").click());
     expect(onPublish).toHaveBeenCalledOnce();
   });
 

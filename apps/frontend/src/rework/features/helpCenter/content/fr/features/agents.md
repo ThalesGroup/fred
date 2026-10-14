@@ -224,9 +224,9 @@ dossiers et documents choisis pour l'agent restent en dehors de l'instantané.
 Une fois publié, la carte affiche **Publié** en bas, avec ses j'aime et ses
 imports. Votre équipe continue d'utiliser et de modifier l'agent comme
 d'habitude. Après une modification, les éditeurs et l'admin de l'équipe voient
-**Modifié, non republié** : la marketplace montre encore la version
-précédente. Un Éditeur qui enregistre une modification se voit
-proposer de le republier aussitôt ; **Ignorer** laisse la version précédente
+**Marketplace à mettre à jour** : la marketplace montre encore la version
+précédente. Un Éditeur qui enregistre une modification peut choisir
+**Mettre à jour** pour remplacer la version publiée ; **Ignorer** la laisse
 en ligne.
 
 ### Retrait de la marketplace

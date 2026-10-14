@@ -42,10 +42,16 @@ export default function RepublishProposalDialog({
     <ConfirmationDialog
       open={open}
       dismissible={false}
-      title={t("rework.agentMarketplace.proposal.title")}
+      title={t(
+        cause === "saved"
+          ? "rework.agentMarketplace.proposal.title"
+          : "rework.agentMarketplace.proposal.titleReactivated",
+      )}
       message={t(`rework.agentMarketplace.proposal.${cause}`, { name: agentName })}
       details={blockedReason ? <p className={styles.blocked}>{blockedReason}</p> : undefined}
-      confirmLabel={t("rework.agentMarketplace.proposal.publish")}
+      confirmLabel={t(
+        cause === "saved" ? "rework.agentMarketplace.proposal.update" : "rework.agentMarketplace.proposal.publish",
+      )}
       cancelLabel={t("rework.agentMarketplace.proposal.ignore")}
       confirmDisabled={Boolean(blockedReason)}
       onConfirm={onPublish}

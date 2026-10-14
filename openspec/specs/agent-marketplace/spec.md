@@ -7,7 +7,7 @@ Lets a team publish one of its agents to an organization-wide marketplace as a s
 
 ### Requirement: Only an editor publishes, within the team's settings
 
-The control-plane SHALL publish an agent only when the caller holds `team_editor` on the agent's team, publication is enabled for the team, the team is public, and the agent's template is public. A new publication SHALL also require the team's published count to be below its agents quota; republishing a published agent SHALL NOT be limited by the quota. Agents of a personal space MUST NOT be published. Publish and Republish SHALL be offered in the agent card's more menu to editors only; they MUST be absent for other users and in personal spaces, and greyed out with a tooltip when the quota is reached, the team is private, or the template is not public. User-facing text MUST NOT use the word "template".
+The control-plane SHALL publish an agent only when the caller holds `team_editor` on the agent's team, publication is enabled for the team, the team is public, and the agent's template is public. A new publication SHALL also require the team's published count to be below its agents quota; republishing a published agent SHALL NOT be limited by the quota. Agents of a personal space MUST NOT be published. Publish and update actions SHALL be offered in the agent card's more menu to editors only; they MUST be absent for other users and in personal spaces, and greyed out with a tooltip when the quota is reached, the team is private, or the template is not public. The action for an existing publication SHALL be labeled "Update on the marketplace" (French "Mettre à jour sur la marketplace"). User-facing text MUST NOT use the word "template".
 
 #### Scenario: Editor publishes from the card
 
@@ -51,7 +51,7 @@ The control-plane SHALL publish an agent only when the caller holds `team_editor
 
 ### Requirement: Every publication goes through the warning dialog
 
-Every publication and republication SHALL open the same dialog. It SHALL warn that the agent's configuration becomes visible to every user of the organization and, when the agent has configuration files, that anyone who imports it receives a copy of its files (naming them); show the team's quota usage ("3 of 5 published"); and link to the Help Center. Counts and dates in the feature's texts SHALL use the locale's plural forms and date format. The confirm action MUST stay disabled until the user ticks an "I understand" checkbox.
+Every publication and republication SHALL open the same dialog. It SHALL warn that the agent's configuration becomes visible to every user of the organization, or replaces the published version during an update, and, when the agent has configuration files, that anyone who imports it receives a copy of its files (naming them); show the team's quota usage ("3 of 5 published"); and link to the Help Center. Counts and dates in the feature's texts SHALL use the locale's plural forms and date format. The confirm action MUST stay disabled until the user ticks an "I understand" checkbox.
 
 #### Scenario: Confirm disabled until acknowledged
 
@@ -86,7 +86,7 @@ Publishing SHALL store a snapshot of the agent; the marketplace MUST show and im
 
 The team agent card SHALL show a marketplace state bar only when publication is enabled for a public team outside the personal space and the agent has a state visible to the viewer. A never-published agent, a hidden state, or a Removed state that the viewer cannot see MUST NOT render the bar, its background, or reserved space. Editors SHALL still find Publish in the card's more menu. Visible bars SHALL be pinned to the card's bottom edge and built from the same component as the marketplace card's Like/Import bar:
 - **Published:** the like count and the import count.
-- **Modified, not republished:** a warning-coloured state, with the counters kept, saying the marketplace still shows the previous version.
+- **Marketplace update needed:** a warning-coloured state, with the counters kept, saying the marketplace still shows the previous version.
 - **Removed:** a state that opens a popover with the reason, the date, the platform admin's reason message if any, and a "Hide" button.
 
 Members who are not editors SHALL see only the Published state; Modified and Removed SHALL be visible to editors and the team admin only.
@@ -118,7 +118,7 @@ Editors SHALL keep editing, duplicating and copying published agents. A save tha
 #### Scenario: Editor modifies a published agent
 
 - **WHEN** an editor saves a change to a published agent's instructions
-- **THEN** the save succeeds, the snapshot is unchanged, and the bar shows "Modified, not republished" with the counters
+- **THEN** the save succeeds, the snapshot is unchanged, and the bar shows "Marketplace update needed" with the counters
 
 #### Scenario: Save without change
 
@@ -133,11 +133,11 @@ Editors SHALL keep editing, duplicating and copying published agents. A save tha
 #### Scenario: Republication fails
 
 - **WHEN** a republication fails for any reason (a capability no longer installed on the pod, a capability unable to prepare its configuration, a missing or unreadable configuration file, an unreachable pod)
-- **THEN** the previous snapshot stays published unchanged, the editor sees the error, and the bar stays "Modified, not republished"
+- **THEN** the previous snapshot stays published unchanged, the editor sees the error, and the bar stays "Marketplace update needed"
 
 ### Requirement: Editors are offered to republish after their own changes
 
-Right after an editor saves a change to a published agent, the Agents page SHALL open a dialog proposing to republish, with the explicit choices "Publish" and "Ignore"; a click on the scrim MUST NOT close it. "Publish" SHALL open the warning dialog. "Ignore" SHALL leave the agent Modified. The same proposal SHALL open when an editor reactivates an agent that was removed because it was deactivated; when the quota is reached, it SHALL show the greyed quota reason instead of an active "Publish".
+Right after an editor saves a change to a published agent, the Agents page SHALL open a dialog proposing to update the marketplace version, with the explicit choices "Update" and "Ignore"; a click on the scrim MUST NOT close it. "Update" SHALL open the warning dialog. "Ignore" SHALL leave the agent Modified. When an editor reactivates an agent that was removed because it was deactivated, the proposal SHALL instead offer "Publish" and "Ignore". When the quota is reached, it SHALL show the greyed quota reason instead of an active confirm action.
 
 #### Scenario: Editor saves a published agent
 
@@ -147,7 +147,7 @@ Right after an editor saves a change to a published agent, the Agents page SHALL
 #### Scenario: Ignore
 
 - **WHEN** the editor chooses "Ignore"
-- **THEN** the dialog closes and the bar shows "Modified, not republished"
+- **THEN** the dialog closes and the bar shows "Marketplace update needed"
 
 #### Scenario: Reactivation proposal at quota
 

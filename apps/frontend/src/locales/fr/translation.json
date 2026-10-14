@@ -4051,8 +4051,8 @@
       "imports_one": "{{count}} import",
       "imports_other": "{{count}} imports",
       "modified": {
-        "label": "Modifié, non republié",
-        "tooltip": "Cet agent a changé depuis sa publication. La marketplace affiche encore la version précédente tant qu'un éditeur ne l'a pas republié."
+        "label": "Marketplace à mettre à jour",
+        "tooltip": "Cet agent a changé depuis sa publication. La marketplace affiche encore la version précédente jusqu'à ce qu'un éditeur la mette à jour."
       },
       "removed": {
         "label": "Retiré de la marketplace",
@@ -4070,7 +4070,7 @@
       },
       "menu": {
         "publish": "Publier sur la marketplace",
-        "republish": "Republier",
+        "republish": "Mettre à jour sur la marketplace",
         "remove": "Retirer de la marketplace"
       },
       "blocked": {
@@ -4080,8 +4080,9 @@
       },
       "publishDialog": {
         "title": "Publier {{name}} sur la marketplace ?",
-        "titleRepublish": "Republier {{name}} ?",
+        "titleRepublish": "Mettre à jour {{name}} sur la marketplace ?",
         "visibility": "Sa configuration (nom, description, instructions et réglages) devient visible par tous les utilisateurs de l'organisation, qui pourront en importer une copie. Les réglages propres à votre équipe, comme les bibliothèques et les documents, ne sont pas partagés.",
+        "visibilityRepublish": "Sa configuration actuelle (nom, description, instructions et réglages) remplacera la version publiée sur la marketplace. Tous les utilisateurs de l'organisation pourront en importer une copie. Les réglages propres à votre équipe, comme les bibliothèques et les documents, ne sont pas partagés.",
         "files": "Toute personne qui importe cet agent reçoit une copie de ses fichiers ({{names}}).",
         "quota_one": "Votre équipe a publié {{count}} agent sur {{quota}} autorisés.",
         "quota_other": "Votre équipe a publié {{count}} agents sur {{quota}} autorisés.",
@@ -4090,12 +4091,14 @@
         "learnMore": "En savoir plus sur la marketplace",
         "understand": "J'ai compris",
         "confirm": "Publier",
-        "confirmRepublish": "Republier"
+        "confirmRepublish": "Mettre à jour"
       },
       "proposal": {
-        "title": "Republier sur la marketplace ?",
+        "title": "Mettre à jour sur la marketplace ?",
+        "titleReactivated": "Publier à nouveau sur la marketplace ?",
         "saved": "Vous avez modifié {{name}}. La marketplace affiche encore sa version précédente.",
         "reactivated": "{{name}} a été retiré de la marketplace lors de sa désactivation. Le publier à nouveau ?",
+        "update": "Mettre à jour",
         "publish": "Publier",
         "ignore": "Ignorer"
       },

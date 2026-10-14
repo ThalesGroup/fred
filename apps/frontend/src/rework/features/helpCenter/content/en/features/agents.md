@@ -210,9 +210,9 @@ documents picked for the agent are left out of the snapshot.
 
 Once published, the card shows **Published** at the bottom, with its likes and
 imports. Your team keeps using and editing the agent as usual. After a change,
-editors and the team admin see **Modified, not republished**: the
+editors and the team admin see **Marketplace update needed**: the
 marketplace still shows the previous version. An Editor who saves a change
-is offered to republish it straight away; **Ignore** keeps the previous
+can choose **Update** to replace the published version; **Ignore** keeps the previous
 version listed.
 
 ### Removal from the marketplace

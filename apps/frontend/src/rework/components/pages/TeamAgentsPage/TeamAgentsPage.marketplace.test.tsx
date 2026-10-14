@@ -328,7 +328,7 @@ describe("TeamAgentsPage marketplace", () => {
     expect(lastConfirm().message).toContain("rework.agentMarketplace.deleteRemoves");
   });
 
-  it("proposes to republish after an editor saves a change, then opens the warning dialog", async () => {
+  it("proposes to update the marketplace after an editor saves a change, then opens the warning dialog", async () => {
     h.team = team(EDITOR);
     h.instances = [agent({ marketplace: PUBLISHED })];
     h.refetched = [agent({ marketplace: { ...PUBLISHED, modified: true } })];
@@ -339,10 +339,10 @@ describe("TeamAgentsPage marketplace", () => {
 
     const proposal = document.querySelector('[role="alertdialog"]');
     expect(proposal?.textContent).toContain("rework.agentMarketplace.proposal.saved");
-    const publish = Array.from(proposal?.querySelectorAll("button") ?? []).find((b) =>
-      b.textContent?.includes("proposal.publish"),
+    const update = Array.from(proposal?.querySelectorAll("button") ?? []).find((b) =>
+      b.textContent?.includes("proposal.update"),
     );
-    await click(publish);
+    await click(update);
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain("publishDialog.titleRepublish");
   });
 

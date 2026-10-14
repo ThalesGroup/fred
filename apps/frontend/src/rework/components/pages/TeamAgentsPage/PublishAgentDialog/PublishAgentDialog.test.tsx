@@ -120,6 +120,8 @@ describe("PublishAgentDialog", () => {
   it("uses the republish wording for a published agent", () => {
     render([], true);
     expect(document.body.textContent).toContain("publishDialog.titleRepublish");
+    expect(document.body.textContent).toContain("publishDialog.visibilityRepublish");
+    expect(document.body.textContent).not.toContain("publishDialog.visibility ");
     expect(confirmButton().textContent).toContain("publishDialog.confirmRepublish");
   });
 });

@@ -80,7 +80,13 @@ export default function PublishAgentDialog({
       onCancel={onCancel}
     >
       <div className={styles.body}>
-        <p>{t("rework.agentMarketplace.publishDialog.visibility")}</p>
+        <p>
+          {t(
+            republish
+              ? "rework.agentMarketplace.publishDialog.visibilityRepublish"
+              : "rework.agentMarketplace.publishDialog.visibility",
+          )}
+        </p>
         {fileNames.length > 0 && (
           <p>{t("rework.agentMarketplace.publishDialog.files", { names: fileNames.join(", ") })}</p>
         )}
