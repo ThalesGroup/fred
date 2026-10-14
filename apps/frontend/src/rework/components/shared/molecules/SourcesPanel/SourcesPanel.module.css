@@ -48,7 +48,7 @@
 
 .heading {
   color: inherit;
-  font: 600 var(--font-label-medium);
+  font: var(--font-label-medium-emphasized);
 }
 
 .count {

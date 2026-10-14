@@ -14,12 +14,13 @@
 
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
-import { mergeConfig, transformWithEsbuild, type Plugin } from "vite";
+import { loadEnv, mergeConfig, transformWithEsbuild, type Plugin } from "vite";
 import svgr from "@svgr/rollup";
 import path from "path";
 import tsconfigPaths from "vite-tsconfig-paths";
 import { visualizer } from "rollup-plugin-visualizer";
 import { loadApplicationProxyConfig, parseApplicationsEnabled } from "./scripts/application-proxy.mjs";
+import { themeOverlayPlugin } from "./scripts/theme-overlay.mjs";
 
 function applicationFailClosedPlugin(classifyRequest: (requestUrl: string) => "proxy" | 404 | 503 | null): Plugin {
   return {
@@ -134,6 +135,11 @@ export default defineConfig(({ command, mode }) => {
 
   return mergeConfig(baseConfig, {
     server: { proxy: applications.proxy },
-    plugins: [applicationFailClosedPlugin(applications.classifyRequest)],
+    plugins: [
+      applicationFailClosedPlugin(applications.classifyRequest),
+      command === "serve" && mode !== "test"
+        ? themeOverlayPlugin({ ...loadEnv(mode, path.resolve(__dirname, "config"), "FRONTEND_THEME_"), ...process.env })
+        : null,
+    ],
   });
 });

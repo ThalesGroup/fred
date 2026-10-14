@@ -80,16 +80,12 @@ function rewriteSingleUrl(value, packedName, sourceDescription) {
   return parsed.toString();
 }
 
+// The app also matches ZIP themes built on this base (data-ui-base-theme).
+const packagedTheme = `:is([data-ui-theme="${PACKAGED_THEME}"], [data-ui-base-theme="${PACKAGED_THEME}"])`;
 const packagedThemeSelectors = new Map([
-  [`[data-ui-theme="${PACKAGED_THEME}"]`, ":root"],
-  [
-    `[data-ui-theme="${PACKAGED_THEME}"][data-theme="light"]`,
-    '[data-theme="light"]',
-  ],
-  [
-    `[data-ui-theme="${PACKAGED_THEME}"][data-theme="dark"]`,
-    '[data-theme="dark"]',
-  ],
+  [packagedTheme, ":root"],
+  [`${packagedTheme}[data-theme="light"]`, '[data-theme="light"]'],
+  [`${packagedTheme}[data-theme="dark"]`, '[data-theme="dark"]'],
 ]);
 
 /** Maps the packaged theme's app selectors onto the package's plain ones. */

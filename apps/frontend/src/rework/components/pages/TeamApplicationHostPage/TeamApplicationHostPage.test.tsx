@@ -65,7 +65,8 @@ vi.mock("../../../../hooks/useSelectedTeam.ts", () => ({
 vi.mock("@rework/features/applications/useTeamApplications.ts", () => ({
   useTeamApplications: () => h.result,
 }));
-vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi.ts", () => ({
+vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi.ts", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
   useLazyGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery: () => [
     () => ({
       unwrap: () => (h.sessionsFail ? Promise.reject(new Error("down")) : Promise.resolve(h.sessions)),
