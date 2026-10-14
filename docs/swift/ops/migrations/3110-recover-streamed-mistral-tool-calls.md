@@ -1,0 +1,35 @@
+---
+schema: 1
+title: "Recover Mistral tool calls written as text in long reasoning turns"
+impact: none
+configuration: none
+configuration_reason: "Only fred-runtime's Mistral tool-call recovery bound and its text rendering of content blocks change; no configuration key, default or chart value is involved."
+no_action_reason: "No API, event, data or configuration change: a Mistral tool call written as text now runs as a tool call, and empty provider blocks no longer appear as text, once the new runtime is deployed."
+---
+## Applicability
+
+Existing Fred deployments upgrading to this release, including agent pods built on fred-runtime. The recovery only applies to Mistral models.
+
+## Prerequisites
+
+No additional prerequisites beyond the normal deployment procedure.
+
+## Configuration
+
+No configuration changes are required.
+
+## Upgrade
+
+Deploy Fred normally; no additional operator or user action is required.
+
+## Validation
+
+With a Mistral model and reasoning enabled, run a long agent turn that ends in a tool call. The tool runs instead of its JSON being printed as the answer, and no `{'type': 'reference', ...}` text appears in the chat. When recovery happens, the `agent.tool_call_text_recovered_total` counter increases.
+
+## Rollback
+
+Use the normal rollback procedure; this change introduces no data migration.
+
+## Limitations
+
+Conversations already stored with the printed tool call keep that text; only new turns are affected.
