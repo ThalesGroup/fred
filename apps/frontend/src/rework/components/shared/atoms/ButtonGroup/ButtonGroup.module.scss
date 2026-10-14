@@ -18,9 +18,14 @@
   display: flex;
   gap: var(--spacing-2xs);
   border-radius: var(--spacing-2xl);
-  background-color: var(--button-group-background-color);
   padding: var(--spacing-2xs);
   width: fit-content;
+
+  @each $surface in ("-lowest", "-low", "", "-high", "-highest") {
+    &[data-surface="surface-container#{$surface}"] {
+      background-color: var(--surface-container#{$surface});
+    }
+  }
 
   &[data-full-width="true"] {
     width: 100%;
