@@ -124,6 +124,20 @@
     }
   }
 
+  @each $name in success, error {
+    &[data-selected-color="#{$name}"] .stateLayer[data-selected="true"] {
+      --item-background-color: var(--#{$name});
+
+      .label {
+        --label-color: var(--on-#{$name});
+      }
+
+      .icon {
+        --icon-color: var(--on-#{$name});
+      }
+    }
+  }
+
   /* Unselected + disabled (e.g. "Open" while a team is private): fully
    * inert — pointer-events:none blocks hover/active/click outright, no
    * :not(:disabled) guards needed on the rules above — and reads as a

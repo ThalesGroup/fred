@@ -45,7 +45,11 @@ export interface CopyToTeamsDialogProps {
   noEditableTeamsLabel: string;
   /** The team that already holds the item: shown checked, never submitted. */
   originTeamId?: string | null;
+  /** Teams never offered, e.g. the team that published a marketplace agent. */
+  excludedTeamIds?: string[];
   statusByTeamId?: Record<string, CopyTargetStatus>;
+  /** Keeps Confirm disabled, e.g. while `statusByTeamId` loads or after it failed. */
+  confirmBlocked?: boolean;
   isSubmitting?: boolean;
   onConfirm: (teamIds: string[]) => void;
   onClose: () => void;
@@ -62,7 +66,9 @@ export default function CopyToTeamsDialog({
   confirmLabel,
   noEditableTeamsLabel,
   originTeamId,
+  excludedTeamIds,
   statusByTeamId,
+  confirmBlocked = false,
   isSubmitting = false,
   onConfirm,
   onClose,
@@ -78,8 +84,14 @@ export default function CopyToTeamsDialog({
   // offered separately at the top).
   const editableTeams = useMemo(
     () =>
-      availableTeams.filter((team) => !isPersonalTeamId(team.id) && team.id !== personalId && canEditTeamContent(team)),
-    [availableTeams, personalId],
+      availableTeams.filter(
+        (team) =>
+          !isPersonalTeamId(team.id) &&
+          team.id !== personalId &&
+          !excludedTeamIds?.includes(team.id) &&
+          canEditTeamContent(team),
+      ),
+    [availableTeams, personalId, excludedTeamIds],
   );
 
   const filteredTeams = useMemo(() => {
@@ -94,6 +106,17 @@ export default function CopyToTeamsDialog({
       setSearch("");
     }
   }, [open]);
+
+  // A team ticked before its status arrived may turn out not importable.
+  const isSelectable = (id: string) => id !== originTeamId && !statusByTeamId?.[id]?.disabledReason;
+  useEffect(() => {
+    setSelected((prev) => {
+      const next = new Set([...prev].filter(isSelectable));
+      return next.size === prev.size ? prev : next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusByTeamId, originTeamId]);
+  const submittable = [...selected].filter(isSelectable);
 
   const toggle = (id: string) => {
     setSelected((prev) => {
@@ -146,8 +169,8 @@ export default function CopyToTeamsDialog({
         )
       }
       confirmLabel={confirmLabel}
-      confirmDisabled={selected.size === 0 || isSubmitting}
-      onConfirm={() => onConfirm([...selected])}
+      confirmDisabled={submittable.length === 0 || confirmBlocked || isSubmitting}
+      onConfirm={() => onConfirm(submittable)}
       onCancel={onClose}
     >
       <div className={styles.container}>

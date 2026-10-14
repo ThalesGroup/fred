@@ -52,6 +52,7 @@ from fred_sdk.contracts.skills import SkillCatalog, SkillDetail
 from pydantic import ValidationError
 
 from control_plane_backend.agent_instances.store import AgentInstanceRecord
+from control_plane_backend.agent_marketplace.service import attach_marketplace_states
 from control_plane_backend.product.agent_copy import (
     copy_agent_instance,
     list_agent_copy_targets,
@@ -322,7 +323,11 @@ async def get_team_agent_instances(
         deps.team_dependencies,
         required_permissions=[TeamPermission.CAN_USE_TEAM_AGENTS],
     )
-    return await list_managed_agent_instances(team_id, deps)
+    summaries = await list_managed_agent_instances(team_id, deps)
+    await attach_marketplace_states(
+        user=user, team_id=team_id, summaries=summaries, deps=deps
+    )
+    return summaries
 
 
 @router.post(
@@ -823,6 +828,7 @@ async def post_agent_instance_copy(
             deps=deps,
             authorization=http_request.headers.get("Authorization"),
             require_editor=require_editor,
+            locale=body.locale,
         )
     except EnrollmentError as exc:
         raise HTTPException(

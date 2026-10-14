@@ -23,13 +23,19 @@ from fred_core import (
     BaseSessionStore,
     RebacEngine,
 )
+from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.scheduler import SchedulerBackend
 from fred_core.store import ContentStore
 from fred_core.teams.metadata_store import TeamMetadataStore
 
+from control_plane_backend.agent_instances.store import AgentInstanceStore
+from control_plane_backend.agent_marketplace.store import AgentMarketplaceStore
 from control_plane_backend.app.container import ControlPlaneContainer
 from control_plane_backend.app.dependencies import get_application_container
 from control_plane_backend.config.models import Configuration
+from control_plane_backend.marketplace_settings.store import (
+    PlatformMarketplaceSettingsStore,
+)
 from control_plane_backend.prompts.category_store import PromptCategoryStore
 from control_plane_backend.prompts.store import PromptStore
 from control_plane_backend.scheduler.dependencies import (
@@ -108,6 +114,15 @@ class TeamServiceDependencies:
     attach_avatar_urls: AvatarUrlAttacher
     search_users: UserSearch
     run_lifecycle_manager_once_in_memory: LifecycleRunner
+    # None = the built-in marketplace defaults (lightweight test bundles).
+    get_marketplace_settings_store: (
+        Callable[[], PlatformMarketplaceSettingsStore] | None
+    ) = None
+    # None = no published agents and no agents to delete with a team (test bundles).
+    get_agent_marketplace_store: Callable[[], AgentMarketplaceStore] | None = None
+    get_agent_instance_store: Callable[[], AgentInstanceStore] | None = None
+    # None = no KPI for the agents a team deletion removes (test bundles).
+    get_kpi_writer: Callable[[], BaseKPIWriter] | None = None
 
 
 def build_team_service_dependencies(
@@ -229,6 +244,10 @@ def build_team_service_dependencies(
         ),
         search_users=user_search,
         run_lifecycle_manager_once_in_memory=lifecycle_runner,
+        get_marketplace_settings_store=container.get_marketplace_settings_store,
+        get_agent_marketplace_store=container.get_agent_marketplace_store,
+        get_agent_instance_store=container.get_agent_instance_store,
+        get_kpi_writer=container.get_kpi_writer,
     )
 
 

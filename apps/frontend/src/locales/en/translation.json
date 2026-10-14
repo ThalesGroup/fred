@@ -1173,7 +1173,9 @@
           "genericTitle": "Disable default-on?",
           "genericMessage": "Turning off default-on revokes inherited access for every team and may suspend agent instances that depend on this feature.",
           "knowledgeBaseTitle": "Disable Knowledge Base by default?",
-          "knowledgeBaseMessage": "Turning off default-on removes inherited Knowledge Base access from every team. Explicit team grants remain unchanged."
+          "knowledgeBaseMessage": "Turning off default-on removes inherited Knowledge Base access from every team. Explicit team grants remain unchanged.",
+          "impactPublished_one": "{{count}} of them is published: it will be removed from the marketplace.",
+          "impactPublished_other": "{{count}} of them are published: they will be removed from the marketplace."
         },
         "matrix": {
           "title": "{{name}} — team access",
@@ -1297,6 +1299,52 @@
           "confirm": "Repair documents",
           "cancel": "Cancel"
         }
+      },
+      "marketplaces": {
+        "title": "Marketplaces",
+        "subtitle": "Choose which teams may publish their agents to the agents marketplace, and how many agents each team may publish.",
+        "agentsSection": "Agents",
+        "defaultTitle": "Publishing",
+        "defaultHint": "Lets the team's editors publish their agents to the marketplace.",
+        "defaultChoice": {
+          "disabled": "Disabled",
+          "enabled": "Enabled"
+        },
+        "quota": "Max agents",
+        "quotaAria": "Max agents for {{team}}",
+        "defaultQuotaAria": "Default max agents",
+        "quotaInvalid": "Enter a whole number of at least 1.",
+        "resetQuota": "Back to the default value ({{count}})",
+        "resetQuotaAria": "Put the max agents of {{team}} back to Default",
+        "customizeQuota": "Customize",
+        "customizeQuotaAria": "Customize the max agents of {{team}}",
+        "rowControlAria": "Publishing for {{team}}",
+        "choice": {
+          "disabled": "Off",
+          "default": "Default",
+          "enabled": "On"
+        },
+        "col": {
+          "team": "Team",
+          "publishing": "Publishing",
+          "quota": "Max agents",
+          "published": "Published"
+        },
+        "loading": "Loading marketplace settings…",
+        "loadError": "Could not load the marketplace settings.",
+        "noTeams": "No team exists yet.",
+        "savedToast": "Marketplace settings saved.",
+        "saveError": "Could not save the marketplace settings.",
+        "impactError": "Could not check what this change would remove.",
+        "offConfirm": {
+          "title": "Turn publishing off?",
+          "teamMessage": "{{team}} will no longer be able to publish agents.",
+          "defaultMessage": "Teams that follow Default will no longer be able to publish agents.",
+          "agents_one": "{{count}} agent will be removed from the marketplace.",
+          "agents_other": "{{count}} agents will be removed from the marketplace.",
+          "confirm": "Turn off",
+          "cancel": "Cancel"
+        }
       }
     },
     "agentCard": {
@@ -1350,6 +1398,7 @@
       "duplicateDialog": {
         "title": "Duplicate this agent",
         "nameLabel": "New agent name",
+        "copyWord": "copy",
         "cancel": "Cancel",
         "confirm": "Duplicate"
       },
@@ -1372,7 +1421,8 @@
       "statusDisabled": "disabled",
       "toggleSuccess": "{{agent}} {{status}}",
       "unexpectedError": "An unexpected error occurred.",
-      "missingTeamId": "Missing team id in route."
+      "missingTeamId": "Missing team id in route.",
+      "moreMenu": "More actions"
     },
     "analytics": {
       "skillUsage": {
@@ -1920,6 +1970,90 @@
           "successToast": "Prompt removed from the marketplace",
           "errorToast": "Failed to remove prompt"
         }
+      },
+      "agents": {
+        "title": "Community agents",
+        "searchPlaceholder": "Search an agent...",
+        "clearSearch": "Clear search",
+        "loading": "Loading agents...",
+        "likeError": "Could not save your like",
+        "teamFilter": {
+          "chip": "Team: {{team}}",
+          "clear": "Remove the filter on {{team}}"
+        },
+        "empty": {
+          "title": "No agent shared yet",
+          "description": "When a team publishes one of its agents, it appears here. You can then see what it does, like it, and import your own copy into your spaces."
+        },
+        "emptySearch": {
+          "title": "No agent matches",
+          "description": "Try other words, or remove the team filter."
+        },
+        "card": {
+          "byTeam": "By",
+          "filterByTeam": "Filter by team {{team}}",
+          "like_one": "Like this agent ({{count}} like)",
+          "like_other": "Like this agent ({{count}} likes)",
+          "import_one": "Import this agent ({{count}} import)",
+          "import_other": "Import this agent ({{count}} imports)",
+          "updatedOn": "Updated on {{date}}",
+          "details": "View details"
+        },
+        "detail": {
+          "import": "Import",
+          "close": "Close",
+          "loadError": "Could not load this agent. It may no longer be published.",
+          "publishedBy": "Published by {{team}} · updated on {{date}}",
+          "likesSinceUpdateTooltip_one": "Including {{count}} since the update of {{date}}",
+          "likesSinceUpdateTooltip_other": "Including {{count}} since the update of {{date}}",
+          "capabilitiesTitle": "What it can do",
+          "noCapabilities": "It answers questions, without any extra function.",
+          "instructionsTitle": "Instructions",
+          "noInstructions": "No instructions.",
+          "filesTitle": "Configuration files",
+          "filesHint": "Your copy receives these files when you import the agent."
+        },
+        "remove": {
+          "title": "Remove from the marketplace?",
+          "message": "\"{{name}}\" will no longer be listed. The team {{team}} sees that a platform administrator removed it, with your message if you write one.",
+          "reasonLabel": "Message to the team (optional)",
+          "reasonHint": "For example: outdated instructions.",
+          "confirm": "Remove"
+        },
+        "import": {
+          "title": "Import {{name}}",
+          "subtitle": "Select the spaces to import this agent into.",
+          "confirm": "Import",
+          "noEditableTeams": "You are not an editor of any team. Only an editor can import an agent into one — ask a team administrator for that role.",
+          "typeNotEnabled": "Agent type not enabled in this team",
+          "loses_one": "Loses {{count}} capability",
+          "loses_other": "Loses {{count}} capabilities",
+          "losesTitle": "Not available in this team:",
+          "independent": "Your copy will be independent: updates made by {{team}} will not reach it.",
+          "info": {
+            "copiedLabel": "Imported",
+            "copied": "The agent's name, description, instructions and settings",
+            "resetLabel": "To choose again",
+            "reset": "Libraries, folders and documents, which belonged to the publishing team",
+            "recreatedLabel": "Recreated",
+            "recreated": "Configuration files, such as a PowerPoint template",
+            "notCopiedLabel": "Not imported",
+            "notCopied": "Conversations, and capabilities not enabled in the team"
+          },
+          "resultTitle": "Import of {{name}}",
+          "importedInto": "Imported into {{team}}",
+          "failedInto": "Not imported into {{team}}",
+          "renamed": "Named \"{{name}}\": the name was already taken there.",
+          "toReconfigure": "To reconfigure there: the libraries, documents and folders the agent should use.",
+          "dropped": "Without: {{capabilities}}",
+          "notice": "{{capability}}: {{message}}",
+          "errorToast": "Import failed",
+          "errors": {
+            "marketplace_publishing_team": "An agent cannot be imported into the team that published it.",
+            "agent_name_conflict": "An agent with this name already exists in this space.",
+            "generic": "Something went wrong for this space. Try again later."
+          }
+        }
       }
     },
     "helpCenter": {
@@ -2350,7 +2484,8 @@
           "teams": "Teams",
           "platformPrompt": "Platform prompts",
           "announcements": "Announcements",
-          "uiSettings": "User interface"
+          "uiSettings": "User interface",
+          "marketplaces": "Marketplaces"
         },
         "title": "Administration spaces"
       },
@@ -2780,7 +2915,13 @@
           "label": "Team visibility",
           "support": "Determines whether the team is visible on the marketplace to every user.",
           "public": "Public",
-          "private": "Private"
+          "private": "Private",
+          "privateConfirm": {
+            "title": "Make the team private?",
+            "message_one": "{{count}} published agent of this team will be removed from the marketplace. Making the team public again does not publish it again.",
+            "message_other": "{{count}} published agents of this team will be removed from the marketplace. Making the team public again does not publish them again.",
+            "confirm": "Make private"
+          }
         },
         "teamAvatar": {
           "title": "Team avatar",
@@ -2920,8 +3061,7 @@
             "teamDefault": "Team default model",
             "teamDefaultCurrent": "Currently {{model}}. Follows changes made by the team admin.",
             "teamDefaultFollows": "Follows changes made by the team admin.",
-            "unavailableOption": "No longer available",
-            "unavailable": "{{model}} is no longer available to this team. Pick another model or the team default model."
+            "loadError": "The recommended model could not be checked. Saving will leave it unchanged."
           }
         },
         "noTemplates": "No agent templates available — ask a platform admin to enable an agent capability, or check the agent runtime.",
@@ -3901,6 +4041,98 @@
         "free_other": "Link access: {{teams}}",
         "summary": "Other access: {{details}}",
         "separator": "; "
+      }
+    },
+    "agentMarketplace": {
+      "barLabel": "Marketplace",
+      "published": "Published",
+      "publishedTooltip": "This agent is published on the marketplace",
+      "publish": "Publish",
+      "likes_one": "{{count}} like",
+      "likes_other": "{{count}} likes",
+      "imports_one": "{{count}} import",
+      "imports_other": "{{count}} imports",
+      "modified": {
+        "label": "Marketplace update needed",
+        "tooltip": "This agent changed since publication. The marketplace still shows the previous version until an editor updates it."
+      },
+      "removed": {
+        "label": "Removed from the marketplace",
+        "date": "Removed on {{date}}",
+        "message": "Message from the platform administrator: {{message}}",
+        "hide": "Hide",
+        "reasons": {
+          "deactivated": "The agent was deactivated.",
+          "suspended": "The agent was suspended: a capability it uses is no longer available to the team.",
+          "switch_off": "Publishing agents was turned off for this team.",
+          "team_private": "The team became private.",
+          "removed_by_platform_admin": "A platform administrator removed it.",
+          "unknown": "The agent is no longer published."
+        }
+      },
+      "menu": {
+        "publish": "Publish to the marketplace",
+        "republish": "Update on the marketplace",
+        "remove": "Remove from the marketplace"
+      },
+      "blocked": {
+        "templateNotPublic": "This agent uses an agent type reserved to platform administrators: it cannot be published.",
+        "teamPrivate": "Private teams cannot publish agents. Make the team public to publish it.",
+        "quotaReached": "Your team has reached its quota of published agents. Remove one from the marketplace to publish this one."
+      },
+      "publishDialog": {
+        "title": "Publish {{name}} to the marketplace?",
+        "titleRepublish": "Update {{name}} on the marketplace?",
+        "visibility": "Its configuration (name, description, instructions and settings) becomes visible to every user of the organization, who can import a copy of it. Settings tied to your team, such as libraries and documents, are not shared.",
+        "visibilityRepublish": "Its current configuration (name, description, instructions and settings) will replace the published version on the marketplace. Everyone in the organization can import a copy. Settings tied to your team, such as libraries and documents, are not shared.",
+        "files": "Anyone who imports this agent receives a copy of its files ({{names}}).",
+        "quota_one": "Your team has published {{count}} agent out of {{quota}} allowed.",
+        "quota_other": "Your team has published {{count}} agents out of {{quota}} allowed.",
+        "quotaLast_one": "Your team has published {{count}} agent out of {{quota}} allowed. This will be the last one.",
+        "quotaLast_other": "Your team has published {{count}} agents out of {{quota}} allowed. This will be the last one.",
+        "learnMore": "Learn more about the marketplace",
+        "understand": "I understand",
+        "confirm": "Publish",
+        "confirmRepublish": "Update"
+      },
+      "proposal": {
+        "title": "Update on the marketplace?",
+        "titleReactivated": "Publish again to the marketplace?",
+        "saved": "You changed {{name}}. The marketplace still shows its previous version.",
+        "reactivated": "{{name}} was removed from the marketplace when it was deactivated. Publish it again?",
+        "update": "Update",
+        "publish": "Publish",
+        "ignore": "Ignore"
+      },
+      "removeDialog": {
+        "title": "Remove from the marketplace?",
+        "message": "\"{{name}}\" will no longer be listed on the marketplace. It stays in your team unchanged, and its likes and imports are kept if you publish it again.",
+        "confirm": "Remove"
+      },
+      "deactivateDialog": {
+        "title": "Deactivate this published agent?",
+        "message": "\"{{name}}\" will also be removed from the marketplace. Reactivating it does not publish it again.",
+        "confirm": "Deactivate"
+      },
+      "deleteRemoves": "It will also be removed from the marketplace.",
+      "publishSuccess": "{{name}} published to the marketplace",
+      "publishError": "Could not publish this agent",
+      "removeSuccess": "{{name}} removed from the marketplace",
+      "removeError": "Could not remove this agent from the marketplace",
+      "hideError": "Could not hide this state",
+      "errors": {
+        "marketplace_version_conflict": "Someone changed this agent's publication in the meantime. The card now shows its current state.",
+        "marketplace_quota_reached": "Your team has reached its quota of published agents.",
+        "marketplace_team_private": "Private teams cannot publish agents.",
+        "marketplace_switch_off": "Publishing agents is not enabled for this team.",
+        "marketplace_template_not_public": "This agent uses an agent type reserved to platform administrators: it cannot be published.",
+        "marketplace_agent_inactive": "A deactivated or suspended agent cannot be published.",
+        "marketplace_personal_space": "Agents of your personal space cannot be published.",
+        "marketplace_forbidden": "You are not allowed to do this.",
+        "marketplace_agent_not_found": "This agent no longer exists.",
+        "marketplace_entry_not_found": "This agent is not published.",
+        "marketplace_runtime_unavailable": "The service running this agent cannot be reached. The published version is unchanged; try again later.",
+        "marketplace_capability_not_exportable": "The capability \"{{capability}}\" cannot be prepared for the marketplace. The published version is unchanged."
       }
     }
   },

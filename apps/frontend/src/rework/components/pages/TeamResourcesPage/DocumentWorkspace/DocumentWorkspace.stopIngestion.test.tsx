@@ -185,9 +185,16 @@ describe("DocumentWorkspace — ingestion cannot be cancelled", () => {
     expect(deleteItem).toBeTruthy();
     const li = deleteItem!.closest("li") ?? deleteItem!;
     expect(li.getAttribute("data-disabled")).toBe("true");
-    // The reason is discoverable on hover (native title), not a permanent
-    // second line — per developer request on #2315.
-    expect(li.getAttribute("title")).toBe("rework.resources.action.deleteDisabledWhileProcessing");
+    const describedBy = li.getAttribute("aria-describedby") ?? "";
+    expect(document.getElementById(describedBy)?.textContent).toBe(
+      "rework.resources.action.deleteDisabledWhileProcessing",
+    );
+    // The reason shows in a hover tooltip, not a permanent second line.
+    const trigger = li.querySelector('[data-fill="true"]');
+    act(() => trigger?.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
+    expect(document.querySelector('[role="tooltip"]')?.textContent).toBe(
+      "rework.resources.action.deleteDisabledWhileProcessing",
+    );
   });
 
   it("keeps 'Delete' clickable for a document with no active task", () => {

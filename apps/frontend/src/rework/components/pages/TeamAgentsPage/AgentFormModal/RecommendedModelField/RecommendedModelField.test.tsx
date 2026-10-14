@@ -13,8 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// "Team default model" comes first, names today's default and saves null; only team-enabled models
-// are offered; a stored model no longer offered stays shown and is flagged.
+// "Team default model" saves null; the form supplies it for unavailable recommendations.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -33,6 +32,8 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const h = vi.hoisted(() => ({
   policy: undefined as TeamRoutingPolicy | undefined,
   availableModels: undefined as AvailableModelProfileList | undefined,
+  modelsError: false,
+  availableQueryArgs: undefined as { teamId: string } | undefined,
 }));
 
 vi.mock("react-i18next", () => ({
@@ -42,11 +43,14 @@ vi.mock("react-i18next", () => ({
 }));
 
 vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
-  useTeamRoutingPolicyQuery: () => ({ data: h.policy }),
-  useAvailableModelProfilesQuery: () => ({ data: h.availableModels }),
+  useTeamRoutingPolicyQuery: () => ({ currentData: h.policy }),
+  useAvailableModelProfilesQuery: (args: { teamId: string }) => {
+    h.availableQueryArgs = args;
+    return { currentData: h.availableModels, isError: h.modelsError };
+  },
 }));
 
-// The Select molecule has its own tests; here only the options and error matter.
+// The Select molecule has its own tests; here only the options and selected value matter.
 vi.mock("@shared/molecules/Select/Select.tsx", () => ({
   default: ({
     options,
@@ -109,6 +113,8 @@ afterEach(() => {
   onChange.mockClear();
   h.policy = undefined;
   h.availableModels = undefined;
+  h.modelsError = false;
+  h.availableQueryArgs = undefined;
 });
 
 describe("RecommendedModelField", () => {
@@ -126,6 +132,7 @@ describe("RecommendedModelField", () => {
   });
 
   it("saves null for the team default and the profile id for a specific model", () => {
+    h.policy = { team_id: "team-1", version: 1, disabled_model_ids: [] };
     h.availableModels = MODELS;
     render("chat.gpt5");
 
@@ -136,6 +143,7 @@ describe("RecommendedModelField", () => {
   });
 
   it("keeps a model pinned to today's default as that specific model, not the team default", () => {
+    h.policy = { team_id: "team-1", version: 1, disabled_model_ids: [] };
     h.availableModels = MODELS;
     render("chat.mistral");
 
@@ -144,6 +152,7 @@ describe("RecommendedModelField", () => {
   });
 
   it("lists a model with two profiles once, keyed by the stored profile, and still names the default", () => {
+    h.policy = { team_id: "team-1", version: 1, disabled_model_ids: [] };
     h.availableModels = {
       profiles: [
         { profile_id: "chat.gpt5", capability_id: GPT, name: "gpt-5", display_name: "GPT-5" },
@@ -163,14 +172,54 @@ describe("RecommendedModelField", () => {
     expect(container.querySelector("[role=alert]")).toBeNull();
   });
 
-  it("flags a stored model the team no longer offers", () => {
+  it("follows the team default when a stored model is disabled for the team", () => {
     h.policy = { team_id: "team-1", version: 1, disabled_model_ids: [CLAUDE] };
     h.availableModels = MODELS;
     render("chat.claude");
 
-    expect(optionLabels()).toContain("Claude (rework.teams.formAgent.fields.recommendedModel.unavailableOption)");
-    expect(container.querySelector("[role=alert]")?.textContent).toBe(
-      "rework.teams.formAgent.fields.recommendedModel.unavailable:Claude",
+    expect(container.querySelector("div[data-value]")?.getAttribute("data-value")).toBe("");
+    expect(optionLabels()).not.toContain("Claude");
+    expect(container.querySelector("[role=alert]")).toBeNull();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("follows the team default when the catalog no longer offers the stored profile", () => {
+    h.policy = { team_id: "team-1", version: 1, disabled_model_ids: [] };
+    h.availableModels = {
+      profiles: MODELS.profiles,
+      effective_default_profile_id: "chat.mistral",
+    };
+    render("chat.azure_apim.gpt6sol");
+
+    expect(h.availableQueryArgs).toEqual({ teamId: "team-1" });
+    expect(container.querySelector("div[data-value]")?.getAttribute("data-value")).toBe("");
+    expect(optionLabels()[0]).toContain("teamDefaultCurrent:Mistral Small");
+    expect(container.textContent).not.toContain("chat.azure_apim.gpt6sol");
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("does not alter a stored recommendation while model reads are incomplete", () => {
+    h.availableModels = MODELS;
+    render("chat.azure_apim.gpt6sol");
+
+    expect(onChange).not.toHaveBeenCalled();
+
+    h.policy = { team_id: "team-1", version: 1, disabled_model_ids: [] };
+    act(() =>
+      root.render(<RecommendedModelField teamId="team-1" value="chat.azure_apim.gpt6sol" onChange={onChange} />),
     );
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("shows a read error instead of claiming the team default is selected", () => {
+    h.modelsError = true;
+    h.policy = { team_id: "team-1", version: 1, disabled_model_ids: [] };
+    h.availableModels = MODELS;
+    render("chat.stored");
+
+    expect(container.textContent).toContain("rework.teams.formAgent.fields.recommendedModel.loadError");
+    expect(container.querySelector("div[data-value]")).toBeNull();
+    expect(onChange).not.toHaveBeenCalled();
   });
 });

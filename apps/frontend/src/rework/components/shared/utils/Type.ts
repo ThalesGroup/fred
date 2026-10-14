@@ -196,6 +196,7 @@ export const materialIcons = [
   "login",
   "mic",
   "stop",
+  "favorite",
   "book_2",
 ] as const;
 

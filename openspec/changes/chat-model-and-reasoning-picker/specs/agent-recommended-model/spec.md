@@ -27,8 +27,8 @@ enabled by the team on the instance's pod. Its first option SHALL be "Team defau
 model", with a helper line naming today's default and saying it follows the
 team admin's changes; saving it SHALL store no recommendation. Every enabled
 model SHALL also be listed on its own, today's default included, and picking
-one SHALL pin it. A stored recommendation that is no longer selectable SHALL be
-shown flagged as unavailable.
+one SHALL pin it. A stored recommendation that is no longer selectable SHALL
+select the team default in the form and SHALL be cleared when the form is saved.
 
 #### Scenario: Editor picks another model
 
@@ -39,6 +39,18 @@ shown flagged as unavailable.
 
 - **WHEN** the editor saves with "Default model" selected
 - **THEN** no recommendation is stored
+
+#### Scenario: Stored model becomes unavailable
+
+- **GIVEN** an agent recommends a model that is no longer available to its team
+- **WHEN** that model is no longer selectable and the editor opens the agent form
+- **THEN** the form selects the team default, and saving clears the recommendation
+
+#### Scenario: Available models cannot be checked
+
+- **GIVEN** an agent has a stored recommendation
+- **WHEN** a model or routing-policy read fails while the editor opens the form
+- **THEN** the form reports the failed check, and saving other edits leaves the recommendation unchanged
 
 ### Requirement: A recommendation is validated when it is written
 

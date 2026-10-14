@@ -14,18 +14,35 @@
 
 import Button from "@shared/atoms/Button/Button.tsx";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
-import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu.tsx";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import { resolveAgentIcon } from "@shared/utils/agentIcon.ts";
 import { userDisplayName } from "@core/utils/userDisplayName.ts";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
+import type { OptionModel } from "@models/Option.model.ts";
 import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
 import { ManagedAgentInstanceSummary, UserSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import styles from "./AgentCard.module.scss";
+import TeamMarketplaceState from "./TeamMarketplaceState.tsx";
 
-type MoreMenuAction = "edit" | "toggle" | "duplicate" | "copyTo" | "delete";
+type MoreMenuAction = "edit" | "toggle" | "duplicate" | "copyTo" | "publish" | "unpublish" | "delete";
+
+/** What the viewer may do with this agent on the marketplace, decided by the page. */
+export interface AgentCardMarketplace {
+  /** The team can publish (switch on, public team): every card of the page shows the bar. */
+  showBar: boolean;
+  /** Editors only, never in the personal space; greyed with the reason as tooltip. */
+  publishAction?: { kind: "publish" | "republish"; disabledReason?: string };
+  /** Editors and the team admin, while the agent is published. */
+  canRemove: boolean;
+  /** Editors and the team admin see Modified and Removed. */
+  showDetailedState: boolean;
+  canHide: boolean;
+  onPublish: () => void;
+  onRemove: () => void;
+  onHide: () => void;
+}
 
 export interface AgentCardProps {
   instance: ManagedAgentInstanceSummary;
@@ -43,6 +60,7 @@ export interface AgentCardProps {
   onDuplicate: () => void;
   onCopyTo: () => void;
   onDelete: () => void;
+  marketplace?: AgentCardMarketplace;
 }
 
 function formatShortDate(dateStr: string | null | undefined): string | undefined {
@@ -70,6 +88,7 @@ export default function AgentCard({
   onDuplicate,
   onCopyTo,
   onDelete,
+  marketplace,
 }: AgentCardProps) {
   const { agentIconName } = useFrontendProperties();
   const { t } = useTranslation();
@@ -151,8 +170,72 @@ export default function AgentCard({
       onToggleEnabled();
     } else if (action === "duplicate") onDuplicate();
     else if (action === "copyTo") onCopyTo();
+    else if (action === "publish") marketplace?.onPublish();
+    else if (action === "unpublish") marketplace?.onRemove();
     else if (action === "delete") onDelete();
   };
+
+  // A team admin who is not an editor still gets the menu, with Remove only.
+  const menuOptions: OptionModel<MoreMenuAction>[] = [];
+  if (canManageAgents) {
+    menuOptions.push(
+      {
+        key: "edit",
+        value: "edit",
+        label: t("rework.agentCard.edit"),
+        icon: { category: "outlined", type: "edit" },
+      },
+      {
+        key: "toggle",
+        value: "toggle",
+        label: toggleLabel,
+        icon: { category: "outlined", type: isEnabled ? "visibility_off" : "visibility" },
+        disabled: isSuspended,
+      },
+      {
+        key: "duplicate",
+        value: "duplicate",
+        label: t("rework.agentCard.duplicate"),
+        icon: { category: "outlined", type: "content_copy" },
+      },
+      {
+        key: "copyTo",
+        value: "copyTo",
+        label: t("rework.agentCard.copyTo"),
+        icon: { category: "outlined", type: "drive_file_move" },
+      },
+    );
+  }
+  if (marketplace?.publishAction) {
+    const { kind, disabledReason } = marketplace.publishAction;
+    menuOptions.push({
+      key: "publish",
+      value: "publish",
+      label: t(
+        kind === "republish" ? "rework.agentMarketplace.menu.republish" : "rework.agentMarketplace.menu.publish",
+      ),
+      icon: { category: "outlined", type: "storefront" },
+      disabled: Boolean(disabledReason),
+      tooltip: disabledReason,
+    });
+  }
+  if (marketplace?.canRemove) {
+    menuOptions.push({
+      key: "unpublish",
+      value: "unpublish",
+      label: t("rework.agentMarketplace.menu.remove"),
+      icon: { category: "outlined", type: "do_not_disturb_on" },
+    });
+  }
+  if (canManageAgents) {
+    menuOptions.push({
+      key: "delete",
+      value: "delete",
+      label: t("rework.agentCard.delete"),
+      icon: { category: "outlined", type: "delete" },
+      destructive: true,
+    });
+  }
 
   return (
     <div className={styles.agentCard} data-enabled={isEnabled}>
@@ -165,49 +248,18 @@ export default function AgentCard({
             <div className={styles.agentName}>{instance.display_name}</div>
             <div className={styles.agentRole}>{instance.role}</div>
           </div>
-          {canManageAgents && (
+          {menuOptions.length > 0 && (
             <div className={styles.moreMenu}>
               <IconButtonMenu<MoreMenuAction>
                 iconButton={{
                   color: "on-surface-retreat",
                   variant: "icon",
-                  size: "small",
+                  size: "medium",
+                  iconSize: "small",
                   icon: { category: "outlined", type: "more_vert" },
+                  "aria-label": t("rework.agentCard.moreMenu"),
                 }}
-                options={[
-                  {
-                    key: "edit",
-                    value: "edit",
-                    label: t("rework.agentCard.edit"),
-                    icon: { category: "outlined", type: "edit" },
-                  },
-                  {
-                    key: "toggle",
-                    value: "toggle",
-                    label: toggleLabel,
-                    icon: { category: "outlined", type: isEnabled ? "visibility_off" : "visibility" },
-                    disabled: isSuspended,
-                  },
-                  {
-                    key: "duplicate",
-                    value: "duplicate",
-                    label: t("rework.agentCard.duplicate"),
-                    icon: { category: "outlined", type: "content_copy" },
-                  },
-                  {
-                    key: "copyTo",
-                    value: "copyTo",
-                    label: t("rework.agentCard.copyTo"),
-                    icon: { category: "outlined", type: "drive_file_move" },
-                  },
-                  {
-                    key: "delete",
-                    value: "delete",
-                    label: t("rework.agentCard.delete"),
-                    icon: { category: "outlined", type: "delete" },
-                    destructive: true,
-                  },
-                ]}
+                options={menuOptions}
                 onSelect={handleMoreMenuSelect}
               />
             </div>
@@ -216,33 +268,36 @@ export default function AgentCard({
         <div className={styles.agentDescription}>{instance.description || t("rework.agentCard.noDescription")}</div>
       </div>
 
-      {isSuspended ? (
-        <div className={styles.suspensionWarning}>{t("rework.agentCard.suspended")}</div>
-      ) : (
-        instance.catalog_warnings &&
-        instance.catalog_warnings.length > 0 && (
-          <div className={styles.catalogWarning}>{t("rework.agentCard.catalogWarning")}</div>
-        )
+      {!isSuspended && instance.catalog_warnings && instance.catalog_warnings.length > 0 && (
+        <div className={styles.catalogWarning}>{t("rework.agentCard.catalogWarning")}</div>
       )}
 
-      <div className={styles.actions}>
-        <Tooltip content={infoTooltipContent}>
-          <IconButton
-            color="on-surface-retreat"
-            variant="icon"
-            size="medium"
-            icon={{ category: "outlined", type: "info" }}
-            aria-label={t("rework.agentCard.tooltip.label")}
-          />
-        </Tooltip>
-        {isEnabled && teamId ? (
-          <Link to={`/team/${teamId}/managed-chat/${instance.agent_instance_id}`} className={styles.chatLink}>
-            {chatButton}
-          </Link>
-        ) : (
-          chatButton
-        )}
+      <div className={styles.footer}>
+        {isSuspended && <div className={styles.suspensionWarning}>{t("rework.agentCard.suspended")}</div>}
+        <div className={styles.actions}>
+          <Tooltip content={infoTooltipContent}>
+            <span className={styles.infoIcon} tabIndex={0}>
+              <Icon category="outlined" type="info" accessibleName={t("rework.agentCard.tooltip.label")} />
+            </span>
+          </Tooltip>
+          {isEnabled && teamId ? (
+            <Link to={`/team/${teamId}/managed-chat/${instance.agent_instance_id}`} className={styles.chatLink}>
+              {chatButton}
+            </Link>
+          ) : (
+            chatButton
+          )}
+        </div>
       </div>
+
+      {marketplace?.showBar && (
+        <TeamMarketplaceState
+          marketplace={instance.marketplace}
+          showDetailedState={marketplace.showDetailedState}
+          canHide={marketplace.canHide}
+          onHide={marketplace.onHide}
+        />
+      )}
     </div>
   );
 }

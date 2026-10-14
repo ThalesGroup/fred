@@ -167,6 +167,52 @@ async def test_deletion_snapshots_only_its_team_and_agent_without_touching_activ
 
 
 @pytest.mark.asyncio
+async def test_team_deletion_snapshots_each_agent_name_without_touching_activity(
+    control_plane_sql_engine: AsyncEngine,
+) -> None:
+    agents = AgentInstanceStore(control_plane_sql_engine)
+    sessions = SessionMetadataStore(control_plane_sql_engine)
+    await agents.create(agent())
+    second = agent("agent-2")
+    second.display_name = "Second name"
+    await agents.create(second)
+    await agents.create(agent("agent-3", team="team-2"))
+    old = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    for sid, team, aid in [
+        ("first", "team-1", "agent-1"),
+        ("second", "team-1", "agent-2"),
+        ("foreign", "team-2", "agent-3"),
+    ]:
+        await sessions.create(
+            SessionMetadataRecord(
+                session_id=sid,
+                team_id=TeamId(team),
+                agent_instance_id=aid,
+                user_id="alice",
+                title=sid,
+                agent_display_name="Snapshot",
+                updated_at=old,
+            )
+        )
+
+    deleted = await agents.delete_by_team(TeamId("team-1"))
+    assert sorted(deleted.agent_instance_ids) == ["agent-1", "agent-2"]
+
+    for sid, expected in [
+        ("first", "Original name"),
+        ("second", "Second name"),
+        ("foreign", "Snapshot"),
+    ]:
+        stored = await sessions.get(sid)
+        assert stored is not None and stored.agent_display_name == expected
+        assert (
+            stored.updated_at is not None
+            and stored.updated_at.replace(tzinfo=timezone.utc) == old
+        )
+    assert await agents.get("agent-3") is not None
+
+
+@pytest.mark.asyncio
 async def test_name_snapshot_and_agent_deletion_roll_back_together(
     control_plane_sql_engine: AsyncEngine,
 ) -> None:

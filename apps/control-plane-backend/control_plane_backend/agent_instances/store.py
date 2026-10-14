@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Collection
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from fred_core.common import TeamId
@@ -27,13 +28,28 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from control_plane_backend.agent_instances.names import is_agent_name_violation
+from control_plane_backend.agent_marketplace.store import (
+    RemovalReason,
+    RemovedEntry,
+    emit_unpublished,
+    remove_published_entries,
+)
 from control_plane_backend.config.models import ManagedAgentTuning
 from control_plane_backend.models.agent_instance_models import AgentInstanceRow
+from control_plane_backend.models.base import utcnow
 from control_plane_backend.models.routing_policy_models import TeamRoutingPolicyRow
 from control_plane_backend.models.session_metadata_models import SessionMetadataRow
 from control_plane_backend.routing_policy.schemas import ModelDisabledForTeamError
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class TeamAgentsDeletion:
+    """What a team deletion removed: its agents, and the entries they had published."""
+
+    agent_instance_ids: list[str]
+    unpublished: list[RemovedEntry]
 
 
 class AgentNameAlreadyExistsError(Exception):
@@ -384,22 +400,41 @@ class AgentInstanceStore:
                             ).tuning.recommended_chat_profile_id
                         }
                     )
-                if display_name is not None:
-                    row.display_name = display_name
-                if description is not None:
-                    row.description = description
-                if enabled is not None:
-                    row.enabled = enabled
-                if tuning is not None:
-                    row.tuning_json = tuning.model_dump_json()
-                if updated_by is not None:
-                    row.updated_by = updated_by
-                row.updated_at = _utcnow()
+                deactivated = enabled is False and row.enabled
+                changes = {
+                    "display_name": display_name,
+                    "description": description,
+                    "enabled": enabled,
+                    "tuning_json": tuning.model_dump_json()
+                    if tuning is not None
+                    else None,
+                }
+                changed = False
+                for column, value in changes.items():
+                    if value is not None and getattr(row, column) != value:
+                        setattr(row, column, value)
+                        changed = True
+                # The marketplace compares `updated_at` to the published snapshot:
+                # a no-op save keeps it, a real one stamps it to the microsecond.
+                if changed:
+                    if updated_by is not None:
+                        row.updated_by = updated_by
+                    row.updated_at = utcnow()
+                removed: list[RemovedEntry] = (
+                    await remove_published_entries(
+                        s,
+                        reason=RemovalReason.DEACTIVATED,
+                        agent_instance_ids=[agent_instance_id],
+                    )
+                    if deactivated
+                    else []
+                )
                 await s.flush()
         except IntegrityError as exc:
             if display_name is not None and is_agent_name_violation(exc):
                 raise AgentNameAlreadyExistsError(team_id, display_name) from exc
             raise
+        emit_unpublished(removed, actor_uid=updated_by)
         return await self.get(agent_instance_id)
 
     async def set_suspension(
@@ -441,6 +476,16 @@ class AgentInstanceStore:
             if not rows:
                 return None
             rows[0].suspension_reason = reason
+            removed = (
+                await remove_published_entries(
+                    s,
+                    reason=RemovalReason.SUSPENDED,
+                    agent_instance_ids=[agent_instance_id],
+                )
+                if reason is not None
+                else []
+            )
+        emit_unpublished(removed)
         return await self.get(agent_instance_id)
 
     async def delete(
@@ -448,8 +493,11 @@ class AgentInstanceStore:
         agent_instance_id: str,
         team_id: TeamId,
         session: AsyncSession | None = None,
+        actor_uid: str | None = None,
     ) -> bool:
-        """Delete one instance scoped to team_id. Returns True if a row was removed."""
+        """Delete one instance scoped to team_id. Returns True if a row was removed.
+        A published entry is taken down first and audited once the deletion is done."""
+        unpublished: list[RemovedEntry] = []
         async with use_session(self._sessions, session) as s:
             instance = await s.scalar(
                 select(AgentInstanceRow)
@@ -461,6 +509,9 @@ class AgentInstanceStore:
             )
             if instance is None:
                 return False
+            unpublished = await remove_published_entries(
+                s, reason=RemovalReason.DELETED, agent_instance_ids=[agent_instance_id]
+            )
             # Keep the last name without making deletion look like chat activity.
             await s.execute(
                 update(SessionMetadataRow)
@@ -479,4 +530,45 @@ class AgentInstanceStore:
                     AgentInstanceRow.team_id == str(team_id),
                 )
             )
+        emit_unpublished(unpublished, actor_uid=actor_uid)
         return result.rowcount > 0
+
+    async def delete_by_team(
+        self,
+        team_id: TeamId,
+        session: AsyncSession | None = None,
+    ) -> TeamAgentsDeletion:
+        """Delete every instance of a team (team deletion); marketplace rows cascade."""
+        async with use_session(self._sessions, session) as s:
+            team_agents = select(AgentInstanceRow.agent_instance_id).where(
+                AgentInstanceRow.team_id == str(team_id)
+            )
+            agent_ids = list((await s.scalars(team_agents.with_for_update())).all())
+            if not agent_ids:
+                return TeamAgentsDeletion([], [])
+            # Taken down before the cascade so the caller can audit what was published.
+            unpublished = await remove_published_entries(
+                s, reason=RemovalReason.TEAM_DELETED, team_ids=[str(team_id)]
+            )
+            # Keep each agent's last name on its sessions, as a single delete does.
+            await s.execute(
+                update(SessionMetadataRow)
+                .where(
+                    SessionMetadataRow.team_id == str(team_id),
+                    SessionMetadataRow.agent_instance_id.in_(team_agents),
+                )
+                .values(
+                    agent_display_name=select(AgentInstanceRow.display_name)
+                    .where(
+                        AgentInstanceRow.agent_instance_id
+                        == SessionMetadataRow.agent_instance_id,
+                        AgentInstanceRow.team_id == str(team_id),
+                    )
+                    .scalar_subquery(),
+                    updated_at=SessionMetadataRow.updated_at,
+                )
+            )
+            await s.execute(
+                delete(AgentInstanceRow).where(AgentInstanceRow.team_id == str(team_id))
+            )
+        return TeamAgentsDeletion(agent_ids, unpublished)
