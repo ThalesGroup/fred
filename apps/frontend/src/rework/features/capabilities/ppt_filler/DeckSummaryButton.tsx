@@ -49,6 +49,9 @@ function noteText(t: TFunction, note: BuildNote, slide: BuiltSlide): string | nu
   if (note.code === "other_kind") {
     return t(`${NOTES}.other_kind`, { built: kindLabel(t, slide.kind), asked: kindLabel(t, note.kind ?? "") });
   }
+  if (note.code === "chart_type_changed") {
+    return t(`${NOTES}.chart_type_changed`, { asked: note.kind ?? "" });
+  }
   if (!PLAIN_NOTES.has(note.code)) return null;
   return t(`${NOTES}.${note.code}`, note.count != null ? { count: note.count } : undefined);
 }

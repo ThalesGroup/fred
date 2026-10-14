@@ -35,6 +35,7 @@ export const SLIDE_KINDS: readonly SlideKind[] = [
   "quote",
   "image_text",
   "table",
+  "chart",
   "closing",
   "other",
 ];
@@ -48,6 +49,13 @@ export interface PatternOverride {
 }
 
 export type OverridePatch = Partial<Omit<PatternOverride, "pattern_id">>;
+
+/** The kinds the selector offers for a pattern: `chart` only where the slide
+ *  holds a chart zone, as the backend's vision check rules (`kind_fits_slots`). */
+export function kindsFor(pattern: Pattern): readonly SlideKind[] {
+  const hasChart = (pattern.zones ?? []).some((zone) => zone.role === "chart");
+  return SLIDE_KINDS.filter((kind) => kind !== "chart" || hasChart || pattern.kind === "chart");
+}
 
 export const TEMPLATE_SHA_KEY = "template_sha256";
 export const OVERRIDES_KEY = "overrides";

@@ -28,7 +28,7 @@ import Select from "@shared/molecules/Select/Select.tsx";
 import type { OptionModel } from "@models/Option.model.ts";
 import type { Pattern, TemplateInventory } from "./api/pptBuilderCapabilityOpenApi";
 import { usePatternsPreview, type PreviewSource } from "./usePatternsPreview";
-import { SLIDE_KINDS, type OverridePatch, type SlideKind } from "./types";
+import { kindsFor, SLIDE_KINDS, type OverridePatch, type SlideKind } from "./types";
 import styles from "./PatternReviewDialog.module.css";
 
 // A plain workerSrc (a fresh worker per load) is enough here: this dialog never
@@ -225,7 +225,7 @@ export function PatternCard({ pattern, page, hasPdf, readOnly, kindOptions, onOv
         <Select
           size="xs"
           compact
-          options={kindOptions}
+          options={kindOptions.filter((option) => kindsFor(pattern).includes(option.value))}
           value={pattern.kind}
           disabled={readOnly}
           ariaLabel={t("capability.ppt_builder.review.kindFor", { label: pattern.label })}

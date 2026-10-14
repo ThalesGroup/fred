@@ -16,6 +16,7 @@ import { describe, expect, it } from "vitest";
 import type { Pattern, TemplateInventory } from "./api/pptBuilderCapabilityOpenApi";
 import {
   effectiveInventory,
+  kindsFor,
   readOverrides,
   readTemplateSha,
   summarize,
@@ -115,5 +116,15 @@ describe("readers and summary", () => {
     expect(readOverrides({ overrides: "nope" })).toEqual([]);
     expect(readTemplateSha({ template_sha256: "" })).toBeNull();
     expect(readTemplateSha({ template_sha256: "abc" })).toBe("abc");
+  });
+});
+
+describe("kindsFor (the kind selector)", () => {
+  const box = { x: 0, y: 0, w: 1, h: 1 };
+  it("offers `chart` only on a slide holding a chart zone", () => {
+    expect(kindsFor(pattern({ kind: "bullets" }))).not.toContain("chart");
+    const chart = pattern({ kind: "chart", zones: [{ key: "ph:1", role: "chart", box }] });
+    expect(kindsFor(chart)).toContain("chart");
+    expect(kindsFor(chart)).toContain("bullets");
   });
 });

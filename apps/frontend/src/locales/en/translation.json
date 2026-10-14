@@ -484,6 +484,7 @@
         "quote": "Quote",
         "image_text": "Image and text",
         "table": "Table",
+        "chart": "Chart",
         "closing": "Closing",
         "other": "Other"
       },
@@ -514,7 +515,8 @@
           "fixed_slide": "This slide is used as it is in the template, so its content was left out.",
           "list_continues": "The list continues on the next slide.",
           "list_continuation": "Continuation of the list from the previous slide.",
-          "other_kind": "Built as “{{built}}” instead of “{{asked}}”."
+          "other_kind": "Built as “{{built}}” instead of “{{asked}}”.",
+          "chart_type_changed": "A “{{asked}}” chart is not available: the data is shown as a column chart."
         }
       }
     }

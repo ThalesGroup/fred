@@ -484,6 +484,7 @@
         "quote": "Citation",
         "image_text": "Image et texte",
         "table": "Tableau",
+        "chart": "Graphique",
         "closing": "Conclusion",
         "other": "Autre"
       },
@@ -514,7 +515,8 @@
           "fixed_slide": "Cette diapositive est reprise telle quelle du template, son contenu a donc été laissé de côté.",
           "list_continues": "La liste continue sur la diapositive suivante.",
           "list_continuation": "Suite de la liste de la diapositive précédente.",
-          "other_kind": "Construite en « {{built}} » au lieu de « {{asked}} »."
+          "other_kind": "Construite en « {{built}} » au lieu de « {{asked}} ».",
+          "chart_type_changed": "Le graphique « {{asked}} » n'est pas disponible : les données sont affichées en histogramme."
         }
       }
     }

@@ -137,6 +137,36 @@ describe("DeckSummaryButton", () => {
     expect(dialog.textContent).not.toContain("capability.ppt_builder");
   });
 
+  it("names a chart built in a content area and a chart type it could not draw", async () => {
+    const charts: BuiltSlide[] = [
+      {
+        number: 1,
+        part: 1,
+        parts: 1,
+        title: "Revenue",
+        kind: "chart",
+        template: "Chart",
+        notes: [{ code: "chart_type_changed", kind: "radar" }],
+      },
+      {
+        number: 2,
+        part: 1,
+        parts: 1,
+        title: "Shares",
+        kind: "bullets",
+        template: "Title and Content",
+        notes: [{ code: "other_kind", kind: "chart" }],
+      },
+    ];
+    const dialog = open(await mount("fr", charts));
+    const items = [...dialog.querySelectorAll("ol > li")].map((li) => li.textContent);
+    expect(items[0]).toContain("Graphique");
+    expect(items[0]).toContain(
+      "Le graphique « radar » n'est pas disponible : les données sont affichées en histogramme.",
+    );
+    expect(items[1]).toContain("Construite en « Liste à puces » au lieu de « Graphique ».");
+  });
+
   it("has a wording for every note code the backend sends", () => {
     const codes = [
       "text_shortened",
@@ -153,6 +183,7 @@ describe("DeckSummaryButton", () => {
       "list_continues",
       "list_continuation",
       "other_kind",
+      "chart_type_changed",
     ];
     for (const locale of [en, fr]) {
       expect(Object.keys(locale.capability.ppt_builder.summary.notes).sort()).toEqual([...codes].sort());

@@ -60,7 +60,18 @@ export type TableSpec = {
 };
 export type Zone = {
   key: string;
-  role: "title" | "subtitle" | "heading" | "body" | "caption" | "number" | "label" | "image" | "table" | "keep";
+  role:
+    | "title"
+    | "subtitle"
+    | "heading"
+    | "body"
+    | "caption"
+    | "number"
+    | "label"
+    | "image"
+    | "table"
+    | "chart"
+    | "keep";
   box: Box;
   sample?: string;
   font_pt?: number | null;
@@ -70,6 +81,8 @@ export type Zone = {
   purpose?: string | null;
   table?: TableSpec | null;
   framed?: boolean;
+  chart_capable?: boolean;
+  chart_type?: string | null;
 };
 export type RepeatGroup = {
   key: string;
@@ -84,6 +97,7 @@ export type RepeatGroup = {
     | "label"
     | "image"
     | "table"
+    | "chart"
     | "keep"
   )[];
   items: Zone[][];
@@ -110,6 +124,7 @@ export type Pattern = {
     | "quote"
     | "image_text"
     | "table"
+    | "chart"
     | "closing"
     | "other";
   zones?: Zone[];
