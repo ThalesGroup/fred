@@ -25,5 +25,5 @@
 
 - [x] 5.1 Add a regression fixture aggregated from one-block deltas (hundreds of thinking blocks, the sentinel between a split name and two calls) and a rendering test for a block without text; verify both fail on the current code.
 - [x] 5.2 Remove the content-block cap from the completed-message parser, keeping the character and call caps; verify the fixture recovers two calls and the remaining cap tests still reject.
-- [x] 5.3 Stop rendering dict blocks without text in `content_to_text`; verify the incident replay renders the sentinel as nothing.
+- [x] 5.3 Stop rendering the sentinel and tool-call blocks in `content_to_text`, render refusals as text, keep unknown blocks visible, and drop a closing-bracket residue after recovered calls; verify with renderer, residue and stream-bridge tests.
 - [x] 5.4 Add the dated execution-contract entry and a migration note; run the fred-runtime test and quality gates and strict OpenSpec validation.
