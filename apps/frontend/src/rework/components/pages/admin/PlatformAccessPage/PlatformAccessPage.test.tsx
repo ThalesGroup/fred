@@ -678,6 +678,38 @@ it("narrows the teams table ignoring accents and case, says when nothing matches
   expect(state.setTeam).not.toHaveBeenCalled();
 });
 
+it("shows only allowed teams on demand and sorts teams by name from the header", () => {
+  state.teams = [
+    { team_id: "t1", name: "Zeta", allowed: true, free: false },
+    { team_id: "t2", name: "Alpha", allowed: false, free: false },
+    { team_id: "t3", name: "Mu", allowed: true, free: false },
+  ];
+  act(() => root.render(<PlatformAccessPage />));
+  openTab("teams");
+  const panel = host.querySelector<HTMLElement>('[id$="-teams-panel"]')!;
+  const listed = () =>
+    [...panel.querySelectorAll(`[class*="datatable-row"]`)].map(
+      (row) => row.querySelector(`[class*="datatable-cell"]`)!.textContent,
+    );
+  const chip = (label: string) =>
+    [...panel.querySelectorAll<HTMLButtonElement>('[role="group"] button')].find((button) =>
+      button.textContent!.startsWith(label),
+    )!;
+  expect(chip("rework.platformAccess.teamFilter.allowed").textContent).toContain("2");
+  act(() => chip("rework.platformAccess.teamFilter.allowed").click());
+  expect(listed()).toEqual(["Zeta", "Mu"]);
+  const nameHeader = [...panel.querySelectorAll<HTMLButtonElement>('[class*="header-sort-button"]')].find((button) =>
+    button.textContent!.startsWith("rework.platformAccess.team"),
+  )!;
+  act(() => nameHeader.click());
+  expect(listed()).toEqual(["Mu", "Zeta"]);
+  act(() => nameHeader.click());
+  expect(listed()).toEqual(["Zeta", "Mu"]);
+  act(() => chip("rework.platformAccess.teamFilter.all").click());
+  expect(listed()).toEqual(["Zeta", "Mu", "Alpha"]);
+  expect(state.setTeam).not.toHaveBeenCalled();
+});
+
 it("whitelists a whole team while retaining its independent Free enrollment flag", async () => {
   render();
   openTab("teams");

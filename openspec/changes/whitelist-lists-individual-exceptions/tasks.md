@@ -151,3 +151,12 @@ Run on the branch restacked on `feat/platform-access-ui-condense` (plain `git re
 - No response shape change: the generated client was not regenerated.
 
 Behaviour to know about 10.3, on a database whose `lower()` is ASCII-only (SQLite; PostgreSQL under a C/POSIX `LC_CTYPE`): a letter outside ASCII and the folding table (Ł, Ø, Cyrillic, Greek) stored as a capital is found when typed as a capital, not when typed in lower case; stored in lower case it is found in either case. With a Unicode-aware `lower()` both cases match, as the PostgreSQL-backed test expects.
+
+## 11. Teams table filter and sort (owner request, 2026-10-14)
+
+- [x] 11.1 Add the shared `FilterChips` ("Toutes" / "Autorisées" with the allowed count) beside the teams search; it combines with the search and its no-match line covers both; verify with "shows only allowed teams on demand and sorts teams by name from the header".
+- [x] 11.2 Make the team name column sortable from its header (shared DataTable client sort: ascending, descending, back to the listing order); same test.
+
+## Verification evidence for section 11 (2026-10-14)
+
+- `apps/frontend`: `npx vitest run src/rework/components/pages/admin/PlatformAccessPage` 4 files, 112 tests passed; `tsc --noEmit`, `prettier --check`, `eslint` on the touched files clean. Not seen in a browser.

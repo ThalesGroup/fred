@@ -10,6 +10,7 @@ import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { Spinner } from "@shared/atoms/Spinner/Spinner";
 import StatusBadge from "@shared/atoms/StatusBadge/StatusBadge";
 import Switch from "@shared/atoms/Switch/Switch";
+import FilterChips from "@shared/molecules/FilterChips/FilterChips";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader";
 import SearchInput from "@shared/molecules/SearchInput/SearchInput";
 import DataTable from "@shared/molecules/DataTable/LocalizedDataTable";
@@ -69,6 +70,7 @@ export default function PlatformAccessPage() {
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [query, setQuery] = useState("");
   const [teamQuery, setTeamQuery] = useState("");
+  const [teamFilter, setTeamFilter] = useState<"allowed" | null>(null);
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState(false);
   const [filterConfirmation, setFilterConfirmation] = useState<boolean>();
@@ -100,7 +102,11 @@ export default function PlatformAccessPage() {
   const teams = usePlatformAccessTeamsQuery(undefined, { skip: !teamsShown });
   // Teams arrive in one response, so the search only narrows what is already loaded.
   const teamNeedle = foldForSearch(teamQuery.trim());
-  const teamRows = (teams.data ?? []).filter((team) => foldForSearch(team.name || team.team_id).includes(teamNeedle));
+  const teamRows = (teams.data ?? []).filter(
+    (team) =>
+      (teamFilter !== "allowed" || team.allowed) && foldForSearch(team.name || team.team_id).includes(teamNeedle),
+  );
+  const teamsNarrowed = teamNeedle !== "" || teamFilter !== null;
   const [filter] = useSetPlatformFilteringMutation();
   const [grantUsers] = useGrantPlatformUsersMutation();
   const [revoke] = useRevokePlatformUserMutation();
@@ -397,9 +403,24 @@ export default function PlatformAccessPage() {
                   onChange={setTeamQuery}
                 />
               </div>
+              <FilterChips<"allowed">
+                options={[
+                  {
+                    id: "allowed",
+                    label: t("rework.platformAccess.teamFilter.allowed"),
+                    count: (teams.data ?? []).filter((team) => team.allowed).length,
+                  },
+                ]}
+                value={teamFilter}
+                onChange={setTeamFilter}
+                allLabel={t("rework.platformAccess.teamFilter.all")}
+                aria-label={t("rework.platformAccess.teamFilter.group")}
+              />
             </div>
-            {teamNeedle && teamRows.length === 0 && <p className={styles.hint}>{t("rework.platformAccess.noTeams")}</p>}
-            {(!teamNeedle || teamRows.length > 0) && (
+            {teamsNarrowed && teamRows.length === 0 && (
+              <p className={styles.hint}>{t("rework.platformAccess.noTeams")}</p>
+            )}
+            {(!teamsNarrowed || teamRows.length > 0) && (
               <DataTable
                 size="small"
                 data={teamRows}
@@ -410,6 +431,8 @@ export default function PlatformAccessPage() {
                     label: t("rework.platformAccess.team"),
                     size: "2fr",
                     cellRenderer: (team) => team.name || team.team_id,
+                    sortable: true,
+                    sortValue: (team) => team.name || team.team_id,
                   },
                   {
                     label: t("rework.platformAccess.teamAllowed"),

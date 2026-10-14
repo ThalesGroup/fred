@@ -109,7 +109,7 @@ Adding people SHALL go through a dialog that searches all known users on the ser
 
 ### Requirement: Access administration has readable section navigation
 
-The page SHALL provide one level of navigation with localized Rules, Users and Teams tabs using the shared Fred navigation presentation, without sub-tabs. Only the active panel SHALL be exposed visually or to keyboard and assistive navigation, and no listing SHALL be requested for a tab that is not shown. The rule draft, the user search, page and page size SHALL survive tab changes without implicit saving or admission mutations. Users and Teams are the two halves of the whitelist: each SHALL open with a heading naming it and a short description stating that its entries always have access whatever the rule, placed above its controls. Import existing users and individual exceptions SHALL appear in Users; independent team authorization SHALL appear in Teams. Every search field of the page (users, teams, account-field picker) SHALL ignore letter case and accents. A top-right filtering action in the page header SHALL remain available across all tabs, without a separate Activation tab. Once the filtering state is known, a status indicator beside the page title SHALL state whether filtering is on or off, on every tab. Ordinary content and secondary explanations SHALL use the body text size of the sibling administration pages across the page and its dialogs, secondary explanations being set apart by a subdued colour rather than a different size. No section heading SHALL reuse the page-title size. Repeated explanations SHALL be removed while authorization exceptions, revocation consequences, validation and errors remain understandable.
+The page SHALL provide one level of navigation with localized Rules, Users and Teams tabs using the shared Fred navigation presentation, without sub-tabs. Only the active panel SHALL be exposed visually or to keyboard and assistive navigation, and no listing SHALL be requested for a tab that is not shown. The rule draft, the user search, page and page size SHALL survive tab changes without implicit saving or admission mutations. Users and Teams are the two halves of the whitelist: each SHALL open with a heading naming it and a short description stating that its entries always have access whatever the rule, placed above its controls. Import existing users and individual exceptions SHALL appear in Users; independent team authorization SHALL appear in Teams. Every search field of the page (users, teams, account-field picker) SHALL ignore letter case and accents. The Teams list SHALL offer a filter showing only the authorized teams, combined with its search, and SHALL sort by team name from its column header. A top-right filtering action in the page header SHALL remain available across all tabs, without a separate Activation tab. Once the filtering state is known, a status indicator beside the page title SHALL state whether filtering is on or off, on every tab. Ordinary content and secondary explanations SHALL use the body text size of the sibling administration pages across the page and its dialogs, secondary explanations being set apart by a subdued colour rather than a different size. No section heading SHALL reuse the page-title size. Repeated explanations SHALL be removed while authorization exceptions, revocation consequences, validation and errors remain understandable.
 
 #### Scenario: Return to an unsaved rule or selected users
 
@@ -136,6 +136,11 @@ The page SHALL provide one level of navigation with localized Rules, Users and T
 
 - **WHEN** an administrator types "equipe demos" in the Teams search while a team is named "Équipe Démos", or types an accented spelling of a field name in the account-field picker
 - **THEN** the team, respectively the field, SHALL be listed
+
+#### Scenario: Only authorized teams, sorted by name
+
+- **WHEN** an administrator selects the authorized-teams filter, then presses the team name header
+- **THEN** only the authorized teams SHALL be listed, in alphabetical order, and selecting all teams SHALL list every team again
 
 #### Scenario: Filtering action available in the header
 
