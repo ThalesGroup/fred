@@ -306,7 +306,7 @@ Apply the documentation checklist at the same time:
 | RFC-backed item finished, no open questions left                 | Fold the durable what/why into the relevant compact doc, trim the RFC to whatever (if anything) is still open, close the GitHub issue |
 | OpenSpec change complete, no open tasks left                      | Add final verification evidence and `openspec archive` it; also update the relevant compact doc only if the change crosses more than one capability; close the GitHub issue |
 | Code and design doc diverge                                       | Fix the design doc in the same change                                                    |
-| `apps/fred-manager` changed, or a topic ported to it              | Update `docs/architecture/` in the same commit; mark invariant tests `// Proves: I<n>`; `make -C docs/architecture check` |
+| `apps/fred-manager` changed                                       | Update `docs/architecture/` in the same commit; mark invariant tests `// Proves: I<n>`; `make -C docs/architecture check` |
 | Capability authoring surface changed (SDK types, hooks, lanes)    | Update `docs/swift/capabilities/AUTHORING.md` + the `add-fred-capability` Skill          |
 | Hot-path code touched (LLM/tool call site, KPI/log emission, per-turn agent loop, shared client/cache) | Run the `fred-performance-reviewer` skill; if a new metric/label was added, confirm it's Grafana-visible per `OBSERVABILITY-AND-AUDIT.md` |
 
@@ -488,7 +488,7 @@ Do not silently expand scope. Do not silently delete content.
 | Scoped, buildable slices of agreed work (in-flight) | `openspec/changes/<name>/` |
 | Per-capability current spec (folded in on archive) | `openspec/specs/<capability>/spec.md` |
 | Architecture entry point                 | `docs/ARCHITECTURE.html`                              |
-| New architecture, as rebuilt in Rust (`fred-manager`), topic by topic | `docs/architecture/` (arc42 dossier; generated blocks, invariants proved by tests) |
+| Architecture of `fred-manager`, as implemented | `docs/architecture/` (arc42 dossier, present tense only; generated blocks, invariants proved by tests) |
 | Platform topology detail                 | `docs/swift/platform/PLATFORM_RUNTIME_MAP.md`         |
 | Coding style, typing, testing rules      | `docs/CONVENTIONS.md`                                 |
 | Chat UI UX status                        | `docs/swift/ux/COMPONENT-UX.md`                       |
