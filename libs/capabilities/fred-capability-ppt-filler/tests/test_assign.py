@@ -369,8 +369,16 @@ def test_repetition_is_allowed_and_reported_on_a_one_archetype_template():
     )
     assert not assignment.problems
     assert [p.label for p in assignment.patterns if p] == ["Only"] * 4
-    assert assignment.notes and "Slides 1 to 3" in assignment.notes[0]
-    assert "Nothing to do, unless they must look different" in assignment.notes[0]
+    (note,) = assignment.notes
+    assert note.startswith("Slides 1, 2, 3, 4 use the template slide 'Only' in a row.")
+    assert "Nothing to do: no other slide of this template suits them" in note
+    # With the check off, the passive note of three in a row is kept.
+    off = assign(
+        inventory,
+        _plan(*[SlidePlan(title=f"P{i}", bullets=["x"]) for i in range(4)]),
+        "off",
+    )
+    assert "Slides 1 to 3" in off.notes[0]
 
 
 def test_invalid_entries_get_no_pattern_and_do_not_shift_the_rules():
@@ -1562,42 +1570,83 @@ def _part(name: str) -> SlidePlan:
     return SlidePlan(title=name, kind="section")
 
 
-def test_parallel_sections_repeating_one_structure_are_not_a_repeat():
-    """Live: Italy then Spain then France with the same kinds in the same order."""
-    inventory = _section_inventory()
-    sections = []
-    for n, name in enumerate(("Italie", "Espagne", "France")):
-        sections += [_part(name), _points(n), _quoted(n)]
-    assignment = assign(inventory, _plan(*sections), "template_slide", 1)
-    assert not assignment.problems
-    assert not [r for r in assignment.repeats if r.revisable]
-    # Each section's slides keep the first section's design.
+def _revisable(plan: List[SlidePlan], max_uses: int = 2) -> List[Any]:
+    found = assign(_section_inventory(), _plan(*plan), "template_slide", max_uses)
+    return [r for r in found.repeats if r.revisable]
+
+
+def test_the_limit_counts_within_each_section():
+    """Twice in Italy (places 2 and 4), twice in Spain (places 1 and 3), max 2."""
+    italy = [_part("Italie"), _quoted(1), _points(1), _quoted(2), _points(2)]
+    spain = [_part("Espagne"), _points(3), _quoted(3), _points(4)]
+    assignment = assign(
+        _section_inventory(), _plan(*italy, *spain), "template_slide", 2
+    )
+    assert not assignment.problems and _revisable(italy + spain) == []
     labels = [p.label if p else "-" for p in assignment.patterns]
-    assert labels == ["Section", "A", "Q"] * 3
-    # Without the section slides, the same six slides are a repeat.
-    flat = [s for s in sections if s.kind != "section"]
-    (repeat, _) = assign(inventory, _plan(*flat), "template_slide", 1).repeats
-    assert repeat.slides == [1, 3, 5] and repeat.revisable
+    assert labels == ["Section", "Q", "A", "Q", "A", "Section", "A", "Q", "A"]
+    # Without the section slides, the deck is one section: four uses.
+    flat = [s for s in italy + spain if s.kind != "section"]
+    (repeat,) = [r for r in _revisable(flat) if r.kind == "bullets"]
+    assert repeat.slides == [2, 4, 5, 7]
 
 
-def test_a_repetition_inside_one_section_is_still_a_repeat():
+def test_three_uses_inside_one_section_are_still_revised():
+    italy = [_part("Italie"), _points(1), _quoted(1), _points(2), _quoted(2)]
+    italy += [_points(3)]
+    (repeat,) = _revisable(italy + [_part("Espagne"), _points(4)])
+    assert repeat.slides == [2, 4, 6] and repeat.at_most == 2 and not repeat.in_a_row
+
+
+def _across_a_boundary(asked: bool) -> List[SlidePlan]:
+    """Agenda parts, so no section slide sits between Italy's end and Spain."""
+    agenda = SlidePlan(title="Sommaire", kind="agenda", bullets=["Italie", "Espagne"])
+    spain = _points(3).model_copy(update={"title": "Espagne", "repeat_layout": asked})
+    italy = _quoted(0).model_copy(update={"title": "Italie"})
+    return [agenda, italy, _points(1), _points(2), spain, _quoted(1)]
+
+
+def test_three_identical_slides_in_a_row_are_revised_across_sections():
+    (repeat,) = _revisable(_across_a_boundary(asked=False))
+    assert repeat.in_a_row and repeat.slides == [3, 4, 5]
+    assert repeat.labels == ["A"] and repeat.at_most == 2
+
+
+def test_identical_slides_the_user_asked_for_are_built_and_noted():
+    slides = _across_a_boundary(asked=True)
+    assignment = assign(_section_inventory(), _plan(*slides), "template_slide", 2)
+    assert not assignment.problems and _revisable(slides) == []
+    assert [p.label if p else "-" for p in assignment.patterns][2:5] == ["A"] * 3
+    assert assignment.repeated == {5: True}
+    assert "Slide 5 keeps slide 4's template slide, as the user asked" in " ".join(
+        assignment.notes
+    )
+
+
+def test_repeat_layout_keeps_the_previous_template_slide_outside_the_cap():
+    inventory = _inventory(
+        _bullets("slide:1", "A", source="slide"),
+        _bullets("slide:2", "B", source="slide"),
+    )
+    slides = [_points(1), _points(2), _points(3)]
+    assert _labels(inventory, *slides) == ["A", "B", "A"]
+    slides[1] = slides[1].model_copy(update={"repeat_layout": True})
+    assignment = assign(inventory, _plan(*slides), "template_slide", 1)
+    # Slide 2 keeps slide 1's design; slide 3, not asked, is not a third in a row.
+    assert [p.label for p in assignment.patterns if p] == ["A", "A", "B"]
+    assert assignment.repeated == {2: True} and assignment.repeats == []
+
+
+def test_repeat_layout_the_content_cannot_keep_is_noted():
     inventory = _section_inventory()
-    one = [_part("Italie"), _points(1), _points(2), _points(3)]
-    (repeat,) = assign(inventory, _plan(*one), "template_slide", 1).repeats
-    assert repeat.slides == [2, 3, 4] and repeat.revisable
-    # Mirrored by a second section, its three places still count three times.
-    two = one + [_part("Espagne"), _points(4), _points(5), _points(6)]
-    (repeat,) = assign(inventory, _plan(*two), "template_slide", 1).repeats
-    assert repeat.slides == [2, 3, 4, 6, 7, 8]
-    # At another place in the other section, a use counts on its own.
-    shifted = [_part("Italie"), _points(1), _quoted(1)]
-    shifted += [_part("Espagne"), _quoted(2), _points(2), _points(3)]
-    (repeat,) = [
-        r
-        for r in assign(inventory, _plan(*shifted), "template_slide", 1).repeats
-        if r.kind == "bullets"
-    ]
-    assert repeat.slides == [2, 6, 7]
+    slides = [_quoted(1), _points(1).model_copy(update={"repeat_layout": True})]
+    assignment = assign(inventory, _plan(*slides), "template_slide", 2)
+    assert [p.label for p in assignment.patterns if p] == ["Q", "A"]
+    assert assignment.repeated == {2: False}
+    assert any(
+        n.startswith("Slide 2 has `repeat_layout`, but its content does not fit")
+        for n in assignment.notes
+    )
 
 
 def test_an_agenda_splits_the_deck_into_sections_without_section_slides():

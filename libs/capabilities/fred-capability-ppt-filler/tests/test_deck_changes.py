@@ -229,7 +229,7 @@ def test_conflicting_changes_and_bad_paths_are_reported():
         "the replacement slide instead.",
         "changes[3] (edit): slide 3: 'items' has 2 entries (items[0] to items[1]).",
         "changes[4] (edit): slide 3: 'colour' is not a field of a slide (it takes title, "
-        "subtitle, bullets, columns, items, image, images, table, chart, notes, kind).",
+        "subtitle, bullets, columns, items, image, images, table, chart, notes, kind, repeat_layout).",
         "changes[5] (edit): slide 4: 'title' is not a list: write 'title' without [0].",
     ]
     assert _problems(
@@ -731,6 +731,26 @@ PINNED = DeckPlan(
 
 def _like(*changes: Any) -> DeckPlan:
     return apply_changes(PINNED, [SlideChange.model_validate(c) for c in changes])
+
+
+def test_repeat_layout_is_an_edit_with_loose_names_and_values():
+    plan = _apply(
+        {"op": "edit", "slide": 2, "field": "repeat_layout", "value": True},
+        {"op": "edit", "slide": 3, "same_layout": "yes"},
+        {"op": "edit", "slide": 4, "field": "keep_layout", "value": "true"},
+    )
+    assert [s.repeat_layout for s in plan.slides] == [False, True, True, True]
+    plan = _apply({"op": "set", "slide": 2, "field": "repeat_layout", "value": 0})
+    assert not any(s.repeat_layout for s in plan.slides)
+    # Written in a new slide, under the field or an alias.
+    plan = _apply(
+        {
+            "op": "insert",
+            "after": 3,
+            "slides": [{"title": "Again", "same_layout": True}],
+        }
+    )
+    assert plan.slides[3].repeat_layout
 
 
 def test_like_asks_for_the_referenced_slides_delivered_design():

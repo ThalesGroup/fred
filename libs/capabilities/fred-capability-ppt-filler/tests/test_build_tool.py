@@ -37,13 +37,13 @@ from fred_capability_ppt_filler.builder.capability import (
 )
 from fred_capability_ppt_filler.builder.checks import SlideReport
 from fred_capability_ppt_filler.builder.models import PatternOverride
-from fred_capability_ppt_filler.builder.plan import DeckPlan
+from fred_capability_ppt_filler.builder.plan import DeckPlan, SlidePlan
 from fred_capability_ppt_filler.builder.tools import (
     BUILD_TOOL_NAME,
     LIST_IMAGES_TOOL_NAME,
     _build_notes,
 )
-from fred_capability_ppt_filler.fill import PptPreviewPart
+from fred_capability_ppt_filler.fill import BuiltSlide, PptPreviewPart
 from fred_sdk.contracts.capability import (
     CapabilityContext,
     CapabilityIdentity,
@@ -219,7 +219,7 @@ def test_the_tool_tells_the_agent_one_call_builds_the_whole_deck():
         and "ordered steps → process" in description
     )
     assert "→ timeline" not in description
-    assert "Use any variant below at most 2 times per deck." in description
+    assert "Use any variant below at most 2 times." in description
 
 
 def test_the_choice_guide_states_the_authors_max():
@@ -229,8 +229,8 @@ def test_the_choice_guide_states_the_authors_max():
         ctx = _ctx(config.model_copy(update=update), assets=assets)
         return _tools(ctx)[BUILD_TOOL_NAME].description
 
-    assert "Each slide of the deck must look different." in guide(variety_max_uses=1)
-    assert "Use any kind below on at most 3 slides per deck" in guide(
+    assert "Each slide must look different." in guide(variety_max_uses=1)
+    assert "Use any kind below on at most 3 slides," in guide(
         variety_check="kind", variety_max_uses=3
     )
     off = guide(variety_check="off", variety_max_uses=1)
@@ -473,7 +473,7 @@ async def test_the_first_deck_is_asked_to_vary_once_and_a_resend_is_built(monkey
     text, result = await build.coroutine(slides=_REPEATED)
     assert not result.is_error and workspace.writes == []
     assert "Your very next message MUST be a new build_presentation call" in text
-    assert "may reuse a slide at the same place in each section" in text
+    assert "The limit counts within each section" in text
     payload = json.loads(text[text.index("{") :])
     assert payload["status"] == "needs_revision"
     (repeat,) = payload["variety"]
@@ -977,6 +977,15 @@ async def test_the_delivered_part_summarises_what_was_built(monkeypatch, preview
     # Codes and counts only: no English prose reaches the user.
     dumped = json.dumps(part.model_dump(mode="json")["summary"])
     assert "Nothing to do" not in dumped and "call again" not in dumped
+    # A layout kept as the user asked, or not, is never silent.
+    built = [BuiltSlide(number=n, kind="bullets", template="A") for n in (1, 2, 3)]
+    sent = DeckPlan(slides=[SlidePlan(title=str(n)) for n in (1, 2, 3)])
+    noted = tools_mod._summary(built, sent, [], [1, 2, 3], {2: True, 3: False})
+    assert [[n.code for n in s.notes] for s in noted] == [
+        [],
+        ["layout_repeated"],
+        ["layout_not_repeated"],
+    ]
     # ppt_filler delivers the same part without one: no button there.
     assert (
         PptPreviewPart(
