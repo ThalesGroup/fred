@@ -411,6 +411,16 @@ def _create_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
             return credential.get_token(scope).token
 
         passthrough = {k: v for k, v in settings.items() if k not in required}
+        if passthrough.get("use_responses_api") is True:
+            # Responses uses the v1 gateway route and selects the model in the body.
+            endpoint = {
+                "openai_api_base": f"{base}{path}/v1",
+                "model": cfg.name,
+            }
+        else:
+            endpoint = {
+                "azure_endpoint": f"{base}{path}/deployments/{cfg.name}/chat/completions?api-version={api_version}"
+            }
         _info_provider(cfg, passthrough)
         logger.info(
             "[MODEL][AZURE_APIM] Constructing AzureChatOpenAI (APIM) deployment=%s with explicit timeout=%s",
@@ -423,7 +433,7 @@ def _create_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
         )
 
         return AzureChatOpenAI(
-            azure_endpoint=f"{base}{path}/deployments/{cfg.name}/chat/completions?api-version={api_version}",
+            **endpoint,
             api_version=api_version,
             azure_ad_token_provider=_token_provider,
             default_headers={

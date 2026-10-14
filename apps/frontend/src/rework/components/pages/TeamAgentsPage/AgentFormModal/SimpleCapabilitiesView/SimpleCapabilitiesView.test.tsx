@@ -46,7 +46,6 @@ const DOCUMENT_ACCESS: CapabilityCatalogEntry = {
 const selection: CapabilitySelectionState = {
   selectedCapabilityIds: [],
   capabilityConfigValues: {},
-  reasoningEnabled: false,
 };
 
 function render(availableIds: ReadonlySet<string>, supportsCapabilities: boolean): string {
@@ -68,7 +67,6 @@ const TEAM_DOCUMENTS_KEY = "rework.teams.formAgent.capabilities.packs.teamDocume
 const WIKI_KEY = "rework.teams.formAgent.capabilities.packs.teamWiki.title";
 const WORD_KEY = "rework.teams.formAgent.capabilities.packs.wordDocument.title";
 const PPT_KEY = "rework.teams.formAgent.capabilities.packs.powerpointDocument.title";
-const REASONING_KEY = "rework.teams.formAgent.capabilities.packs.reasoning.title";
 
 describe("SimpleCapabilitiesView hides packs the team cannot use", () => {
   it("keeps a pack with at least one admin-enabled capability", () => {
@@ -106,10 +104,6 @@ describe("SimpleCapabilitiesView hides packs the team cannot use", () => {
     expect(html).toContain(WIKI_KEY);
     expect(html).not.toContain(TEAM_DOCUMENTS_KEY);
   });
-
-  it("always keeps reasoning, which enables no capability at all", () => {
-    expect(render(new Set(), true)).toContain(REASONING_KEY);
-  });
 });
 
 function renderIncluded(includedCapabilities: CapabilityCatalogEntry[]): string {
@@ -143,7 +137,6 @@ describe("SimpleCapabilitiesView for an agent without free selection", () => {
 
     expect(html).not.toContain(DATA_KNOWLEDGE_KEY);
     expect(html).not.toContain(TEAM_DOCUMENTS_KEY);
-    expect(html).toContain(REASONING_KEY);
   });
 
   it("says so neutrally when the agent includes nothing", () => {
