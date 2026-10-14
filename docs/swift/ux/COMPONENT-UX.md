@@ -1191,13 +1191,13 @@ built-in template.
   for this agent; slides are labelled by rules". While on, an indented
   (`outline-muted` left rule) `Select` lists "The agent's model" plus the
   vision-capable profiles only.
-- **Variety row** (`PptBuilderVarietySettings`). One sentence in the same
-  setting-card style as the vision switch: "Enforce variety [By slide name | By
-  identified slide type] at most [1–5] times each", two compact small
-  `Select`s inline, with its switch at the end and a Body Small description
-  below. Off saves `variety_check: "off"` and leaves both selects in place,
-  disabled; on restores the last mode. The row is a `div`, not a `label`, so a
-  click on a select never toggles the switch.
+- **Variety row** (`PptBuilderVarietySettings`). Same setting card as the
+  vision switch: the switch row "Enforce variety" with its Body Small
+  description, then one line "[By slide name | By identified slide type] at
+  most [1–5] times each" (two compact small `Select`s, the mode one filling
+  the width; wraps only when very narrow). The selects sit outside the switch's
+  `label`, so a click on one never toggles it. Off saves `variety_check: "off"`
+  and leaves both selects in place, disabled; on restores the last mode.
 - **Review dialog** (central `Dialog`, `maxWidth` 1040, single "Done"
   action). A grid of cards (`surface-container`, `--radius-s`, 1px
   `outline-muted`): thumbnail (react-pdf page rendered at the box's width),

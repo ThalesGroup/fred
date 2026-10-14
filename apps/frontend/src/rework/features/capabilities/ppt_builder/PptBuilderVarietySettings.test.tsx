@@ -105,7 +105,7 @@ function pick(element: HTMLSelectElement, value: string) {
 }
 
 describe("PptBuilderVarietySettings", () => {
-  it("reads as one sentence with the mode and max selects", () => {
+  it("shows the title, the description and the mode and max selects", () => {
     render({});
     const text = container.textContent ?? "";
     for (const part of ["title", "atMost", "times", "options.template_slide", "options.kind", "description"]) {

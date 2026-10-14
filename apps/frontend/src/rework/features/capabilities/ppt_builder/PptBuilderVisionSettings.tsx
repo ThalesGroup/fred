@@ -59,7 +59,7 @@ export function PptBuilderVisionSettings({ disabled, configValues, onConfigChang
   }
 
   return (
-    <div className={`${styles.settingCard} ${styles.vision}`}>
+    <div className={`${styles.settingCard} ${styles.stacked}`}>
       <label className={styles.switchRow}>
         <span className={styles.switchText}>
           <span className={styles.switchLabel}>{t("capability.ppt_builder.fields.use_vision.title")}</span>

@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// "Enforce variety [mode] at most [N] times each" with its switch: one sentence
-// for the two variety settings. Off saves `variety_check: "off"`; on restores
-// the last mode, so the selects stay put (disabled) while off.
+// "Enforce variety" switch, then "[mode] at most [N] times each" below it.
+// Off saves `variety_check: "off"`; on restores the last mode, so the selects
+// stay put (disabled) while off.
 
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -52,49 +52,52 @@ export function PptBuilderVarietySettings({ disabled, configValues, onConfigChan
   }));
   const maxOptions: SelectOption<number>[] = MAX_USES.map((n) => ({ value: n, key: String(n), label: String(n) }));
 
-  // A div, not a label: a click on a select must not toggle the switch.
+  // Same frame as the vision card: switch row on top, the selects on their own line below it.
   return (
-    <div className={`${styles.settingCard} ${styles.varietyRow}`}>
-      <span className={styles.switchText}>
-        <span className={styles.sentence}>
+    <div className={`${styles.settingCard} ${styles.stacked}`}>
+      <label className={styles.switchRow}>
+        <span className={styles.switchText}>
           <span className={styles.switchLabel}>{t("capability.ppt_builder.fields.variety_check.title")}</span>
-          <span className={styles.modeSelect}>
-            <Select
-              size="small"
-              compact
-              ariaLabel={t("capability.ppt_builder.fields.variety_check.modeAria")}
-              options={modeOptions}
-              value={mode}
-              disabled={disabled || !on}
-              onChange={(next) => {
-                setLastMode(next);
-                onConfigChange(VARIETY_CHECK_KEY, next);
-              }}
-            />
+          <span className={styles.switchDescription}>
+            {t("capability.ppt_builder.fields.variety_check.description")}
           </span>
-          <span className={styles.switchLabel}>{t("capability.ppt_builder.fields.variety_check.atMost")}</span>
-          <span className={styles.maxSelect}>
-            <Select
-              size="small"
-              compact
-              ariaLabel={t("capability.ppt_builder.fields.variety_check.maxAria")}
-              options={maxOptions}
-              value={maxUses}
-              disabled={disabled || !on}
-              onChange={(n) => onConfigChange(VARIETY_MAX_USES_KEY, n)}
-            />
-          </span>
-          <span className={styles.switchLabel}>{t("capability.ppt_builder.fields.variety_check.times")}</span>
         </span>
-        <span className={styles.switchDescription}>{t("capability.ppt_builder.fields.variety_check.description")}</span>
-      </span>
-      <Switch
-        size="small"
-        checked={on}
-        disabled={disabled}
-        aria-label={t("capability.ppt_builder.fields.variety_check.title")}
-        onChange={(event) => onConfigChange(VARIETY_CHECK_KEY, event.target.checked ? mode : "off")}
-      />
+        <Switch
+          size="small"
+          checked={on}
+          disabled={disabled}
+          onChange={(event) => onConfigChange(VARIETY_CHECK_KEY, event.target.checked ? mode : "off")}
+        />
+      </label>
+      <div className={styles.varietyControls}>
+        <span className={styles.modeSelect}>
+          <Select
+            size="small"
+            compact
+            ariaLabel={t("capability.ppt_builder.fields.variety_check.modeAria")}
+            options={modeOptions}
+            value={mode}
+            disabled={disabled || !on}
+            onChange={(next) => {
+              setLastMode(next);
+              onConfigChange(VARIETY_CHECK_KEY, next);
+            }}
+          />
+        </span>
+        <span className={styles.switchLabel}>{t("capability.ppt_builder.fields.variety_check.atMost")}</span>
+        <span className={styles.maxSelect}>
+          <Select
+            size="small"
+            compact
+            ariaLabel={t("capability.ppt_builder.fields.variety_check.maxAria")}
+            options={maxOptions}
+            value={maxUses}
+            disabled={disabled || !on}
+            onChange={(n) => onConfigChange(VARIETY_MAX_USES_KEY, n)}
+          />
+        </span>
+        <span className={styles.switchLabel}>{t("capability.ppt_builder.fields.variety_check.times")}</span>
+      </div>
     </div>
   );
 }
