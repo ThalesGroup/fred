@@ -2878,8 +2878,6 @@ async def test_runtime_binding_carries_team_disabled_models_from_one_gather(
     import asyncio
     from types import SimpleNamespace
 
-    import control_plane_backend.product.service as service
-
     record = _make_record(agent_instance_id="inst", team_id="team-a")
     record.tuning = record.tuning.model_copy(
         update={"recommended_chat_profile_id": "chat.small"}
@@ -2894,7 +2892,7 @@ async def test_runtime_binding_carries_team_disabled_models_from_one_gather(
         gathers.append(len(aws))
         return real_gather(*aws, **kwargs)
 
-    monkeypatch.setattr(service.asyncio, "gather", _counting_gather)
+    monkeypatch.setattr(product_service.asyncio, "gather", _counting_gather)
     deps = SimpleNamespace(
         get_agent_instance_store=lambda: _FakeAgentInstanceStore([record]),
         get_team_capability_settings_store=_FakeSettingsStore,
@@ -2905,7 +2903,7 @@ async def test_runtime_binding_carries_team_disabled_models_from_one_gather(
         get_team_routing_policy_store=lambda: policy_store,
     )
 
-    binding = await service.get_runtime_binding_for_team("inst", "team-a", deps)  # type: ignore[arg-type]
+    binding = await product_service.get_runtime_binding_for_team("inst", "team-a", deps)  # type: ignore[arg-type]
 
     assert binding is not None
     assert binding.team_disabled_model_ids == ["model__a", "model__b"]

@@ -1649,7 +1649,7 @@ class _LegacyReasoningAgent(_ReasoningAgent):
 def test_deprecated_definition_reasoning_fields_load_warn_and_change_nothing(
     monkeypatch, tmp_path
 ) -> None:
-    import fred_sdk.contracts.models as sdk_models
+    from fred_sdk.contracts import models as sdk_models
 
     # The app's logging setup replaces root handlers, so record the call itself.
     warned: list[str] = []
