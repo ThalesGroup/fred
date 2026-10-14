@@ -58,7 +58,7 @@ run without directory-based role grants.
 ## Running provisioning
 
 Start the compatible service once to initialize SQL migrations and the extended FGA
-model, then complete root bootstrap. Import itself never migrates SQL, creates a store
+model, then complete root bootstrap. CLI import itself never migrates SQL, creates a store
 or synchronizes a model. It needs Postgres, OpenFGA and Keycloak; it does not need the
 HTTP server or Temporal to remain running. It loads the published store/model IDs.
 
@@ -66,8 +66,15 @@ From `apps/fred-manager`, with the directory client configured and an operator a
 token in a private file:
 
 ```sh
-make import-provisioning BUNDLE=/path/to/bundle.json TOKEN_FILE=/path/to/operator-token
+make build-demo-bundle
+make import-provisioning BUNDLE=target/demo-provisioning-bundle.zip TOKEN_FILE=/path/to/operator-token
 ```
+
+`build-demo-bundle` packages the five checked-in JSON files with Python's standard
+ZIP library and atomically replaces its output. `DEMO_PROVISIONING_FIXTURE_DIR`
+and `DEMO_BUNDLE_FILE` override source/output paths, including paths with spaces;
+no running service is needed. HTTP clients submit the same ZIP as multipart `file`
+to `/fred-manager/v1/import-export/import` on the running server.
 
 The bearer must identify a current platform admin. Only the bootstrap root imports a
 bundle containing platform-admin declarations, including declarations already granted.

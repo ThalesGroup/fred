@@ -1,20 +1,20 @@
 ## 1. One generated ZIP format
 
-- [ ] 1.1 Add the five checked-in demo JSON files and control-plane-compatible `build-demo-bundle` target/variables; verify its output paths and exact archive entries, including overridden paths with spaces.
-- [ ] 1.2 Implement the bounded current-version ZIP parser and remove old JSON acceptance; verify `not_yet_supported` for old inputs and preflight rejection of malformed/unknown/duplicate/path/corrupt/oversized input with offline tests.
+- [x] 1.1 Add the five checked-in demo JSON files and control-plane-compatible `build-demo-bundle` target/variables; verify its output paths and exact archive entries, including overridden paths with spaces.
+- [x] 1.2 Implement the bounded current-version ZIP parser and remove old JSON acceptance; verify `not_yet_supported` for old inputs and preflight rejection of malformed/unknown/duplicate/path/corrupt/oversized input with offline tests.
 
 ## 2. Shared provisioning and HTTP
 
-- [ ] 2.1 Extend the existing provisioning service to explicit organizations/teams/projects and direct grants without a legacy adapter; verify all roles, parent requirements, same-name isolation, whole-bundle preflight and additive replay against real PostgreSQL/OpenFGA.
-- [x] 2.2 Correct shared role mutation publication before exposing the route, keeping roles in OpenFGA. Use native guarded Writes and validate and its cutover, initialization, no-op, multi-scope and batch semantics. Preserve existing grants and pass delayed-parent/actor-revocation, cancellation/restart and replay regressions. Resolve the I5 contract boundary explicitly; do not add an unapproved recovery framework.
-- [ ] 2.3 Add multipart HTTP import and route CLI ZIP input to the same service, preserving authorization and safe errors; verify HTTP status, non-admin/root refusals, dependency failures and absence of secret leakage through router tests.
-- [ ] 2.4 Invoke the real `make build-demo-bundle` output in the real-Keycloak HTTP integration test; verify identity preservation, roles, caller-visible spaces and replay; exercise a nonempty-project variant automatically with invariant markers.
+- [x] 2.1 Extend the existing provisioning service to explicit organizations/teams/projects and direct grants without a legacy adapter; verify all roles, parent requirements, same-name isolation, whole-bundle preflight and additive replay against real PostgreSQL/OpenFGA.
+- [x] 2.2 Correct shared role mutation publication before exposing the route, keeping roles in OpenFGA. Use native guarded Writes and validate their cutover, initialization, no-op, multi-scope and batch semantics. Preserve existing grants and pass delayed-parent/actor-revocation, cancellation/restart and replay regressions. Resolve the I5 contract boundary explicitly; do not add an unapproved recovery framework.
+- [x] 2.3 Add multipart HTTP import and route CLI ZIP input to the same service, preserving authorization and safe errors; verify HTTP status, non-admin/root refusals, dependency failures and absence of secret leakage through router tests.
+- [x] 2.4 Invoke the real `make build-demo-bundle` output in the real-Keycloak HTTP integration test; verify identity preservation, roles, caller-visible spaces and replay; exercise a nonempty-project variant automatically with invariant markers.
 
 ## 3. Review and completion
 
-- [ ] 3.1 Obtain independent implementation review and re-review of corrected findings; record base/head, coverage and dispositions here, with a regression for each confirmed defect.
-- [ ] 3.2 After review, update README and applicable arc42 chapters to implemented present-tense behavior, including precise OpenFGA query filters/counts/cardinality and lock costs; verify changed request budgets, regenerate derived blocks and pass `make -C docs/architecture check`.
-- [ ] 3.3 Pass manager `make test`, `make test-integration`, `make code-quality` and OpenSpec validation; record evidence, reconcile/sync/archive artifacts and create clean local implementation commits per reviewed step without pushing. Do not claim the subsequent UI journey is validated.
+- [x] 3.1 Obtain independent implementation review and re-review of corrected findings; record base/head, coverage and dispositions here, with a regression for each confirmed defect.
+- [x] 3.2 After review, update README and applicable arc42 chapters to implemented present-tense behavior, including precise OpenFGA query filters/counts/cardinality and lock costs; verify changed request budgets, regenerate derived blocks and pass `make -C docs/architecture check`.
+- [x] 3.3 Pass manager `make test`, `make test-integration`, `make code-quality` and OpenSpec validation; record evidence, reconcile/sync/archive artifacts and create clean local implementation commits per reviewed step without pushing. Do not claim the subsequent UI journey is validated.
 
 ## Planning review
 
@@ -159,3 +159,40 @@ The dedicated post-review documentation pass records implemented semantics and
 request costs in arc42. Generated blocks and `make -C docs/architecture check`
 pass. Strict OpenSpec validation and `git diff --check` pass. ZIP/HTTP tasks remain
 open and the active change is not archived or presented as complete.
+
+
+## ZIP import close-out
+
+Reviewed base/head: `af0b412b4` plus the ZIP worktree. A separate read-only reviewer
+covers archive validation, CLI/HTTP consumers, explicit hierarchy, authorization
+and replay, Make packaging, fixtures, tests, README, arc42 and the synced spec.
+The sole implementation finding is fixed: child names are resolved after all
+organization locks, so an insertion committed during lock wait cannot escape
+preflight. `blueprint_preflight_reads_child_names_after_organization_lock` forces
+that interleaving and verifies a preflight conflict with zero identity creation.
+Independent re-review confirms the correction. Documentation findings correct the
+exact authority relation (`admin`), packaging implementation, early HTTP error
+counts and unsupported-compression classification; final review finds no remaining
+production defect. Tests are inspected by the reviewer, executed by the author.
+This is a bounded backend step review, not full-branch/PR or UI readiness; prior
+branch changes, generated frontend integration and live Temporal are excluded.
+
+Verification: manager `make test` passes 34 unit tests; `make test-integration`
+passes 47 tests against disposable PostgreSQL/OpenFGA, including real Keycloak;
+`make code-quality` passes. The real Make artifact is imported through HTTP and
+replayed, with existing identity profile/credential preservation, visible spaces,
+all platform roles and a project variant. The artifact verifies 29 Checks,
+18 Reads, 25 Writes and 89 tuple operations. The project variant verifies 15
+Checks, 4 Reads and 4 Writes, including two existing-parent fallback pairs.
+The 105-user batch fixture verifies 114/107/111 requests and 548 tuple operations.
+Malformed/duplicate multipart input, 401/403/409/413/422/503 failures and an injected
+SQL 500 preserve safe errors; invalid preflight has no valid-prefix provisioning.
+ZIP unit tests cover duplicate JSON/ZIP names, local-header mismatches, paths,
+encryption, symlinks, CRC/size corruption, limits, versions and Make path overrides.
+
+The dedicated post-review arc42 pass and generated route/invariant blocks pass
+`make -C docs/architecture check`. Strict change validation, all 28 main specs
+and `git diff --check` pass. The current capability spec replaces the legacy input
+contract and includes guard ordering, query costs, ZIP generation, HTTP and project
+reconciliation. The reviewed blocks are local commits only; no push, browser
+acceptance or generated frontend client is claimed.

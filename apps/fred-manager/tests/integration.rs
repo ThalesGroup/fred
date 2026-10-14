@@ -1137,13 +1137,7 @@ async fn durable_grants_are_audited_even_when_sql_commit_fails() {
 }
 
 fn provisioning_bundle() -> fred_manager::provisioning::Bundle {
-    fred_manager::provisioning::Bundle::parse(br#"{
-      "organization":{"name":"Provisioned","admins":["alice"]},
-      "users":[
-        {"username":"alice","password":"private-password","first_name":"Alice","last_name":"Example","teams":["BID"],"team_roles":{"team_admin":["BID"]}},
-        {"username":"bob","password":"private-password","team_roles":{"team_member":["BID"],"team_editor":["BID"],"team_analyst":["BID"]},"platform_roles":["observer","team_manager","feature_manager","prompt_editor"]},
-        {"username":"platform-only","password":"private-password","platform_roles":["admin"]}
-      ]}"#).unwrap()
+    parse_blueprint(br#"{"users":[{"username":"alice","password":"private-password","first_name":"Alice","last_name":"Example"},{"username":"bob","password":"private-password","platform_roles":["observer","team_manager","feature_manager","prompt_editor"]},{"username":"platform-only","password":"private-password","platform_roles":["admin"]}],"organizations":[{"ref":"org","name":"Provisioned","roles":{"alice":["admin","member"],"bob":["member"]}}],"teams":[{"ref":"BID","name":"BID","organization":"org","roles":{"alice":["admin"],"bob":["member","editor","analyst"]}}],"projects":[]}"#).unwrap()
 }
 
 // Proves: I4, I8, I17
@@ -1255,10 +1249,7 @@ async fn provisioning_replays_every_role_without_updating_identities_or_implicit
 #[tokio::test]
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
 async fn provisioning_preflight_failures_have_no_identity_space_or_role_writes() {
-    use fred_manager::{
-        provisioning::{Bundle, Importer},
-        roles::PlatformRole,
-    };
+    use fred_manager::{provisioning::Importer, roles::PlatformRole};
     let e = env().await;
     let server = support::IdentityServer::start().await;
     let auth = server.auth().await;
@@ -1304,11 +1295,17 @@ async fn provisioning_preflight_failures_have_no_identity_space_or_role_writes()
         assert!(result.is_err());
     }
     let token = server.token("root");
-    for users in [
-        serde_json::json!([{"username":"alice","password":"private-password"},{"username":"tail"}]),
-        serde_json::json!([{"username":"alice","password":"private-password","teams":["uncreatable"]}]),
+    for (users, teams) in [
+        (
+            serde_json::json!([{"username":"alice","password":"private-password"},{"username":"tail"}]),
+            serde_json::json!([]),
+        ),
+        (
+            serde_json::json!([{"username":"alice","password":"private-password"}]),
+            serde_json::json!([{"ref":"bad","name":"uncreatable","organization":"org","roles":{"alice":["member"]}}]),
+        ),
     ] {
-        let bundle = Bundle::parse(&serde_json::to_vec(&serde_json::json!({"organization":{"name":"Provisioned","admins":["alice"]},"users":users})).unwrap()).unwrap();
+        let bundle = parse_blueprint(&serde_json::to_vec(&serde_json::json!({"organizations":[{"ref":"org","name":"Provisioned","roles":{"alice":["admin","member"]}}],"users":users,"teams":teams,"projects":[]})).unwrap()).unwrap();
         let error = Importer {
             pool: &e.pool,
             fga: &e.fga,
@@ -1466,7 +1463,7 @@ async fn simultaneous_imports_reuse_usernames_and_space_names() {
 #[tokio::test]
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
 async fn provisioning_waiter_rechecks_revoked_or_expired_operator() {
-    use fred_manager::provisioning::{Bundle, Importer};
+    use fred_manager::provisioning::Importer;
     for expired in [false, true] {
         let e = env().await;
         let server = support::IdentityServer::start().await;
@@ -1490,7 +1487,7 @@ async fn provisioning_waiter_rechecks_revoked_or_expired_operator() {
         let pool = e.pool.clone();
         let fga = e.fga.clone();
         let pending = tokio::spawn(async move {
-            let bundle = Bundle::parse(br#"{"organization":{"name":"new","admins":["alice"]},"users":[{"username":"alice","password":"private-password"}]}"#).unwrap();
+            let bundle = parse_blueprint(br#"{"users":[{"username":"alice","password":"private-password"}],"organizations":[{"ref":"org","name":"new","roles":{"alice":["admin","member"]}}],"teams":[],"projects":[]}"#).unwrap();
             Importer {
                 pool: &pool,
                 fga: &fga,
@@ -1542,7 +1539,7 @@ async fn import_cli_is_read_only_until_authorized_and_requires_initialized_state
     config["storage"]["postgres"]["username"] = "postgres".into();
     config["storage"]["postgres"]["database"] = database.into();
     let _: Configuration = serde_json::from_value(config.clone()).unwrap();
-    std::fs::write(temp.join("bundle.json"),br#"{"organization":{"name":"CLI","admins":["alice"]},"users":[{"username":"alice","password":"private-password"}]}"#).unwrap();
+    std::fs::write(temp.join("bundle.json"), fixture_zip(br#"{"users":[{"username":"alice","password":"private-password"}],"organizations":[{"ref":"org","name":"CLI","roles":{"alice":["admin","member"]}}],"teams":[],"projects":[]}"#)).unwrap();
     let http = reqwest::Client::new();
     let store_id = e.fga.store_id();
     let model_url = format!("{}/stores/{store_id}/authorization-models", e.openfga);
@@ -1606,7 +1603,7 @@ async fn import_cli_is_read_only_until_authorized_and_requires_initialized_state
             std::fs::write(temp.join("bundle.json"), br#"{"private-password":true}"#).unwrap();
         }
         if case == "valid" {
-            std::fs::write(temp.join("bundle.json"), br#"{"organization":{"name":"CLI","admins":["alice"]},"users":[{"username":"alice","password":"private-password"}]}"#).unwrap();
+            std::fs::write(temp.join("bundle.json"), fixture_zip(br#"{"users":[{"username":"alice","password":"private-password"}],"organizations":[{"ref":"org","name":"CLI","roles":{"alice":["admin","member"]}}],"teams":[],"projects":[]}"#)).unwrap();
         }
         if case == "bad-config" {
             std::fs::write(temp.join("configuration.yaml"), "private-secret: [bad").unwrap();
@@ -1734,7 +1731,7 @@ async fn import_cli_is_read_only_until_authorized_and_requires_initialized_state
 #[tokio::test]
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
 async fn provisioning_batches_large_parent_and_child_grants_and_rejects_personal_collision() {
-    use fred_manager::provisioning::{Bundle, Importer};
+    use fred_manager::provisioning::Importer;
     let e = env().await;
     let server = support::IdentityServer::start().await;
     let auth = server.auth().await;
@@ -1744,14 +1741,24 @@ async fn provisioning_batches_large_parent_and_child_grants_and_rejects_personal
         .await
         .unwrap();
     let mut users = Vec::new();
+    let mut org_roles = serde_json::Map::new();
+    let mut team_roles = serde_json::Map::new();
     for i in 0..105 {
         let name = format!("user-{i}");
         server.users.lock().await.insert(name.clone(), name.clone());
-        users.push(serde_json::json!({"username":name,"team_roles":{"team_admin":["BID"],"team_analyst":["BID"]}}));
+        users.push(serde_json::json!({"username":name}));
+        org_roles.insert(
+            name.clone(),
+            if i == 0 {
+                serde_json::json!(["member", "admin"])
+            } else {
+                serde_json::json!(["member"])
+            },
+        );
+        team_roles.insert(name, serde_json::json!(["admin", "analyst"]));
     }
-    let value =
-        serde_json::json!({"organization":{"name":"Many","admins":["user-0"]},"users":users});
-    let bundle = Bundle::parse(&serde_json::to_vec(&value).unwrap()).unwrap();
+    let value = serde_json::json!({"users":users,"organizations":[{"ref":"org","name":"Many","roles":org_roles}],"teams":[{"ref":"bid","name":"BID","organization":"org","roles":team_roles}],"projects":[]});
+    let bundle = parse_blueprint(&serde_json::to_vec(&value).unwrap()).unwrap();
     let proxy = support::fga_proxy::Proxy::start(&e.openfga).await;
     let fga = Fga::connect(
         &proxy.base,
@@ -1779,7 +1786,7 @@ async fn provisioning_batches_large_parent_and_child_grants_and_rejects_personal
     {
         let fault = proxy.fault.lock().await;
         // U=105, B=ceil(106/96)+ceil(210/96)=5, G=0, new organization=1.
-        assert_eq!(fault.calls.get("check"), Some(&113));
+        assert_eq!(fault.calls.get("check"), Some(&114));
         assert_eq!(fault.calls.get("read"), Some(&107));
         assert_eq!(fault.calls.get("write"), Some(&111));
         let operations: Vec<_> = fault
@@ -1800,7 +1807,7 @@ async fn provisioning_batches_large_parent_and_child_grants_and_rejects_personal
     spaces::create_personal_space(&e.pool, &e.fga, "user-0", org.id)
         .await
         .unwrap();
-    let collision=Bundle::parse(br#"{"organization":{"name":"Many","admins":["new"]},"users":[{"username":"new","password":"private-password","team_roles":{"team_admin":["user-0"]}}]}"#).unwrap();
+    let collision=parse_blueprint(br#"{"users":[{"username":"new","password":"private-password"}],"organizations":[{"ref":"org","name":"Many","roles":{"new":["admin","member"]}}],"teams":[{"ref":"user-0","name":"user-0","organization":"org","roles":{"new":["admin"]}}],"projects":[]}"#).unwrap();
     assert!(importer.run(&collision).await.is_err());
     assert!(directory.find_username("new").await.unwrap().is_none());
 }
@@ -1891,7 +1898,7 @@ async fn preflight_does_not_block_revocation_and_cancelled_identity_creation_rep
     }
 }
 
-// Proves: I17, I18
+// Proves: I1, I4, I8, I17, I18
 #[tokio::test]
 #[ignore = "needs Postgres, OpenFGA and disposable Keycloak: make test-integration"]
 async fn real_keycloak_service_account_provisions_complete_bundle() {
@@ -1975,6 +1982,198 @@ async fn real_keycloak_service_account_provisions_complete_bundle() {
             bob.id.clone()
         };
         assert!(grants.contains(&(subject, role)));
+    }
+    // Acceptance uses the artifact built by the actual public Make command over HTTP.
+    let output = std::env::temp_dir().join(format!("manager-demo-{}.zip", Uuid::new_v4()));
+    assert!(
+        tokio::process::Command::new("make")
+            .arg("build-demo-bundle")
+            .env("DEMO_BUNDLE_FILE", &output)
+            .status()
+            .await
+            .unwrap()
+            .success()
+    );
+    let bytes = std::fs::read(&output).unwrap();
+    std::fs::remove_file(output).unwrap();
+    let proxy = support::fga_proxy::Proxy::start(&e.openfga).await;
+    let observed_fga = Fga::connect(
+        &proxy.base,
+        &e.store,
+        false,
+        false,
+        None,
+        Some(Duration::from_secs(5)),
+    )
+    .await
+    .unwrap()
+    .load(&e.pool)
+    .await
+    .unwrap();
+    proxy.fault.lock().await.calls.clear();
+    let app = fred_manager::api::governance_router(fred_manager::api::GovernanceState {
+        auth: std::sync::Arc::new(auth),
+        pool: e.pool.clone(),
+        fga: observed_fga,
+        directory: Some(directory.clone()),
+    });
+    let (status, report) = http_import(&app, &token, &bytes).await;
+    assert_eq!(status, 200, "{report}");
+    assert_eq!(report["identities_created"], 13); // Alice and Bob already exist.
+    assert_eq!(report["spaces_reconciled"], 4);
+    {
+        let fault = proxy.fault.lock().await;
+        // Actual Make artifact: U=15, O=1, B=4, G=5; HTTP adds one admin Check.
+        assert_eq!(fault.calls.get("check"), Some(&29));
+        assert_eq!(fault.calls.get("read"), Some(&18));
+        assert_eq!(fault.calls.get("write"), Some(&25));
+        let operations: usize = fault
+            .written
+            .iter()
+            .map(|body| {
+                body["writes"]["tuple_keys"].as_array().map_or(0, Vec::len)
+                    + body["deletes"]["tuple_keys"].as_array().map_or(0, Vec::len)
+            })
+            .sum();
+        assert_eq!(operations, 89);
+    }
+    let demo = db::named_space(&e.pool, None, "Demo")
+        .await
+        .unwrap()
+        .unwrap();
+    let north = db::named_space(&e.pool, Some(demo.id), "northbridge")
+        .await
+        .unwrap()
+        .unwrap();
+    let sophia = directory.find_username("sophia").await.unwrap().unwrap();
+    assert!(
+        !e.fga
+            .check(&sophia.id, Permission::Read, north.id)
+            .await
+            .unwrap()
+    );
+    assert!(
+        e.fga
+            .check(&sophia.id, Permission::Manage, north.id)
+            .await
+            .unwrap()
+    );
+    assert!(
+        e.fga
+            .check(&sophia.id, Permission::Read, demo.id)
+            .await
+            .unwrap()
+    );
+    for (username, role) in [
+        ("alice", fred_manager::roles::PlatformRole::PlatformAdmin),
+        (
+            "gabriel",
+            fred_manager::roles::PlatformRole::PlatformObserver,
+        ),
+        ("oscar", fred_manager::roles::PlatformRole::TeamManager),
+        ("nina", fred_manager::roles::PlatformRole::FeatureManager),
+        ("quinn", fred_manager::roles::PlatformRole::PromptEditor),
+    ] {
+        let subject = directory.find_username(username).await.unwrap().unwrap();
+        assert!(
+            e.fga
+                .platform_grants()
+                .await
+                .unwrap()
+                .contains(&(subject.id, role))
+        );
+    }
+    let (status, report) = http_import(&app, &token, &bytes).await;
+    assert_eq!(status, 200, "{report}");
+    assert_eq!(report["identities_created"], 0);
+    assert_eq!(
+        db::named_space(&e.pool, None, "Demo")
+            .await
+            .unwrap()
+            .unwrap()
+            .id,
+        demo.id
+    );
+    assert_eq!(
+        directory.find_username("alice").await.unwrap().unwrap().id,
+        alice.id
+    );
+    let preserved = kc
+        .get(&format!("/admin/realms/app/users/{}", alice.id))
+        .await;
+    assert_eq!(preserved["firstName"], "Alice");
+    assert_eq!(preserved["lastName"], "Example");
+    assert_eq!(preserved["email"], "alice@example.com");
+    let alice_token = kc
+        .password_token("app", "app", "alice", "private-password")
+        .await;
+    use tower::ServiceExt;
+    let response = app
+        .clone()
+        .oneshot(
+            axum::http::Request::builder()
+                .uri("/me/spaces")
+                .header("Authorization", format!("Bearer {alice_token}"))
+                .body(axum::body::Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 200);
+    let visible: serde_json::Value = serde_json::from_slice(
+        &axum::body::to_bytes(response.into_body(), 100_000)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert!(
+        visible
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|s| s["id"] == demo.id.to_string())
+    );
+    // Variant declares a project and uses the same HTTP path and real directory.
+    let variant = fixture_zip(br#"{"users":[{"username":"alice"},{"username":"bob"}],"organizations":[{"ref":"demo","name":"Demo","roles":{}}],"teams":[{"ref":"north","name":"northbridge","organization":"demo","roles":{"alice":["member"]}}],"projects":[{"ref":"project","name":"Project","team":"north","roles":{"alice":["admin"],"bob":["member","editor","analyst"]}}]}"#);
+    {
+        let mut fault = proxy.fault.lock().await;
+        fault.calls.clear();
+        fault.written.clear();
+    }
+    let (status, report) = http_import(&app, &token, &variant).await;
+    assert_eq!(status, 200, "{report}");
+    {
+        let fault = proxy.fault.lock().await;
+        // U=2, O=1, B=2, H=2 existing-parent fallbacks, N=G=Z=0; HTTP adds C=1.
+        assert_eq!(fault.calls.get("check"), Some(&15));
+        assert_eq!(fault.calls.get("read"), Some(&4));
+        assert_eq!(fault.calls.get("write"), Some(&4));
+    }
+    let project = db::named_space(&e.pool, Some(north.id), "Project")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(project.path, vec![demo.id, north.id, project.id]);
+    assert!(
+        !e.fga
+            .check(&alice.id, Permission::Read, project.id)
+            .await
+            .unwrap()
+    );
+    assert!(
+        e.fga
+            .check(&alice.id, Permission::Manage, project.id)
+            .await
+            .unwrap()
+    );
+    for role in [Role::Member, Role::Editor, Role::Analyst] {
+        assert!(
+            e.fga
+                .roles_of(&bob.id)
+                .await
+                .unwrap()
+                .contains(&(project.id, role))
+        );
     }
 }
 
@@ -2182,10 +2381,7 @@ async fn cancellation_after_fga_write_rolls_back_new_space_and_replays() {
 #[tokio::test]
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
 async fn import_rechecks_parent_after_wait_and_repairs_existing_space_grants() {
-    use fred_manager::{
-        provisioning::{Bundle, Importer},
-        roles::PlatformRole,
-    };
+    use fred_manager::{provisioning::Importer, roles::PlatformRole};
     let e = env().await;
     let server = support::IdentityServer::start().await;
     bootstrap::grant_root(&e.pool, &e.fga, "root")
@@ -2227,7 +2423,7 @@ async fn import_rechecks_parent_after_wait_and_repairs_existing_space_grants() {
     let auth = server.auth().await;
     let directory = server.directory();
     let token = server.token("delegate");
-    let bytes=br#"{"organization":{"name":"Existing","admins":["alice"]},"users":[{"username":"alice","team_roles":{"team_admin":["New"]}},{"username":"bob","team_roles":{"team_analyst":["New"]},"platform_roles":["observer"]}]}"#;
+    let bytes=br#"{"users":[{"username":"alice"},{"username":"bob","platform_roles":["observer"]}],"organizations":[{"ref":"org","name":"Existing","roles":{"alice":["admin","member"],"bob":["member"]}}],"teams":[{"ref":"New","name":"New","organization":"org","roles":{"alice":["admin"],"bob":["analyst"]}}],"projects":[]}"#;
     let pending = tokio::spawn(async move {
         Importer {
             pool: &pool,
@@ -2236,7 +2432,7 @@ async fn import_rechecks_parent_after_wait_and_repairs_existing_space_grants() {
             auth: &auth,
             bearer: &token,
         }
-        .run(&Bundle::parse(bytes).unwrap())
+        .run(&parse_blueprint(bytes).unwrap())
         .await
     });
     wait_for_advisory_waiter(&e.pool).await;
@@ -2275,9 +2471,17 @@ async fn import_rechecks_parent_after_wait_and_repairs_existing_space_grants() {
         auth: &auth,
         bearer: &token,
     };
-    assert!(importer.run(&Bundle::parse(bytes).unwrap()).await.is_err());
+    assert!(
+        importer
+            .run(&parse_blueprint(bytes).unwrap())
+            .await
+            .is_err()
+    );
     proxy.fault.lock().await.fail_at = 0;
-    importer.run(&Bundle::parse(bytes).unwrap()).await.unwrap();
+    importer
+        .run(&parse_blueprint(bytes).unwrap())
+        .await
+        .unwrap();
     assert_eq!(
         db::named_space(&e.pool, Some(org.id), "New")
             .await
@@ -3236,4 +3440,294 @@ async fn competing_empty_initializers_converge_on_the_published_binding() {
         a.store_id(),
         "published destination wins over ambiguous legacy discovery"
     );
+}
+
+// Test data names the actual four ZIP sections; no legacy fixture conversion.
+fn fixture_zip(bytes: &[u8]) -> Vec<u8> {
+    use std::io::{Cursor, Write};
+    let value: serde_json::Value = serde_json::from_slice(bytes).unwrap();
+    let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
+    let options = zip::write::SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated);
+    zip.start_file("manifest.json", options).unwrap();
+    zip.write_all(br#"{"format_version":2,"users_schema_version":2,"source_platform":"swift"}"#)
+        .unwrap();
+    for section in ["users", "organizations", "teams", "projects"] {
+        zip.start_file(format!("{section}.json"), options).unwrap();
+        zip.write_all(&serde_json::to_vec(&value[section]).unwrap())
+            .unwrap();
+    }
+    zip.finish().unwrap().into_inner()
+}
+fn parse_blueprint(
+    bytes: &[u8],
+) -> Result<fred_manager::provisioning::Bundle, fred_manager::blueprint::InputError> {
+    fred_manager::provisioning::Bundle::parse(&fixture_zip(bytes))
+}
+
+async fn http_import(
+    app: &axum::Router,
+    bearer: &str,
+    zip: &[u8],
+) -> (axum::http::StatusCode, serde_json::Value) {
+    use tower::ServiceExt;
+    let mut body=b"--manager-boundary\r\nContent-Disposition: form-data; name=\"file\"; filename=\"bundle.zip\"\r\nContent-Type: application/zip\r\n\r\n".to_vec();
+    body.extend_from_slice(zip);
+    body.extend_from_slice(b"\r\n--manager-boundary--\r\n");
+    let response = app
+        .clone()
+        .oneshot(
+            axum::http::Request::builder()
+                .method("POST")
+                .uri("/import-export/import")
+                .header("Authorization", format!("Bearer {bearer}"))
+                .header(
+                    "Content-Type",
+                    "multipart/form-data; boundary=manager-boundary",
+                )
+                .body(axum::body::Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = response.status();
+    let bytes = axum::body::to_bytes(response.into_body(), 100_000)
+        .await
+        .unwrap();
+    (status, serde_json::from_slice(&bytes).unwrap())
+}
+
+// Proves: I1, I4, I8, I15, I17, I18
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn blueprint_http_hierarchy_isolation_preflight_and_safe_errors() {
+    use fred_manager::api::{GovernanceState, governance_router};
+    use tower::ServiceExt;
+    let e = env().await;
+    let server = support::IdentityServer::start().await;
+    let auth = std::sync::Arc::new(server.auth().await);
+    let directory = server.directory();
+    bootstrap::grant_root(&e.pool, &e.fga, "root")
+        .await
+        .unwrap();
+    let app = governance_router(GovernanceState {
+        auth: auth.clone(),
+        pool: e.pool.clone(),
+        fga: e.fga.clone(),
+        directory: Some(directory.clone()),
+    });
+    let token = server.token("root");
+    let mut value = serde_json::json!({"users":[{"username":"alice","password":"private-password"},{"username":"bob","password":"private-password"}],"organizations":[{"ref":"a","name":"A","roles":{"alice":["admin","member"]}},{"ref":"b","name":"B","roles":{"bob":["admin","member"]}}],"teams":[{"ref":"at","name":"Team","organization":"a","roles":{"alice":["admin","member"]}},{"ref":"bt","name":"Team","organization":"b","roles":{"bob":["admin","analyst"]}}],"projects":[{"ref":"ap","name":"Project","team":"at","roles":{"alice":["admin","editor"]}},{"ref":"bp","name":"Project","team":"bt","roles":{"bob":["admin"]}}]});
+    // Malformed upload is never parsed for a caller lacking platform authority.
+    for (bearer, status) in [("invalid".to_owned(), 401), (server.token("ordinary"), 403)] {
+        let response = app
+            .clone()
+            .oneshot(
+                axum::http::Request::builder()
+                    .method("POST")
+                    .uri("/import-export/import")
+                    .header("Authorization", format!("Bearer {bearer}"))
+                    .body(axum::body::Body::from("not multipart"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), status);
+    }
+    for body in [
+        "--manager-boundary--\r\n",
+        "--manager-boundary\r\nContent-Disposition: form-data; name=\"wrong\"\r\n\r\n{}\r\n--manager-boundary--\r\n",
+        "--manager-boundary\r\nContent-Disposition: form-data; name=\"file\"\r\n\r\n{}\r\n--manager-boundary\r\nContent-Disposition: form-data; name=\"file\"\r\n\r\n{}\r\n--manager-boundary--\r\n",
+    ] {
+        let response = app
+            .clone()
+            .oneshot(
+                axum::http::Request::builder()
+                    .method("POST")
+                    .uri("/import-export/import")
+                    .header("Authorization", format!("Bearer {token}"))
+                    .header(
+                        "Content-Type",
+                        "multipart/form-data; boundary=manager-boundary",
+                    )
+                    .body(axum::body::Body::from(body))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), 400);
+        let detail: serde_json::Value = serde_json::from_slice(
+            &axum::body::to_bytes(response.into_body(), 1000)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(detail["detail"], "expected one multipart file");
+    }
+    assert!(server.users.lock().await.is_empty());
+    for input in [b"{}".as_slice(), b"[old JSON]"] {
+        let (s, b) = http_import(&app, &token, input).await;
+        assert_eq!(s, 422);
+        assert_eq!(b["detail"], "not_yet_supported");
+    }
+    let (s, b) = http_import(&app, &token, b"private-password malformed archive").await;
+    assert_eq!(s, 422);
+    assert!(!b.to_string().contains("private-password"));
+    value["teams"][1]["roles"]["bob"] = serde_json::json!(["admin"]);
+    let (s, b) = http_import(
+        &app,
+        &token,
+        &fixture_zip(&serde_json::to_vec(&value).unwrap()),
+    )
+    .await;
+    assert_eq!(s, 422, "{b}");
+    assert!(server.users.lock().await.is_empty());
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("select count(*) from space")
+            .fetch_one(&e.pool)
+            .await
+            .unwrap(),
+        0
+    );
+    value["teams"][1]["roles"]["bob"] = serde_json::json!(["admin", "analyst"]);
+    // Root-only grant is rejected before identities, even for another platform admin.
+    e.fga
+        .write_platform(
+            &mut e.fga.guard(&[Scope::Platform]).await.unwrap(),
+            "delegate",
+            fred_manager::roles::PlatformRole::PlatformAdmin,
+            true,
+        )
+        .await
+        .unwrap();
+    value["users"][0]["platform_roles"] = serde_json::json!(["admin"]);
+    let (s, b) = http_import(
+        &app,
+        &server.token("delegate"),
+        &fixture_zip(&serde_json::to_vec(&value).unwrap()),
+    )
+    .await;
+    assert_eq!(s, 403, "{b}");
+    assert!(server.users.lock().await.is_empty());
+    value["users"][0]["platform_roles"] = serde_json::json!([]);
+    server.control.lock().await.fail_create = true;
+    let (s, b) = http_import(
+        &app,
+        &token,
+        &fixture_zip(&serde_json::to_vec(&value).unwrap()),
+    )
+    .await;
+    assert_eq!(s, 503, "{b}");
+    assert!(b["detail"].as_str().unwrap().contains("identities"));
+    assert!(!b.to_string().contains("private-password"));
+    server.control.lock().await.fail_create = false;
+    let bytes = fixture_zip(&serde_json::to_vec(&value).unwrap());
+    for expected_created in [2, 0] {
+        let (s, b) = http_import(&app, &token, &bytes).await;
+        assert_eq!(s, 200, "{b}");
+        assert_eq!(b["identities_created"], expected_created);
+        assert_eq!(b["spaces_reconciled"], 6);
+    }
+    let alice = directory.find_username("alice").await.unwrap().unwrap().id;
+    let bob = directory.find_username("bob").await.unwrap().unwrap().id;
+    let mut ids = Vec::new();
+    for (name, subject, other) in [("A", &alice, &bob), ("B", &bob, &alice)] {
+        let org = db::named_space(&e.pool, None, name).await.unwrap().unwrap();
+        let team = db::named_space(&e.pool, Some(org.id), "Team")
+            .await
+            .unwrap()
+            .unwrap();
+        let project = db::named_space(&e.pool, Some(team.id), "Project")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(project.path, vec![org.id, team.id, project.id]);
+        for space in [org.id, team.id, project.id] {
+            assert!(
+                e.fga
+                    .check(subject, Permission::Manage, space)
+                    .await
+                    .unwrap()
+            );
+            assert!(!e.fga.check(other, Permission::Read, space).await.unwrap());
+            assert!(!e.fga.check(other, Permission::Manage, space).await.unwrap());
+        }
+        ids.push(project.id);
+    }
+    assert_ne!(ids[0], ids[1]);
+    // Internal SQL failures expose a phase and counters, never database diagnostics.
+    sqlx::raw_sql("CREATE FUNCTION fail_import_fixture() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.name = 'Internal failure' THEN RAISE EXCEPTION 'private-password'; END IF; RETURN NEW; END $$; CREATE TRIGGER fail_import_fixture BEFORE INSERT ON space FOR EACH ROW EXECUTE FUNCTION fail_import_fixture();").execute(&e.pool).await.unwrap();
+    let failing=fixture_zip(br#"{"users":[{"username":"alice"}],"organizations":[{"ref":"bad","name":"Internal failure","roles":{"alice":["admin"]}}],"teams":[],"projects":[]}"#);
+    let (status, body) = http_import(&app, &token, &failing).await;
+    assert_eq!(status, 500, "{body}");
+    assert!(body["detail"].as_str().unwrap().contains("roles/spaces"));
+    assert!(!body.to_string().contains("private-password"));
+    sqlx::raw_sql(
+        "DROP TRIGGER fail_import_fixture ON space; DROP FUNCTION fail_import_fixture();",
+    )
+    .execute(&e.pool)
+    .await
+    .unwrap();
+    // Oversized upload is rejected before parsing or writes.
+    let (s, b) = http_import(
+        &app,
+        &token,
+        &vec![0; fred_manager::blueprint::MAX_ARCHIVE + 1],
+    )
+    .await;
+    assert_eq!(s, 413, "{b}");
+}
+
+// Proves: I1, I18
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn blueprint_preflight_reads_child_names_after_organization_lock() {
+    let e = env().await;
+    let server = support::IdentityServer::start().await;
+    bootstrap::grant_root(&e.pool, &e.fga, "root")
+        .await
+        .unwrap();
+    server
+        .users
+        .lock()
+        .await
+        .insert("alice".into(), "alice".into());
+    let org = spaces::create_organization(&e.pool, &e.fga, "Existing", "alice")
+        .await
+        .unwrap();
+    let mut held = hold_organization_lock(&e, org.id).await;
+    let id = Uuid::new_v4();
+    db::insert_space(
+        &mut held,
+        &fred_manager::domain::Space {
+            id,
+            kind: SpaceKind::Team,
+            name: "Collision".into(),
+            parent_id: Some(org.id),
+            personal_owner: Some("personal-owner".into()),
+            path: vec![org.id, id],
+        },
+    )
+    .await
+    .unwrap();
+    let app = fred_manager::api::governance_router(fred_manager::api::GovernanceState {
+        auth: std::sync::Arc::new(server.auth().await),
+        pool: e.pool.clone(),
+        fga: e.fga.clone(),
+        directory: Some(server.directory()),
+    });
+    let token = server.token("root");
+    let pending = tokio::spawn(async move {
+        http_import(&app,&token,&fixture_zip(br#"{"users":[{"username":"alice"},{"username":"tail","password":"private-password"}],"organizations":[{"ref":"org","name":"Existing","roles":{"tail":["member"]}}],"teams":[{"ref":"team","name":"Collision","organization":"org","roles":{"tail":["admin"]}}],"projects":[]}"#)).await
+    });
+    wait_for_advisory_waiter(&e.pool).await;
+    held.commit().await.unwrap();
+    let (status, body) = tokio::time::timeout(Duration::from_secs(5), pending)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(status, 409, "{body}");
+    assert!(body["detail"].as_str().unwrap().contains("preflight"));
+    assert!(!server.users.lock().await.contains_key("tail"));
+    assert!(server.control.lock().await.created.is_empty());
 }

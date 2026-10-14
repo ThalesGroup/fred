@@ -63,12 +63,13 @@ Every error body is `{"detail": "<message>"}`, as FastAPI.
 
 | Status | When |
 | --- | --- |
-| 400 | Unknown role name, placement rule broken (I1) |
+| 400 | Unknown role name, placement rule broken (I1), malformed multipart import |
 | 401 | Missing or invalid bearer (details above) |
 | 403 | Permission denied (`forbidden`), wrong bootstrap secret |
 | 404 | Unknown id |
 | 409 | Unique or foreign-key violation, invariant refusal, bootstrap completed, ingestion already running |
-| 422 | Invalid JSON body (optional ones included), short bootstrap token, half a cursor |
+| 413 | Import exceeds 50 MiB compressed or 100 MiB expanded |
+| 422 | Invalid ZIP/declarations, `not_yet_supported` import format; invalid JSON body (optional ones included), short bootstrap token, half a cursor |
 | 503 | Bootstrap or platform-role administration with authentication disabled; grant with no directory or incompatible subject/realm mapping |
 | 500 | Anything else, logged, answered `internal error` |
 
@@ -148,15 +149,26 @@ process-local cache renews the service token five seconds before expiry; a 401 i
 that token and retries once. Errors expose operation and status, never upstream bodies,
 credentials or raw transport diagnostics. User lookup encodes the subject as a path segment.
 
-## CLI feedback
+## Import boundary and feedback
 
-Import reads the operator bearer from a file, separately from the service-client secret.
-Initialization and validation failures report zero counters and no provisioning writes,
+The CLI reads the operator bearer from a file, separately from the service-client
+secret. HTTP accepts exactly one multipart `file` after verified platform-admin
+authority. The ZIP parser accepts stored/deflated entries without extraction,
+checks actual expanded bytes and rejects duplicate/path-bearing entries, inconsistent
+headers, symlinks, encryption and corrupt data. Archive size is 50 MiB; expanded
+data totals at most 100 MiB. The HTTP body limit adds 64 KiB for multipart framing.
+Parsing runs on a blocking worker. Old formats return 422 `not_yet_supported`.
+HTTP maps operator authentication to 401, authority to 403, invalid declarations
+to 422, state/revision conflicts to 409, unavailable dependencies to 503 and internal
+SQL failures to 500. Importer failures contain static reasons and safe counts, never dependency
+diagnostics or input values. HTTP upload, parsing and initial authorization
+failures contain a `detail` without reconciliation counts.
+CLI initialization and validation failures report zero counters and no provisioning writes,
 including configuration/file errors before logging starts. Bundle types do not implement
 Debug or Serialize. Parsing diagnostics do not echo input
-values; provisioning failures report a safe phase and acknowledgment counts, then exit
+values; provisioning failures report a safe phase and acknowledgment counts, and the CLI exits
 nonzero. Counts cover resolved/created identities, committed reconciled spaces and
-acknowledged grants; a lost response can leave uncounted remote effects. Success prints
-these counts as one JSON object. The recovery action after a partial failure is replay
+acknowledged grants; a lost response can leave uncounted remote effects. Success returns
+these counts as one JSON object (stdout or HTTP 200). The recovery action after a partial failure is replay
 with a valid operator token, after correcting the cause. Created identities are not deleted
 as compensation. `create-org` retains its operator/database trust boundary.

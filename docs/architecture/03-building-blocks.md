@@ -14,7 +14,8 @@ flowchart TB
     auth["auth.rs<br/>bearer verification"]
     error["error.rs<br/>error contract"]
     spaces["spaces.rs<br/>space and role mutations"]
-    provisioning["provisioning.rs<br/>bundle validation and reconciliation"]
+    provisioning["provisioning.rs<br/>preflight and reconciliation"]
+    blueprint["blueprint.rs<br/>bounded ZIP and declarations"]
     platform["platform.rs<br/>platform-role administration"]
     roles["roles.rs<br/>roles and capabilities"]
     directory["keycloak.rs<br/>service-account directory"]
@@ -24,7 +25,9 @@ flowchart TB
     fga["fga.rs<br/>OpenFGA client"]
     ingestion["ingestion.rs<br/>Temporal client"]
 
-    main --> config & logging & api & provisioning
+    main --> config & logging & api & provisioning & blueprint
+    api --> provisioning & blueprint
+    provisioning --> blueprint
     provisioning --> auth & platform & directory & db & fga & spaces
     api --> auth & error & spaces & bootstrap & db & fga & ingestion & logging
     spaces --> domain & db & fga
@@ -52,9 +55,10 @@ flowchart TB
 `roles` defines typed platform roles and scoped capabilities. `platform` serializes
 role mutations with bootstrap. `keycloak` owns one shared HTTP client and a synchronized
 service-token cache. `api::governance_router` groups identity, platform administration
-and self-capability routes independently of the Temporal client.
+space listing, ZIP import and self-capability routes independently of the Temporal client.
 
-`provisioning::Bundle` validates and normalizes declarations without exposing credentials
-through Debug or serialization. `Importer` performs read-only preflight, per-identity
+`blueprint::Bundle` validates the bounded ZIP and normalizes declarations without exposing credentials
+through Debug or serialization. HTTP and CLI parse on a blocking worker without
+filesystem extraction. `Importer` performs read-only preflight, per-identity
 mutations, then additive space/role reconciliation. The binary connects without SQL
 migration or FGA model synchronization, and does not initialize Temporal for import.

@@ -9,7 +9,6 @@ Every route but the health probe requires a bearer token (chapter 6).
 | --- | --- | --- |
 | GET | `/fred-manager/v1/healthz` | `inline` |
 | POST | `/fred-manager/v1/bootstrap/platform-admin` | `bootstrap_platform_admin` |
-| GET | `/fred-manager/v1/me/spaces` | `my_spaces` |
 | POST | `/fred-manager/v1/me/personal-space` | `create_personal_space` |
 | POST | `/fred-manager/v1/spaces` | `create_space` |
 | PUT | `/fred-manager/v1/spaces/{id}/roles/{role}/{user}` | `grant` |
@@ -27,6 +26,8 @@ Every route but the health probe requires a bearer token (chapter 6).
 | POST | `/fred-manager/v1/authorize/document` | `authorize_document` |
 | POST | `/fred-manager/v1/authorize/scope` | `authorize_scope` |
 | GET | `/fred-manager/v1/me` | `me` |
+| GET | `/fred-manager/v1/me/spaces` | `my_spaces` |
+| POST | `/fred-manager/v1/import-export/import` | `import_blueprint` |
 | GET | `/fred-manager/v1/users/platform-roles` | `list_platform_roles` |
 | PUT | `/fred-manager/v1/users/{user}/platform-roles/{role}` | `grant_platform_role` |
 | DELETE | `/fred-manager/v1/users/{user}/platform-roles/{role}` | `revoke_platform_role` |
@@ -209,56 +210,69 @@ The caller receives no implicit role; project creation still requires local gove
 
 ## Authenticated provisioning import
 
-`fred-manager import-provisioning <bundle.json> --token-file <path>` verifies the
+`fred-manager import-provisioning <bundle.zip> --token-file <path>` verifies the
 operator bearer, connects to SQL without migrating and verifies migration
-versions/checksums. It loads the published FGA store/model and checks platform admin. A bundle
-that declares platform admin additionally requires the completed bootstrap root.
+versions/checksums. It loads the published FGA store/model and checks platform admin.
+Multipart `POST /import-export/import` checks the authenticated caller's platform
+admin authority before reading exactly one `file` field. Both parse the same ZIP
+on a blocking worker and invoke `Importer`. A platform-admin declaration also
+requires the completed bootstrap root, including on replay.
 
 ```mermaid
 sequenceDiagram
-    participant C as CLI
+    participant C as CLI or HTTP handler
     participant KC as Keycloak
     participant PG as Postgres
     participant FGA as OpenFGA
     C->>KC: verify operator bearer using signing keys
-    C->>PG: verify schema, read published store/model binding
-    C->>FGA: verify pinned model, check platform admin
-    C->>PG: lock platform then existing organization
-    C->>FGA: recheck authority and root-only declarations
-    C->>PG: validate space names, release read-only locks
+    C->>FGA: check platform admin before reading input
+    C->>C: bound and validate the complete ZIP
+    C->>PG: lock platform, verify root-only declarations, release
     C->>KC: preflight every exact username and missing password
+    C->>PG: lock platform, resolve roots, lock organizations in UUID order
+    C->>PG: resolve children, validate collisions and new-space admins
+    C->>FGA: check existing parent content when not declared
+    C->>PG: release read-only locks
     loop each identity
         C->>PG: lock platform
-        C->>FGA: read platform guard, recheck authority, consume guard
+        C->>FGA: capture platform guard, recheck authority, consume guard
         C->>KC: resolve or create with service credentials
         C->>PG: release lock
     end
-    C->>PG: lock platform then organization, reread space names
-    C->>FGA: initialize new organization guard, capture both guards
-    C->>PG: insert missing organization row
-    C->>FGA: recheck bearer/authority, guarded parent grants
-    C->>PG: insert missing team rows
-    C->>FGA: guarded team/platform grants, audit acknowledgments
+    C->>PG: lock platform, resolve roots, lock organizations, resolve children
+    C->>FGA: validate all parent requirements
+    loop each organization subtree
+        C->>FGA: initialize new guard, capture platform and organization revisions
+        C->>FGA: recheck authority and subtree parent requirements
+        C->>PG: insert missing rows in parent-first order
+        C->>FGA: guarded parent-first role batches, audit acknowledgments
+    end
+    C->>FGA: capture platform guard, recheck authority and grant platform roles
     C->>PG: commit space rows, release locks
+    C-->>C: return completed counts
 ```
 
-All predictable bundle, passwordless-identity and new-team-admin errors fail preflight
-before provisioning writes (I18). Read-only directory traversal holds no mutation lock.
-Each identity phase holds the platform lock; reconciliation holds platform then organization
-locks through its writes. Bearer verification and FGA authority checks repeat at mutation
-boundaries, including after lock waits. Space grants use batches of at most 96 role tuples plus four guard operations,
-with organization membership before dependent child roles (I4, I5).
+Predictable bundle, passwordless-identity, missing new-space-admin and parent-access
+errors fail whole-bundle preflight before provisioning writes (I18). Directory
+traversal holds no mutation lock. Child names are read only after acquiring all
+organization locks. Reconciliation retains those locks and the platform lock through
+SQL commit. It captures revisions before rechecking authority and parent access,
+then carries acknowledged revisions through batches of at most 96 space-role tuples
+plus four guard operations (I4, I5). A subtree with no role writes consumes its guard
+explicitly. Platform grants use the platform guard and recheck identity existence.
 
-Organizations are resolved by root name, teams by organization and name. Existing IDs
-are reused; incompatible or personal-space name collisions are refused. Existing users
-are resolved by exact username without updating their profile/password. Lookup is paginated
-and rejects ambiguous or inexact replies; a creation conflict triggers a fresh lookup.
+Organizations resolve by root name, teams by organization/name, projects by team/name.
+Existing committed IDs are reused; incompatible-kind and personal-space collisions
+are refused. Bundle references only identify declarations within that input.
+Exact username lookup is paginated and rejects ambiguous/inexact replies; a creation
+conflict triggers a fresh lookup. Existing profiles and credentials are preserved.
 
-Reconciliation is additive (I17). Undeclared roles remain; missing declared grants are
-repaired. A renamed declaration identifies a different space. There is no distributed
-rollback: identities and acknowledged FGA grants can survive a failed SQL transaction.
-New space rows commit after their initial grants; rolled-back UUIDs are never reused.
-Replay uses committed identities/spaces and repairs the requested state.
+Reconciliation is additive (I17): undeclared roles remain and requested grants are
+repaired. Renaming a declaration identifies a different space. Identities and
+acknowledged FGA grants can survive a failed SQL transaction; there is no distributed
+rollback. New rows commit after their initial grants, and rolled-back UUIDs are never
+reused. The CLI exits nonzero on failure; HTTP returns safe phase/count information.
+HTTP 200 means reconciliation completes, not merely that an upload is accepted.
 
 Local folder/document mutations capture the organization guard, authorize, consume
 the guard and commit SQL under the same organization lock. Placement reads use the

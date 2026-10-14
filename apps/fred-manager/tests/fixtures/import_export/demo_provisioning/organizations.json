@@ -1,0 +1,42 @@
+[
+  {
+    "ref": "demo",
+    "name": "Demo",
+    "roles": {
+      "alice": [
+        "admin",
+        "member"
+      ],
+      "bob": [
+        "member"
+      ],
+      "phil": [
+        "member"
+      ],
+      "zoe": [
+        "member"
+      ],
+      "liam": [
+        "member"
+      ],
+      "sophia": [
+        "member"
+      ],
+      "marc": [
+        "member"
+      ],
+      "elena": [
+        "member"
+      ],
+      "nadia": [
+        "member"
+      ],
+      "derek": [
+        "member"
+      ],
+      "priya": [
+        "member"
+      ]
+    }
+  }
+]

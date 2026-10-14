@@ -22,159 +22,81 @@ use crate::{
     domain::{Role, Space, SpaceKind},
     fga::{Fga, Guard, Scope, Tuple},
     keycloak::Directory,
-    logging, platform,
-    roles::PlatformRole,
-    spaces,
+    logging, platform, spaces,
 };
-use anyhow::{Context, Result, bail, ensure};
-use serde::{Deserialize, Serialize};
+use anyhow::{Result, ensure};
+use serde::Serialize;
 use sqlx::{PgPool, Postgres, Transaction};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use uuid::Uuid;
 
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct RawBundle {
-    organization: Organization,
-    users: Vec<RawUser>,
-}
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Organization {
-    name: String,
-    admins: Vec<String>,
-}
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct RawUser {
-    username: String,
-    email: Option<String>,
-    first_name: Option<String>,
-    last_name: Option<String>,
-    password: Option<String>,
-    #[serde(default)]
-    teams: Vec<String>,
-    #[serde(default, deserialize_with = "unique_roles")]
-    team_roles: BTreeMap<String, Vec<String>>,
-    #[serde(default)]
-    platform_roles: Vec<String>,
-}
-// Unlike a generic map, malformed duplicate declarations cannot silently overwrite roles.
-fn unique_roles<'de, D: serde::Deserializer<'de>>(
-    deserializer: D,
-) -> std::result::Result<BTreeMap<String, Vec<String>>, D::Error> {
-    struct Visitor;
-    impl<'de> serde::de::Visitor<'de> for Visitor {
-        type Value = BTreeMap<String, Vec<String>>;
-        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-            f.write_str("unique role declarations")
-        }
-        fn visit_map<M: serde::de::MapAccess<'de>>(
-            self,
-            mut map: M,
-        ) -> std::result::Result<Self::Value, M::Error> {
-            let mut roles = BTreeMap::new();
-            while let Some((key, value)) = map.next_entry::<String, Vec<String>>()? {
-                if roles.insert(key, value).is_some() {
-                    return Err(serde::de::Error::custom("duplicate team role"));
-                }
-            }
-            Ok(roles)
-        }
-    }
-    deserializer.deserialize_map(Visitor)
-}
-struct Entry {
-    identity: RawUser,
-    teams: BTreeMap<String, Vec<Role>>,
-    platform: BTreeSet<PlatformRole>,
-}
-/// Validated input intentionally has no Debug/Serialize implementation: it holds passwords.
-pub struct Bundle {
-    organization: Organization,
-    users: Vec<Entry>,
-}
+pub use crate::blueprint::Bundle;
+use crate::domain::Permission;
+use crate::error::AppError;
 
-fn valid_name(value: &str) -> bool {
-    !value.trim().is_empty() && !value.chars().any(char::is_control)
+#[derive(Debug, thiserror::Error)]
+#[error("invalid or expired operator bearer")]
+struct Unauthorized;
+
+#[derive(Debug, thiserror::Error)]
+#[error("{message}")]
+pub struct Failure {
+    pub status: axum::http::StatusCode,
+    message: String,
 }
-impl Bundle {
-    pub fn parse(bytes: &[u8]) -> Result<Self> {
-        // Serde's error can include an unknown field or value supplied near a password.
-        let raw: RawBundle = serde_json::from_slice(bytes)
-            .map_err(|_| anyhow::anyhow!("invalid provisioning JSON or unknown field"))?;
-        ensure!(
-            valid_name(&raw.organization.name),
-            "organization name must be nonempty"
-        );
-        ensure!(
-            !raw.organization.admins.is_empty(),
-            "organization admins must be nonempty"
-        );
-        let mut names = BTreeSet::new();
-        let mut users = Vec::new();
-        for user in raw.users {
-            ensure!(valid_name(&user.username), "username must be nonempty");
-            ensure!(names.insert(user.username.clone()), "duplicate username");
-            let mut teams = BTreeMap::<String, Vec<Role>>::new();
-            for (role, targets) in &user.team_roles {
-                let role = match role.as_str() {
-                    "team_member" => Role::Member,
-                    "team_editor" => Role::Editor,
-                    "team_admin" => Role::Admin,
-                    "team_analyst" => Role::Analyst,
-                    _ => bail!("unknown or non-assignable team role"),
-                };
-                for team in targets {
-                    ensure!(valid_name(team), "team name must be nonempty");
-                    let roles = teams.entry(team.clone()).or_default();
-                    if !roles.contains(&role) {
-                        roles.push(role);
-                    }
+impl Failure {
+    fn at(phase: &str, error: anyhow::Error, report: &Report) -> Self {
+        use axum::http::StatusCode as S;
+        let status = if error.is::<crate::fga::Conflict>() {
+            S::CONFLICT
+        } else if let Some(e) = error.downcast_ref::<AppError>() {
+            match e {
+                AppError::Forbidden | AppError::Denied(_) => S::FORBIDDEN,
+                AppError::BadRequest(_) | AppError::Unprocessable(_) => S::UNPROCESSABLE_ENTITY,
+                AppError::Conflict(_) | AppError::NotFound => S::CONFLICT,
+                AppError::Unavailable(_) => S::SERVICE_UNAVAILABLE,
+                AppError::Internal(_) => S::SERVICE_UNAVAILABLE,
+            }
+        } else if error.is::<Unauthorized>() {
+            S::UNAUTHORIZED
+        } else if let Some(e) = error.downcast_ref::<sqlx::Error>() {
+            match e {
+                sqlx::Error::Database(db)
+                    if db.is_unique_violation() || db.is_foreign_key_violation() =>
+                {
+                    S::CONFLICT
                 }
+                sqlx::Error::Io(_)
+                | sqlx::Error::Tls(_)
+                | sqlx::Error::PoolTimedOut
+                | sqlx::Error::PoolClosed => S::SERVICE_UNAVAILABLE,
+                _ => S::INTERNAL_SERVER_ERROR,
             }
-            for team in &user.teams {
-                ensure!(valid_name(team), "team name must be nonempty");
-                teams
-                    .entry(team.clone())
-                    .or_insert_with(|| vec![Role::Member]);
-            }
-            let platform = user
-                .platform_roles
-                .iter()
-                .map(|r| PlatformRole::parse(r).context("unknown or non-assignable platform role"))
-                .collect::<Result<_>>()?;
-            users.push(Entry {
-                identity: user,
-                teams,
-                platform,
-            });
+        } else {
+            S::SERVICE_UNAVAILABLE
+        };
+        // Never retain the dependency error chain or interpolate supplied values.
+        let reason = match status {
+            S::FORBIDDEN => "forbidden",
+            S::UNAUTHORIZED => "invalid or expired operator bearer",
+            S::UNPROCESSABLE_ENTITY => "invalid identity or space declaration",
+            S::CONFLICT => "state or authorization conflict",
+            S::INTERNAL_SERVER_ERROR => "internal failure",
+            _ => "dependency unavailable",
+        };
+        Self {
+            status,
+            message: format!(
+                "provisioning {phase} failed: {reason}; {report}; correct the cause and replay (acknowledgments may be incomplete)"
+            ),
         }
-        ensure!(
-            raw.organization.admins.iter().all(|a| names.contains(a)),
-            "organization admin must name a bundle user"
-        );
-        Ok(Self {
-            organization: raw.organization,
-            users,
-        })
     }
-    fn has_admin_grant(&self) -> bool {
-        self.users
-            .iter()
-            .any(|u| u.platform.contains(&PlatformRole::PlatformAdmin))
-    }
-    fn teams(&self) -> BTreeSet<&str> {
-        self.users
-            .iter()
-            .flat_map(|u| u.teams.keys().map(String::as_str))
-            .collect()
-    }
-    fn declares_admin(&self, team: &str) -> bool {
-        self.users
-            .iter()
-            .any(|u| u.teams.get(team).is_some_and(|r| r.contains(&Role::Admin)))
-    }
+}
+fn invalid(message: &str) -> anyhow::Error {
+    AppError::Unprocessable(message.into()).into()
+}
+fn conflict(message: &str) -> anyhow::Error {
+    AppError::Conflict(message.into()).into()
 }
 
 #[derive(Debug, Default, Serialize)]
@@ -219,7 +141,7 @@ impl Importer<'_> {
             .auth
             .authenticate(Some(self.bearer))
             .await
-            .map_err(|_| anyhow::anyhow!("invalid or expired operator bearer"))?;
+            .map_err(|_| Unauthorized)?;
         platform::require_admin(self.fga, &caller.uid).await?;
         if bundle.has_admin_grant() {
             platform::require_root(tx, &caller.uid).await?;
@@ -227,85 +149,143 @@ impl Importer<'_> {
         Ok(caller.uid)
     }
 
-    /// Every predictable input, identity and space conflict is checked before creating
-    /// the first identity. State is reread under locks for each mutation phase.
+    /// All predictable conflicts are checked for the whole bundle before writes.
+    /// Directory traversal does not hold mutation locks; reconciliation rereads state.
     async fn preflight(&self, bundle: &Bundle) -> Result<()> {
         let mut tx = bootstrap::locked(self.pool).await?;
         self.authorize(&mut tx, bundle).await?;
-        self.validate_spaces(&mut tx, bundle).await?;
-        tx.rollback().await?; // Do not block revocations during read-only directory traversal.
+        tx.rollback().await?;
+        let mut subjects = BTreeMap::new();
         for entry in &bundle.users {
             let user = &entry.identity;
-            if self
-                .directory
-                .find_username(&user.username)
-                .await?
-                .is_none()
-            {
-                ensure!(
-                    user.password.as_ref().is_some_and(|p| !p.is_empty()),
-                    "missing identity requires a password"
-                );
+            match self.directory.find_username(&user.username).await? {
+                Some(found) => {
+                    subjects.insert(user.username.clone(), found.id);
+                }
+                None if !user.password.as_ref().is_some_and(|p| !p.is_empty()) => {
+                    return Err(invalid("missing identity requires a password"));
+                }
+                None => (),
             }
         }
+        let mut tx = bootstrap::locked(self.pool).await?;
+        self.authorize(&mut tx, bundle).await?;
+        let resolved = self.resolve_spaces(&mut tx, bundle).await?;
+        self.validate_parents(bundle, &resolved, &subjects, None)
+            .await?;
+        tx.rollback().await?;
         Ok(())
     }
 
-    async fn validate_spaces(
+    /// Resolve names under the platform lock, then lock every organization in UUID
+    /// order. The returned IDs are candidates until the enclosing SQL commit.
+    async fn resolve_spaces(
         &self,
         tx: &mut Transaction<'_, Postgres>,
         bundle: &Bundle,
-    ) -> Result<Option<Space>> {
-        let org = db::named_space(&mut **tx, None, &bundle.organization.name).await?;
-        if let Some(org) = &org {
-            ensure!(
-                org.kind == SpaceKind::Organization && org.personal_owner.is_none(),
-                "incompatible organization collision"
-            );
-            spaces::lock_organization(tx, org).await?;
-        }
-        for name in bundle.teams() {
-            let team = if let Some(org) = &org {
-                db::named_space(&mut **tx, Some(org.id), name).await?
-            } else {
-                None
-            };
-            if let Some(team) = team {
-                ensure!(
-                    team.kind == SpaceKind::Team && team.personal_owner.is_none(),
-                    "incompatible or personal team collision"
-                );
-            } else {
-                ensure!(
-                    bundle.declares_admin(name),
-                    "new team requires a declared team admin"
-                );
+    ) -> Result<Vec<(Space, bool)>> {
+        let mut resolved: Vec<(Space, bool)> = Vec::new();
+        for organizations in [true, false] {
+            for declaration in bundle
+                .spaces
+                .iter()
+                .filter(|s| (s.kind == SpaceKind::Organization) == organizations)
+            {
+                let parent = declaration.parent.map(|p| &resolved[p].0);
+                let parent_new = declaration.parent.is_some_and(|p| resolved[p].1);
+                let existing = if parent_new {
+                    None
+                } else {
+                    db::named_space(&mut **tx, parent.map(|p| p.id), &declaration.name).await?
+                };
+                let is_new = existing.is_none();
+                let space = if let Some(existing) = existing {
+                    if existing.kind != declaration.kind || existing.personal_owner.is_some() {
+                        return Err(conflict("incompatible or personal space collision"));
+                    }
+                    existing
+                } else {
+                    if !declaration.roles.values().any(|r| r.contains(&Role::Admin)) {
+                        return Err(invalid("new space requires a declared admin"));
+                    }
+                    let id = Uuid::new_v4();
+                    Space {
+                        id,
+                        name: declaration.name.clone(),
+                        kind: declaration.kind,
+                        parent_id: parent.map(|p| p.id),
+                        personal_owner: None,
+                        path: crate::domain::space_path(parent, id),
+                    }
+                };
+                resolved.push((space, is_new));
+            }
+            if !organizations {
+                break;
+            }
+            let mut organizations: Vec<_> = resolved
+                .iter()
+                .filter(|(s, _)| s.kind == SpaceKind::Organization)
+                .map(|(s, _)| s)
+                .collect();
+            organizations.sort_by_key(|s| s.id);
+            for org in organizations {
+                spaces::lock_organization(tx, org).await?;
             }
         }
-        Ok(org)
+        Ok(resolved)
+    }
+
+    async fn validate_parents(
+        &self,
+        bundle: &Bundle,
+        resolved: &[(Space, bool)],
+        subjects: &BTreeMap<String, String>,
+        organization: Option<Uuid>,
+    ) -> Result<()> {
+        for (i, child) in bundle.spaces.iter().enumerate() {
+            if organization.is_some_and(|o| resolved[i].0.path[0] != o) {
+                continue;
+            }
+            let Some(p) = child.parent else {
+                continue;
+            };
+            for (username, roles) in &child.roles {
+                if roles.is_empty() {
+                    continue;
+                }
+                // This domain predicate describes declared direct roles. Existing
+                // effective access is always evaluated by the pinned OpenFGA model.
+                if bundle.spaces[p]
+                    .roles
+                    .get(username)
+                    .is_some_and(|r| r.iter().any(|r| r.grants_content()))
+                {
+                    continue;
+                }
+                let allowed =
+                    if let Some(subject) = subjects.get(username).filter(|_| !resolved[p].1) {
+                        self.fga
+                            .check(subject, Permission::Read, resolved[p].0.id)
+                            .await?
+                    } else {
+                        false
+                    };
+                if !allowed {
+                    return Err(invalid("child role requires parent content membership"));
+                }
+            }
+        }
+        Ok(())
     }
 
     pub async fn run(&self, bundle: &Bundle) -> Result<Report> {
         let mut report = Report::default();
         // Error causes from SQL may contain user-supplied values. Return only safe phase
         // and counters; upstream bodies and bundle values never enter the error chain.
-        if let Err(error) = self.preflight(bundle).await {
-            // Our input/authorization messages are static; SQL/dependency diagnostics are not.
-            let reason = match error.to_string().as_str() {
-                "missing identity requires a password" => "missing identity requires a password",
-                "new team requires a declared team admin" => {
-                    "new team requires a declared team admin"
-                }
-                "incompatible or personal team collision" => {
-                    "incompatible or personal team collision"
-                }
-                "forbidden" => "forbidden",
-                _ => "authentication, directory or state validation failed",
-            };
-            bail!(
-                "provisioning preflight failed: {reason}; {report}; correct the cause and replay"
-            );
-        }
+        self.preflight(bundle)
+            .await
+            .map_err(|e| Failure::at("preflight", e, &report))?;
         let mut subjects = BTreeMap::new();
         for entry in &bundle.users {
             let result = async {
@@ -332,21 +312,11 @@ impl Importer<'_> {
                 Ok::<_, anyhow::Error>(())
             }
             .await;
-            if result.is_err() {
-                bail!(
-                    "provisioning identities failed; {report}; correct the cause and replay (acknowledgments may be incomplete)"
-                );
-            }
+            result.map_err(|e| Failure::at("identities", e, &report))?;
         }
-        if self
-            .reconcile(bundle, &subjects, &mut report)
+        self.reconcile(bundle, &subjects, &mut report)
             .await
-            .is_err()
-        {
-            bail!(
-                "provisioning roles/spaces failed; {report}; correct the cause and replay (acknowledgments may be incomplete)"
-            );
-        }
+            .map_err(|e| Failure::at("roles/spaces", e, &report))?;
         Ok(report)
     }
 
@@ -358,112 +328,83 @@ impl Importer<'_> {
     ) -> Result<()> {
         let mut tx = bootstrap::locked(self.pool).await?;
         self.authorize(&mut tx, bundle).await?;
-        let existing = self.validate_spaces(&mut tx, bundle).await?;
-        let is_new = existing.is_none();
-        let org = existing.unwrap_or_else(|| {
-            let id = Uuid::new_v4();
-            Space {
-                id,
-                name: bundle.organization.name.clone(),
-                kind: SpaceKind::Organization,
-                parent_id: None,
-                personal_owner: None,
-                path: vec![id],
+        let resolved = self.resolve_spaces(&mut tx, bundle).await?;
+        // Whole-bundle checks precede publication; each subtree is checked again
+        // after capturing its guard, so a late revoke cannot invalidate the decision.
+        self.validate_parents(bundle, &resolved, subjects, None)
+            .await?;
+        for (org, is_new) in resolved
+            .iter()
+            .filter(|(s, _)| s.kind == SpaceKind::Organization)
+        {
+            if *is_new {
+                self.fga
+                    .initialize_guard(Scope::Organization(org.id))
+                    .await?;
             }
-        });
-        // A fresh organization cannot have other mutations yet; lock it before insertion.
-        spaces::lock_organization(&mut tx, &org).await?;
-        if is_new {
-            self.fga
-                .initialize_guard(Scope::Organization(org.id))
+            let mut guard = self
+                .fga
+                .guard(&[Scope::Platform, Scope::Organization(org.id)])
                 .await?;
-        }
-        let mut guard = self
-            .fga
-            .guard(&[Scope::Platform, Scope::Organization(org.id)])
-            .await?;
-        let actor = self.authorize(&mut tx, bundle).await?;
-        if db::named_space(&mut *tx, None, &org.name).await?.is_none() {
-            db::insert_space(&mut tx, &org).await?;
-        }
-        let mut parent = Vec::new();
-        for entry in &bundle.users {
-            let user = &subjects[&entry.identity.username];
-            let admin = bundle
-                .organization
-                .admins
-                .contains(&entry.identity.username);
-            if admin {
-                parent.push(Tuple {
-                    user,
-                    role: Role::Admin,
-                    space: org.id,
-                });
-            }
-            if admin || !entry.teams.is_empty() {
-                parent.push(Tuple {
-                    user,
-                    role: Role::Member,
-                    space: org.id,
-                });
-            }
-        }
-        self.grant_spaces(&mut tx, &mut guard, bundle, &actor, &parent, report)
-            .await?;
-        for name in bundle.teams() {
-            let team = match db::named_space(&mut *tx, Some(org.id), name).await? {
-                Some(team) => team,
-                None => {
-                    let id = Uuid::new_v4();
-                    let team = Space {
-                        id,
-                        name: name.into(),
-                        kind: SpaceKind::Team,
-                        parent_id: Some(org.id),
-                        personal_owner: None,
-                        path: vec![org.id, id],
-                    };
-                    db::insert_space(&mut tx, &team).await?;
-                    team
-                }
-            };
-            let grants: Vec<_> = bundle
-                .users
+            let actor = self.authorize(&mut tx, bundle).await?;
+            self.validate_parents(bundle, &resolved, subjects, Some(org.id))
+                .await?;
+            let mut wrote = false;
+            for (declaration, (space, is_new)) in bundle
+                .spaces
                 .iter()
-                .flat_map(|entry| {
-                    let user = subjects[&entry.identity.username].as_str();
-                    entry
-                        .teams
-                        .get(name)
-                        .into_iter()
-                        .flatten()
-                        .map(move |role| Tuple {
+                .zip(&resolved)
+                .filter(|(_, (s, _))| s.path[0] == org.id)
+            {
+                if *is_new {
+                    db::insert_space(&mut tx, space).await?;
+                }
+                let grants: Vec<_> = declaration
+                    .roles
+                    .iter()
+                    .flat_map(|(username, roles)| {
+                        let user = subjects[username].as_str();
+                        roles.iter().map(move |role| Tuple {
                             user,
                             role: *role,
-                            space: team.id,
+                            space: space.id,
                         })
-                })
-                .collect();
-            self.grant_spaces(&mut tx, &mut guard, bundle, &actor, &grants, report)
-                .await?;
-        }
-        for entry in &bundle.users {
-            for role in &entry.platform {
-                self.authorize(&mut tx, bundle).await?;
-                let user = &subjects[&entry.identity.username];
-                ensure!(
-                    self.directory.exists(user).await?,
-                    "identity disappeared before platform grant"
-                );
-                self.fga
-                    .write_platform(&mut guard, user, *role, true)
+                    })
+                    .collect();
+                wrote |= !grants.is_empty();
+                self.grant_spaces(&mut tx, &mut guard, bundle, &actor, &grants, report)
                     .await?;
-                report.grants_acknowledged += 1;
-                logging::audit_relation(Some(&actor), user, role.relation(), "platform:root", true);
+            }
+            if !wrote {
+                self.fga.fence(&mut guard).await?;
+            }
+        }
+        if bundle.users.iter().any(|e| !e.platform.is_empty()) {
+            let mut guard = self.fga.guard(&[Scope::Platform]).await?;
+            for entry in &bundle.users {
+                for role in &entry.platform {
+                    let actor = self.authorize(&mut tx, bundle).await?;
+                    let user = &subjects[&entry.identity.username];
+                    ensure!(
+                        self.directory.exists(user).await?,
+                        "identity disappeared before platform grant"
+                    );
+                    self.fga
+                        .write_platform(&mut guard, user, *role, true)
+                        .await?;
+                    report.grants_acknowledged += 1;
+                    logging::audit_relation(
+                        Some(&actor),
+                        user,
+                        role.relation(),
+                        "platform:root",
+                        true,
+                    );
+                }
             }
         }
         tx.commit().await?;
-        report.spaces_reconciled = 1 + bundle.teams().len();
+        report.spaces_reconciled = resolved.len();
         Ok(())
     }
 
@@ -494,73 +435,5 @@ impl Importer<'_> {
             }
         }
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-    fn input() -> serde_json::Value {
-        json!({"organization":{"name":"TSN","admins":["alice"]},"users":[{"username":"alice","teams":["BID","fallback"],"team_roles":{"team_admin":["BID"],"team_analyst":["BID"]},"platform_roles":["admin","platform_admin","observer","platform_observer","team_manager","feature_manager","prompt_editor"]}]})
-    }
-    #[test]
-    fn all_roles_aliases_cumulative_grants_and_per_entry_fallback() {
-        let bundle = Bundle::parse(&serde_json::to_vec(&input()).unwrap()).unwrap();
-        let user = &bundle.users[0];
-        assert_eq!(user.platform.len(), 5);
-        assert_eq!(user.teams["BID"], vec![Role::Admin, Role::Analyst]);
-        assert_eq!(user.teams["fallback"], vec![Role::Member]);
-    }
-    #[test]
-    fn duplicate_raw_role_keys_are_rejected() {
-        assert!(Bundle::parse(br#"{"organization":{"name":"O","admins":["u"]},"users":[{"username":"u","team_roles":{"team_member":["A"],"team_member":["B"]}}]}"#).is_err());
-    }
-
-    // Proves: I11
-    #[test]
-    fn malformed_declarations_never_echo_payloads() {
-        let mut cases = vec![
-            json!({"private-password": true}),
-            json!({"organization":{"name":"","admins":[]},"users":[]}),
-        ];
-        for field in [
-            "username",
-            "teams",
-            "team_roles",
-            "platform_roles",
-            "password",
-        ] {
-            let mut value = input();
-            value["users"][0][field] = json!({"private-password":true});
-            cases.push(value);
-        }
-        let mut duplicate = input();
-        let user = duplicate["users"][0].clone();
-        duplicate["users"].as_array_mut().unwrap().push(user);
-        cases.push(duplicate);
-        for field in ["platform_roles", "teams"] {
-            let mut value = input();
-            value["users"][0][field] = json!([""]);
-            cases.push(value);
-        }
-        for role in ["pending_team_admin", "suspended", "private-password"] {
-            let mut value = input();
-            value["users"][0]["team_roles"] = json!({role:["BID"]});
-            cases.push(value);
-        }
-        let mut unknown = input();
-        unknown["users"][0]["private-password"] = json!(true);
-        cases.push(unknown);
-        let mut missing = input();
-        missing["organization"]["admins"] = json!(["missing"]);
-        cases.push(missing);
-        for value in cases {
-            let error = Bundle::parse(&serde_json::to_vec(&value).unwrap())
-                .err()
-                .expect("must reject");
-            assert!(!format!("{error:?}").contains("private-password"));
-        }
-        assert!(Bundle::parse(br#"{"password":"private-password", broken"#).is_err());
     }
 }

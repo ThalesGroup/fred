@@ -31,3 +31,5 @@ pub mod roles;
 pub mod spaces;
 
 pub mod provisioning;
+
+pub mod blueprint;

@@ -155,8 +155,10 @@ requiring verified platform-admin authority before upload reading and root
 for any platform-admin grant before provisioning writes. It SHALL use the same
 identity and reconciliation behavior as the CLI. It SHALL return HTTP 200 with
 reconciliation counts only after successful completion, never a fabricated task
-ID or early success. Errors SHALL retain safe phase/count information, use Fred's
-`detail` envelope and never expose credentials, input bodies or upstream bodies.
+ID or early success. Importer failures SHALL retain safe phase/count information. Early upload, parsing
+and authorization failures SHALL use `detail` without reconciliation counts. All
+errors SHALL use Fred's `detail` envelope and never expose credentials, input bodies
+or upstream bodies.
 Old/unsupported input SHALL return HTTP 422 with `not_yet_supported`.
 
 ZIP data SHALL be read without extraction and bounded to 50 MiB compressed and

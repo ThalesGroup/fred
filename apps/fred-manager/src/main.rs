@@ -21,7 +21,7 @@ use fred_manager::{
     api, auth, config::Configuration as Config, fga::Fga, ingestion, logging, spaces,
 };
 
-const USAGE: &str = "usage: fred-manager [serve | migrate-authorization | create-org <name> <admin-user> | import-provisioning <bundle.json> --token-file <path>]";
+const USAGE: &str = "usage: fred-manager [serve | migrate-authorization | create-org <name> <admin-user> | import-provisioning <bundle.zip> --token-file <path>]";
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -206,10 +206,16 @@ async fn import(config: Config, bundle_file: &str, token_file: &str) -> Result<(
             fga.is_platform_admin(&caller.uid).await?,
             "import requires platform admin"
         );
-        let bytes = tokio::fs::read(bundle_file)
+        use tokio::io::AsyncReadExt;
+        let file = tokio::fs::File::open(bundle_file)
             .await
             .map_err(|_| anyhow::anyhow!("cannot read provisioning bundle"))?;
-        let bundle = Bundle::parse(&bytes)?;
+        let mut bytes = Vec::new();
+        file.take(fred_manager::blueprint::MAX_ARCHIVE as u64 + 1)
+            .read_to_end(&mut bytes)
+            .await
+            .map_err(|_| anyhow::anyhow!("cannot read provisioning bundle"))?;
+        let bundle = tokio::task::spawn_blocking(move || Bundle::parse(&bytes)).await??;
         Ok::<_, anyhow::Error>((pool, fga, directory, auth, bearer, bundle))
     }
     .await;
@@ -242,15 +248,9 @@ fn import_setup_error(error: anyhow::Error) -> anyhow::Error {
         | "initialize the compatible fred-manager schema with serve before import"
         | "initialize fred-manager with serve before import"
         | "initialize the compatible fred-manager model with serve before import"
-        | "invalid provisioning JSON or unknown field"
-        | "organization name must be nonempty"
-        | "organization admins must be nonempty"
-        | "username must be nonempty"
-        | "duplicate username"
-        | "team name must be nonempty"
-        | "unknown or non-assignable team role"
-        | "unknown or non-assignable platform role"
-        | "organization admin must name a bundle user" => message.as_str(),
+        | "not_yet_supported"
+        | "invalid provisioning ZIP or declaration"
+        | "provisioning bundle exceeds size limit" => message.as_str(),
         _ => "configuration or dependency validation failed",
     };
     anyhow::anyhow!(

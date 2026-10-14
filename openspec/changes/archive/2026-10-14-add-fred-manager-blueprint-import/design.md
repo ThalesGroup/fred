@@ -5,7 +5,9 @@ with preflight, platform/root checks and additive reconciliation. Its space mode
 supports projects; its importer currently accepts one organization and teams.
 
 The control-plane `build-demo-bundle` target packages checked-in fixtures using
-`zip -q -X`. Reuse that command and file-variable convention in fred-manager.
+`zip -q -X`. Fred-manager keeps the Make target and file-variable convention;
+Python standard-library packaging quotes no shell paths and replaces the output
+atomically without retaining stale archive entries.
 The user's latest instruction explicitly removes legacy input compatibility.
 
 ## Goals / Non-Goals
@@ -18,7 +20,7 @@ reproduction. See the proposal for exclusions.
 
 ## Authorization storage decision
 
-Two real-OpenFGA fault tests now reproduce the unknown-completion gap: a delayed
+Two real-OpenFGA fault tests reproduced the baseline unknown-completion gap: a delayed
 child grant becomes effective after parent revocation (I4), and a delayed platform
 grant becomes effective after its actor loses platform-admin authority (I5).
 The proxy explicitly models an accepted request surviving caller cancellation;

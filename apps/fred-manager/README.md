@@ -75,47 +75,52 @@ The [deployment chapter](../../docs/architecture/07-deployment.md) describes con
 
 ## Import a provisioning bundle
 
-After compatible service initialization and root bootstrap, save a platform administrator's
+Build the checked-in demo, without running services:
+
+```sh
+make build-demo-bundle
+# Optional overrides, with the same names as control-plane:
+make build-demo-bundle DEMO_PROVISIONING_FIXTURE_DIR="/path/to/fixtures" DEMO_BUNDLE_FILE="/path/to/demo.zip"
+```
+
+The ZIP contains exactly `manifest.json`, `users.json`, `organizations.json`,
+`teams.json` and `projects.json`. The manifest declares `format_version: 2`,
+`users_schema_version: 2`, `source_platform: "swift"`. The four data files are arrays.
+The demo contains 15 identities, one organization, three teams and an empty project
+array. Demo passwords are test credentials. The
+[declaration contract](../../docs/architecture/05-data-and-authorization.md#provisioning-declarations)
+defines explicit parent references and roles, including projects. Old JSON and
+Python version-1 ZIPs return `not_yet_supported`; no conversion is performed.
+
+After compatible initialization and root bootstrap, save a platform administrator's
 access token in a private file and run:
 
 ```sh
-make import-provisioning BUNDLE=/path/to/bundle.json TOKEN_FILE=/path/to/operator-token
+make import-provisioning BUNDLE=target/demo-provisioning-bundle.zip TOKEN_FILE=/path/to/operator-token
 # Equivalent binary command:
-fred-manager import-provisioning /path/to/bundle.json --token-file /path/to/operator-token
+fred-manager import-provisioning /path/to/bundle.zip --token-file /path/to/operator-token
 ```
 
-The command reads the usual configuration and secrets. It needs the manager's service
-client described above, but neither the running HTTP server nor Temporal. It never creates
-or migrates the database schema or FGA model. A bundle declaring `admin`/`platform_admin`
-requires the bootstrap root, even when that grant already exists.
+The CLI uses the normal configuration and the manager's Keycloak service client.
+It needs neither the running HTTP server nor Temporal and never initializes or
+migrates SQL/OpenFGA. The HTTP equivalent is multipart
+`POST /fred-manager/v1/import-export/import`, with exactly one field named `file`
+and the operator bearer. It checks platform authority before reading the upload.
+A bundle declaring platform admin requires the bootstrap root, even on replay;
+the demo includes such a declaration. Archive limits are 50 MiB compressed and
+100 MiB expanded, with no filesystem extraction.
 
-```json
-{
-  "organization": { "name": "TSN", "admins": ["alice"] },
-  "users": [
-    {
-      "username": "alice",
-      "password": "<initial-password-for-a-new-user>",
-      "first_name": "Alice",
-      "last_name": "Example",
-      "teams": ["BID"],
-      "team_roles": { "team_admin": ["BID"] },
-      "platform_roles": ["observer"]
-    }
-  ]
-}
-```
+Existing identities keep their profile and password; new identities need a
+nonempty password. All space roles are explicit: admin alone grants no content
+access, and every child-role holder needs parent content membership. Replay
+preserves committed space IDs and undeclared grants and repairs requested grants.
+Success returns JSON counts only after completion. A failed run reports a safe
+phase and acknowledgment counts; correct the cause and replay with a valid token.
+There is no cross-system rollback, so failure does not prove absence of effects.
 
-The user entries use the control-plane `users.json` fields. Existing identities need no
-password and keep their profile and credential. Missing identities require a nonempty
-password. The example gives Alice organization admin/member and team admin, without team
-content access. The [declaration rules](../../docs/architecture/05-data-and-authorization.md#provisioning-declarations)
-cover all roles, aliases and member fallback.
-
-Success prints JSON acknowledgment counts. Failure exits nonzero with the phase and safe
-counts; correct the cause and replay with a valid operator token. Replay preserves existing
-identities, committed space IDs and undeclared grants, and repairs requested grants. There
-is no cross-system rollback. Never treat a failed run as proof that nothing was written.
+`make test-integration` imports the actual Make artifact over HTTP with disposable
+Keycloak, PostgreSQL and OpenFGA, verifies replay and identity preservation, and
+imports a variant with a project.
 
 ## Upgrade existing authorization
 

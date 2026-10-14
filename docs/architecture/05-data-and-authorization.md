@@ -188,7 +188,7 @@ type guard
 | I15 | Only the completed bootstrap root changes platform-admin grants; its own grant is protected. New platform grants target an existing Keycloak subject. | `platform`, platform lock, directory lookup |
 | I16 | Every acknowledged role mutation emits a security audit event before SQL commit, independently of application severity and text/JSON format. | `logging::audit_relation`, mutation services |
 | I17 | Provisioning replay preserves existing identities, committed space IDs and undeclared grants, and repairs requested grants without reusing rolled-back space IDs. | `provisioning`, exact directory lookup, SQL uniqueness |
-| I18 | Import requires a verified platform administrator and compatible initialized state; predictable preflight failures cause no provisioning or initialization writes. | CLI read-only initialization, `Importer::preflight`, root guard |
+| I18 | Import requires a verified platform administrator and compatible initialized state; predictable preflight failures cause no provisioning or initialization writes. | CLI read-only initialization, HTTP authority-before-upload, `Importer::preflight`, root guard |
 
 Roles are cumulative and scoped to one space. Analyst grants content read and the capabilities
 `run_evaluations`, `manage_evaluation_corpus` and `read_conversations_for_evaluation`.
@@ -210,24 +210,32 @@ supported direct/union expressions to `model.json`, and `make check-model` check
 
 ## Provisioning declarations
 
-The bundle has `organization: { name, admins }` and a `users` array. Organization name
-and admins are nonempty; admins reference usernames in that array. User fields match
-the control-plane `users.json`: `username`, optional `email`, `first_name`, `last_name`,
-`password`, and default-empty `teams`, `team_roles`, `platform_roles`.
+The ZIP has exactly five root files. `manifest.json` declares
+`{"format_version":2,"users_schema_version":2,"source_platform":"swift"}`. The
+other files are arrays:
 
-| Declaration | Direct grants |
+| File | Declaration |
 | --- | --- |
-| Organization admin | Organization `admin` and `member` |
-| Any team role | Organization `member`, plus the declared team role |
-| `team_member`, `team_editor`, `team_admin`, `team_analyst` | Team `member`, `editor`, `admin`, `analyst`, respectively |
-| `teams` entry without an explicit role for that team in the same user entry | Team `member` |
-| Platform role only | Platform grant, no space grant |
+| `users.json` | Unique `username`, optional `email`, `first_name`, `last_name`, `password`, default-empty `platform_roles` |
+| `organizations.json` | `ref`, `name`, `roles`; at least one organization |
+| `teams.json` | `ref`, `name`, `organization` reference, `roles` |
+| `projects.json` | `ref`, `name`, `team` reference, `roles`; empty array accepted |
 
-Explicit team roles accumulate and suppress the `teams` member fallback for that user
-and team. Every new team requires a declared team admin. Platform aliases `admin` and
-`observer` normalize to `platform_admin` and `platform_observer`; equivalent declarations
-are deduplicated. Unknown fields/roles, duplicate usernames, duplicate role-object keys,
-empty names and non-assignable lifecycle roles are rejected, never ignored.
+A roles object maps declared usernames to arrays of `member`, `editor`, `analyst`,
+`admin`. Roles accumulate and equivalent grants are deduplicated. Admin confers no
+implicit content role. Every new space requires a declared admin. Every child-role
+holder requires declared or existing parent content access. Existing access is
+checked by OpenFGA; no space grant is synthesized. The demo explicitly declares
+organization membership for team-role holders.
+
+References are nonempty and unique across the entire bundle. Parents and role
+subjects must be declared. Space names are nonempty and unique within each parent;
+homonyms under distinct parents remain distinct. Platform aliases `admin` and
+`observer` normalize to `platform_admin` and `platform_observer`. Unknown fields/roles,
+duplicate JSON keys, usernames, references and sibling names are rejected. Legacy
+`teams`/`team_roles` user fields are not accepted. Old JSON and Python version-1 ZIPs,
+unknown versions/sections and multidisk formats return `not_yet_supported`.
+Malformed archives, unsupported compression, encryption and symlinks are rejected.
 
 Missing identities require a nonempty password and are created enabled with a
 non-temporary credential. Absent or empty email uses `<username>@example.com`;

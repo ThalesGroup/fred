@@ -109,10 +109,17 @@ BUNDLE ?=
 TOKEN_FILE ?=
 export BUNDLE TOKEN_FILE
 .PHONY: import-provisioning
-import-provisioning: dev ## Import a bundle as platform admin (BUNDLE=<json path> TOKEN_FILE=<bearer file path>); replay is additive
+import-provisioning: dev ## Import a bundle as platform admin (BUNDLE=<zip path> TOKEN_FILE=<bearer file path>); replay is additive
 	@test -n "$$BUNDLE" && test -n "$$TOKEN_FILE" || { echo 'Usage: make import-provisioning BUNDLE=<path> TOKEN_FILE=<path>'; exit 1; }
 	$(CARGO) run -- import-provisioning "$$BUNDLE" --token-file "$$TOKEN_FILE"
 
 .PHONY: migrate-authorization
 migrate-authorization: dev ## Offline cutover: stop legacy writers and settle pending writes before running
 	$(CARGO) run -- migrate-authorization
+
+DEMO_PROVISIONING_FIXTURE_DIR ?= tests/fixtures/import_export/demo_provisioning
+DEMO_BUNDLE_FILE ?= target/demo-provisioning-bundle.zip
+export DEMO_PROVISIONING_FIXTURE_DIR DEMO_BUNDLE_FILE
+.PHONY: build-demo-bundle
+build-demo-bundle: ## Build the demo provisioning ZIP without running services
+	python3 tools/build_demo_bundle.py

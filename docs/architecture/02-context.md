@@ -3,7 +3,7 @@
 ```mermaid
 flowchart LR
     client["Client<br/>browser application"]
-    operator["Platform administrator<br/>CLI import + bearer file"]
+    operator["Platform administrator<br/>CLI or HTTP ZIP import"]
     caller["Service acting for a user<br/>with the user's token"]
     manager["fred-manager<br/>CLI and REST /fred-manager/v1"]
     keycloak["Keycloak<br/>realm app"]
@@ -11,7 +11,7 @@ flowchart LR
     postgres[("Postgres<br/>database fred")]
     temporal["Temporal<br/>queue fred-ingestion"]
 
-    operator -- "provisioning bundle" --> manager
+    operator -- "ZIP + operator bearer" --> manager
     client -- "bearer token" --> manager
     caller -- "authorize document,<br/>authorize scope" --> manager
     client -- "login" --> keycloak

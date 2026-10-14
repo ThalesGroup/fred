@@ -91,7 +91,6 @@ pub fn router(state: AppState, base_url: &str, authorized_origins: &[String]) ->
             get(|| async { Json(serde_json::json!({ "status": "ok" })) }),
         )
         .route("/bootstrap/platform-admin", post(bootstrap_platform_admin))
-        .route("/me/spaces", get(my_spaces))
         .route("/me/personal-space", post(create_personal_space))
         .route("/spaces", post(create_space))
         .route(
@@ -202,7 +201,7 @@ struct MySpace {
 }
 
 async fn my_spaces(
-    State(s): State<AppState>,
+    State(s): State<GovernanceState>,
     CurrentUser { uid: user, .. }: CurrentUser,
 ) -> AppResult<Json<Vec<MySpace>>> {
     let roles = s.fga.roles_of(&user).await?;
@@ -723,6 +722,13 @@ impl FromRef<GovernanceState> for Arc<Authenticator> {
 pub fn governance_router(state: GovernanceState) -> Router {
     Router::new()
         .route("/me", get(me))
+        .route("/me/spaces", get(my_spaces))
+        .route(
+            "/import-export/import",
+            post(import_blueprint).layer(axum::extract::DefaultBodyLimit::max(
+                crate::blueprint::MAX_ARCHIVE + 64 * 1024,
+            )),
+        )
         .route("/users/platform-roles", get(list_platform_roles))
         .route(
             "/users/{user}/platform-roles/{role}",
@@ -733,4 +739,66 @@ pub fn governance_router(state: GovernanceState) -> Router {
         .route("/authorize/space", post(authorize_space))
         .route_layer(axum::middleware::from_fn(logging::expose_route))
         .with_state(state)
+}
+
+/// Authenticate and check platform authority before constructing the body extractor.
+/// Only the ZIP's file bytes are parsed, and all parsing precedes provisioning.
+async fn import_blueprint(
+    State(s): State<GovernanceState>,
+    user: CurrentUser,
+    request: axum::extract::Request,
+) -> axum::response::Response {
+    use crate::{
+        blueprint::{Bundle, InputError, MAX_ARCHIVE},
+        provisioning::Importer,
+    };
+    use axum::{
+        extract::{FromRequest, Multipart},
+        response::IntoResponse,
+    };
+    let result = async {
+        require_directory_actor(&s).map_err(IntoResponse::into_response)?;
+        match s.fga.is_platform_admin(&user.uid).await {
+            Ok(true) => (),
+            Ok(false) => return Err(AppError::Forbidden.into_response()),
+            Err(_) => return Err(AppError::Unavailable("authorization unavailable".into()).into_response()),
+        }
+        let directory = s.directory.as_ref().filter(|d| s.auth.directory_subjects_match(d.realm()))
+            .ok_or_else(|| AppError::Unavailable("import requires configured Keycloak service credentials and matching subject authentication".into()).into_response())?;
+        let bearer = request.headers().get(header::AUTHORIZATION).and_then(|h| h.to_str().ok())
+            .and_then(|h| h.split_once(' ')).filter(|(scheme,_)| scheme.eq_ignore_ascii_case("bearer")).map(|(_,token)| token.trim()).unwrap_or("").to_owned();
+        let mut multipart = Multipart::from_request(request, &s).await.map_err(|e| upload_error(e.status()))?;
+        let mut field = multipart.next_field().await.map_err(|e| upload_error(e.status()))?
+            .ok_or_else(|| upload_error(StatusCode::BAD_REQUEST))?;
+        if field.name() != Some("file") { return Err(upload_error(StatusCode::BAD_REQUEST)); }
+        let mut bytes = Vec::new();
+        while let Some(chunk) = field.chunk().await.map_err(|e| upload_error(e.status()))? {
+            if chunk.len() > MAX_ARCHIVE - bytes.len() { return Err(upload_error(StatusCode::PAYLOAD_TOO_LARGE)); }
+            bytes.extend_from_slice(&chunk);
+        }
+        drop(field); // Release multer's exclusive field handle before checking for another.
+        if multipart.next_field().await.map_err(|e| upload_error(e.status()))?.is_some() { return Err(upload_error(StatusCode::BAD_REQUEST)); }
+        let bundle = tokio::task::spawn_blocking(move || Bundle::parse(&bytes)).await
+            .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"detail":"import parsing failed"}))).into_response())?
+            .map_err(|error| {
+                let status = match error { InputError::TooLarge => StatusCode::PAYLOAD_TOO_LARGE, _ => StatusCode::UNPROCESSABLE_ENTITY };
+                (status, Json(serde_json::json!({"detail":error.to_string()}))).into_response()
+            })?;
+        let report = Importer { pool: &s.pool, fga: &s.fga, directory, auth: &s.auth, bearer: &bearer }.run(&bundle).await
+            .map_err(|error| {
+                let status = error.downcast_ref::<crate::provisioning::Failure>().map(|e| e.status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+                (status, Json(serde_json::json!({"detail":error.to_string()}))).into_response()
+            })?;
+        Ok::<_, axum::response::Response>(Json(report).into_response())
+    }.await;
+    result.unwrap_or_else(|response| response)
+}
+fn upload_error(status: StatusCode) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    let status = if status == StatusCode::PAYLOAD_TOO_LARGE {
+        status
+    } else {
+        StatusCode::BAD_REQUEST
+    };
+    (status, Json(serde_json::json!({"detail": if status == StatusCode::PAYLOAD_TOO_LARGE { "provisioning bundle exceeds size limit" } else { "expected one multipart file" }}))).into_response()
 }

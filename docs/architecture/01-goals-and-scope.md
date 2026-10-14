@@ -13,7 +13,7 @@ write or manage them.
 | One-check content access, and the search scope of a space | 4, 5 |
 | Bearer authentication against the Keycloak realm | 6 |
 | The one-time root platform admin | 4 |
-| Authenticated CLI provisioning of identities, organizations, teams and roles | 4, 7 |
+| Authenticated CLI/HTTP ZIP provisioning of identities, organizations, teams, projects and roles | 4, 7 |
 | Submission of ingestion and deletion work to Temporal | 4 |
 | Structured stdout logging, request correlation | 6 |
 

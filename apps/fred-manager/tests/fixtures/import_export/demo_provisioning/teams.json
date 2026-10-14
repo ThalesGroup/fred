@@ -1,0 +1,61 @@
+[
+  {
+    "ref": "fredlab",
+    "name": "fredlab",
+    "organization": "demo",
+    "roles": {
+      "bob": [
+        "editor"
+      ],
+      "zoe": [
+        "member"
+      ],
+      "marc": [
+        "admin"
+      ],
+      "elena": [
+        "analyst"
+      ],
+      "priya": [
+        "admin",
+        "editor",
+        "analyst"
+      ]
+    }
+  },
+  {
+    "ref": "northbridge",
+    "name": "northbridge",
+    "organization": "demo",
+    "roles": {
+      "bob": [
+        "editor"
+      ],
+      "phil": [
+        "member"
+      ],
+      "sophia": [
+        "admin"
+      ],
+      "derek": [
+        "editor"
+      ]
+    }
+  },
+  {
+    "ref": "swiftpost",
+    "name": "swiftpost",
+    "organization": "demo",
+    "roles": {
+      "phil": [
+        "member"
+      ],
+      "liam": [
+        "member"
+      ],
+      "nadia": [
+        "admin"
+      ]
+    }
+  }
+]
