@@ -176,6 +176,7 @@ mod tests {
         }
     }
 
+    // Proves: I1
     #[test]
     fn parent_rules() {
         let org = space(SpaceKind::Organization, None, false);
@@ -195,6 +196,7 @@ mod tests {
         assert!(check_parent(SpaceKind::Project, Some(&project)).is_err());
     }
 
+    // Proves: I7
     #[test]
     fn search_scope_is_ancestors_then_self() {
         let tsn = space(SpaceKind::Organization, None, false);

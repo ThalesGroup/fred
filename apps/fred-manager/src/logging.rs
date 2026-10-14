@@ -481,6 +481,7 @@ mod tests {
         assert_eq!(line["space_id"], "s-1");
     }
 
+    // Proves: I11
     #[test]
     fn sensitive_and_reserved_fields_never_leak() {
         let line = json_line(|| {
@@ -498,6 +499,7 @@ mod tests {
         assert_eq!(line["kept"], 1);
     }
 
+    // Proves: I11
     #[test]
     fn dependencies_get_a_fixed_message_without_their_fields() {
         let line = json_line(|| {
@@ -508,6 +510,7 @@ mod tests {
         assert!(line.get("statement").is_none());
     }
 
+    // Proves: I13
     #[tokio::test]
     async fn requests_carry_ids_and_end_with_one_http_event() {
         use axum::{Router, body::Body, routing::get};

@@ -683,6 +683,7 @@ mod tests {
         assert!(!format!("{user:?}").contains("bob@tsn.example"));
     }
 
+    // Proves: I10
     #[tokio::test]
     async fn rejects_expired_and_overlong_tokens() {
         let expired = bob(json!({ "iat": now() - 600, "exp": now() - 300 }));
@@ -703,6 +704,7 @@ mod tests {
         );
     }
 
+    // Proves: I10
     #[tokio::test]
     async fn lifetime_ceiling_cannot_be_skipped() {
         let mut no_iat = bob(json!({ "exp": now() + 365 * 86400 }));
@@ -747,6 +749,7 @@ mod tests {
         assert!(second.contains("cooldown"), "{second}");
     }
 
+    // Proves: I10
     #[tokio::test]
     async fn rejects_missing_kid_and_bad_signature() {
         // An unknown kid would refetch the JWKS; a missing kid fails before any network call.
@@ -764,6 +767,7 @@ mod tests {
         assert_eq!(v.decode(&forged).await.unwrap_err(), AuthError::Invalid);
     }
 
+    // Proves: I10
     #[tokio::test]
     async fn strict_mode_checks_issuer_and_audience() {
         let strict = SecuritySettings {

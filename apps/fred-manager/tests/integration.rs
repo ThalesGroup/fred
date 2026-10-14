@@ -20,7 +20,7 @@ use std::time::Duration;
 
 use fred_manager::{
     bootstrap, db,
-    domain::{Document, Permission, Role, Space, SpaceKind},
+    domain::{self, Document, Folder, Permission, Role, Space, SpaceKind},
     error::AppError,
     fga::Fga,
     spaces,
@@ -139,6 +139,7 @@ async fn reads(e: &Env, user: &str, space: Uuid) -> bool {
     e.fga.check(user, Permission::Read, space).await.unwrap()
 }
 
+// Proves: I4
 #[tokio::test]
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
 async fn concurrent_revocations_keep_parent_access() {
@@ -175,6 +176,7 @@ async fn concurrent_revocations_keep_parent_access() {
     }
 }
 
+// Proves: I4
 #[tokio::test]
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
 async fn concurrent_grant_and_revoke_keep_the_invariant() {
@@ -208,6 +210,7 @@ async fn concurrent_grant_and_revoke_keep_the_invariant() {
     }
 }
 
+// Proves: I5
 #[tokio::test]
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
 async fn a_revoked_admin_cannot_finish_a_waiting_request() {
@@ -237,6 +240,7 @@ async fn a_revoked_admin_cannot_finish_a_waiting_request() {
     );
 }
 
+// Proves: I6
 #[tokio::test]
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
 async fn a_member_with_a_personal_space_can_leave_the_organization() {
@@ -266,6 +270,7 @@ async fn a_member_with_a_personal_space_can_leave_the_organization() {
     assert!(!reads(&e, "bob", personal.id).await);
 }
 
+// Proves: I9
 #[tokio::test]
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
 async fn bootstrap_promotes_one_person_once() {
@@ -284,6 +289,7 @@ async fn bootstrap_promotes_one_person_once() {
     assert!(!e.fga.is_platform_admin("bob").await.unwrap());
 }
 
+// Proves: I9
 #[tokio::test]
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
 async fn a_finished_bootstrap_stays_closed_after_its_admin_is_removed() {
@@ -297,6 +303,7 @@ async fn a_finished_bootstrap_stays_closed_after_its_admin_is_removed() {
     assert!(!e.fga.is_platform_admin("alice").await.unwrap());
 }
 
+// Proves: I9
 #[tokio::test]
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
 async fn concurrent_retries_finish_a_bootstrap_once() {
@@ -329,6 +336,7 @@ async fn concurrent_retries_finish_a_bootstrap_once() {
     );
 }
 
+// Proves: I9
 #[tokio::test]
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
 async fn an_interrupted_bootstrap_is_finished_by_its_caller_only() {
@@ -347,6 +355,100 @@ async fn an_interrupted_bootstrap_is_finished_by_its_caller_only() {
     assert!(!e.fga.is_platform_admin("bob").await.unwrap());
 }
 
+fn document(space: Uuid, folder: Option<Uuid>, name: &str) -> Document {
+    Document {
+        id: Uuid::new_v4(),
+        space_id: space,
+        folder_id: folder,
+        name: name.into(),
+        mime: "text/plain".into(),
+        size: 1,
+        sha256: "x".into(),
+        created_by: "alice".into(),
+    }
+}
+
+// Proves: I2, I3
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn placement_is_immutable_and_folders_stay_in_their_space() {
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    let id = Uuid::new_v4();
+    let folder = Folder {
+        id,
+        space_id: team.id,
+        parent_id: None,
+        name: "Appels d'offres".into(),
+        path: domain::folder_path(None, id),
+    };
+    db::insert_folder(&e.pool, &folder).await.unwrap();
+    let doc = document(team.id, Some(folder.id), "cdc.pdf");
+    db::insert_document(&e.pool, &doc).await.unwrap();
+
+    let moves = [
+        format!("update space set parent_id = null where id = '{}'", team.id),
+        format!(
+            "update folder set space_id = '{}' where id = '{}'",
+            org.id, folder.id
+        ),
+        format!(
+            "update document set folder_id = null where id = '{}'",
+            doc.id
+        ),
+    ];
+    for statement in moves {
+        let refused = sqlx::query(AssertSqlSafe(statement.clone()))
+            .execute(&e.pool)
+            .await;
+        assert!(refused.is_err(), "{statement} must be refused");
+    }
+    let elsewhere = document(org.id, Some(folder.id), "wrong-space.pdf");
+    assert!(db::insert_document(&e.pool, &elsewhere).await.is_err());
+    db::rename_document(&e.pool, doc.id, "cdc-v2.pdf")
+        .await
+        .unwrap();
+    db::rename_folder(&e.pool, folder.id, "AO").await.unwrap();
+}
+
+// Proves: I8
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn admin_roles_grant_no_content_access() {
+    let e = env().await;
+    let (org, _) = org_and_team(&e).await;
+    grant(&e, org.id, Role::Member, "carol").await;
+    let team = spaces::create_space(
+        &e.pool,
+        &e.fga,
+        "alice",
+        SpaceKind::Team,
+        org.id,
+        "OPS".into(),
+        "carol",
+    )
+    .await
+    .unwrap();
+    assert!(
+        e.fga
+            .check("carol", Permission::Manage, team.id)
+            .await
+            .unwrap()
+    );
+    assert!(
+        !reads(&e, "carol", team.id).await,
+        "a space admin is not a reader"
+    );
+    bootstrap::grant_root(&e.pool, &e.fga, "dave")
+        .await
+        .unwrap();
+    assert!(
+        !reads(&e, "dave", org.id).await,
+        "a platform admin is not a reader"
+    );
+}
+
+// Proves: I12
 #[tokio::test]
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
 async fn pagination_survives_deleting_the_cursor_row() {
@@ -354,16 +456,7 @@ async fn pagination_survives_deleting_the_cursor_row() {
     let (org, _) = org_and_team(&e).await;
     let mut docs = Vec::new();
     for name in ["a", "b", "c"] {
-        let d = Document {
-            id: Uuid::new_v4(),
-            space_id: org.id,
-            folder_id: None,
-            name: name.into(),
-            mime: "text/plain".into(),
-            size: 1,
-            sha256: "x".into(),
-            created_by: "alice".into(),
-        };
+        let d = document(org.id, None, name);
         db::insert_document(&e.pool, &d).await.unwrap();
         docs.push(d);
     }

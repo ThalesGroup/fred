@@ -1,80 +1,30 @@
 # fred-manager
 
-Draft. Owns spaces, folders and documents, answers every access question with one
-OpenFGA check, and submits ingestion work to the Python workers through Temporal.
+The Rust service that takes over spaces, folders, documents and their authorization
+from the Python backends, topic by topic. Its design, invariants and decisions are in
+the architecture dossier: [docs/architecture](../../docs/architecture/README.md). This
+file only says how to work on it.
 
-## Model
+## Develop
 
-- **Spaces**: organization > team > project. A personal space is a team with
-  `personal_owner` set, one member, no project. Placement never changes.
-- **Rights**: OpenFGA type `space` with direct roles `member`, `editor`, `admin`
-  and no parent relation, plus `platform:root` for platform roles
-  (`openfga/model.fga`). A role on a space requires read access to its parent;
-  fred-manager refuses writes that would break this, and serializes every role or
-  space mutation of one organization under a Postgres advisory lock, checking the
-  caller's own right under that lock too, so concurrent requests cannot interleave
-  between a check and its write.
-- **Personal spaces** are managed from their organization: an organization admin can
-  remove the owner's roles there, nobody can add any. A member leaves an organization
-  by losing their personal-space roles first, then their organization role.
-- **Folders**: classification only, no rights. `folder.path` is a chain of ids.
-- **Documents**: one space, one folder, both immutable. Renames are free; a move is
-  a re-import.
-- **Derived artefacts** have no authorization identity of their own. Storage keys
-  live under `<space_id>/<document_id>/`; every chunk carries `space_id`,
-  `document_id` and `folder_path`, never a name.
-
-| Question | OpenFGA call | Then |
-| --- | --- | --- |
-| Can Bob read document D? | `can_read` on D's space | none |
-| Bob's agent searches from a BID conversation | `can_read` on BID | filter `space_id ∈ path(BID)` |
-| Search within a folder | same | add `folder_path` prefix |
-
-## Configuration
-
-As in the Python backends: `config/configuration.yaml` (named by `CONFIG_FILE`) holds
-the settings with the same sections and names (`app`, `security`, `storage.postgres`,
-`scheduler.temporal`), and `config/.env` (named by `ENV_FILE`) holds the secrets only,
-`FRED_POSTGRES_PASSWORD`, `OPENFGA_API_TOKEN` and `FRED_BOOTSTRAP_TOKEN`. Variables already set in the process
-win over `.env`. The `FRED_STRICT_*` and `FRED_JWT_*` toggles keep their fred-core
-meaning. The tables live in the shared `fred` database; none of fred's tables shares
-their names.
-
-At startup, as fred-core's OpenFGA engine does, fred-manager finds the store named
-`security.rebac.store_name` (default `fred-manager`, never fred's own), creates it if
-`create_store_if_needed`, and writes the model if `sync_schema_on_init`.
-
-## Run
-
-Same targets as the other apps (`make help` lists them):
+Same targets as the other apps (`make help` lists them). Building needs `protoc`;
+`PROTOC` defaults to `~/bin/tools/protoc/bin/protoc`.
 
 ```
-cp config/.env.template config/.env   # fill the three secrets
+cp config/.env.template config/.env   # once: the three secrets
 make run                              # http://localhost:8400/fred-manager/v1
 make test                             # offline unit tests
-make test-integration                 # against throwaway Postgres and OpenFGA containers
+make test-integration                 # throwaway Postgres and OpenFGA containers
 make code-quality                     # clippy + rustfmt
+make -C ../../docs/architecture check # the dossier still matches the code
 ```
-
-Building needs `protoc`; `PROTOC` defaults to `~/bin/tools/protoc/bin/protoc`. The
-Makefile fragments are `scripts/makefiles/rust-*.mk`, mirroring the `python-*.mk` ones.
-`GET /fred-manager/v1/healthz` is the only route without a bearer token. Invalid JSON
-bodies, optional ones included, get 422 with a `detail`, as in FastAPI. Document pages use a keyset cursor,
-`after_name` and `after_id` of the previous page's last document: deleting that
-document changes nothing, and a document renamed across the cursor between two pages
-may be skipped or repeated.
 
 ## From scratch (fred-deployment-factory)
 
-Both stories start from a fresh infrastructure; fred-manager creates its tables and its
-OpenFGA store on first start, and the realm starts empty.
-
-**Host run, after `make docker-up` or `make k3d-up`.** Postgres, Keycloak, OpenFGA and
-Temporal answer on the same localhost ports in both, so the same local files serve:
+**Host run, after `make docker-up` or `make k3d-up`:**
 
 ```
-cp config/.env.template config/.env      # once: the three secrets
-make run                                 # http://localhost:8400/fred-manager/v1
+make run
 make bootstrap-local BOOTSTRAP_USER=<you> BOOTSTRAP_PASSWORD=<pw>
 make create-org ORG_NAME=TSN ORG_ADMIN=<your user_id, from GET /me>
 ```
@@ -88,9 +38,8 @@ make k3d-logs SVC=fred-manager
 make k3d-app-uninstall DIR=../fred/apps/fred-manager
 ```
 
-The pod reads its three secrets from `fred-secrets`; the bootstrap one is regenerated by
-every new cluster. It accepts tokens issued at `http://keycloak:8080/realms/app` only
-(the `127.0.0.1 keycloak` hosts entry the factory requires). From apps/fred-manager:
+Then, from apps/fred-manager, bootstrap the pod with the cluster's secret, regenerated
+by every new cluster, and a token issued at `keycloak:8080`:
 
 ```
 make bootstrap-local BOOTSTRAP_USER=<you> BOOTSTRAP_PASSWORD=<pw> \
@@ -100,95 +49,8 @@ make bootstrap-local BOOTSTRAP_USER=<you> BOOTSTRAP_PASSWORD=<pw> \
     -o jsonpath='{.data.CONTROL_PLANE_BOOTSTRAP_TOKEN}' | base64 -d)"
 ```
 
-`deploy/k3d/` follows the factory's application contract: `helmfile.yaml.gotmpl`,
-`values.yaml` and `build`. The release `fred-manager` uses fred's chart with every other
-application disabled, and Traefik routes `http://localhost:8088/fred-manager`.
-`deploy/k3d/chart` is fred's chart through symlinks without `values.schema.json`, whose
-closed application list `helm lint` enforces even with `--skip-schema-validation`. It
-goes away when fred-manager joins the chart and its schema.
+## Changing it
 
-## Logging
-
-Same stdout output as the Python APIs (fred-core `logs/processors.py`). `app.log_format`
-selects `json`, one object per line with `severity`, `message`, `timestamp`
-(`seconds`/`nanos`), `logger`, `service` (`fred-manager`), `service_role` (`api`),
-`category` and `logging.googleapis.com/sourceLocation`, or readable `text` without
-terminal-width wrapping or colors when redirected. `app.log_level` sets the level.
-Local configuration selects text; k3d selects JSON, as the chart reference values do.
-
-Event and request-context fields are top-level and never replace core fields; fields
-named like credentials or content (`token`, `email`, `body`, ...) are dropped.
-Dependencies reach stdout from WARNING only, with the fixed message `Dependency
-diagnostic`. Every request gets `X-Request-ID` and `X-Correlation-ID` headers, its
-lines carry `request_id`, `correlation_id` and, once authenticated, `user_id`, and it
-ends with one event on logger `http`: method, route template, status, duration and
-outcome, silent for successful health probes. Rust has no function names at runtime,
-so `sourceLocation.function` holds the module path, and there is no `task_name`.
-
-## Root platform admin
-
-Same contract and same commands as the control-plane's root bootstrap. A fresh
-deployment has no platform admin; the first one promotes themselves once, with two
-independent proofs: their own verified bearer and the deploy-time secret.
-
-```
-make bootstrap-local BOOTSTRAP_USER=<you> BOOTSTRAP_PASSWORD=<pw>   # FRED_BOOTSTRAP_TOKEN from config/.env
-```
-
-`POST /fred-manager/v1/bootstrap/platform-admin {"token": ...}` grants `admin` on
-`platform:root` to the caller only: 422 for a token under 16 characters, 403 for a wrong
-or unconfigured secret, 409 once completed (even if every admin is later removed), 503
-when authentication is disabled. Unlike the control-plane, the marker naming the caller in
-`platform_bootstrap` commits before the OpenFGA write, and the bootstrap is finished once
-`granted_at` records that write: if it fails, only the same caller can finish by
-retrying, so a second secret holder is never promoted, and a finished bootstrap never
-reopens, even for a concurrent retry or for its own admin after removal: the grant
-re-reads the marker and records its completion under the bootstrap lock. The secret is a
-secret like the others, read from the variable `app.bootstrap_token_env_var` names
-(`FRED_BOOTSTRAP_TOKEN`): `config/.env` locally, and on k3d the control-plane's
-`CONTROL_PLANE_BOOTSTRAP_TOKEN` from `fred-secrets`. Each service keeps its own marker,
-so bootstrapping one never consumes the other.
-`GET /fred-manager/v1/me` returns the caller's `platform_roles`. Platform roles grant no
-access to any space's content.
-
-## Authentication
-
-Ported from fred-core `security/oidc.py`: every route requires
-`Authorization: Bearer <access token>` from the UI's Keycloak client, verified
-RS256 against the realm JWKS, with the same claims mapping (`sub` is the OpenFGA
-user id, roles from `resource_access.<client_id>.roles`), the same 401 details, the
-same lifetime ceiling and the same `security:` settings (`profile: c3`, `user`,
-`m2m.realm_url`, `authorized_origins`).
-
-Not ported yet, each needs its own decision: GCU acceptance, local identity
-snapshot, account status, platform access rules, whitelist and delegated callers.
-As PyJWT and its `PyJWKClient`: a future or non-integer `iat` is refused, and an unknown
-`kid` refetches the realm keys at most once per 30 seconds, failed attempts included,
-one fetch at a time, while cached keys stay readable during a fetch.
-Deliberate differences, all stricter: no token cache (verification is cheap here),
-`exp` and `iat` are required so the lifetime ceiling always applies, and an empty
-subject is refused for every provider.
-
-## Worker contract
-
-fred-manager starts two workflows on `scheduler.temporal.task_queue`, JSON payloads,
-workflow id `ingest-<document_id>` / `delete-<document_id>`:
-
-- `IngestDocument { document_id, space_id, folder_path, storage_prefix, source_key, mime, profile, requested_by }`
-- `DeleteDocument { document_id, space_id, storage_prefix }`
-
-No Python worker implements them yet, and no test submits them to a real Temporal yet.
-Deleting a document while its ingestion runs is not ordered yet; that belongs to the
-ingestion step.
-
-## Not in this draft
-
-Uploading the source object, space deletion and search itself are out of scope.
-
-Open before going further, each its own step: who may grant themselves a content role
-on a space they administer; adding fred-manager to the root `make test` /
-`make code-quality` and CI (Rust and protoc in the CI images) and to the chart and its
-schema; tests of the HTTP routes and of Temporal submissions; ordering a deletion
-against a running ingestion; the post-authentication admission gates listed above.
-Next planned step: import a provisioning bundle (users.json with an organization),
-first from the command line, with its own Keycloak service account.
+A change described in the dossier updates its chapter in the same commit. A test that
+proves an invariant carries `// Proves: I<n>` above it. Applied migrations are never
+edited; add a new one.

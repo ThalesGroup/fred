@@ -1,0 +1,42 @@
+erDiagram
+
+"space" }o--o| "space" : "parent_id"
+"folder" }o--|| "space" : "space_id"
+"folder" }o--|| "folder" : "parent_id, space_id"
+"document" }o--|| "space" : "space_id"
+"document" }o--|| "folder" : "folder_id, space_id"
+
+"space" {
+  uuid id
+  space_kind kind
+  text name
+  uuid parent_id FK
+  text personal_owner
+  uuid_array path
+  timestamp_with_time_zone created_at
+}
+"folder" {
+  uuid id
+  uuid space_id FK
+  uuid parent_id FK
+  text name
+  text path
+  timestamp_with_time_zone created_at
+}
+"document" {
+  uuid id
+  uuid space_id FK
+  uuid folder_id FK
+  text name
+  text mime
+  bigint size
+  text sha256
+  text created_by
+  timestamp_with_time_zone created_at
+}
+"platform_bootstrap" {
+  boolean singleton
+  text completed_by
+  timestamp_with_time_zone completed_at
+  timestamp_with_time_zone granted_at
+}
