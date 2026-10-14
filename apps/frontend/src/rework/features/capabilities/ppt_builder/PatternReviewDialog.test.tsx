@@ -167,7 +167,7 @@ describe("PatternReviewDialog", () => {
     expect(container.textContent).toContain("capability.ppt_builder.review.labelledByRules");
   });
 
-  it("shows the deck's slides first, then the layouts folded with their hint, then the excluded", () => {
+  it("shows the deck's slides first, then the layouts folded with their hint, then the excluded unfolded", () => {
     renderDialog();
     const sections = [...container.querySelectorAll("[data-section]")];
     expect(sections.map((s) => s.getAttribute("data-section"))).toEqual(["slides", "layouts", "excluded"]);
@@ -177,7 +177,8 @@ describe("PatternReviewDialog", () => {
     expect(layouts.open).toBe(false);
     expect(layouts.querySelector("summary")?.textContent).toBe("capability.ppt_builder.review.layouts");
     expect(layouts.textContent).toContain("capability.ppt_builder.review.layoutsHint");
-    expect((sections[2] as HTMLDetailsElement).open).toBe(false);
+    // The analysis set a slide aside (a chart): the section is unfolded so it is seen.
+    expect((sections[2] as HTMLDetailsElement).open).toBe(true);
     expect(sections[2].querySelector("summary")?.textContent).toBe("capability.ppt_builder.review.excluded");
   });
 
@@ -194,6 +195,8 @@ describe("PatternReviewDialog", () => {
     );
     const sections = [...container.querySelectorAll("[data-section]")];
     expect(sections.map((s) => s.getAttribute("data-section"))).toEqual(["excluded"]);
+    // Only the author's own exclusions: nothing to point out, it stays folded.
+    expect((sections[0] as HTMLDetailsElement).open).toBe(false);
   });
 
   it("writes include, kind and label corrections as overrides", () => {

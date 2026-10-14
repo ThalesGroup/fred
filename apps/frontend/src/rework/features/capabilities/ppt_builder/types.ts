@@ -102,7 +102,15 @@ export function effectiveInventory(inventory: TemplateInventory, overrides: Patt
         label: override.label?.trim() ? override.label.trim() : pattern.label,
         kind: override.kind ?? pattern.kind,
         included: override.included ?? pattern.included,
-        exclusion_reason: override.included === false ? "author" : override.included ? null : pattern.exclusion_reason,
+        // The analysis' own reason wins over "by you" when it would set the slide aside anyway.
+        exclusion_reason:
+          override.included === false
+            ? pattern.included === false
+              ? pattern.exclusion_reason
+              : "author"
+            : override.included
+              ? null
+              : pattern.exclusion_reason,
       };
     }),
   };

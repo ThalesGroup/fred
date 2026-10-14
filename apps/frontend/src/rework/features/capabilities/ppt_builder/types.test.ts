@@ -92,6 +92,11 @@ describe("effectiveInventory", () => {
     expect([chart.included, chart.exclusion_reason]).toEqual([true, null]);
     expect(INVENTORY.patterns?.[0].label).toBe("Cover");
   });
+
+  it("keeps the analysis' reason when the author excludes a slide it already set aside", () => {
+    const [, , chart] = effectiveInventory(INVENTORY, [{ pattern_id: "slide:9", included: false }]).patterns ?? [];
+    expect([chart.included, chart.exclusion_reason]).toEqual([false, "chart"]);
+  });
 });
 
 describe("readers and summary", () => {

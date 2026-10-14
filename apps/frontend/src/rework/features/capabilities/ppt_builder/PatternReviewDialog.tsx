@@ -87,6 +87,8 @@ export function PatternReviewDialog({ open, inventory, previewSource, readOnly, 
   const slides = patterns.filter((p) => p.included !== false && p.source === "slide");
   const layouts = patterns.filter((p) => p.included !== false && p.source === "layout");
   const excluded = patterns.filter((p) => p.included === false);
+  // Slides the analysis set aside (library sheets, tables…) are worth a look: unfold them.
+  const analysisExcluded = excluded.some((p) => p.exclusion_reason && p.exclusion_reason !== "author");
   const card = (pattern: Pattern) => (
     <PatternCard
       key={pattern.id}
@@ -117,7 +119,7 @@ export function PatternReviewDialog({ open, inventory, previewSource, readOnly, 
         </details>
       )}
       {excluded.length > 0 && (
-        <details className={styles.section} data-section="excluded">
+        <details className={styles.section} data-section="excluded" open={analysisExcluded}>
           <summary className={styles.sectionTitle}>
             {t("capability.ppt_builder.review.excluded", { count: excluded.length })}
           </summary>
