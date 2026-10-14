@@ -26,6 +26,9 @@ export interface ButtonGroupItemProps extends ComponentPropsWithRef<"button"> {
    * color (success/secondary/error) rather than one color for the whole
    * group. Falls back to the group-level `color` when omitted. */
   color?: ColorTheme;
+  /** Fills this item with success or error instead of secondary-container
+   * while it is selected, e.g. an Enabled/Disabled pick. */
+  selectedColor?: Extract<ColorTheme, "success" | "error">;
 }
 
 export interface ButtonGroupItemPrivateProps {
@@ -42,6 +45,7 @@ export interface ButtonGroupItemPrivateProps {
 
 export default function ButtonGroupItem({
   color,
+  selectedColor,
   label,
   icon,
   selected,
@@ -57,6 +61,7 @@ export default function ButtonGroupItem({
       ref={ref}
       className={styles.buttonGroupItem}
       data-color={color}
+      data-selected-color={selectedColor}
       data-size={size}
       data-full-width={fullWidth}
       role={variant === "radio" ? "radio" : "tab"}

@@ -65,6 +65,12 @@
   grid-auto-rows: minmax(200px, auto);
   gap: var(--spacing-s);
   padding: 0 var(--spacing-m) var(--spacing-m);
+}
+
+/* The scroll lives on a wrapper, not on the grid: Firefox sizes the rows of a
+   scrolling grid too short, and each card's bottom bar ended up under the next row. */
+.agentListScroll {
+  min-height: 0;
   overflow: auto;
 }
 

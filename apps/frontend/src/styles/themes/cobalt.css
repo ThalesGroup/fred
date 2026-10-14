@@ -17,7 +17,7 @@
 /* Cobalt UI theme: strict navy and cyan, Inter, near-square controls. Colors
    come from LCh seeds (neutral 265/2.5 in light, 226/2.5 in dark; primary
    298/90; tertiary 226/39) with the accent rules of the token rework. */
-[data-ui-theme="cobalt"] {
+:is([data-ui-theme="cobalt"], [data-ui-base-theme="cobalt"]) {
   --font-family-base: "Inter", sans-serif;
   /* Near-square controls (buttons, inputs), soft menus; cards keep --radius-l. */
   --radius-xs: 4px;
@@ -36,7 +36,7 @@
 
 /* Light ladder rises toward white; surface-main sits just under the highest
    container so the main content keeps the strongest text contrast. */
-[data-ui-theme="cobalt"][data-theme="light"] {
+:is([data-ui-theme="cobalt"], [data-ui-base-theme="cobalt"])[data-theme="light"] {
   color-scheme: light;
   --primary: #002789;
   --on-primary: #fcfcff;
@@ -85,7 +85,7 @@
   --surface-picture: #ffffff;
 }
 
-[data-ui-theme="cobalt"][data-theme="dark"] {
+:is([data-ui-theme="cobalt"], [data-ui-base-theme="cobalt"])[data-theme="dark"] {
   color-scheme: dark;
   --primary: #c8bfff;
   --on-primary: #001454;

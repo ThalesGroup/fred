@@ -130,9 +130,11 @@ inside Dialog, and option selection does not confirm the Dialog. Escape, Tab and
 Enter belong to the topmost modal only (`isTopmostModal` in `utils/Portal.tsx`,
 any `dialog` or `alertdialog` with `aria-modal`): a `ConfirmationDialog` opened
 over a Dialog gets the keyboard, and an Escape already handled is ignored.
-Opt-in props:
+Width comes from `maxWidth` (px, capped at 90vw). Opt-in props:
 `actionsAddon` (e.g. a checkbox) renders in the action bar before the buttons;
-`dividers` rules off the header and action bar with `outline-variant`;
+`footerStart` puts content (a hint, a loading row, a secondary action such as
+a removal) at the far left of the action bar, opposite cancel/confirm, first in
+Tab order but never the opening focus; `dividers` rules off the header and action bar with `outline-variant`;
 `initialFocus="dialog"` focuses the dialog itself rather than its first
 control, so a long body opens at its top; `hideConfirm` leaves a text Cancel as
 the only action.
@@ -1102,6 +1104,9 @@ The name `small` is scoped to this component. On the shared scale, 24px is
   caller classes alongside generated classes and now has a visible two-pixel
   `:focus-visible` outline. Its neutral tonal colors use defined on-surface and
   on-surface-retreat state layers for hover and press.
+  An optional `iconSize` keeps a smaller glyph tier in a larger button, e.g. the
+  `AgentCard` more menu: a 40px target around the 20px glyph, offset so the glyph
+  stays where the 32px button had it.
 - Material and custom icons are decorative by default. A standalone informative icon
   receives only an explicit caller-owned accessible name; glyph identifiers no longer
   become user-facing labels. The unsupported legacy `infos` name was corrected to
@@ -2084,13 +2089,15 @@ Displays one managed agent instance. Current layout (#2096, superseding the #207
 - Header row: icon, name, role (short one-liner) — and, only for users who can manage agents in the team, a `⋮` **more menu** flush to the top-right (`IconButtonMenu`), containing Edit, Activate/Deactivate, Duplicate, and Delete (rendered in the error color via `MenuItem`'s new `destructive` prop).
 - Description (3-line clamp).
 - Suspension/catalog warning banner, when applicable. Both share the `warning-container`/`on-warning-container` treatment (2026-09-18): the suspension banner already names the cause and the fix, so the `error-container` it used before over-alarmed for a state the editor can repair. The more menu's toggle item is correspondingly just "Suspended" (disabled) — the explanation lives in the banner, not repeated in the menu. The suspension banner is `position: absolute`, inset `--spacing-s` (12px) from the left, right and bottom edges with centred text, and `pointer-events: none`, so it overlays the footer row without changing the card's height and leaves the more menu and footer buttons clickable underneath; the catalog warning still sits in the column flow.
-- Footer row: an always-visible `i` **info icon** (bottom-left, not gated on any permission) that reveals a rich instant-hover `Tooltip` above it — Origin (raw `source_runtime_id`) and Template on their own rows, plus Created-by/Last-updated-by (name + short date, only shown when set) — and the **Chat** button (bottom-right), disabled unless the instance is enabled.
+- Footer row: an always-visible `i` **info icon** (bottom-left, not gated on any permission; a plain 20px `on-surface-muted` icon, focusable, aligned with the card content — not a button) that reveals a rich instant-hover `Tooltip` above it — Origin (raw `source_runtime_id`) and Template on their own rows, plus Created-by/Last-updated-by (name + short date, only shown when set) — and the **Chat** button (bottom-right), disabled unless the instance is enabled.
 - The origin/template line that used to sit under the agent name (#2076) is gone from the card body entirely — it only lives in the info tooltip now.
 - **Duplicate** opens `DuplicateAgentDialog` (name field prefilled with the source's name); confirming rebuilds a `CreateAgentInstanceRequest` from the source instance via the same `buildAgentFormSubmitPayload`/`extractCapabilityConfigValues` helpers the edit form uses (correct capability filtering against the live template), then calls the normal create endpoint — no backend change.
 - **Delete** reuses `TeamAgentsPage`'s existing `handleDelete` (previously only reachable from inside the edit modal) via the same `ConfirmationDialog`, with the same inverted emphasis as the "Leave team" dialog: Cancel is `filled`/primary (visually dominant, the safe choice), Delete is `text`/error (low emphasis).
 - The `Tooltip` atom gained an optional `content: ReactNode` prop (alongside the existing `text: string`) for this rich variant — sizes to content instead of forcing a single nowrap line, same hover/`:focus-within`/above-anchor positioning as every other tooltip in the app.
 - Disabled cards render with muted colours, driven by the existing `data-enabled` CSS custom-property cascade (unchanged by #2096).
 - The Chat button's hover treatment (rotating conic-gradient border) is unchanged from #2076.
+- **Marketplace (agents marketplace, 2026-10-12).** The more menu renders when the user can edit **or** remove the agent from the marketplace: a team admin who is not an editor gets a menu with **Remove from the marketplace** only. Editors get **Publish to the marketplace** / **Update on the marketplace** (never in the personal space), greyed with the reason as the item's tooltip for an administrator-only agent type, a private team, or a reached quota (updating an existing publication ignores the quota). Deactivating or deleting a published agent goes through the `criticalAction` confirmation and says it leaves the marketplace. The marketplace state sits in the shared `AgentMarketplaceBar`, pinned under the footer row (below). The description block grows (`flex-grow`) so the footer and bar stay at the bottom and cards in one grid row keep equal heights; the suspension banner is anchored to the footer row, not the card, so it never covers the bar.
+- **Menu item tooltips (2026-10-12).** `OptionModel.tooltip` renders the shared `Tooltip` over the whole row (`placement="left"`, new `fill` prop) instead of a native `title`, so a greyed item's reason always shows on hover — e.g. Publish blocked by a private team, the quota or an administrator-only agent type. Keyboard and screen-reader users get the same text through `aria-describedby` on the `<li>`, pointing at an always-rendered `hidden` span: the menu keeps DOM focus on the list (`aria-activedescendant`), so the Tooltip itself never receives focus.
 
 #### Open UX issues
 
@@ -2104,6 +2111,55 @@ Displays one managed agent instance. Current layout (#2096, superseding the #207
 
 ---
 
+### `AgentMarketplaceBar` and the team card's marketplace state
+
+**Location:** `src/rework/components/shared/molecules/AgentMarketplaceBar/AgentMarketplaceBar.tsx` (bar, `MarketplaceCounter`, `formatMarketplaceDate`), `src/rework/components/shared/organisms/AgentCard/TeamMarketplaceState.tsx`
+**Status:** `Functional`
+
+One bar for both agent cards: the card's last child, flush with its bottom edge at full width, its bottom corners inheriting the card's radius; `surface-container-high` background (one step above the card's `surface-container`, no divider), `font-label-large`, `on-surface-retreat` text, 2.5rem minimum height. `MarketplaceCounter` is an icon plus a number with a full sentence as `aria-label`; given `onClick` it becomes a toggle button with `aria-pressed` and a filled icon (the marketplace card's Like). On the team card the bar appears only for a visible publication state while the team can publish (switch on, public team, not the personal space):
+
+- **Not published / hidden** (`dismissed`): no bar, background or reserved space; editors publish from the more menu.
+- **Published:** like and import counters (`spacing-2xs` icon gap, `spacing-s` between them), then the published chip pushed right — the same `success-container` chip as a published prompt card, in `label-large-emphasized` with an 18px icon.
+- **Marketplace update needed:** the bar switches to the `warning` tone, counters kept; a tooltip on the label says the marketplace still shows the previous version.
+- **Removed:** a pill button "Removed from the marketplace" opening a small popover upward (`surface-floating`, `shadow-m`): reason, locale date, the platform admin's message if any, and **Hide** for editors and the team admin only.
+- Members who are not editors only ever see Published; Modified and Removed are hidden even if sent, leaving no bar for Removed.
+
+#### Open UX issues
+
+- Not yet design-reviewed. The `favorite` icon was added to `materialIcons` for likes.
+
+---
+
+### `PublishAgentDialog` and `RepublishProposalDialog`
+
+**Location:** `src/rework/components/pages/TeamAgentsPage/PublishAgentDialog/`, `src/rework/components/pages/TeamAgentsPage/RepublishProposalDialog/`
+**Status:** `Functional`
+
+- **Publish dialog** (shared `Dialog`): every publication and republication. Visibility warning, "Anyone who imports this agent receives a copy of its files (…)" when a selected capability declares file slots (named by capability, file names are not known before publication), "3 of 5 published", the feature's only Help Center link (the Agents page's marketplace heading, by anchor), and an "I understand" checkbox gating the confirm button.
+- **Republish proposal** (`ConfirmationDialog` with `dismissible={false}`: neither the scrim nor Escape closes it): after an editor's save that actually changed a published agent, offer "Update" / "Ignore"; after reactivating an agent removed by its deactivation, offer "Publish" / "Ignore". The confirm action opens the publication warning dialog; at the quota, it is disabled (`confirmDisabled`) and the reason is shown under the message.
+
+#### Open UX issues
+
+- Not yet design-reviewed.
+
+---
+
+### `MarketplaceAgents`, `MarketplaceAgentCard`, ID card and import dialog
+
+**Location:** `src/rework/components/pages/marketplace/MarketplaceAgents/` (page, `MarketplaceAgentDialog/`, `ImportAgentDialog/`), `src/rework/components/shared/organisms/AgentCard/MarketplaceAgentCard.tsx`
+**Status:** `Functional`
+
+- **Page** (`/marketplace/agents`, `MarketplaceNavbar` entry with the deployment's agent nickname and icon): same header as the prompts marketplace with a single `SearchInput` (name, role, description and team name, case- and accent-insensitive). Clicking a card's team name filters on that team; the active filter shows as a removable `Chip` ("Team: <name>") in a flex chips row under the header, meant to hold category chips later. Both run client-side so the page tells the two empty states apart; the chip stays visible on the no-result state. Server order is kept (newest first publication). Empty states use `PageEmptyState` with its optional `description` line: storefront "No agent shared yet" with what the page is for, and search_off "No agent matches" with a hint.
+- **Card:** the `AgentCard` shell and styles, always in the enabled palette, without chat, enable toggle, more menu or info tooltip. A top band in `surface-container-high` reads "By <team>" (live name, never a person); the team name is a text-styled button (underlined on hover and focus, `aria-label` "Filter by team <name>") that filters the page and stops propagation. An outlined "View details" button sits above the shared bar, which is pinned at the bottom as on the team card and holds the Like toggle (`aria-pressed`, filled heart in `primary`, self-like allowed, disabled while in flight), the Import counter as a button opening the import dialog, and "Updated on <date>" pushed right.
+- **ID card** (`Dialog` at `maxWidth` 960 with `dividers`, titled with the agent name, confirm **Import**, cancel **Close**): two columns, one below 720px. Left: an `outline-variant` summary card (`radius-s`, `spacing-s` padding; the capability section below it has no divider, its own padding-top spaces it) opening with a "Published by <team> · updated on <date>" line, then the icon tile beside the agent name with its role below (same styles as an active `AgentCard`), description and counter pills ("N likes", with "including M since the update of <date>" in a tooltip once republished; imports), then sections divided by `outline-muted`, each titled by a quiet `label-medium` / `on-surface-retreat` label (also on the instructions column): what it can do (capability names and descriptions), configuration files (name and size, no link). Right: the instructions (`prompts.system`), coloured like the agent form's prompt field through `PromptHighlight` (read-only spans from `PromptEditor`'s own parser and highlight style, text selectable). The Dialog runs with `scrollMode="children"`: the instructions take the height left and scroll on their own once the dialog reaches its max-height, the left column scrolls separately if needed; below 720px the whole card scrolls. Platform admins also get a text **Remove from the marketplace** in error colour in the Dialog's `footerStart` (far left of the action bar), opening a second `Dialog` with an optional message (500 characters) sent as the removal reason.
+- **Import** (`CopyToTeamsDialog` with the new `excludedTeamIds`, which drops the publishing team from the list): per team readiness from `import-targets` (agent type not enabled: disabled; missing capabilities: warning with the list in its tooltip), an info tooltip on what is imported / to choose again / recreated / not imported, the independence sentence as explanation. After confirming, a result `Dialog` lists one bordered block per destination: "Imported into <team>" with the new name when it was numbered, what to reconfigure there, dropped capabilities and capability notices; or "Not imported into <team>" with a localized reason.
+
+#### Open UX issues
+
+- Not yet design-reviewed.
+
+---
+
 ### `TeamCard`
 
 **Location:** `src/rework/components/shared/organisms/TeamCard/TeamCard.tsx`
@@ -2114,7 +2170,7 @@ so enabling the charter keeps nominated contacts visible before acceptance.
 These avatars do not indicate administrator authority; the charter gate uses
 the accepted administrator roster from the per-team detail response.
 
-Displays one team in the marketplace (`MarketplaceTeams`). The footer's join
+Displays one team in the marketplace (`MarketplaceTeams`). Corner radius `radius-ms`, like `AgentCard` and `PromptCard`. The footer's join
 affordance (TEAM-09, narrowed to 2 states 2026-07-26) is driven entirely by
 the team's `joining_mode`, gated on `!team.is_member`:
 
@@ -2213,6 +2269,13 @@ supports the `color` override prop, but no shipped consumer uses it — the
 plain group-level color pattern is what every `ButtonGroup` consumer
 follows now.
 
+2026-10-12: the track color of a `ButtonGroup` is the typed `surface` prop
+(`surface-container-lowest` to `-highest`, default `surface-container`), which
+replaces the free `backgroundColor` string and its inline custom property.
+Unselected items are transparent, so the track shows through on any surface.
+Both groups here use `surface-container-lowest`, because their `form-section`
+is already `surface-container`.
+
 **Visibility control (TEAM-10, 2026-07-26).** New `ButtonGroup`
 (`public`/`private`; default `public` at the time — new teams default to
 `private` since 2026-08-26, #2433) gating marketplace discoverability
@@ -2266,6 +2329,13 @@ hardcoded class — same escape-hatch pattern as `DataTable`'s own
 `var(--surface-container-lowest)`, since they already sit inside a
 `surface-container` `form-section` and the default pill color would
 otherwise blend into it.
+
+**`ButtonGroupItem` — `selectedColor` (2026-10-12).** Optional per-item
+`selectedColor: "success" | "error"` fills the item with `--success` /
+`--on-success` or `--error` / `--on-error` while it is selected
+(`data-selected-color`); items without it keep `secondary-container`. Used by
+the admin Marketplaces page: Enabled/On reads success, Disabled/Off error,
+Default stays neutral.
 
 ### `TeamSettingsParameters` — team banner upload
 
@@ -2612,7 +2682,9 @@ closure of the same logic. Sizing: height `2rem` (`32px`), `label-medium`
 text, default (inactive) border `1px solid outline` — was `0.5px
 outline-variant`, a size/color pair that didn't match any other chip-style
 control in the app. Chip padding-left/right `spacing-s` (`12px`, was
-`spacing-xs`/`8px`). That geometry now lives in one `%pill` placeholder
+`spacing-xs`/`8px`). Optional `size="small"` (2026-10-12) is used by the members
+table: height `1.5rem`, `label-small`, padding `spacing-xs`, gap `spacing-2xs`; the
+dialog keeps the default. That geometry now lives in one `%pill` placeholder
 `@extend`ed by both the toggles and the baseline badge below, so the two
 cannot drift apart in the same row.
 
@@ -3772,8 +3844,14 @@ The ppt_filler capability's custom agent-form widget (rendered inside its
 upload/replace control, instant per-slide schema preview through the
 capability's stateless `/analyze` pod route, slide-numbered template errors
 i18n'd by stable code, and Save gating while the mandatory template is missing
-or invalid. The staged file travels with the atomic save (multipart
+or invalid. Both Simple and Advanced forms reject analyzed decks with no template
+fields, explain the required markers and slide notes in English and French,
+and link to `/ppt-filler-help`. Fixed slides remain allowed alongside fields.
+The staged file travels with the atomic save (multipart
 `with-assets` endpoints); the preview never persists anything.
+Save transport failures use distinct translated feedback for an unreachable runtime,
+validation timeout, and interrupted communication. These messages avoid internal
+service URLs and do not claim that an interrupted validation means the runtime is stopped.
 
 #### Open UX issues
 
@@ -4695,9 +4773,10 @@ shows a generic "no longer available" line.
 "Recommended model" `Select` in the agent form's General section. First option
 "Team default model" (helper line: "Currently <name>. Follows changes made by
 the team admin.") saves `null`; then every team-enabled model, today's default
-included, which pins it. A
-stored value no longer selectable is shown flagged "No longer available". The
-form's former Reasoning card is removed.
+included, which pins it. If the stored model is no longer selectable, the
+form selects the team default and saves `null` when edited. The form's former
+Reasoning card is removed. Saving waits for model reads when a recommendation
+is stored; a failed read is shown explicitly and leaves that value unchanged.
 
 ### `PlatformRolesPage` (`/admin/platform-roles`, 2026-08-21, #2405)
 

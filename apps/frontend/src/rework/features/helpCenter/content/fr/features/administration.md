@@ -51,6 +51,8 @@ n'accèdent donc pas nécessairement à la même page.
 - **Interface utilisateur** — le thème proposé par défaut et les thèmes
   disponibles pour les utilisateurs.
 - **Annonces** — les bandeaux et les patch notes affichés aux utilisateurs.
+- **Marketplaces** — qui peut publier des agents dans la marketplace, et
+  combien.
 - **Analytiques** — les indicateurs d'usage à l'échelle de la plateforme.
 - **Activité** — les traitements en cours et leur historique.
 - **Auto-test** et **Audit du corpus** — les vérifications de bon
@@ -76,8 +78,30 @@ Chaque changement est enregistré aussitôt.
 Un utilisateur dont le thème n'est plus proposé passe au thème par défaut. Son choix est conservé : il le retrouve si le thème est de nouveau proposé. Choisir
 un thème dans son profil, même celui déjà affiché, le garde ensuite si le thème
 par défaut change. Si un seul thème est proposé, le
-profil n'affiche plus que le mode. Les changements s'appliquent au prochain
-chargement de l'application par chaque utilisateur.
+profil n'affiche plus que le mode. Les changements s'appliquent aussitôt pour
+l'administrateur, et pour les autres utilisateurs à leur retour sur
+l'application ou dans la minute.
+
+Pour ajouter un thème aux couleurs de votre organisation, voir
+[Créer un thème personnalisé](/help/fr/guides/custom-theme).
+
+## Marketplaces
+
+Sur la page **Marketplaces**, un **Admin plateforme** décide dans quelles
+équipes les éditeurs peuvent publier des agents dans la marketplace (voir
+[Les agents](/help/fr/features/agents#la-marketplace-des-agents)) :
+
+- une ligne **Activation de la publication** : **Désactivé** ou **Activé**,
+  et combien d'agents une équipe peut publier (5 sauf changement). Toutes les
+  équipes la suivent, y compris celles créées plus tard ;
+- pour chaque équipe, **Désactivée**, **Défaut** ou **Activée**. Son
+  **Nombre d'agents max** suit la valeur par défaut ; **Personnaliser** lui en
+  donne un propre, avec un retour possible au défaut.
+
+Désactiver la publication pour une équipe retire ses agents publiés de la
+marketplace ; la confirmation annonce d'abord combien. Baisser le nombre
+d'agents max garde les agents déjà publiés mais bloque les nouvelles
+publications.
 
 ## Qui ouvre les fonctions à votre équipe
 

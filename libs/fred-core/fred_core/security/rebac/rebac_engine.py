@@ -168,6 +168,9 @@ class TeamPermission(str, Enum):
     CAN_ADMINISTER_EDITORS = "can_administer_editors"
     CAN_ADMINISTER_ANALYSTS = "can_administer_analysts"
     CAN_ADMINISTER_ADMINS = "can_administer_admins"
+    # Agents marketplace; the platform switch and quota are checked on top.
+    CAN_PUBLISH_MARKETPLACE_AGENTS = "can_publish_marketplace_agents"
+    CAN_UNPUBLISH_MARKETPLACE_AGENTS = "can_unpublish_marketplace_agents"
     CAN_READ_CONVERSATIONS = "can_read_conversations"
     # AUTHZ-05 review item 1b: `team_member`-only, unlike CAN_READ (which
     # also admits `public`) — gates seeing/using the team's agents.

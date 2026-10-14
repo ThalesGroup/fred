@@ -251,3 +251,37 @@ describe("ButtonGroup keyboard activation", () => {
     expect(first.getAttribute("aria-checked")).toBeNull();
   });
 });
+
+describe("ButtonGroup selected colour", () => {
+  it("exposes an item's selectedColor and leaves items without one on the default", () => {
+    const groupItems: ButtonGroupItemProps[] = [
+      { label: "Off", selectedColor: "error" },
+      { label: "Default" },
+      { label: "On", selectedColor: "success" },
+    ];
+    render(<ButtonGroup items={groupItems} size="small" color="secondary" variant="radio" aria-label="test" />);
+
+    const [off, def, on] = items();
+    expect(off.dataset.selectedColor).toBe("error");
+    expect(on.dataset.selectedColor).toBe("success");
+    expect(def.hasAttribute("data-selected-color")).toBe(false);
+  });
+});
+
+describe("ButtonGroup track surface", () => {
+  const base = { size: "small", color: "secondary", variant: "radio", "aria-label": "Mode" } as const;
+  const group = () => container.querySelector('[role="radiogroup"]');
+
+  it("defaults to surface-container and sets no inline style", () => {
+    render(<ButtonGroup {...base} items={[{ label: "A" }, { label: "B" }]} />);
+
+    expect(group()?.getAttribute("data-surface")).toBe("surface-container");
+    expect(group()?.getAttribute("style")).toBeNull();
+  });
+
+  it("carries the requested surface", () => {
+    render(<ButtonGroup {...base} surface="surface-container-lowest" items={[{ label: "A" }, { label: "B" }]} />);
+
+    expect(group()?.getAttribute("data-surface")).toBe("surface-container-lowest");
+  });
+});

@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from temporalio.client import Client as TemporalClient
 
 from control_plane_backend.agent_instances.store import AgentInstanceStore
+from control_plane_backend.agent_marketplace.store import AgentMarketplaceStore
 from control_plane_backend.announcements.store import AnnouncementStore
 from control_plane_backend.app.container import ControlPlaneContainer
 from control_plane_backend.app.dependencies import get_application_container
@@ -89,6 +90,7 @@ class ProductServiceDependencies:
     configuration: Configuration
     team_dependencies: TeamServiceDependencies
     get_agent_instance_store: Callable[[], AgentInstanceStore]
+    get_agent_marketplace_store: Callable[[], AgentMarketplaceStore]
     get_team_capability_settings_store: Callable[[], TeamCapabilitySettingsStore]
     get_team_routing_policy_store: Callable[[], TeamRoutingPolicyStore]
     get_platform_model_binding_store: Callable[[], PlatformModelBindingStore]
@@ -145,6 +147,7 @@ def build_product_service_dependencies(
         configuration=container.configuration,
         team_dependencies=build_team_service_dependencies(container),
         get_agent_instance_store=container.get_agent_instance_store,
+        get_agent_marketplace_store=container.get_agent_marketplace_store,
         get_team_capability_settings_store=container.get_team_capability_settings_store,
         get_team_routing_policy_store=container.get_team_routing_policy_store,
         get_platform_model_binding_store=container.get_platform_model_binding_store,

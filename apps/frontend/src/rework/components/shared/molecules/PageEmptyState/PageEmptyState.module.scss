@@ -41,6 +41,12 @@
   white-space: pre-line;
 }
 
+.description {
+  max-width: 50ch;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
+
 .icon {
   display: flex;
   justify-content: center;

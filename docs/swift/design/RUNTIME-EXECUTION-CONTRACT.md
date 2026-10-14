@@ -2714,6 +2714,9 @@ persisted before this fix.
 
 ### 8.42 ✅ Tool error claims the final response only when the whole round failed (issue #2244, 2026-08-05)
 
+> **Final-response half superseded by §8.115 (2026-10-14):** a wholly-failed
+> round's error is now only the fallback when the model writes no answer.
+
 **Refines §8.27's runtime half.** Since the v2 loop shipped, any
 `is_error=True` tool result made the ReAct stream surface that error text
 verbatim as the `FinalRuntimeEvent` content and discard the LLM's own
@@ -5704,7 +5707,7 @@ is_error = status_is_error or artifact_is_error
 
 The text shown to the user for a failed call comes from the same trust
 boundary and feeds both `ToolResultRuntimeEvent.content` and
-`FinalRuntimeEvent.content`:
+`FinalRuntimeEvent.content` (the latter only as a fallback since §8.115):
 
 - A typed `is_error=True` `ToolInvocationResult` that reaches this boundary
   is Fred-owned: its text is rendered fresh from the artifact via
@@ -6949,6 +6952,18 @@ list. Deploy runtime pods before the web client to avoid that rendering for
 the turns sent in between. Acceptance:
 `openspec/specs/platform-agent-skills/spec.md`.
 
+### 8.113 Capability config export and inline copy files (2026-10-11)
+
+Additive, extends §8.102. `POST /agents/capabilities/{id}/export-config` (body
+`CapabilityConfigExportRequest`: envelope, team and agent instance) returns
+`CapabilityConfigExportResult`: the upgraded envelope with scope-private settings reset
+and every `AssetKey` file as `files` (asset key → base64), read with the caller's token.
+404 when the capability is not installed, 422 when the config or a file cannot be read.
+`CapabilityConfigCopyRequest` gains optional `asset_files` (same shape): when set, the
+pod takes the files from it instead of reading the source instance (a key missing or
+not valid base64 → 422). Together they let a copy be prepared from a stored snapshot
+without access to the source team. Acceptance: `openspec/changes/add-agent-marketplace/`.
+
 ### 8.114 Per-conversation model choice, instance recommendation and model-led reasoning (2026-10-09, #3029)
 
 Supersedes the team per-agent level of §8.32 and the agent gate and tri-state
@@ -7021,3 +7036,34 @@ or constructor) still loads, logs one deprecation warning per definition
 class, and changes nothing. They will be removed in a later minor. `AgentTuning`
 no longer has them and ignores them in stored payloads.
 Migration note: `docs/swift/ops/migrations/chat-model-and-reasoning-picker.md`.
+
+### 8.115 A model answer after a failed tool round is the final response (2026-10-14, #2588)
+
+**Supersedes the final-response half of §8.42 and §8.74.** Until now, when
+every tool call of a round failed, `react_runtime.py` suppressed the model's
+assistant deltas and replaced its final answer with the failed call's
+user-facing error text (often the generic "This step failed unexpectedly and
+could not be completed."). Honest answers were lost: Deep's filesystem gate
+(#2588), the per-turn tool-call cap (`ToolCallLimitMiddleware`, contrary to
+`tool_pacing.py`'s "a normal answer, never a crash"), and a tool's revision
+request flagged `is_error`.
+
+**Rule.** `FinalRuntimeEvent.content` is the model's non-empty answer written
+after the last error that claimed the final response; its deltas stream
+normally. The claimed error text (§8.74 boundary, unchanged) is used only when
+the model wrote nothing after the failure — a blank answer, or no model turn at
+all; the runtime logs `event=final_from_tool_error` then. The round rules of
+§8.42 still decide which error, if any, is the fallback.
+
+**Trust boundary.** The original override guarded against a model misreporting
+a failure. The same safeguards that already applied to partial failures since
+§8.42 now cover a wholly-failed round: every failed call keeps `is_error=True`
+and its bounded text on its tool row, and the read-only platform instructions
+forbid claiming a call not made or pasting a raw tool error. No policy-refusal
+marker is needed: refusals and genuine failures follow the same rule.
+
+**Scope.** `react_runtime.py` only (shared by ReAct and Deep). No event, SDK,
+OpenAPI or configuration change. Tests:
+`libs/fred-runtime/tests/test_react_tool_error_final_2244.py`.
+OpenSpec: `openspec/changes/keep-model-answer-after-failed-tool-round/`.
+Migration note: `docs/swift/ops/migrations/2588-keep-model-answer-after-failed-tool-round.md`.

@@ -13,8 +13,9 @@
 // limitations under the License.
 
 import { describe, expect, it } from "vitest";
-import { getHelpPage, getHelpTree, helpPagePath, parseFrontmatter } from "./content";
+import { getHelpPage, getHelpPagesForLang, getHelpTree, helpPagePath, parseFrontmatter } from "./content";
 import { HELP_LANGS, HELP_SECTIONS } from "./manifest";
+import { extractHeadings } from "./search";
 
 describe("parseFrontmatter", () => {
   it("splits fields from body and ignores unknown keys", () => {
@@ -59,6 +60,20 @@ describe("help content corpus", () => {
     const ids = (lang: (typeof HELP_LANGS)[number]) =>
       getHelpTree(lang).map((s) => ({ id: s.id, pages: s.pages.map((p) => p.id) }));
     expect(ids("fr")).toEqual(ids("en"));
+  });
+
+  it("points every cross-link anchor at an existing heading", () => {
+    for (const lang of HELP_LANGS) {
+      for (const { body } of getHelpPagesForLang(lang)) {
+        for (const [, linkLang, section, page, slug] of body.matchAll(
+          /\]\(\/help\/(\w+)\/([\w-]+)\/([\w-]+)#([\w-]+)\)/g,
+        )) {
+          const target = getHelpPage(linkLang as typeof lang, section, page);
+          expect(target, `${linkLang}/${section}/${page} must exist`).not.toBeNull();
+          expect(extractHeadings(target!.body).map((h) => h.slug)).toContain(slug);
+        }
+      }
+    }
   });
 
   it("parses frontmatter into meta (title differs from file id)", () => {

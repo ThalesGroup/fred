@@ -20,6 +20,7 @@ import contextvars
 import hashlib
 import json
 import logging
+import time
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -1340,18 +1341,45 @@ async def _validate_capability_config_via_pod(
         for upload in asset_files
     ]
     headers = {"Authorization": authorization} if authorization else None
+    started = time.monotonic()
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
                 url, data=data, files=files or None, headers=headers
             )
     except httpx.RequestError as exc:
-        raise EnrollmentError(
-            f"Agent runtime service at {base_url} is not reachable to "
-            f"validate capability '{capability_id}' configuration. Start the "
-            "corresponding agent runtime, then try again.",
-            http_status=503,
-        ) from exc
+        if isinstance(exc, (httpx.ConnectError, httpx.ConnectTimeout)):
+            code, status, message = (
+                "capability_validation_unavailable",
+                503,
+                "The agent runtime could not be reached to validate the configuration. "
+                "Please try again in a moment.",
+            )
+        elif isinstance(exc, httpx.TimeoutException):
+            code, status, message = (
+                "capability_validation_timeout",
+                504,
+                "Configuration validation took too long. Please try again.",
+            )
+        else:
+            code, status, message = (
+                "capability_validation_interrupted",
+                502,
+                "Communication with the agent runtime was interrupted during "
+                "configuration validation. Please try again.",
+            )
+        # The request logging scope supplies existing request/correlation IDs.
+        logger.warning(
+            "Capability validation transport failed: exception_type=%s duration_ms=%.1f",
+            type(exc).__name__,
+            (time.monotonic() - started) * 1000,
+            extra={
+                "capability_id": capability_id,
+                "outcome": "failed",
+                "error_code": code,
+            },
+        )
+        raise EnrollmentError(message, http_status=status, code=code) from exc
     if response.status_code in (400, 404, 422):
         try:
             detail = response.json().get("detail") or response.text
@@ -1377,6 +1405,29 @@ async def _validate_capability_config_via_pod(
             http_status=502,
         )
     return envelope
+
+
+def _advertised_defaults(
+    available: Sequence[CapabilityCatalogEntry], default_capability_ids: Sequence[str]
+) -> list[str]:
+    available_ids = frozenset(entry.id for entry in available)
+    return [cap_id for cap_id in default_capability_ids if cap_id in available_ids]
+
+
+async def template_default_capability_ids(
+    available: Sequence[CapabilityCatalogEntry],
+    default_capability_ids: Sequence[str],
+    team_id: TeamId,
+    deps: ProductServiceDependencies | None,
+) -> list[str]:
+    """The template defaults the pod advertises, narrowed to what the team may use."""
+    candidate_ids = _advertised_defaults(available, default_capability_ids)
+    if deps is None or not candidate_ids:
+        return candidate_ids
+    usable_ids = await usable_capability_ids(deps.team_dependencies.rebac, team_id)
+    if usable_ids is None:
+        return candidate_ids
+    return [cap_id for cap_id in candidate_ids if cap_id in usable_ids]
 
 
 async def _apply_capability_selection(
@@ -1460,21 +1511,10 @@ async def _apply_capability_selection(
         # use. No 403 — an implicit default silently degrades to "whatever
         # this team already has" rather than blocking every fresh team's
         # first save.
-        available_ids = frozenset(entry.id for entry in available)
-        candidate_ids = [
-            cap_id for cap_id in default_capability_ids if cap_id in available_ids
-        ]
-        if deps is not None and candidate_ids:
-            usable_ids = await usable_capability_ids(
-                deps.team_dependencies.rebac, team_id
-            )
-            effective_ids = (
-                candidate_ids
-                if usable_ids is None
-                else [cap_id for cap_id in candidate_ids if cap_id in usable_ids]
-            )
-        else:
-            effective_ids = candidate_ids
+        candidate_ids = _advertised_defaults(available, default_capability_ids)
+        effective_ids = await template_default_capability_ids(
+            available, default_capability_ids, team_id, deps
+        )
         # 2026-07-19 fix B (GitHub #2004 item 5, depends_on fast-follow
         # defense-in-depth): the template declared defaults, but every one of
         # them got filtered out by the team's ReBAC grants — persisting `[]`
@@ -3137,7 +3177,9 @@ async def unenroll_agent_instance(
     - `deleted = await unenroll_agent_instance(team_id=team_id, agent_instance_id="inst-1", deps=deps)`
     """
     store = deps.get_agent_instance_store()
-    deleted = await store.delete(agent_instance_id, team_id)
+    deleted = await store.delete(
+        agent_instance_id, team_id, actor_uid=user.uid if user else None
+    )
     if deleted:
         try:
             deps.get_kpi_writer().count(

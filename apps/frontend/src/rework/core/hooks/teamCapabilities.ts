@@ -33,6 +33,8 @@ export type TeamCapabilities = {
   canAdministerEditors: boolean;
   canAdministerAnalysts: boolean;
   canAdministerAdmins: boolean;
+  canPublishMarketplaceAgents: boolean;
+  canUnpublishMarketplaceAgents: boolean;
   canReadConversations: boolean;
   canUseTeamAgents: boolean;
   canUseTeamApplications: boolean;
@@ -60,6 +62,8 @@ const PERMISSION_TO_FLAG: Record<TeamPermission, keyof TeamCapabilities> = {
   can_administer_editors: "canAdministerEditors",
   can_administer_analysts: "canAdministerAnalysts",
   can_administer_admins: "canAdministerAdmins",
+  can_publish_marketplace_agents: "canPublishMarketplaceAgents",
+  can_unpublish_marketplace_agents: "canUnpublishMarketplaceAgents",
   can_read_conversations: "canReadConversations",
   can_use_team_agents: "canUseTeamAgents",
   can_use_team_applications: "canUseTeamApplications",
