@@ -304,7 +304,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     getTeamApplicationsControlPlaneV1TeamsTeamIdApplicationsGet: {
       providesTags: [{ type: "ControlPlaneCapability" as const, id: "LIST" }],
     },
-      // Enablement changes agent state, marketplace entries and usable models.
+    // Enablement changes agent state, marketplace entries and usable models.
     putTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPut: {
       invalidatesTags: (_, __, arg) => [
         { type: "ControlPlaneCapability", id: "LIST" },
