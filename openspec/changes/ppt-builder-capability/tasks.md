@@ -448,3 +448,15 @@ Owns: `capability.py` (`awrap_tool_call`), `tools.py` (`round_refusal`, unchange
 - [x] 40.3 A `slides` call equal to the deck delivered this turn is answered "unchanged, deck already delivered as '<file>'" with no render, upload or preview. Tests: render counter unchanged, one write; another file name or content renders; the WP27 parallel-copy test now expects the copy answered as unchanged
 - [x] 40.4 Package `make test`, `ruff check`, `ruff check --select I`, `ruff format --check`, basedpyright with baseline; `verification.md`; `openspec validate --strict`
 - Not covered: a live re-run of the session
+
+## WP41. Live-session fixes: revisions are not errors, the next call, parallel sections
+
+Owns: `tools.py` (`_answer`, `_NEXT_CALL`, the variety ask and choice guide), `capability.py` (working rules, round refusal), `assign.py` (`_places`, mirrored uses in `_beam` and `_repeats`, `_wants_picture`), `design.md` D27, delta spec, tests, `verification.md`.
+
+- [x] 41.1 Fit and variety `needs_revision`, the identical-resend guard, the round refusal, "nothing changed" and "unchanged, deck already delivered" are non-error results with the same text and payload; bad calls, load/busy/render/upload failures and an analysis not ready stay errors. Tests: each revision path asserts `not is_error` (fit, variety, merged, `changes`, design pin, identical resend still evaluated once, round refusal, unchanged); the empty plan and the bad changes stay errors
+- [x] 41.2 Every revision text and the working rules say the very next message must be a new `build_presentation` call with the fixes, never a final answer, unless the user must decide something. Tests: the fit and variety texts, the system prompt
+- [x] 41.3 A template slide with a framed picture area is never offered (variety option, suggestion, fit close kind) to slides without an image. Tests: a picture-per-item `cards` variant neither offered nor suggested, a plain one suggested; a framed `image_text` close kind offered only with an image
+- [x] 41.4 Parallel sections: uses at the same place of different sections (`section` slides, else agenda entries) count once, in the ask and the beam; repetition inside a section still counts. Tests: three mirrored sections accepted, each keeping the first's design, the same slides without sections a repeat; three uses in one section revised, mirrored or not; an unmirrored place counted on its own; agenda boundaries with and without matching titles
+- [x] 41.5 Package `make test`, `ruff check`, `ruff check --select I`, `ruff format --check`, basedpyright with baseline; `verification.md`; `openspec validate --strict`
+- Not in scope: the runtime replacing the model's answer after an error result (separate runtime fix, `libs/fred-runtime` untouched)
+- Not covered: a live re-run of the session

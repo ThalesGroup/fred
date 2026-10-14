@@ -428,6 +428,19 @@ The system SHALL accept from the model a plan of slides carrying content only â€
 - **AND** no option or suggestion for them names a template slide that has the same fit problem
 - **AND** when the next call fixes the fit problems with the kinds unchanged, the deck is built as is, the repeat only noted
 
+#### Scenario: Parallel sections are accepted
+
+- **GIVEN** a first deck whose sections repeat one structure: each starts with a `section` slide (or, when the deck has none, with a slide titled as an entry of its agenda) and holds the same kinds in the same order (Italy: section, figures, timeline; Spain: section, figures, timeline)
+- **WHEN** the variety check is on and a template slide (or, with `kind`, a kind) is used once per section, at the same place among each section's content slides
+- **THEN** those uses count as one: no variety ask, no reuse or over-max cost in the assignment, so each section's slide keeps the first section's design; the deck is built
+- **AND** the variety ask and the choice guide say that sections repeating one structure may reuse a slide at the same place in each section
+
+#### Scenario: Repetition inside one section is still revised
+
+- **GIVEN** a first deck with two sections
+- **WHEN** one template slide is used on more content slides of one section than the cap allows (three times in a row in the first section, mirrored or not in the second), or at a place the other section does not mirror
+- **THEN** each place counts once and every unmirrored use counts on its own, so the group still exceeds its cap and `needs_revision` lists it under `variety`; three identical template slides in a row are still avoided whenever another slide fits
+
 #### Scenario: Suggestions state what the slide holds
 
 - **WHEN** the variety ask suggests a kind for a slide from its content
@@ -538,7 +551,19 @@ The system SHALL instruct the agent to write the plan and call `build_presentati
 
 ### Requirement: No silent fallback
 
-The system SHALL NOT substitute an unfitting pattern for a slide. When a slide fits no pattern, the tool SHALL build nothing and return a structured error the model can act on.
+The system SHALL NOT substitute an unfitting pattern for a slide. When a slide fits no pattern, the tool SHALL build nothing and return a structured `needs_revision` result the model can act on. An expected revision SHALL NOT be returned as a failed tool call: only a bad call, an unavailable template, a busy server, a render or a storage failure SHALL be an error.
+
+#### Scenario: A revision is not a failed call
+
+- **WHEN** a call is refused for fit problems, for a variety ask, as a resend identical to a call refused this turn, as a later call of one model round, or as a deck that changes nothing (unchanged changes, a resend of the deck just delivered)
+- **THEN** the tool result is not an error, so the runtime hands it to the model and never ends the turn on its text; a fit or variety refusal carries `status: "needs_revision"` and the same `slides` / `variety` payload as before
+- **AND** each revision's text (fit, variety, identical resend) ends with: `Your very next message MUST be a new build_presentation call with these fixes applied, never a final answer, unless the user must decide something first.`
+- **AND** an unreadable plan, `slides` and `changes` together, empty `changes`, no deck to change, changes that cannot be applied, a plan whose every slide is empty, the previous deck unreadable, the template not loadable, a busy server, a render failure, an upload failure, or a template whose analysis is not ready stay errors
+
+#### Scenario: Remedies only name what the content can fill
+
+- **WHEN** a fit problem's close-kind options, a variety option or a variety suggestion would name a template slide whose framed picture area (one that shows a frame left empty) none of the slides concerned can fill, as they hold no image
+- **THEN** that template slide is not offered, and its kind is not proposed through it (a `cards` variant with a picture per item is never offered for slides without images; another `cards` variant without pictures still is)
 
 #### Scenario: Slide fits nothing
 
@@ -703,7 +728,7 @@ The system SHALL write the generated deck to the conversation's agent workspace,
 
 - **GIVEN** a deck delivered in this turn
 - **WHEN** a `slides` call assigns exactly that deck (same file name, every slide with the same content and template slide)
-- **THEN** nothing is rendered, uploaded or stored and no preview is added; the result, an error like every non-delivery, says "unchanged, deck already delivered as '<file>'", not to tell the user it was changed, and to send `changes` to change it
+- **THEN** nothing is rendered, uploaded or stored and no preview is added; the result, not an error, says "unchanged, deck already delivered as '<file>'", not to tell the user it was changed, and to send `changes` to change it
 - **AND** another file name or other content is built as a new deck
 
 #### Scenario: What was built
@@ -754,7 +779,7 @@ The system SHALL let the user correct a deck in chat by regenerating from an ame
 
 - **GIVEN** a delivered deck
 - **WHEN** a `changes` call leaves every slide's content and template slide as they are and keeps the file name (for example slide 7's current kind and bullets sent again, a replacement identical to the slide, or a `like` naming the design the slide already has)
-- **THEN** nothing is built or stored and the result, an error like every non-delivery, says nothing changed, why (the values sent are the current ones), not to tell the user it was changed, and the remedy (`edit` with the new text, `like` for another slide's design)
+- **THEN** nothing is built or stored and the result, not an error, says nothing changed, why (the values sent are the current ones), not to tell the user it was changed, and the remedy (`edit` with the new text, `like` for another slide's design)
 
 #### Scenario: New slide written in the change itself
 

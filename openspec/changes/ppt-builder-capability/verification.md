@@ -1390,3 +1390,25 @@ Commands (package root `libs/capabilities/fred-capability-ppt-filler`): `make te
 
 Not covered: a live re-run with a real model; agent loops that do not run the capability
 middleware (none expose `ppt_builder` today).
+
+
+## Results: WP41 (live-session fixes: revisions are not errors, the next call, parallel sections)
+
+Session `a9429766` (`mistral-medium`): a 14-slide deck with 4 charts got a variety `needs_revision` (Italy and Spain sections mirroring each other: figures at 4/8, timeline at 6/10). Returned as `is_error`, it made the runtime count a failed call; the model planned the fix, ended the turn without the call, and its answer was replaced by the raw revision text and JSON.
+
+| Finding | Fix | Evidence |
+| --- | --- | --- |
+| A revision was a failed tool call | `_answer` (non-error) for fit/variety `needs_revision`, identical resend, round refusal, nothing changed, already delivered; `_error` kept for real failures | `test_a_slide_that_fits_nothing_builds_nothing_and_says_what_to_change` (`not is_error`, block text = result text), `test_the_first_deck_is_asked_to_vary_once_and_a_resend_is_built`, `test_each_variety_check_mode_asks_for_its_own_repeat`, `test_parallel_build_calls_of_one_round_build_only_the_first`, `test_a_call_identical_to_a_refused_one_is_not_evaluated_again` (loop breaker: one evaluation, not an error), `test_changes_that_leave_the_deck_as_is_build_nothing`, `test_resending_the_delivered_deck_rebuilds_nothing`; still errors: `test_empty_plan_is_an_error_the_user_can_read`, `test_no_base_both_modes_and_bad_changes_build_nothing` |
+| The turn ended after a revision | Revision texts and working rules require the next message to be the fixed call | the fit and variety texts above; `test_builder_capability.py` system-prompt assertion |
+| Alternatives the content cannot fill | Framed-picture template slides never offered to slides without an image | `test_variety_never_offers_a_variant_needing_pictures_the_slides_lack`, `test_a_fit_remedy_never_names_a_kind_needing_a_missing_picture` |
+| Parallel sections asked to vary | Mirrored places counted once in the ask and the beam | `test_parallel_sections_repeating_one_structure_are_not_a_repeat`, `test_a_repetition_inside_one_section_is_still_a_repeat`, `test_an_agenda_splits_the_deck_into_sections_without_section_slides` |
+
+Commands (package root `libs/capabilities/fred-capability-ppt-filler`): `make test`: 630 passed,
+5 skipped (625 before WP41, 5 tests added); `ruff check`, `ruff check --select I`, `ruff format
+--check` clean; `basedpyright --baseline-file .baseline/basedpyright-baseline.json`: 0 errors
+(existing `builder_decks.py` `__all__` warning). `openspec validate ppt-builder-capability
+--strict` and `openspec validate ppt-builder-charts --strict` valid. Frontend untouched: no
+`ppt_builder` component reads the tool error flag.
+
+Not covered: a live re-run with a real model; the runtime's own handling of error results
+(`libs/fred-runtime` untouched).
