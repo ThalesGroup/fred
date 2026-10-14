@@ -156,7 +156,9 @@ class TeamMetadataStore:
             yield session
 
     @asynccontextmanager
-    async def advisory_lock(self, key: str) -> AsyncIterator[None]:
+    async def advisory_lock(
+        self, key: str, session: AsyncSession | None = None
+    ) -> AsyncIterator[None]:
         """Hold a Postgres transaction-scoped advisory lock for `key` for the
         duration of the `async with` block.
 
@@ -172,7 +174,7 @@ class TeamMetadataStore:
         non-Postgres dialects (e.g. SQLite in tests): a single-process test
         run has no cross-replica race to close.
         """
-        async with self._sessions() as s, s.begin():
+        async with use_session(self._sessions, session) as s:
             if self._engine.dialect.name == "postgresql":
                 await s.execute(
                     text("SELECT pg_advisory_xact_lock(:key)"),

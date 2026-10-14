@@ -175,26 +175,30 @@ async def set_marketplace_default(
     store = deps.get_marketplace_settings_store
     if store is None:
         raise RuntimeError("marketplace settings store is not configured")
-    before = await load_marketplace_default(store)
-    teams = await deps.get_team_metadata_store().list_all()
-    affected = [
-        team.id
-        for team in teams
-        if _turned_off(
-            before,
-            team,
-            team,
-            default_switch_after=request.agents_publishing_enabled,
-        )
-    ]
-    async with deps.get_team_metadata_store().transaction() as session:
-        await store().set(
-            agents_publishing_enabled=request.agents_publishing_enabled,
-            agents_publish_quota=request.agents_publish_quota,
-            updated_by=user.uid,
-            session=session,
-        )
-        impact, removed = await _apply_switch_off(deps, affected, session)
+    team_store = deps.get_team_metadata_store()
+    async with team_store.transaction() as session:
+        async with team_store.advisory_lock(
+            "agents_marketplace_settings", session=session
+        ):
+            before = await load_marketplace_default(store, session=session)
+            await store().set(
+                agents_publishing_enabled=request.agents_publishing_enabled,
+                agents_publish_quota=request.agents_publish_quota,
+                updated_by=user.uid,
+                session=session,
+            )
+            teams = await team_store.list_all(session=session)
+            affected = [
+                team.id
+                for team in teams
+                if _turned_off(
+                    before,
+                    team,
+                    team,
+                    default_switch_after=request.agents_publishing_enabled,
+                )
+            ]
+            impact, removed = await _apply_switch_off(deps, affected, session)
     emit_unpublished(removed, actor_uid=user.uid)
     emit_audit_log(
         "marketplace.settings.default_updated",
@@ -234,22 +238,31 @@ async def set_team_marketplace_settings(
     deps: TeamServiceDependencies,
 ) -> MarketplaceSettingsUpdateResult:
     await _require_manage_platform(deps, user)
-    team = await _require_team(deps, team_id)
-    default = await load_marketplace_default(deps.get_marketplace_settings_store)
-    affected = (
-        [team.id] if _turned_off(default, team, _with_overrides(team, request)) else []
-    )
     team_store = deps.get_team_metadata_store()
     async with team_store.transaction() as session:
-        updated = await team_store.set_marketplace_overrides(
-            team_id,
-            agents_publishing_enabled=request.agents_publishing_enabled,
-            agents_publish_quota=request.agents_publish_quota,
-            session=session,
-        )
-        if updated is None:
-            raise TeamNotFoundError(team_id)
-        impact, removed = await _apply_switch_off(deps, affected, session)
+        async with team_store.advisory_lock(
+            "agents_marketplace_settings", session=session
+        ):
+            team = await team_store.get_by_team_id(team_id, session=session)
+            if team is None:
+                raise TeamNotFoundError(team_id)
+            default = await load_marketplace_default(
+                deps.get_marketplace_settings_store, session=session
+            )
+            affected = (
+                [team.id]
+                if _turned_off(default, team, _with_overrides(team, request))
+                else []
+            )
+            updated = await team_store.set_marketplace_overrides(
+                team_id,
+                agents_publishing_enabled=request.agents_publishing_enabled,
+                agents_publish_quota=request.agents_publish_quota,
+                session=session,
+            )
+            if updated is None:
+                raise TeamNotFoundError(team_id)
+            impact, removed = await _apply_switch_off(deps, affected, session)
     emit_unpublished(removed, actor_uid=user.uid)
     emit_audit_log(
         "marketplace.settings.team_updated",

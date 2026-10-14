@@ -18,6 +18,7 @@ turns off (their published agents are removed)."""
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from typing import Any, cast
 
 import pytest
@@ -263,6 +264,41 @@ async def test_default_switch_off_affects_teams_on_default_only(
 
     assert sorted(result.impact.affected_team_ids) == ["alpha", "beta"]
     assert _team(result.settings, "gamma").agents_publishing_enabled is True
+
+
+@pytest.mark.asyncio
+async def test_default_switch_off_uses_overrides_at_write_time(
+    team_store: TeamMetadataStore,
+    settings_store: PlatformMarketplaceSettingsStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    deps = _deps(_FakeRebac(), team_store, settings_store)
+    await settings_store.set(
+        agents_publishing_enabled=True, agents_publish_quota=5, updated_by="admin"
+    )
+    await team_store.set_marketplace_overrides(
+        TeamId("gamma"), agents_publishing_enabled=True, agents_publish_quota=None
+    )
+    original_transaction = team_store.transaction
+
+    @asynccontextmanager
+    async def reset_override_before_write():
+        await team_store.set_marketplace_overrides(
+            TeamId("gamma"), agents_publishing_enabled=None, agents_publish_quota=None
+        )
+        async with original_transaction() as session:
+            yield session
+
+    monkeypatch.setattr(team_store, "transaction", reset_override_before_write)
+    result = await set_marketplace_default(
+        user=_admin(),
+        request=SetAgentsMarketplaceDefaultRequest(
+            agents_publishing_enabled=False, agents_publish_quota=5
+        ),
+        deps=deps,
+    )
+
+    assert sorted(result.impact.affected_team_ids) == ["alpha", "beta", "gamma"]
 
 
 @pytest.mark.asyncio

@@ -20,6 +20,7 @@ from collections.abc import Callable, Iterable
 
 from fred_core.common import TeamId
 from fred_core.teams.metadata_store import TeamMetadata
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from control_plane_backend.agent_marketplace.store import AgentMarketplaceStore
 from control_plane_backend.marketplace_settings.schemas import (
@@ -37,9 +38,11 @@ from control_plane_backend.models.marketplace_settings_models import (
 
 async def load_marketplace_default(
     get_store: Callable[[], PlatformMarketplaceSettingsStore] | None,
+    *,
+    session: AsyncSession | None = None,
 ) -> AgentsMarketplaceDefault:
     """The stored default, or the built-in one when nothing was ever saved."""
-    stored = await get_store().get() if get_store is not None else None
+    stored = await get_store().get(session=session) if get_store is not None else None
     if stored is None:
         return AgentsMarketplaceDefault(
             agents_publishing_enabled=DEFAULT_AGENTS_PUBLISHING_ENABLED,
