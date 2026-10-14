@@ -130,7 +130,9 @@ export type Pattern = {
   zones?: Zone[];
   groups?: RepeatGroup[];
   included?: boolean;
-  exclusion_reason?: ("chart" | "table" | "icon_bank" | "no_placeholder" | "unsupported_parts" | "author") | null;
+  exclusion_reason?:
+    | ("chart" | "table" | "library" | "icon_bank" | "no_placeholder" | "unsupported_parts" | "author")
+    | null;
   reusable?: boolean;
   labelled_by?: "heuristic" | "vision";
   warnings?: string[];
