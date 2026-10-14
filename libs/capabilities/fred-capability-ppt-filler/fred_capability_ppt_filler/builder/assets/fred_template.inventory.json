@@ -1,5 +1,5 @@
 {
- "template_sha256": "4ccba7af8573b718173dbf41df5a1e0e157aca2a236436b1f5c4f4d985a5cc94",
+ "template_sha256": "417acd04aaa958874b83021365ad895796fe6ce77dcc82dbee62efa5956db37b",
  "inventory": {
   "slide_width": 12192000,
   "slide_height": 6858000,
@@ -1033,9 +1033,65 @@
     "warnings": []
    },
    {
-    "id": "layout:10",
+    "id": "slide:271",
+    "source": "slide",
+    "source_index": 11,
+    "name": "Fred Chart Wide",
+    "label": "One chart across the slide",
+    "kind": "chart",
+    "zones": [
+     {
+      "key": "ph:100",
+      "role": "title",
+      "box": {
+       "x": 45,
+       "y": 60,
+       "w": 910,
+       "h": 127
+      },
+      "sample": "One chart across the slide",
+      "font_pt": 32.0,
+      "chars_per_line": 56,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null
+     },
+     {
+      "key": "ph:101",
+      "role": "chart",
+      "box": {
+       "x": 45,
+       "y": 220,
+       "w": 910,
+       "h": 660
+      },
+      "sample": "",
+      "font_pt": 18.0,
+      "chars_per_line": 21,
+      "max_lines": 12,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": "column"
+     }
+    ],
+    "groups": [],
+    "included": true,
+    "exclusion_reason": null,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "layout:11",
     "source": "layout",
-    "source_index": 10,
+    "source_index": 11,
     "name": "Fred Table",
     "label": "Fred Table",
     "kind": "bullets",
@@ -1091,9 +1147,9 @@
    {
     "id": "slide:267",
     "source": "slide",
-    "source_index": 12,
+    "source_index": 13,
     "name": "Fred Quote",
-    "label": "Fred Quote (12)",
+    "label": "Fred Quote (13)",
     "kind": "quote",
     "zones": [
      {
@@ -1145,9 +1201,9 @@
     "warnings": []
    },
    {
-    "id": "layout:12",
+    "id": "layout:13",
     "source": "layout",
-    "source_index": 12,
+    "source_index": 13,
     "name": "Fred Title Only",
     "label": "Fred Title Only",
     "kind": "section",
@@ -1183,7 +1239,7 @@
    {
     "id": "slide:269",
     "source": "slide",
-    "source_index": 14,
+    "source_index": 15,
     "name": "Fred Closing",
     "label": "Bring your own template, or use this one",
     "kind": "closing",
@@ -1237,9 +1293,9 @@
     "warnings": []
    },
    {
-    "id": "layout:14",
+    "id": "layout:15",
     "source": "layout",
-    "source_index": 14,
+    "source_index": 15,
     "name": "Fred Blank",
     "label": "Fred Blank",
     "kind": "other",
@@ -1254,7 +1310,7 @@
    {
     "id": "slide:266",
     "source": "slide",
-    "source_index": 11,
+    "source_index": 12,
     "name": "Fred Table",
     "label": "Layout catalogue",
     "kind": "section",
@@ -1290,7 +1346,7 @@
    {
     "id": "slide:268",
     "source": "slide",
-    "source_index": 13,
+    "source_index": 14,
     "name": "Fred Title Only",
     "label": "Title Only leaves the canvas free",
     "kind": "cards",
@@ -1468,9 +1524,9 @@
    {
     "id": "slide:270",
     "source": "slide",
-    "source_index": 15,
+    "source_index": 16,
     "name": "Fred Blank",
-    "label": "Fred Blank (15)",
+    "label": "Fred Blank (16)",
     "kind": "other",
     "zones": [],
     "groups": [],
