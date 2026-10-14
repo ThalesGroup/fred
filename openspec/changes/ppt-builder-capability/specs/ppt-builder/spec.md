@@ -428,18 +428,34 @@ The system SHALL accept from the model a plan of slides carrying content only â€
 - **AND** no option or suggestion for them names a template slide that has the same fit problem
 - **AND** when the next call fixes the fit problems with the kinds unchanged, the deck is built as is, the repeat only noted
 
-#### Scenario: Parallel sections are accepted
+#### Scenario: The limit counts within each section
 
-- **GIVEN** a first deck whose sections repeat one structure: each starts with a `section` slide (or, when the deck has none, with a slide titled as an entry of its agenda) and holds the same kinds in the same order (Italy: section, figures, timeline; Spain: section, figures, timeline)
-- **WHEN** the variety check is on and a template slide (or, with `kind`, a kind) is used once per section, at the same place among each section's content slides
-- **THEN** those uses count as one: no variety ask, no reuse or over-max cost in the assignment, so each section's slide keeps the first section's design; the deck is built
-- **AND** the variety ask and the choice guide say that sections repeating one structure may reuse a slide at the same place in each section
+- **GIVEN** a first deck with two sections, each starting at a `section` slide (or, when the deck has none, at a slide titled as an entry of its agenda), and a variety cap of 2
+- **WHEN** one template slide is used twice in Italy (its 2nd and 4th content slides) and twice in Spain (its 1st and 3rd)
+- **THEN** no variety ask is returned and the deck is built: the count resets from one section to the next, so a later section may reuse an earlier one's slides in any order
+- **AND** the same slides without section boundaries count four uses and are asked to vary; a deck with fewer than two sections is one section; cover, agenda, section and closing slides are never counted
+- **AND** the variety ask and the choice guide say that the limit counts within each section and that a later section may reuse an earlier one's slides
 
-#### Scenario: Repetition inside one section is still revised
+#### Scenario: Three uses inside one section are revised
 
-- **GIVEN** a first deck with two sections
-- **WHEN** one template slide is used on more content slides of one section than the cap allows (three times in a row in the first section, mirrored or not in the second), or at a place the other section does not mirror
-- **THEN** each place counts once and every unmirrored use counts on its own, so the group still exceeds its cap and `needs_revision` lists it under `variety`; three identical template slides in a row are still avoided whenever another slide fits
+- **GIVEN** a first deck with two sections and a variety cap of 2
+- **WHEN** one template slide is used three times inside one section, wherever it sits in it
+- **THEN** `needs_revision` lists those three slides under `variety` with `at_most` 2; the other section's uses are not listed
+
+#### Scenario: Three identical slides in a row are revised across a section boundary
+
+- **GIVEN** a first deck whose sections start at agenda entries, so no section slide separates them
+- **WHEN** the last two content slides of one section and the first of the next use the same template slide and no other slide fits them
+- **THEN** `needs_revision` lists those three slides under `variety` with `in_a_row` true, although each section is within its cap; when another slide fits, the assignment avoids the run itself
+
+#### Scenario: Identical slides the user asked for are built and noted
+
+- **GIVEN** the same deck, with `repeat_layout` true on the third slide of the run (the user explicitly asked for identical consecutive slides)
+- **WHEN** the deck is assigned
+- **THEN** that slide keeps the previous slide's template slide, is left out of the per-section cap and of the three-in-a-row rule, no variety ask is returned and the deck is built
+- **AND** the agent's notes say the slide keeps the previous slide's template slide as the user asked, and the "What was built" summary carries `layout_repeated` on it
+- **AND** when its content does not fit the previous slide's template slide, it is built on another one, with a note saying how to keep the layout and `layout_not_repeated` in the summary
+- **AND** the tool description says to set `repeat_layout` only when the user explicitly asked for identical consecutive slides, never on the model's own initiative; `{"op": "edit", "slide": N, "field": "repeat_layout", "value": true}` sets it on a delivered deck
 
 #### Scenario: Suggestions state what the slide holds
 

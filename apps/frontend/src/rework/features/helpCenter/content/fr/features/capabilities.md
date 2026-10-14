@@ -157,9 +157,9 @@ diapositive du template sert au plus le nombre de fois choisi. **Par type de sli
 identifié** : chaque type (des listes à puces, par exemple) revient au plus ce
 nombre de fois, même sur des diapositives différentes. Avec **1**, chaque
 diapositive est différente ; avec **2** (par défaut), une diapositive peut
-revenir une fois. Des sections construites pareil (une par pays, par exemple)
-peuvent reprendre la même diapositive au même endroit, comme la deuxième
-diapositive de chaque pays. Quand le template contient trop peu de diapositives pour la
+revenir une fois. La limite compte dans chaque section : une section (un pays,
+par exemple) peut reprendre les mêmes diapositives qu'une autre. Des
+diapositives identiques à la suite ne sont faites que si vous le demandez. Quand le template contient trop peu de diapositives pour la
 présentation demandée, l'agent fait au mieux. Sur la première présentation
 d'une conversation, l'agent est invité à revoir celles qui se répètent trop.
 Interrupteur coupé : aucune limite. Le changement vaut dès la présentation

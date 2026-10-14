@@ -1412,3 +1412,25 @@ Commands (package root `libs/capabilities/fred-capability-ppt-filler`): `make te
 
 Not covered: a live re-run with a real model; the runtime's own handling of error results
 (`libs/fred-runtime` untouched).
+
+## Results: WP42 (the variety limit per section, `repeat_layout`)
+
+Owner decision 2026-10-14: the per-template-slide limit counts within each section, a later section may reuse an earlier one's slides in any order, and identical slides in a row are made only when the user asks (D27, rewritten).
+
+| Rule | Evidence |
+| --- | --- |
+| Limit per section, counts reset | `test_the_limit_counts_within_each_section` (Italy at 2/4, Spain at 1/3, cap 2: no ask, Spain keeps the same designs; flat: slides 2, 4, 5, 7 asked), `test_three_uses_inside_one_section_are_still_revised` (slides 2, 4, 6, `at_most` 2), `test_an_agenda_splits_the_deck_into_sections_without_section_slides` (unchanged) |
+| No three in a row, across a boundary | `test_three_identical_slides_in_a_row_are_revised_across_sections` (agenda sections, slides 3–5, `in_a_row`), `test_repetition_is_allowed_and_reported_on_a_one_archetype_template` (run note; off mode keeps the old note), `test_no_three_identical_slides_in_a_row_when_an_alternative_fits` (unchanged) |
+| `repeat_layout` | `test_identical_slides_the_user_asked_for_are_built_and_noted`, `test_repeat_layout_keeps_the_previous_template_slide_outside_the_cap`, `test_repeat_layout_the_content_cannot_keep_is_noted`, `test_repeat_layout_is_an_edit_with_loose_names_and_values`, `test_the_delivered_part_summarises_what_was_built` (summary codes); frontend `DeckSummaryButton.test.tsx` (fr/en wording for every code) |
+| Wording | `test_the_choice_guide_states_the_authors_max`, `test_the_first_deck_is_asked_to_vary_once_and_a_resend_is_built` (the section rule in the ask) |
+
+Commands (package root `libs/capabilities/fred-capability-ppt-filler`): `make test`: 635 passed,
+5 skipped (630 before WP42: 2 tests of the mirrored rule removed, 7 added); `ruff check`, `ruff
+check --select I`, `ruff format --check` clean; `basedpyright --baseline-file
+.baseline/basedpyright-baseline.json`: 0 errors (existing `builder_decks.py` `__all__` warning).
+Frontend (`apps/frontend`): `npx tsc --noEmit -p .` clean; `npx vitest run
+src/rework/features/capabilities/ppt_builder src/rework/features/capabilities/ppt_filler
+src/rework/features/helpCenter`: 15 files, 108 tests passed; prettier and eslint clean on the
+touched files. `openspec validate ppt-builder-capability --strict` valid.
+
+Not covered: a live re-run with a real model.
