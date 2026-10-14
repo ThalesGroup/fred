@@ -16,21 +16,28 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
 from fred_core.common import TeamId
 from fred_core.sql import make_session_factory, use_session
 from fred_sdk.contracts.context import ModelBinding
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
+from control_plane_backend.agent_instances.store import (
+    clear_recommended_chat_profiles,
+)
 from control_plane_backend.models.platform_model_binding_models import (
     CHAT_MODEL_CAPABILITY,
     PlatformModelBindingRow,
 )
 from control_plane_backend.models.routing_policy_models import TeamRoutingPolicyRow
+from control_plane_backend.routing_policy.schemas import (
+    RoutingPolicyVersionConflictError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -42,9 +49,20 @@ class StoredTeamRoutingPolicy:
     team_id: TeamId
     version: int
     chat_default_profile_id: str | None
-    agent_profile_overrides: dict[str, str]
+    disabled_model_ids: tuple[str, ...]
+    reasoning_default_off_model_ids: tuple[str, ...]
     updated_by: str | None
     updated_at: datetime | None
+
+
+def _json_id_list(payload: str | None) -> tuple[str, ...]:
+    try:
+        value = json.loads(payload or "[]")
+    except ValueError:
+        return ()
+    if not isinstance(value, list):
+        return ()
+    return tuple(item for item in value if isinstance(item, str))
 
 
 def _row_to_record(row: TeamRoutingPolicyRow) -> StoredTeamRoutingPolicy:
@@ -52,7 +70,10 @@ def _row_to_record(row: TeamRoutingPolicyRow) -> StoredTeamRoutingPolicy:
         team_id=TeamId(row.team_id),
         version=row.version,
         chat_default_profile_id=row.chat_default_profile_id,
-        agent_profile_overrides=json.loads(row.agent_profile_overrides_json or "{}"),
+        disabled_model_ids=_json_id_list(row.disabled_model_ids_json),
+        reasoning_default_off_model_ids=_json_id_list(
+            row.reasoning_default_off_model_ids_json
+        ),
         updated_by=row.updated_by,
         updated_at=row.updated_at,
     )
@@ -77,19 +98,28 @@ class TeamRoutingPolicyStore:
         *,
         team_id: TeamId,
         chat_default_profile_id: str | None,
-        agent_profile_overrides: dict[str, str],
+        disabled_model_ids: Sequence[str],
+        reasoning_default_off_model_ids: Sequence[str],
         updated_by: str | None,
+        cleared_recommendation_profile_ids: frozenset[str] = frozenset(),
+        expected_version: int | None = None,
         session: AsyncSession | None = None,
     ) -> StoredTeamRoutingPolicy:
-        overrides_payload = json.dumps(agent_profile_overrides)
+        """Replace the policy and, in the same transaction, clear the team's
+        instance recommendations naming `cleared_recommendation_profile_ids`.
+        `expected_version` (0 = no row yet) refuses a write over a newer one."""
+
+        disabled = tuple(disabled_model_ids)
+        reasoning_off = tuple(reasoning_default_off_model_ids)
         async with use_session(self._sessions, session) as s:
-            existing = (
-                await s.execute(
-                    select(TeamRoutingPolicyRow).where(
-                        TeamRoutingPolicyRow.team_id == str(team_id)
-                    )
+            existing = await s.get(
+                TeamRoutingPolicyRow, str(team_id), with_for_update=True
+            )
+            actual = existing.version if existing is not None else 0
+            if expected_version is not None and expected_version != actual:
+                raise RoutingPolicyVersionConflictError(
+                    expected=expected_version, actual=actual
                 )
-            ).scalar_one_or_none()
             if existing is None:
                 version = 1
                 s.add(
@@ -97,7 +127,10 @@ class TeamRoutingPolicyStore:
                         team_id=str(team_id),
                         version=version,
                         chat_default_profile_id=chat_default_profile_id,
-                        agent_profile_overrides_json=overrides_payload,
+                        disabled_model_ids_json=json.dumps(list(disabled)),
+                        reasoning_default_off_model_ids_json=json.dumps(
+                            list(reasoning_off)
+                        ),
                         updated_by=updated_by,
                     )
                 )
@@ -105,13 +138,23 @@ class TeamRoutingPolicyStore:
                 version = existing.version + 1
                 existing.version = version
                 existing.chat_default_profile_id = chat_default_profile_id
-                existing.agent_profile_overrides_json = overrides_payload
+                existing.disabled_model_ids_json = json.dumps(list(disabled))
+                existing.reasoning_default_off_model_ids_json = json.dumps(
+                    list(reasoning_off)
+                )
                 existing.updated_by = updated_by
+            if cleared_recommendation_profile_ids:
+                await clear_recommended_chat_profiles(
+                    s,
+                    profile_ids=cleared_recommendation_profile_ids,
+                    team_id=team_id,
+                )
         return StoredTeamRoutingPolicy(
             team_id=team_id,
             version=version,
             chat_default_profile_id=chat_default_profile_id,
-            agent_profile_overrides=agent_profile_overrides,
+            disabled_model_ids=disabled,
+            reasoning_default_off_model_ids=reasoning_off,
             updated_by=updated_by,
             updated_at=None,
         )
@@ -122,15 +165,73 @@ class TeamRoutingPolicyStore:
         team_id: TeamId,
         session: AsyncSession | None = None,
     ) -> StoredTeamRoutingPolicy | None:
+        # Primary-key read: it runs on the per-turn runtime-binding call.
         async with use_session(self._sessions, session) as s:
-            row = (
-                await s.execute(
-                    select(TeamRoutingPolicyRow).where(
-                        TeamRoutingPolicyRow.team_id == str(team_id)
-                    )
-                )
-            ).scalar_one_or_none()
+            row = await s.get(TeamRoutingPolicyRow, str(team_id))
         return _row_to_record(row) if row is not None else None
+
+    async def list_team_ids_referencing_model(
+        self,
+        capability_id: str,
+        default_profile_ids: frozenset[str] = frozenset(),
+        session: AsyncSession | None = None,
+    ) -> list[TeamId]:
+        """Teams whose exception lists name `capability_id`, or whose default
+        is one of its `default_profile_ids` (revocation cleanup)."""
+
+        pattern = f"%{json.dumps(capability_id)}%"
+        conditions = [
+            TeamRoutingPolicyRow.disabled_model_ids_json.like(pattern),
+            TeamRoutingPolicyRow.reasoning_default_off_model_ids_json.like(pattern),
+        ]
+        if default_profile_ids:
+            conditions.append(
+                TeamRoutingPolicyRow.chat_default_profile_id.in_(
+                    sorted(default_profile_ids)
+                )
+            )
+        async with use_session(self._sessions, session) as s:
+            rows = (
+                await s.execute(
+                    select(TeamRoutingPolicyRow.team_id).where(or_(*conditions))
+                )
+            ).all()
+        return [TeamId(row[0]) for row in rows]
+
+    async def apply_model_revocation(
+        self,
+        *,
+        team_id: TeamId,
+        capability_id: str,
+        recommendation_profile_ids: frozenset[str],
+        session: AsyncSession | None = None,
+    ) -> list[str]:
+        """Drop a model the team lost from its exception lists, its default
+        (the pod default takes over) and the team's recommendations naming
+        it, in one transaction. Returns the ids of the instances whose
+        recommendation was cleared. No version bump: this is a platform side
+        effect, not a team edit."""
+
+        async with use_session(self._sessions, session) as s:
+            row = await s.get(TeamRoutingPolicyRow, str(team_id))
+            if row is not None:
+                if row.chat_default_profile_id in recommendation_profile_ids:
+                    row.chat_default_profile_id = None
+                disabled = _json_id_list(row.disabled_model_ids_json)
+                reasoning_off = _json_id_list(row.reasoning_default_off_model_ids_json)
+                if capability_id in disabled:
+                    row.disabled_model_ids_json = json.dumps(
+                        [i for i in disabled if i != capability_id]
+                    )
+                if capability_id in reasoning_off:
+                    row.reasoning_default_off_model_ids_json = json.dumps(
+                        [i for i in reasoning_off if i != capability_id]
+                    )
+            if not recommendation_profile_ids:
+                return []
+            return await clear_recommended_chat_profiles(
+                s, profile_ids=recommendation_profile_ids, team_id=team_id
+            )
 
 
 @dataclass(frozen=True)

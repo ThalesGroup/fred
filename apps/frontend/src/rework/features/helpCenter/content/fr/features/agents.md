@@ -32,6 +32,18 @@ agent de votre équipe que vous parlez.
   consulter. Sans rattachement, il ne voit aucun document.
 - **Les fonctions** — ce qu'il sait faire au-delà de répondre.
 
+## Le modèle de langage conseillé
+
+Dans la section **Général**, **Modèle conseillé** choisit le modèle de langage
+sur lequel démarrent les conversations avec cet agent. **Modèle par défaut de
+l'équipe** (le premier choix) reprend le modèle par défaut de l'équipe, et le
+suit quand l'admin d'équipe en change. Choisir un modèle précis, même celui qui
+est le défaut aujourd'hui, le garde quoi qu'il arrive au défaut. Seuls les modèles activés pour l'équipe sont
+proposés. Les membres peuvent toujours choisir un autre modèle dans la
+conversation (voir [Les conversations](/help/fr/features/chat)).
+
+Le raisonnement ne se règle plus dans l'agent : il suit le modèle choisi.
+
 ## Se faire aider par l'assistant de création
 
 Écrire de bonnes instructions (le « prompt système ») demande de l'habitude.
@@ -44,13 +56,11 @@ un agent existant :
    suffisent.
 2. Cliquez sur **Proposer**. Après quelques secondes, l'assistant propose un
    nom, un rôle, une courte description, des instructions et les capacités qui
-   semblent utiles à cet agent. Quand l'agent peut le proposer, le
-   **Raisonnement** figure toujours en tête des capacités.
+   semblent utiles à cet agent.
 3. Relisez les propositions. Tout est coché : décochez ce que vous ne voulez
    pas. Si rien ne convient, modifiez votre description et redemandez.
 4. Cliquez sur **Appliquer** : seuls les éléments cochés sont remplis. Les
-   capacités cochées remplacent la sélection actuelle. Le **Raisonnement**
-   coché est proposé dans le chat et activé au début de chaque conversation.
+   capacités cochées remplacent la sélection actuelle.
 
 Si un élément coché doit remplacer quelque chose que vous aviez déjà écrit,
 l'assistant vous demande d'abord de confirmer. Rien n'est enregistré tant que
@@ -60,8 +70,7 @@ vous n'enregistrez pas l'agent : vous pouvez encore tout modifier.
 
 L'onglet **Capacités** décide de ce que l'agent a le droit de faire : chercher
 dans les documents de l'équipe, exploiter une pièce jointe, rédiger un document
-Word, remplir une présentation PowerPoint, produire une page web, prendre le
-temps de raisonner par étapes…
+Word, remplir une présentation PowerPoint, produire une page web…
 
 Deux façons de choisir, via l'interrupteur **Avancé** en haut de l'onglet :
 

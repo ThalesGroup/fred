@@ -44,6 +44,12 @@ const composerKeys = vi.hoisted(() => ({
   recall: undefined as undefined | ((event: unknown) => boolean),
   send: undefined as undefined | (() => void),
 }));
+// The composer's model read: refetched when the window regains focus or a conversation opens.
+const modelRead = vi.hoisted(() => ({
+  refetch: vi.fn(),
+  fulfilledTimeStamp: undefined as number | undefined,
+  options: undefined as { skip?: boolean } | undefined,
+}));
 // The thread's opener for a sent prompt badge, and the error toast.
 const threadProps = vi.hoisted(() => ({
   openCommandPrompt: undefined as
@@ -168,7 +174,15 @@ vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   // #2387 — the composer's model label. Undefined here: this file covers the
   // chat-input policy wiring, and the label's own behaviour is covered in
   // ReasoningChip.test.tsx.
-  useEffectiveChatModelQuery: () => ({ data: undefined }),
+  useEffectiveChatModelQuery: (_: unknown, options?: { skip?: boolean }) => {
+    modelRead.options = options;
+    return {
+      data: undefined,
+      currentData: undefined,
+      fulfilledTimeStamp: modelRead.fulfilledTimeStamp,
+      refetch: modelRead.refetch,
+    };
+  },
   useAddPromptFavoriteMutation: () => [vi.fn()],
   useRemovePromptFavoriteMutation: () => [vi.fn()],
 }));
@@ -1016,6 +1030,83 @@ describe("ManagedChatPage — arrow keys recall sent messages", () => {
     expect(setInput).toHaveBeenCalledWith("/summary focus on risks");
   });
 });
+
+describe("ManagedChatPage — the model list follows admin changes made elsewhere", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    vi.stubGlobal("localStorage", memoryStorage());
+    modelRead.refetch.mockClear();
+    modelRead.fulfilledTimeStamp = Date.now() - 31_000;
+    chatValue = { ...chatValue, sessionId: "session-1", isHistorySettled: true };
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() => {
+      root.render(<ManagedChatPage />);
+    });
+  });
+
+  afterEach(() => {
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+    vi.unstubAllGlobals();
+  });
+
+  it("refetches the model list when the window regains focus", () => {
+    act(() => {
+      window.dispatchEvent(new Event("focus"));
+    });
+
+    expect(modelRead.refetch).toHaveBeenCalledTimes(1);
+  });
+
+  // Each read also asks the pod for its catalog: tab switching must not hammer it.
+  it("skips a focus refetch when the last read is under 30 seconds old", () => {
+    modelRead.fulfilledTimeStamp = Date.now() - 5_000;
+    act(() => {
+      root.render(<ManagedChatPage />);
+    });
+    act(() => {
+      window.dispatchEvent(new Event("focus"));
+    });
+
+    expect(modelRead.refetch).not.toHaveBeenCalled();
+  });
+
+  it("refetches the model list when another conversation opens, not on a plain re-render", () => {
+    act(() => {
+      root.render(<ManagedChatPage />);
+    });
+    expect(modelRead.refetch).not.toHaveBeenCalled();
+
+    chatValue = { ...chatValue, sessionId: "session-2" };
+    act(() => {
+      root.render(<ManagedChatPage />);
+    });
+
+    expect(modelRead.refetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops reading the model list once the conversation's agent is deleted", () => {
+    expect(modelRead.options?.skip).toBeFalsy();
+
+    chatValue = { ...chatValue, sessionId: "session-2", isReadOnly: true, executionDisabled: true };
+    act(() => {
+      root.render(<ManagedChatPage />);
+    });
+    act(() => {
+      window.dispatchEvent(new Event("focus"));
+    });
+
+    expect(modelRead.options?.skip).toBe(true);
+    expect(modelRead.refetch).not.toHaveBeenCalled();
+  });
+});
+
 describe("ManagedChatPage skill preview", () => {
   it.each([
     { origin: "user", child: false },

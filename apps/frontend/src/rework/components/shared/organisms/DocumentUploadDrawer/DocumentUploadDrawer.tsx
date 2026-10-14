@@ -590,7 +590,7 @@ export function DocumentUploadDrawer({
                           variant="radio"
                           aria-label={t("documentLibrary.conflictDecisionFor", { name: conflict.label })}
                           // The block behind it is already surface-container.
-                          backgroundColor="var(--surface-container-high)"
+                          surface="surface-container-high"
                           selectedIndex={decision === "overwrite" ? 0 : decision === "skip" ? 1 : -1}
                           onSelectedIndexChange={(index) => decideOne(conflict, index === 0 ? "overwrite" : "skip")}
                           items={[

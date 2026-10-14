@@ -230,8 +230,7 @@ export default function TeamAgentsPage() {
       role: payload.role || undefined,
       description: payload.description || undefined,
       usage_statement: payload.usageStatement,
-      reasoning_enabled: payload.reasoningEnabled,
-      reasoning_default_on: payload.reasoningDefaultOn,
+      recommended_chat_profile_id: payload.recommendedChatProfileId,
       tuning_field_values:
         Object.keys(payload.tuningFieldValues).length > 0
           ? (payload.tuningFieldValues as AgentRequestTuningFieldValues)
@@ -281,8 +280,11 @@ export default function TeamAgentsPage() {
       role: payload.role || undefined,
       description: payload.description || undefined,
       usage_statement: payload.usageStatement,
-      reasoning_enabled: payload.reasoningEnabled,
-      reasoning_default_on: payload.reasoningDefaultOn,
+      // Omitted when untouched, so a stale stored value never blocks an unrelated save.
+      recommended_chat_profile_id:
+        payload.recommendedChatProfileId !== (editingInstance.recommended_chat_profile_id ?? null)
+          ? payload.recommendedChatProfileId
+          : undefined,
       tuning_field_values:
         Object.keys(payload.tuningFieldValues).length > 0
           ? (payload.tuningFieldValues as AgentRequestTuningFieldValues)

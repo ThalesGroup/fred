@@ -119,18 +119,18 @@ make run FRONTEND_BACKEND_MODE=standalone
 
 ```text
 index.tsx
-└── loadConfig() (async)
-    └── Keycloak login
-        └── render <FredUi />
-              └── ApplicationContextProvider
-                   └── AppWithTheme (sets [data-theme] light/dark/system on <html>)
-                        └── AuthProvider
-                             └── GcuGuard → BootstrapGuard
-                                  ├── ConfirmationDialogProvider + ToastProvider
-                                  └── RouterProvider (createBrowserRouter)
-                                       └── LayoutWithSidebar
-                                             ├── SideBar (toggle + cluster + theme)
-                                             └── Outlet (all pages go here)
+`-- loadConfig() (async)
+    `-- Keycloak login
+        `-- render <FredUi />
+              `-- ApplicationContextProvider
+                   `-- AppWithTheme (sets [data-theme] light/dark/system on <html>)
+                        `-- AuthProvider
+                             `-- GcuGuard → BootstrapGuard
+                                  |-- ConfirmationDialogProvider + ToastProvider
+                                  `-- RouterProvider (createBrowserRouter)
+                                       `-- LayoutWithSidebar
+                                             |-- SideBar (toggle + cluster + theme)
+                                             `-- Outlet (all pages go here)
 ```
 
 ### Component Responsibilities
@@ -216,6 +216,25 @@ rebuild needed. Use it for static frontend settings and branding only; do not ad
 
 ### Theme overlay (branding assets without a rebuild)
 
+The same ZIP loader runs in Docker and in the local Vite server. For local
+development, set these values in `apps/frontend/config/.env` (copy the template
+if needed), then run `make run` or the VS Code frontend / All Services PROD task:
+
+```dotenv
+FRONTEND_THEME_URL=http://localhost:8333/fred-themes/theme.zip
+FRONTEND_THEME_S3_ACCESS_KEY=your-access-key
+FRONTEND_THEME_S3_SECRET_KEY=your-secret-key
+FRONTEND_THEME_REQUIRED=false
+```
+
+Omit both credential settings for a public object. `file:///absolute/path/theme.zip`
+also works for a local archive. Shell environment values override `config/.env`.
+Local startup requires `curl`, `unzip` and `jq`. Vite serves the validated theme
+from a temporary directory ahead of stock assets and never changes `public/`.
+After replacing a ZIP, restart the frontend and reload the browser; unset
+`FRONTEND_THEME_URL` and restart to return to stock assets. Docker/k3d uses the
+same environment settings with its reachable internal storage hostname.
+
 `config.json` selects assets by name, but the files themselves are baked into
 the image. A deployment ships its own logos, favicons, default avatars, agent
 icons and legal markdown as one **theme archive**: a zip laid out like
@@ -224,19 +243,101 @@ files.
 
 ```
 acme-theme-1.0.zip
-├── images/acme-logo.svg             # new name, referenced from properties: logoName: "acme-logo"
-├── images/icons/customAgent.svg     # agent icon silhouette (rendered as a CSS mask)
-├── images/default-team-avatar.png   # same name as a stock file: shadows it
-├── gcu.md  gcu.fr.md  gdpr.md  gdpr.fr.md
-├── team-admin-charter.md  team-admin-charter.fr.md   # shown to team admins, see TERMS_OF_USE.md
-├── release.md
-└── contrib/<brand>/...              # optional, the releaseBrand cascade still applies
+|-- theme-catalog.json               # selectable themes
+|-- themes/
+|   |-- acme/
+|   |   |-- theme-custom.css          # CSS scoped to acme
+|   |   `-- images/acme-logo.svg      # unique image name across the ZIP
+|   `-- partner/
+|       |-- theme-custom.css
+|       `-- images/partner-logo.svg
+`-- shared/
+    |-- images/icons/customAgent.svg  # image available to every theme
+    |-- theme-properties.json         # global branding labels and image names
+    |-- theme-translations/en.json    # global English UI label overrides
+    |-- theme-translations/fr.json    # global French UI label overrides
+    |-- gcu.md  gcu.fr.md  gdpr.md  gdpr.fr.md
+    |-- team-admin-charter.md  team-admin-charter.fr.md
+    |-- release.md
+    `-- contrib/<brand>/...           # optional releaseBrand content
 ```
 
-Only `/images/**`, `/contrib/**` and root `*.md` files can be overridden;
-`index.html`, `config.json` and the bundle never are. Symlinks are dropped and
+The installer assembles theme folders into the same public URLs as before.
+Image paths in CSS and catalog metadata still refer to `/images/`; image names
+must be unique across theme folders and `shared/images/`. Existing flat ZIPs
+remain supported. Only `/images/**`, `/contrib/**`, root `*.md`, `theme-custom.css`,
+`theme-catalog.json`, `theme-properties.json` and `theme-translations/{en,fr}.json` can be overridden;
+`index.html`, `config.json` and the bundle never are. Translation JSON can
+override UI message keys; omitted keys keep the shipped text. Use CSS selectors such as
+`html[data-ui-theme="pebble"][data-theme="light"]` to override any token in
+Pebble, Cobalt or Cloud, including colors, fonts and radii. The JSON may set
+these branding keys: `siteDisplayName`, `siteTitle`, `siteSubtitle`,
+`agentsNicknameSingular`, `agentsNicknamePlural`, `logoName`, `logoNameDark`,
+`faviconName`, `faviconNameDark`, `defaultTeamAvatarFile`,
+`defaultPersonalAvatarFile`, `agentIconName`, `releaseBrand` and
+`contactSupportLink`. It cannot change authentication, feature flags or the
+frontend base path. See `theme/` for a working example. Symlinks are dropped and
 an archive with entries escaping its root is refused. A zip made from a folder
 (`zip -r acme-theme.zip acme-theme/`) is accepted: the wrapper folder is skipped.
+
+To add selectable themes, put entries in `theme-catalog.json`:
+
+```json
+{
+  "themes": [
+    {
+      "id": "acme",
+      "label": "Acme",
+      "base": "pebble",
+      "tabTitle": "Acme Portal",
+      "faviconName": "acme-icon",
+      "faviconNameDark": "acme-icon-dark"
+    },
+    { "id": "partner", "label": "Partner", "base": "cloud" }
+  ]
+}
+```
+
+Each ID must be unique, lowercase and at most 32 characters; `base` is
+`pebble`, `cobalt` or `cloud`. The base supplies all tokens, fonts and shapes.
+The optional `tabTitle` (at most 200 characters) and `faviconName` /
+`faviconNameDark` (SVG basenames under `images/`, letters, digits, `_` and `-`)
+brand the browser tab while that theme is active; without them the tab keeps
+`siteDisplayName` and the global favicon, and a missing dark icon reuses the
+light one.
+Add only the differences in `theme-custom.css`, using selectors such as
+`[data-ui-theme="acme"][data-ui-base-theme="pebble"][data-theme="light"]`
+and the matching `dark` selector. Include the base attribute so the ZIP rule
+wins over the shipped CSS, which loads later. Color tokens always need all
+three attributes, even to adjust a shipped theme
+(`[data-ui-theme="cobalt"][data-ui-base-theme="cobalt"][data-theme="dark"]`);
+only mode-independent rules such as fonts can omit `[data-theme]`. A flat ZIP
+holding a root `themes/` or `shared/` directory is read as a structured one. Do not prefix these selectors
+with `html`: the admin previews also
+need to match them. ZIP themes appear in the profile picker and the admin theme settings,
+where an admin can choose a default or hide a theme. Images and fonts placed in
+the ZIP are shared assets; CSS can select different assets for each theme.
+The chat also exposes `[data-chat-main]`, `[data-chat-welcome-agent]` and
+`[data-chat-agent-icon]` for theme-specific backgrounds and avatars. Scope
+these rules under `html[data-ui-theme="<id>"]` so other themes stay unchanged.
+
+To change UI text, copy a key's nesting from `src/locales/fr/translation.json`
+into `theme-translations/fr.json`, for example:
+
+```json
+{
+  "rework": {
+    "uiSettings": { "title": "Mon interface" }
+  }
+}
+```
+
+Use `theme-translations/en.json` for English. Only supplied keys change; the
+rest keep their shipped translations. These overrides apply to the whole
+deployment, whichever theme is selected: one ZIP carries one set of labels, and
+themes in the same ZIP cannot have different labels. Rename "Agents" with the
+agent nicknames in `theme-properties.json`. Use `theme-catalog.json` for each theme's display name and
+`theme-properties.json` for shared brand labels and image names.
 
 | Variable                                                        | Meaning                                                                                                                                                                                                                                  |
 | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -251,8 +352,8 @@ Behaviour to keep in mind:
   their extension. A property pointing at a missing file renders a broken
   image, not a 404.
 - Browsers cache images: ship a new file name and update the property rather
-  than overwriting a file in place. Markdown is fetched with `cache: no-cache`,
-  so shadowing `gcu.md` in place is fine.
+  than overwriting a file in place. Theme CSS and properties are requested with
+  `no-cache`; translation JSON and Markdown are fetched with `no-cache` too.
 - A new `gcu.md` does not re-prompt users. Bump `gcu_version` in the
   control-plane configuration alongside it.
 - The archive is applied at container start. After replacing the zip under the
@@ -263,7 +364,7 @@ Behaviour to keep in mind:
   which holds the liveness probe off while the archive downloads.
 
 The archive is unpacked into `/var/lib/fred/theme`, outside the web root, and
-nginx tries it before the baked file for the three surfaces above.
+nginx tries it before the baked file for the supported surfaces above.
 
 Helm wiring is values only, no chart template change:
 
@@ -310,18 +411,27 @@ the URL is unset or an empty literal, the frontend is disabled, or either key is
 which is a hard failure for what is only branding. With it the fetch degrades to
 anonymous and the baked assets are served.
 
-The k3d values (`deploy/k3d/values.yaml`) carry this shape
-against the k3d seaweedfs, reusing the stack chart's own `fred-secrets`.
+The k3d values (`deploy/k3d/values.yaml`) use
+`http://seaweedfs:8333/fred-themes/theme.zip`, reusing the stack chart's own
+`fred-secrets`.
+Upload a new ZIP to the `fred-themes/theme.zip` object in SeaweedFS, then
+restart the frontend pods. For example, with an S3 client configured for your
+SeaweedFS endpoint and credentials:
+
+```sh
+aws --endpoint-url "$SEAWEED_S3_ENDPOINT" s3 cp theme.zip s3://fred-themes/theme.zip
+```
+
 `make theme-bundle` packages `theme/` into `theme.zip`, ready to upload. That
 directory is a complete working example - round logo and its dark variant, an
 agent icon silhouette, a team avatar, and the four legal files - so the target
 produces a verifiable archive out of the box; copy it and point `THEME_SRC` at
-your own. Two of its files need a property to be reached at all:
-`acme-team-avatar.svg` (`defaultTeamAvatarFile`) and `icons/customAgent.svg`
-(`agentIconName`); the logo and the markdown work on their file names alone.
+your own. Its `theme-properties.json` selects `acme-team-avatar.svg` and
+`icons/customAgent.svg`; its catalog adds an Acme theme based on Pebble, and
+`theme-custom.css` customizes Acme in both light and dark modes.
 
 The target also flags the two layout mistakes that are hard to spot from a
-running pod: entries outside the three served surfaces, and an English legal
+running pod: entries outside the supported surfaces, and an English legal
 file with no language variant beside it. `make theme-container-smoke` exercises the whole path against
 a locally built image.
 

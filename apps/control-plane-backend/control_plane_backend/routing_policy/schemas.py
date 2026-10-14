@@ -23,25 +23,48 @@ from pydantic import BaseModel, Field
 
 
 class TeamRoutingPolicy(BaseModel):
-    """One team's resolved routing policy.
+    """One team's resolved model settings.
 
-    `GET` always returns this shape — an empty policy (`version=0`, both
-    fields empty/None) when the team has never written one, resolving to
-    runtime defaults, never a 404 ("GET returns the stored policy or an empty
-    policy that resolves to runtime defaults").
+    `GET` always returns this shape — an empty policy (`version=0`, nothing
+    set) when the team has never written one, resolving to runtime defaults,
+    never a 404. Disabled and reasoning-off models are stored as exceptions,
+    so a model the platform newly allows arrives enabled with reasoning on.
     """
 
     team_id: TeamId
     version: int
     chat_default_profile_id: str | None = None
-    agent_profile_overrides: dict[str, str] = Field(default_factory=dict)
+    disabled_model_ids: list[str] = Field(
+        default_factory=list,
+        description="Model capability ids the team disabled for its members.",
+    )
+    reasoning_default_off_model_ids: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Model capability ids whose composer reasoning row starts OFF. "
+            "Every other reasoning-enabled model starts ON."
+        ),
+    )
 
 
 class UpdateTeamRoutingPolicyRequest(BaseModel):
-    """`PATCH` body — a full typed replacement, no per-field patch semantics."""
+    """`PATCH` body — a full typed replacement, no per-field patch semantics.
+
+    Ids the team can no longer use are pruned on write. Newly disabled models
+    clear the team's agent recommendations naming them, in the same write.
+    """
 
     chat_default_profile_id: str | None = None
-    agent_profile_overrides: dict[str, str] = Field(default_factory=dict)
+    disabled_model_ids: list[str] = Field(default_factory=list)
+    reasoning_default_off_model_ids: list[str] = Field(default_factory=list)
+    expected_version: int | None = Field(
+        default=None,
+        description=(
+            "The `version` the client last read (0 before any write). When "
+            "set and the stored version differs, the write is refused with "
+            "409 so a concurrent edit is not overwritten."
+        ),
+    )
 
 
 class AvailableModelProfile(BaseModel):
@@ -54,10 +77,57 @@ class AvailableModelProfile(BaseModel):
     profile_id: str
     capability_id: str
     name: str = Field(description="i18n key, same as CapabilityCatalogEntry.name")
+    display_name: str | None = Field(
+        default=None,
+        description="Ops-authored model display name, when the pod catalog has one.",
+    )
+    reasoning_available: bool = Field(
+        default=False,
+        description=(
+            "Whether a platform admin enabled reasoning for this model: only "
+            "then can the team set a reasoning default for it."
+        ),
+    )
 
 
 class AvailableModelProfileList(BaseModel):
     profiles: list[AvailableModelProfile] = Field(default_factory=list)
+    effective_default_profile_id: str | None = Field(
+        default=None,
+        description=(
+            "The profile shown as the team's Default: the stored team default, "
+            "else the pod default of the team's pods when they agree. Its "
+            "model cannot be disabled."
+        ),
+    )
+
+
+class DisableImpactAgent(BaseModel):
+    agent_instance_id: str
+    display_name: str
+
+
+class DisableImpact(BaseModel):
+    """Agents whose recommendation names a model about to be disabled; they
+    will follow the team default once it is."""
+
+    agents: list[DisableImpactAgent] = Field(default_factory=list)
+
+
+class SelectableChatModel(BaseModel):
+    """One model a member may pick for a conversation with an agent."""
+
+    profile_id: str = Field(description="Choice key sent as `chat_profile_id`.")
+    capability_id: str
+    name: str
+    display_name: str | None = None
+    reasoning_enabled: bool = Field(
+        default=False, description="Reasoning enabled platform-wide for this model."
+    )
+    reasoning_default_on: bool = Field(
+        default=False,
+        description="The team's starting reasoning state for this model.",
+    )
 
 
 class EffectiveChatModel(BaseModel):
@@ -144,6 +214,22 @@ class EffectiveChatModel(BaseModel):
         ),
     )
 
+    selectable_models: list[SelectableChatModel] = Field(
+        default_factory=list,
+        description=(
+            "Models a member may pick for this agent: chat models served by "
+            "the instance's pod, `can_use` for the team and not team-disabled. "
+            "Empty when the choice is locked or the pod is unreachable."
+        ),
+    )
+    choice_locked: bool = Field(
+        default=False,
+        description=(
+            "True when a platform binding or a pod per-agent override fixes "
+            "the model, so no choice is offered."
+        ),
+    )
+
 
 class ProfileNotUsableError(Exception):
     """One or more profile ids in a routing-policy write are not `can_use`-enabled
@@ -157,6 +243,53 @@ class ProfileNotUsableError(Exception):
         super().__init__(
             f"Team {team_id!r} may not use profile id(s) {profile_ids!r} — "
             "not enabled for this team."
+        )
+
+
+class ModelDisabledForTeamError(Exception):
+    """A write names a profile whose model the team disabled: the team default,
+    or an agent's recommendation. Mapped to 422."""
+
+    def __init__(self, *, team_id: TeamId, profile_ids: list[str]) -> None:
+        self.team_id = team_id
+        self.profile_ids = profile_ids
+        super().__init__(
+            f"Profile id(s) {profile_ids!r} name a model team {team_id!r} disabled."
+        )
+
+
+class DefaultModelNotDisableableError(Exception):
+    """The team's default model, explicit or effective, cannot be disabled."""
+
+    def __init__(self, *, capability_ids: list[str]) -> None:
+        self.capability_ids = capability_ids
+        super().__init__(
+            f"Model(s) {capability_ids!r} are the team default and cannot be disabled."
+        )
+
+
+class ModelCatalogUnavailableError(Exception):
+    """A pod serving the team could not be read while a write disables models,
+    so the default it protects and the recommendations it clears are unknown.
+    Mapped to 503: retry once the pod is back."""
+
+    def __init__(self, *, runtime_ids: list[str]) -> None:
+        self.runtime_ids = runtime_ids
+        super().__init__(
+            f"Model catalog of runtime(s) {runtime_ids!r} is unreachable; models "
+            "cannot be disabled until it is back. Try again shortly."
+        )
+
+
+class RoutingPolicyVersionConflictError(Exception):
+    """The policy changed since the client read it. Mapped to 409."""
+
+    def __init__(self, *, expected: int, actual: int) -> None:
+        self.expected = expected
+        self.actual = actual
+        super().__init__(
+            f"The team's model settings changed (version {actual}, expected "
+            f"{expected}). Reload and try again."
         )
 
 

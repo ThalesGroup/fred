@@ -1,0 +1,13 @@
+{
+  "siteDisplayName": "Fred",
+  "siteTitle": "Fred",
+  "siteSubtitle": "",
+  "agentsNicknameSingular": "Agent",
+  "agentsNicknamePlural": "Agents",
+  "logoName": "fred",
+  "logoNameDark": "fred-dark",
+  "faviconName": "fred",
+  "faviconNameDark": "fred-dark",
+  "defaultTeamAvatarFile": "acme-team-avatar.svg",
+  "agentIconName": "customAgent"
+}

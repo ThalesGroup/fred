@@ -14,7 +14,13 @@
 
 import { createKeycloakInstance } from "../security/KeycloakService";
 import type { FrontendConfig } from "../slices/controlPlane/controlPlaneOpenApi";
-import { cachePlatformUiThemes, type PlatformUiThemes } from "../app/uiThemes.ts";
+import {
+  cachePlatformUiThemes,
+  setCustomUiThemes,
+  UI_THEMES,
+  type CustomUiTheme,
+  type PlatformUiThemes,
+} from "../app/uiThemes.ts";
 
 /** Public pre-auth control-plane config surface. */
 const FRONTEND_CONFIG_URL = "/control-plane/v1/frontend/config";
@@ -66,6 +72,77 @@ type RawAppConfig = {
   properties?: Record<string, string>;
 };
 
+/** Branding-only keys the deployment theme may supply before login. */
+const THEME_PROPERTY_KEYS = [
+  "agentIconName",
+  "agentsNicknamePlural",
+  "agentsNicknameSingular",
+  "contactSupportLink",
+  "defaultPersonalAvatarFile",
+  "defaultTeamAvatarFile",
+  "faviconName",
+  "faviconNameDark",
+  "logoName",
+  "logoNameDark",
+  "releaseBrand",
+  "siteDisplayName",
+  "siteSubtitle",
+  "siteTitle",
+] as const;
+
+async function loadThemeProperties(): Promise<Record<string, string>> {
+  const response = await fetch("/theme-properties.json", { cache: "no-cache" });
+  if (response.status === 404) return {};
+  if (!response.ok) throw new Error(`Cannot load /theme-properties.json: ${response.status}`);
+  const payload: unknown = await response.json();
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw new Error("Invalid theme properties");
+  return Object.fromEntries(
+    THEME_PROPERTY_KEYS.flatMap((key) =>
+      typeof (payload as Record<string, unknown>)[key] === "string"
+        ? [[key, (payload as Record<string, string>)[key]]]
+        : [],
+    ),
+  );
+}
+
+async function loadThemeCatalog(): Promise<void> {
+  const response = await fetch("/theme-catalog.json", { cache: "no-cache" });
+  if (response.status === 404) {
+    setCustomUiThemes([]);
+    return;
+  }
+  if (!response.ok) throw new Error(`Cannot load /theme-catalog.json: ${response.status}`);
+  const payload: unknown = await response.json();
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw new Error("Invalid theme catalog");
+  const themes = (payload as { themes?: unknown }).themes;
+  if (!Array.isArray(themes) || themes.length > 16) throw new Error("Invalid theme catalog");
+  const ids = new Set<string>(UI_THEMES);
+  for (const theme of themes as CustomUiTheme[]) {
+    if (
+      !theme ||
+      typeof theme !== "object" ||
+      typeof theme.id !== "string" ||
+      !/^[a-z][a-z0-9-]{0,31}$/.test(theme.id) ||
+      ids.has(theme.id) ||
+      typeof theme.label !== "string" ||
+      !theme.label.trim() ||
+      theme.label.length > 80 ||
+      !UI_THEMES.includes(theme.base)
+    )
+      throw new Error("Invalid theme catalog");
+    ids.add(theme.id);
+  }
+  setCustomUiThemes(themes);
+}
+
+// Theme files are cosmetic: a broken one must leave the stock look, never block startup.
+const ignoreThemeFile =
+  <T,>(fallback: T) =>
+  (error: unknown): T => {
+    console.warn("Theme file ignored, using stock values:", error);
+    return fallback;
+  };
+
 let config: AppConfig | null = null;
 
 /**
@@ -92,13 +169,20 @@ export const loadConfig = async () => {
 
   const base = (await res.json()) as RawAppConfig;
 
-  const { user_auth, gcu_version, root_bootstrap_required, ui_themes, platform_access_enabled } =
-    await loadPublicConfig();
+  const [{ user_auth, gcu_version, root_bootstrap_required, ui_themes, platform_access_enabled }, themeProperties] =
+    await Promise.all([
+      loadPublicConfig(),
+      loadThemeProperties().catch(ignoreThemeFile({})),
+      loadThemeCatalog().catch((error: unknown) => {
+        setCustomUiThemes([]);
+        ignoreThemeFile(undefined)(error);
+      }),
+    ]);
 
   config = {
     frontend_basename: base.frontend_basename ?? "/",
     feature_flags: base.feature_flags ?? {},
-    properties: base.properties ?? {},
+    properties: { ...base.properties, ...themeProperties },
     user_auth,
     platform_access_enabled,
     gcu_version,
