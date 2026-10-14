@@ -58,12 +58,13 @@
 
 ### 7. Example chart reuse
 
-- [ ] 7.1 `render.py` `_duplicate_slide`: copy a chart zone's chart part with its embedded workbook (and chart style/colour parts when present) under new part names, rewire the frame's `r:id`; any copy failure falls back to the phase A path
-- [ ] 7.2 `charts.py`: when the pattern is an example slide whose chart zone's `chart_type` equals the plan's type, `chart.replace_data()` with the plan's data, then only the data-dependent rules (legend presence, data labels, unit number format); extra series beyond the example's get theme accents
-- [ ] 7.3 `assign.py`: no change to the choice of slide (the type match only changes how the chart is drawn); `tools.py` summary unchanged
-- [ ] 7.4 `checks.py`: the copied chart part is related once and holds the plan's categories and values
+- [x] 7.1 `render.py` `_duplicate_slide`: copy a chart zone's chart part with its embedded workbook (and chart style/colour parts when present) under new part names, rewire the frame's `r:id`; any copy failure falls back to the phase A path
+- [x] 7.2 `charts.py`: when the pattern is an example slide whose chart zone's `chart_type` equals the plan's type, `chart.replace_data()` with the plan's data, then only the data-dependent rules (legend presence, data labels, unit number format); extra series beyond the example's get theme accents
+- [x] 7.3 `assign.py`: no change to the choice of slide (the type match only changes how the chart is drawn); `tools.py` summary unchanged
+- [x] 7.4 `checks.py`: the copied chart part is related once and holds the plan's categories and values
 - Verification: tests on the built-in example chart (column requested → its own `srgbClr`/formatting kept and values replaced; pie requested → fresh phase A chart), the saved deck reopens with `has_chart` and one workbook per chart; evidence PDF of the built-in chart slide before/after
 
 ### 8. Phase B close-out
 
-- [ ] 8.1 `verification.md` phase B section; README update; `openspec validate ppt-builder-charts --strict`; archive after `ppt-builder-capability`
+- [x] 8.1 `verification.md` phase B section; README update; `openspec validate ppt-builder-charts --strict`
+- [ ] 8.2 Archive after `ppt-builder-capability`

@@ -63,6 +63,31 @@ Rendered evidence (built-in template, `assign` + `render_deck`, no LLM, LibreOff
 
 Not proven: PowerPoint's rendering of the linked `both` labels.
 
-## Phase B
+## Phase B (2026-10-14, design D11)
 
-Not started: waits for the owner's test of phase A (tasks 7–8).
+| Check | Where | Result |
+|---|---|---|
+| `make test` | `libs/capabilities/fred-capability-ppt-filler` | 679 passed, 5 skipped (reference corporate templates not provided) |
+| `tests/test_chart_slides.py` | same | 65 tests (7 new for phase B), all passing |
+| `tests/test_chart_intents.py` | same | 33 tests, all passing (two highlight assertions updated, see below) |
+| `ruff check .`, `ruff check --select I .`, `ruff format --check .` | same | clean (61 files) |
+| `basedpyright --baseline-file .baseline/basedpyright-baseline.json` | same | 0 errors; the 1 known warning |
+| `openspec validate ppt-builder-charts --strict` | repo root | valid |
+
+No frontend change: the summary codes and the tool schema are unchanged.
+
+What the tests prove (built-in template, no LLM):
+
+- A column chart on "Charts stay native and editable" keeps the example chart: its literal `4851C3` series fill and its own series labels stay, categories and values are the plan's, labels and value axis take `#,##0.0" M€"`, no legend and no title for one untitled series.
+- A pie on the same slide is a fresh phase A chart (theme accents, no `srgbClr`).
+- The same example on two slides: two chart parts and two workbooks, no duplicate part names in the archive, each slide relating its one chart once, each chart holding its own values.
+- A chart style part (`chartStyle` relationship, as PowerPoint saves) is copied with each chart: two slides, two style parts.
+- Two series on the one-series example: the first keeps `4851C3`, the second takes `accent2`; a legend appears and the value labels go.
+- `highlight` + `sort` on the kept chart: categories sorted, the other bars muted (`tx1` at 35 %), the emphasised bar keeps the designer's colour and gets a bold label; no `intent_not_shown` note.
+- A chart part with an external relationship (a linked workbook) is not copied: the slide gets a fresh chart with the plan's values and the archive holds one chart part.
+
+Changed assertions: on the built-in deck a single-series column chart now lands on the wide example slide's own chart, so in `test_chart_intents.py` the emphasised bar no longer gets its own `accent1` point: it keeps the series' fill (`accent1` in that example) while the others are muted.
+
+Rendered evidence (LibreOffice, `assign` + `render_deck`, no LLM): `phase-b.pdf` in the session scratchpad (not committed). Pages 1–2: the template's two example slides as designed. Then before (phase A, reuse disabled) / after (phase B) pairs: revenue by quarter with a takeaway (after: the designer's gap width, no value axis, its label style; values `12,4 M€`…, the plan title added); sorted with Q3 emphasised (after: Q3 in the designer's colour, the rest grey, bold label); three series by region on the wide slide (after: the example's two colours kept, the third series in accent 3, legend under the plot); a pie on the takeaway slide, identical before and after (another type: phase A). Every page looked at: nothing overflowed, labels readable.
+
+Not proven: PowerPoint opening the copied parts (checked through python-pptx and LibreOffice only); a real corporate template's chart with `chartStyle`/`colors` parts (tested with a synthetic style part); a chart with a `userShapes` drawing (falls back by design, not tested).

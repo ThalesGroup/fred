@@ -50,7 +50,10 @@ has none.
   hold percentages, values or both); the code draws a native python-pptx chart
   in a chart zone (a chart placeholder, or an example slide's one main chart),
   else in a free large content placeholder, in the theme's accent colours and
-  body font. The type mapping, chart data, legend rule and length check are
+  body font. When an example slide's own chart already shows the type asked,
+  it is kept instead (copied with its workbook, data replaced): the designer's
+  colours and fonts stay, only legend, labels and number format follow the
+  data. The type mapping, chart data, legend rule and length check are
   adapted from `fred-capability-pptx-generator` (PR #3058, by Shuigami).
 
 Optional annotation channels: a shape name from the Selection pane (`title`,
