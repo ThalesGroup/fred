@@ -125,6 +125,11 @@ acli jira workitem transition --key PRISM-68 --status "Analysis in progress" --y
 
 - Move only after the step is actually done. `Waiting for customer` and `Planned` follow a
   public reply, so they wait for the developer's approval of that reply (rule 2).
+- From `Analysis in progress`, reaching `Planned` requires `CCB` -> `Planned`.
+  Once the planning criteria above are met, move through `CCB` and immediately to
+  `Planned`. `CCB` normally holds tickets where the decision to fix is still uncertain
+  and is currently used rarely; this required intermediate transition adds no new
+  approval step for bugs already accepted for a fix. Verify each resulting status.
 - For bugs, keep the ticket `Planned` while the fix is developed, reviewed, merged or
   tagged. Move it to `Resolved` only after confirmed deployment on the reporter's
   production platform: this status notifies the customer that their bug is resolved.
@@ -156,7 +161,8 @@ Try to **reproduce** it, and locate the cause in this repo (`git log`, `grep`, r
 3. Draft a public reply for the developer to approve (rule 2): thank the reporter, give a
    workaround if one exists, and include the GitHub issue link so they can follow the fix.
    The reporter is usually an end user, so keep the reply non-technical.
-4. Once the reply with the GitHub issue link is posted, move the ticket to `Planned`.
+4. Once the reply with the GitHub issue link is posted, follow "Ticket status" to move
+   the ticket to `Planned`.
    Follow the deployment and second-verification rules in "Ticket status" for subsequent
    resolution and closure.
 
