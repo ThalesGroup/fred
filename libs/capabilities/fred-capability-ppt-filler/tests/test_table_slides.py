@@ -27,7 +27,7 @@ from builder_decks import (
     add_table_slide,
     build_slides,
 )
-from fred_capability_ppt_filler.builder import tools
+from fred_capability_ppt_filler.builder import builtin, tools
 from fred_capability_ppt_filler.builder.analysis import analyze_template
 from fred_capability_ppt_filler.builder.assign import assign, infer_kinds, misfit
 from fred_capability_ppt_filler.builder.labelling import kind_fits_slots
@@ -287,3 +287,56 @@ def test_a_table_too_tall_continues_on_a_second_table_slide_with_its_header(
 def test_a_table_beyond_two_slides_still_needs_revision(inventory):
     problems = assign(inventory, _deck(SlidePlan(title="T", table=_table(60)))).problems
     assert len(problems) == 1 and "60 rows need" in problems[0].problem
+
+
+# --- built-in template ---------------------------------------------------------------
+
+
+def _builtin_tables(plan: DeckPlan):
+    content, inventory = builtin.builtin_template()
+    assignment = assign(inventory, plan)
+    assert not assignment.problems, [p.as_dict() for p in assignment.problems]
+    deck, patterns, numbers = assignment.deck(plan)
+    result = render_deck(content, inventory, deck, patterns, None, numbers)
+    frames = [
+        next(s for s in slide.shapes if getattr(s, "has_table", False))
+        for slide in Presentation(io.BytesIO(result.pptx)).slides
+        if any(getattr(s, "has_table", False) for s in slide.shapes)
+    ]
+    return assignment, patterns, frames
+
+
+def test_a_comparison_of_four_offers_builds_on_the_builtin_table_slide():
+    offers = PlanTable(
+        header=["Critère", "Offre A", "Offre B", "Offre C", "Offre D"],
+        rows=[[f"Critère {r}", "Oui", "Non", "Partiel", "Oui"] for r in range(6)],
+    )
+    assignment, patterns, frames = _builtin_tables(
+        _deck(SlidePlan(title="Quatre offres", table=offers))
+    )
+    assert [p.id for p in patterns if p and p.kind == "table"] == ["slide:266"]
+    assert not assignment.notes
+    (frame,) = frames
+    assert _rows(frame) == [offers.header, *offers.rows]
+    xml = frame._element.xml
+    # The theme draws the table: its style, no literal colour or template text.
+    assert "{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}" in xml
+    assert "srgbClr" not in xml and "typeface" not in xml
+    assert "Option A" not in xml
+
+
+def test_a_table_too_tall_for_the_builtin_slide_continues_with_its_header():
+    assignment, _, frames = _builtin_tables(
+        _deck(SlidePlan(title="Planning", table=_table(16)))
+    )
+    assert "continue on a second 'table' slide" in assignment.notes[0]
+    assert len(frames) == 2
+    assert [_rows(f)[0] for f in frames] == [[f"Col {c}" for c in range(5)]] * 2
+    assert sum(len(_rows(f)) - 1 for f in frames) == 16
+
+
+def test_six_columns_on_the_builtin_table_need_revision():
+    _, inventory = builtin.builtin_template()
+    plan = _deck(SlidePlan(title="T", table=_table(3, cols=6)))
+    problems = assign(inventory, plan).problems
+    assert problems and "6 columns given, max 5" in problems[0].problem

@@ -59,6 +59,26 @@ def test_builtin_deck_reads_its_example_slides():
     assert not by_name["Fred Comparison"].groups
 
 
+def test_builtin_deck_offers_a_data_table_slide():
+    """The "Fred Table" example slide is a header-row data table to fill."""
+    _, inventory = builtin.builtin_template()
+    pattern = next(p for p in inventory.patterns if p.id == "slide:266")
+    assert (pattern.kind, pattern.included) == ("table", True)
+    assert not any(p.exclusion_reason == "table" for p in inventory.patterns)
+    zone = next(z for z in pattern.zones if z.role == "table")
+    assert zone.table is not None and zone.table.header
+    assert len(zone.table.columns) == 5
+    # The first column holds the criterion: the widest one.
+    assert zone.table.columns[0] > max(zone.table.columns[1:])
+    schema = _args_schema(inventory).model_json_schema()
+    assert "table" in schema["$defs"]["BuildSlide"]["properties"]
+    rooms = "/".join(str(c) for c in zone.table.columns)
+    assert (
+        f"table 2 to 5 columns (≈{rooms} chars per cell line), "
+        f"header + ≈{zone.max_lines} lines of rows"
+    ) in _description(inventory, "template_slide", 2)
+
+
 def test_builtin_rooms_read_as_words_then_chars():
     """Every room the model reads on the shipped deck leads with a word budget."""
     _, inventory = builtin.builtin_template()
