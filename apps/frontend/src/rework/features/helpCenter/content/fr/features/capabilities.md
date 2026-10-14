@@ -126,7 +126,8 @@ remplit chaque mois à partir des documents de la période.
 **Ce qu'elle fait** — l'agent construit une présentation PowerPoint à partir de
 votre demande, sur le template de votre entreprise ou, à défaut, sur un template
 intégré. Pour chaque diapositive, il choisit la diapositive du template qui
-convient le mieux au contenu et la remplit. La présentation s'affiche dans un
+convient le mieux au contenu et la remplit ; les chiffres deviennent des
+graphiques modifiables, aux couleurs du template. La présentation s'affiche dans un
 aperçu à côté de la conversation et se télécharge en `.pptx`. Le bouton
 d'information à côté du téléchargement montre **Ce qui a été construit** :
 chaque diapositive, son type, et ce qui a été raccourci, laissé de côté ou

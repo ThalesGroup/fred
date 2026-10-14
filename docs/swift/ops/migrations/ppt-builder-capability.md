@@ -46,6 +46,10 @@ package, so every fred-agents pod that installs that package registers it.
 3. Cost: each template upload (or vision setting change) makes one vision call
    per example slide, at most four at a time, once per template hash. A
    20-slide template is about 20 calls.
+4. Native charts raise the template analysis version. Templates already
+   analysed keep working and are read again in the background (the agent form
+   says when a save is needed), at the cost of an upload; until then their
+   chart slides stay set aside. The built-in template ships already analysed.
 
 ## Validation
 

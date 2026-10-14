@@ -61,7 +61,7 @@ The system SHALL accept on a plan slide a `chart` field holding only data — `t
 #### Scenario: Data-only schema
 
 - **WHEN** the model adds a colour or a position to its chart
-- **THEN** that key is reported as an ignored field per the existing no-silent-loss rule and is never applied
+- **THEN** that key is never applied, the deck is built, and the delivery note names the key as set by the template
 
 #### Scenario: Chart edited through changes
 

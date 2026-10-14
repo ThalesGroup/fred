@@ -45,9 +45,17 @@ has none.
   a wrong deck. `render.py` duplicates and fills; `checks.py` removes leftover
   example text. Delivery reuses the filler's preview part and pane.
 
+- **Charts** (`charts.py`): the model sends data only (`chart {type,
+  categories, series, title, unit}`); the code draws a native python-pptx chart
+  in a chart zone (a chart placeholder, or an example slide's one main chart),
+  else in a free large content placeholder, in the theme's accent colours and
+  body font. The type mapping, chart data, legend rule and length check are
+  adapted from `fred-capability-pptx-generator` (PR #3058, by Shuigami).
+
 Optional annotation channels: a shape name from the Selection pane (`title`,
 `body`, `number`, `keep`…), and `kind:` / `label:` lines in a slide's notes.
-Design: `openspec/changes/ppt-builder-capability/`.
+Design: `openspec/changes/ppt-builder-capability/`, charts:
+`openspec/changes/ppt-builder-charts/`.
 
 ### Evaluation (opt-in)
 

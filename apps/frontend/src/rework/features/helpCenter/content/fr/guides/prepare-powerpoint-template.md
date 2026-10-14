@@ -61,6 +61,7 @@ Le mot entre parenthèses est celui à écrire dans une note (voir plus bas).
 | Citation (`quote`)               | La citation et son auteur                                  |
 | Image et texte (`image_text`)    | Une image et un texte en plus du titre                     |
 | Tableau (`table`)                | Un tableau à remplir                                       |
+| Graphique (`chart`)              | Une zone de graphique, ou un graphique sur la diapositive  |
 | Conclusion (`closing`)           | Remerciements ou contacts. Toujours en dernière position   |
 | Autre (`other`)                  | L'agent ne s'en sert pas                                   |
 
@@ -137,16 +138,38 @@ Le nombre de lignes affichées fixe ce que le tableau peut contenir. L'agent
 peut retirer des colonnes (il en garde au moins deux) et ajouter ou retirer
 des lignes dans la hauteur du tableau.
 
+## Les graphiques
+
+L'agent transforme les chiffres d'une demande en un vrai graphique PowerPoint
+(barres, histogramme, courbes, secteurs, anneau, histogramme empilé, aires),
+qui reste modifiable dans PowerPoint.
+
+- **Prévoyez une diapositive de graphique** : un masque avec un espace réservé
+  de graphique, ou une diapositive d'exemple avec un graphique qui en occupe
+  une bonne partie. Une zone de texte à côté du graphique reçoit un court
+  message clé ; ajoutez une seconde diapositive de graphique sans cette zone
+  pour les graphiques qui se passent de commentaire.
+- **Le template décide de l'apparence** : le graphique prend les couleurs
+  d'accentuation du thème, dans l'ordre, et sa police de corps. Pour changer
+  les couleurs de tous les graphiques, changez les couleurs d'accentuation du
+  thème. La mise en forme du graphique d'exemple n'est pas reprise : il montre
+  seulement où placer le graphique.
+- Sans diapositive de graphique, une grande zone de contenu (celle du masque
+  « Titre et contenu » de PowerPoint) reçoit le graphique quand la diapositive
+  n'a pas d'autre texte.
+- L'agent ne dessine jamais un graphique ailleurs, et demande moins de
+  catégories ou des libellés plus courts plutôt que de les tasser.
+
 ## Ce qui est mis de côté
 
 Ces diapositives restent visibles dans **Vérifier les slides**, avec la raison :
 
 | Raison affichée      | Ce qui la provoque                                                                         |
 | -------------------- | ------------------------------------------------------------------------------------------ |
-| Graphique            | Un graphique inséré occupe une bonne partie de la diapositive                              |
+| Graphique            | Deux graphiques ou plus se partagent la diapositive                                        |
 | Tableau              | Un tableau qui n'est pas un tableau de données (cellules fusionnées, couleurs par cellule) |
 | Banque d'icônes      | Une vingtaine d'images ou plus, sans texte                                                 |
-| Non copiable         | Un SmartArt, un graphique ou un objet incorporé (Excel…)                                   |
+| Non copiable         | Un SmartArt, un petit graphique ou un objet incorporé (Excel…)                             |
 | Aucun espace réservé | Un masque sans rien à remplir                                                              |
 | Exclu par vous       | Vous l'avez mise de côté                                                                   |
 
@@ -182,4 +205,5 @@ les notes et les noms de formes, eux, voyagent avec le fichier.
 | Des zones de texte à la taille du texte attendu               | Des zones ajustées à deux mots                  |
 | Un texte d'exemple réaliste, différent sur chaque diapositive | Le même texte d'exemple partout                 |
 | Des tableaux simples, sans fusion ni couleur par cellule      | Un planning dessiné en cellules colorées        |
-| Les SmartArt convertis en formes                              | Des graphiques ou objets incorporés à remplir   |
+| Les SmartArt convertis en formes                              | Des objets incorporés à remplir                 |
+| Un seul graphique par diapositive de graphique                | Plusieurs graphiques sur une diapositive        |

@@ -119,7 +119,7 @@ each month from the period's documents.
 **What it does** — the agent builds a PowerPoint presentation from your
 request, on your company template or, without one, on a built-in template. It
 picks, for each slide, the template slide that fits the content best and fills
-it. The deck appears in a preview beside the conversation and downloads as
+it; numbers become editable charts in the template's colours. The deck appears in a preview beside the conversation and downloads as
 `.pptx`. The info button next to the download shows **What was built**: each
 slide, its kind, and what was shortened, left out or continued on another
 slide.

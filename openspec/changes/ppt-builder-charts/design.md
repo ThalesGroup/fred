@@ -28,7 +28,7 @@ chart: {type: column|bar|line|pie|doughnut|stacked_column|area, categories: [str
 ```
 
 - Coercion (as `PlanTable`, D14): aliases (`chart_type`/`kind`→`type`, `labels`/`x`→`categories`, `data`→`series`, a bare `values` list → one series named after the chart title or `""`); a series given as `{name: value}` pairs is read as categories + one series; values written as text are parsed (`"12,5"`, `"1 200"`, `"45 %"`, `"€3.2"`), never rescaled: when every text value carries the same unit (`%`, `€`, `M€`…) and no `unit` is given, it becomes the unit; a value that does not read as a number is kept as a gap with the text sent, so validation names it (D5); unknown keys become `ignored_fields` (D15: no silent loss).
-- No `color`, `style`, `legend`, `position`, `size`, `font` field. #3058's `ChartSeries.color` is not ported: it is exactly the model-does-design path the owner rejected.
+- No `color`, `style`, `legend`, `position`, `size`, `font` field. #3058's `ChartSeries.color` is not ported: it is exactly the model-does-design path the owner rejected. Such a key sent anyway is not content: it is set aside (`style_fields`) and named in the delivery note, never applied and never a revision.
 - `title` is the chart's own caption (e.g. "Revenue by region"), not the slide title; `unit` labels the values (D4).
 - Alternative rejected: reusing #3058's `ChartSpec` as is (carries `color`, `gantt_tasks`, `x_values`, `sizes` the slice does not support; each unused field invites the model to fill it).
 
@@ -54,7 +54,7 @@ New module `builder/charts.py`, called by `render.py` for a `chart` zone or a ch
 - **Colours from the theme, never literal:** each series (column, bar, stacked column, area: fill; line: line and markers) gets `schemeClr accent{(i mod 6) + 1}`; pie/doughnut points get `accent1..accentN`. Literal colours would survive a template switch and break the "theme restyles it" promise; leaving fills unset relies on the reader's default chart style, and LibreOffice (our preview) does not apply the theme palette the way PowerPoint does — the explicit reference is read the same by both. Gridlines and text use `tx1` with a luminance offset, also a theme reference.
 - **Text:** the chart-wide text references the theme body font (`+mn-lt`, as the template's own example chart does); one size for axis, legend and data labels: two thirds of the zone's font size (a chart zone stores the presentation's default text size), between 10 and 14 pt.
 - **Code-decided presentation**, adapted from #3058: legend at the bottom, outside the plot, when several series or a pie/doughnut, none otherwise; data labels on pie/doughnut (percentages) and on a single-series column/bar with ≤ 8 categories (values); light value-axis gridlines; `chart.title` as the chart's title when given, none otherwise (an untitled single-series chart would show the series name); `unit` in the value-axis and data-label number format (`#,##0.#" M€"`, `0" %"`), decimals as the data has them (≤ 2).
-- **Credit:** the module header says it is adapted from `fred-capability-pptx-generator` (PR #3058, by Shuigami); the type mapping, `CategoryChartData` construction, legend rule and length check are ported, the rest is new.
+- **Credit:** the module header says it is adapted from `fred-capability-pptx-generator`, by Shuigami (the PR number stays in the README and the commits: no issue numbers in code); the type mapping, `CategoryChartData` construction, legend rule and length check are ported, the rest is new.
 
 ### D5. Validation: the plan is checked before assignment
 
@@ -96,7 +96,8 @@ Waterfall, funnel, heatmap and Gantt as pictures are deferred to a later change,
 ### D9. Summary, preview, review
 
 - "What was built" (D25): the entry's `kind` is `chart` (or the substituted kind on tier 2, with an `other_kind` note naming `chart`); new note code `chart_type_changed` (D2's fallback), its `kind` carrying the type asked. No new code for refusals (nothing is built).
-- Preview: LibreOffice renders the native chart into the PDF; no frontend change beyond the kind label.
+- Preview: LibreOffice renders the native chart into the PDF; no frontend change beyond the kind label. The review thumbnails (patterns deck, never delivered) show an example slide's own chart by sharing its chart part.
+- Tool description: `chart {type, categories, series [{name, values}], title, unit}` among the slide fields, "numbers that compare across categories or over time → chart" in the guide, `chart.series[0].values[2]` among the edit paths, each only when the template can host a chart; with no chart slide, the catalogue adds "or a chart in place of the bullets" to the chart-capable variants.
 - Review dialog and kind selector: `chart` added to `SlideKind` (regenerated client) and the fr/en labels; the selector offers `chart` only on a pattern holding a chart zone (the same compatibility rule as vision).
 
 ### D10. Built-in template (owner decision, 2026-10-14)

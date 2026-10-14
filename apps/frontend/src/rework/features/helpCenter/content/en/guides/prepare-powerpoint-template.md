@@ -59,6 +59,7 @@ The word in brackets is the one to write in a note (see below).
 | Quote (`quote`)               | The quote and its author                            |
 | Image and text (`image_text`) | A picture and a text besides the title              |
 | Table (`table`)               | A table to fill                                     |
+| Chart (`chart`)               | A chart area, or one chart over the slide           |
 | Closing (`closing`)           | Thanks or contacts. Always last in the presentation |
 | Other (`other`)               | The agent does not use it                           |
 
@@ -132,16 +133,35 @@ The number of rows shown sets what the table can hold. The agent may remove
 columns (it keeps at least two) and add or remove rows within the table's
 height.
 
+## Charts
+
+The agent turns the numbers of a request into a real PowerPoint chart (bars,
+columns, lines, pie, doughnut, stacked columns, areas), which stays editable
+in PowerPoint.
+
+- **Offer a chart slide**: a layout with a chart placeholder, or an example
+  slide holding one chart over a good part of it. A text area beside the chart
+  takes a short takeaway; add a second chart slide without that area for charts
+  that need no comment.
+- **The template decides the look**: the chart takes the theme's accent
+  colours, in order, and its body font. To change the colours of every chart,
+  change the theme's accent colours. The example chart's own formatting is not
+  kept: it shows where the chart goes.
+- Without a chart slide, a large content area (the one PowerPoint's "Title and
+  Content" layout offers) takes the chart when the slide has no other text.
+- The agent never draws a chart elsewhere, and asks for fewer categories or
+  shorter labels rather than squeeze them.
+
 ## What is set aside
 
 These slides stay visible in **Review slides**, with the reason:
 
 | Reason shown     | What causes it                                                    |
 | ---------------- | ----------------------------------------------------------------- |
-| Chart            | An inserted chart covers a good part of the slide                 |
+| Chart            | Two charts or more share the slide                                |
 | Table            | A table that is not a data table (merged cells, per-cell colours) |
 | Icon bank        | Twenty or so pictures or more, with no text                       |
-| Cannot be copied | A SmartArt, a chart or an embedded object (Excel…)                |
+| Cannot be copied | A SmartArt, a small chart or an embedded object (Excel…)          |
 | No placeholder   | A layout with nothing to fill                                     |
 | Excluded by you  | You set it aside                                                  |
 
@@ -176,4 +196,5 @@ file.
 | Text boxes sized for the expected text         | Boxes fitted to two words            |
 | Realistic sample text, different on each slide | The same sample text everywhere      |
 | Simple tables, no merges or per-cell colours   | A schedule drawn with coloured cells |
-| SmartArt converted to shapes                   | Charts or embedded objects to fill   |
+| SmartArt converted to shapes                   | Embedded objects to fill             |
+| One chart per chart slide                      | Several charts on one slide          |
