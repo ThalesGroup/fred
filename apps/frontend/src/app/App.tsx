@@ -69,8 +69,7 @@ function FredUiContent() {
     : `${import.meta.env.BASE_URL ?? "/"}/`;
 
   useEffect(() => {
-    // Browser tab name = the app display name (config-driven via siteDisplayName,
-    // same string as "<app> is coming soon" / the loading-screen alt).
+    // Browser tab name follows the active ZIP theme, else the app display name.
     const tab = uiThemeTab(uiTheme, darkMode, siteDisplayName, favicon, faviconDark);
     document.title = tab.title;
     const faviconElement = document.getElementById("favicon") as HTMLLinkElement;
@@ -127,7 +126,7 @@ function FredUiContent() {
                           await writeRichClipboard("", text);
                         }}
                       >
-                        {/* Same guards as the banners; inside ToastProvider for its error toast. */}
+                        {/* Same guards as the banners, and above the router: it never remounts. */}
                         <PatchNoteGate />
                         <RouterProvider router={router} />
                       </ToastProvider>
