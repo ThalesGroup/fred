@@ -210,7 +210,8 @@ def _already_delivered(file_name: str, slide_count: int) -> str:
 # Ends every revision: models planned the fix, then ended the turn without the call.
 _NEXT_CALL = (
     " Your very next message MUST be a new build_presentation call with these fixes applied, "
-    "never a final answer, unless the user must decide something first."
+    "never a final answer, unless the user must decide something first. Make it as a real tool call: "
+    "never write the call, its JSON or the planned fixes in your reply text."
 )
 
 

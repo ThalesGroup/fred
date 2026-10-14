@@ -377,6 +377,7 @@ async def test_a_slide_that_fits_nothing_builds_nothing_and_says_what_to_change(
     # A revision, not a failure: the runtime hands it to the model, never ends the turn.
     assert not result.is_error and result.blocks[0].text == text
     assert "Your very next message MUST be a new build_presentation call" in text
+    assert "never write the call, its JSON" in text
     assert workspace.writes == []
     payload = json.loads(text[text.index("{") :])
     assert payload["status"] == "needs_revision"

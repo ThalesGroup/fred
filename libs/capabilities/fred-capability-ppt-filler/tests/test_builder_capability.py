@@ -384,6 +384,8 @@ async def test_a_succeeded_analysis_gives_the_model_the_templates_catalogue(
         "If the tool returns needs_revision, nothing was built yet: your very next message "
         "MUST be a new 'build_presentation' call with the fixes applied"
     ) in update["system_message"].content
+    # Models wrote the retry as JSON in the chat instead of calling the tool.
+    assert "never write the call, its JSON" in update["system_message"].content
 
     # The registered tool executes with the template's tool, from validated args.
     monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
