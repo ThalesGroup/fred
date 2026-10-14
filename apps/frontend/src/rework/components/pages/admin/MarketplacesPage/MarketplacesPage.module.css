@@ -84,8 +84,14 @@
   font: var(--font-body-medium);
 }
 
-.quotaCell,
+.quotaCell {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
 .quotaField {
+  flex-shrink: 0;
   width: 5.5rem;
 }
 
