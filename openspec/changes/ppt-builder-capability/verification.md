@@ -1452,4 +1452,20 @@ Owner templates (read-only copies of the stored `.pptx`, analysed locally at ver
 
 Commands (package root): `make test`: 691 passed, 5 skipped; `ruff check`, `ruff check --select I`, `ruff format --check` clean; `basedpyright --baseline-file .baseline/basedpyright-baseline.json`: 0 errors (existing `builder_decks.py` `__all__` warning). `make builtin-inventory` (version bump only). `openspec validate ppt-builder-capability --strict` valid.
 
-Not covered: the regenerated frontend client (pending, see 43.2); the label renders without it (`t()` on the reason). Slidesgo's untitled resource pages (infographics, maps; Paintress 20-24, 32) stay `other`, not reusable, so never chosen, but are not marked `library`.
+Frontend client (43.2, commit 2a1f39b92): `cd apps/frontend && make update-ppt-builder-capability-api`; only `pptBuilderCapabilityOpenApi.ts` changed (`library` added to `exclusion_reason`).
+
+Not covered: Slidesgo's untitled resource pages (infographics, maps; Paintress 20-24, 32) stay `other`, not reusable, so never chosen, but are not marked `library`.
+
+## Results: WP44 (a list over its zone's entry limit says so)
+
+Live case: "the 'bullets' slide does not fit (bullets: 3 entries, 59 chars; this zone holds ≤14 words (≈101 chars) (longest: bullets[2], 21 chars)) [...] keep bullets within ≤14 words (≈101 chars): shorten or drop entries". The zone has 1 line, so at most 1 entry fits (each entry a paragraph, `floor(1 / 0.7)`); the agent shortened instead of merging. Replayed on the stored template inventory, the same slide now reads "bullets: 3 entries; this zone holds 1 line (≈101 chars): at most 1 entry", option "merge bullets into at most 1 entry, or use another kind"; the 2-line variants read "at most 2 entries".
+
+| Rule | Evidence |
+| --- | --- |
+| Entry count over the limit named, not chars (1-line, 2-line, a column) | `test_too_many_entries_for_a_one_line_zone_name_the_entry_limit_not_chars`, `test_too_many_entries_for_a_two_line_zone`, `test_too_many_column_entries_name_the_column_list` |
+| Count fits, entries wrap: lines taken vs held | `test_entries_few_enough_but_too_long_get_a_length_message`; the two `999 chars` misfit tests updated |
+| Description quotes lines and max entries | `test_a_list_field_room_quotes_its_lines_and_entry_limit`; the variety-note tests updated |
+
+The five new tests fail on the previous code (old message, no entry limit in the description). Commands (package root): `make test`: 696 passed, 5 skipped; `ruff check`, `ruff check --select I`, `ruff format --check` clean; `basedpyright --baseline-file .baseline/basedpyright-baseline.json`: 0 errors (existing `builder_decks.py` `__all__` warning). `openspec validate ppt-builder-capability --strict` valid.
+
+Not covered: a live re-run with a real model.

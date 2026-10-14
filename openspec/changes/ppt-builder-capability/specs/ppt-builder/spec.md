@@ -552,6 +552,14 @@ The system SHALL accept from the model a plan of slides carrying content only �
 - **THEN** it reads as a word budget followed by the measured characters (`≤4 words (≈32 chars)`, `≤20 words (≈71 chars × 2 lines)`, `1 word (≈12 chars)`), the words being `floor((C + 1) / 7)` per line × L, at least one ("1 short word" under 6 characters per line), from the same rule on every template
 - **AND** the fit check still measures characters against the same room, and a shortening option names the same target (`shorten items[2].label to 1 word (≈12 chars)`)
 
+#### Scenario: A list field states how many entries its zone holds
+
+- **GIVEN** a `bullets` or `columns.bullets` zone of L lines, each entry starting its own paragraph, so it holds at most `floor(L / 0.7)` entries at the smallest font
+- **WHEN** the description or the schema hints quote that field's room
+- **THEN** the lines are always shown and the entry limit follows (`≤14 words (≈101 chars × 1 line, max 1 entry)`)
+- **AND** when a slide gives more entries than that, the misfit names the count and the limit, not characters (`bullets: 3 entries; this zone holds 1 line (≈101 chars): at most 1 entry`), with the option `merge bullets into at most 1 entry, or use another kind`
+- **AND** when the count fits but entries wrap past the zone, the misfit names the lines they take and the lines the zone holds at the smallest font (`bullets: 2 entries wrap to 23 lines; this zone holds 11`), with the option to keep each entry to one line
+
 #### Scenario: Item heading without a heading zone
 
 - **GIVEN** items with a heading and a text, and a list whose items have a single text zone
