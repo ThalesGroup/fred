@@ -37,6 +37,7 @@ ZoneRole = Literal[
     "label",
     "image",
     "table",
+    "chart",
     "keep",
 ]
 
@@ -70,6 +71,7 @@ SlideKind = Literal[
     "quote",
     "image_text",
     "table",
+    "chart",
     "closing",
     "other",
 ]
@@ -81,6 +83,7 @@ LabelSource = Literal["heuristic", "vision"]
 
 PatternSource = Literal["layout", "slide"]
 
+# `chart`: two or more charts share the slide's main area, so none is its zone.
 ExclusionReason = Literal[
     "chart",
     "table",
@@ -145,10 +148,18 @@ class Zone(BaseModel):
     # What the slot says on this slide ("subtitle", "KPI value"), from vision.
     purpose: Optional[str] = None
     # Set on a `table` zone; its ``max_lines`` are the body lines at full size.
+    # On a `chart` zone ``max_lines`` are the categories a column chart holds and
+    # ``chars_per_line`` a category label's room (2 lines) among six of them.
     table: Optional[TableSpec] = None
     # An image zone drawn over a layout or master shape no slide can remove:
     # left empty, that frame shows, so the zone needs a picture.
     framed: bool = False
+    # A large content placeholder: it may host a chart when the slide puts no
+    # text in it (PowerPoint's own "insert chart" place).
+    chart_capable: bool = False
+    # Set on a `chart` zone of an example slide: the type its chart shows, in
+    # the plan's vocabulary when it maps to one.
+    chart_type: Optional[str] = None
 
 
 class RepeatGroup(BaseModel):

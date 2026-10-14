@@ -3,7 +3,7 @@
  "inventory": {
   "slide_width": 12192000,
   "slide_height": 6858000,
-  "analysis_version": 11,
+  "analysis_version": 12,
   "patterns": [
    {
     "id": "slide:256",
@@ -29,7 +29,9 @@
       "grows": false,
       "purpose": null,
       "table": null,
-      "framed": false
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null
      },
      {
       "key": "ph:104",
@@ -47,7 +49,9 @@
       "grows": false,
       "purpose": null,
       "table": null,
-      "framed": false
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null
      },
      {
       "key": "ph:105",
@@ -65,7 +69,9 @@
       "grows": false,
       "purpose": null,
       "table": null,
-      "framed": false
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null
      }
     ],
     "groups": [],
@@ -99,7 +105,9 @@
       "grows": false,
       "purpose": null,
       "table": null,
-      "framed": false
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null
      },
      {
       "key": "ph:102",
@@ -117,7 +125,9 @@
       "grows": false,
       "purpose": null,
       "table": null,
-      "framed": false
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null
      }
     ],
     "groups": [],
@@ -151,7 +161,9 @@
       "grows": false,
       "purpose": null,
       "table": null,
-      "framed": false
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null
      },
      {
       "key": "ph:104",
@@ -169,7 +181,9 @@
       "grows": false,
       "purpose": null,
       "table": null,
-      "framed": false
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null
      },
      {
       "key": "ph:105",
@@ -187,7 +201,9 @@
       "grows": false,
       "purpose": null,
       "table": null,
-      "framed": false
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null
      }
     ],
     "groups": [],
@@ -221,7 +237,9 @@
       "grows": false,
       "purpose": null,
       "table": null,
-      "framed": false
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null
      },
      {
       "key": "ph:101",
@@ -239,7 +257,9 @@
       "grows": false,
       "purpose": null,
       "table": null,
-      "framed": false
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null
      }
     ],
     "groups": [],
@@ -273,7 +293,9 @@
       "grows": false,
       "purpose": null,
       "table": null,
-      "framed": false
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null
      },
      {
       "key": "ph:101",
@@ -291,7 +313,9 @@
       "grows": false,
       "purpose": null,
       "table": null,
-      "framed": false
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null
      },
      {
       "key": "ph:102",
@@ -309,7 +333,9 @@
       "grows": false,
       "purpose": null,
       "table": null,
-      "framed": false
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null
      }
     ],
     "groups": [],
@@ -343,7 +369,9 @@
       "grows": false,
       "purpose": null,
       "table": null,
-      "framed": false
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null
      },
      {
       "key": "ph:103",
@@ -361,7 +389,9 @@
       "grows": false,
       "purpose": null,
       "table": null,
-      "framed": false
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null
      },
      {
       "key": "ph:104",
@@ -379,7 +409,9 @@
       "grows": false,
       "purpose": null,
       "table": null,
-      "framed": false
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null
      },
      {
       "key": "ph:105",
@@ -397,7 +429,9 @@
       "grows": false,
       "purpose": null,
       "table": null,
-      "framed": false
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null
      },
      {
       "key": "ph:106",
@@ -415,7 +449,9 @@
       "grows": false,
       "purpose": null,
       "table": null,
-      "framed": false
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null
      }
     ],
     "groups": [],
@@ -449,7 +485,9 @@
       "grows": false,
       "purpose": null,
       "table": null,
-      "framed": false
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null
      },
      {
       "key": "ph:101",
@@ -467,7 +505,9 @@
       "grows": false,
       "purpose": null,
       "table": null,
-      "framed": false
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null
      },
      {
       "key": "ph:103",
@@ -485,7 +525,9 @@
       "grows": false,
       "purpose": null,
       "table": null,
-      "framed": true
+      "framed": true,
+      "chart_capable": false,
+      "chart_type": null
      }
     ],
     "groups": [],
@@ -519,7 +561,9 @@
       "grows": false,
       "purpose": null,
       "table": null,
-      "framed": false
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null
      },
      {
       "key": "ph:110",
@@ -537,7 +581,9 @@
       "grows": false,
       "purpose": null,
       "table": null,
-      "framed": false
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null
      }
     ],
     "groups": [
@@ -566,7 +612,9 @@
          "grows": false,
          "purpose": null,
          "table": null,
-         "framed": false
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null
         },
         {
          "key": "ph:103",
@@ -584,7 +632,9 @@
          "grows": false,
          "purpose": null,
          "table": null,
-         "framed": false
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null
         }
        ],
        [
@@ -604,7 +654,9 @@
          "grows": false,
          "purpose": null,
          "table": null,
-         "framed": false
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null
         },
         {
          "key": "ph:106",
@@ -622,7 +674,9 @@
          "grows": false,
          "purpose": null,
          "table": null,
-         "framed": false
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null
         }
        ],
        [
@@ -642,7 +696,9 @@
          "grows": false,
          "purpose": null,
          "table": null,
-         "framed": false
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null
         },
         {
          "key": "ph:109",
@@ -660,7 +716,9 @@
          "grows": false,
          "purpose": null,
          "table": null,
-         "framed": false
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null
         }
        ]
       ],
@@ -701,7 +759,9 @@
       "grows": false,
       "purpose": null,
       "table": null,
-      "framed": false
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null
      }
     ],
     "groups": [
@@ -730,7 +790,9 @@
          "grows": false,
          "purpose": null,
          "table": null,
-         "framed": false
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null
         },
         {
          "key": "ph:105",
@@ -748,7 +810,9 @@
          "grows": false,
          "purpose": null,
          "table": null,
-         "framed": false
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null
         }
        ],
        [
@@ -768,7 +832,9 @@
          "grows": false,
          "purpose": null,
          "table": null,
-         "framed": false
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null
         },
         {
          "key": "ph:110",
@@ -786,7 +852,9 @@
          "grows": false,
          "purpose": null,
          "table": null,
-         "framed": false
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null
         }
        ],
        [
@@ -806,7 +874,9 @@
          "grows": false,
          "purpose": null,
          "table": null,
-         "framed": false
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null
         },
         {
          "key": "ph:115",
@@ -824,7 +894,9 @@
          "grows": false,
          "purpose": null,
          "table": null,
-         "framed": false
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null
         }
        ],
        [
@@ -844,7 +916,9 @@
          "grows": false,
          "purpose": null,
          "table": null,
-         "framed": false
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null
         },
         {
          "key": "ph:120",
@@ -862,7 +936,9 @@
          "grows": false,
          "purpose": null,
          "table": null,
-         "framed": false
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null
         }
        ]
       ],
@@ -881,12 +957,12 @@
     "warnings": []
    },
    {
-    "id": "layout:9",
-    "source": "layout",
-    "source_index": 9,
+    "id": "slide:265",
+    "source": "slide",
+    "source_index": 10,
     "name": "Fred Chart",
-    "label": "Fred Chart",
-    "kind": "bullets",
+    "label": "Charts stay native and editable",
+    "kind": "chart",
     "zones": [
      {
       "key": "ph:100",
@@ -897,14 +973,36 @@
        "w": 910,
        "h": 127
       },
-      "sample": "Slide title",
+      "sample": "Charts stay native and editable",
       "font_pt": 32.0,
-      "chars_per_line": 52,
+      "chars_per_line": 56,
       "max_lines": 1,
       "grows": false,
       "purpose": null,
       "table": null,
-      "framed": false
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null
+     },
+     {
+      "key": "ph:101",
+      "role": "chart",
+      "box": {
+       "x": 45,
+       "y": 220,
+       "w": 608,
+       "h": 660
+      },
+      "sample": "",
+      "font_pt": 18.0,
+      "chars_per_line": 14,
+      "max_lines": 12,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": "column"
      },
      {
       "key": "ph:103",
@@ -915,14 +1013,16 @@
        "w": 220,
        "h": 567
       },
-      "sample": "Key takeaway",
+      "sample": "Charts use theme colours, so a custom template restyles them automatically.\n\nPut",
       "font_pt": 16.0,
       "chars_per_line": 23,
       "max_lines": 9,
       "grows": false,
       "purpose": null,
       "table": null,
-      "framed": false
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null
      }
     ],
     "groups": [],
@@ -956,7 +1056,9 @@
       "grows": false,
       "purpose": null,
       "table": null,
-      "framed": false
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null
      },
      {
       "key": "ph:101",
@@ -974,7 +1076,9 @@
       "grows": false,
       "purpose": null,
       "table": null,
-      "framed": false
+      "framed": false,
+      "chart_capable": true,
+      "chart_type": null
      }
     ],
     "groups": [],
@@ -1008,7 +1112,9 @@
       "grows": false,
       "purpose": null,
       "table": null,
-      "framed": false
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null
      },
      {
       "key": "ph:102",
@@ -1026,7 +1132,9 @@
       "grows": false,
       "purpose": null,
       "table": null,
-      "framed": false
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null
      }
     ],
     "groups": [],
@@ -1060,7 +1168,9 @@
       "grows": false,
       "purpose": null,
       "table": null,
-      "framed": false
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null
      }
     ],
     "groups": [],
@@ -1094,7 +1204,9 @@
       "grows": false,
       "purpose": null,
       "table": null,
-      "framed": false
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null
      },
      {
       "key": "ph:104",
@@ -1112,7 +1224,9 @@
       "grows": false,
       "purpose": null,
       "table": null,
-      "framed": false
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null
      }
     ],
     "groups": [],
@@ -1134,58 +1248,6 @@
     "included": false,
     "exclusion_reason": "no_placeholder",
     "reusable": false,
-    "labelled_by": "heuristic",
-    "warnings": []
-   },
-   {
-    "id": "slide:265",
-    "source": "slide",
-    "source_index": 10,
-    "name": "Fred Chart",
-    "label": "Charts stay native and editable",
-    "kind": "bullets",
-    "zones": [
-     {
-      "key": "ph:100",
-      "role": "title",
-      "box": {
-       "x": 45,
-       "y": 60,
-       "w": 910,
-       "h": 127
-      },
-      "sample": "Charts stay native and editable",
-      "font_pt": 32.0,
-      "chars_per_line": 56,
-      "max_lines": 1,
-      "grows": false,
-      "purpose": null,
-      "table": null,
-      "framed": false
-     },
-     {
-      "key": "ph:103",
-      "role": "body",
-      "box": {
-       "x": 709,
-       "y": 267,
-       "w": 220,
-       "h": 567
-      },
-      "sample": "Charts use theme colours, so a custom template restyles them automatically.\n\nPut",
-      "font_pt": 16.0,
-      "chars_per_line": 23,
-      "max_lines": 9,
-      "grows": false,
-      "purpose": null,
-      "table": null,
-      "framed": false
-     }
-    ],
-    "groups": [],
-    "included": false,
-    "exclusion_reason": "chart",
-    "reusable": true,
     "labelled_by": "heuristic",
     "warnings": []
    },
@@ -1213,7 +1275,9 @@
       "grows": false,
       "purpose": null,
       "table": null,
-      "framed": false
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null
      }
     ],
     "groups": [],
@@ -1247,7 +1311,9 @@
       "grows": false,
       "purpose": null,
       "table": null,
-      "framed": false
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null
      }
     ],
     "groups": [
@@ -1276,7 +1342,9 @@
          "grows": false,
          "purpose": null,
          "table": null,
-         "framed": false
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null
         },
         {
          "key": "sp:5",
@@ -1294,7 +1362,9 @@
          "grows": false,
          "purpose": null,
          "table": null,
-         "framed": false
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null
         }
        ],
        [
@@ -1314,7 +1384,9 @@
          "grows": false,
          "purpose": null,
          "table": null,
-         "framed": false
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null
         },
         {
          "key": "sp:8",
@@ -1332,7 +1404,9 @@
          "grows": false,
          "purpose": null,
          "table": null,
-         "framed": false
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null
         }
        ],
        [
@@ -1352,7 +1426,9 @@
          "grows": false,
          "purpose": null,
          "table": null,
-         "framed": false
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null
         },
         {
          "key": "sp:11",
@@ -1370,7 +1446,9 @@
          "grows": false,
          "purpose": null,
          "table": null,
-         "framed": false
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null
         }
        ]
       ],

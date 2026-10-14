@@ -321,6 +321,11 @@ class RunResult:
     tables_used: int = 0
     tables_shape_kept: int = 0
     tables_overflow: int = 0
+    # Charts: slides sent with a chart, built on a chart slide, and the design
+    # keys (colours, position) the model added although the schema has none.
+    charts_given: int = 0
+    charts_on_chart_slides: int = 0
+    chart_style_keys: int = 0
     leftovers: List[str] = field(default_factory=list)
     removed_by_check: int = 0
     truncated: int = 0
@@ -644,6 +649,14 @@ def _measure(
         if chosen[i].id == chosen[i - 1].id == chosen[i - 2].id
     )
     _variety(run, inventory, slides, chosen)
+    with_chart = [(s, p) for s, p in zip(plan.slides, assigned) if s.chart is not None]
+    run.charts_given = len(with_chart)
+    run.charts_on_chart_slides = sum(
+        1 for _, p in with_chart if p is not None and p.kind == "chart"
+    )
+    run.chart_style_keys = sum(
+        len(s.chart.style_fields) for s, _ in with_chart if s.chart is not None
+    )
     if renders:
         report = renders[-1].report
         for slide_report in report.slides.values():
@@ -663,7 +676,17 @@ def _measure(
         run.lost = len(run.lost_texts)
 
 
-_NOT_TEXT = {"kind", "type", "pattern", "image", "images", "notes", "file_name"}
+# A chart's text lives in its chart part, not in the slide's shapes.
+_NOT_TEXT = {
+    "kind",
+    "type",
+    "pattern",
+    "image",
+    "images",
+    "notes",
+    "file_name",
+    "chart",
+}
 
 
 def _raw_texts(value: Any, key: Optional[str] = None) -> List[str]:
@@ -806,8 +829,9 @@ def _summary(results: List[RunResult], variants: List[Variant]) -> str:
         "| template | mode | runs | success | first call | avg repairs | cover once@1 "
         "| 3-in-a-row | distinct/slides | max reuse | max kind repeat (max / mean) | A-B-A | avoidable reuses "
         "| patterns used | tables used/given | table shape kept | table overflow "
+        "| charts on chart slides/given | chart style keys "
         "| leftovers | removed by check | truncated | lost | split lists | variety asks | avg wall s | tokens in / out (k) | reply chars (mean) | tool call instead of reply |",
-        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for variant in variants:
         runs = [
@@ -837,6 +861,8 @@ def _summary(results: List[RunResult], variants: List[Variant]) -> str:
             f"| {sum(r.tables_used for r in ok)}/{sum(r.tables_given for r in ok)} "
             f"| {sum(r.tables_shape_kept for r in ok)} "
             f"| {sum(r.tables_overflow for r in ok)} "
+            f"| {sum(r.charts_on_chart_slides for r in ok)}/{sum(r.charts_given for r in ok)} "
+            f"| {sum(r.chart_style_keys for r in ok)} "
             f"| {sum(len(r.leftovers) for r in ok)} "
             f"| {sum(r.removed_by_check for r in ok)} "
             f"| {sum(r.truncated for r in ok)} | {sum(r.lost for r in ok)} "

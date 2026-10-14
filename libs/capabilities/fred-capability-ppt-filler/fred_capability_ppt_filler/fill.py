@@ -136,6 +136,7 @@ BuildNoteCode = Literal[
     "fixed_slide",
     "list_continued",
     "other_kind",
+    "chart_type_changed",
 ]
 
 
@@ -144,7 +145,8 @@ class BuildNote(BaseModel):
 
     code: BuildNoteCode
     count: Optional[int] = None
-    kind: Optional[str] = None  # the requested kind, for `other_kind`
+    # The requested kind (`other_kind`) or chart type (`chart_type_changed`).
+    kind: Optional[str] = None
 
 
 class BuiltSlide(BaseModel):

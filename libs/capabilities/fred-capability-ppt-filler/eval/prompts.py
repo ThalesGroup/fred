@@ -94,6 +94,17 @@ PROMPTS: dict[str, str] = {
         "d'introduction, puis le planning sous forme de tableau avec 8 sessions (date, thème, "
         "formateur, lieu) que tu inventes de façon réaliste, puis une slide sur la logistique."
     ),
+    # Chartable data: figures over time, and shares of a whole.
+    "sales_charts": (
+        "Build a 5-slide sales review with charts: revenue per quarter in 2025 and 2026 "
+        "(2025: 12, 15, 14, 18 M€; 2026: 14, 17, 19, 22 M€), and the 2026 split by region "
+        "(Europe 45%, Americas 30%, Asia 18%, Africa 7%). End with the outlook."
+    ),
+    "market_shares": (
+        "Prépare 4 slides sur nos parts de marché : un graphique de l'évolution de nos ventes "
+        "mensuelles de janvier à juin (120, 135, 128, 150, 162, 171 unités) et un graphique des "
+        "parts de marché (nous 34 %, concurrent A 28 %, concurrent B 21 %, autres 17 %)."
+    ),
 }
 
 # A second user turn per prompt, asking to change the delivered deck: an
@@ -136,4 +147,6 @@ EDITS: dict[str, str] = {
     "schedule_table": (
         "Mets ce contact sur la dernière slide : formation@acme.fr, 01 44 55 66 77."
     ),
+    "sales_charts": "Q4 2026 was 23 M€, not 22: fix the chart.",
+    "market_shares": "Les ventes de juin sont de 175 unités, pas 171 : corrige le graphique.",
 }

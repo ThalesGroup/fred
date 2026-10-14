@@ -72,7 +72,7 @@ def build_patterns_deck(template_bytes: bytes, inventory: TemplateInventory) -> 
         else:
             source = slides_by_id.get(int(pattern.id.split(":", 1)[1]))
             if source is not None and pattern.exclusion_reason != "unsupported_parts":
-                _duplicate_slide(presentation, source)
+                _duplicate_slide(presentation, source, preview=True)
             elif source is not None:
                 presentation.slides.add_slide(source.slide_layout)
             elif blank is not None:

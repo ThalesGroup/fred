@@ -69,6 +69,7 @@ _KIND_GUIDE = {
     "quote": "a quotation and its author",
     "image_text": "a picture next to text",
     "table": "a table of rows and columns to fill with data",
+    "chart": "a chart drawn from data (bars, lines, pie)",
     "closing": "thank-you, contact or end slide",
     "other": "none of the above",
 }
@@ -190,6 +191,9 @@ def kind_fits_slots(kind: SlideKind, pattern: Pattern) -> bool:
     groups = [g for g in pattern.groups if g.count >= 2]
     # A table zone is only filled from a plan table: the slide stays a table.
     if ("table" in roles) != (kind == "table"):
+        return False
+    # Likewise a chart zone is only filled from a plan chart.
+    if ("chart" in roles) != (kind == "chart"):
         return False
     if kind in ("cover", "section", "quote"):
         return titles > 0

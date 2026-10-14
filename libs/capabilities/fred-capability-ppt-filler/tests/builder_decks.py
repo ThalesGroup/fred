@@ -204,18 +204,33 @@ def add_icon_bank_slide(presentation, pictures: int = 24):
 
 
 def add_chart_slide(presentation):
+    """Two charts share the slide: neither is its main chart, so it stays excluded."""
     slide = _titled(presentation, "Chart")
     data = CategoryChartData()
     data.categories = ["A", "B"]
     data.add_series("S", (1, 2))
+    for left in (0.5, 5.0):
+        slide.shapes.add_chart(
+            XL_CHART_TYPE.COLUMN_CLUSTERED,
+            Inches(left),
+            Inches(1.5),
+            Inches(4.4),
+            Inches(5),
+            data,
+        )
+    return slide
+
+
+def add_main_chart_slide(presentation, chart_type=XL_CHART_TYPE.PIE):
+    """One free chart over the slide's main area, under a title and a takeaway."""
+    slide = _titled(presentation, "Parts de marché")
+    data = CategoryChartData()
+    data.categories = ["Europe", "Amériques", "Asie"]
+    data.add_series("Parts", (45, 35, 20))
     slide.shapes.add_chart(
-        XL_CHART_TYPE.COLUMN_CLUSTERED,
-        Inches(1),
-        Inches(1.5),
-        Inches(7),
-        Inches(5),
-        data,
+        chart_type, Inches(0.5), Inches(1.5), Inches(6), Inches(5), data
     )
+    _textbox(slide.shapes, 6.8, 2.0, 2.8, 3.0, "Changez ce texte", FONT_BODY)
     return slide
 
 

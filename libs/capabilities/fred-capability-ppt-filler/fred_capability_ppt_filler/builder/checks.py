@@ -139,3 +139,17 @@ def remove_leftovers(
         else:
             clear_paragraphs(shape.text_frame._txBody)
     return removed
+
+
+def remove_orphan_charts(slide) -> int:
+    """Drop chart frames whose chart part did not come with the slide (an
+    example chart the renderer did not replace): PowerPoint would repair them."""
+    rid = qn("r:id")
+    frames = [
+        node.getparent().getparent().getparent()
+        for node in slide.shapes._spTree.iter(qn("c:chart"))
+        if not node.get(rid)
+    ]
+    for frame in frames:
+        frame.getparent().remove(frame)
+    return len(frames)

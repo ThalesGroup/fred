@@ -40,6 +40,7 @@ LIKE = "like"
 # Slide fields (and their aliases) a model may write in the change itself.
 _SLIDE_KEYS = frozenset(
     ("title", "subtitle", "bullets", "columns", "items", "image", "images", "table")
+    + ("chart",)
     + ("notes", "kind", "body", "text", "pattern", "type")
 )
 
@@ -190,12 +191,21 @@ _FIELDS: Dict[str, Dict[str, _Type]] = {
         "image": "text",
         "images": ("list", "text"),
         "table": "table",
+        "chart": "chart",
         "notes": "text",
         "kind": "text",
     },
     "column": {"heading": "text", "bullets": ("list", "text")},
     "item": {k: "text" for k in ("number", "heading", "text", "label", "image")},
     "table": {"header": ("list", "text"), "rows": ("list", ("list", "text"))},
+    "chart": {
+        "type": "text",
+        "title": "text",
+        "unit": "text",
+        "categories": ("list", "text"),
+        "series": ("list", "series"),
+    },
+    "series": {"name": "text", "values": ("list", "number")},
 }
 _PATH = re.compile(r"^[a-z_]+(\[\d+\])*(\.[a-z_]+(\[\d+\])*)*$")
 _TOKEN = re.compile(r"([a-z_]+)|\[(\d+)\]")
@@ -383,6 +393,7 @@ CLEARABLE = (
     "image",
     "images",
     "table",
+    "chart",
 )
 
 

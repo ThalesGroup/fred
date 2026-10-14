@@ -19,6 +19,8 @@ optional ``kind`` last. Which template slide shows each entry is decided in
 
 from __future__ import annotations
 
+import math
+import re
 from collections import Counter
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
@@ -282,6 +284,251 @@ class PlanTable(BaseModel):
         return any(self.header) or any(any(r) for r in self.rows)
 
 
+# --- charts ---------------------------------------------------------------------------
+
+CHART_TYPES = ("column", "bar", "line", "pie", "doughnut", "stacked_column", "area")
+# Readability caps of every chart, whatever its zone.
+MAX_SERIES = 4
+MAX_SLICES = 6
+_CHART_TYPE_NAMES = {
+    "columns": "column",
+    "histogram": "column",
+    "vertical bar": "column",
+    "bars": "bar",
+    "horizontal bar": "bar",
+    "lines": "line",
+    "curve": "line",
+    "camembert": "pie",
+    "donut": "doughnut",
+    "ring": "doughnut",
+    "stacked": "stacked_column",
+    "stacked bar": "stacked_column",
+    "stacked columns": "stacked_column",
+    "column stacked": "stacked_column",
+    "areas": "area",
+}
+# Design keys a model adds to a chart: the template decides them, never the call.
+_CHART_STYLE_KEYS = frozenset(
+    ("color", "colors", "colour", "colours", "palette", "style", "theme", "legend")
+    + ("position", "size", "width", "height", "font", "fonts", "x_axis", "y_axis")
+)
+_NUMBER = re.compile(r"^([^\d+\-.,]*?)\s*([+\-]?\d[\d\s.,']*)\s*(\D*)$")
+
+
+def _chart_type(value: Any) -> Tuple[str, Optional[str]]:
+    """The type to build and, for a type the builder does not offer, the one asked."""
+    text = lexicon.normalize(_as_text(value) or "")
+    text = re.sub(r"\s*(chart|graph|graphique|diagramme)\s*", " ", text).strip()
+    if not text:
+        return "column", None
+    name = text.replace(" ", "_")
+    if name in CHART_TYPES:
+        return name, None
+    found = _CHART_TYPE_NAMES.get(text)
+    return (found, None) if found else ("column", text[:30])
+
+
+def _decimal(digits: str) -> Optional[float]:
+    """``1 200``, ``12,5``, ``1,200.50``, ``1.200,5``: the last separator
+    followed by other than three digits is the decimal one."""
+    digits = re.sub(r"[\s']", "", digits)
+    separators = [i for i, c in enumerate(digits) if c in ".,"]
+    if separators:
+        last = separators[-1]
+        decimals = len(digits) - last - 1
+        mixed = len({digits[i] for i in separators}) > 1
+        if mixed or (decimals != 3 and digits.count(digits[last]) == 1):
+            digits = re.sub(r"[.,]", "", digits[:last]) + "." + digits[last + 1 :]
+        else:
+            digits = re.sub(r"[.,]", "", digits)
+    try:
+        number = float(digits)
+    except ValueError:
+        return None
+    return number if math.isfinite(number) else None
+
+
+def read_number(value: Any) -> Tuple[Optional[float], str]:
+    """A value as a number and the unit written around it (``"45 %"`` →
+    ``(45.0, "%")``); ``(None, "")`` when it does not read as one."""
+    if isinstance(value, bool) or value is None:
+        return None, ""
+    if isinstance(value, (int, float)):
+        return (float(value), "") if math.isfinite(value) else (None, "")
+    match = _NUMBER.match(str(value).replace(" ", " ").replace(" ", " "))
+    if match is None:
+        return None, ""
+    number = _decimal(match.group(2))
+    unit = (match.group(3).strip() + match.group(1).strip()).strip()
+    if number is None or len(unit) > 6 or re.search(r"\d", unit):
+        return None, ""
+    return number, unit
+
+
+class PlanSeries(BaseModel):
+    """One series of a chart: a name and one value per category."""
+
+    name: str = Field(default="", description="Series name, shown in the legend.")
+    values: List[Optional[float]] = Field(
+        default_factory=list,
+        description="One number per category, in the categories' order.",
+        json_schema_extra=lambda schema: schema.update({"items": {"type": "number"}}),
+    )
+    # Values that did not read as numbers, by index, with the text sent.
+    unread: SkipJsonSchema[Dict[int, str]] = Field(default_factory=dict)
+    units: SkipJsonSchema[List[str]] = Field(default_factory=list, exclude=True)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce(cls, value: Any) -> Any:
+        if not isinstance(value, dict):
+            value = {"values": value}
+        name = next(
+            (value.get(k) for k in ("name", "label", "title") if value.get(k)), ""
+        )
+        raw = next(
+            (value[k] for k in ("values", "data", "y") if value.get(k) is not None),
+            [],
+        )
+        raw = list(raw) if isinstance(raw, (list, tuple)) else [raw]
+        carried = {int(k): v for k, v in (value.get("unread") or {}).items()}
+        values: List[Optional[float]] = []
+        unread: Dict[int, str] = {}
+        units: List[str] = []
+        for index, entry in enumerate(raw):
+            number, unit = read_number(entry)
+            values.append(number)
+            if number is None:
+                unread[index] = carried.get(index) or _quote(entry)[:20]
+            elif isinstance(entry, str):
+                units.append(unit)
+        return {
+            "name": _as_text(name) or "",
+            "values": values,
+            "unread": unread,
+            "units": units,
+        }
+
+
+class PlanChart(BaseModel):
+    """A data chart: the model gives the numbers, the template its look."""
+
+    type: str = Field(
+        default="column",
+        description="column | bar (horizontal) | line | pie | doughnut | stacked_column | "
+        "area (one or two series).",
+        json_schema_extra={"enum": list(CHART_TYPES)},
+    )
+    categories: List[str] = Field(
+        default_factory=list,
+        description="Category labels: the x axis, or a pie's slices.",
+    )
+    series: List[PlanSeries] = Field(
+        default_factory=list,
+        description="Series, each {name, values}: one number per category.",
+    )
+    title: Optional[str] = Field(
+        default=None, description="Optional caption of the chart itself."
+    )
+    unit: Optional[str] = Field(
+        default=None, description="Optional unit of the values: '%', 'M€', 'days'."
+    )
+    # An unknown type built as a column chart: the type asked, for the note.
+    asked_type: SkipJsonSchema[Optional[str]] = None
+    # Design keys the call carried (colours, position): the template decides them.
+    style_fields: SkipJsonSchema[List[str]] = Field(default_factory=list)
+    ignored_fields: SkipJsonSchema[List[str]] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce(cls, value: Any) -> Any:
+        if isinstance(value, (list, tuple)):
+            value = {"series": value}
+        if not isinstance(value, dict):
+            return {"ignored_fields": [f"chart '{_quote(value)}'"]}
+        aliases = {
+            "chart_type": "type",
+            "kind": "type",
+            "labels": "categories",
+            "x": "categories",
+            "data": "series",
+            "datasets": "series",
+            "caption": "title",
+            "units": "unit",
+        }
+        data = _with_aliases(value, aliases)
+        kind, asked = _chart_type(data.get("type"))
+        if kind == "column" and value.get("asked_type"):
+            asked = value["asked_type"]
+        title = _as_text(data.get("title"))
+        categories = data.get("categories")
+        series = data.get("series")
+        if series is None and data.get("values") is not None:
+            series = [{"name": title or "", "values": data["values"]}]
+        if isinstance(series, dict):
+            if all(isinstance(v, (list, tuple)) for v in series.values()):
+                series = [{"name": k, "values": v} for k, v in series.items()]
+            else:
+                categories = categories or list(series)
+                series = [{"name": title or "", "values": list(series.values())}]
+        series = list(series) if isinstance(series, (list, tuple)) else []
+        if series and all(isinstance(v, (int, float, str)) for v in series):
+            series = [{"name": title or "", "values": series}]
+        # A series written as {category: value} pairs names its categories.
+        paired = [
+            s
+            for s in series
+            if isinstance(s, dict)
+            and not any(k in s for k in ("values", "data", "y"))
+            and len(s) > 1
+        ]
+        if paired and not categories:
+            categories = [k for k in paired[0] if k not in ("name", "label", "title")]
+        series = [
+            {
+                "name": s.get("name") or s.get("label") or s.get("title") or "",
+                "values": [s.get(c) for c in categories or []],
+            }
+            if s in paired
+            else s
+            for s in series
+        ]
+        known = set(cls.model_fields) | set(aliases) | {"values"}
+        style = [k for k in value if lexicon.normalize(k) in _CHART_STYLE_KEYS]
+        style += [
+            f"series.{k}"
+            for s in series
+            if isinstance(s, dict)
+            for k in s
+            if lexicon.normalize(k) in _CHART_STYLE_KEYS
+        ]
+        return {
+            "type": kind,
+            "categories": [(_as_text(c) or "").strip() for c in _seq(categories or [])],
+            "series": [s for s in series if s is not None],
+            "title": title,
+            "unit": _as_text(data.get("unit")),
+            "asked_type": asked,
+            "style_fields": sorted(set(value.get("style_fields") or []) | set(style)),
+            "ignored_fields": _ignored(
+                {k: v for k, v in value.items() if k not in style}, known
+            ),
+        }
+
+    @model_validator(mode="after")
+    def _unit_from_values(self) -> "PlanChart":
+        """Every value written with the same unit ("45 %") gives the unit."""
+        units = {u for s in self.series for u in s.units}
+        written = sum(len(s.units) for s in self.series)
+        counted = sum(len(s.values) for s in self.series)
+        if not self.unit and len(units) == 1 and written == counted and "" not in units:
+            self.unit = units.pop()
+        return self
+
+    def has_content(self) -> bool:
+        return bool(self.categories) or any(s.values for s in self.series)
+
+
 class SlidePlan(BaseModel):
     title: Optional[str] = None
     subtitle: Optional[str] = None
@@ -302,6 +549,11 @@ class SlidePlan(BaseModel):
     table: Optional[PlanTable] = Field(
         default=None,
         description="A data table {header, rows}; only on a kind that lists a table.",
+    )
+    chart: Optional[PlanChart] = Field(
+        default=None,
+        description="A data chart {type, categories, series [{name, values}], title, unit}: "
+        "numbers only, the template sets colours and fonts.",
     )
     notes: Optional[str] = Field(default=None, description="Speaker notes.")
     # Last on purpose: the model writes the content first, then names its kind.
@@ -383,6 +635,7 @@ def has_content(slide: SlidePlan) -> bool:
         or slide.image
         or slide.images
         or (slide.table is not None and slide.table.has_content())
+        or (slide.chart is not None and slide.chart.has_content())
     )
 
 
@@ -447,6 +700,17 @@ def table_summary(zone: Zone) -> str:
     )
 
 
+def chart_summary(zone: Zone) -> str:
+    """What a chart zone holds: its types and, as a column chart, its room."""
+    room = (
+        f": categories max {zone.max_lines}, labels "
+        f"{capacity_text(zone.chars_per_line, 2)}, series max {MAX_SERIES}"
+        if zone.max_lines and zone.chars_per_line
+        else ""
+    )
+    return f"chart ({', '.join(CHART_TYPES)}){room}"
+
+
 def _item_fields(group: RepeatGroup) -> Dict[str, List[Zone]]:
     """The item fields one repeat group holds, with their zones."""
     fields: Dict[str, List[Zone]] = {}
@@ -487,6 +751,7 @@ def zone_summary(pattern: Pattern) -> str:
     if images:
         parts.append(f"images×{len(images)}{_required(images)}")
     parts.extend(table_summary(z) for z in pattern.zones if z.role == "table")
+    parts.extend(chart_summary(z) for z in pattern.zones if z.role == "chart")
     parts.extend(group_summary(g) for g in pattern.groups)
     return "; ".join(parts) or "no editable zone"
 

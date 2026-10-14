@@ -97,6 +97,7 @@ from fred_capability_ppt_filler.builder.models import (
 from fred_capability_ppt_filler.builder.plan import (
     HIDDEN_FIELDS,
     DeckPlan,
+    PlanChart,
     PlanColumn,
     PlanItem,
     PlanTable,
@@ -193,14 +194,25 @@ def offered_kinds(inventory: TemplateInventory) -> List[SlideKind]:
     return [k for k in SLIDE_KINDS if k in kinds]
 
 
+def chart_hosts(inventory: TemplateInventory) -> str:
+    """Where a chart can go: ``chart`` slides, else content areas, else nowhere."""
+    zones = [z for p in assignable(inventory) for z in p.zones]
+    if any(z.role == "chart" for z in zones):
+        return "chart"
+    return "content" if any(z.chart_capable for z in zones) else ""
+
+
 def catalogue(inventory: TemplateInventory) -> str:
     """One line per kind the template offers, with every distinct variant: its
     label and what it holds. A hidden variant is one the model never writes for."""
     variants: Dict[str, Dict[str, str]] = {}
+    in_content = chart_hosts(inventory) == "content"
     for pattern in assignable(inventory):
-        variants.setdefault(pattern.kind, {}).setdefault(
-            zone_summary(pattern), pattern.label
-        )
+        summary = zone_summary(pattern)
+        if in_content and any(z.chart_capable for z in pattern.zones):
+            # No chart slide: say which content area takes one instead of bullets.
+            summary += "; or a chart in place of the bullets"
+        variants.setdefault(pattern.kind, {}).setdefault(summary, pattern.label)
     return "\n".join(
         f"- {kind}: "
         + " | ".join(f"{label}: {summary}" for summary, label in variants[kind].items())
@@ -213,7 +225,9 @@ def _args_schema(inventory: TemplateInventory) -> type[BaseModel]:
     and each text field's room in its description (JSON schema only:
     validation accepts anything and coerces it)."""
     return _schema_for(
-        tuple(offered_kinds(inventory)), field_hints(assignable(inventory))
+        tuple(offered_kinds(inventory)),
+        field_hints(assignable(inventory)),
+        bool(chart_hosts(inventory)),
     )
 
 
@@ -251,7 +265,9 @@ def _hinted(
 # on the event loop; keyed by what the schema shows, so equal templates share it.
 @lru_cache(maxsize=64)
 def _schema_for(
-    kinds: Tuple[SlideKind, ...], hints: Tuple[Tuple[str, str], ...]
+    kinds: Tuple[SlideKind, ...],
+    hints: Tuple[Tuple[str, str], ...],
+    charts: bool = False,
 ) -> type[BaseModel]:
     rooms = dict(hints)
     item = create_model(
@@ -268,6 +284,11 @@ def _schema_for(
         if "table" in kinds
         else (SkipJsonSchema[Optional[PlanTable]], None)
     )
+    chart: Any = (
+        (Optional[PlanChart], SlidePlan.model_fields["chart"])
+        if charts
+        else (SkipJsonSchema[Optional[PlanChart]], None)
+    )
     slide_model = create_model(
         "BuildSlide",
         __base__=SlidePlan,
@@ -275,6 +296,7 @@ def _schema_for(
         columns=(List[column], Field(default_factory=list)),  # type: ignore[valid-type]
         items=(List[item], Field(default_factory=list)),  # type: ignore[valid-type]
         table=table,
+        chart=chart,
         kind=(
             Optional[SlideKind],
             Field(
@@ -302,6 +324,7 @@ def _schema_for(
                     "[{heading, bullets}], items [{number, heading, text, label, image}], "
                     "image, images, "
                     + ("table {header, rows}, " if "table" in kinds else "")
+                    + ("chart, " if charts else "")
                     + "notes, kind."
                 ),
             ),
@@ -836,11 +859,15 @@ def build_list_images_tool(
 _GUIDE_KINDS = ("figures", "timeline", "cards", "process", "table")
 
 
-def _guide(kinds: List[SlideKind], variety: VarietyCheck, max_uses: int) -> str:
+def _guide(
+    kinds: List[SlideKind], variety: VarietyCheck, max_uses: int, charts: str = ""
+) -> str:
     """Which content suits which offered kind, and the author's max."""
     pairs = [f"{SHAPE_HINTS[k]} → {k}" for k in _GUIDE_KINDS if k in kinds]
     if "table" in kinds:
         pairs[-1] += ", not restated as columns before it"
+    if charts:
+        pairs.append("numbers that compare across categories or over time → chart")
     lead = (
         f" Shape the content, within the fields and items max each variant lists below: "
         f"{'; '.join(pairs)}."
@@ -863,6 +890,7 @@ def _description(
     inventory: TemplateInventory, variety: VarietyCheck, max_uses: int
 ) -> str:
     kinds = offered_kinds(inventory)
+    charts = chart_hosts(inventory)
     rules = ""
     if "cover" in kinds:
         rules += " The first slide is always the template's cover."
@@ -876,8 +904,9 @@ def _description(
         "To CHANGE the last deck of this conversation (a fix after needs_revision, or a change the user asks "
         'for), send only `changes`, numbered on that deck\'s slides: {"op": "replace", "slide": N, "slides": '
         '[...]}, {"op": "insert", "after": N (0 = at the start), "slides": [...]}, {"op": "remove", "slide": '
-        'N}, {"op": "edit", "slide": N, "field": "title" | "bullets[1]" | "items[2].label" (indexes from 0), '
-        '"value": ...}. The other slides stay exactly as they were and the whole deck is rebuilt. '
+        'N}, {"op": "edit", "slide": N, "field": "title" | "bullets[1]" | "items[2].label"'
+        + (' | "chart.series[0].values[2]"' if charts else "")
+        + ' (indexes from 0), "value": ...}. The other slides stay exactly as they were and the whole deck is rebuilt. '
         "To change text inside a slide, use `edit`: the slide keeps its design; `replace` is for "
         "a different slide (one of the same kind keeps the replaced slide's design when it fits). "
         'When the user wants a slide to look like another ("same layout/design as slide M"), send '
@@ -887,6 +916,12 @@ def _description(
         "'- ' prefix for a sub-bullet, **bold** allowed), columns [{heading, bullets}], items [{number, "
         "heading, text, label, image}], image/images (document_ids from list_images_in_folder), "
         + ("table {header, rows} for tabular data, " if "table" in kinds else "")
+        + (
+            "chart {type, categories, series [{name, values}], title, unit} for numbers "
+            "(data only: the template sets its colours, fonts and place), "
+            if charts
+            else ""
+        )
         + "notes; then, "
         "optionally, its `kind` from the list below (left out, it is inferred from the content; a kind "
         "the template cannot use there is replaced by a close kind that holds the content, never an "
@@ -898,7 +933,7 @@ def _description(
         "a document. If a slide fits no slide of the template, nothing is built and the result lists, per "
         "slide, what to change: apply it with `changes`. The result is shown to the user automatically; "
         "never write a download link. Each call's deck replaces the previous one.\n"
-        + _guide(kinds, variety, max_uses)
+        + _guide(kinds, variety, max_uses, charts)
         + "\n"
         "Slide kinds of this template, with each variant's name and what each zone holds at full "
         "size (words, then ≈chars per line × lines; items max N; variants separated by |). Write to "

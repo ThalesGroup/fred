@@ -48,7 +48,7 @@ from pptx.enum.shapes import MSO_SHAPE_TYPE
 from pptx.oxml.ns import qn
 
 from fred_capability_ppt_filler import text_metrics
-from fred_capability_ppt_filler.builder import lexicon
+from fred_capability_ppt_filler.builder import charts, lexicon
 from fred_capability_ppt_filler.builder.models import (
     SLIDE_KINDS,
     AnalysisError,
@@ -104,6 +104,8 @@ _SHARED_TEXT_MIN_SLIDES = 2
 _REPLACEABLE_PICTURE_AREA = 0.25
 # A chart/table covering this share of the slide is the slide's content.
 _MAIN_CONTENT_AREA = 0.15
+# A content placeholder this large may host a chart in place of its text.
+_CHART_MIN_AREA = 0.25
 _ICON_BANK_PICTURES = 20
 # A layout/master shape under this share of the slide is a frame, not a background.
 _FRAME_MAX_AREA = 0.5
@@ -168,7 +170,7 @@ _TITLE_PLACEHOLDERS = ("TITLE", "CENTER_TITLE", "VERTICAL_TITLE")
 
 # Bumped whenever the rules below change what an inventory holds, so agents
 # saved with an older analysis are recomputed from their stored template.
-ANALYSIS_VERSION = 11
+ANALYSIS_VERSION = 12
 
 
 def theme_fonts(presentation) -> Tuple[Optional[str], Optional[str]]:
@@ -558,7 +560,7 @@ def estimate_capacity(
 
 def _zone(rec: _Rec, role: ZoneRole, width: int, height: int) -> Zone:
     chars_per_line = max_lines = None
-    if role != "image" and role != "keep":
+    if role not in ("image", "keep", "chart"):
         chars_per_line, max_lines = estimate_capacity(
             rec.box,
             rec.font_pt,
@@ -579,6 +581,9 @@ def _zone(rec: _Rec, role: ZoneRole, width: int, height: int) -> Zone:
         chars_per_line=chars_per_line,
         max_lines=max_lines,
         grows=rec.frame.grows,
+        chart_capable=rec.ph_type == "OBJECT"
+        and role == "body"
+        and rec.area >= _CHART_MIN_AREA,
     )
 
 
@@ -622,6 +627,8 @@ def _placeholder_role(rec: _Rec) -> Optional[ZoneRole]:
         return "heading" if _is_top_band(rec) and rec.box.w < 600 else "body"
     if ph == "PICTURE":
         return "image"
+    if ph == "CHART":
+        return "chart"
     return None
 
 
@@ -864,6 +871,7 @@ class _Analyzer:
                 )
             )
         _promote_headings(zones)
+        self._chart_zones(zones, records)
         name = layout.name or f"Layout {index + 1}"
         pattern = Pattern(
             id=f"layout:{index}",
@@ -981,6 +989,20 @@ class _Analyzer:
             if zone is not None:
                 zones.append(zone)
 
+        # 4c. The slide's one main chart, when no chart placeholder holds one.
+        main_charts = [
+            rec
+            for rec in records
+            if rec.kind == "chart"
+            and rec.ph_idx is None
+            and len(rec.path) == 1
+            and rec.area >= _MAIN_CONTENT_AREA
+            and _declared_role(rec) != "keep"
+        ]
+        if len(main_charts) == 1 and not any(z.role == "chart" for z in zones):
+            zones.append(_zone(main_charts[0], "chart", self.width, self.height))
+        self._chart_zones(zones, records)
+
         pattern = Pattern(
             id=f"slide:{slide.slide_id}",
             source="slide",
@@ -1022,6 +1044,22 @@ class _Analyzer:
             _mark_framed(pattern, self.frames(slide.slide_layout))
         pattern.reusable = pattern.kind != "other"
         return pattern
+
+    def _chart_zones(self, zones: List[Zone], records: List[_Rec]) -> None:
+        """A chart zone draws its text from the presentation's default size and
+        stores its column-chart room; an example chart's type is kept too."""
+        by_key = {rec.key: rec for rec in records}
+        for zone in zones:
+            if zone.role != "chart":
+                continue
+            zone.font_pt = self.default_pt
+            size = (self.width, self.height)
+            zone.max_lines = charts.max_categories(zone, "column", size)
+            shown = min(charts.QUOTED_CATEGORIES, zone.max_lines)
+            zone.chars_per_line = charts.label_room(zone, "column", size, shown)[0]
+            rec = by_key.get(zone.key)
+            if rec is not None and rec.kind == "chart":
+                zone.chart_type = charts.type_of(cast(Any, rec.shape).chart)
 
     def _table_zone(self, rec: _Rec) -> Optional[Zone]:
         tbl = rec.shape._element.find(f".//{qn('a:tbl')}")
@@ -1213,9 +1251,16 @@ class _Analyzer:
     # -- exclusions --------------------------------------------------------------------
 
     def _apply_exclusions(self, pattern: Pattern, slide, records: List[_Rec]) -> None:
-        tables = {z.key for z in pattern.zones if z.role == "table"}
+        held = {z.key for z in pattern.zones if z.role in ("table", "chart")}
+        # The chart part of a chart zone is replaced at render, never copied.
+        chart_rids = {
+            node.get(qn("r:id"))
+            for rec in records
+            if rec.key in held and rec.kind == "chart"
+            for node in rec.shape._element.iter(qn("c:chart"))
+        }
         for rec in records:
-            if rec.key in tables:
+            if rec.key in held:
                 continue
             if rec.kind in ("chart", "table") and rec.area >= _MAIN_CONTENT_AREA:
                 pattern.included = False
@@ -1227,8 +1272,8 @@ class _Analyzer:
             pattern.included = False
             pattern.exclusion_reason = "icon_bank"
             return
-        for rel in slide.part.rels.values():
-            if rel.is_external:
+        for rId, rel in slide.part.rels.items():
+            if rel.is_external or rId in chart_rids:
                 continue
             if not rel.reltype.endswith(COPYABLE_REL_SUFFIXES):
                 pattern.included = False
@@ -1489,6 +1534,8 @@ def _kind(
     zones = [z for z in pattern.zones if z.role != "keep"]
     if any(z.role == "table" for z in zones):
         return "table"
+    if any(z.role == "chart" for z in zones):
+        return "chart"
     hinted = _hinted_kind(pattern, records, name, layout_type)
     if not zones and not pattern.groups:
         return "closing" if hinted == "closing" else "other"

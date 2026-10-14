@@ -32,7 +32,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Literal, NamedTuple, Optional, Sequence, Tuple
 
-from fred_capability_ppt_filler.builder import lexicon
+from fred_capability_ppt_filler.builder import charts, lexicon
 from fred_capability_ppt_filler.builder.models import (
     SLIDE_KINDS,
     Pattern,
@@ -44,6 +44,7 @@ from fred_capability_ppt_filler.builder.plan import (
     ITEM_FIELDS,
     SLIDE_FIELDS,
     DeckPlan,
+    PlanChart,
     PlanItem,
     PlanTable,
     SlidePlan,
@@ -61,6 +62,7 @@ from fred_capability_ppt_filler.builder.render import (
     _only_names_the_slide,
     _reading_order,
     _unused_item_fields,
+    chart_host,
     fit_table,
     zone_capacity,
 )
@@ -122,6 +124,8 @@ CLOSE_KINDS: Dict[str, Tuple[SlideKind, ...]] = {
     "quote": ("section", "bullets"),
     "image_text": ("bullets", "two_columns"),
     "closing": ("section", "bullets"),
+    # A content placeholder able to hold a chart: the fit check keeps the rest out.
+    "chart": ("bullets", "two_columns", "image_text"),
 }
 
 _MAX_KIND_OPTIONS = 3
@@ -236,6 +240,8 @@ def infer_kinds(slide: SlidePlan) -> List[SlideKind]:
     kinds: List[SlideKind]
     if slide.table is not None and slide.table.has_content():
         return ["table"]
+    if _chart(slide) is not None:
+        return ["chart", *CLOSE_KINDS["chart"]]
     if len(slide.columns) >= 2:
         headed = all(c.heading for c in slide.columns)
         kinds = (
@@ -399,8 +405,15 @@ def _check_zone(
 _NO_PLACE = ": this slide has no place for it"
 
 
+def _chart(slide: SlidePlan) -> Optional[PlanChart]:
+    chart = slide.chart
+    return chart if chart is not None and chart.has_content() else None
+
+
 def _no_place(what: str, pattern: Pattern) -> Misfit:
     option = f"drop {what}"
+    if what == "chart":
+        option = "give the chart a slide of its own (title and chart)"
     if what == "bullets" and pattern.groups:
         most = max(g.count for g in pattern.groups)
         option = f"give the bullets as items (at most {most})"
@@ -495,6 +508,21 @@ def misfit(
                 "give the content as `table`, or another kind",
             )
         )
+    chart = _chart(slide)
+    host = chart_host(pattern, text) if chart is not None else None
+    if chart is not None and host is None:
+        lost.append("chart")
+    elif chart is not None and host is not None:
+        reasons.extend(
+            Misfit(*found) for found in charts.fit_problems(host, chart, size)
+        )
+    elif any(z.role == "chart" for z in pattern.zones):
+        reasons.append(
+            Misfit(
+                "this slide shows a chart and needs `chart` {type, categories, series}",
+                "give the content as `chart`, or another kind",
+            )
+        )
     reasons[:0] = [_no_place(what, pattern) for what in lost if what not in held]
 
     # A framed picture left empty shows its layout's frame.
@@ -539,7 +567,11 @@ def misfit(
     for zone in pattern.zones:
         if zone.role == "image":
             cost += 0.0 if images else _IMAGE_HOLE
-        elif zone.role not in ("keep", "table") and zone.key not in text:
+        elif (
+            zone.role not in ("keep", "table", "chart")
+            and zone.key not in text
+            and zone is not host
+        ):
             cost += _EMPTY_ZONE
     for group in pattern.groups:
         for item, zones in zip(slide.items, group.items):
@@ -608,6 +640,11 @@ def _dropped_text(index: int, slide: SlidePlan) -> Optional[SlideProblem]:
                 f"columns[{n}]: {', '.join(column.ignored_fields)} is not a column field"
             )
             options.append("write columns as a list, one {heading, bullets} per column")
+    if slide.chart is not None and slide.chart.ignored_fields:
+        found.append(
+            f"chart: {', '.join(slide.chart.ignored_fields)} is not a chart field"
+        )
+        options.append("give the chart only type, categories, series, title, unit")
     for n, item in enumerate(slide.items):
         if item.ignored_fields:
             found.append(
@@ -626,6 +663,22 @@ def _dropped_text(index: int, slide: SlidePlan) -> Optional[SlideProblem]:
         options.append("complete each entry, or drop the half-written one")
     return SlideProblem(
         index, "; ".join(parts), list(dict.fromkeys(options)), slide.kind
+    )
+
+
+def _chart_data(index: int, slide: SlidePlan) -> Optional[SlideProblem]:
+    """The chart's data, checked once whatever slide will show it."""
+    chart = slide.chart
+    if chart is None:
+        return None
+    found = charts.data_problems(chart)
+    if not found:
+        return None
+    return SlideProblem(
+        index,
+        "; ".join(what for what, _ in found),
+        list(dict.fromkeys(fix for _, fix in found)),
+        slide.kind,
     )
 
 
@@ -909,6 +962,39 @@ def _tableless(slide: _Slide) -> bool:
     )
 
 
+def _chartless(slide: _Slide) -> bool:
+    """The slide has a chart and no template slide has a place for one."""
+    return _chart(slide.plan) is not None and not any(
+        z.role == "chart" or z.chart_capable
+        for p, _, _ in slide.checked
+        for z in p.zones
+    )
+
+
+def _chart_options(slide: _Slide) -> List[str]:
+    """What the chart's data can become on this template, best first."""
+    chart = _chart(slide.plan)
+    kinds = {p.kind: p for p, _, _ in slide.checked}
+    options = []
+    if "table" in kinds:
+        options.append(
+            "give the data as `table` (a row per category, a column per series)"
+        )
+    values = len(chart.categories) * len(chart.series) if chart is not None else 0
+    most = (
+        max((g.count for g in kinds["figures"].groups), default=0)
+        if "figures" in kinds
+        else 0
+    )
+    if most and values <= most:
+        options.append(
+            f"give the {values} values as items of a 'figures' slide "
+            "(number: the value, label: the category)"
+        )
+    options.append("keep the key numbers as bullets")
+    return options
+
+
 def _closest(slide: _Slide, has_cover: bool) -> Optional[Tuple[Pattern, List[Misfit]]]:
     """The kind closest to the content, then fewest problems, then the roomiest;
     None when no slide can take the position or a table must be rewritten."""
@@ -917,9 +1003,18 @@ def _closest(slide: _Slide, has_cover: bool) -> Optional[Tuple[Pattern, List[Mis
     rank = {k: 0 for tier in slide.tiers[:-1] for k in tier}
     rank.update({k: 1 for k in slide.tiers[-1]})
     own = _own(slide, has_cover)
-    if not own or _tableless(slide):
+    if not own or _tableless(slide) or _chartless(slide):
         return None
-    return min(own, key=lambda pr: (rank[pr[0].kind], *_fewest(pr)))
+    # A chart's advice is about a slide that can show it.
+    hosts = _chart(slide.plan) is not None
+    return min(
+        own,
+        key=lambda pr: (
+            rank[pr[0].kind],
+            hosts and not any(z.role == "chart" for z in pr[0].zones),
+            *_fewest(pr),
+        ),
+    )
 
 
 def _fewest(pair: Tuple[Pattern, List[Misfit]]) -> Tuple[int, int]:
@@ -929,10 +1024,12 @@ def _fewest(pair: Tuple[Pattern, List[Misfit]]) -> Tuple[int, int]:
     return len(reasons), -room
 
 
-def _why_not(slide: _Slide, offered: set[str]) -> Optional[str]:
+def _why_not(
+    slide: _Slide, offered: set[str], asked: Optional[str] = None
+) -> Optional[str]:
     """Why the requested kind cannot be used at all here; None when only its
     content keeps it out."""
-    asked = slide.plan.kind
+    asked = asked or slide.plan.kind
     if asked == "cover" and not slide.first:
         return "only the first slide can be the cover"
     if asked == "closing" and not slide.last:
@@ -980,6 +1077,13 @@ def _problem(slide: _Slide, has_cover: bool, offered: set[str]) -> SlideProblem:
                 "write the table as items (one item per row) or as columns",
                 "or keep its key rows as bullets",
             ],
+            slide.plan.kind,
+        )
+    if _chartless(slide):
+        return SlideProblem(
+            slide.index,
+            "chart: this template has no slide for a chart",
+            _chart_options(slide),
             slide.plan.kind,
         )
     asked, close = slide.plan.kind, _close(slide)
@@ -1061,12 +1165,15 @@ def _substitution(
 ) -> Optional[str]:
     """What was built instead of the requested kind, why, and the edit that
     would give the requested kind."""
-    asked = slide.plan.kind
+    # A chart in a content area is a substitution even when no kind was asked.
+    asked = slide.plan.kind or ("chart" if _chart(slide.plan) is not None else None)
     # The first slide is the cover by rule, and the description says so.
     if not asked or chosen.kind == asked or (slide.first and chosen.kind == "cover"):
         return None
     head = f"Slide {number}: built as '{chosen.kind}' instead of '{asked}'"
-    why = _why_not(slide, offered)
+    if asked == "chart" and chosen.kind != "chart":
+        head += ", the chart in its content area"
+    why = _why_not(slide, offered, asked)
     if why is not None:
         remedy = (
             "To make it the closing slide, move it to the end; otherwise nothing to do."
@@ -1263,7 +1370,8 @@ def _suggested(
     while the template has a variant of it left; slides with the same advice share a line."""
     found: Dict[Tuple[str, str], List[int]] = {}
     for slide in slides:
-        shape = content_shape(slide.plan)
+        # A chart's data has one natural form: never recast into another kind.
+        shape = content_shape(slide.plan) if _chart(slide.plan) is None else None
         if shape is None:
             continue
         blocked = _same_problem(slide)
@@ -1329,6 +1437,8 @@ def _repeats(
     for (group_by, _), group in groups.items():
         kind = group[0][1].kind
         structural = group_by == "structural"
+        # Chart slides may only vary among chart designs.
+        recast = not structural and kind != "chart"
         at_most = _NOTE_USES - 1
         if caps is not None and not structural:
             at_most = caps.kind if by_kind else caps.slide
@@ -1340,14 +1450,14 @@ def _repeats(
         offer = [p for p in unused if p.id not in blocked]
         same = [f"{p.label}: {zone_summary(p)}" for p in offer if p.kind == kind]
         suggested = (
-            []
-            if structural
-            else _suggested([s for s, _ in group], kind, pool, budget, given)
+            _suggested([s for s, _ in group], kind, pool, budget, given)
+            if recast
+            else []
         )
         others = [
             f"'{other}' for {hint}: {p.label}: {zone_summary(p)}"
             for other, hint in SHAPE_HINTS.items()
-            if not structural
+            if recast
             and other not in _STRUCTURAL
             and other != kind
             and budget.get(other, 0) > 0
@@ -1435,7 +1545,9 @@ def assign(
     problems: List[SlideProblem] = []
     splits: Dict[int, _Split] = {}
     for slide in slides:
-        dropped = _dropped_text(slide.index, slide.plan)
+        dropped = _dropped_text(slide.index, slide.plan) or _chart_data(
+            slide.index, slide.plan
+        )
         if dropped is not None:
             problems.append(dropped)
             continue

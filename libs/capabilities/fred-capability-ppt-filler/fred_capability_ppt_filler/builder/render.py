@@ -32,13 +32,23 @@ import math
 import re
 from collections import Counter
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, cast
+from typing import (
+    Any,
+    Collection,
+    Dict,
+    List,
+    Mapping,
+    Optional,
+    Sequence,
+    Tuple,
+    cast,
+)
 
 from pptx.oxml.ns import qn
 from pptx.util import Emu
 
 from fred_capability_ppt_filler import text_metrics
-from fred_capability_ppt_filler.builder import checks, lexicon
+from fred_capability_ppt_filler.builder import charts, checks, lexicon
 from fred_capability_ppt_filler.builder.analysis import (
     _cell_text,
     _font_name_of,
@@ -210,7 +220,9 @@ def _all_layouts(presentation) -> list:
     ]
 
 
-def _copy_relationships(source_part, dest_part) -> Dict[str, str]:
+def _copy_relationships(
+    source_part, dest_part, shared: Sequence[str] = _MEDIA_RELS
+) -> Dict[str, str]:
     """Re-create the media and external-link relationships on ``dest_part``.
 
     Targets are shared, so an image copied ten times stays one part. Links to
@@ -223,7 +235,7 @@ def _copy_relationships(source_part, dest_part) -> Dict[str, str]:
                 rid_map[rId] = dest_part.rels.get_or_add_ext_rel(
                     rel.reltype, rel.target_ref
                 )
-        elif rel.reltype.endswith(_MEDIA_RELS):
+        elif rel.reltype.endswith(tuple(shared)):
             rid_map[rId] = dest_part.relate_to(rel.target_part, rel.reltype)
     return rid_map
 
@@ -263,9 +275,10 @@ def _copy_notes(source, dest) -> None:
     )
 
 
-def _duplicate_slide(presentation, source):
+def _duplicate_slide(presentation, source, preview: bool = False):
     """Append a copy of ``source``: layout, background, colour map, shapes,
-    media and notes."""
+    media and notes. A ``preview`` copy also shows its charts, sharing their
+    parts: fine for a thumbnail, never for a delivered deck."""
     dest = presentation.slides.add_slide(source.slide_layout)
     for shape in list(dest.shapes):
         shape._element.getparent().remove(shape._element)
@@ -284,7 +297,9 @@ def _duplicate_slide(presentation, source):
     _copy_shapes(
         source.shapes._spTree,
         dest.shapes._spTree,
-        _copy_relationships(source.part, dest.part),
+        _copy_relationships(
+            source.part, dest.part, _MEDIA_RELS + (("/chart",) if preview else ())
+        ),
     )
     _copy_notes(source, dest)
     return dest
@@ -1095,6 +1110,19 @@ def _assign_group(
     return text, images, used
 
 
+# --- charts -------------------------------------------------------------------------------
+
+
+def chart_host(pattern: Pattern, text_keys: Collection[str]) -> Optional[Zone]:
+    """Where the slide's chart goes: its chart zone, else a content placeholder
+    able to hold one that receives no text."""
+    zones = _reading_order(pattern.zones)
+    found = next((z for z in zones if z.role == "chart"), None)
+    return found or next(
+        (z for z in zones if z.chart_capable and z.key not in text_keys), None
+    )
+
+
 # --- rendering ------------------------------------------------------------------------------
 
 
@@ -1212,6 +1240,8 @@ class _Renderer:
                 frame = slide.notes_slide.notes_text_frame
                 if frame is not None:
                     frame.text = slide_plan.notes or ""
+            # A fixed slide's example chart is never redrawn: it cannot stay broken.
+            checks.remove_orphan_charts(slide)
         if rendered == 0:
             raise RenderError(
                 "the plan holds no usable slide. Write each entry of `slides` as an "
@@ -1272,7 +1302,9 @@ class _Renderer:
         )
         if parts > 1:
             self.report.note("list_continued")
-        asked = slide_plan.kind
+        chart = slide_plan.chart if shown else None
+        # A chart in a content area is a substitution even when no kind was asked.
+        asked = slide_plan.kind or ("chart" if chart is not None else None)
         # The first slide is the cover by rule: not a substitution.
         if (
             asked
@@ -1280,6 +1312,8 @@ class _Renderer:
             and not (rendered == 1 and pattern.kind == "cover")
         ):
             self.report.note("other_kind", kind=asked)
+        if chart is not None and chart.asked_type:
+            self.report.note("chart_type_changed", kind=chart.asked_type)
 
     def _tell(self, note: str) -> None:
         """A finding the after-check report does not carry: sent to the agent."""
@@ -1354,6 +1388,7 @@ class _Renderer:
         lost.extend(
             _unused_item_fields(pattern.groups, plan, (self.width, self.height))
         )
+        host = self._fill_chart(slide, pattern, plan, index, text, position, lost)
 
         for group in pattern.groups:
             group_text, group_images, used = _assign_group(
@@ -1405,6 +1440,8 @@ class _Renderer:
         layout_body = _layout_body_props(slide)
         scaled: Dict[str, List[Tuple[Any, Zone, float]]] = {}
         for zone in self._fillable_text_zones(pattern):
+            if host is not None and zone.key == host.key:
+                continue
             placed = index.get(zone.key)
             shape = cast(Any, placed.shape) if placed is not None else None
             if (
@@ -1502,6 +1539,45 @@ class _Renderer:
                     _remove(placed)
                 continue
             self._place_image(slide, placed, prepared)
+
+    def _fill_chart(
+        self,
+        slide,
+        pattern: Pattern,
+        plan: SlidePlan,
+        index: Dict[str, PlacedShape],
+        text: Mapping[str, Any],
+        position: int,
+        lost: List[str],
+    ) -> Optional[Zone]:
+        """Draw the plan's chart in its host; an unfilled chart zone goes."""
+        chart = (
+            plan.chart if plan.chart is not None and plan.chart.has_content() else None
+        )
+        host = chart_host(pattern, text) if chart is not None else None
+        if chart is not None and host is None:
+            lost.append("chart")
+        for zone in (z for z in pattern.zones if z.role == "chart" and z is not host):
+            placed = index.get(zone.key)
+            if placed is not None:
+                _remove(placed)
+        placed = index.get(host.key) if host is not None else None
+        if chart is None or host is None or placed is None:
+            return None
+        charts.draw(slide, placed, host, chart)
+        if chart.asked_type:
+            self._tell(
+                f"Slide {position}: chart type '{chart.asked_type}' is not offered; built as "
+                f"'column'. Nothing to do; to change it, edit chart.type to one of "
+                f"{', '.join(charts.XL_TYPES)}."
+            )
+        if chart.style_fields:
+            self._tell(
+                f"Slide {position}: the chart's {', '.join(chart.style_fields)} "
+                "were ignored: the template sets a chart's colours, fonts and place. "
+                "Nothing to do; never send them."
+            )
+        return host
 
     def _fill_table(
         self,
@@ -1750,7 +1826,11 @@ class _Renderer:
 
     @staticmethod
     def _fillable_text_zones(pattern: Pattern) -> List[Zone]:
-        zones = [z for z in pattern.zones if z.role not in ("image", "keep", "table")]
+        zones = [
+            z
+            for z in pattern.zones
+            if z.role not in ("image", "keep", "table", "chart")
+        ]
         for group in pattern.groups:
             for item in group.items:
                 zones.extend(z for z in item if z.role not in ("image", "keep"))
