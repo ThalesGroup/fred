@@ -50,6 +50,13 @@ erDiagram
   timestamp_with_time_zone completed_at
   timestamp_with_time_zone granted_at
 }
+"authorization_store" {
+  boolean singleton
+  text configured_store
+  text source_store
+  text active_store
+  text model_id
+}
 ```
 <!-- end generated -->
 
@@ -95,8 +102,19 @@ changes nothing outside the row.
 
 ## OpenFGA model
 
-Store `fred-manager`, found or created at startup, model written when
-`sync_schema_on_init` is set. User ids are Keycloak subjects.
+`store_name` identifies the configured legacy/source store. The SQL singleton
+`authorization_store` binds that name to the active store and model IDs; it holds
+no roles. Startup pins those IDs and verifies the model without selecting a newer
+model or falling back to the source. Empty initialization and offline migration
+publish a fresh store only after all writes succeed. User IDs are Keycloak subjects.
+
+Each organization and the platform has a `guard` object with an immutable
+`initialized` sentinel and one random `version` revision. A mutation captures its
+scope revisions before authorization/state checks. Its Write deletes the captured
+revisions with `on_missing: error` and inserts fresh revisions together with the
+role delta. Missing revisions roll back the complete Write. Unknown outcomes end
+the attempt; replay captures fresh revisions and reauthorizes. Role insertions
+remain idempotent. Guard relations imply no permission.
 
 <!-- generated: include apps/fred-manager/openfga/model.fga text -->
 ```text
@@ -138,6 +156,14 @@ type space
     define can_run_evaluations: analyst or admin
     define can_manage_evaluation_corpus: analyst or admin
     define can_read_conversations_for_evaluation: analyst
+
+# Mutation ordering only; these relations grant no permission.
+type revision
+
+type guard
+  relations
+    define initialized: [revision]
+    define version: [revision]
 ```
 <!-- end generated -->
 
@@ -148,8 +174,8 @@ type space
 | I1 | An organization is a root, a team's parent is an organization, a project's parent is a non-personal team. | `domain::check_parent`, schema checks |
 | I2 | Placement never changes: a space's parent and path, a folder's space, parent and path, a document's space and folder. Names may change. | triggers |
 | I3 | A document's folder, and a sub-folder's parent, belong to the same space. | composite foreign keys |
-| I4 | Holding a role on a space requires a content role on its parent, under any concurrency. | `spaces`, organization lock |
-| I5 | A caller's right is evaluated at the moment of its write: a request authorized before a revocation cannot finish after it. | caller check under the lock |
+| I4 | Holding a role on a space requires a content role on its parent, under any concurrency. | `spaces`, organization lock and atomic OpenFGA guard |
+| I5 | Role and SQL mutations cannot publish a decision invalidated by an earlier successful revocation. External operations are authorized at dispatch. | checks after guard capture, atomic fence, SQL lock through commit |
 | I6 | A personal space never gains a member, and its organization can always remove its owner. | `spaces::grant`, `spaces::revoke` |
 | I7 | A space's search scope is its ancestors and itself, never its descendants. | `space.path` |
 | I8 | Space admin and platform admin roles read no content. | OpenFGA `can_read = member or editor or analyst` |
@@ -173,6 +199,12 @@ No space or platform role propagates to another space.
 Platform admin implies all platform capabilities. Team manager grants team creation and listing;
 feature manager grants `manage_capabilities` and team registry listing; prompt editor grants
 `edit_platform_prompt`; observer grants `observe_platform`. These grants do not imply space membership or content access.
+I5 orders role publication and local SQL commits, not the arrival of HTTP responses.
+Keycloak creation and Temporal submission are authorized before dispatch under the
+relevant lock and guard fence. Their remote completion can follow cancellation or
+revocation; neither a timeout nor revocation rolls back already dispatched work.
+Read-only checks report permission at evaluation time, not a lease on future access.
+
 `openfga/model.fga` is the authoritative permission matrix; `make model` compiles its
 supported direct/union expressions to `model.json`, and `make check-model` checks parity.
 

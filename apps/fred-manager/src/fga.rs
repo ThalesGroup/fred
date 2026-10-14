@@ -19,7 +19,7 @@
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -29,6 +29,8 @@ use crate::{
 };
 
 /// The single platform object holding platform roles.
+mod migration;
+
 const PLATFORM: &str = "platform:root";
 
 #[derive(Clone)]
@@ -36,10 +38,40 @@ pub struct Fga {
     http: reqwest::Client,
     base: String,
     store: String,
+    configured_store: String,
+    ambiguous_source: bool,
     /// None means the store's latest model, as fred-core does without a sync.
     model: Option<String>,
     token: Option<String>,
 }
+
+/// Captured before authorization, consumed atomically with the authorized effects.
+/// A failed/ambiguous write invalidates this attempt; never refresh it and reuse a decision.
+pub struct Guard {
+    versions: Option<Vec<Value>>,
+}
+
+#[derive(Clone, Copy)]
+pub enum Scope {
+    Platform,
+    Organization(Uuid),
+}
+impl Scope {
+    fn object(self) -> String {
+        match self {
+            Self::Platform => "guard:platform".into(),
+            Self::Organization(id) => format!("guard:{id}"),
+        }
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("authorization changed; retry with fresh authorization checks")]
+pub struct Conflict;
+
+#[derive(Debug, thiserror::Error)]
+#[error("openfga request failed ({0})")]
+struct RequestFailure(reqwest::StatusCode);
 
 pub struct Tuple<'a> {
     pub user: &'a str,
@@ -74,10 +106,19 @@ impl Fga {
             http: http.build()?,
             base: base.trim_end_matches('/').to_string(),
             store: String::new(),
+            configured_store: store_name.into(),
+            ambiguous_source: false,
             model: None,
             token,
         };
         let stores = fga.get(&format!("/stores?name={store_name}")).await?;
+        fga.ambiguous_source = stores["stores"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|s| s["name"].as_str() == Some(store_name))
+            .count()
+            > 1;
         let found = stores["stores"]
             .as_array()
             .into_iter()
@@ -104,38 +145,6 @@ impl Fga {
         Ok(fga)
     }
 
-    /// Import never initializes or updates a model. Pin the compatible latest model
-    /// so later writes cannot switch to an unrelated concurrently published schema.
-    pub async fn require_compatible_model(mut self) -> Result<Self> {
-        let reply = self
-            .get(&format!(
-                "/stores/{}/authorization-models?page_size=1",
-                self.store
-            ))
-            .await?;
-        let current = reply["authorization_models"]
-            .as_array()
-            .and_then(|m| m.first())
-            .context("initialize fred-manager with serve before import")?;
-        let expected: Value = serde_json::from_str(include_str!("../openfga/model.json"))?;
-        if current["schema_version"] != expected["schema_version"]
-            || normalized_model(current["type_definitions"].clone())
-                != normalized_model(expected["type_definitions"].clone())
-            || current
-                .get("conditions")
-                .is_some_and(|v| !v.is_null() && v.as_object().is_none_or(|m| !m.is_empty()))
-        {
-            bail!("initialize the compatible fred-manager model with serve before import");
-        }
-        self.model = Some(
-            current["id"]
-                .as_str()
-                .context("missing model id")?
-                .to_owned(),
-        );
-        Ok(self)
-    }
-
     async fn get(&self, path: &str) -> Result<Value> {
         let mut req = self.http.get(format!("{}{}", self.base, path));
         if let Some(t) = &self.token {
@@ -156,7 +165,7 @@ impl Fga {
         let status = resp.status();
         let body: Value = resp.json().await.unwrap_or(Value::Null);
         if !status.is_success() {
-            bail!("openfga request failed ({status})");
+            return Err(RequestFailure(status).into());
         }
         Ok(body)
     }
@@ -171,12 +180,6 @@ impl Fga {
         self.check_object(user, "admin", PLATFORM).await
     }
 
-    pub async fn grant_platform_admin(&self, user: &str) -> Result<()> {
-        let key =
-            json!({ "user": format!("user:{user}"), "relation": "admin", "object": PLATFORM });
-        self.write_keys(vec![key], Vec::new()).await
-    }
-
     async fn check_object(&self, user: &str, relation: &str, object: &str) -> Result<bool> {
         let mut body = json!({
             "tuple_key": { "user": format!("user:{user}"), "relation": relation, "object": object },
@@ -189,27 +192,124 @@ impl Fga {
         Ok(resp["allowed"].as_bool().unwrap_or(false))
     }
 
-    pub async fn write(&self, writes: &[Tuple<'_>], deletes: &[Tuple<'_>]) -> Result<()> {
-        self.write_keys(
+    pub async fn write(
+        &self,
+        guard: &mut Guard,
+        writes: &[Tuple<'_>],
+        deletes: &[Tuple<'_>],
+    ) -> Result<()> {
+        self.write_guarded(
+            guard,
             writes.iter().map(Tuple::key).collect(),
             deletes.iter().map(Tuple::key).collect(),
         )
         .await
     }
 
-    /// Idempotent, as fred-core's engine: duplicates and missing deletes are ignored.
-    async fn write_keys(&self, writes: Vec<Value>, deletes: Vec<Value>) -> Result<()> {
-        let mut body = json!({});
-        self.pin_model(&mut body);
-        if !writes.is_empty() {
-            body["writes"] = json!({ "tuple_keys": writes, "on_duplicate": "ignore" });
-        }
-        if !deletes.is_empty() {
-            body["deletes"] = json!({ "tuple_keys": deletes, "on_missing": "ignore" });
-        }
-        self.post(&format!("/stores/{}/write", self.store), body)
-            .await?;
+    /// Initialization is strict on both tuples. An uncertain initializer cannot later
+    /// add another version: the immutable sentinel makes that entire retry fail.
+    pub(crate) async fn initialize_guard(&self, scope: Scope) -> Result<()> {
+        let object = scope.object();
+        self.post(&format!("/stores/{}/write", self.store), json!({
+            "authorization_model_id": self.model,
+            "writes": {"tuple_keys": [
+                {"user":"revision:initialized", "relation":"initialized", "object":object},
+                {"user":format!("revision:{}", Uuid::new_v4()), "relation":"version", "object":object}
+            ], "on_duplicate":"error"}
+        })).await?;
         Ok(())
+    }
+
+    /// SQL locks prevent ordinary contention; these revisions also fence remote writes
+    /// that outlive their caller/transaction. Read before *all* checks used by the delta.
+    pub async fn guard(&self, scopes: &[Scope]) -> Result<Guard> {
+        anyhow::ensure!(
+            !scopes.is_empty(),
+            "a mutation needs an authorization scope"
+        );
+        let mut versions = Vec::new();
+        for scope in scopes {
+            let object = scope.object();
+            anyhow::ensure!(
+                !versions.iter().any(|v: &Value| v["object"] == object),
+                "duplicate guard scope"
+            );
+            let mut keys = self
+                .read_keys(json!({"object":object,"relation":"version"}))
+                .await?;
+            anyhow::ensure!(keys.len() == 1, "missing or corrupt authorization guard");
+            let key = keys.pop().unwrap();
+            let revision = key
+                .user
+                .strip_prefix("revision:")
+                .context("invalid guard subject")?;
+            Uuid::parse_str(revision).context("invalid guard revision")?;
+            anyhow::ensure!(
+                key.condition.is_none_or(|c| c.is_null()),
+                "conditional guard is invalid"
+            );
+            versions.push(json!({"user":key.user,"relation":key.relation,"object":key.object}));
+        }
+        Ok(Guard {
+            versions: Some(versions),
+        })
+    }
+
+    /// Empty role deltas still fence earlier requests, including idempotent revocations.
+    /// Callers omit absent role deletes after a guarded read: guard deletes stay strict.
+    async fn write_guarded(
+        &self,
+        guard: &mut Guard,
+        mut writes: Vec<Value>,
+        mut deletes: Vec<Value>,
+    ) -> Result<()> {
+        let previous = guard
+            .versions
+            .take()
+            .context("authorization attempt already failed")?;
+        anyhow::ensure!(
+            writes.len() + deletes.len() + 2 * previous.len() <= 100,
+            "OpenFGA transaction exceeds 100 tuple operations"
+        );
+        let next: Vec<Value> = previous
+            .iter()
+            .map(|key| {
+                json!({
+                    "user":format!("revision:{}", Uuid::new_v4()),
+                    "relation":"version", "object":key["object"]
+                })
+            })
+            .collect();
+        writes.extend(next.clone());
+        deletes.extend(previous);
+        let mut body = json!({
+            "writes":{"tuple_keys":writes, "on_duplicate":"ignore"},
+            "deletes":{"tuple_keys":deletes, "on_missing":"error"}
+        });
+        self.pin_model(&mut body);
+        if let Err(error) = self
+            .post(&format!("/stores/{}/write", self.store), body)
+            .await
+        {
+            if error
+                .downcast_ref::<RequestFailure>()
+                .is_some_and(|e| matches!(e.0.as_u16(), 400 | 409))
+            {
+                return Err(Conflict.into());
+            }
+            return Err(error);
+        }
+        guard.versions = Some(next);
+        Ok(())
+    }
+
+    pub async fn fence(&self, guard: &mut Guard) -> Result<()> {
+        self.write_guarded(guard, vec![], vec![]).await
+    }
+
+    /// Store identity for diagnostics and operator tools, never selected by a caller.
+    pub fn store_id(&self) -> &str {
+        &self.store
     }
 
     pub async fn check_platform(&self, user: &str, permission: PlatformPermission) -> Result<bool> {
@@ -244,12 +344,18 @@ impl Fga {
     }
 
     /// Low-level writer; callers must hold the platform lock and authorize the mutation.
-    pub async fn write_platform(&self, user: &str, role: PlatformRole, grant: bool) -> Result<()> {
+    pub async fn write_platform(
+        &self,
+        guard: &mut Guard,
+        user: &str,
+        role: PlatformRole,
+        grant: bool,
+    ) -> Result<()> {
         let key = json!({ "user": format!("user:{user}"), "relation": role.relation(), "object": PLATFORM });
         if grant {
-            self.write_keys(vec![key], vec![]).await
+            self.write_guarded(guard, vec![key], vec![]).await
         } else {
-            self.write_keys(vec![], vec![key]).await
+            self.write_guarded(guard, vec![], vec![key]).await
         }
     }
 
@@ -305,7 +411,11 @@ impl Fga {
         let mut out = Vec::new();
         let mut token = String::new();
         loop {
-            let body = json!({ "tuple_key": key, "continuation_token": token, "consistency": "HIGHER_CONSISTENCY" });
+            let mut body =
+                json!({ "continuation_token": token, "consistency": "HIGHER_CONSISTENCY" });
+            if key.as_object().is_some_and(|k| !k.is_empty()) {
+                body["tuple_key"] = key.clone();
+            }
             let page: Page = serde_json::from_value(
                 self.post(&format!("/stores/{}/read", self.store), body)
                     .await?,
@@ -328,11 +438,13 @@ impl Fga {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize, Serialize)]
 struct StoredKey {
     user: String,
     relation: String,
     object: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    condition: Option<Value>,
 }
 
 /// OpenFGA protobuf JSON adds absent default values when reading a model back.

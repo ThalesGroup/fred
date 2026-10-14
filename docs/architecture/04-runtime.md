@@ -85,7 +85,9 @@ sequenceDiagram
 ## Role and space mutations
 
 `grant`, `revoke`, `create_space` and `create_personal_space` take a transaction-scoped
-advisory lock keyed by the organization, then check and write under it (I4, I5).
+advisory lock keyed by the organization, capture its guard revision, then check and
+write under it (I4, I5). SQL locks order live callers; OpenFGA guard consumption
+rejects stale remote writes that outlive their caller or transaction.
 
 ```mermaid
 sequenceDiagram
@@ -96,9 +98,10 @@ sequenceDiagram
     C->>M: PUT /spaces/{id}/roles/{role}/{user}
     M->>PG: select space
     M->>PG: begin, pg_advisory_xact_lock(organization)
+    M->>FGA: read organization guard revision
     M->>FGA: check caller can_manage space
     M->>FGA: check target can_read parent
-    M->>FGA: write tuple, on_duplicate ignore
+    M->>FGA: atomic role write and guard replacement, strict old-guard delete
     M->>PG: commit, lock released
     M-->>C: 204
 ```
@@ -207,8 +210,8 @@ The caller receives no implicit role; project creation still requires local gove
 ## Authenticated provisioning import
 
 `fred-manager import-provisioning <bundle.json> --token-file <path>` verifies the
-operator bearer, resolves an existing compatible FGA model and checks platform admin.
-It connects to SQL without migrating and verifies migration versions/checksums. A bundle
+operator bearer, connects to SQL without migrating and verifies migration
+versions/checksums. It loads the published FGA store/model and checks platform admin. A bundle
 that declares platform admin additionally requires the completed bootstrap root.
 
 ```mermaid
@@ -218,22 +221,24 @@ sequenceDiagram
     participant PG as Postgres
     participant FGA as OpenFGA
     C->>KC: verify operator bearer using signing keys
-    C->>FGA: read and pin compatible model, check platform admin
-    C->>PG: verify schema, lock platform then existing organization
+    C->>PG: verify schema, read published store/model binding
+    C->>FGA: verify pinned model, check platform admin
+    C->>PG: lock platform then existing organization
     C->>FGA: recheck authority and root-only declarations
     C->>PG: validate space names, release read-only locks
     C->>KC: preflight every exact username and missing password
     loop each identity
         C->>PG: lock platform
-        C->>FGA: recheck operator authority
+        C->>FGA: read platform guard, recheck authority, consume guard
         C->>KC: resolve or create with service credentials
         C->>PG: release lock
     end
     C->>PG: lock platform then organization, reread space names
+    C->>FGA: initialize new organization guard, capture both guards
     C->>PG: insert missing organization row
-    C->>FGA: recheck bearer/authority, grant parent membership
+    C->>FGA: recheck bearer/authority, guarded parent grants
     C->>PG: insert missing team rows
-    C->>FGA: grant team and platform roles, audit acknowledgments
+    C->>FGA: guarded team/platform grants, audit acknowledgments
     C->>PG: commit space rows, release locks
 ```
 
@@ -241,7 +246,7 @@ All predictable bundle, passwordless-identity and new-team-admin errors fail pre
 before provisioning writes (I18). Read-only directory traversal holds no mutation lock.
 Each identity phase holds the platform lock; reconciliation holds platform then organization
 locks through its writes. Bearer verification and FGA authority checks repeat at mutation
-boundaries, including after lock waits. Space grants use batches of at most 100 tuples,
+boundaries, including after lock waits. Space grants use batches of at most 96 role tuples plus four guard operations,
 with organization membership before dependent child roles (I4, I5).
 
 Organizations are resolved by root name, teams by organization and name. Existing IDs
@@ -254,3 +259,8 @@ repaired. A renamed declaration identifies a different space. There is no distri
 rollback: identities and acknowledged FGA grants can survive a failed SQL transaction.
 New space rows commit after their initial grants; rolled-back UUIDs are never reused.
 Replay uses committed identities/spaces and repairs the requested state.
+
+Local folder/document mutations capture the organization guard, authorize, consume
+the guard and commit SQL under the same organization lock. Placement reads use the
+held SQL connection. Temporal submission holds that lock through dispatch; its
+remote effects have the dispatch boundary described by I5 in chapter 5.

@@ -36,3 +36,11 @@ type space
     define can_run_evaluations: analyst or admin
     define can_manage_evaluation_corpus: analyst or admin
     define can_read_conversations_for_evaluation: analyst
+
+# Mutation ordering only; these relations grant no permission.
+type revision
+
+type guard
+  relations
+    define initialized: [revision]
+    define version: [revision]

@@ -20,7 +20,7 @@ use crate::{
     auth::Authenticator,
     bootstrap, db,
     domain::{Role, Space, SpaceKind},
-    fga::{Fga, Tuple},
+    fga::{Fga, Guard, Scope, Tuple},
     keycloak::Directory,
     logging, platform,
     roles::PlatformRole,
@@ -310,7 +310,10 @@ impl Importer<'_> {
         for entry in &bundle.users {
             let result = async {
                 let mut tx = bootstrap::locked(self.pool).await?;
+                let mut guard = self.fga.guard(&[Scope::Platform]).await?;
                 self.authorize(&mut tx, bundle).await?;
+                // Authorize external dispatch; a timeout is not remote rollback.
+                self.fga.fence(&mut guard).await?;
                 let user = &entry.identity;
                 let (resolved, created) = self
                     .directory
@@ -356,8 +359,7 @@ impl Importer<'_> {
         let mut tx = bootstrap::locked(self.pool).await?;
         self.authorize(&mut tx, bundle).await?;
         let existing = self.validate_spaces(&mut tx, bundle).await?;
-        // validate_spaces may wait for the organization lock after the platform check.
-        let actor = self.authorize(&mut tx, bundle).await?;
+        let is_new = existing.is_none();
         let org = existing.unwrap_or_else(|| {
             let id = Uuid::new_v4();
             Space {
@@ -371,6 +373,16 @@ impl Importer<'_> {
         });
         // A fresh organization cannot have other mutations yet; lock it before insertion.
         spaces::lock_organization(&mut tx, &org).await?;
+        if is_new {
+            self.fga
+                .initialize_guard(Scope::Organization(org.id))
+                .await?;
+        }
+        let mut guard = self
+            .fga
+            .guard(&[Scope::Platform, Scope::Organization(org.id)])
+            .await?;
+        let actor = self.authorize(&mut tx, bundle).await?;
         if db::named_space(&mut *tx, None, &org.name).await?.is_none() {
             db::insert_space(&mut tx, &org).await?;
         }
@@ -396,7 +408,7 @@ impl Importer<'_> {
                 });
             }
         }
-        self.grant_spaces(&mut tx, bundle, &actor, &parent, report)
+        self.grant_spaces(&mut tx, &mut guard, bundle, &actor, &parent, report)
             .await?;
         for name in bundle.teams() {
             let team = match db::named_space(&mut *tx, Some(org.id), name).await? {
@@ -432,7 +444,7 @@ impl Importer<'_> {
                         })
                 })
                 .collect();
-            self.grant_spaces(&mut tx, bundle, &actor, &grants, report)
+            self.grant_spaces(&mut tx, &mut guard, bundle, &actor, &grants, report)
                 .await?;
         }
         for entry in &bundle.users {
@@ -443,7 +455,9 @@ impl Importer<'_> {
                     self.directory.exists(user).await?,
                     "identity disappeared before platform grant"
                 );
-                self.fga.write_platform(user, *role, true).await?;
+                self.fga
+                    .write_platform(&mut guard, user, *role, true)
+                    .await?;
                 report.grants_acknowledged += 1;
                 logging::audit_relation(Some(&actor), user, role.relation(), "platform:root", true);
             }
@@ -453,19 +467,21 @@ impl Importer<'_> {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)] // One batch shares the enclosing mutation and audit context.
     async fn grant_spaces(
         &self,
         tx: &mut Transaction<'_, Postgres>,
+        guard: &mut Guard,
         bundle: &Bundle,
         actor: &str,
         tuples: &[Tuple<'_>],
         report: &mut Report,
     ) -> Result<()> {
-        // 100 is OpenFGA's default write transaction limit. The organization lock stays
-        // held across batches, so parent revocations cannot interleave with child grants.
-        for batch in tuples.chunks(100) {
+        // Two scopes consume four operations in OpenFGA's 100-operation transaction.
+        // Acknowledged revisions carry forward; any failed batch invalidates the attempt.
+        for batch in tuples.chunks(96) {
             self.authorize(tx, bundle).await?;
-            self.fga.write(batch, &[]).await?;
+            self.fga.write(guard, batch, &[]).await?;
             report.grants_acknowledged += batch.len();
             for tuple in batch {
                 logging::audit_relation(

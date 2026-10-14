@@ -18,7 +18,7 @@
 use crate::{
     bootstrap,
     error::{AppError, AppResult},
-    fga::Fga,
+    fga::{Fga, Scope},
     keycloak::Directory,
     roles::PlatformRole,
 };
@@ -70,6 +70,7 @@ pub async fn grant(
     role: PlatformRole,
 ) -> AppResult<()> {
     let mut tx = bootstrap::locked(pool).await?;
+    let mut guard = fga.guard(&[Scope::Platform]).await?;
     require_admin(fga, caller).await?;
     if role == PlatformRole::PlatformAdmin {
         require_root(&mut tx, caller).await?;
@@ -79,7 +80,7 @@ pub async fn grant(
     if !directory.exists(target).await? {
         return Err(AppError::NotFound);
     }
-    fga.write_platform(target, role, true).await?;
+    fga.write_platform(&mut guard, target, role, true).await?;
     crate::logging::audit_relation(Some(caller), target, role.relation(), "platform:root", true);
     tx.commit().await?;
 
@@ -94,6 +95,7 @@ pub async fn revoke(
     role: PlatformRole,
 ) -> AppResult<()> {
     let mut tx = bootstrap::locked(pool).await?;
+    let mut guard = fga.guard(&[Scope::Platform]).await?;
     require_admin(fga, caller).await?;
     if role == PlatformRole::PlatformAdmin {
         let root = require_root(&mut tx, caller).await?;
@@ -108,7 +110,7 @@ pub async fn revoke(
     {
         return Err(AppError::NotFound);
     }
-    fga.write_platform(target, role, false).await?;
+    fga.write_platform(&mut guard, target, role, false).await?;
     crate::logging::audit_relation(
         Some(caller),
         target,

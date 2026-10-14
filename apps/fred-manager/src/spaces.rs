@@ -21,9 +21,9 @@ use uuid::Uuid;
 
 use crate::{
     bootstrap, db,
-    domain::{self, Permission, Role, Space, SpaceKind},
+    domain::{self, Folder, Permission, Role, Space, SpaceKind},
     error::{AppError, AppResult},
-    fga::{Fga, Tuple},
+    fga::{Fga, Guard, Scope, Tuple},
     roles::PlatformPermission,
 };
 
@@ -58,12 +58,13 @@ pub(crate) async fn lock_organization(
 async fn persist(
     mut tx: Transaction<'_, Postgres>,
     fga: &Fga,
+    guard: &mut Guard,
     space: &Space,
     tuples: &[Tuple<'_>],
     caller: Option<&str>,
 ) -> AppResult<()> {
     db::insert_space(&mut tx, space).await?;
-    fga.write(tuples, &[]).await?;
+    fga.write(guard, tuples, &[]).await?;
     for tuple in tuples {
         crate::logging::audit_relation(
             caller,
@@ -105,7 +106,9 @@ pub async fn create_organization(
             space: id,
         },
     ];
-    persist(pool.begin().await?, fga, &org, &tuples, None).await?;
+    fga.initialize_guard(Scope::Organization(id)).await?;
+    let mut guard = fga.guard(&[Scope::Organization(id)]).await?;
+    persist(pool.begin().await?, fga, &mut guard, &org, &tuples, None).await?;
     Ok(org)
 }
 
@@ -128,6 +131,12 @@ pub async fn create_space(
         pool.begin().await?
     };
     lock_organization(&mut tx, &parent).await?;
+    let scopes = if kind == SpaceKind::Team {
+        vec![Scope::Platform, Scope::Organization(parent.path[0])]
+    } else {
+        vec![Scope::Organization(parent.path[0])]
+    };
+    let mut guard = fga.guard(&scopes).await?;
     let local = fga.check(caller, Permission::Manage, parent.id).await?;
     if !local
         && !(kind == SpaceKind::Team
@@ -152,6 +161,7 @@ pub async fn create_space(
     persist(
         tx,
         fga,
+        &mut guard,
         &space,
         &[Tuple {
             user: admin,
@@ -174,6 +184,7 @@ pub async fn create_personal_space(
     domain::check_parent(SpaceKind::Team, Some(&org))?;
     let mut tx = pool.begin().await?;
     lock_organization(&mut tx, &org).await?;
+    let mut guard = fga.guard(&[Scope::Organization(org.id)]).await?;
     require(fga, caller, Permission::Read, org.id).await?;
     let id = Uuid::new_v4();
     let space = Space {
@@ -196,7 +207,7 @@ pub async fn create_personal_space(
             space: id,
         },
     ];
-    persist(tx, fga, &space, &tuples, Some(caller)).await?;
+    persist(tx, fga, &mut guard, &space, &tuples, Some(caller)).await?;
     Ok(space)
 }
 
@@ -214,6 +225,7 @@ pub async fn grant(
     }
     let mut tx = pool.begin().await?;
     lock_organization(&mut tx, &space).await?;
+    let mut guard = fga.guard(&[Scope::Organization(space.path[0])]).await?;
     require(fga, caller, Permission::Manage, space.id).await?;
     if let Some(parent) = space.parent_id
         && !fga.check(target, Permission::Read, parent).await?
@@ -221,6 +233,7 @@ pub async fn grant(
         return Err(AppError::Conflict(PARENT_REQUIRED.into()));
     }
     fga.write(
+        &mut guard,
         &[Tuple {
             user: target,
             role,
@@ -258,6 +271,7 @@ pub async fn revoke(
     };
     let mut tx = pool.begin().await?;
     lock_organization(&mut tx, &space).await?;
+    let mut guard = fga.guard(&[Scope::Organization(space.path[0])]).await?;
     require(fga, caller, Permission::Manage, manager).await?;
     let held = fga.roles_of(target).await?;
     let on_space: Vec<Role> = held
@@ -279,12 +293,17 @@ pub async fn revoke(
         return Err(AppError::Conflict(CHILDREN_FIRST.into()));
     }
     fga.write(
+        &mut guard,
         &[],
-        &[Tuple {
-            user: target,
-            role,
-            space: space.id,
-        }],
+        &if on_space.contains(&role) {
+            vec![Tuple {
+                user: target,
+                role,
+                space: space.id,
+            }]
+        } else {
+            vec![]
+        },
     )
     .await?;
     crate::logging::audit_relation(
@@ -297,4 +316,54 @@ pub async fn revoke(
     tx.commit().await?;
     tracing::info!(actor_uid = caller, subject = target, ?role, space_id = %space.id, outcome = "revoked", "authz.relation.revoked");
     Ok(())
+}
+
+/// Fence a local SQL mutation or external dispatch while retaining the organization
+/// lock. The caller commits its SQL changes before releasing this transaction.
+pub async fn authorized_write(
+    pool: &PgPool,
+    fga: &Fga,
+    caller: &str,
+    space_id: Uuid,
+) -> AppResult<Transaction<'static, Postgres>> {
+    let space = db::space(pool, space_id).await?;
+    let mut tx = pool.begin().await?;
+    lock_organization(&mut tx, &space).await?;
+    let mut guard = fga.guard(&[Scope::Organization(space.path[0])]).await?;
+    require(fga, caller, Permission::Write, space_id).await?;
+    fga.fence(&mut guard).await?;
+    Ok(tx)
+}
+
+/// Folder creation uses the held connection for placement lookup and insertion, so
+/// lock waiters cannot starve its transaction by consuming the rest of the pool.
+pub async fn create_folder(
+    pool: &PgPool,
+    fga: &Fga,
+    caller: &str,
+    space_id: Uuid,
+    parent_id: Option<Uuid>,
+    name: String,
+) -> AppResult<Folder> {
+    let mut tx = authorized_write(pool, fga, caller, space_id).await?;
+    let parent = match parent_id {
+        Some(id) => Some(db::folder(&mut *tx, id).await?),
+        None => None,
+    };
+    if parent.as_ref().is_some_and(|p| p.space_id != space_id) {
+        return Err(AppError::BadRequest(
+            "the parent folder belongs to another space".into(),
+        ));
+    }
+    let id = Uuid::new_v4();
+    let folder = Folder {
+        id,
+        space_id,
+        parent_id,
+        name,
+        path: domain::folder_path(parent.as_ref(), id),
+    };
+    db::insert_folder(&mut *tx, &folder).await?;
+    tx.commit().await?;
+    Ok(folder)
 }

@@ -116,3 +116,18 @@ Success prints JSON acknowledgment counts. Failure exits nonzero with the phase 
 counts; correct the cause and replay with a valid operator token. Replay preserves existing
 identities, committed space IDs and undeclared grants, and repairs requested grants. There
 is no cross-system rollback. Never treat a failed run as proof that nothing was written.
+
+## Upgrade existing authorization
+
+Stop legacy manager writers and settle pending requests, then run
+`make migrate-authorization` with the normal operator configuration. Existing
+nonempty installations refuse automatic cutover during `serve`. The command
+preserves supported roles, permissions, space IDs and bootstrap state in a fresh
+OpenFGA store and publishes its IDs in SQL; replay never recopies a published store.
+Invalid legacy models, hierarchy or grants require repair before cutover. The
+[deployment chapter](../../docs/architecture/07-deployment.md#offline-authorization-cutover)
+defines the offline precondition and failure behavior.
+
+A role mutation that loses its authorization revision returns a conflict; replay
+rechecks current authority. Timeout is not rollback. Roles and permission evaluation
+remain in OpenFGA; SQL holds only the active store/model binding.

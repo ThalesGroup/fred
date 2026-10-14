@@ -40,3 +40,10 @@ erDiagram
   timestamp_with_time_zone completed_at
   timestamp_with_time_zone granted_at
 }
+"authorization_store" {
+  boolean singleton
+  text configured_store
+  text source_store
+  text active_store
+  text model_id
+}

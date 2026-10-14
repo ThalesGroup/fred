@@ -284,6 +284,38 @@
           }
         }
       }
+    },
+    {
+      "type": "revision"
+    },
+    {
+      "type": "guard",
+      "relations": {
+        "initialized": {
+          "this": {}
+        },
+        "version": {
+          "this": {}
+        }
+      },
+      "metadata": {
+        "relations": {
+          "initialized": {
+            "directly_related_user_types": [
+              {
+                "type": "revision"
+              }
+            ]
+          },
+          "version": {
+            "directly_related_user_types": [
+              {
+                "type": "revision"
+              }
+            ]
+          }
+        }
+      }
     }
   ]
 }

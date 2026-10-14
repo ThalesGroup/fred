@@ -38,10 +38,20 @@ pub enum AppError {
     #[error("{0}")]
     Unprocessable(String),
     #[error(transparent)]
-    Internal(#[from] anyhow::Error),
+    Internal(anyhow::Error),
 }
 
 pub type AppResult<T> = Result<T, AppError>;
+
+impl From<anyhow::Error> for AppError {
+    fn from(error: anyhow::Error) -> Self {
+        if error.is::<crate::fga::Conflict>() {
+            Self::Conflict(error.to_string())
+        } else {
+            Self::Internal(error)
+        }
+    }
+}
 
 impl From<RuleError> for AppError {
     fn from(e: RuleError) -> Self {

@@ -21,7 +21,7 @@ use fred_manager::{
     api, auth, config::Configuration as Config, fga::Fga, ingestion, logging, spaces,
 };
 
-const USAGE: &str = "usage: fred-manager [serve | create-org <name> <admin-user> | import-provisioning <bundle.json> --token-file <path>]";
+const USAGE: &str = "usage: fred-manager [serve | migrate-authorization | create-org <name> <admin-user> | import-provisioning <bundle.json> --token-file <path>]";
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -66,6 +66,17 @@ async fn main() -> Result<()> {
         .as_slice()
     {
         [] | ["serve"] => serve(config).await,
+        ["migrate-authorization"] => {
+            async {
+                let pool = pool(&config).await?;
+                fga(&config)
+                    .await?
+                    .initialize(&pool, true)
+                    .await
+                    .map(|_| ())
+            }
+            .await
+        }
         ["create-org", name, admin] => create_org(config, name, admin).await,
         ["import-provisioning", bundle, "--token-file", token] => {
             import(config, bundle, token).await
@@ -96,7 +107,7 @@ async fn fga(config: &Config) -> Result<Fga> {
         &rebac.api_url,
         &rebac.store_name,
         rebac.create_store_if_needed,
-        rebac.sync_schema_on_init,
+        false,
         config.fga_token(),
         config.fga_timeout(),
     )
@@ -104,11 +115,17 @@ async fn fga(config: &Config) -> Result<Fga> {
 }
 
 async fn serve(config: Config) -> Result<()> {
+    let pool = pool(&config).await?;
+    let fga = if config.security.rebac.sync_schema_on_init {
+        fga(&config).await?.initialize(&pool, false).await?
+    } else {
+        fga(&config).await?.load(&pool).await?
+    };
     let state = api::AppState {
         directory: fred_manager::keycloak::Directory::configured(config.security.m2m.as_ref())?,
         auth: std::sync::Arc::new(auth::Authenticator::start(config.security()?).await?),
-        pool: pool(&config).await?,
-        fga: fga(&config).await?,
+        pool,
+        fga,
         bootstrap_token_env_var: config.app.bootstrap_token_env_var.clone(),
         ingestion: ingestion::Ingestion::connect(
             &config.temporal_url(),
@@ -132,7 +149,7 @@ async fn serve(config: Config) -> Result<()> {
 /// Organizations are created by an operator, not through the API.
 async fn create_org(config: Config, name: &str, admin: &str) -> Result<()> {
     let pool = pool(&config).await?;
-    let fga = fga(&config).await?;
+    let fga = fga(&config).await?.load(&pool).await?;
     let org = spaces::create_organization(&pool, &fga, name, admin)
         .await
         .map_err(|e| anyhow::anyhow!("{e}"))?;
@@ -163,22 +180,6 @@ async fn import(config: Config, bundle_file: &str, token_file: &str) -> Result<(
             .authenticate(Some(bearer.trim()))
             .await
             .map_err(|_| anyhow::anyhow!("invalid or expired operator bearer"))?;
-        let rebac = &config.security.rebac;
-        let fga = Fga::connect(
-            &rebac.api_url,
-            &rebac.store_name,
-            false,
-            false,
-            config.fga_token(),
-            config.fga_timeout(),
-        )
-        .await?
-        .require_compatible_model()
-        .await?;
-        anyhow::ensure!(
-            fga.is_platform_admin(&caller.uid).await?,
-            "import requires platform admin"
-        );
         let pool = PgPoolOptions::new()
             .max_connections(2)
             .connect_with(config.postgres()?)
@@ -189,6 +190,22 @@ async fn import(config: Config, bundle_file: &str, token_file: &str) -> Result<(
                 "initialize the compatible fred-manager schema with serve before import"
             )
         })?;
+        let rebac = &config.security.rebac;
+        let fga = Fga::connect(
+            &rebac.api_url,
+            &rebac.store_name,
+            false,
+            false,
+            config.fga_token(),
+            config.fga_timeout(),
+        )
+        .await?
+        .load(&pool)
+        .await?;
+        anyhow::ensure!(
+            fga.is_platform_admin(&caller.uid).await?,
+            "import requires platform admin"
+        );
         let bytes = tokio::fs::read(bundle_file)
             .await
             .map_err(|_| anyhow::anyhow!("cannot read provisioning bundle"))?;

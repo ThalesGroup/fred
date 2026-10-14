@@ -21,10 +21,10 @@ for raw in (root / 'openfga/model.fga').read_text().splitlines():
     elif match := re.fullmatch(r'define (\w+): (.+)', line):
         assert current is not None
         children = []
-        direct = False
+        direct = None
         for term in match[2].split(' or '):
-            if term == '[user]':
-                direct = True
+            if direct_type := re.fullmatch(r'\[(user|revision)\]', term):
+                direct = direct_type[1]
                 children.append({'this': {}})
             elif re.fullmatch(r'\w+', term):
                 children.append({'computedUserset': {'relation': term}})
@@ -32,7 +32,7 @@ for raw in (root / 'openfga/model.fga').read_text().splitlines():
                 raise ValueError('Unsupported model syntax')
         current.setdefault('relations', {})[match[1]] = children[0] if len(children) == 1 else {'union': {'child': children}}
         if direct:
-            current.setdefault('metadata', {}).setdefault('relations', {})[match[1]] = {'directly_related_user_types': [{'type': 'user'}]}
+            current.setdefault('metadata', {}).setdefault('relations', {})[match[1]] = {'directly_related_user_types': [{'type': direct}]}
     else:
         raise ValueError('Unsupported model syntax')
 output = root / 'openfga/model.json'

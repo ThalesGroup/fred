@@ -18,7 +18,10 @@
 
 use sqlx::{PgPool, Postgres, Transaction};
 
-use crate::{error::AppError, fga::Fga};
+use crate::{
+    error::AppError,
+    fga::{Fga, Scope},
+};
 
 pub const MIN_TOKEN_LENGTH: usize = 16;
 /// `advisory_lock_key("fred-manager.platform_bootstrap")`, as fred-core derives it.
@@ -73,7 +76,14 @@ pub async fn grant_root(pool: &PgPool, fga: &Fga, uid: &str) -> Result<(), AppEr
         Some((claimant, false)) if claimant == uid => {}
         _ => return Err(AppError::Conflict(COMPLETED.into())),
     }
-    fga.grant_platform_admin(uid).await?;
+    let mut guard = fga.guard(&[Scope::Platform]).await?;
+    fga.write_platform(
+        &mut guard,
+        uid,
+        crate::roles::PlatformRole::PlatformAdmin,
+        true,
+    )
+    .await?;
     crate::logging::audit_relation(Some(uid), uid, "admin", "platform:root", true);
     sqlx::query("update platform_bootstrap set granted_at = now()")
         .execute(&mut *tx)

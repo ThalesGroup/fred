@@ -117,6 +117,17 @@ check, or defer a known weakness within the step. Source inconsistencies must
 be resolved explicitly, with regression coverage, rather than copied blindly.
 Feature boundaries do not excuse incomplete behavior within an accepted step.
 
+Keep direct roles in OpenFGA and let its model evaluate permissions; do not move
+canonical grants into SQL or duplicate the permission matrix in Rust. For each
+authorization change, identify the exact OpenFGA request types, filters, count,
+pagination, tuple volume, dependency ordering and SQL lock duration. State which
+cardinalities drive cost (users, memberships, spaces or documents), distinguish
+client RPC counts from server-side evaluation work, and verify affected request
+budgets with focused tests. Keep the implemented inventory in the arc42 quality
+chapter; put proposed costs and trade-offs in the existing OpenSpec design.
+Report measurements with their fixture sizes and concurrency. Do not infer
+scalability from one Check call, passing correctness tests or a small demo.
+
 Each step is one clean, tested and documented commit on this branch. Do not
 push without the developer's explicit agreement. Obtain independent review,
 fix every actionable finding with a regression test, and have the corrections

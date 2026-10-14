@@ -317,25 +317,15 @@ async fn create_folder(
     CurrentUser { uid: user, .. }: CurrentUser,
     ApiJson(req): ApiJson<CreateFolder>,
 ) -> AppResult<(StatusCode, Json<Folder>)> {
-    require(&s.fga, &user, Permission::Write, req.space_id).await?;
-    let parent = match req.parent_id {
-        Some(p) => Some(db::folder(&s.pool, p).await?),
-        None => None,
-    };
-    if parent.as_ref().is_some_and(|p| p.space_id != req.space_id) {
-        return Err(AppError::BadRequest(
-            "the parent folder belongs to another space".into(),
-        ));
-    }
-    let id = Uuid::new_v4();
-    let folder = Folder {
-        id,
-        space_id: req.space_id,
-        parent_id: req.parent_id,
-        name: req.name,
-        path: domain::folder_path(parent.as_ref(), id),
-    };
-    db::insert_folder(&s.pool, &folder).await?;
+    let folder = spaces::create_folder(
+        &s.pool,
+        &s.fga,
+        &user,
+        req.space_id,
+        req.parent_id,
+        req.name,
+    )
+    .await?;
     Ok((StatusCode::CREATED, Json(folder)))
 }
 
@@ -351,8 +341,9 @@ async fn rename_folder(
     ApiJson(req): ApiJson<Rename>,
 ) -> AppResult<StatusCode> {
     let folder = db::folder(&s.pool, id).await?;
-    require(&s.fga, &user, Permission::Write, folder.space_id).await?;
-    db::rename_folder(&s.pool, id, &req.name).await?;
+    let mut tx = spaces::authorized_write(&s.pool, &s.fga, &user, folder.space_id).await?;
+    db::rename_folder(&mut *tx, id, &req.name).await?;
+    tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -362,8 +353,9 @@ async fn delete_folder(
     Path(id): Path<Uuid>,
 ) -> AppResult<StatusCode> {
     let folder = db::folder(&s.pool, id).await?;
-    require(&s.fga, &user, Permission::Write, folder.space_id).await?;
-    db::delete_folder(&s.pool, id).await?;
+    let mut tx = spaces::authorized_write(&s.pool, &s.fga, &user, folder.space_id).await?;
+    db::delete_folder(&mut *tx, id).await?;
+    tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -423,7 +415,7 @@ async fn create_document(
     CurrentUser { uid: user, .. }: CurrentUser,
     ApiJson(req): ApiJson<CreateDocument>,
 ) -> AppResult<(StatusCode, Json<CreatedDocument>)> {
-    require(&s.fga, &user, Permission::Write, req.space_id).await?;
+    let mut tx = spaces::authorized_write(&s.pool, &s.fga, &user, req.space_id).await?;
     let document = Document {
         id: Uuid::new_v4(),
         space_id: req.space_id,
@@ -435,7 +427,8 @@ async fn create_document(
         created_by: user,
     };
     // The composite foreign key rejects a folder from another space.
-    db::insert_document(&s.pool, &document).await?;
+    db::insert_document(&mut *tx, &document).await?;
+    tx.commit().await?;
     let storage_prefix = domain::storage_prefix(document.space_id, document.id);
     let source_key = format!("{storage_prefix}source");
     Ok((
@@ -465,8 +458,9 @@ async fn rename_document(
     ApiJson(req): ApiJson<Rename>,
 ) -> AppResult<StatusCode> {
     let document = db::document(&s.pool, id).await?;
-    require(&s.fga, &user, Permission::Write, document.space_id).await?;
-    db::rename_document(&s.pool, id, &req.name).await?;
+    let mut tx = spaces::authorized_write(&s.pool, &s.fga, &user, document.space_id).await?;
+    db::rename_document(&mut *tx, id, &req.name).await?;
+    tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -478,7 +472,7 @@ async fn delete_document(
     Path(id): Path<Uuid>,
 ) -> AppResult<StatusCode> {
     let document = db::document(&s.pool, id).await?;
-    require(&s.fga, &user, Permission::Write, document.space_id).await?;
+    let mut tx = spaces::authorized_write(&s.pool, &s.fga, &user, document.space_id).await?;
     s.ingestion
         .delete(DeleteDocument {
             document_id: id,
@@ -486,7 +480,8 @@ async fn delete_document(
             storage_prefix: domain::storage_prefix(document.space_id, id),
         })
         .await?;
-    db::delete_document(&s.pool, id).await?;
+    db::delete_document(&mut *tx, id).await?;
+    tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -511,9 +506,9 @@ async fn ingest_document(
 ) -> AppResult<StatusCode> {
     let request = ingest_request(&body)?;
     let document = db::document(&s.pool, id).await?;
-    require(&s.fga, &user, Permission::Write, document.space_id).await?;
+    let mut tx = spaces::authorized_write(&s.pool, &s.fga, &user, document.space_id).await?;
     let folder_path = match document.folder_id {
-        Some(f) => db::folder(&s.pool, f).await?.path,
+        Some(f) => db::folder(&mut *tx, f).await?.path,
         None => "/".to_string(),
     };
     let storage_prefix = domain::storage_prefix(document.space_id, id);
@@ -527,7 +522,9 @@ async fn ingest_document(
         profile: request.profile.unwrap_or_else(|| "medium".into()),
         requested_by: user,
     };
-    match s.ingestion.ingest(input).await? {
+    let submitted = s.ingestion.ingest(input).await?;
+    tx.commit().await?;
+    match submitted {
         Submitted::Started => Ok(StatusCode::ACCEPTED),
         Submitted::AlreadyRunning => Err(AppError::Conflict("ingestion already running".into())),
     }

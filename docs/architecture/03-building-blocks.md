@@ -40,11 +40,11 @@ flowchart TB
 | --- | --- | --- |
 | `api` | HTTP surface, one OpenFGA check per content access | handlers stay thin; mutations live in `spaces` and `platform` |
 | `auth` | `CurrentUser` extractor, JWKS cache | chapter 6 |
-| `spaces` | create space, grant, revoke | check and write under the organization lock (I4, I5) |
+| `spaces` | space/role mutations, folder creation and local write authorization | organization lock plus atomic guard (I4, I5) |
 | `bootstrap` | the one-time root grant | two steps under the bootstrap lock (I9) |
 | `domain` | `Space`, `Folder`, `Document`, roles, parent rules | pure functions, unit-tested (I1, I7) |
 | `db` | content and space SQL | placement columns written by inserts only (I2) |
-| `fga` | store discovery, model sync, check, write, read | idempotent writes |
+| `fga` | pinned store/model, check, read, guarded write; offline cutover | roles stay in OpenFGA; SQL publishes only the store/model binding |
 | `ingestion` | `IngestDocument`, `DeleteDocument` submission | one workflow id per document and operation |
 | `logging` | output format, request span, completion event | chapter 6 (I11, I13) |
 | `error` | status codes, `{"detail": ...}` bodies | chapter 6 |

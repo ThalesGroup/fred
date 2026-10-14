@@ -120,7 +120,7 @@ pub async fn insert_space(tx: &mut Transaction<'_, Postgres>, s: &Space) -> sqlx
     Ok(())
 }
 
-pub async fn folder(pool: &PgPool, id: Uuid) -> sqlx::Result<Folder> {
+pub async fn folder<'e>(pool: impl sqlx::PgExecutor<'e>, id: Uuid) -> sqlx::Result<Folder> {
     sqlx::query_as(concat!(folder!(), " where id = $1"))
         .bind(id)
         .fetch_one(pool)
@@ -142,7 +142,7 @@ pub async fn folders(
     .await
 }
 
-pub async fn insert_folder(pool: &PgPool, f: &Folder) -> sqlx::Result<()> {
+pub async fn insert_folder<'e>(pool: impl sqlx::PgExecutor<'e>, f: &Folder) -> sqlx::Result<()> {
     sqlx::query(
         "insert into folder (id, space_id, parent_id, name, path) values ($1, $2, $3, $4, $5)",
     )
@@ -156,7 +156,11 @@ pub async fn insert_folder(pool: &PgPool, f: &Folder) -> sqlx::Result<()> {
     Ok(())
 }
 
-pub async fn rename_folder(pool: &PgPool, id: Uuid, name: &str) -> sqlx::Result<()> {
+pub async fn rename_folder<'e>(
+    pool: impl sqlx::PgExecutor<'e>,
+    id: Uuid,
+    name: &str,
+) -> sqlx::Result<()> {
     sqlx::query("update folder set name = $2 where id = $1")
         .bind(id)
         .bind(name)
@@ -166,7 +170,7 @@ pub async fn rename_folder(pool: &PgPool, id: Uuid, name: &str) -> sqlx::Result<
 }
 
 /// Fails with a foreign-key violation while the folder holds documents or sub-folders.
-pub async fn delete_folder(pool: &PgPool, id: Uuid) -> sqlx::Result<()> {
+pub async fn delete_folder<'e>(pool: impl sqlx::PgExecutor<'e>, id: Uuid) -> sqlx::Result<()> {
     sqlx::query("delete from folder where id = $1")
         .bind(id)
         .execute(pool)
@@ -206,7 +210,10 @@ pub async fn documents(
     .await
 }
 
-pub async fn insert_document(pool: &PgPool, d: &Document) -> sqlx::Result<()> {
+pub async fn insert_document<'e>(
+    pool: impl sqlx::PgExecutor<'e>,
+    d: &Document,
+) -> sqlx::Result<()> {
     sqlx::query(
         "insert into document (id, space_id, folder_id, name, mime, size, sha256, created_by)
          values ($1, $2, $3, $4, $5, $6, $7, $8)",
@@ -224,7 +231,11 @@ pub async fn insert_document(pool: &PgPool, d: &Document) -> sqlx::Result<()> {
     Ok(())
 }
 
-pub async fn rename_document(pool: &PgPool, id: Uuid, name: &str) -> sqlx::Result<()> {
+pub async fn rename_document<'e>(
+    pool: impl sqlx::PgExecutor<'e>,
+    id: Uuid,
+    name: &str,
+) -> sqlx::Result<()> {
     sqlx::query("update document set name = $2 where id = $1")
         .bind(id)
         .bind(name)
@@ -233,7 +244,7 @@ pub async fn rename_document(pool: &PgPool, id: Uuid, name: &str) -> sqlx::Resul
     Ok(())
 }
 
-pub async fn delete_document(pool: &PgPool, id: Uuid) -> sqlx::Result<()> {
+pub async fn delete_document<'e>(pool: impl sqlx::PgExecutor<'e>, id: Uuid) -> sqlx::Result<()> {
     sqlx::query("delete from document where id = $1")
         .bind(id)
         .execute(pool)

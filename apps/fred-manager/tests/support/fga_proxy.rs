@@ -10,11 +10,16 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 #[derive(Default)]
 pub struct Fault {
+    pub hide_stores: bool,
     pub writes: usize,
+    pub calls: std::collections::BTreeMap<String, usize>,
     pub acknowledged: Vec<u16>,
     pub fail_at: usize,
     pub after: bool,
     pub gate: Option<Arc<Gate>>,
+    /// Hold the request before forwarding it, to model a write arriving after timeout.
+    pub gate_before: bool,
+    pub gate_role_write: bool,
     pub written: Vec<serde_json::Value>,
 }
 pub struct Proxy {
@@ -42,52 +47,98 @@ impl Proxy {
                 async move {
                     let (parts, body) = request.into_parts();
                     let body = to_bytes(body, 1024 * 1024).await.unwrap();
+                    *state
+                        .lock()
+                        .await
+                        .calls
+                        .entry(parts.uri.path().rsplit('/').next().unwrap().into())
+                        .or_default() += 1;
+                    if parts.method == axum::http::Method::GET
+                        && parts.uri.path() == "/stores"
+                        && state.lock().await.hide_stores
+                    {
+                        return Response::builder()
+                            .status(StatusCode::OK)
+                            .header("content-type", "application/json")
+                            .body(Body::from(r#"{"stores":[]}"#))
+                            .unwrap();
+                    }
                     let write = parts.uri.path().ends_with("/write");
-                    let (fail, after, gate) = if write {
+                    let (fail, after, gate, gate_before) = if write {
                         let mut fault = state.lock().await;
                         fault.writes += 1;
-                        fault.written.push(serde_json::from_slice(&body).unwrap());
+                        let value: serde_json::Value = serde_json::from_slice(&body).unwrap();
+                        let role_write =
+                            value["writes"]["tuple_keys"]
+                                .as_array()
+                                .is_some_and(|keys| {
+                                    keys.iter().any(|k| {
+                                        k["object"]
+                                            .as_str()
+                                            .is_some_and(|o| o.starts_with("space:"))
+                                    })
+                                });
+                        fault.written.push(value);
+                        let gate = if !fault.gate_role_write || role_write {
+                            fault.gate.take()
+                        } else {
+                            None
+                        };
                         (
                             fault.writes == fault.fail_at,
                             fault.after,
-                            fault.gate.take(),
+                            gate,
+                            fault.gate_before,
                         )
                     } else {
-                        (false, false, None)
+                        (false, false, None, false)
                     };
-                    if fail && !after {
-                        return Response::builder()
-                            .status(StatusCode::INTERNAL_SERVER_ERROR)
-                            .body(Body::from("private-password"))
+                    let deliver = async move {
+                        if gate_before && let Some(gate) = &gate {
+                            gate.entered.notify_one();
+                            gate.release.notified().await;
+                        }
+                        if fail && !after {
+                            return Response::builder()
+                                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                                .body(Body::from("private-password"))
+                                .unwrap();
+                        }
+                        let reply = http
+                            .request(parts.method, format!("{upstream}{}", parts.uri))
+                            .header("content-type", "application/json")
+                            .body(body)
+                            .send()
+                            .await
                             .unwrap();
+                        let status = reply.status();
+                        if write {
+                            state.lock().await.acknowledged.push(status.as_u16());
+                        }
+                        let body = reply.bytes().await.unwrap();
+                        if !gate_before && let Some(gate) = gate {
+                            gate.entered.notify_one();
+                            gate.release.notified().await;
+                        }
+                        if fail {
+                            return Response::builder()
+                                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                                .body(Body::from("private-password"))
+                                .unwrap();
+                        }
+                        Response::builder()
+                            .status(status)
+                            .header("content-type", "application/json")
+                            .body(Body::from(body))
+                            .unwrap()
+                    };
+                    if gate_before {
+                        // Model an accepted request whose cancellation does not reach
+                        // the upstream: its delivery survives the caller disconnect.
+                        tokio::spawn(deliver).await.unwrap()
+                    } else {
+                        deliver.await
                     }
-                    let reply = http
-                        .request(parts.method, format!("{upstream}{}", parts.uri))
-                        .header("content-type", "application/json")
-                        .body(body)
-                        .send()
-                        .await
-                        .unwrap();
-                    let status = reply.status();
-                    if write {
-                        state.lock().await.acknowledged.push(status.as_u16());
-                    }
-                    let body = reply.bytes().await.unwrap();
-                    if let Some(gate) = gate {
-                        gate.entered.notify_one();
-                        gate.release.notified().await;
-                    }
-                    if fail {
-                        return Response::builder()
-                            .status(StatusCode::INTERNAL_SERVER_ERROR)
-                            .body(Body::from("private-password"))
-                            .unwrap();
-                    }
-                    Response::builder()
-                        .status(status)
-                        .header("content-type", "application/json")
-                        .body(Body::from(body))
-                        .unwrap()
                 }
             }),
         );
