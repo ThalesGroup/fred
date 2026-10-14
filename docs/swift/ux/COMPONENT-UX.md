@@ -3829,6 +3829,9 @@ capability's stateless `/analyze` pod route, slide-numbered template errors
 i18n'd by stable code, and Save gating while the mandatory template is missing
 or invalid. The staged file travels with the atomic save (multipart
 `with-assets` endpoints); the preview never persists anything.
+Save transport failures use distinct translated feedback for an unreachable runtime,
+validation timeout, and interrupted communication. These messages avoid internal
+service URLs and do not claim that an interrupted validation means the runtime is stopped.
 
 #### Open UX issues
 

@@ -1297,6 +1297,11 @@
       }
     },
     "agentCard": {
+      "validationErrors": {
+        "capability_validation_unavailable": "Le service de l'agent est inaccessible pour valider la configuration. Réessayez dans un instant.",
+        "capability_validation_timeout": "La validation de la configuration a pris trop de temps. Réessayez.",
+        "capability_validation_interrupted": "La communication avec le service de l'agent a été interrompue pendant la validation de la configuration. Réessayez."
+      },
       "activate": "Activer",
       "catalogWarning": "Dérive de configuration MCP — recréer pour résoudre",
       "chat": "Discuter",

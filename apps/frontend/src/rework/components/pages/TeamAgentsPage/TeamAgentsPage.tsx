@@ -17,6 +17,7 @@ import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
 import AgentCard from "@shared/organisms/AgentCard/AgentCard.tsx";
 import SearchInput from "@shared/molecules/SearchInput/SearchInput.tsx";
 import Select from "@shared/molecules/Select/Select.tsx";
+import { capabilityValidationErrorText } from "./capabilityValidationErrors";
 import type { OptionModel } from "@models/Option.model.ts";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -265,7 +266,10 @@ export default function TeamAgentsPage() {
       }
       showError({
         summary: t("rework.agentCard.createError", { agent: agentsNicknameSingular.toLowerCase() }),
-        detail: extractApiErrorDetail(error) ?? t("rework.agentCard.unexpectedError"),
+        detail:
+          capabilityValidationErrorText(error, t) ??
+          extractApiErrorDetail(error) ??
+          t("rework.agentCard.unexpectedError"),
       });
     }
   };
@@ -316,7 +320,10 @@ export default function TeamAgentsPage() {
       }
       showError({
         summary: t("rework.agentCard.updateError", { agent: agentsNicknameSingular.toLowerCase() }),
-        detail: extractApiErrorDetail(error) ?? t("rework.agentCard.unexpectedError"),
+        detail:
+          capabilityValidationErrorText(error, t) ??
+          extractApiErrorDetail(error) ??
+          t("rework.agentCard.unexpectedError"),
       });
     }
   };

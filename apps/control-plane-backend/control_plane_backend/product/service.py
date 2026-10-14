@@ -20,6 +20,7 @@ import contextvars
 import hashlib
 import json
 import logging
+import time
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -1404,18 +1405,45 @@ async def _validate_capability_config_via_pod(
         for upload in asset_files
     ]
     headers = {"Authorization": authorization} if authorization else None
+    started = time.monotonic()
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
                 url, data=data, files=files or None, headers=headers
             )
     except httpx.RequestError as exc:
-        raise EnrollmentError(
-            f"Agent runtime service at {base_url} is not reachable to "
-            f"validate capability '{capability_id}' configuration. Start the "
-            "corresponding agent runtime, then try again.",
-            http_status=503,
-        ) from exc
+        if isinstance(exc, (httpx.ConnectError, httpx.ConnectTimeout)):
+            code, status, message = (
+                "capability_validation_unavailable",
+                503,
+                "The agent runtime could not be reached to validate the configuration. "
+                "Please try again in a moment.",
+            )
+        elif isinstance(exc, httpx.TimeoutException):
+            code, status, message = (
+                "capability_validation_timeout",
+                504,
+                "Configuration validation took too long. Please try again.",
+            )
+        else:
+            code, status, message = (
+                "capability_validation_interrupted",
+                502,
+                "Communication with the agent runtime was interrupted during "
+                "configuration validation. Please try again.",
+            )
+        # The request logging scope supplies existing request/correlation IDs.
+        logger.warning(
+            "Capability validation transport failed: exception_type=%s duration_ms=%.1f",
+            type(exc).__name__,
+            (time.monotonic() - started) * 1000,
+            extra={
+                "capability_id": capability_id,
+                "outcome": "failed",
+                "error_code": code,
+            },
+        )
+        raise EnrollmentError(message, http_status=status, code=code) from exc
     if response.status_code in (400, 404, 422):
         try:
             detail = response.json().get("detail") or response.text

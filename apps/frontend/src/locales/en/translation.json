@@ -1297,6 +1297,11 @@
       }
     },
     "agentCard": {
+      "validationErrors": {
+        "capability_validation_unavailable": "The agent runtime could not be reached to validate the configuration. Please try again in a moment.",
+        "capability_validation_timeout": "Configuration validation took too long. Please try again.",
+        "capability_validation_interrupted": "Communication with the agent runtime was interrupted during configuration validation. Please try again."
+      },
       "activate": "Activate",
       "catalogWarning": "MCP configuration drift — recreate to resolve",
       "chat": "Chat",
