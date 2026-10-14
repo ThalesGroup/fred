@@ -19,9 +19,11 @@ from fred_core.common import TeamId
 from fred_core.logs.audit_log import emit_audit_log
 from fred_core.security.rebac.rebac_engine import ORGANIZATION_ID
 from fred_core.teams.metadata_store import TeamMetadata
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from control_plane_backend.agent_marketplace.store import (
     RemovalReason,
+    RemovedEntry,
     emit_unpublished,
 )
 from control_plane_backend.marketplace_settings.effective import (
@@ -102,17 +104,19 @@ async def _impact(
 
 
 async def _apply_switch_off(
-    deps: TeamServiceDependencies, team_ids: list[TeamId], actor_uid: str
-) -> MarketplaceSettingsImpact:
+    deps: TeamServiceDependencies, team_ids: list[TeamId], session: AsyncSession
+) -> tuple[MarketplaceSettingsImpact, list[RemovedEntry]]:
     """Take down the published agents of teams whose switch turned off."""
     if deps.get_agent_marketplace_store is None or not team_ids:
-        return MarketplaceSettingsImpact(affected_team_ids=team_ids)
+        return MarketplaceSettingsImpact(affected_team_ids=team_ids), []
     removed = await deps.get_agent_marketplace_store().remove_team_entries(
-        team_ids, RemovalReason.SWITCH_OFF
+        team_ids, RemovalReason.SWITCH_OFF, session=session
     )
-    emit_unpublished(removed, actor_uid=actor_uid)
-    return MarketplaceSettingsImpact(
-        affected_team_ids=team_ids, removed_published_agents=len(removed)
+    return (
+        MarketplaceSettingsImpact(
+            affected_team_ids=team_ids, removed_published_agents=len(removed)
+        ),
+        removed,
     )
 
 
@@ -183,13 +187,15 @@ async def set_marketplace_default(
             default_switch_after=request.agents_publishing_enabled,
         )
     ]
-    # Saved first: a publication racing this change then reads the new switch.
-    await store().set(
-        agents_publishing_enabled=request.agents_publishing_enabled,
-        agents_publish_quota=request.agents_publish_quota,
-        updated_by=user.uid,
-    )
-    impact = await _apply_switch_off(deps, affected, user.uid)
+    async with deps.get_team_metadata_store().transaction() as session:
+        await store().set(
+            agents_publishing_enabled=request.agents_publishing_enabled,
+            agents_publish_quota=request.agents_publish_quota,
+            updated_by=user.uid,
+            session=session,
+        )
+        impact, removed = await _apply_switch_off(deps, affected, session)
+    emit_unpublished(removed, actor_uid=user.uid)
     emit_audit_log(
         "marketplace.settings.default_updated",
         actor_uid=user.uid,
@@ -233,14 +239,18 @@ async def set_team_marketplace_settings(
     affected = (
         [team.id] if _turned_off(default, team, _with_overrides(team, request)) else []
     )
-    updated = await deps.get_team_metadata_store().set_marketplace_overrides(
-        team_id,
-        agents_publishing_enabled=request.agents_publishing_enabled,
-        agents_publish_quota=request.agents_publish_quota,
-    )
-    if updated is None:
-        raise TeamNotFoundError(team_id)
-    impact = await _apply_switch_off(deps, affected, user.uid)
+    team_store = deps.get_team_metadata_store()
+    async with team_store.transaction() as session:
+        updated = await team_store.set_marketplace_overrides(
+            team_id,
+            agents_publishing_enabled=request.agents_publishing_enabled,
+            agents_publish_quota=request.agents_publish_quota,
+            session=session,
+        )
+        if updated is None:
+            raise TeamNotFoundError(team_id)
+        impact, removed = await _apply_switch_off(deps, affected, session)
+    emit_unpublished(removed, actor_uid=user.uid)
     emit_audit_log(
         "marketplace.settings.team_updated",
         actor_uid=user.uid,

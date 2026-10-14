@@ -53,10 +53,12 @@ from fred_core.store import ContentStore
 from fred_core.teams.metadata_store import TeamMetadata, TeamMetadataPatch
 from fred_core.users.store.postgres_user_store import get_user_store
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from control_plane_backend.agent_instances.store import TeamAgentsDeletion
 from control_plane_backend.agent_marketplace.store import (
     RemovalReason,
+    RemovedEntry,
     emit_unpublished,
 )
 from control_plane_backend.common.avatar_image import read_avatar_upload
@@ -1134,8 +1136,21 @@ async def update_team(
         ):
             patch_data["joining_mode"] = JoiningMode.INVITE_ONLY
         patch = TeamMetadataPatch.model_validate(patch_data)
+        removed: list[RemovedEntry] = []
         try:
-            updated = await store.upsert(team_id, patch)
+            if (
+                "visibility" in patch_data
+                and resulting_visibility == TeamVisibility.PRIVATE
+                and deps.get_agent_marketplace_store is not None
+            ):
+                async with store.transaction() as session:
+                    updated = await store.upsert(team_id, patch, session=session)
+                    if updated is not None:
+                        removed = await _remove_published_agents_of_private_team(
+                            team_id, deps, session=session
+                        )
+            else:
+                updated = await store.upsert(team_id, patch)
         except IntegrityError as exc:
             # `name` is the only unique-constrained column, and the pre-check
             # above is a fast path only - this is what closes the race between
@@ -1143,6 +1158,7 @@ async def update_team(
             if "name" not in patch_data:
                 raise
             raise TeamAlreadyExistsError(patch_data["name"]) from exc
+        emit_unpublished(removed, actor_uid=user.uid)
         if renamed_from is not None:
             # Nothing else records a rename: there is no team audit table, and
             # the bundle importer reconciles teams by name, so a duplicate team
@@ -1177,8 +1193,6 @@ async def update_team(
                     [team_id], consistency_token=RebacEngine.HIGHER_CONSISTENCY
                 )
             else:
-                # Before the ReBAC call: if it fails, the team is still private.
-                await _remove_published_agents_of_private_team(team_id, user, deps)
                 public_token = await rebac.revoke_team_public_relations(
                     [team_id], consistency_token=RebacEngine.HIGHER_CONSISTENCY
                 )
@@ -1189,15 +1203,14 @@ async def update_team(
 
 
 async def _remove_published_agents_of_private_team(
-    team_id: TeamId, user: KeycloakUser, deps: TeamServiceDependencies
-) -> None:
+    team_id: TeamId, deps: TeamServiceDependencies, *, session: AsyncSession
+) -> list[RemovedEntry]:
     """A private team cannot publish: its marketplace entries are removed."""
     if deps.get_agent_marketplace_store is None:
-        return
-    removed = await deps.get_agent_marketplace_store().remove_team_entries(
-        [team_id], RemovalReason.TEAM_PRIVATE
+        return []
+    return await deps.get_agent_marketplace_store().remove_team_entries(
+        [team_id], RemovalReason.TEAM_PRIVATE, session=session
     )
-    emit_unpublished(removed, actor_uid=user.uid)
 
 
 async def upload_team_avatar(

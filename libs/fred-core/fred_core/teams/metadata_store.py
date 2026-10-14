@@ -150,6 +150,12 @@ class TeamMetadataStore:
         self._sessions = make_session_factory(engine)
 
     @asynccontextmanager
+    async def transaction(self) -> AsyncIterator[AsyncSession]:
+        """Share one transaction with stores backed by the same database."""
+        async with self._sessions() as session, session.begin():
+            yield session
+
+    @asynccontextmanager
     async def advisory_lock(self, key: str) -> AsyncIterator[None]:
         """Hold a Postgres transaction-scoped advisory lock for `key` for the
         duration of the `async with` block.

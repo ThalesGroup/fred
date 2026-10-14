@@ -481,11 +481,15 @@ class AgentMarketplaceStore:
             row.state = EntryState.DISMISSED.value
 
     async def remove_team_entries(
-        self, team_ids: Sequence[TeamId], reason: RemovalReason
+        self,
+        team_ids: Sequence[TeamId],
+        reason: RemovalReason,
+        *,
+        session: AsyncSession | None = None,
     ) -> list[RemovedEntry]:
         if not team_ids:
             return []
-        async with self._sessions() as s, s.begin():
+        async with use_session(self._sessions, session) as s:
             return await remove_published_entries(
                 s, reason=reason, team_ids=[str(t) for t in team_ids]
             )
@@ -569,6 +573,7 @@ class AgentMarketplaceStore:
                     func.lower(AgentMarketplaceEntryRow.description).contains(
                         needle, autoescape=True
                     ),
+                    func.lower(TeamMetadataRow.name).contains(needle, autoescape=True),
                 )
             )
         async with self._sessions() as s:

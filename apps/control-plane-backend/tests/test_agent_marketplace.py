@@ -884,6 +884,36 @@ async def test_team_made_private_removes_its_entries_even_if_rebac_fails(
 
 
 @pytest.mark.asyncio
+async def test_private_team_write_rolls_back_if_entry_removal_fails(
+    env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from control_plane_backend.teams import service as team_service
+    from control_plane_backend.teams.schemas import UpdateTeamRequest
+
+    await _agent(env)
+    await _publish(env)
+
+    async def _validated(user, team_id, rebac, permissions, deps):
+        return await env.teams.get_by_team_id(team_id), None
+
+    async def _removal_fails(*args, **kwargs):
+        raise RuntimeError("removal failed")
+
+    monkeypatch.setattr(team_service, "_validate_team_and_check_permission", _validated)
+    monkeypatch.setattr(env.market, "remove_team_entries", _removal_fails)
+    with pytest.raises(RuntimeError, match="removal failed"):
+        await team_service.update_team(
+            _user(_ADMIN),
+            _TEAM,
+            UpdateTeamRequest(visibility=TeamVisibility.PRIVATE),
+            env.deps.team_dependencies,
+        )
+
+    assert (await env.teams.get_by_team_id(_TEAM)).visibility == TeamVisibility.PUBLIC
+    assert len(await env.market.list_published()) == 1
+
+
+@pytest.mark.asyncio
 async def test_switch_off_removes_entries_and_counts_them(env) -> None:
     from control_plane_backend.marketplace_settings import service as settings_service
     from control_plane_backend.marketplace_settings.schemas import (
@@ -912,6 +942,48 @@ async def test_switch_off_removes_entries_and_counts_them(env) -> None:
 
     assert result.impact.removed_published_agents == 1
     assert (await _card(env, _EDITOR)).removed_reason == "switch_off"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scope", ["default", "team"])
+async def test_switch_off_write_rolls_back_if_entry_removal_fails(
+    env, monkeypatch: pytest.MonkeyPatch, scope: str
+) -> None:
+    from control_plane_backend.marketplace_settings import service as settings_service
+    from control_plane_backend.marketplace_settings.schemas import (
+        SetAgentsMarketplaceDefaultRequest,
+        SetTeamMarketplaceSettingsRequest,
+    )
+
+    await _agent(env)
+    await _publish(env)
+
+    async def _removal_fails(*args, **kwargs):
+        raise RuntimeError("removal failed")
+
+    monkeypatch.setattr(env.market, "remove_team_entries", _removal_fails)
+    with pytest.raises(RuntimeError, match="removal failed"):
+        if scope == "default":
+            await settings_service.set_marketplace_default(
+                user=_user(_PLATFORM),
+                request=SetAgentsMarketplaceDefaultRequest(
+                    agents_publishing_enabled=False, agents_publish_quota=2
+                ),
+                deps=env.deps.team_dependencies,
+            )
+        else:
+            await settings_service.set_team_marketplace_settings(
+                user=_user(_PLATFORM),
+                team_id=_TEAM,
+                request=SetTeamMarketplaceSettingsRequest(
+                    agents_publishing_enabled=False, agents_publish_quota=None
+                ),
+                deps=env.deps.team_dependencies,
+            )
+
+    assert (await env.settings.get()).agents_publishing_enabled is True
+    assert (await env.teams.get_by_team_id(_TEAM)).agents_publishing_enabled is None
+    assert len(await env.market.list_published()) == 1
 
 
 @pytest.mark.asyncio
@@ -1091,6 +1163,10 @@ async def test_listing_order_filters_and_live_team_name(env) -> None:
         user=_user(_OUTSIDER), q="analy", team_id=None, deps=env.deps
     )
     assert [a.display_name for a in by_q] == ["Analyst"]
+    by_team_name = await marketplace.list_marketplace_agents(
+        user=_user(_OUTSIDER), q="beta renamed", team_id=None, deps=env.deps
+    )
+    assert [a.display_name for a in by_team_name] == ["Beta helper"]
     by_team = await marketplace.list_marketplace_agents(
         user=_user(_OUTSIDER), q=None, team_id=_OTHER, deps=env.deps
     )
