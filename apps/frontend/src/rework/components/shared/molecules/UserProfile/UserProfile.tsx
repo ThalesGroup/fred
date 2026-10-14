@@ -24,12 +24,12 @@ import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import MenuPopover from "@shared/molecules/MenuPopover/MenuPopover.tsx";
 import MenuPopoverItem from "@shared/molecules/MenuPopover/MenuPopoverItem.tsx";
 import { PatchNoteDialog } from "@shared/molecules/PatchNoteDialog/PatchNoteDialog.tsx";
-import { useActivePatchNote } from "../../../../features/announcements/useActivePatchNote.ts";
+import { usePatchNoteHistory } from "../../../../features/announcements/usePatchNoteHistory.ts";
 
 /**
  * Bottom-of-rail user entry: an avatar button. Clicking it opens a popover above it grouping
  * user-scoped actions: Profile (the existing settings page), What's new (the
- * active patch note, even once dismissed), optional Contact support, and Logout. The Help Center and the platform admin console moved out
+ * patch-note history, while it has something to read), optional Contact support, and Logout. The Help Center and the platform admin console moved out
  * of this menu to the mainNavBar (#2298); team admin stays on the team banner
  * gear. This menu is global only.
  */
@@ -38,8 +38,8 @@ export default function UserProfile() {
   const { t } = useTranslation();
   const { contactSupportLink } = useFrontendProperties();
   const [open, setOpen] = useState(false);
-  const patchNote = useActivePatchNote();
-  const [readingPatchNote, setReadingPatchNote] = useState(false);
+  const { notes: patchNotes } = usePatchNoteHistory();
+  const [readingPatchNotes, setReadingPatchNotes] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const userFullName = KeyCloakService.GetUserFullName();
@@ -83,7 +83,7 @@ export default function UserProfile() {
                   label={t("rework.profileMenu.profile")}
                   onClick={() => goTo("/settings")}
                 />,
-                ...(patchNote
+                ...(patchNotes.length > 0
                   ? [
                       <MenuPopoverItem
                         key="whatsNew"
@@ -91,7 +91,7 @@ export default function UserProfile() {
                         label={t("rework.profileMenu.whatsNew")}
                         onClick={() => {
                           setOpen(false);
-                          setReadingPatchNote(true);
+                          setReadingPatchNotes(true);
                         }}
                       />,
                     ]
@@ -137,15 +137,7 @@ export default function UserProfile() {
         </button>
       </Tooltip>
 
-      {patchNote && (
-        <PatchNoteDialog
-          open={readingPatchNote}
-          title={patchNote.title}
-          markdown={patchNote.markdown}
-          showDontShowAgain={false}
-          onClose={() => setReadingPatchNote(false)}
-        />
-      )}
+      <PatchNoteDialog open={readingPatchNotes} notes={patchNotes} onClose={() => setReadingPatchNotes(false)} />
     </div>
   );
 }

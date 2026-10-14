@@ -79,6 +79,8 @@ export interface DialogProps {
   className?: string;
   /** Drop the space under the title, for a body that brings its own top spacing. */
   compactTitle?: boolean;
+  /** Tighter header and action bar with small buttons, for a tall reading dialog. */
+  dense?: boolean;
   /** Optional content on the left of the action bar, facing the buttons (e.g. a short hint or a
    *  secondary removal); a control there never takes the opening focus. */
   footerStart?: ReactNode;
@@ -108,6 +110,7 @@ export function DialogPrimitive({
   portalContainer,
   className,
   compactTitle = false,
+  dense = false,
   footerStart,
 }: DialogProps) {
   const titleId = useId();
@@ -243,7 +246,11 @@ export function DialogPrimitive({
               style={maxWidth ? { width: `min(${maxWidth}px, 90vw)` } : undefined}
               onClick={(event) => event.stopPropagation()}
             >
-              <div className={compactTitle ? `${styles.titleContainer} ${styles.compactTitle}` : styles.titleContainer}>
+              <div
+                className={[styles.titleContainer, compactTitle && styles.compactTitle, dense && styles.dense]
+                  .filter(Boolean)
+                  .join(" ")}
+              >
                 {titlePrefix}
                 <p id={titleId} className={styles.title}>
                   {title}
@@ -258,11 +265,17 @@ export function DialogPrimitive({
               >
                 {children}
               </div>
-              <div className={styles.actions}>
+              <div className={dense ? `${styles.actions} ${styles.dense}` : styles.actions}>
                 {footerStart && <div className={styles.actionsStart}>{footerStart}</div>}
                 {actionsAddon && <div className={styles.actionsAddon}>{actionsAddon}</div>}
                 {!hideCancel && (
-                  <Button type="button" color="on-surface" variant="text" size="medium" onClick={onCancel}>
+                  <Button
+                    type="button"
+                    color="on-surface"
+                    variant="text"
+                    size={dense ? "small" : "medium"}
+                    onClick={onCancel}
+                  >
                     {cancelLabel}
                   </Button>
                 )}
@@ -272,7 +285,7 @@ export function DialogPrimitive({
                     color={confirmColor}
                     icon={confirmIcon}
                     variant="filled"
-                    size="medium"
+                    size={dense ? "small" : "medium"}
                     disabled={confirmDisabled}
                     onClick={onConfirm}
                   >

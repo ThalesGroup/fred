@@ -96,6 +96,7 @@ const injectedRtkApi = api.injectEndpoints({
           offset: queryArg.offset,
           limit: queryArg.limit,
           query: queryArg.query,
+          exceptions_only: queryArg.exceptionsOnly,
         },
       }),
     }),
@@ -1351,24 +1352,67 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/control-plane/v1/announcements/active` }),
     }),
-    getActivePatchNoteControlPlaneV1AnnouncementsPatchNoteGet: build.query<
-      GetActivePatchNoteControlPlaneV1AnnouncementsPatchNoteGetApiResponse,
-      GetActivePatchNoteControlPlaneV1AnnouncementsPatchNoteGetApiArg
+    getPatchNoteHistoryControlPlaneV1AnnouncementsPatchNotesGet: build.query<
+      GetPatchNoteHistoryControlPlaneV1AnnouncementsPatchNotesGetApiResponse,
+      GetPatchNoteHistoryControlPlaneV1AnnouncementsPatchNotesGetApiArg
     >({
-      query: () => ({ url: `/control-plane/v1/announcements/patch-note` }),
+      query: () => ({ url: `/control-plane/v1/announcements/patch-notes` }),
     }),
-    dismissPatchNoteControlPlaneV1AnnouncementsAnnouncementIdDismissalPut: build.mutation<
-      DismissPatchNoteControlPlaneV1AnnouncementsAnnouncementIdDismissalPutApiResponse,
-      DismissPatchNoteControlPlaneV1AnnouncementsAnnouncementIdDismissalPutApiArg
+    markPatchNoteAnnouncementSeenControlPlaneV1AnnouncementsPatchNoteAnnouncementsAnnouncementIdSeenPut: build.mutation<
+      MarkPatchNoteAnnouncementSeenControlPlaneV1AnnouncementsPatchNoteAnnouncementsAnnouncementIdSeenPutApiResponse,
+      MarkPatchNoteAnnouncementSeenControlPlaneV1AnnouncementsPatchNoteAnnouncementsAnnouncementIdSeenPutApiArg
     >({
       query: (queryArg) => ({
-        url: `/control-plane/v1/announcements/${queryArg.announcementId}/dismissal`,
+        url: `/control-plane/v1/announcements/patch-note-announcements/${queryArg.announcementId}/seen`,
         method: "PUT",
       }),
     }),
-    listActivationHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGet: build.query<
-      ListActivationHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetApiResponse,
-      ListActivationHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetApiArg
+    setPatchNoteOrderControlPlaneV1AdminPlatformAnnouncementsPatchNotesOrderPut: build.mutation<
+      SetPatchNoteOrderControlPlaneV1AdminPlatformAnnouncementsPatchNotesOrderPutApiResponse,
+      SetPatchNoteOrderControlPlaneV1AdminPlatformAnnouncementsPatchNotesOrderPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/announcements/patch-notes/order`,
+        method: "PUT",
+        body: queryArg.patchNoteOrderRequest,
+      }),
+    }),
+    getPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementGet: build.query<
+      GetPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementGetApiResponse,
+      GetPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/announcements/patch-notes/announcement` }),
+    }),
+    announcePatchNotesControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementPost: build.mutation<
+      AnnouncePatchNotesControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementPostApiResponse,
+      AnnouncePatchNotesControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/announcements/patch-notes/announcement`,
+        method: "POST",
+        body: queryArg.patchNoteAnnounceRequest,
+      }),
+    }),
+    withdrawPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementDelete: build.mutation<
+      WithdrawPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementDeleteApiResponse,
+      WithdrawPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementDeleteApiArg
+    >({
+      query: () => ({
+        url: `/control-plane/v1/admin/platform/announcements/patch-notes/announcement`,
+        method: "DELETE",
+      }),
+    }),
+    getPatchNotePackageControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementsAnnouncementIdGet: build.query<
+      GetPatchNotePackageControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementsAnnouncementIdGetApiResponse,
+      GetPatchNotePackageControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementsAnnouncementIdGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/announcements/patch-notes/announcements/${queryArg.announcementId}`,
+      }),
+    }),
+    listExposureHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGet: build.query<
+      ListExposureHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetApiResponse,
+      ListExposureHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetApiArg
     >({
       query: () => ({ url: `/control-plane/v1/admin/platform/announcements/activation-history` }),
     }),
@@ -2011,6 +2055,8 @@ export type ListPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGetApiA
   offset?: number;
   limit?: number;
   query?: string;
+  /** Only users holding an individual exception. */
+  exceptionsOnly?: boolean;
 };
 export type GrantPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersPostApiResponse = unknown;
 export type GrantPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersPostApiArg = {
@@ -2784,18 +2830,42 @@ export type PutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutApiArg 
 export type GetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetApiResponse =
   /** status 200 Successful Response */ Announcement[];
 export type GetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetApiArg = void;
-export type GetActivePatchNoteControlPlaneV1AnnouncementsPatchNoteGetApiResponse =
-  /** status 200 Successful Response */ ActivePatchNote;
-export type GetActivePatchNoteControlPlaneV1AnnouncementsPatchNoteGetApiArg = void;
-export type DismissPatchNoteControlPlaneV1AnnouncementsAnnouncementIdDismissalPutApiResponse = unknown;
-export type DismissPatchNoteControlPlaneV1AnnouncementsAnnouncementIdDismissalPutApiArg = {
-  announcementId: string;
+export type GetPatchNoteHistoryControlPlaneV1AnnouncementsPatchNotesGetApiResponse =
+  /** status 200 Successful Response */ PatchNoteHistory;
+export type GetPatchNoteHistoryControlPlaneV1AnnouncementsPatchNotesGetApiArg = void;
+export type MarkPatchNoteAnnouncementSeenControlPlaneV1AnnouncementsPatchNoteAnnouncementsAnnouncementIdSeenPutApiResponse =
+  unknown;
+export type MarkPatchNoteAnnouncementSeenControlPlaneV1AnnouncementsPatchNoteAnnouncementsAnnouncementIdSeenPutApiArg =
+  {
+    announcementId: string;
+  };
+export type SetPatchNoteOrderControlPlaneV1AdminPlatformAnnouncementsPatchNotesOrderPutApiResponse = unknown;
+export type SetPatchNoteOrderControlPlaneV1AdminPlatformAnnouncementsPatchNotesOrderPutApiArg = {
+  patchNoteOrderRequest: PatchNoteOrderRequest;
 };
-export type ListActivationHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetApiResponse =
-  /** status 200 Successful Response */ AnnouncementActivationEvent[];
-export type ListActivationHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetApiArg = void;
+export type GetPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementGetApiResponse =
+  /** status 200 Successful Response */ PatchNoteAnnouncement | null;
+export type GetPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementGetApiArg = void;
+export type AnnouncePatchNotesControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementPostApiResponse =
+  /** status 201 Successful Response */ PatchNoteAnnouncement;
+export type AnnouncePatchNotesControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementPostApiArg = {
+  patchNoteAnnounceRequest: PatchNoteAnnounceRequest;
+};
+export type WithdrawPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementDeleteApiResponse =
+  unknown;
+export type WithdrawPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementDeleteApiArg =
+  void;
+export type GetPatchNotePackageControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementsAnnouncementIdGetApiResponse =
+  /** status 200 Successful Response */ PatchNoteSnapshot[];
+export type GetPatchNotePackageControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementsAnnouncementIdGetApiArg =
+  {
+    announcementId: string;
+  };
+export type ListExposureHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetApiResponse =
+  /** status 200 Successful Response */ AnnouncementExposure[];
+export type ListExposureHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetApiArg = void;
 export type ListAnnouncementsControlPlaneV1AdminPlatformAnnouncementsGetApiResponse =
-  /** status 200 Successful Response */ AdminAnnouncement[];
+  /** status 200 Successful Response */ Announcement[];
 export type ListAnnouncementsControlPlaneV1AdminPlatformAnnouncementsGetApiArg = void;
 export type CreateAnnouncementControlPlaneV1AdminPlatformAnnouncementsPostApiResponse =
   /** status 201 Successful Response */ Announcement;
@@ -4857,67 +4927,71 @@ export type Announcement = {
   description_long: {
     [key: string]: string;
   };
-  /** Whether the announcement is delivered to users right now. */
+  /** Banner: whether it is delivered to users right now. Patch note: whether the next announcement includes it; users never read this row. */
   enabled: boolean;
   /** Whether a user may close the banner. A non-dismissible announcement stays until an admin disables it. */
   dismissible: boolean;
-  /** The edition the browser-side close is keyed on, so a bump shows the announcement again to everyone who had closed it. Both kinds bump when re-enabled; a banner also on a content edit. */
+  /** The edition a banner's browser-side close is keyed on, so a bump shows it again to everyone who had closed it. Not used by patch notes. */
   content_version: number;
+  /** Patch note only: its place in the administrator's order, 1 at the top. Null for a banner. */
+  position?: number | null;
   created_at: string;
   updated_at: string;
   created_by?: string | null;
   updated_by?: string | null;
 };
-export type ActivePatchNote = {
-  patch_note?: Announcement | null;
-  /** Whether the caller ticked "Don't show again" since it was last enabled: the client does not open it at load, only on request. */
-  dismissed?: boolean;
-};
-export type AnnouncementActivationEvent = {
+export type PatchNoteSnapshot = {
+  /** The patch note it was taken from; may be deleted. */
   id: string;
-  /** May name an announcement that has since been deleted. */
-  announcement_id: string;
-  kind: "banner" | "patch_note";
-  /** Locale → title as it was when the event happened. */
-  label: {
-    [key: string]: string;
-  };
-  /** The banner's severity when the event happened; null for a patch note. */
-  severity?: ("info" | "warning" | "error" | "success") | null;
-  action: "activated" | "deactivated";
-  /** Uid of the administrator who made the change. */
-  actor_uid?: string | null;
-  occurred_at: string;
-};
-export type AdminAnnouncement = {
-  id: string;
-  /** `banner` or `patch_note`. Fixed at creation. */
-  kind: "banner" | "patch_note";
-  severity: "info" | "warning" | "error" | "success";
-  /** Locale → title map. The frontend resolves it against the viewer's locale and falls back to 'en'. */
+  /** Locale → plain-text title map. */
   title: {
     [key: string]: string;
   };
-  /** Locale → markdown map rendered inside the banner itself. */
-  description_short: {
-    [key: string]: string;
-  };
-  /** Locale → markdown map. For a banner, the more-info dialog (empty for every locale means no more-info action). For a patch note, its body. */
+  /** Locale → markdown body map. */
   description_long: {
     [key: string]: string;
   };
-  /** Whether the announcement is delivered to users right now. */
-  enabled: boolean;
-  /** Whether a user may close the banner. A non-dismissible announcement stays until an admin disables it. */
-  dismissible: boolean;
-  /** The edition the browser-side close is keyed on, so a bump shows the announcement again to everyone who had closed it. Both kinds bump when re-enabled; a banner also on a content edit. */
-  content_version: number;
-  created_at: string;
-  updated_at: string;
-  created_by?: string | null;
-  updated_by?: string | null;
-  /** Patch note only: how many users ticked "Don't show again" since it was last enabled. Null for a banner. */
-  dismissal_count?: number | null;
+};
+export type PatchNoteHistory = {
+  /** The package of the announcement in effect, in its order. Empty when none is in effect. */
+  patch_notes: PatchNoteSnapshot[];
+  /** Set when an announcement is in effect and the caller has not recorded it as seen: the client opens the dialog, then records this id. */
+  pending_announcement_id?: string | null;
+};
+export type PatchNoteOrderRequest = {
+  /** Every patch note's id, exactly once; anything else is refused. */
+  ids: string[];
+};
+export type PatchNoteAnnouncement = {
+  id: string;
+  announced_at: string;
+  /** Uid of the administrator who announced. */
+  announced_by?: string | null;
+};
+export type PatchNoteAnnounceRequest = {
+  /** The ids of the included patch notes, in order, as the confirmation listed them. Refused with `409` unless they are exactly the currently included ones, in that order, and at most 10. */
+  ids: string[];
+};
+export type AnnouncementExposure = {
+  /** For a patch-note line: the announcement's id. */
+  id: string;
+  kind: "banner" | "patch_note";
+  /** The banner, or the first patch note of the package. May name an announcement that has since been deleted. */
+  announcement_id: string;
+  /** Locale → title when the exposure started: the banner's, or the first patch note's. */
+  label: {
+    [key: string]: string;
+  };
+  /** The banner's severity when it was enabled; null for patch notes. */
+  severity?: ("info" | "warning" | "error" | "success") | null;
+  /** How many patch notes the package holds. Null for a banner, and for an older patch-note line that kept no package: only a non-null value means the package can be read. */
+  note_count?: number | null;
+  /** When users started seeing it. */
+  activated_at: string;
+  /** When the banner was disabled or deleted, or the announcement replaced or withdrawn. Null while users still see it. */
+  deactivated_at?: string | null;
+  /** Uid of the administrator who started it. */
+  actor_uid?: string | null;
 };
 export type AnnouncementWriteRequest = {
   /** `banner` or `patch_note`. An update cannot change it. */
@@ -5538,11 +5612,18 @@ export const {
   usePutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutMutation,
   useGetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetQuery,
   useLazyGetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetQuery,
-  useGetActivePatchNoteControlPlaneV1AnnouncementsPatchNoteGetQuery,
-  useLazyGetActivePatchNoteControlPlaneV1AnnouncementsPatchNoteGetQuery,
-  useDismissPatchNoteControlPlaneV1AnnouncementsAnnouncementIdDismissalPutMutation,
-  useListActivationHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetQuery,
-  useLazyListActivationHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetQuery,
+  useGetPatchNoteHistoryControlPlaneV1AnnouncementsPatchNotesGetQuery,
+  useLazyGetPatchNoteHistoryControlPlaneV1AnnouncementsPatchNotesGetQuery,
+  useMarkPatchNoteAnnouncementSeenControlPlaneV1AnnouncementsPatchNoteAnnouncementsAnnouncementIdSeenPutMutation,
+  useSetPatchNoteOrderControlPlaneV1AdminPlatformAnnouncementsPatchNotesOrderPutMutation,
+  useGetPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementGetQuery,
+  useLazyGetPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementGetQuery,
+  useAnnouncePatchNotesControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementPostMutation,
+  useWithdrawPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementDeleteMutation,
+  useGetPatchNotePackageControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementsAnnouncementIdGetQuery,
+  useLazyGetPatchNotePackageControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementsAnnouncementIdGetQuery,
+  useListExposureHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetQuery,
+  useLazyListExposureHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetQuery,
   useListAnnouncementsControlPlaneV1AdminPlatformAnnouncementsGetQuery,
   useLazyListAnnouncementsControlPlaneV1AdminPlatformAnnouncementsGetQuery,
   useCreateAnnouncementControlPlaneV1AdminPlatformAnnouncementsPostMutation,

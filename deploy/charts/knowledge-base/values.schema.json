@@ -1,0 +1,598 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "Fred Knowledge Base pod chart values",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "properties": {
+    "image": {
+      "type": "object",
+      "properties": {
+        "repository": {
+          "type": "string"
+        },
+        "tag": {
+          "type": "string"
+        },
+        "pullPolicy": {
+          "type": "string",
+          "enum": [
+            "Always",
+            "IfNotPresent",
+            "Never"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "imagePullSecrets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "nameOverride": {
+      "type": "string"
+    },
+    "fullnameOverride": {
+      "type": "string"
+    },
+    "replicaCount": {
+      "type": "integer"
+    },
+    "configuration": {
+      "description": "Everything a Knowledge Base pod needs to reach Fred and Temporal.",
+      "properties": {
+        "app": {
+          "description": "How a deployed pod names itself to the people operating it.\n\nThe `app` section every pod reads, whatever it contributes. `runtime_id` is\nset at deployment \u2014 chart values or `configuration.yaml` \u2014 never in an\nimage's code, so two deployments of one image can still be told apart.",
+          "properties": {
+            "runtime_id": {
+              "description": "Slug identifying this pod across every telemetry stream: the `service` label of its metrics and the `service` field of every log record it writes \u2014 that equality is what lets a log line be joined to its own metric. Lowercase slug only, so no display prose can reach a Prometheus label.",
+              "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+              "title": "Runtime Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "runtime_id"
+          ],
+          "title": "PodAppIdentity",
+          "type": "object",
+          "additionalProperties": false
+        },
+        "knowledge_base": {
+          "description": "Where this pod publishes, and what it is allowed to publish under.\n\n`prefix` is the dotted prefix this image owns \u2014 `fred.samples`. Every name\nit publishes lives under it, Fred binds the prefix to this pod's client on\nthe first publication, and no other client may write there afterwards.",
+          "properties": {
+            "prefix": {
+              "minLength": 1,
+              "title": "Prefix",
+              "type": "string"
+            },
+            "control_plane_url": {
+              "minLength": 1,
+              "title": "Control Plane Url",
+              "type": "string"
+            },
+            "knowledge_flow_url": {
+              "default": "",
+              "title": "Knowledge Flow Url",
+              "type": "string"
+            }
+          },
+          "required": [
+            "prefix",
+            "control_plane_url"
+          ],
+          "title": "KnowledgeBaseSettings",
+          "type": "object",
+          "additionalProperties": false
+        },
+        "security": {
+          "description": "The machine half of `security`, and only that half.\n\nThe key path is the one every Fred backend uses, and `M2MSecurity` is the\nsame model they parse it with. What is absent is `security.user`: a\nKnowledge Base pod serves no user and validates no user token \u2014 the only\nport it may open is a read-only metrics endpoint \u2014 so requiring a block it\nwould never read would be configuration theatre.",
+          "properties": {
+            "m2m": {
+              "additionalProperties": false,
+              "description": "Configuration for machine-to-machine authentication.",
+              "properties": {
+                "enabled": {
+                  "default": true,
+                  "title": "Enabled",
+                  "type": "boolean"
+                },
+                "realm_url": {
+                  "format": "uri",
+                  "minLength": 1,
+                  "title": "Realm Url",
+                  "type": "string"
+                },
+                "client_id": {
+                  "title": "Client Id",
+                  "type": "string"
+                },
+                "provider": {
+                  "default": "keycloak",
+                  "enum": [
+                    "keycloak",
+                    "oidc"
+                  ],
+                  "title": "Provider",
+                  "type": "string"
+                },
+                "scope": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "title": "Scope"
+                },
+                "token_url": {
+                  "anyOf": [
+                    {
+                      "format": "uri",
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "title": "Token Url"
+                },
+                "secret_env_var": {
+                  "default": "M2M_CLIENT_SECRET",
+                  "title": "Secret Env Var",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "realm_url",
+                "client_id"
+              ],
+              "title": "M2MSecurity",
+              "type": "object"
+            }
+          },
+          "required": [
+            "m2m"
+          ],
+          "title": "PodSecurity",
+          "type": "object",
+          "additionalProperties": false
+        },
+        "scheduler": {
+          "description": "Where Temporal is, in the shape the Control Plane already reads it.\n\n`TemporalSchedulerConfig` is the model the dispatching side parses for\nKnowledge Bases too, so both halves of the contract describe Temporal\nidentically.\n\n`scheduler.temporal.task_queue` is ignored on purpose: a run's queue is\nderived from the definition id by `routing.task_queue_for`, identically on\nboth sides, so that a pod and a Control Plane cannot disagree about it.\nConfiguring it would be the bug \u2014 two sides disagreeing would lose every\nrun in silence.",
+          "properties": {
+            "temporal": {
+              "properties": {
+                "host": {
+                  "default": "localhost:7233",
+                  "title": "Host",
+                  "type": "string"
+                },
+                "namespace": {
+                  "default": "default",
+                  "title": "Namespace",
+                  "type": "string"
+                },
+                "task_queue": {
+                  "default": "default",
+                  "title": "Task Queue",
+                  "type": "string"
+                },
+                "workflow_id_prefix": {
+                  "default": "task",
+                  "title": "Workflow Id Prefix",
+                  "type": "string"
+                },
+                "connect_timeout_seconds": {
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": 5,
+                  "title": "Connect Timeout Seconds"
+                },
+                "rpc_timeout_seconds": {
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": 10,
+                  "description": "Deadline applied to individual Temporal RPC calls (start_workflow, describe) so a stuck Temporal frontend cannot hang the caller indefinitely.",
+                  "title": "Rpc Timeout Seconds"
+                },
+                "ingestion_workflow_parallelism": {
+                  "default": 3,
+                  "description": "Max number of files launched in parallel per parent ingestion workflow.",
+                  "minimum": 1,
+                  "title": "Ingestion Workflow Parallelism",
+                  "type": "integer"
+                },
+                "ingestion_max_concurrent_workflow_tasks": {
+                  "default": 3,
+                  "description": "Max concurrent Temporal workflow tasks processed by a worker process.",
+                  "minimum": 1,
+                  "title": "Ingestion Max Concurrent Workflow Tasks",
+                  "type": "integer"
+                },
+                "ingestion_max_concurrent_activities": {
+                  "default": 3,
+                  "description": "Max concurrent Temporal activities processed by a worker process.",
+                  "minimum": 1,
+                  "title": "Ingestion Max Concurrent Activities",
+                  "type": "integer"
+                }
+              },
+              "title": "TemporalSchedulerConfig",
+              "type": "object",
+              "additionalProperties": false
+            }
+          },
+          "title": "PodScheduler",
+          "type": "object",
+          "additionalProperties": false
+        },
+        "observability": {
+          "description": "What this pod exposes to be scraped, and how it writes its logs.\n\nBoth endpoints are enabled by default but bound to loopback, as on every\nFred backend: nothing is reachable from outside the pod until a deployment\nbinds it outward explicitly, and what it then opens is read-only.",
+          "properties": {
+            "kpi": {
+              "description": "The Prometheus half of `observability.kpi`, and only that half.\n\nSame key path and same model as every Fred backend. The log and OpenSearch\nsinks beside it there are absent here: a pod writes no KPI event, so it\nwould never read them.",
+              "properties": {
+                "prometheus": {
+                  "properties": {
+                    "enabled": {
+                      "default": true,
+                      "title": "Enabled",
+                      "type": "boolean"
+                    },
+                    "port": {
+                      "default": 9000,
+                      "title": "Port",
+                      "type": "integer"
+                    },
+                    "address": {
+                      "default": "127.0.0.1",
+                      "title": "Address",
+                      "type": "string"
+                    }
+                  },
+                  "title": "KpiPrometheusSinkConfig",
+                  "type": "object",
+                  "additionalProperties": false
+                }
+              },
+              "title": "PodKpi",
+              "type": "object",
+              "additionalProperties": false
+            },
+            "temporal": {
+              "properties": {
+                "prometheus": {
+                  "description": "The workflow engine's own exporter: polls, task latencies, slots.\n\nServed by the engine's core on a port of its own \u2014 its metrics never pass\nthrough `prometheus_client` \u2014 so it is scraped beside `kpi.prometheus`.",
+                  "properties": {
+                    "enabled": {
+                      "default": true,
+                      "title": "Enabled",
+                      "type": "boolean"
+                    },
+                    "port": {
+                      "default": 9001,
+                      "title": "Port",
+                      "type": "integer"
+                    },
+                    "address": {
+                      "default": "127.0.0.1",
+                      "title": "Address",
+                      "type": "string"
+                    }
+                  },
+                  "title": "TemporalMetricsConfig",
+                  "type": "object",
+                  "additionalProperties": false
+                }
+              },
+              "title": "PodTemporalObservability",
+              "type": "object",
+              "additionalProperties": false
+            },
+            "logs": {
+              "description": "How this pod writes its log records to standard output.\n\n`json` for a deployed pod, whose log pipeline parses each line into fields;\n`text` for a person reading a terminal. Both carry `app.runtime_id`.",
+              "properties": {
+                "format": {
+                  "default": "json",
+                  "enum": [
+                    "json",
+                    "text"
+                  ],
+                  "title": "Format",
+                  "type": "string"
+                }
+              },
+              "title": "PodLogs",
+              "type": "object",
+              "additionalProperties": false
+            }
+          },
+          "title": "PodObservability",
+          "type": "object",
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "app",
+        "knowledge_base",
+        "security"
+      ],
+      "title": "PodConfiguration",
+      "type": "object",
+      "additionalProperties": true
+    },
+    "secret": {
+      "type": "object",
+      "properties": {
+        "existingSecret": {
+          "type": "string"
+        },
+        "create": {
+          "type": "boolean"
+        },
+        "data": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "extraEnvVars": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          },
+          "valueFrom": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "extraVolumes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "extraVolumeMounts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "mountPath": {
+            "type": "string"
+          },
+          "subPath": {
+            "type": "string"
+          },
+          "readOnly": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "podAnnotations": {
+      "type": "object"
+    },
+    "podLabels": {
+      "type": "object"
+    },
+    "podSecurityContext": {
+      "type": "object"
+    },
+    "securityContext": {
+      "type": "object",
+      "properties": {
+        "allowPrivilegeEscalation": {
+          "type": "boolean"
+        },
+        "capabilities": {
+          "type": "object",
+          "properties": {
+            "drop": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "add": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "runAsUser": {
+          "type": "integer"
+        },
+        "runAsNonRoot": {
+          "type": "boolean"
+        },
+        "readOnlyRootFilesystem": {
+          "type": "boolean"
+        },
+        "seccompProfile": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "resources": {
+      "type": "object",
+      "properties": {
+        "limits": {
+          "type": "object"
+        },
+        "requests": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
+    },
+    "terminationGracePeriodSeconds": {
+      "type": "integer"
+    },
+    "nodeSelector": {
+      "type": "object"
+    },
+    "tolerations": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "affinity": {
+      "type": "object"
+    },
+    "topologySpreadConstraints": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "strategy": {
+      "type": "object"
+    },
+    "publish": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "backoffLimit": {
+          "type": "integer"
+        },
+        "activeDeadlineSeconds": {
+          "type": "integer"
+        },
+        "ttlSecondsAfterFinished": {
+          "type": "integer"
+        },
+        "podAnnotations": {
+          "type": "object"
+        },
+        "resources": {
+          "type": "object",
+          "properties": {
+            "limits": {
+              "type": "object"
+            },
+            "requests": {
+              "type": "object"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "metricsService": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "type": {
+          "type": "string"
+        },
+        "annotations": {
+          "type": "object"
+        },
+        "serviceMonitor": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "labels": {
+              "type": "object"
+            },
+            "annotations": {
+              "type": "object"
+            },
+            "interval": {
+              "type": "string"
+            },
+            "scrapeTimeout": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            },
+            "relabelings": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            "metricRelabelings": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

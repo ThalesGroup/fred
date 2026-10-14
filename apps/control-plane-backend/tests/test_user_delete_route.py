@@ -107,8 +107,8 @@ async def _deployment(
     async def no_favorites(user_id: str) -> None:
         calls.append("delete_favorites")
 
-    async def no_dismissals(_user_id: str) -> None:
-        calls.append("delete_patch_note_dismissals")
+    async def no_seen(_user_id: str) -> None:
+        calls.append("delete_patch_note_seen")
 
     container = SimpleNamespace(
         get_rebac_engine=lambda: engine_under_test,
@@ -117,9 +117,7 @@ async def _deployment(
         get_prompt_store=lambda: SimpleNamespace(
             delete_favorites_for_user=no_favorites
         ),
-        get_announcement_store=lambda: SimpleNamespace(
-            delete_dismissals_for_user=no_dismissals
-        ),
+        get_announcement_store=lambda: SimpleNamespace(delete_seen_for_user=no_seen),
     )
     app = FastAPI()
     app.include_router(users_api.router)
@@ -169,7 +167,7 @@ async def test_delete_bans_before_identity_deletion() -> None:
         assert deployment.calls == [
             "suspend_account",
             "delete_favorites",
-            "delete_patch_note_dismissals",
+            "delete_patch_note_seen",
             "delete_identity_account",
         ]
         await _assert_banned(deployment.rebac)
@@ -270,7 +268,7 @@ async def test_identity_failure_after_the_ban_leaves_the_person_banned() -> None
         assert deployment.calls == [
             "suspend_account",
             "delete_favorites",
-            "delete_patch_note_dismissals",
+            "delete_patch_note_seen",
             "delete_identity_account",
         ]
         assert deployment.identity.accounts == {_BYSTANDER}
@@ -287,7 +285,7 @@ async def test_missing_identity_returns_not_found_after_the_ban() -> None:
         assert deployment.calls == [
             "suspend_account",
             "delete_favorites",
-            "delete_patch_note_dismissals",
+            "delete_patch_note_seen",
             "delete_identity_account",
         ]
         await _assert_banned(deployment.rebac)
@@ -316,7 +314,7 @@ async def test_without_account_status_enforcement_delete_writes_no_ban() -> None
         assert response.status_code == 204
         assert deployment.calls == [
             "delete_favorites",
-            "delete_patch_note_dismissals",
+            "delete_patch_note_seen",
             "delete_identity_account",
         ]
         assert ban(_PERSON) not in rebac.relations

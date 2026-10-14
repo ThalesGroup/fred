@@ -242,6 +242,15 @@ it("disables cleanup without obsolete links", () => {
   render();
   expect(button("links.cleanup").disabled).toBe(true);
 });
+
+it("keeps cleanup in the dialog footer, away from the status filter", () => {
+  render();
+  const filter = document.querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]')!;
+  const cleanup = button("links.cleanup");
+  expect(filter.parentElement?.closest(`.${styles.linkControls}`)?.contains(cleanup)).toBe(false);
+  expect(cleanup.compareDocumentPosition(button("createLink")) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+  expect(document.querySelector(`.${styles.linkControls}`)?.contains(button("createLink"))).toBe(true);
+});
 it("keeps history available while Free is suspended and prevents link creation", () => {
   hooks.linkStatus = "suspended";
   render(false);
@@ -310,7 +319,7 @@ it("shows successful joiners on a revoked link with bounded pages", () => {
   hooks.linkStatus = "revoked";
   hooks.joinerTotal = 26;
   render(false);
-  expect(document.querySelector<HTMLElement>(`.${styles.linkTable}`)?.style.height).toBe("11.25rem");
+  expect(document.querySelector<HTMLElement>(`.${styles.boundedTable}`)?.getAttribute("style")).toBeNull();
   expect(
     [...document.querySelectorAll<HTMLButtonElement>(`.${styles.linkActions} button`)].map((node) =>
       node.getAttribute("aria-label"),

@@ -43,7 +43,8 @@ export default function PlatformAccessValuePrompt({
     <Dialog
       open
       title={t("rework.platformAccess.picker.valueTitle")}
-      maxWidth={600}
+      maxWidth={480}
+      compactTitle
       confirmLabel={t("rework.platformAccess.picker.useValue")}
       cancelLabel={t("rework.platformAccess.picker.keepValue")}
       confirmDisabled={value === undefined || !value.length || value.length > limit}
@@ -52,7 +53,7 @@ export default function PlatformAccessValuePrompt({
         if (value !== undefined && value.length > 0 && value.length <= limit) onSelect(value);
       }}
     >
-      <div className={`${styles.dialogBody} ${styles.valuePrompt}`}>
+      <div className={styles.dialogBody}>
         <p>{t("rework.platformAccess.picker.valueHint")}</p>
         <dl className={styles.tokenExample}>
           <div>
@@ -73,7 +74,8 @@ export default function PlatformAccessValuePrompt({
               )}
               {examples.length > 1 ? (
                 <Select
-                  size="small"
+                  compact
+                  size="xs"
                   label={t("rework.platformAccess.rule.value")}
                   value={chosen}
                   onChange={setChosen}

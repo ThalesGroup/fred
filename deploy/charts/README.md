@@ -85,3 +85,17 @@ against any reachable control-plane.
 fred-agents can inspect the cluster it runs in. It reads a kubeconfig from
 `global.kubeconfig`; its server must be reachable from the pod, e.g.
 `https://kubernetes.default.svc` for the cluster hosting Fred.
+
+# Pods built on Fred's libraries
+
+An agent pod (`fred-runtime`) or a Knowledge Base pod (`fred-sdk`) that lives in its own
+repository deploys from one of two generic charts, published with this one, with its image
+and its configuration only:
+
+- `agent-pod/` — the pod behind a Service, and the `runtime_catalog_sources` entry that
+  registers it, printed at install;
+- `knowledge-base/` — the `run` worker and the `publish` Job that declares it to Fred.
+
+Each validates the pod's configuration against the library's own model at `helm install`,
+and its README (`helm show readme oci://ghcr.io/thalesgroup/fred-helm/<chart>`) lists what
+a deployment must set. A pod's repository keeps only its image and its values.

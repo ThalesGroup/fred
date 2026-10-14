@@ -154,8 +154,11 @@ async def list_platform_access_users(
     offset: int = Query(0, ge=0),
     limit: int = Query(25, ge=1, le=100),
     query: str = Query("", max_length=200),
+    exceptions_only: bool = Query(
+        False, description="Only users holding an individual exception."
+    ),
 ) -> PlatformAccessUsersPage:
-    return await service.users_page(access, offset, limit, query)
+    return await service.users_page(access, offset, limit, query, exceptions_only)
 
 
 @router.post("/admin/platform/access/users", status_code=204)
