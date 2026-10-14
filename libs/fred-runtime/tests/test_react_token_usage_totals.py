@@ -665,7 +665,7 @@ async def test_non_mistral_mixed_reference_chunk_loses_no_text() -> None:
 
 
 @pytest.mark.asyncio
-async def test_mixed_reference_with_unknown_block_streams_only_its_text() -> None:
+async def test_mixed_reference_with_unknown_block_remains_visible() -> None:
     content: list[str | dict[str, object]] = [
         {"type": "text", "text": "read"},
         "_query",
@@ -684,8 +684,9 @@ async def test_mixed_reference_with_unknown_block_streams_only_its_text() -> Non
         for event in collected
         if isinstance(event, AssistantDeltaRuntimeEvent)
     )
-    # The unknown block takes the generic path, which renders text only.
-    assert streamed == "read_query"
+    assert "read" in streamed
+    assert "keep this block" in streamed
+    assert "reference_ids" not in streamed
     assert not [event for event in collected if isinstance(event, ToolCallRuntimeEvent)]
 
 

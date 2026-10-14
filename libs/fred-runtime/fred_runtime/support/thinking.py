@@ -58,6 +58,11 @@ from langchain_core.messages import AIMessage, BaseMessage
 # `thinking` covers Anthropic extended thinking and Mistral `ThinkChunk`;
 # `reasoning` covers OpenAI-compatible reasoning blocks.
 THINKING_BLOCK_TYPES = frozenset({"thinking", "reasoning"})
+# Provider blocks that carry no answer text (Mistral's call `reference`, tool-call
+# blocks); rendering them would put their Python repr in the answer and history.
+_NON_TEXT_BLOCK_TYPES = frozenset(
+    {"reference", "tool_use", "tool_call", "input_json_delta"}
+)
 
 
 def block_type(item: object) -> str | None:
@@ -173,12 +178,14 @@ def content_to_text(content: object, *, out_fragments: list[str] | None = None) 
                 if fragment:
                     out_fragments.append(fragment)
             continue
-        if isinstance(item, dict):
-            # A block without text (e.g. Mistral's empty `reference`) shows nothing;
-            # its Python repr must never reach the answer, history or replay.
-            if "text" in item:
-                rendered_parts.append(str(item["text"]))
-        else:
+        if not isinstance(item, dict):
+            rendered_parts.append(str(item))
+        elif "text" in item:
+            rendered_parts.append(str(item["text"]))
+        elif item.get("type") == "refusal" and isinstance(item.get("refusal"), str):
+            rendered_parts.append(item["refusal"])
+        elif item.get("type") not in _NON_TEXT_BLOCK_TYPES:
+            # Unknown blocks stay visible rather than silently disappearing.
             rendered_parts.append(str(item))
     # Text blocks may split a token or Markdown fence; preserve their exact bytes.
     return "".join(rendered_parts)
