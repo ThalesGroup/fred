@@ -35,10 +35,8 @@ import {
   buildAgentDraftRequest,
   findSystemPromptField,
   agentDraftErrorKey,
-  isReasoningOffered,
   offeredDraftItems,
   overwrittenItems,
-  REASONING_LABEL_KEY,
   selectedDraft,
 } from "./creationAssistant";
 
@@ -99,14 +97,12 @@ describe("applyRecommendedCapabilities", () => {
   const state = {
     selectedCapabilityIds: [CAP_WRITABLE_DOCUMENT],
     capabilityConfigValues: { [CAP_TEAM_WIKI]: { mode: "read_write" } },
-    reasoningEnabled: true,
   };
 
-  it("replaces the selection and keeps reasoning and existing settings", () => {
+  it("replaces the selection and keeps existing settings", () => {
     const available = new Set([CAP_WRITABLE_DOCUMENT, CAP_TEAM_WIKI, CAP_HTML_ARTIFACT]);
     const next = applyRecommendedCapabilities([CAP_TEAM_WIKI, "ghost"], state, available);
     expect(next.selectedCapabilityIds).toEqual([CAP_TEAM_WIKI]);
-    expect(next.reasoningEnabled).toBe(true);
     expect(next.capabilityConfigValues).toEqual(state.capabilityConfigValues);
   });
 
@@ -208,7 +204,7 @@ describe("capability overwrite", () => {
   const draft = { capabilityIds: [CAP_DOCUMENT_ACCESS] };
   const applied = applyRecommendedCapabilities(
     [CAP_DOCUMENT_ACCESS],
-    { selectedCapabilityIds: [], capabilityConfigValues: {}, reasoningEnabled: false },
+    { selectedCapabilityIds: [], capabilityConfigValues: {} },
     AVAILABLE,
   );
   const afterFirstApply = {
@@ -231,19 +227,5 @@ describe("capability overwrite", () => {
       },
     };
     expect(overwrittenItems(draft, attachmentsOff, AVAILABLE)).toEqual(["capabilities"]);
-  });
-});
-
-describe("reasoning proposal", () => {
-  it("follows the Simple view's reasoning pack: offered whatever the team's capabilities, under its title", () => {
-    expect(isReasoningOffered(new Set())).toBe(true);
-    expect(isReasoningOffered(new Set([CAP_TEAM_WIKI]))).toBe(true);
-    expect(REASONING_LABEL_KEY).toBe("rework.teams.formAgent.capabilities.packs.reasoning.title");
-  });
-
-  it("is applied only when ticked, and never counts as an overwrite", () => {
-    expect(selectedDraft(DRAFT, new Set(), [], true)).toEqual({ reasoning: true });
-    expect(selectedDraft(DRAFT, new Set(), [], false)).toEqual({});
-    expect(overwrittenItems({ reasoning: true }, { ...EMPTY, capabilityIds: ["team_wiki"] }, AVAILABLE)).toEqual([]);
   });
 });
