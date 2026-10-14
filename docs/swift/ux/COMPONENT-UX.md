@@ -322,11 +322,9 @@ over a scrolling body (`--spacing-xs` padding). The header is a full-width `butt
 on `--surface-container` (`--spacing-xs` `--spacing-s` padding, `--font-title-small`, top corners
 following the panel) that selects or clears the whole section: tri-state icon right (`check_circle`,
 `remove_circle` with `aria-checked="mixed"` when partly selected, `radio_button_unchecked`), inset
-state-layer hover, 2px `--primary` focus ring. Wherever the Simple view offers its reasoning pack,
-the capabilities column always starts with a reasoning tile (the pack's title), selected by default
-and counted in the header's tri-state; applied, it turns reasoning on with conversations starting
-in it, unticked it leaves the form's reasoning alone. The hint shows when no capability is
-recommended and no reasoning tile is offered; the header is a plain title only when the column has no tile at all. **Apply** is disabled when nothing is ticked and writes only ticked items
+state-layer hover, 2px `--primary` focus ring. The column proposes no reasoning tile: reasoning
+follows the conversation's model, not the agent. The hint shows when no capability is
+recommended; the header is then a plain title. **Apply** is disabled when nothing is ticked and writes only ticked items
 (capabilities replace the selection, document access through the resource pack). If a ticked item
 would replace a value the user wrote (on create, template seeds count as empty; capabilities compare
 what Apply would write, selection and document sources), a critical `ConfirmationDialog` lists
@@ -395,6 +393,11 @@ radius, padding) plus an optional header and groups of rows separated by thin di
 it does **not** position itself (consumers place it). `MenuPopoverItem` is one homogeneous
 row: leading icon + label + optional inline muted value + optional badge + optional trailing
 affordance (e.g. `chevron_right` for sub-rows, `add` for actions), with a `danger` variant.
+Opt-in `dense` (2026-10-09, used by the composer model chip only) tightens the surface
+padding, the rows' side padding (vertical stays `--spacing-xs`) and dividers; every other
+menu keeps the default rhythm. Opt-in `quietUnselected` (same chip only): unselected labels in
+`--on-surface-retreat`, the selected and the hovered row's label in `--on-surface`
+(the accent state layer and check stay).
 Sub-menu rows are rows with a chevron whose anchored panel is rendered by the parent as a
 sibling. Uses the profile-menu token set (`--surface-container-*`, `--on-surface*`,
 `--outline-variant`, `--radius-*`). Current instances: `UserProfile`, `SearchConfig`.
@@ -435,67 +438,9 @@ Uppercase section labels are gone (sentence case: "Recherche", "Portée"). Searc
 only owns its box width and the anchored sub-menus; the surface and row grammar come from the
 shared molecule.
 
-As of REASON-01 (#2166) the platform contributed its first non-capability control: a
-`Reasoning` On/Off row (`stockKit/ReasoningControl.tsx`). As of 2026-08-12 that row is
-**gone from the tune menu**: reasoning is now a **plain text button + chevron**
-(`features/capabilities/ReasoningChip.tsx`) pinned at the composer's **right
-edge** before the mic — the designer's Composer.html mockup (2026-08-12) is the
-reference. The button leads with the MODEL IDENTITY, followed by the reasoning
-MODE: "Mistral Small · Boost" when on, "Mistral Small · Rapide" when off (bare
-"Raisonnement"/mode labels when no model resolves at all); its menu opens
-above, right-aligned, with the effort/latency explainer as a muted header and
-the two modes as check-circle rows.
-
-**Two modes, not an on/off switch (#2387).** "Mistral Small · Désactivé" read
-as though the MODEL were disabled — the state word sat beside the model name
-with nothing tying it to reasoning. Naming both modes removes that reading:
-neither describes anything as off. EN uses Fast / Boost.
-
-`Boost` also wears the Chat button's spectrum (`.state[data-on]`), so the one
-"the AI is doing more" signal reads the same on the agent card and in the
-composer. Two departures from that border: linear rather than conic (a conic
-sweep across ~40px of text smears), and no white stops (white travels a border
-but is a hole in text, invisible on the light theme) — leaving cyan → violet →
-pink. A solid `--primary` sits underneath as the fallback for engines that
-ignore `background-clip: text`, and `forced-colors` drops the gradient for the
-system palette. The WORD carries the state either way, so colour is
-reinforcement, never the only signal. 2026-08-21: the shared stops were
-saturated and moderately darkened (same hues) in both places — the original
-pastels were near-invisible on the light surface, a fully darkened pass sank
-into the dark one; the retained stops sit halfway between, so the single
-gradient reads on both themes.
-
-Deliberately NOT a low/medium/high picker — a same-day effort picker was
-withdrawn (providers 400 on values they don't support,
-`RUNTIME-EXECUTION-CONTRACT.md` §8.48) — and since #2387 not a level DISPLAY
-either. The level a reasoning turn runs with is the model's ops-authored
-`settings.reasoning_effort`, applied live by the pod; showing it implied a
-per-question choice that never existed, and it took two snapshot columns to
-reach the composer at all (§8.54). The wire stays the on/off tri-state.
-
-**Superseded in part by #2387 — see "Composer model label" below.** Until then
-the model identity came from `params.model_id` on this very control, i.e. the
-single model whose REASONING was enabled platform-wide, which is unrelated to
-routing; and the chip as a whole was gated on the reasoning control existing.
-Both changed: the identity now comes from
-`GET /teams/{team_id}/routing-policy/effective-chat-model`, the model shows even
-when no reasoning is offered, and the reasoning MENU additionally requires the
-routed model to be reasoning-enabled. The author/admin gates below still decide
-whether the control is emitted at all — a closed upstream gate removes it
-entirely rather than disabling it (`CONTROL-PLANE-PRODUCT-CONTRACT.md` §33). The offer itself lived in the General
-section until Amendment C (2026-08-02) moved it into the Capabilities tab, rendered
-through the same `CapabilityCard` component every real capability uses (generalized
-to a plain `name`/`description`/`subForm` API for this) even though the reasoning
-offer still isn't a capability underneath.
-
-As of Amendment B (#2175) that row's **starting** value is the agent author's, not a
-constant: the reasoning card grows a second switch nested under `Reasoning` in its own
-sub-form area — visible only while `Reasoning` is on, matching how a real capability's
-own boolean config field renders — and it seeds the composer row's initial state for
-every new conversation. Nothing about the row itself changes: still a per-question
-choice the user can flip, still removed entirely when an upstream gate is closed. The
-form hint carries the cost of the opt-in (slower, may repeat tool calls on tool-using
-agents) so the decision is informed at the point it is made.
+Reasoning is not a tune-menu row: since 2026-08-12 it lives in the composer's
+right-edge model control, `ReasoningChip` (see "Composer model and reasoning
+control" below).
 
 #### Open UX issues
 
@@ -4445,7 +4390,7 @@ clears the binding back to "Using pod default".
 
 ---
 
-## Platform announcements: banners and patch notes (2026-08-19 as the config-driven info banner, replaced 2026-09-25, issue #2805; patch notes 2026-10-09)
+## Platform announcements: banners and patch notes (2026-08-19 as the config-driven info banner, replaced 2026-09-25, issue #2805; patch notes 2026-10-09; patch-note history 2026-10-13)
 
 ### `AnnouncementStack` / `AnnouncementBanner`
 
@@ -4494,7 +4439,8 @@ off does not. Storage failures degrade to "never dismissed".
 **Location:** `src/rework/components/pages/admin/AnnouncementsPage/`
 **Status:** `Functional`
 
-`/admin/annonces`, platform-admin only. One row per announcement, rendered
+`/admin/annonces`, platform-admin only. Three tabs: "Bandeaux", "Patch notes"
+and "Historique" (see below for the last two). One row per banner, rendered
 with the real `AnnouncementBanner` in preview mode — the component itself, not a
 lookalike, so what an admin sees is what users get — with the delivery switch
 and edit/delete actions beside it. In preview the close button still renders
@@ -4518,49 +4464,111 @@ enables from the list once the wording is right.
 
 **Location:** `src/rework/components/shared/molecules/PatchNoteDialog/` (the
 dialog and `PatchNoteBody`) and `src/rework/features/announcements/`
-(`PatchNoteGate`, `useActivePatchNote`)
+(`PatchNoteGate`, `usePatchNoteHistory`)
 **Status:** `Functional`
 
-The shared `Dialog` at `maxWidth` 720, `dividers`, `initialFocus="dialog"`,
-one "Fermer" button, titled with the note's title. `PatchNoteBody` renders the
+One dialog for announced patch notes, wherever it opens: the shared `Dialog`
+at `maxWidth` 720, `dividers`, `initialFocus="dialog"`, one "Fermer" button,
+titled with the current note's title. It takes an ordered list of readable
+notes and opens on the first one. What users read is the package frozen by
+the last announcement, never the live notes. `PatchNoteBody` renders the
 markdown for both this dialog and the editor's inline preview: first heading
 on a neutral `surface-container` band, `h2` sections ruled with
-`outline-muted`, links in a new tab. "Ne plus afficher" sits in the action bar
-(`actionsAddon`); Escape and the scrim report it like "Fermer". The gate,
-mounted once in `App.tsx` above the router, opens the note at load unless the
-server flags it `dismissed` or it was closed during this sign-in (flag keyed by
-user, login session, note and `content_version`). The profile menu's
-"Nouveautés" entry reopens the active note on request, without the checkbox.
-The admin preview is this same component and records nothing.
+`outline-muted`, links in a new tab.
 
-### Patch-note admin row, editor and activation history
+- **`Dialog` `dense` prop.** Optional, off by default: tighter header and
+  action bar (`--spacing-xs` block padding) and `size="small"` action buttons,
+  for a tall reading dialog. `PatchNoteDialog` uses it, with a fixed surface
+  height through `className` (capped to the viewport by `Dialog`), so the
+  dialog does not resize between notes of different lengths.
+- **Navigation.** With more than one note, `Dialog`'s `footerStart` holds an
+  `IconButton` (`chevron_left`, towards the first note), the position
+  (`1 / 4`, `--font-label-large`, `on-surface-retreat`, tabular figures) and a
+  second `IconButton` (`chevron_right`, towards the following ones); both are
+  `size="small"` in the default `on-surface-retreat`. The button that cannot
+  move further is disabled and hands the keyboard focus to the other one.
+  Moving replaces title and body and shows the note from its top. A single
+  note shows no navigation. There is no "Ne plus afficher" control.
+- **Gate.** Mounted once in `App.tsx` above the router. It opens the dialog
+  only when the read at load carries a pending announcement and at least one
+  readable note; closing (Close, Escape, scrim) records that announcement as
+  seen and keeps the dialog closed for the page view even if the record
+  fails. An announcement made later in the same page view waits for the next
+  load.
+- **Profile menu.** "Nouveautés" opens the same dialog on request, and is
+  absent when no announcement is in effect.
+- **Admin uses.** The preview (a single note) and the history's "view the
+  announced patch notes" (a past package, with navigation) are this same
+  component; neither records anything.
+
+### Patch notes tab, editor and exposure history
 
 **Location:** `src/rework/components/pages/admin/AnnouncementsPage/`
 **Status:** `Functional`
 
-- **Header and views.** One filled "Nouvelle annonce" button opens
-  `AnnouncementKindChooser` (two `SelectableCard` tiles, text Cancel only;
-  `SelectableCard` gained optional `icon` and `selected`, additive in
-  `@fred-oss/ui`);
-  a `ButtonGroup` tabs switch shows "Annonces" or "Historique" (not remembered).
-- **Patch-note row.** Neutral `surface-container` card (`outline-*` border,
-  `new_releases` icon, title, the number of users who hid it in
-  `--font-body-small` / `on-surface-retreat`), then Preview, `Switch`, Edit,
-  Delete aligned with banner rows. Enabling a note while another is active
-  first confirms, naming the one switched off.
+- **Header and tabs.** A `ButtonGroup` tabs switch: "Bandeaux", "Patch notes",
+  "Historique" (not remembered; opens on banners). Each list tab has its own
+  filled create button ("Nouveau bandeau" / "Nouveau patch note") that opens
+  its editor directly, and its own empty state.
+- **Patch-note card (`PatchNoteList`).** The tab is a working area: nothing
+  done on a card reaches users. Neutral `surface-container` card with an
+  `outline-muted` border: drag handle at the left (`drag_indicator`), a
+  `Checkbox` right after it, title over a `--font-body-small` line reading
+  "Inclus dans la prochaine annonce" (primary) or "Non inclus"
+  (`on-surface-retreat`), then Preview, Edit, Delete at the right. The
+  checkbox sits in a round click target the size of a medium icon button
+  (2.5rem, `state-on-surface-hover` on hover), and the title and status are
+  its `<label>`: clicking the text toggles it and gives it its accessible
+  name, so it carries no `aria-label`. Any number can be included, the
+  checkbox never asks for confirmation, and a new note starts not included.
+- **Reordering.** `@dnd-kit` sortable list, vertical only. While a card is
+  moved, a lifted copy (`surface-container-high`, `--shadow-m`) follows the
+  pointer, its slot stays as a dashed `outline-variant` placeholder and the
+  other cards slide to show where it will land; the copy then settles into
+  place. Keyboard: Space or Enter on the handle, arrows, Space or Enter again,
+  Escape to cancel, with spoken instructions and positions in French and
+  English. One request on drop carries the whole order; the list shows the new
+  order at once and goes back, with an error toast, if the server refuses it.
+  Motion is dropped under `prefers-reduced-motion`.
+- **Announce (`PatchNoteAnnouncer`).** Above the list, and above the empty
+  state when the list holds no patch note, a tonal "Annoncer
+  la mise à jour (X/10)" button (`campaign` icon) whose label carries the
+  number of included patch notes against the cap of 10 per announcement
+  ("(0/10)" when none is), disabled when nothing is included
+  (a short line then says to include a note), and beside it the date and time
+  of the announcement in effect with the administrator's name. It is also
+  disabled above 10 included patch notes, the line then saying to deselect
+  some, and while a toggle, a reorder or a list reload is under way, so the
+  confirmation always lists the settled order. Confirming sends that list; if
+  the server answers that it changed meanwhile, the list reloads and an error
+  toast says so. The plain
+  `ConfirmationDialog` asks whether this is the list to send: its `details`
+  slot holds the included titles as a numbered list, in order, under a
+  sentence saying users see exactly this list at their next sign-in and in
+  "Nouveautés", and that later edits wait for the next announcement.
+- **Withdraw.** While an announcement is in effect, a text button "Retirer
+  l'annonce en cours" in the `error` colour sits at the far right of the
+  announce row, apart from the announce button and its last-use line. It goes
+  through the critical `ConfirmationDialog`, whose text is the explanation:
+  "Nouveautés" becomes empty for everyone and nobody gets the dialog until the
+  next announcement.
 - **`PatchNoteEditorDialog`.** `maxWidth` 1200; FR/EN tabs (opens on the first
   language with content), title `TextInput`, `PromptEditor` beside the
   `PatchNoteBody` preview (stacked under 900 px). Save needs a title and body
-  in the same languages. "Enregistrer et activer" (outlined, `actionsAddon`)
-  on an inactive note. Escape, scrim or Cancel with unsaved changes ask
-  through `ConfirmationDialog`. Other dialogs (preview, confirmations) replace
-  the editor rather than stack on it.
-- **History.** `LocalizedDataTable` (`size="small"`), newest first, sortable,
-  with `FilterChips` (named group; remembered per browser, unknown values
-  ignored). A banner's Type chip takes its severity tone. Client-side
-  pagination (20 per page) over the API's newest 100 events; the table fills
-  the page body and scrolls its rows, the page never scrolls (server-side
-  paging: #3015).
+  in the same languages. "Enregistrer et inclure" (outlined, `actionsAddon`)
+  on a note that is not included, with no confirmation. Escape, scrim or
+  Cancel with unsaved changes ask through `ConfirmationDialog`. Other dialogs
+  (preview, discard confirmation) replace the editor rather than stack on it.
+- **History.** One line per exposure, newest first, in a
+  `LocalizedDataTable` (`size="small"`): Type (a banner's chip takes its
+  severity tone, "Patch notes" stays neutral), Titre (a patch-note line shows
+  its first note's title and "+ N autres"), Activation, Désactivation (empty
+  while users still see it), Par. No action column. `FilterChips` filter by
+  type (named group; remembered per browser, unknown values ignored). A
+  patch-note line that kept its package ends with a `visibility` `IconButton`
+  opening that package in `PatchNoteDialog`; other lines have none.
+  Client-side pagination (20 per page); the table fills the page body and
+  scrolls its rows, the page never scrolls (server-side paging: #3015).
 
 #### Open UX issues
 
@@ -4603,48 +4611,100 @@ _Priority order for the next UX session. Update before each session._
 23. **AgentFormModal — single-template auto-collapse** — when one template available, hide browser or show non-interactive card?
 24. **HitlPrompt — focus management** — closed 2026-10-10 without autofocus; keyboard answers replace it (see component section).
 
-## Composer model label (#2387, 2026-08-17)
+## Composer model and reasoning control (2026-10-09)
 
 ### `ReasoningChip`
 
 **Location:** `src/rework/features/capabilities/ReasoningChip.tsx`
 **Status:** `Functional`
 
-The composer's right-edge chip. Two concerns, now independent:
+A text button + chevron at the composer's right edge, before the mic: the
+current model's name, then the reasoning mode one step fainter
+(`--on-surface-retreat`; Faible / Élevé, EN Low / High). Its menu opens above,
+right-aligned, with two sections:
 
-- **Model identity** — the model the next turn will actually route to, from
-  `GET /teams/{team_id}/routing-policy/effective-chat-model`. Read-only; the
-  choice lives in the team routing policy and the platform binding.
-- **Reasoning toggle** — still emitted only when the agent's author enabled
-  reasoning and a platform-enabled reasoning model exists (REASON-01 §8's
-  diagnosability rule: a control that can do nothing must be absent).
+- **Models** — `EffectiveChatModel.selectable_models` as check-circle rows.
+  Picking one sets the conversation's `chat_profile_id`
+  (`useComposerSettings`, session storage `chat.composer.{sessionId}`); picking
+  the recommended model clears it. A new conversation starts on the
+  recommended model.
+- **Effort** — Faible / Élevé (Raisonnement), no hint line (removed
+  2026-10-09: it took too much room). For a model without reasoning the section
+  stays, with a muted "Aucun niveau d'effort disponible" line. Rows shown only
+  when the platform emitted the `reasoning_toggle` control and the current
+  model's `reasoning_enabled` is true. The row starts in that model's
+  `reasoning_default_on` (the team's default), at conversation start and on
+  every model switch. Never an effort level (`RUNTIME-EXECUTION-CONTRACT.md`
+  §8.48).
 
-Previously the model identity rode on the `reasoning_toggle` control's own
-`params`, i.e. the single model whose _reasoning_ an admin had enabled
-platform-wide. That is unrelated to routing, so the chip contradicted any
-platform binding or team override in force. The name is kept (`ReasoningChip`)
-because the reasoning menu is still what makes it interactive.
+| Condition                                            | Renders                                                                     |
+| ---------------------------------------------------- | --------------------------------------------------------------------------- |
+| Two or more selectable models, or a reasoning row    | Interactive button and menu                                                 |
+| `choice_locked` (platform binding, pod override)     | No model rows; the menu keeps only the reasoning row, if any                |
+| One model and no reasoning row                       | Static `<span>` with the model name, same metrics, not a disabled button    |
+| Nothing resolved and no reasoning row                | Nothing (`null`)                                                            |
 
-Three render states:
+**Stale choice.** When a refetch no longer lists the chosen model, or the user
+switches to a conversation whose stored choice the current list does not offer,
+the choice is dropped and a snackbar names it ("… is no longer available"). An
+empty `selectable_models` (locked, pod down) keeps the choice: the pod ignores
+an invalid one anyway. The page reads the agent's `currentData`, so another
+agent's list never judges this agent's choice.
+The page re-reads the list on mount, on window focus and when another
+conversation opens, so an admin change made in another browser lands without a
+reload (no polling). Mount and focus skip the read within 30 s of the last one:
+each read also fetches the pod catalog.
 
-| Condition                                                   | Renders                                                                                                                                                                                                                           |
-| ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Reasoning control present **and** `reasoning_enabled`       | Interactive `<button>`: model name, then reasoning state one step fainter (`--on-surface-muted`), then chevron. Menu on click.                                                                                                    |
-| Reasoning control present but `reasoning_enabled === false` | Static label only. The toggle would be inert — the pod strips reasoning for this model — so it is hidden rather than shown as a no-op. `undefined` (not resolved yet, or an older backend) keeps the control the platform served. |
-| No reasoning control at all, model resolved                 | Non-interactive `<span class="static">`, same 38px metrics so the composer row keeps its rhythm. Deliberately **not** a disabled button — no action is being withheld, so nothing should look clickable.                          |
-| Neither                                                     | Nothing (`null`). An empty chip would be worse than none.                                                                                                                                                                         |
+**Menu name.** The popover's accessible name follows its sections: "Model and
+reasoning" with both, "Models" or "Reasoning" with one.
 
-**Unavailable model.** When `enabled_for_team` is `false` the turn will fail
-with `ModelNotUsableError` before the LLM call. The model name takes
-`--error` + `line-through` via `.model[data-unavailable]`, an `error_outline`
-icon sits beside it, and the reason reaches the accessible name and `title` —
-colour alone would leave a colour-blind reader with no signal.
+**Unavailable model.** When `enabled_for_team` is `false` the model name takes
+`--error` + `line-through` (`.model[data-unavailable]`), with an
+`error_outline` icon, and the reason reaches the accessible name and `title`.
 
-**Label fallback**: `modelLabel(display_name, name, capability_id)` prefers the
-ops-authored `model_display_name`, then prettifies the real model `name`, then
-falls back to splitting the capability id. The `name` step matters because
-`model_capability_id` normalizes non-id-safe characters — derived from the id,
-`mistral:latest` would read "Mistral Latest".
+**Label fallback:** `modelLabel(display_name, name, capability_id)` prefers the
+ops-authored `model_display_name`, then prettifies the model `name`, then the
+capability id.
+
+### `TeamSettingsRouting` — team Models section
+
+**Location:** `src/rework/components/shared/organisms/TeamSettingsPanel/TeamSettingsRouting/`
+**Status:** `Functional`
+
+Team settings "Models" entry. One row per model the platform allows the team,
+following the admin UI themes page grammar: a "Default" badge or a "Set as
+default" `Button`, an "enabled for the team" `Switch` (disabled on the
+default), and a "Reasoning on by default" `Switch` only when
+`reasoning_available`. The default row says, in visible helper text tied to its
+switch by `aria-describedby`, that the default cannot be disabled (a tooltip on
+a disabled switch is unreachable by keyboard). Disabling a model opens a
+critical `ConfirmationDialog` (filled primary Cancel, text error confirm, like
+deleting an agent; confirm does nothing until the impact is loaded) listing the
+agents that use it as their recommended model (disable-impact read), naming the
+model that takes over (the team default; body-medium text)
+and the conversation fallback line: those conversations go back to the agent's
+recommended model; cancel writes nothing. Editable by team admins and a
+personal space's owner; read-only for editors and analysts.
+
+Writes are locked while a save or a refetch is in flight; each save sends the
+policy `version` it was built on, and its response is written straight into the
+cache so a switch never snaps back. A 409 (someone saved meanwhile) reloads the
+policy and shows a warning toast. A failed read of the policy or of the
+available models shows a `ServiceNotice` and no controls, never the
+"platform allows no model" empty state. A stored default no longer served
+shows a generic "no longer available" line.
+
+### `RecommendedModelField` — agent form
+
+**Location:** `src/rework/components/pages/TeamAgentsPage/AgentFormModal/RecommendedModelField/`
+**Status:** `Functional`
+
+"Recommended model" `Select` in the agent form's General section. First option
+"Team default model" (helper line: "Currently <name>. Follows changes made by
+the team admin.") saves `null`; then every team-enabled model, today's default
+included, which pins it. A
+stored value no longer selectable is shown flagged "No longer available". The
+form's former Reasoning card is removed.
 
 ### `PlatformRolesPage` (`/admin/platform-roles`, 2026-08-21, #2405)
 
@@ -5154,25 +5214,42 @@ announced nor durable past the first keystroke.
 
 ### `CommandMenu`
 
-The menu offers prompt commands from the active team and skills from the
-selected agent's runtime catalog. For a resolved ReAct template, it additionally
-offers the caller's personal prompt commands, with visible and accessible labels
-for platform skills, personal prompts and team prompts. Personal chats offer one
-prompt source. Entries preserve their owning team and id; choosing either
+The menu lists its entries in up to three sections, always in this order, each
+under its own heading: the conversation's team (`Team "<name>"`), the caller's
+personal space (`Personal space`), then the platform skills of the selected
+agent's runtime catalog (`Platform skills`). Personal prompt commands are
+offered whatever the agent's kind. A section with no entry, or no match for the
+typed text, is hidden with its heading; a personal chat shows one commands
+section, the personal one. Headings are sentence case, on one line, truncated
+with an ellipsis (the full label is in the tooltip); until the team's name is
+known the team heading reads `Team`. Rows carry no source label: the heading,
+which also labels the section for assistive technology, says where they come
+from. Arrow keys walk every displayed row as one list, across sections.
+
+The typed text is matched against the command name only (not the prompt's
+name or description), anywhere inside it and whatever the case. Inside each
+section the names that start with the typed text come first, the others
+follow, each group in the order the server returned. Sections keep their
+order, so the flat list stays grouped by source. The focus always starts on
+the first row shown, even when a later section holds a name starting with the
+text: one rule, no jump between sections while typing. `Enter`, `Tab` and a
+click all do the same thing: they insert the focused command in the composer
+and send nothing.
+
+Entries preserve their owning team and id; choosing either
 homonymous prompt runs that exact prompt after completion. A typed prompt
 command without an explicit row prefers the chat team's match, then the personal
-one, once the team's command catalog has resolved. An invalidated completed
+one; the submit waits for the team's command catalog to answer first. An invalidated completed
 prompt requires command editing or reselection rather than dispatching a homonym.
 Explicit personal selections are usable while team discovery is pending.
 In the managed-chat composer, a completed recognized prompt command uses the same
-inline icon-and-name treatment as platform skills, with a distinct blue prompt
-icon and no visible slash. Its hover hint gives the full
-prompt title, personal/team source and description. The document retains
+inline icon-and-name container as platform skills, in the same colours
+(`--secondary-container` / `--on-secondary-container`), its name shown with the leading slash. Its hover hint gives the full
+prompt title, its source worded like the menu's section heading (`Personal space`, `Team "<name>"`) and its description. The token is a button that opens the prompt's preview (see below). The document retains
 `/command` for editing, copying and undo; the visual follows the exact prompt
 selected for submission, including homonyms. Incomplete, removed or invalidated
 prompt selections receive no prompt visual.
-Deep and other execution families retain their current sources. Its heading follows the kinds of entries
-currently displayed. `/` lists the available skills directly alongside prompt
+`/` lists the available skills directly alongside prompt
 commands without a standalone `/skill` dispatcher; `/comp` filters `compare-options`
 and `/meet` filters `meeting-minutes`. Choosing a skill completes the existing
 canonical invocation and preserves the request, without sending a turn.
@@ -5181,26 +5258,32 @@ names from the current runtime catalog enable these inline suggestions.
 Homonymous prompt and skill entries remain separate, with prompt commands first.
 
 Dressed in the shared menu grammar (`MenuPopover`): `--shadow-m`, `1px solid
---outline-muted`, `--radius-s`, `--surface-container-high` fill,
-`--on-surface-muted` heading, `--state-on-surface-hover` on the focused row.
+--outline-muted`, `--radius-s`, `--surface-floating` fill,
+`--on-surface-retreat` heading on a `--surface-container-high` band (`--radius-xs`), `--state-on-surface-hover` on the focused row.
 It is anchored above the composer field rather than floating free. Keyboard
 focus and hover share that one highlight, so a pointer never leaves two rows
 looking active.
 
 Prompt and skill rows share the same two-line layout: command or skill name
-above, full description in italics below. Prompts use a distinct prompt icon
-in a blue information tile; skills keep the platform pictogram. Skill names
-(without `/skill`) and their optional argument hints share the first line.
-Text wraps at narrow widths; the hint displays its value
-without the frontmatter field label. The list scrolls within its existing limit.
-Platform skills use a dedicated hexagon/book pictogram and localized platform-origin
-hover hint. Composer and sent-message badges reuse that pictogram; their native
+(always with its leading slash, `/summary` or `/review`, never `/skill review`) above, description in italics directly below, with no gap
+between the two. The description stays on one line and is cut with an ellipsis.
+Prompts and skills share one tile, `--secondary-container` with an
+`--on-secondary-container` glyph; only the icon tells them apart (the prompt
+icon, the platform pictogram). The arrow keys stop at the first and last row,
+they do not wrap. Focusing the first row of a section brings its
+heading into view with it, and the very first row scrolls the list to its top. A skill's argument hint is not shown in the menu: it only
+appears in the composer once the skill is selected. The list scrolls within
+its existing limit. A row's native tooltip gives its full description (the
+name when there is none): the section heading already says where it comes from.
+Platform skills use a dedicated hexagon/book pictogram. Composer and
+sent-message badges reuse that pictogram with a localized platform-origin hint; their native
 tooltip includes the current runtime catalog description when available. Missing
 catalog entries retain the name, origin and preview action without a new fetch.
 
-The focused entry's prompt detail is prefetched as the focus moves: the listing
-carries only a preview, so running a command needs the detail endpoint, and the
-prefetch keeps that round trip off the critical path without making it optional.
+The focused entry's prompt detail is prefetched as the focus moves, which
+warms the connection and the preview. It is not what gets sent: submit reads
+each prompt again, so the turn carries the text its library holds at that
+moment.
 The focused row is scrolled into view on every move (the list passes 40vh and
 the caret never moves, so nothing would bring it back on its own).
 
@@ -5210,8 +5293,14 @@ activation suppresses its own default, so clicking an entry is not a focus loss.
 `Esc` outlives a focus round trip — a menu dismissed stays dismissed for that
 query.
 
-With nothing to offer, the panel still appears and says why — a team holding no
-command at all reads differently from a query matching none of the ones it has.
+With nothing to offer, the panel still appears and says why, in one of four
+lines: the commands are loading (a catalog has not answered yet, so nothing is
+claimed about what exists), the commands could not be loaded (a catalog failed
+and has never answered; it is asked again each time a command is started, so
+typing `/` again is the retry), there is no command at all (true in a team and in
+the personal space: anyone can add one to a personal prompt, an editor to a
+team prompt), or the query matches none of the existing ones. Rows that have
+already arrived are shown while another catalog loads.
 The placeholder has just invited the user to type `/`, so a silent nothing would
 read as a broken hint. Such a panel is a `role="status"` line rather than an
 empty listbox (the swap `Menu` already makes) and claims no key but `Esc`: the
@@ -5219,11 +5308,11 @@ typed token still submits as ordinary text and `Tab` still moves focus.
 
 ### Inline skill invocation
 
-A completed `/<name>` stays at its invocation position within the editable text. The full name (without a visible slash) and platform icon form a discreet clickable label without a filled pill, border, removal cross or separate row. Chat uses a CodeMirror plain-text document with an inline replacement decoration; ordinary textarea consumers are unchanged. Wrapped lines and explicit newlines start at the normal text inset, and the label scrolls with its line. Editing any invocation character removes recognition while preserving surrounding text. A skill can be sent alone. Its advisory argument hint appears after a bare selected invocation without becoming document content.
+A completed `/<name>` stays at its invocation position within the editable text. The full name with its leading slash (`/name`, for prompts and platform skills alike, in the menu, the composer and sent messages) and its icon form a small clickable container: `--secondary-container` fill with `--on-secondary-container` icon and name, for a platform skill and for a prompt (team or personal) alike, so that every command has one colour and the two differ by their icon only; `--radius-xs`, `--spacing-2xs` horizontal padding and no vertical padding, so a line holding one is exactly as tall as a plain line. No border, removal cross or separate row. Chat uses a CodeMirror plain-text document with an inline replacement decoration; ordinary textarea consumers are unchanged. Wrapped lines and explicit newlines start at the normal text inset, and the label scrolls with its line. A token is one block (a CodeMirror atomic range): Left/Right and a selection cross it in one step, Backspace right after it or Delete right before it removes the whole `/name` together with the space that would otherwise be left doubled or leading, and undo brings it back. The command menu does not reopen on that deletion, and it stays closed whenever the caret sits right after a rendered token, prompt or skill, picked or typed by hand, even at the very end of the draft: the text under a token is no longer a command being typed. A new `/` further on opens it for that new command only. A programmatic edit that breaks the name still drops recognition while preserving surrounding text. A `/name` is a token only while whitespace or a text boundary delimits it on both sides: a character typed right before or right after it turns it back into plain text for good, which then reads like any name typed by hand (removing the character does not bring back the prompt or skill that had been picked). Tokens follow the edit the editor made, not a comparison of the text before and after, so removing one of two tokens that read the same leaves the other with its own prompt. A message can hold several prompt tokens, up to 16, the same command more than once included; each is its own block with its own source hint, and removing or editing one leaves the other prompt and skill tokens recognised. A skill can be sent alone. Its advisory argument hint appears after a bare selected invocation without becoming document content. The placeholder is not part of the editable line: it is an `aria-hidden` element sharing the editor's grid cell, under it, with the same inset, font and line height, shown while the document is empty (`aria-placeholder` carries it for assistive technology). The empty line then holds only its line break, so the native caret is drawn at its normal height with nothing against it; a long placeholder still wraps and sizes the field.
 
-Skill suggestions use the command range at the caret, including before, after or within existing text. Completion replaces only that range and preserves its position. An exact catalog name followed by whitespace also imports on typing or paste. Neither action sends. Available prompt commands also complete inline without erasing surrounding text, before or after selected skills in every managed execution family. ReAct alone adds the caller's separate personal library to a team chat. A complete delimited skill name takes precedence, while choosing the prompt entry explicitly preserves prompt dispatch.
+Skill suggestions use the command range at the caret, including before, after or within existing text. Completion replaces only that range and preserves its position. An exact catalog name followed by whitespace also imports on typing or paste. Neither action sends. Available prompt commands also complete inline without erasing surrounding text, before or after selected skills in every managed execution family, and the menu keeps offering them, from the team and from the personal space, when the message already holds one or more prompt commands. A complete delimited skill name takes precedence, while choosing the prompt entry explicitly preserves prompt dispatch.
 
-Sent attributed user messages render the same inline token at its stored position. Full copy, native selection-copy and edit use `/name`. Older request-only and `/skill name` turns normalize to this canonical form for display/copy/edit without a backend schema change. Multiple skills can coexist with one available prompt in either selection order. Draft and history retain the blue prompt icon/name and purple skill badges. Each occurrence remains independently editable; repeated names load once. A catalog refresh invalidating a completed selection fails submission rather than dropping it. Canonical prompt draft text and its selected occurrence preserve mixed history, copying and editing.
+Sent attributed user messages render the same inline token at its stored position. Full copy, native selection-copy and edit use `/name`. Older request-only and `/skill name` turns normalize to this canonical form for display/copy/edit without a backend schema change. Several skills and several prompts can coexist in any selection order. Draft and history show the same prompt and skill containers. The user bubble is itself `--secondary-container`, the fill of every container, so sent containers add an inset 1px `--secondary` hairline (a shadow, not a border: no size change). Each occurrence remains independently editable; repeated names load once. A catalog refresh invalidating a completed selection fails submission rather than dropping it. Canonical prompt draft text and its selected occurrence preserve mixed history, copying and editing.
 Agent-selected skills appear in the reasoning trace rather than labeling the user
 message. The inline icon/name is a keyboard-accessible button that opens the
 existing exclusive right-hand chat panel; activating the same skill again closes
@@ -5273,27 +5362,44 @@ child loads, and toggles it closed on a second activation.
 
 ### Running a command, and the turn it leaves
 
-Resolution happens on submit, whatever the menu is doing, so `Tab` then `Enter`
-and `Enter` from the open menu reach the same send. A token no prompt holds is
-sent as typed — the user may genuinely have meant to write it.
+The menu never sends. `Enter` on a row inserts the command like `Tab` and a
+click; a second `Enter`, with the menu closed, sends the message. Resolution
+happens on that ordinary submit only, so every way of picking a row reaches the
+same send, with the same pinned prompt and the same turn descriptor. A token no
+prompt holds is sent as typed: the user may genuinely have meant to write it.
+
+When a command cannot run, the toast names it (`/command`) and says which case
+it is. If its prompt was deleted or renamed, or the token was picked for
+another agent or team, it asks the user to remove the command and choose it
+again. "Try again in a moment" is kept for a read that failed. A catalog that
+has not answered yet is no error: when the draft holds a `/name` that was not
+picked from the menu, the submit waits for it, then sends. Only a catalog that
+still fails after being asked once more holds the message back, with that same
+toast. A `/name` no catalog knows is sent as typed, silently. With several prompt commands the message is sent whole or
+not at all: one command that cannot run holds everything back, the draft is
+kept, and the toast names the first such command of the line. A message with
+more than 16 prompt commands is refused with a toast stating the limit.
 
 What goes on the wire is the **prompt's text**, never the command: the text does
 not pass through the composer and the user never sees it there. In ReAct, text
 before and after the token stays on its respective side of the expanded prompt,
-including other selected skills. A single prompt and several skills share the
-turn; all skill names travel together in its runtime context.
+including other selected skills. Several prompts and several skills share the
+turn: each prompt's text takes the place of its own command, in the order of
+the line, each prompt is read once even when its command is repeated, and all
+skill names travel together in the turn's runtime context. The length limit
+applies to the assembled text.
 
 The turn itself renders as its command rather than as the assembled text
 (`UserMessage` + `CommandTurn`), which keeps a transcript of long prompts
-readable. Sent prompt tokens retain the composer's blue `--info` colour and
+readable, with one badge per prompt command at its position in the typed line. Sent prompt tokens use the composer's prompt container and
 decorative `edit_note` icon, with the same compact inline presentation as skill
-badges. Legacy appended text keeps the bubble's text colour. Hover underlines
-the prompt; keyboard focus is visible. Selection-copy omits decorative glyph
+badges; keyboard focus draws a `--primary` outline around the container. The panel a sent prompt opens (`CommandPromptPanel`) stacks its header: the prompt's name on top (`--on-surface`, label-large), its `/command` below (`--on-surface-retreat`, body-medium), then the text that was sent; no description is shown. A badge opens the panel on its own prompt alone: that prompt's name, its `/command`, and the part of the sent text that came from it, without the user's own words or another prompt's text. A turn stored before prompts were listed one by one, or whose list does not fit its stored text, shows a single badge and the whole sent text, as before. Each prompt token of the composer opens the same panel before anything is sent: same header, then that prompt's current text read on opening, with a short line while it loads or when it cannot be read (deleted, or no longer accessible); activating the same token again closes it, activating another one replaces the preview. Legacy appended text keeps the bubble's text colour. Hover and press tint
+the badge with the secondary container state layers, like a tonal button (no underline), for prompt and skill badges alike and for the clickable composer token; keyboard focus is visible. The slash is display only: stored text, recognition, offsets, `data-skill-name` and accessible labels keep the bare name, and a selection-copy never adds a second slash. Selection-copy omits decorative glyph
 names and preserves the command and skill slashes.
 The command and the text typed after it are laid out as one inline
 sentence, not as a flex row: they are one string and have to reflow as one when
 the bubble narrows (opening a side panel), where flex items would each wrap on
-their own and read as two unrelated texts. A control on that turn opens the text that was actually sent, read
+their own and read as two unrelated texts. Each badge on that turn opens the text that was actually sent, read
 from the turn's own stored copy: the prompt behind it may since have been
 edited or deleted, so it cannot be re-fetched by id.
 
@@ -5304,7 +5410,7 @@ colour) is what marks it actionable. `--radius-xs`, well inside the bubble's
 `--radius-m`, so it reads as nested rather than as a second bubble.
 
 A command-launched conversation takes its **title from what was run** — the
-prompt's name, plus any text typed after the command, falling back to
+name of the first prompt of the line, plus the user's own text, falling back to
 `/<command>`. Not the composer's contents, which may hold only the partial
 query `Enter` matched, and not the prompt's body, which would name every run of
 one command identically. Nothing retitles a session afterwards.
@@ -5316,7 +5422,9 @@ conversation; further presses go back, ArrowDown goes forward, and ArrowDown
 past the newest empties the composer. Browsing lasts only while the recalled
 line is untouched: any edit hands the arrows back to the caret, so a draft is
 never replaced. The list is the thread itself, never browser storage, and a
-command turn comes back as the typed `/command` line, not the prompt it ran.
+command turn comes back as the typed `/command` line, not the prompt it ran,
+with every prompt command restored as a token bound to the prompt it was sent
+with.
 
 The command menu answers typing, not a recall: a recalled `/command` keeps it
 shut (its query starts out dismissed, as after `Esc`), and the first edit
@@ -5481,19 +5589,19 @@ available. Current owned session details drive the execution state; agent-list
 errors never imply deletion. Existing query invalidation, bounded refresh and window
 focus revalidation catch a deletion from the same client or another session.
 See the [managed-conversation lifecycle spec](../../../openspec/specs/managed-conversations/spec.md).
-## Platform access screens (2026-10-05)
+## Platform access screens (2026-10-05, condensed, conditions grid and whitelist list 2026-10-13)
 
-The page groups administration into Rules and Whitelist using the shared home-page ButtonGroup with tab semantics. Panels retain local drafts, selections and pagination. Ordinary text uses 16 px, secondary guidance 14 px and section headings 22 px through existing tokens. The filtering action remains available at the top right of the shared page header across all tabs. Enabling requires at least one saved rule, individual exception or eligible authorized/Free team, then opens a confirmation with counted Allowed and Blocked tabs under the saved configuration. The activation body uses standard padding and consistent gaps between the warning, result heading, timestamp and table. Blocked users appear first when present, otherwise Allowed; empty groups show a short message instead of an empty table. Populated dry-run tables have a bounded height; the shared DataTable scrolls only its rows while its column header and pagination remain fixed. The initial page size is 20, matching the shared selector's supported 20/50/100 options. Accounts that cannot be evaluated appear only in a separate expandable Verification unavailable section. This indicates missing or unusable review evidence, not a third admission state; a missing field in a verified token is evaluated normally. A circular refresh icon beside the last-check timestamp refreshes the read-only population snapshot, reference policy and import status; stale rows disappear and confirmation stays disabled during loading, errors or revision conflicts. There is no separate Activation tab; the header action opens the reviewed confirmation. Unsaved rule edits are never applied by activation. If the initial import has not completed, this modal explicitly offers Continue without importing or Go to whitelist; the second choice opens Whitelist > Users without activating. Import-status loading or failure prevents activation confirmation and offers retry, while disabling does not require that status.
+The page has one level of navigation, Rules | Users | Teams (2026-10-14), using the shared home-page ButtonGroup with tab semantics; Users and Teams are the two halves of the whitelist and were sub-tabs of a Whitelist tab before, a second navigation row removed to save vertical space. Panels retain local drafts, the user search and pagination. Text uses 14 px (`--font-body-medium`) like the sibling admin pages, with guidance in `on-surface-retreat`; the page is capped at 1080px. Each whitelist tab opens with an `h2` in `--font-title-small`, the style of the Conditions heading ("Utilisateurs de la liste blanche" / "Whitelisted users", "Équipes de la liste blanche" / "Whitelisted teams"), and a one-sentence description in `on-surface-retreat` grouped tightly under it, both above the tab's controls; the description says its entries always have access whatever the rule. Tables use `size="small"` (40px rows) and every control except the header action uses the small tier. A StatusBadge beside the page title states whether filtering is on. The filtering action remains available at the top right of the shared page header across all tabs. Enabling requires at least one saved rule, individual exception or eligible authorized/Free team, then opens a confirmation with counted Allowed and Blocked tabs under the saved configuration. The activation body uses the shared dialog-body gap; the missing-import warning uses the warning container colours and one spinner covers the review refresh. Blocked users appear first when present, otherwise Allowed; empty groups show a short message instead of an empty table. Populated dry-run tables have a bounded height; the shared DataTable scrolls only its rows while its column header and pagination remain fixed. The initial page size is 20, matching the shared selector's supported 20/50/100 options. Accounts that cannot be evaluated appear only in a separate shared Disclosure (Not checked). This indicates missing or unusable review evidence, not a third admission state; a missing field in a verified token is evaluated normally. A circular refresh icon beside the last-check timestamp refreshes the read-only population snapshot, reference policy and import status; stale rows disappear and confirmation stays disabled during loading, errors or revision conflicts. There is no separate Activation tab; the header action opens the reviewed confirmation. Unsaved rule edits are never applied by activation. If the initial import has not completed, this modal explicitly offers Continue without importing or Go to whitelist; the second choice opens the Users tab without activating. Import-status loading or failure prevents activation confirmation and offers retry, while disabling does not require that status.
 
-`PlatformAccessPage` adds the platform-admin navigation entry when admission administration is available. The editor starts empty without a saved policy. Add condition and the selected field both open the connected administrator's own verified JSON directly. The exact field name appears in a lightly tinted monospace chip with a decorative edit glyph, aligned with the other condition inputs; clicking either opens the same picker, without a field dropdown or other users' observed fields. The picker defaults to flat root text attributes and blue selectable keys, hiding protocol metadata. Advanced fields exposes bounded nested paths and text arrays from the same account. Only the JSON region scrolls; search, selection and actions remain stationary and keyboard reachable. The selection row always reserves the same height and presents the current path as a code chip, so selecting a key does not resize the dialog. Field confirmation precedes a separate optional current-value reuse popup with labeled field and token-value details. Its alternate action returns to enter the filter value manually, preserving any existing draft value. Case sensitivity stays visible, and the global AND/OR and allow/block controls preserve independent exceptions. The last draft condition can be removed without deleting the stored policy. Test/Save require a nonempty valid draft. Save is prominent and explicit, with distinct unsaved, saving and saved feedback; conflicts preserve edits. The own-token preview uses a green/red panel and separates rule matching from admission through independent sources.
+`PlatformAccessPage` adds the platform-admin navigation entry when admission administration is available. The editor starts empty without a saved policy. Add condition and the selected field both open the connected administrator's own verified JSON directly. The exact field name appears in a `primary-container` monospace chip with a decorative edit glyph, aligned with the other condition inputs; clicking either opens the same picker, without a field dropdown or other users' observed fields. The picker defaults to flat root text attributes and blue selectable keys, hiding protocol metadata. Advanced fields exposes bounded nested paths and text arrays from the same account. Only the JSON region scrolls; search, selection and actions remain stationary and keyboard reachable. The picker is condensed: the shared SearchInput (`xs`) and the Advanced/Simple fields text button share one row, the list uses 12px monospace rows of about 26px, and the current path is a code chip in the dialog's action bar facing the buttons, so selecting a key does not resize the dialog. Field confirmation precedes a separate optional current-value reuse popup with labeled field and token-value details. Its alternate action returns to enter the filter value manually, preserving any existing draft value. Case sensitivity stays visible as a labelled switch, and the global AND/OR and allow/block controls preserve independent exceptions. Conditions form their own section: a header row holds the title (an `h2`, the first level under the page title, in `--font-title-small`), the AND/OR radio ButtonGroup (only with two or more conditions) and Add condition at its right end, so the button never moves; a new condition is appended and scrolled into view. Each condition is one block on `surface-main` with an `outline-muted` border and `--radius-s`, laid out as a single row - number, account field, comparison, value, case switch, delete - on column tracks shared with one heading line above the list, so fields line up like table rows. The heading line is visual only; every control carries its own accessible name, and per-condition labels replace it when the row wraps (container narrower than 700px). Controls use the 32px tier (`xs` Select and TextInput, small IconButton and Switch); the regex hint and the per-condition test result stay inside the block. The filter-mode Select is `compact`, with no reserved error line under it. The last draft condition can be removed without deleting the stored policy. Test/Save require a nonempty valid draft. Test, Discard and Save share one action row under the conditions, with the unsaved/saved state beside Save; conflicts preserve edits. The own-account test result sits directly under that row as one banner per tested fact, each in the success or error container colours of its own outcome: whether the tested rule accepts the account (judged for the selected mode: a match is accepted in Allow mode and blocked in Block mode; a rule that could not be checked never accepts), and whether the account keeps access once filtering is on. The second banner names what keeps the access - the tested rule, the platform administrator role, the individual access, each authorized or link-access team by name (a team without a name is counted in a neutral wording, never shown by its identifier) - using the administrator's own row from the existing whitelist user search, requested only after a test that keeps access; without that row it states the outcome alone. The reminder that whitelist entries always grant access is the description under the title of the Users and Teams tabs.
 
-Users use the team-members table presentation with identifier, first name, last name and independent provenance. The Access via column uses shared Chip labels with source type and team name, without team UIDs or a second email line beneath the identifier. The existing search bar and table remain: no user query or result table appears with an empty or whitespace-only search; typing the first character requests bounded server results. Only the current search response supplies rows, which disappear during loading, failure or search clearing. Manual selection has no 100-user ceiling and persists across searches/pages. Unknown identities reject an entire grant, without duplicating or overwriting existing exceptions. The explicit one-time **Import existing users** action remains under Whitelist > Users as a compact row with a small outlined button and the import counts, wrapping on narrow screens rather than using a dedicated card. Its guidance is available on the button's tooltip; completed imports become a single subdued status line and cannot restore removed exceptions. Whitelist retains its heading with Users and Teams sub-tabs. Users contains import and individual exceptions; Teams contains independent team authorization, which uses live membership rather than permanent copies, so membership removal withdraws that global source on the next request.
+Users use the team-members table presentation with identifier, first name and last name, without a second email line beneath the identifier. Then come three whitelist columns: **Added on** (the grant date of the individual access, `toLocaleString` in the interface language like the invitation-links table, 11rem), **Origin** ("Manuel" or "Import initial" as plain text, 8rem) and **Other access** (9rem): a single shared Chip labelled "Autres accès" when the person has other sources, never the individual access itself. The shared Tooltip on it lists them as text grouped by kind, one line each and only those that apply: rule, platform administrator, authorized teams by name, link-access teams by name. The Chip takes neither focus nor ARIA attributes and has one size, so it sits in a `span role="note"` with `tabIndex=0` whose accessible name is the full list in a localized sentence (the TeamRoleChips / KpiStatCard pattern); the tooltip opens on hover and on keyboard focus. A cell with no other access is empty, with no chip and no "-": removing that person makes them lose access. The Users tab is the whitelist of people (2026-10-13): it lists only the people holding an individual exception (manual or initial import), most recent grant first (people added in one operation stay alphabetical among themselves), server-paginated with the real total and the table's rows-per-page selector, never every known user. Search uses the shared SearchInput (placeholder plus accessible name "Rechercher un utilisateur de la liste blanche") on one row with the import and the add button; it narrows that list, is debounced (300 ms), trimmed, and restarts at the first page. The request is skipped while the tab is not shown. Every search of the page ignores accents as well as case (2026-10-14): the user search on the server (table and add dialog), the teams filter and the account-field picker through the shared `stripDiacritics`. An empty whitelist says so and points to the add button; a search without match has its own one-line message. The only row action is Remove, a small outlined button in the error colour, confirmed by a success toast; the table has no row selection and no bulk bar. Only the current page's own response supplies rows: while another page or search loads the rows are blank and the pagination stays in place, and a refresh of the same page after an action keeps its rows; when a removal empties the last page the shared DataTable snaps the offset back to the page before it (the page adds no step of its own), and after a successful add the search is cleared and the list returns to its first page, where the newest entries are. **Add users** (small filled button with the add icon, right of the import) opens `PlatformAccessAddUsersDialog`, built on the shared `AddPeopleDialog` shell that the team "Add members" dialog also renders, so both look and behave alike: a search field whose suggestions open from two characters, a bordered pending list, Cancel and Add. The search runs over every known user, debounced (300 ms), one server page of 25; when more people match, a last non-selectable line gives the number of others and asks to refine the search. Only the answer to the text currently typed is offered; the menu says "searching", "no match" or "search failed" otherwise. People who already hold individual access appear disabled with a second line saying so; people already in the pending list are left out of the suggestions. The pending list survives successive searches and has no ceiling. Add grants the whole selection in one call, confirms with a success toast worded from the number selected (the API returns no count), closes the dialog and refreshes the list; a failed grant keeps the dialog and its selection, and the dialog cannot be dismissed while the grant is being saved. Unknown identities reject an entire grant, without duplicating or overwriting existing exceptions. The explicit one-time **Import existing users** action remains in the Users tab, at the right of the search row before Add users, as a small outlined button with the import counts, wrapping on narrow screens. Its guidance is available on the button's tooltip; completed imports become a single subdued status text and cannot restore removed exceptions. Users contains import and individual exceptions; Teams contains independent team authorization, with its search, shared `FilterChips` "Toutes" / "Autorisées" (with the allowed count) and a sortable team name column (2026-10-14), which uses live membership rather than permanent copies, so membership removal withdraws that global source on the next request.
 
-The platform administration Teams registry owns the Free toggle, labeled Link access (Accès par lien in French), and Manage links action for each team, visible only to platform administrators when admission administration is available. The Link access column reserves at least 9rem so its full label remains visible in both languages. Ordinary team managers do not request admission state or see these controls. Platform access retains individual and team whitelist controls together in Whitelist, without a separate Teams tab. Free updates preserve that independent flag, and shared query invalidation refreshes both pages. Manage links opens paginated history with Accesses (Accès), creation/expiry dates, status and Copy URL actions; last-access timestamps stay out of the table. Create link sits at the right of a wrapping toolbar with spacing before the table. It opens a separate form with note followed by optional expiration, using the KPI selector's popover presentation and shared date/time input. The expiration panel provides one future timestamp, Apply, future duration shortcuts and No expiration; it stays inside the dialog, and Escape dismisses only the selector. Creation success shows the original URL with Copy URL. History recovery writes the original URL to the clipboard; success is announced only after writing through the same shared ActionBar and useCopyConfirmation hook as chat turns: a two-second check on the clicked copy icon and a screen-reader status. The icon button keeps its fixed dimensions and adds no success paragraph or local animation. Rejection retains a selectable URL with a manual-copy fallback. URLs and reusable mutation payloads are transient and cleared on dismissal. Revocation requires confirmation and stops future enrollment while preserving existing membership. Free suspension disables creation but retains history, copying and revocation.
+The platform administration Teams registry owns the Free toggle, labeled Link access (Accès par lien in French), and Manage links action for each team, visible only to platform administrators when admission administration is available. The Link access column reserves at least 9rem so its full label remains visible in both languages. Ordinary team managers do not request admission state or see these controls. Platform access keeps individual and team whitelist controls in its Users and Teams tabs. Free updates preserve that independent flag, and shared query invalidation refreshes both pages. Manage links opens paginated history with Opens (Ouvertures), creation/expiry dates, status and Copy link actions; last-access timestamps stay out of the table. Create link sits at the right of the status filter row; the filter takes a share of the dialog width rather than a fixed one. It opens a separate form with note followed by optional expiration, using the KPI selector's popover presentation and shared date/time input. The expiration panel provides one future timestamp, Apply, future duration shortcuts and No expiration; it stays inside the dialog, and Escape dismisses only the selector. Creation success shows the original URL in Fred's monospace font with Copy link and attempts to copy it automatically. History recovery writes the original URL to the clipboard; success is announced only after writing through the same shared ActionBar and useCopyConfirmation hook as chat turns: a two-second check on the corresponding copy icon and a screen-reader status. The icon button keeps its fixed dimensions and adds no success paragraph or local animation. Rejection retains a selectable URL with a manual-copy fallback. URLs and reusable mutation payloads are transient and cleared on dismissal. Revocation requires confirmation and stops future enrollment while preserving existing membership. Free suspension disables creation but retains history, copying and revocation.
 
-`PlatformAccessDeniedPage` and `FreeEnrollmentPage` render outside the protected shell and its bootstrap/CGU guards. Admission refusal shows shared `contactSupportLink`, retry and sign-out; enrollment uses the same support property and omits sign-out in both the invitation and its error state. Enrollment presents a responsive surface card with the configured site name, shared TeamInitials avatar, named team and required terms. Typography, surfaces, radii and spacing use Fred tokens. The shared Checkbox accepts terms in a bounded scroll region; a compact footer contains support and a single filled Join action with the shared person-add icon. The page scrolls within the application shell on small screens. Enrollment preserves the path through OIDC and reloads protected state after successful membership. Only the specific admission refusal triggers the denial route; service outages and unrelated authorization errors retain their own handling. Behavioral requirements: `openspec/specs/platform-access-control/spec.md`.
+`PlatformAccessDeniedPage` and `FreeEnrollmentPage` render outside the protected shell and its bootstrap/CGU guards, in one page-local card (`PlatformAccessCard`): the configured `siteDisplayName` as brand line, a single `h1` labelling the card, a body and an optional footer behind a divider, 28rem wide on `surface-container-high`, with account and team blocks on `surface-container-highest`. No error icon and no `PageError`. Admission refusal greets the person by first name (plain greeting when unknown), shows the signed-in account from the session token (shared UserAvatar, name, copyable email; the block is omitted when neither is known), two numbered steps, a text-link sign-out at the footer's left, an outlined "Check my access" and a filled "Request access" opening `contactSupportLink` in a new tab; that last action is hidden when no link is configured, and the first step drops its reference to the address when no email is shown. Enrollment announces an invitation, shows the shared TeamInitials tile and team name in an inner surface, the support link at the footer's left and a single filled "Join the team" action without icon; required terms still go through the common terms page first. A preview answered `404 free_enrollment_link_invalid` (also when it comes back from accepting terms or joining) shows "link no longer valid" with one sentence and the support link only, without retry or team name. Any other preview failure and a failed join show a temporary-problem card (`PlatformAccessError`) with a retry and no sign-out. The page scrolls within the application shell on small screens. Enrollment preserves the path through OIDC and reloads protected state after successful membership. Only the specific admission refusal triggers the denial route; service outages and unrelated authorization errors retain their own handling. Behavioral requirements: `openspec/specs/platform-access-control/spec.md`.
 
 
-Admission denial, invalid enrollment and transient admission failures reuse PageError's icon, layout and typography with support/retry actions; sign-out is reserved for admission denial. Caller-supplied actions work before RouterProvider exists; ordinary error pages retain their home action. Picker values disappear on dismissal, unsupported numeric/boolean fields stay unselectable, and selecting a key only changes the draft.
+Admission denial, every enrollment state and the transient admission-verification failure of `PlatformAdmissionGuard` share the card described above instead of PageError; sign-out appears on admission denial and on the guard's failure, never on the enrollment route. Ordinary error pages retain their home action. Picker values disappear on dismissal, unsupported numeric/boolean fields stay unselectable, and selecting a key only changes the draft.
 
-Invitation history filtering and cleanup (2026-10-09): the shared Select filters All, Active, Revoked or Expired across server-paginated history. Suspended links appear in All with grayscale rows at reduced opacity, retaining copying and revocation actions; the status is available to screen readers without a visible Suspended label or explanatory paragraph. Suspension has no separate filter. A fixed-height shared DataTable keeps headers and pagination outside its scrolling body. Loading hides previous rows while retaining pagination totals until the requested page arrives. Cleanup uses the shared destructive confirmation Dialog with the selected team in its title and the team-wide eligible count; the history dialog remains visible behind it, inert and hidden from assistive navigation while confirmation alone handles focus and keyboard dismissal; it preserves the filter and refreshes history after success. Copy keeps the chat ActionBar feedback without changing modal geometry.
+Invitation history filtering and cleanup (2026-10-09): the shared Select filters All, Active, Revoked or Expired across server-paginated history. Suspended links appear in All with grayscale rows at reduced opacity, retaining copying and revocation actions; the status is available to screen readers without a visible Suspended label or explanatory paragraph. Suspension has no separate filter. A height-bounded shared DataTable (same rule as the activation review) keeps headers and pagination outside its scrolling body. Loading hides previous rows while retaining pagination totals until the requested page arrives. Cleanup is triggered from the history dialog's footer, away from the filter, and uses the shared destructive confirmation Dialog (revocation confirms in the error colour too) with the selected team in its title and the team-wide eligible count; the history dialog remains visible behind it, inert and hidden from assistive navigation while confirmation alone handles focus and keyboard dismissal; it preserves the filter and refreshes history after success. Copy keeps the chat ActionBar feedback without changing modal geometry.

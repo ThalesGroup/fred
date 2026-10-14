@@ -53,8 +53,10 @@ from fred_sdk.contracts.context import (
     PortableContext,
     PortableEnvironment,
     RuntimeContext,
+    TurnCommand,
     resolve_effective_chat_profile,
 )
+from fred_sdk.contracts.models import AgentTuning
 from pydantic import ValidationError
 
 # ---------------------------------------------------------------------------
@@ -477,9 +479,7 @@ def test_bound_runtime_context_platform_chat_model_binding_round_trips() -> None
 
 # ---------------------------------------------------------------------------
 # resolve_effective_chat_profile — the one implementation of chat-profile
-# precedence (#2387), shared by the pod runtime and control-plane. Migrated
-# here from libs/fred-runtime/tests/test_model_routing.py, where it covered the
-# team-only `resolve_team_override` half of the same rule.
+# precedence, shared by the pod runtime and control-plane.
 # ---------------------------------------------------------------------------
 
 
@@ -492,7 +492,8 @@ def _resolve(**kwargs: Any):
             "agent_id": None,
             "pod_agent_chat_profile_overrides": None,
             "pod_default_chat_profile_id": None,
-            "team_agent_profile_overrides": None,
+            "user_chat_profile_id": None,
+            "instance_chat_profile_id": None,
             "team_chat_default_profile_id": None,
             **kwargs,
         }
@@ -519,62 +520,81 @@ class TestResolveEffectiveChatProfile:
         assert result.profile_id == "team.default"
         assert result.origin is ChatProfileOrigin.TEAM_DEFAULT
 
-    def test_team_agent_override_beats_team_default(self) -> None:
+    def test_instance_recommendation_beats_team_default(self) -> None:
         result = _resolve(
             agent_id="rico",
             pod_default_chat_profile_id="pod.default",
-            team_agent_profile_overrides={"rico": "team.rico"},
+            instance_chat_profile_id="instance.rec",
             team_chat_default_profile_id="team.default",
         )
         assert result is not None
-        assert result.profile_id == "team.rico"
-        assert result.origin is ChatProfileOrigin.TEAM_AGENT_OVERRIDE
+        assert result.profile_id == "instance.rec"
+        assert result.origin is ChatProfileOrigin.INSTANCE_RECOMMENDATION
 
-    def test_pod_agent_override_beats_every_team_level(self) -> None:
-        """The operator's local escape hatch (`LLM_ROUTING_FRED.md`
-        §Deterministic precedence) — a team can never beat it."""
+    def test_user_choice_beats_instance_recommendation(self) -> None:
+        result = _resolve(
+            agent_id="rico",
+            pod_default_chat_profile_id="pod.default",
+            user_chat_profile_id="user.choice",
+            instance_chat_profile_id="instance.rec",
+            team_chat_default_profile_id="team.default",
+        )
+        assert result is not None
+        assert result.profile_id == "user.choice"
+        assert result.origin is ChatProfileOrigin.USER_CHOICE
+
+    def test_pod_agent_override_beats_user_and_team_levels(self) -> None:
+        """The operator's local escape hatch: only the platform binding,
+        handled by the caller, ranks above it."""
 
         result = _resolve(
             agent_id="rico",
             pod_agent_chat_profile_overrides={"rico": "pod.rico"},
             pod_default_chat_profile_id="pod.default",
-            team_agent_profile_overrides={"rico": "team.rico"},
+            user_chat_profile_id="user.choice",
+            instance_chat_profile_id="instance.rec",
             team_chat_default_profile_id="team.default",
         )
         assert result is not None
         assert result.profile_id == "pod.rico"
         assert result.origin is ChatProfileOrigin.POD_AGENT_OVERRIDE
 
-    def test_override_for_another_agent_does_not_leak(self) -> None:
+    def test_no_team_per_agent_level_exists(self) -> None:
+        assert {origin.value for origin in ChatProfileOrigin} == {
+            "pod_agent_override",
+            "user_choice",
+            "instance_recommendation",
+            "team_default",
+            "pod_default",
+        }
+
+    def test_pod_override_for_another_agent_does_not_leak(self) -> None:
         result = _resolve(
             agent_id="other",
             pod_agent_chat_profile_overrides={"rico": "pod.rico"},
-            team_agent_profile_overrides={"rico": "team.rico"},
             team_chat_default_profile_id="team.default",
         )
         assert result is not None
         assert result.profile_id == "team.default"
         assert result.origin is ChatProfileOrigin.TEAM_DEFAULT
 
-    def test_none_agent_id_skips_both_override_maps(self) -> None:
+    def test_none_agent_id_skips_the_pod_override_map(self) -> None:
         """Nested-agent and direct-execution paths can arrive without an
-        agent_id; neither override map may match on a null key."""
+        agent_id; the override map may not match on a null key."""
 
         result = _resolve(
             agent_id=None,
             pod_agent_chat_profile_overrides={"rico": "pod.rico"},
-            team_agent_profile_overrides={"rico": "team.rico"},
             team_chat_default_profile_id="team.default",
         )
         assert result is not None
         assert result.profile_id == "team.default"
         assert result.origin is ChatProfileOrigin.TEAM_DEFAULT
 
-    def test_empty_override_maps_are_not_treated_as_a_hit(self) -> None:
+    def test_empty_override_map_is_not_treated_as_a_hit(self) -> None:
         result = _resolve(
             agent_id="rico",
             pod_agent_chat_profile_overrides={},
-            team_agent_profile_overrides={},
             pod_default_chat_profile_id="pod.default",
         )
         assert result is not None
@@ -595,6 +615,30 @@ class TestResolveEffectiveChatProfile:
         assert result is not None
         with pytest.raises(ValidationError):
             result.profile_id = "tampered"  # type: ignore[misc]
+
+
+def test_runtime_context_carries_the_user_choice_and_no_team_overrides() -> None:
+    ctx = RuntimeContext.model_validate(
+        {"chat_profile_id": "chat.fast", "agent_profile_overrides": {"rico": "x"}}
+    )
+    assert ctx.chat_profile_id == "chat.fast"
+    assert "agent_profile_overrides" not in RuntimeContext.model_fields
+    assert "agent_profile_overrides" not in ctx.model_dump()
+
+
+def test_agent_tuning_reads_legacy_reasoning_keys_and_carries_recommendation() -> None:
+    tuning = AgentTuning.model_validate(
+        {
+            "role": "r",
+            "description": "d",
+            "reasoning_enabled": True,
+            "reasoning_default_on": True,
+            "recommended_chat_profile_id": "chat.fast",
+        }
+    )
+    assert tuning.recommended_chat_profile_id == "chat.fast"
+    assert "reasoning_enabled" not in tuning.model_dump()
+    assert AgentTuning(role="r", description="d").recommended_chat_profile_id is None
 
 
 @pytest.mark.parametrize(
@@ -628,3 +672,78 @@ def test_runtime_context_resolves_legacy_and_multiple_skills(payload, names):
 def test_runtime_context_rejects_ambiguous_or_malformed_skills(payload):
     with pytest.raises(ValidationError):
         RuntimeContext.model_validate(payload)
+
+
+def _turn_prompt(index: int = 0, **overrides: Any) -> dict[str, Any]:
+    return {
+        "command": f"cmd{index}",
+        "prompt_id": f"p-{index}",
+        "prompt_name": f"Prompt {index}",
+        "draft_offset": index * 10,
+        "text_offset": index * 50,
+        "text_length": 40,
+        **overrides,
+    }
+
+
+def test_turn_command_without_prompts_validates_as_before() -> None:
+    command = TurnCommand.model_validate({"command": "summary"})
+
+    assert command.prompts is None
+    assert "prompts" not in command.model_dump(exclude_none=True)
+
+
+@pytest.mark.parametrize("count", [1, 16])
+def test_turn_command_lists_its_prompts_and_dumps_them(count: int) -> None:
+    prompts = [_turn_prompt(index) for index in range(count)]
+    context = RuntimeContext.model_validate(
+        {"command": {"command": "cmd0", "prompt_id": "p-0", "prompts": prompts}}
+    )
+
+    dumped = context.model_dump(exclude_none=True)["command"]["prompts"]
+
+    assert dumped == prompts
+
+
+@pytest.mark.parametrize(
+    "prompts",
+    [
+        [],
+        [_turn_prompt(index) for index in range(17)],
+        [_turn_prompt(draft_offset=-1)],
+        [_turn_prompt(text_offset=-1)],
+        [_turn_prompt(text_length=0)],
+        [_turn_prompt(command="")],
+        [{"command": "summary"}],
+        {"command": "summary"},
+    ],
+)
+def test_turn_command_rejects_a_malformed_prompts_list(prompts: Any) -> None:
+    with pytest.raises(ValidationError):
+        RuntimeContext.model_validate(
+            {"command": {"command": "summary", "prompts": prompts}}
+        )
+
+
+def test_turn_command_prompt_ignores_an_unknown_key() -> None:
+    command = TurnCommand.model_validate(
+        {"command": "summary", "prompts": [_turn_prompt(later_field="x")]}
+    )
+
+    assert command.prompts is not None
+    assert "later_field" not in command.prompts[0].model_dump()
+
+
+def test_turn_command_offsets_are_not_measured_against_any_text() -> None:
+    """Offsets are the client's UTF-16 indices; nothing here knows the text."""
+
+    command = TurnCommand.model_validate(
+        {
+            "command": "summary",
+            "draft_text": "/summary",
+            "prompts": [_turn_prompt(text_offset=10_000, text_length=10_000)],
+        }
+    )
+
+    assert command.prompts is not None
+    assert command.prompts[0].text_offset == 10_000

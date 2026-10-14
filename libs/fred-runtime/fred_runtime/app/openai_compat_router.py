@@ -303,17 +303,28 @@ def create_openai_compat_router(
                     tuning=target.tuning,
                     team_settings=target.team_settings,
                     reasoning_enabled_model_ids=target.reasoning_enabled_model_ids,
+                    team_disabled_model_ids=target.team_disabled_model_ids,
                     platform_chat_model_binding=target.platform_chat_model_binding,
                     platform_prompt=target.platform_prompt,
                     credential_provider=target.credential_provider,
                     owns_run_record=True,
                 ),
             )
+            answer_streamed = False
             try:
                 async for event in iterator:
                     chunk = fred_event_to_openai_chunk(
                         event, completion_id, model, created
                     )
+                    kind = event.get("kind")
+                    if kind == "assistant_delta":
+                        answer_streamed = True
+                    elif kind == "tool_call":
+                        answer_streamed = False
+                    elif kind == "final" and chunk is not None and not answer_streamed:
+                        # Some answers exist only in the final event (a surfaced
+                        # tool error, a graph that never streams): deliver them.
+                        chunk.choices[0].delta.content = event.get("content") or None
                     if chunk is not None:
                         yield f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
             except Exception:

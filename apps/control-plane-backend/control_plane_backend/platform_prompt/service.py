@@ -25,6 +25,7 @@ from fastapi import HTTPException
 from fred_core import KeycloakUser
 from fred_core.security.rebac.rebac_engine import RelationType
 from fred_sdk.contracts.agent_draft import CreationAssistantReasoningEffort
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from control_plane_backend.capabilities.catalog import (
     aggregate_capability_catalog,
@@ -196,6 +197,8 @@ async def set_platform_prompt(
 
 async def resolve_platform_prompt_text(
     deps: ProductServiceDependencies,
+    *,
+    session: AsyncSession | None = None,
 ) -> str | None:
     """Return the stored platform prompt for a runtime binding, or `None`.
 
@@ -216,7 +219,7 @@ async def resolve_platform_prompt_text(
     the runtime needs to honour a deliberate `""`.
     """
 
-    stored = await deps.get_platform_prompt_store().get()
+    stored = await deps.get_platform_prompt_store().get(session=session)
     return None if stored is None else stored.text
 
 

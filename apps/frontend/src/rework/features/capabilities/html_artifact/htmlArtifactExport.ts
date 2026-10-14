@@ -20,9 +20,10 @@
 // SECURITY: the render uses `composeHtmlDocument`, already sanitized (Layer A: no
 // <script>/on*-handlers) and CSP-locked (Layer C). We lay it out in an off-screen
 // iframe (no allow-scripts) purely to size it, then rasterize its serialized DOM
-// through an `<svg><foreignObject>` loaded as an <img>. An SVG loaded via <img>
-// runs in the browser's "secure static mode": no scripts, and NO external resource
-// loads at all — the same "data: only" footprint as the live preview's CSP.
+// through an `<svg><foreignObject>` loaded as an <img> from a data: URL. An SVG
+// loaded via <img> runs in the browser's "secure static mode": no scripts, and NO
+// external resource loads at all — the same "data: only" footprint as the live
+// preview's CSP.
 
 import { composeHtmlDocument, artifactFileName } from "./htmlArtifactDocument";
 
@@ -73,31 +74,29 @@ async function renderArtifactToCanvas(html: string, css: string): Promise<HTMLCa
       `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">` +
       `<foreignObject x="0" y="0" width="100%" height="100%">${serialized}</foreignObject>` +
       `</svg>`;
-    const svgUrl = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
-    try {
-      const img = new Image();
-      img.width = width;
-      img.height = height;
-      await new Promise<void>((resolve, reject) => {
-        img.onload = () => resolve();
-        img.onerror = () => reject(new Error("failed to rasterize the artifact"));
-        img.src = svgUrl;
-      });
-      const scale = window.devicePixelRatio || 1;
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.round(width * scale);
-      canvas.height = Math.round(height * scale);
-      const ctx = canvas.getContext("2d");
-      if (!ctx) throw new Error("canvas 2D context unavailable");
-      ctx.scale(scale, scale);
-      // Opaque white base so transparent regions read as a page, not black (JPEG).
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, width, height);
-      ctx.drawImage(img, 0, 0);
-      return canvas;
-    } finally {
-      URL.revokeObjectURL(svgUrl);
-    }
+    // A data: URL, not a blob: one: Chrome taints the canvas after drawing a blob:
+    // SVG holding a foreignObject, and toDataURL then throws a SecurityError.
+    const svgUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+    const img = new Image();
+    img.width = width;
+    img.height = height;
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error("failed to rasterize the artifact"));
+      img.src = svgUrl;
+    });
+    const scale = window.devicePixelRatio || 1;
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(width * scale);
+    canvas.height = Math.round(height * scale);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("canvas 2D context unavailable");
+    ctx.scale(scale, scale);
+    // Opaque white base so transparent regions read as a page, not black (JPEG).
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, width, height);
+    ctx.drawImage(img, 0, 0);
+    return canvas;
   } finally {
     iframe.remove();
   }

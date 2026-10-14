@@ -28,14 +28,41 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { ChatControlDescriptor } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { ChatControlDescriptor, EffectiveChatModel } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { useComposerSettings } from "./useComposerSettings";
 
-/** A reasoning_toggle descriptor, `params.default` being the agent author's
- *  preselection (#2175). Each call returns a NEW array — the point of the
- *  regression below is that identity, not content, is what wakes the effect. */
-function controls(defaultOn: boolean): ChatControlDescriptor[] {
-  return [{ capability_id: "platform", widget: "reasoning_toggle", params: { default: defaultOn, effort: "high" } }];
+/** A reasoning_toggle descriptor. Each call returns a NEW array — the point of
+ *  the regression below is that identity, not content, is what wakes the effect. */
+function controls(): ChatControlDescriptor[] {
+  return [{ capability_id: "platform", widget: "reasoning_toggle", params: {} }];
+}
+
+const SMALL = "model__mistral__mistral-small";
+const LARGE = "model__mistral__mistral-large";
+
+/** The agent's resolved model (Mistral Small) and the team's reasoning default for each row. */
+function model(smallOn: boolean, largeOn = false, rows = ["small", "large"]): EffectiveChatModel {
+  const all = {
+    small: {
+      profile_id: "chat.small",
+      capability_id: SMALL,
+      name: "mistral-small",
+      reasoning_enabled: true,
+      reasoning_default_on: smallOn,
+    },
+    large: {
+      profile_id: "chat.large",
+      capability_id: LARGE,
+      name: "mistral-large",
+      reasoning_enabled: true,
+      reasoning_default_on: largeOn,
+    },
+  } as const;
+  return {
+    capability_id: SMALL,
+    reasoning_enabled: true,
+    selectable_models: rows.map((key) => all[key as keyof typeof all]),
+  } as EffectiveChatModel;
 }
 
 type Hook = ReturnType<typeof useComposerSettings>;
@@ -43,13 +70,17 @@ type Hook = ReturnType<typeof useComposerSettings>;
 function TestHost({
   sessionId,
   chatControls,
+  effectiveModel,
+  onChoiceDropped,
   onRender,
 }: {
   sessionId: string | null;
   chatControls: readonly ChatControlDescriptor[];
+  effectiveModel?: EffectiveChatModel;
+  onChoiceDropped?: (label: string) => void;
   onRender: (hook: Hook) => void;
 }) {
-  onRender(useComposerSettings(sessionId, chatControls));
+  onRender(useComposerSettings(sessionId, chatControls, effectiveModel, onChoiceDropped));
   return null;
 }
 
@@ -58,21 +89,39 @@ describe("useComposerSettings — defaults never clobber an explicit pick", () =
   let root: Root;
   let latest: Hook;
 
-  const render = (sessionId: string | null, chatControls: readonly ChatControlDescriptor[]) => {
+  const dropped: string[] = [];
+  const render = (
+    sessionId: string | null,
+    chatControls: readonly ChatControlDescriptor[],
+    effectiveModel?: EffectiveChatModel,
+  ) => {
     act(() => {
-      root.render(<TestHost sessionId={sessionId} chatControls={chatControls} onRender={(h) => (latest = h)} />);
+      root.render(
+        <TestHost
+          sessionId={sessionId}
+          chatControls={chatControls}
+          effectiveModel={effectiveModel}
+          onChoiceDropped={(label) => dropped.push(label)}
+          onRender={(h) => (latest = h)}
+        />,
+      );
     });
   };
 
   /** A reload (or leaving the conversation and coming back): nothing survives
    *  but sessionStorage. */
-  const remount = (sessionId: string | null, chatControls: readonly ChatControlDescriptor[]) => {
+  const remount = (
+    sessionId: string | null,
+    chatControls: readonly ChatControlDescriptor[],
+    effectiveModel?: EffectiveChatModel,
+  ) => {
     act(() => root.unmount());
     root = createRoot(container);
-    render(sessionId, chatControls);
+    render(sessionId, chatControls, effectiveModel);
   };
 
   beforeEach(() => {
+    dropped.length = 0;
     sessionStorage.clear();
     container = document.createElement("div");
     document.body.appendChild(container);
@@ -88,7 +137,7 @@ describe("useComposerSettings — defaults never clobber an explicit pick", () =
   it("keeps a reasoning pick made before the first message, once that message binds a session", () => {
     // New conversation: no session id yet, so nothing this hook writes reaches
     // sessionStorage.
-    render(null, controls(false));
+    render(null, controls());
     expect(latest.reasoning).toBe(false);
 
     act(() => latest.setReasoning(true));
@@ -97,31 +146,31 @@ describe("useComposerSettings — defaults never clobber an explicit pick", () =
     // handleSend mints the session id (suppressing the session-change reset)
     // and send() re-runs prepare-execution, whose response replaces
     // `chatControls` with an equal-but-new array.
-    render("sid-1", controls(false));
+    render("sid-1", controls());
 
     expect(latest.reasoning).toBe(true);
   });
 
   it("keeps a search policy / library pick across the same first-send refresh", () => {
-    render(null, controls(false));
+    render(null, controls());
 
     act(() => latest.setSearchPolicy("semantic"));
     act(() => latest.setSelectedLibraryIds(["lib-a"]));
 
-    render("sid-1", controls(false));
+    render("sid-1", controls());
 
     expect(latest.searchPolicy).toBe("semantic");
     expect(latest.selectedLibraryIds).toEqual(["lib-a"]);
   });
 
   it("makes that pick durable: bindSession() persists it under the freshly minted session id", () => {
-    render(null, controls(false));
+    render(null, controls());
     act(() => latest.setReasoning(true));
 
     // What useManagedChat does the moment it mints a session id for a
     // conversation that had none.
     act(() => latest.bindSession("sid-1"));
-    remount("sid-1", controls(false));
+    remount("sid-1", controls());
 
     expect(latest.reasoning).toBe(true);
   });
@@ -132,32 +181,30 @@ describe("useComposerSettings — defaults never clobber an explicit pick", () =
     act(() => latest.bindSession("sid-1"));
 
     expect(sessionStorage.getItem("chat.composer.sid-1")).toBeNull();
-    render("sid-1", controls(true));
+    render("sid-1", controls(), model(true));
     expect(latest.reasoning).toBe(true);
   });
 
-  it("still applies the author's defaults when chat_controls lands after mount and nothing was picked", () => {
-    // The effect's original job: the eager prepare-execution call has not
-    // resolved yet at mount, so the composer starts on the `?? false` fallback.
-    render(null, []);
+  it("seeds reasoning from the team default once the models arrive and nothing was picked", () => {
+    render(null, controls());
     expect(latest.reasoning).toBe(false);
 
-    render(null, controls(true));
+    render(null, controls(), model(true));
 
     expect(latest.reasoning).toBe(true);
   });
 
   it("re-enables default hydration after reset() — a genuine session entry", () => {
-    render(null, controls(false));
+    render(null, controls(), model(false));
     act(() => latest.setReasoning(true));
 
     // Entering another session: state is rebuilt from that session's storage
-    // (empty here) with no chat_controls resolved for it yet.
+    // (empty here) and the models known so far.
     act(() => latest.reset("sid-2", []));
     expect(latest.reasoning).toBe(false);
 
-    // …and that session's own controls, arriving after, are applied normally.
-    render("sid-2", controls(true));
+    // …and that session's own refreshed models are applied normally.
+    render("sid-2", controls(), model(true));
 
     expect(latest.reasoning).toBe(true);
   });
@@ -177,11 +224,11 @@ describe("useComposerSettings — defaults never clobber an explicit pick", () =
     expect(latest.askUser).toBe(false);
   });
 
-  it("lets a stored session pick outrank the author's default", () => {
+  it("lets a stored session pick outrank the team default", () => {
     sessionStorage.setItem("chat.composer.sid-3", JSON.stringify({ reasoning: false }));
 
     render("sid-3", []);
-    render("sid-3", controls(true));
+    render("sid-3", controls(), model(true));
 
     expect(latest.reasoning).toBe(false);
   });
@@ -201,5 +248,108 @@ describe("useComposerSettings — defaults never clobber an explicit pick", () =
 
     act(() => latest.setRagScope("general_only"));
     expect(latest.ragScope).toBe("general_only");
+  });
+});
+
+describe("useComposerSettings — model choice", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+  let latest: Hook;
+  const dropped: string[] = [];
+
+  const render = (sessionId: string | null, effectiveModel?: EffectiveChatModel) => {
+    act(() => {
+      root.render(
+        <TestHost
+          sessionId={sessionId}
+          chatControls={controls()}
+          effectiveModel={effectiveModel}
+          onChoiceDropped={(label) => dropped.push(label)}
+          onRender={(h) => (latest = h)}
+        />,
+      );
+    });
+  };
+
+  beforeEach(() => {
+    dropped.length = 0;
+    sessionStorage.clear();
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+  });
+
+  afterEach(() => {
+    act(() => root.unmount());
+    container.remove();
+    sessionStorage.clear();
+  });
+
+  it("starts a new conversation on the recommended model with its team reasoning default", () => {
+    render(null, model(true));
+    expect(latest.chatProfileId).toBeNull();
+    expect(latest.reasoning).toBe(true);
+  });
+
+  it("reseeds reasoning from the team default of each model switched to", () => {
+    render("sid-1", model(true, false));
+    act(() => latest.setChatProfileId("chat.large"));
+    expect(latest.chatProfileId).toBe("chat.large");
+    expect(latest.reasoning).toBe(false);
+
+    act(() => latest.setChatProfileId("chat.small"));
+    // Picking the recommended model clears the choice.
+    expect(latest.chatProfileId).toBeNull();
+    expect(latest.reasoning).toBe(true);
+  });
+
+  it("keeps the choice for the conversation across a reload", () => {
+    render("sid-1", model(false));
+    act(() => latest.setChatProfileId("chat.large"));
+
+    act(() => root.unmount());
+    root = createRoot(container);
+    render("sid-1", model(false));
+
+    expect(latest.chatProfileId).toBe("chat.large");
+  });
+
+  it("clears a choice no longer offered, names the lost model and falls back to the recommended one", () => {
+    render("sid-1", model(true, false));
+    act(() => latest.setChatProfileId("chat.large"));
+
+    render("sid-1", model(true, false, ["small"]));
+
+    expect(latest.chatProfileId).toBeNull();
+    expect(latest.reasoning).toBe(true);
+    expect(dropped).toEqual(["Mistral Large"]);
+    expect(JSON.parse(sessionStorage.getItem("chat.composer.sid-1") ?? "{}").chatProfileId).toBeNull();
+  });
+
+  it("checks the stored choice of a conversation it switches to, with the same list", () => {
+    // sid-2 picked Large back when it was offered; the team has since disabled it.
+    sessionStorage.setItem(
+      "chat.composer.sid-2",
+      JSON.stringify({ chatProfileId: "chat.large", chatModelLabel: "Mistral Large", reasoning: false }),
+    );
+    const onlySmall = model(true, false, ["small"]);
+    render("sid-1", onlySmall);
+
+    act(() => latest.reset("sid-2", controls()));
+
+    expect(latest.chatProfileId).toBeNull();
+    expect(latest.reasoning).toBe(true);
+    expect(dropped).toEqual(["Mistral Large"]);
+    expect(JSON.parse(sessionStorage.getItem("chat.composer.sid-2") ?? "{}").chatProfileId).toBeNull();
+  });
+
+  it("keeps the choice while the list is empty (locked or unreachable pod)", () => {
+    render("sid-1", model(false));
+    act(() => latest.setChatProfileId("chat.large"));
+
+    render("sid-1", { capability_id: SMALL, selectable_models: [], choice_locked: true } as EffectiveChatModel);
+
+    expect(latest.chatProfileId).toBe("chat.large");
+    expect(dropped).toEqual([]);
   });
 });

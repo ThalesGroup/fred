@@ -2169,6 +2169,10 @@ freshness treatment — see `RUNTIME-EXECUTION-CONTRACT.md` §8.55.
 
 ### Addendum — REASON-01 phase 2, reasoning is an agent property (2026-07-30)
 
+**2026-10-09 — retired by §63.** The per-agent offer and default below, and
+the Amendment B, Capabilities-tab and #2473 addenda, no longer apply: the
+platform activation alone gates reasoning, and the team sets per-model defaults.
+
 Levels 3-4 shipped (`RUNTIME-EXECUTION-CONTRACT.md` §8.30). Reasoning is **not**
 a capability (RFC §15, Amendment A) — it was built as one and withdrawn before
 release, because an agent does not _use_ reasoning the way it uses a tool.
@@ -2523,6 +2527,12 @@ values inside `series`/`rows`.
 
 ## 37. Contract Notes — TEAM-05, team routing policy (2026-07-30, issue #2118; simplified 2026-08, `llm-routing-simplify`)
 
+**2026-10-09 — amended by §63.** Per-agent overrides removed, team disabled
+models and reasoning defaults added, write gate narrowed to `team_admin`. The
+data model, resolution, authorization and frontend paragraphs below describe
+the pre-§63 policy where they mention `agent_profile_overrides` or
+`team_editor` writes.
+
 **2026-08-16 — chat profile typing (#2365).** The pod catalog now projects
 `model_chat_profile_ids` explicitly alongside the complete
 `model_profile_ids` inventory. Team picker, universal multi-pod intersection,
@@ -2605,9 +2615,10 @@ panel with every input disabled (read-only), not a second component.
 **Explicit non-goals (V1):** per-user routing inside a shared multi-member
 team (distinct from personal-space support, which is just a team routing
 policy scoped to a one-member team), model temperature/timeout tuning, a
-per-message composer picker, direct `models_catalog.yaml` editing from the
-product. Per-agent routing (`agent_profile_overrides`) is in scope, not a
-non-goal.
+per-message composer picker (**reversed 2026-10-09, §63**), direct
+`models_catalog.yaml` editing from the product. Per-agent routing
+(`agent_profile_overrides`) was in scope until §63 replaced it with the
+instance recommended model.
 
 ## 38. Contract Notes — team image renamed banner → avatar (2026-08-08, #2300)
 
@@ -2822,7 +2833,7 @@ deciding level is visible.
 elevated-role gate** §37's policy reads use. Anyone entitled to hold a
 conversation with an agent is entitled to know which model answers them, and
 that is safe precisely because the response carries no policy detail (above).
-Editing the policy stays `team_editor`-only.
+Editing the policy is `team_admin`-only since §63.
 
 **`reasoning_enabled` and the reasoning toggle.** The `reasoning_toggle` control
 on `ExecutionPreparation` answers "the platform enabled reasoning on _some_
@@ -2878,7 +2889,8 @@ error — the same diagnosability rule REASON-01 §8 applies to the reasoning
 control. Always `true` when a platform binding decided, which bypasses team
 enablement by design (§40's ReBAC exemption).
 
-**Explicit non-goals:** making the chip a model _picker_ (it stays read-only),
+**Explicit non-goals:** making the chip a model _picker_ (**reversed
+2026-10-09, §63**: the chip lists `selectable_models`),
 surfacing the deciding precedence level in the UI, per-turn re-resolution, and
 any non-chat capability — `embedding` has no
 production consumer.
@@ -4230,7 +4242,7 @@ about prompts.
 
 **What it is.** A platform admin sets the UI theme users get by default and the
 themes withdrawn from their choice. Theme ids are opaque to the control plane:
-the frontend owns the theme catalog and ignores ids it does not ship.
+the frontend owns the theme catalog (shipped themes plus valid deployment ZIP entries) and ignores ids outside it.
 
 **Model.** One `platform_ui_settings` row at most (`id = 'default'`, CHECK
 constraint): `default_theme` (nullable), `hidden_themes` (JSON list),
@@ -4252,8 +4264,10 @@ constraint): `default_theme` (nullable), `hidden_themes` (JSON list),
 `hidden_themes`) on the unauthenticated `GET /frontend/config`, omitted while
 no row exists, `default_theme` omitted when null (`exclude_none`). Ids only, no
 admin-authored content. The frontend caches it so its boot script can apply the
-theme before the next load's config arrives; a change applies to each user at
-their next load. Full behavior: OpenSpec `platform-ui-theme-settings`.
+theme before the next load's config arrives. A running client refreshes the
+public config after its own admin save, on window focus and every 60 seconds,
+keeping the last good settings on failure. Full behavior: OpenSpec
+`platform-ui-theme-settings`.
 
 ## 58. Contract Notes — copy an agent to other teams (2026-10-04, #2949)
 
@@ -4354,47 +4368,96 @@ defaults to `banner`. A patch note keeps one markdown body per locale in
 `title` is a plain-text locale map validated like a banner's (200 characters),
 and must cover exactly the locales that have a body.
 
-**One active patch note.** Enabling a patch note (toggle, or create with
-`enabled=true`) disables the active one in the same transaction. Banners are
-untouched. A partial unique index (`uq_platform_announcement_active_patch_note`,
-`enabled AND kind = 'patch_note'`) makes two enabled patch notes impossible; a
-concurrent activation that loses on it gets `409`.
+**One active patch note; dismissal and re-show.** Superseded by 61.1
+(2026-10-13): any number of patch notes can be enabled, and the per-note
+dismissals, the unique index, its `409` and `dismissal_count` are gone. Toggle,
+content update and delete still read the row `FOR UPDATE`.
 
-**Dismissal and re-show.** Server-side, one row per user and patch note
-(`platform_announcement_dismissal`); a row present means hidden for that user.
-Every off-to-on toggle deletes all of the note's dismissals in the same
-transaction as the enable, so a re-enabled note is shown to everyone again; a
-content edit keeps them. A patch note's `content_version` never moves on a
-content edit and is bumped on every off-to-on toggle, as for a banner: it keys
-the client's "closed this sign-in" flag. Dismissals are also removed with the
-patch note and with the user (`DELETE /users/{id}`). Banners keep their
-per-browser dismissal. The admin list (`AdminAnnouncement`) gives each patch
-note a `dismissal_count`: its rows (one grouped count). Toggle, content update and delete read
-the row `FOR UPDATE`.
+**Activation history.** Superseded by 61.1: one line per exposure
+(`platform_announcement_exposure`) instead of one event per change.
 
-**Activation history.** `platform_announcement_activation_event`, append-only,
-no foreign key so it outlives the announcement. One event per real `enabled`
-change: toggle on/off, creation enabled, automatic disable of the previous
-patch note (actor = the admin enabling the new one) and deletion of an enabled
-announcement (`deactivated`). Each event carries `announcement_id`, `kind`,
-`label` (title per locale at event time), `severity` (the
-banner's severity at event time; `null` for a patch note, whose stored
-severity is a placeholder), `action` (`activated | deactivated`), `actor_uid`
-and `occurred_at`, written in the same
-transaction as the change. The `.toggled` and `.created` audit records gain
-`auto_disabled_ids`.
+### 61.1 Patch-note packages, order and exposure history (2026-10-13)
 
-| Method | Path                                                  | Permission            | Response                                   |
-| ------ | ----------------------------------------------------- | --------------------- | ------------------------------------------ |
-| GET    | `/announcements/patch-note`                           | authenticated         | `ActivePatchNote { patch_note: Announcement \| null, dismissed: bool }`: the enabled patch note and whether the caller dismissed it since it was last enabled |
-| PUT    | `/announcements/{id}/dismissal`                       | authenticated         | `204`, idempotent (one row per user and note); `404` when the id is not a patch note. Identity from the token only |
-| GET    | `/admin/platform/announcements/activation-history`    | `can_manage_platform` | `AnnouncementActivationEvent[]`, 100 newest first |
+OpenSpec change `browse-patch-note-history`. Replaces "one active patch note,
+shown when enabled, dismissible for good" and the event history.
 
-`GET /announcements/patch-note` is read once per application load (no
-polling); a patch note enabled mid-session is seen at the next load. The client
-opens it at load unless `dismissed`, and the profile menu reopens it on request.
-`GET /admin/platform/announcements` now returns `AdminAnnouncement[]`
-(`Announcement` plus `dismissal_count`, null for a banner).
+**Working area.** The `patch_note` rows of `platform_announcement` are what
+administrators edit; users never read them. `enabled` means "included in the
+next announcement": any number can be enabled, a patch note is created
+disabled, and toggling writes no history. Its `content_version` keys nothing.
+
+**Order.** `Announcement.position` (`platform_announcement.position`, nullable
+integer): 1 at the top for a patch note, `null` for a banner. A new patch note
+takes position 1 and the others move down. `GET /admin/platform/announcements`
+returns `Announcement[]`: banners newest first, then patch notes by position.
+
+**Announcement = frozen package.** Announcing snapshots the enabled patch
+notes, in position order, as `PatchNoteSnapshot { id, title, description_long }`
+with every locale they hold. Users read that package, and only that, until the
+next announcement or a withdrawal; later edits, reorders, toggles and deletions
+do not reach it. Every announcement is a new package, pending again for every
+user. Withdrawing leaves no package in effect: the user read is empty and
+nothing is pending.
+
+The announce request carries the ids the administrator confirmed, in order;
+the package is frozen only when the enabled patch notes are exactly that list,
+so a change made meanwhile by someone else is refused, not announced. A
+package holds at most 10 patch notes (`MAX_PATCH_NOTES_PER_ANNOUNCEMENT`).
+Announce, withdraw, create and reorder take one transaction-scoped advisory
+lock on PostgreSQL, so at most one package is ever in effect.
+
+**Exposures.** `platform_announcement_exposure` holds one row per exposure, no
+foreign key so it outlives the announcement: `id`, `kind`, `announcement_id`
+(the banner; for a package, its first patch note), `label` and `severity` as
+they were at the start, `actor_uid`, `activated_at`, `deactivated_at` (null
+while it lasts), and for a package `note_count` and `package`. A banner's row
+starts when it is enabled (toggle, or created enabled) and ends when it is
+disabled or deleted. A package's row starts at the announcement and ends when
+the next one replaces it or when it is withdrawn. The announcement *in effect*
+is the open `patch_note` row with a non-null `note_count`. Rows are written in
+the same transaction as the change.
+
+**Seen.** `platform_announcement_seen`, one row per user (`user_id`,
+`announcement_id`, `seen_at`), replaces `platform_announcement_dismissal`. An
+announcement is pending for a user when one is in effect, it opens the dialog
+(every package does, except the one the upgrade creates, see below) and the
+user's row does not name it. A record never moves a user back to an older
+announcement (one guarded upsert). Rows are removed with the user
+(`DELETE /users/{id}`).
+
+| Method | Path                                                         | Permission            | Request / response |
+| ------ | ------------------------------------------------------------ | --------------------- | ------------------ |
+| GET    | `/announcements/patch-notes`                                 | authenticated         | `PatchNoteHistory { patch_notes: PatchNoteSnapshot[], pending_announcement_id: str \| null }`: the package in effect, empty when none |
+| PUT    | `/announcements/patch-note-announcements/{id}/seen`          | authenticated         | `204`, idempotent; `404` when the id is not an announced package. Identity from the token only |
+| PUT    | `/admin/platform/announcements/patch-notes/order`            | `can_manage_platform` | `PatchNoteOrderRequest { ids: str[] }` (at most 1000) → `204`; `409`, changing nothing, unless the list names each patch note exactly once |
+| GET    | `/admin/platform/announcements/patch-notes/announcement`     | `can_manage_platform` | `PatchNoteAnnouncement { id, announced_at, announced_by } \| null`: the announcement in effect |
+| POST   | `/admin/platform/announcements/patch-notes/announcement`     | `can_manage_platform` | `PatchNoteAnnounceRequest { ids: str[] }` (1 to 1000) → `201` `PatchNoteAnnouncement`; `409`, announcing nothing, when no patch note is included, when more than 10 are, or when the included ones are not exactly `ids` in order |
+| DELETE | `/admin/platform/announcements/patch-notes/announcement`     | `can_manage_platform` | withdraw, `204`; `404` when none is in effect |
+| GET    | `/admin/platform/announcements/patch-notes/announcements/{id}` | `can_manage_platform` | `PatchNoteSnapshot[]`: the package of a history line; `404` for an unknown line or one without package |
+| GET    | `/admin/platform/announcements/activation-history`           | `can_manage_platform` | `AnnouncementExposure[]`, 100 newest first |
+
+`AnnouncementExposure` is `{ id, kind, announcement_id, label, severity,
+note_count, activated_at, deactivated_at, actor_uid }`; there is no `action`.
+For a patch-note line `label` is the first note's title and `note_count` the
+size of the package; `note_count` is null for a banner and for a line that
+kept no package, which cannot be opened. `GET /announcements/patch-notes` is
+read once per application load (no polling). Audit records:
+`platform.announcement.patch_notes_reordered`, `.patch_notes_announced`,
+`.patch_notes_withdrawn`.
+
+**Removed.** `GET /announcements/patch-note` and `ActivePatchNote`;
+`PUT /announcements/{id}/dismissal`; `AdminAnnouncement` and its
+`dismissal_count`; the `409` on concurrent activation; `auto_disabled_ids` in
+the `.created` and `.toggled` audit records; `AnnouncementActivationEvent` and
+its `action`; `platform_announcement_activation_event`.
+
+**Upgrade.** Migration `e5ff6d80cc9f` drops the unique index and the dismissal
+table and numbers existing patch notes newest first. Migration `a6c1d94e27b3`
+converts the events to exposure rows (each activation paired with the
+deactivation that followed; earlier patch-note activations become ended rows
+without package) and makes the enabled patch note the first package, with
+`opens_dialog = false`: readable from "What's new", pending for nobody. No
+user gets a dialog until an administrator announces.
 
 ## 62. Contract Notes — agent creation assistant (2026-10-08)
 
@@ -4475,6 +4538,142 @@ preset `creation_assistant_usage` (`can_observe_platform`, no `team_id`)
 returns `CreationAssistantUsageResponse`: `total_tokens`, `input_tokens`,
 `output_tokens` and `drafts` (calls the provider answered, usable or not) for
 the period, read from `agent.creation_assistant_completed` only.
+
+## 63. Contract Notes — team model settings, recommended model and composer model choice (2026-10-09, #3029)
+
+Amends §33 (per-agent reasoning), §37 (team routing policy) and §41 (effective
+chat model). Runtime side: `RUNTIME-EXECUTION-CONTRACT.md` §8.114. OpenSpec
+change `chat-model-and-reasoning-picker`.
+
+### §37 amended — the team policy becomes the team's Models section
+
+**Policy shape** (`TeamRoutingPolicy`, `PATCH` still a full typed replacement):
+
+| Field                             | Meaning                                                                    |
+| --------------------------------- | -------------------------------------------------------------------------- |
+| `chat_default_profile_id`         | Unchanged: the team default, `null` = pod default                          |
+| `disabled_model_ids`              | Model capability ids the team disabled for its members (exceptions)        |
+| `reasoning_default_off_model_ids` | Model capability ids whose composer reasoning row starts OFF (exceptions)  |
+
+Both lists are stored as **exceptions**, keyed by model capability id (as
+`can_use` and the reasoning store are), in the new
+`disabled_model_ids_json` / `reasoning_default_off_model_ids_json` columns. So a
+model the platform newly allows arrives enabled, with reasoning on by default,
+with no team write.
+
+**`agent_profile_overrides` is removed** from the policy, its schemas,
+`ExecutionPreparation` and the runtime. Alembic revision `e9026d8e4db6` copies
+each override into `recommended_chat_profile_id` of the team's instances of that
+template that have none, then drops the column (lossy downgrade). An imported
+old bundle is mapped the same way; `legacy_overrides_mapped` counts it in the
+import report.
+
+**Write validation.** The default's model must be usable and not disabled
+(`ModelDisabledForTeamError`, 422). The default model, explicit or effective,
+cannot be disabled (`DefaultModelNotDisableableError`, 422). Exception ids the
+team can no longer use are pruned silently. Newly disabled models clear the
+team's agent recommendations naming them in the same transaction. A write that
+disables models is refused with 503 (`ModelCatalogUnavailableError`) when one
+of the team's pod catalogs cannot be read and either no default is stored (the
+pod defaults it must protect are unknown) or a model is newly disabled (the
+recommendations to clear are unknown): it never fails open.
+
+**Optimistic concurrency.** The request takes an optional `expected_version`
+(the `version` last read, 0 before any write). When set and the stored
+version differs, the write is refused with 409
+(`RoutingPolicyVersionConflictError`); the Models section reloads and warns.
+Omitted, the write is unconditional as before.
+
+**Write gate narrowed: `team_editor` → `team_admin`** (`can_update_info`,
+owner decision 2026-10-09). Every remaining field belongs to the Models section.
+A personal space's owner keeps the write through the system-team bypass. Team
+editors and analysts get a read-only view and keep steering models per agent
+through the recommended model. Reads (`GET …/routing-policy`,
+`…/available-models`) keep their elevated-role gate.
+
+**New read.** `GET /teams/{team_id}/routing-policy/disable-impact?capability_id=`
+(`team_admin`, it exposes agent names) → `DisableImpact { agents:
+[{agent_instance_id, display_name}] }`: the instances whose recommendation maps
+to that model. One instance query plus the shared catalog aggregation.
+
+**`available-models`** gains `display_name` and `reasoning_available` per
+profile, and `effective_default_profile_id`: the stored default, else the pod
+default of the team's pods when they agree. It now carries the routing-policy
+cache tag, invalidated by an agent `PATCH`.
+
+**Platform revocation.** When a model loses `can_use` for a team (grant removal,
+personal-space scope revoke) or platform-wide (default-on switched off, for
+teams without an explicit grant), `capabilities/service.py` clears the matching
+recommendations and prunes the team exception lists. A stored team default on
+that model is cleared too, so the pod default takes over and turns keep
+working; the Models section then shows the pod default as the default. No team
+dialog.
+
+**Disable fallback.** Agents recommending a disabled model follow the team
+default. A conversation whose member chose that model goes back to the agent's
+recommended model (itself the team default when the agent has none) on its
+next refresh.
+
+**Agent save vs disable.** An agent create or update re-checks its
+recommendation against the team policy inside its own write transaction, under
+a shared lock on the policy row, and an update that does not set
+`recommended_chat_profile_id` keeps the stored value rather than the one loaded
+before the write, so a recommendation a concurrent disable cleared is never
+written back.
+
+**Non-goal reversed.** "A per-message composer picker" (§37 V1 non-goals) is
+now in scope: see §41 below. Per-user routing *policy* stays out: the user's
+choice is per conversation and never stored server-side.
+
+### Agent instance — `recommended_chat_profile_id`
+
+On `ManagedAgentTuning` (inside `tuning_json`, no schema change),
+`CreateAgentInstanceRequest`, `UpdateAgentInstanceRequest` (absent = unchanged,
+`null` = follow the team) and `ManagedAgentInstanceSummary`. Validated on write
+against `can_use` ∩ team-enabled ∩ the instance pod's chat profiles (422). It
+reaches the pod on the trusted runtime binding, never on request content.
+
+### §33 amended — per-agent reasoning retired
+
+`reasoning_enabled` / `reasoning_default_on` leave `ManagedAgentTuning`, the
+create/update requests, `ManagedAgentInstanceSummary`, `AgentTemplateSummary`
+and the agent form. Stored rows and old bundles still load, with the keys
+ignored. The two Amendment B and #2473 addenda above no longer apply.
+
+`_platform_reasoning_control` keeps one gate: the descriptor is emitted whenever
+at least one model has reasoning enabled platform-wide, for every agent, without
+`params.default`. The composer seeds the row from the chosen model's team
+default. `ManagedAgentRuntimeBinding` gains `team_disabled_model_ids`, read
+with the policy row. The call's short reads run on two concurrent sessions
+(instance, team settings, policy / reasoning, platform binding, platform
+prompt): at most 2 pooled connections per turn instead of 5.
+
+`ExecutionPreparation.chat_profile_id` replaces `agent_profile_overrides`. It
+is set only from the evaluator's `agent_model_override` (service identity
+only, validated like a recommendation) and forwarded as
+`RuntimeContext.chat_profile_id`. The chat UI does not forward it.
+
+### §41 amended — the composer reads the selectable models
+
+`EffectiveChatModel` gains:
+
+| Field               | Meaning                                                                                                                                                                         |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `selectable_models` | `SelectableChatModel { profile_id, capability_id, name, display_name, reasoning_enabled, reasoning_default_on }`: chat models served by the instance's pod, `can_use`, not team-disabled. One row per model; the resolved model's row is keyed by the resolved profile |
+| `choice_locked`     | `true` when a platform binding or a pod per-agent override fixes the model; `selectable_models` is then empty                                                                    |
+
+The resolution now includes the instance recommendation (validated like the
+pod does) and no user level, so `name` names what a new conversation starts on.
+No I/O is added. Unreachable pod: empty, as before. Still members-readable;
+still no precedence level revealed.
+
+**Non-goal reversed.** "Making the chip a model picker" is now in scope: the
+composer's model control lists `selectable_models` and keeps the choice per
+conversation in browser session storage (`chat.composer.{sessionId}`), sent as
+`runtime_context.chat_profile_id` on each turn. The page re-reads this route on
+mount, window focus (both at most once per 30 s) and conversation switch; a
+choice missing from a refetch is dropped with a notice. Component: `docs/swift/ux/COMPONENT-UX.md`
+`ReasoningChip`.
 
 ## Knowledge Flow ingestion cancellation — 2026-09-23
 
@@ -4627,6 +4826,12 @@ Public `/frontend/config` includes `platform_access_enabled`, indicating admissi
 
 `/admin/platform/access` exposes persisted filtering and versioned all/any rules with allow/block mode under `CAN_MANAGE_PLATFORM`. `policy-preview` tests the actor's own verified human token without saving or observing draft-only values; `policy` saves with an expected revision, conflict detection and the active-filter actor safeguard. Its `users`, `teams`, `t0-preview` and `t0-import` subresources manage individual exceptions, team flags and an explicit one-time existing-user snapshot. Independent enrollment links support optional notes/expiration and per-link revocation. Creation and explicit reveal require the acting administrator's own human credential and return uncached plaintext tokens; ordinary paginated history excludes tokens. Tokens are recoverable in SQL for copying the original URL later. Removing Free suspends links; restoring Free resumes unrevoked, unexpired links. An authenticated caller-only opening POST increments the link's aggregate count and last-opening time without persisting visits or visitor identity. Preview and enrollment do not increment counts.
 
+Disabling filtering admits every authenticated, active person while retaining the saved rule, revision, user/team exceptions, Free flags and links for later reactivation. Current `CAN_MANAGE_PLATFORM` authority is an independent admission source while filtering is active, including delegated human requests; role removal withdraws it on the next request. Account suspension, terms acceptance and resource authorization still apply. An unavailable role authority produces an availability error. The activation preview and user list identify the administrator source.
+
+`GET /admin/platform/access/teams/{team_id}/enrollment-links/{link_id}/joiners` returns bounded, paginated successful joiners for a link to platform administrators. Entries use the user's current first name, last name and username while active, or the last recorded values and a deleted flag after account deletion, plus the original join time. The record is written only when enrollment grants a new team membership, not on opening, preview, terms acceptance or an already-member retry. It survives team departure, account deletion, and link suspension, revocation or expiration. Explicit link-history cleanup removes those records. Existing historical joins are not backfilled.
+
+Successful Platform access mutations emit structured `fred.security.audit` events with the actor and relevant state or target identifiers, independently of ordinary application log verbosity. Filtering changes include the resulting revision, and link creation identifies the new link without exposing its token. Bulk manual grants and the initial T0 import emit one bounded summary with counts; they do not create one log event per user. The T0 event includes the number of exceptions actually added; a completed T0 retry emits no import event. Each successful new Free-link team join emits one event with user, team and link IDs. Openings and already-member retries do not emit a join event. Failed requests emit no success event. Link tokens and rule claim values are not written to audit events. Audit-log retention is controlled by the deployment's downstream log pipeline, as described in `docs/swift/platform/OBSERVABILITY-AND-AUDIT.md`.
+
 Invitation history supports an optional `status` query (`active`, `revoked`, `expired`, `suspended`) and returns filtered `total` plus team-wide `inactive_count` (2026-10-09). Revoked takes precedence over expired; one server timestamp determines each listing. `DELETE /admin/platform/access/teams/{team_id}/enrollment-links/inactive` requires platform administration and atomically deletes only that team's revoked or expired records under the existing mutation lock. It returns the actual `deleted_count` and audits actor, team and count after commit. Usable suspended links, membership and access settings are preserved; notes and aggregate counters of deleted links are permanently removed. No additional schema migration is required.
 
 `GET /admin/platform/access/own-claims` (2026-10-07) returns a bounded JSON projection and exact selectable paths from the acting administrator's freshly verified own human access token. It rejects workload/delegated credentials and disables HTTP caching. The payload is transient: it is not added to principal serialization, SQL evidence or audit logs. The former observed `claims` route and catalog collection are retired (2026-10-08); the pending admission migration creates no catalog table. Claim selection reads only this own-token projection.
@@ -4636,11 +4841,13 @@ The own-credential `/platform-access/status` endpoint exposes only admission and
 Platform admission administration also accepts an atomic manual grant of any positive number of existing Fred user UUIDs through `POST /admin/platform/access/users`.
 Unknown identities reject the whole request; duplicate IDs do not duplicate
 exceptions and existing manual/T0 provenance is preserved. The UI retains its
-selection across searches and pages. Every admission administrator check uses
+selection across searches. Every admission administrator check uses
 higher-consistency OpenFGA authorization so revoking administrator authority
 withdraws these mutations on subsequent requests.
 
 User listing includes `first_name` and `last_name` alongside username/email and searches these same fields (2026-10-08). Manual grants validate and insert in bounded SQL batches within one transaction, without an arbitrary 100-user cap.
+
+`GET /admin/platform/access/users` accepts the optional boolean query parameter `exceptions_only` (2026-10-13, default `false`). When `true`, the page and `total` cover only users holding an individual exception (manual or T0); it combines with `query`, `offset` and `limit`. Without the parameter rows are ordered in SQL by `lower(username)` ascending, users without a username last, then by user id; the previous order was user id alone. With `exceptions_only=true` rows are ordered by the exception's `granted_at` descending (most recent grant first), then by that same alphabetical rule; `granted_at` is never null, and the rows of one bulk grant or of the initial import share one timestamp. The response shape is unchanged: each row's `sources` are reported as before, and the individual source (`manual` or `t0`) carries the `granted_at` the whitelist table displays. The exception row is read with the page query, not once per row. Its `query` matching ignores accents as well as case on both sides (2026-10-14): Latin letters carrying a diacritic match their plain letter in either direction on username, email, first name and last name; ligatures (œ, æ, ß) match only themselves. No extension is required. The whitelist Users tab requests `exceptions_only=true`; its add dialog and the rule tester's own-row lookup do not.
 
 `PlatformAccessState.has_admission_sources` identifies a saved rule, individual exception or eligible authorized/Free team. Filtering can activate with independent sources alone. `PATCH /admin/platform/access` accepts `expected_revision`, rejecting stale confirmations with 409 while preserving legacy-gate and actor-lockout safeguards. `GET /admin/platform/access/activation-preview` returns all known local users with identity metadata and allowed/blocked/unknown outcomes, counts, `revision` and `checked_at` (2026-10-08). It evaluates saved policy, fresh selected evidence, suspension, individual exceptions and live higher-consistency team membership without mutating admission or exposing claim values. Missing/stale/conflicting rule evidence produces unknown unless another authoritative source suffices; unavailable account status remains unknown. A membership-authority error fails the preview instead of claiming a complete classification. Bounded concurrent checks and a 120-second total deadline protect this explicit administrative read; unavailable or changed policy snapshots return errors. The preview is an observation, not a frozen authorization decision. The UI requires explicit confirmation, uses the returned revision and never implicitly saves a draft.
 

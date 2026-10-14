@@ -598,6 +598,11 @@ Key models:
 Fred-specific metadata travels in the top-level `fred` field of each chunk.
 Standard OpenAI clients ignore unknown top-level fields.
 
+The `finish_reason` chunk carries the `final` event's `content` in `delta.content`
+when no `assistant_delta` was streamed since the last `tool_call` (non-streaming
+model, graph answer, tool error surfaced as the answer); a streamed answer is
+never repeated.
+
 Session ownership uses the native route's shared gate: with authentication enabled,
 `X-Fred-Session-Id` targeting another user's existing history session returns HTTP 403
 and emits `session_owner_mismatch` before credential admission or agent resolution.
@@ -1983,6 +1988,11 @@ config) and 4 (composer control) are phase 2 and not implemented here.
 Levels 3-4 of REASON-01 (per-agent and per-question reasoning), plus its three
 tool-loop-safety preconditions. Builds on §8.29 (levels 1-2); read that first.
 
+**2026-10-09 — superseded in part by §8.114.** Level 3 (the agent offer,
+`AgentTuning.reasoning_enabled`) is removed: the platform activation alone is
+the ceiling. The tri-state below is redefined: only `True` reasons, `None`
+no longer defers to the ceiling.
+
 **Reasoning is not a capability** (RFC §15, Amendment A). It was built as one, as
 §7 specified, and withdrawn before release: an agent does not *use* reasoning the
 way it uses a tool, so the Tools tab was the wrong place to enable it. What ships:
@@ -2101,6 +2111,11 @@ model — see §C.9 and the note below.
 ---
 
 ### 8.32 ✅ `RuntimeContext` gains team routing policy fields (TEAM-05, #2118, 2026-07-27)
+
+**2026-10-09 — `agent_profile_overrides` and `resolve_team_override` removed
+(§8.114).** The user's choice (`chat_profile_id`) and the instance
+recommendation now sit between the pod override and the team default;
+`chat_default_profile_id` below is unchanged.
 
 **2026-08-16 — chat-only drift enforcement (#2365).** A team-selected profile
 whose declared capability is not `chat` now raises
@@ -6504,6 +6519,9 @@ than failing the turn. `prompt_id` is attribution, never resolved at display
 time — a prompt is overwritten on edit and can be deleted, so the turn's own
 text is the record of what was sent.
 
+A turn can hold several prompt commands since 8.112, which adds a list to this
+descriptor and leaves the fields above describing the first one.
+
 ### 8.99 Agent-initiated human questions
 
 An interactive ReAct or Deep turn exposes the platform `ask_user` tool only when
@@ -6888,3 +6906,118 @@ provider may bill it). The log line adds the same fields and `reasoning`
 (`used`/`off`/`fallback`).
 Never the description or any drafted text. Acceptance:
 `openspec/changes/add-agent-creation-assistant/`.
+
+### 8.112 Several prompt commands on a user turn (2026-10-13)
+
+Additive. `TurnCommand` (the `command` of `RuntimeContext`) and the stored
+`CommandDescriptor` (`ChatMetadata.command`) gain an optional `prompts` list:
+one entry per prompt command occurrence of the turn, in the order of the typed
+line, 1 to 16 entries (`TurnCommandPrompt` / `CommandPromptDescriptor`).
+
+| Field | Meaning |
+| --- | --- |
+| `command` | the command, without its slash (required, not empty) |
+| `prompt_id`, `prompt_name` | attribution, optional, never resolved at display time |
+| `draft_offset` | index of the command's `/` in `draft_text` (>= 0) |
+| `text_offset`, `text_length` | where that prompt's text sits in the turn's stored text (>= 0, >= 1) |
+
+The three positions are the client's string indices (UTF-16 code units), like
+`draft_command_offset`. The runtime stores and serves them and never compares
+them to the text: a Python length counts code points and would disagree on any
+character outside the basic plane. A reader checks that a list fits its turn
+before using it, and otherwise falls back to the single fields.
+
+The single fields of 8.98 are unchanged and describe the first entry
+(`command`, `prompt_id`, `prompt_name`, `draft_command_offset`);
+`appended_text` is the user's own text and `draft_text` the typed line. The
+list points into the stored text and copies none of it, so the turn's own text
+stays the record of what was sent, and the agent still receives nothing about
+commands.
+
+A request whose list is empty, longer than 16 or malformed is refused as
+invalid (422), like any other invalid request field. On the internal context
+path a malformed list drops the whole descriptor and the turn is stored as
+plain text, as in 8.98. No schema change: the descriptor is JSON in
+`session_history.metadata_json`.
+
+Mixed versions. No model on the path forbids unknown keys, so nothing is
+rejected. A pod whose fred-sdk predates the list ignores it: the turn runs on
+the full assembled text and is stored with the single fields only, so a client
+renders its first prompt command and shows the others as the `/name` the user
+typed. A pod rolled back after such rows were written keeps serving their
+list. Deploy runtime pods before the web client to avoid that rendering for
+the turns sent in between. Acceptance:
+`openspec/specs/platform-agent-skills/spec.md`.
+
+### 8.114 Per-conversation model choice, instance recommendation and model-led reasoning (2026-10-09, #3029)
+
+Supersedes the team per-agent level of §8.32 and the agent gate and tri-state
+of §8.30. OpenSpec change `chat-model-and-reasoning-picker`; product side in
+`CONTROL-PLANE-PRODUCT-CONTRACT.md` §37 / §41 (2026-10-09 entries).
+
+**Chat model precedence**, highest first. `resolve_effective_chat_profile`
+(fred-sdk) stays the one shared implementation, used by the pod and by the
+control-plane effective-chat-model read:
+
+1. platform binding (`BoundRuntimeContext.platform_chat_model_binding`, §8.55),
+   short-circuited by the caller;
+2. pod per-agent override (`models_catalog.yaml` `agent_profile_overrides`);
+3. user's per-conversation choice — new `RuntimeContext.chat_profile_id`;
+4. instance recommendation — new `AgentTuning.recommended_chat_profile_id`;
+5. team default (`RuntimeContext.chat_default_profile_id`);
+6. pod default.
+
+`RuntimeContext.agent_profile_overrides`, `resolve_team_override` and
+`ChatProfileOrigin.TEAM_AGENT_OVERRIDE` are removed. `ChatProfileOrigin` and
+`ModelSelectionSource` gain `user_choice` and `instance_recommendation`; both
+are logged at info on `[V2][MODEL_ROUTING]`. No KPI label changes.
+`chat_profile_id` is bound on managed-instance turns only: a direct template
+run (`agent_id`, no `agent_instance_id`) drops it.
+
+**Trust boundary.**
+
+- `chat_profile_id` is client-forwarded. `RoutedChatModelFactory.select`
+  accepts it, and the recommendation, only when the profile is a known chat
+  profile, its model is in `usable_model_ids` (`can_use`; `None` = ReBAC off)
+  and not in `team_disabled_model_ids`. Otherwise it logs
+  `[V2][MODEL_ROUTING] <level> ignored: … reason=…` at debug (it runs on every
+  model call and names client input) and falls through. A stale or spoofed
+  choice never fails the turn. The resolver stays pure: the caller
+  passes `None` for an invalid level.
+- `BoundRuntimeContext.team_disabled_model_ids` and
+  `BoundRuntimeContext.recommended_chat_profile_id` are TRUSTED: filled from
+  the per-turn `ManagedAgentRuntimeBinding` (the disabled set) and the
+  server-resolved instance tuning (the recommendation). No `ctx.get` exists
+  for either, so a request body cannot set them. Empty / `None` outside
+  managed turns; an older control plane that omits the disabled set stays
+  compatible.
+- The team default keeps failing closed: unknown or non-chat →
+  `TeamRoutingProfileDriftError`; model team-disabled → `ModelNotUsableError`
+  (never a silent substitution). The team-disabled set narrows the user,
+  instance and team levels only; the pod default stays gated by `can_use`.
+- The choice applies to the top-level agent only. Registry children get a
+  `PortableContext` without it and keep their own resolution; native Deep
+  sub-agents reuse the parent's client.
+
+**Reasoning.**
+
+- Ceiling: on a managed instance turn, `reasoning_enabled_model_ids` is the
+  platform list from the runtime binding, with no agent gate
+  (`AgentTuning.reasoning_enabled` / `reasoning_default_on` are removed; the
+  `AgentDefinition` fields are deprecated no-ops). A turn without a managed
+  instance binds `[]`.
+- Tri-state redefined: only `reasoning is True` reasons, within the ceiling.
+  `False` and `None` both strip, so callers that send nothing
+  (OpenAI-compatible router, evaluation) never reason by accident. The field
+  stays `bool | None` for wire compatibility. `build_for_chat` strips unless
+  `reasoning is True`; the composer always sends an explicit value while its
+  row is shown.
+- The effort picker stays withdrawn (§8.48).
+
+**Deprecated for pod authors (design Q1, decided 2026-10-09).**
+`AgentDefinition.reasoning_enabled` / `reasoning_default_on` stay for one SDK
+minor as deprecated, inert fields: a definition setting them (class attribute
+or constructor) still loads, logs one deprecation warning per definition
+class, and changes nothing. They will be removed in a later minor. `AgentTuning`
+no longer has them and ignores them in stored payloads.
+Migration note: `docs/swift/ops/migrations/chat-model-and-reasoning-picker.md`.

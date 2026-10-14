@@ -44,17 +44,19 @@ Trois zones :
 
 ## Les nouveautés après une mise à jour
 
-Après une mise à jour, une fenêtre peut s'ouvrir à votre arrivée sur
-l'application pour présenter les changements, sous un titre choisi par les
-administrateurs. Fermez-la avec **Fermer** : elle ne revient pas pendant que
-vous travaillez, mais elle s'affichera de nouveau à votre prochaine connexion.
-Si vous cochez **Ne plus afficher** avant de fermer, elle ne s'affichera plus,
-sur aucun de vos appareils, sauf si les administrateurs la publient à nouveau. Les nouveautés suivantes vous seront présentées à leur
-tour.
+Après une mise à jour, la fenêtre **Nouveautés** peut s'ouvrir à votre arrivée
+sur l'application pour présenter les changements. Fermez-la avec **Fermer** :
+elle ne s'ouvrira plus toute seule, sur aucun de vos appareils, jusqu'à la
+prochaine annonce des administrateurs.
 
-Pour la relire à tout moment, ouvrez votre menu de profil, en bas de la barre
+Pour la rouvrir à tout moment, ouvrez votre menu de profil, en bas de la barre
 latérale, et choisissez **Nouveautés**. Cette entrée est présente tant que des
 nouveautés sont publiées.
+
+Quand plusieurs nouveautés sont publiées, les flèches en bas à gauche de la
+fenêtre permettent de passer de l'une à l'autre : la plus récente s'affiche en
+premier, la flèche de droite mène aux précédentes, et le repère entre les deux
+(par exemple « 1 / 4 ») indique où vous en êtes.
 
 ## Votre espace personnel
 

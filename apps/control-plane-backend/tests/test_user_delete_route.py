@@ -48,6 +48,18 @@ _MEMBERSHIP = Relation(
 _DELETE = f"/users/{_PERSON}"
 
 
+@pytest.fixture(autouse=True)
+def stub_join_history_storage(monkeypatch) -> None:
+    async def no_join_history(
+        _store: object, _user_id: str, *, table_may_be_missing: bool = False
+    ) -> None:
+        pass
+
+    monkeypatch.setattr(users_api, "platform_access_available", lambda: False)
+    monkeypatch.setattr(users_api, "PlatformAccessStore", lambda _engine: object())
+    monkeypatch.setattr(users_api, "mark_user_join_history_deleted", no_join_history)
+
+
 class _IdentityProvider:
     """`KeycloakAdmin.a_delete_user`: a 204 removes the account; any other status
     raises `KeycloakDeleteError` with that code (404 when the account is missing)."""
@@ -95,18 +107,17 @@ async def _deployment(
     async def no_favorites(user_id: str) -> None:
         calls.append("delete_favorites")
 
-    async def no_dismissals(_user_id: str) -> None:
-        calls.append("delete_patch_note_dismissals")
+    async def no_seen(_user_id: str) -> None:
+        calls.append("delete_patch_note_seen")
 
     container = SimpleNamespace(
         get_rebac_engine=lambda: engine_under_test,
+        get_pg_async_engine=object,
         get_platform_bootstrap_store=lambda: SimpleNamespace(get_completed_by=root),
         get_prompt_store=lambda: SimpleNamespace(
             delete_favorites_for_user=no_favorites
         ),
-        get_announcement_store=lambda: SimpleNamespace(
-            delete_dismissals_for_user=no_dismissals
-        ),
+        get_announcement_store=lambda: SimpleNamespace(delete_seen_for_user=no_seen),
     )
     app = FastAPI()
     app.include_router(users_api.router)
@@ -156,12 +167,50 @@ async def test_delete_bans_before_identity_deletion() -> None:
         assert deployment.calls == [
             "suspend_account",
             "delete_favorites",
-            "delete_patch_note_dismissals",
+            "delete_patch_note_seen",
             "delete_identity_account",
         ]
         await _assert_banned(deployment.rebac)
         assert ban(_PERSON) in deployment.rebac.relations
         assert deployment.identity.accounts == {_BYSTANDER}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("directory", "identity_exists", "expected_status", "available"),
+    [
+        ("keycloak", True, 204, True),
+        ("keycloak", False, 404, True),
+        ("local", True, 204, True),
+        ("local", True, 204, False),
+    ],
+)
+async def test_delete_marks_link_join_history(
+    monkeypatch,
+    directory: str,
+    identity_exists: bool,
+    expected_status: int,
+    available: bool,
+) -> None:
+    calls: list[bool] = []
+
+    async def mark_deleted(
+        _store: object, user_id: str, *, table_may_be_missing: bool = False
+    ) -> None:
+        assert user_id == _PERSON
+        calls.append(table_may_be_missing)
+
+    monkeypatch.setattr(users_api, "platform_access_available", lambda: available)
+    monkeypatch.setattr(
+        users_api, "get_platform_access", lambda: SimpleNamespace(store=object())
+    )
+    monkeypatch.setattr(users_api, "mark_user_join_history_deleted", mark_deleted)
+    async with _deployment(user_directory=directory) as deployment:
+        if not identity_exists:
+            deployment.identity.accounts.discard(_PERSON)
+        response = await deployment.client.delete(_DELETE)
+        assert response.status_code == expected_status
+        assert calls == [not available]
 
 
 @pytest.mark.asyncio
@@ -219,7 +268,7 @@ async def test_identity_failure_after_the_ban_leaves_the_person_banned() -> None
         assert deployment.calls == [
             "suspend_account",
             "delete_favorites",
-            "delete_patch_note_dismissals",
+            "delete_patch_note_seen",
             "delete_identity_account",
         ]
         assert deployment.identity.accounts == {_BYSTANDER}
@@ -236,7 +285,7 @@ async def test_missing_identity_returns_not_found_after_the_ban() -> None:
         assert deployment.calls == [
             "suspend_account",
             "delete_favorites",
-            "delete_patch_note_dismissals",
+            "delete_patch_note_seen",
             "delete_identity_account",
         ]
         await _assert_banned(deployment.rebac)
@@ -265,7 +314,7 @@ async def test_without_account_status_enforcement_delete_writes_no_ban() -> None
         assert response.status_code == 204
         assert deployment.calls == [
             "delete_favorites",
-            "delete_patch_note_dismissals",
+            "delete_patch_note_seen",
             "delete_identity_account",
         ]
         assert ban(_PERSON) not in rebac.relations

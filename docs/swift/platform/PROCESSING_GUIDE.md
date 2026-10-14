@@ -145,6 +145,9 @@ Additional runtime/model dependencies:
   directly to DuckDB. Other detected encodings, including Windows-1252, are
   transcoded to UTF-8 before the first DuckDB read, so offline deployments do
   not trigger an encoding-extension download.
+- Plain-text and Markdown inputs (corpus and chat attachments) are decoded as
+  UTF-8 (BOM stripped), then Windows-1252, then Latin-1, with newlines
+  normalised, so legacy Windows files keep their accents.
 
 3. Control Docling model-dependent features
 

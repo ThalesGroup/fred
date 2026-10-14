@@ -47,14 +47,31 @@ reçoit la consigne de le signaler.
 activées et les connaissances générales. **Connaissances générales** ne lance
 pas de recherche documentaire.
 
+## Choisir le modèle et le raisonnement
+
+Le bouton à droite du champ de saisie indique le modèle de langage qui répond.
+Une conversation démarre sur le modèle conseillé par l'agent. Ouvrez le bouton
+pour choisir un autre modèle parmi ceux activés pour l'équipe : ce choix vaut
+pour cette conversation seulement, et une nouvelle conversation repart du
+modèle conseillé.
+
+Quand le modèle sait raisonner, le même menu propose **Faible** ou **Élevé
+(Raisonnement)**. Il démarre sur le réglage choisi par l'équipe pour ce modèle.
+Le raisonnement donne des réponses plus réfléchies, mais plus lentes et plus
+coûteuses.
+
+Si le modèle choisi n'est plus disponible, un message le signale et la
+conversation revient au modèle conseillé.
+
 ## Insérer un prompt
 
 Plutôt que de retaper une demande récurrente, insérez le contenu d'un prompt
 enregistré dans le champ de saisie, puis modifiez-le avant d'envoyer. C'est un
 raccourci pour ce message, pas un réglage durable de la conversation.
 
-Un prompt porteur d'une commande se lance plus court encore : tapez `/` dans un
-champ vide — voir [Les commandes](/help/fr/features/commands).
+Un prompt porteur d'une commande se lance plus court encore : tapez `/` dans le
+champ de saisie, même s'il contient déjà du texte : voir
+[Les commandes](/help/fr/features/commands).
 
 ## Reprendre un message envoyé
 

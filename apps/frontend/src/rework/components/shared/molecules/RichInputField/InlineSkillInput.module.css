@@ -24,7 +24,25 @@
 .editor :global(.cm-line) {
   padding: 0 var(--spacing-xs);
 }
-.editor :global(.cm-placeholder),
+/* Placeholder and editor share one grid cell: the placeholder still sizes the
+   field (it may wrap) but stays out of the editable line, under the editor. */
+.field {
+  display: grid;
+  min-width: 0;
+}
+.field > * {
+  grid-area: 1 / 1;
+  min-width: 0;
+}
+.placeholder {
+  padding: 0 var(--spacing-xs);
+  pointer-events: none;
+  font: var(--font-body-large);
+  line-height: 1.5;
+  user-select: none;
+  overflow-wrap: anywhere;
+}
+.placeholder,
 .hint {
   color: var(--on-surface-muted);
 }
@@ -34,8 +52,4 @@
 .hint {
   margin-inline-start: var(--spacing-xs);
   pointer-events: none;
-}
-
-.promptToken {
-  color: var(--info);
 }

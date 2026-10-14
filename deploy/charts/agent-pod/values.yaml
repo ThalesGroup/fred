@@ -1,0 +1,82 @@
+# An agent pod built on fred-runtime. The chart deploys someone's image with that
+# pod's configuration; README.md lists what each deployment must set.
+
+# Required: the pod's image. The chart has no default.
+image:
+  repository: ""
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+replicaCount: 1
+
+service:
+  port: 80
+
+# Optional: route the pod's configuration.app.base_url from the browser. That
+# path is also the pod's ingress_prefix in Fred's runtime_catalog_sources.
+ingress:
+  enabled: false
+  className: ""
+  host: ""
+  annotations: {}
+
+# Mounted as /app/config/configuration.yaml: fred-runtime's AgentPodConfig,
+# validated against it by values.schema.json. Set at least app.runtime_id,
+# app.base_url, security.m2m and security.user (README.md, "Configure").
+configuration:
+  app:
+    host: "0.0.0.0"
+    # The port the image serves on.
+    port: 8000
+
+# Other files the pod reads, mounted under /app/config/ next to
+# configuration.yaml (e.g. models_catalog.yaml). A mapping is written as YAML.
+extraConfigFiles: {}
+
+# Credentials, as environment variables. `existingSecret` is mounted whole
+# (envFrom); `extraEnvVars` reads single keys from Secrets the platform already
+# owns. `create` renders `data` into a Secret, for tests only.
+secret:
+  existingSecret: ""
+  create: false
+  data: {}
+extraEnvVars: []
+
+extraVolumes: []
+extraVolumeMounts: []
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 512Mi
+  limits:
+    cpu: "1"
+    memory: 2Gi
+
+terminationGracePeriodSeconds: 30
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []

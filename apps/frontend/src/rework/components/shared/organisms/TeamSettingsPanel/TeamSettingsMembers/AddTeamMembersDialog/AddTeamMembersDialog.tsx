@@ -14,11 +14,8 @@
 
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import Button from "@shared/atoms/Button/Button.tsx";
-import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
-import Autocomplete from "@shared/molecules/Autocomplete/Autocomplete.tsx";
 import TeamRoleChips from "@shared/molecules/TeamRoleChips/TeamRoleChips.tsx";
-import { Portal } from "@shared/utils/Portal.tsx";
+import AddPeopleDialog from "@shared/organisms/AddPeopleDialog/AddPeopleDialog.tsx";
 import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
 import { useMutationAction } from "@core/hooks/useMutationAction.ts";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
@@ -33,7 +30,6 @@ import {
   useGrantTeamMemberRoleMutation,
   useSearchCandidateTeamMembersQuery,
 } from "../../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
-import styles from "./AddTeamMembersDialog.module.scss";
 
 interface PendingMember {
   user: UserSummary;
@@ -79,17 +75,6 @@ export default function AddTeamMembersDialog({ open, team, onClose }: AddTeamMem
       setSearchQuery("");
     }
   }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open, onClose]);
-
-  if (!open) return null;
 
   const handleSelectCandidate = (user: UserSummary) => {
     setPendingMembers((prev) => (prev.some((m) => m.user.id === user.id) ? prev : [...prev, { user, roles: [] }]));
@@ -174,87 +159,35 @@ export default function AddTeamMembersDialog({ open, team, onClose }: AddTeamMem
   };
 
   return (
-    <Portal id="modal-portal">
-      <div className={styles.overlay} onClick={onClose}>
-        <div
-          className={styles.dialog}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="add-team-members-dialog-title"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className={styles.header}>
-            <p id="add-team-members-dialog-title" className={styles.title}>
-              {t("rework.teamSettings.members.addMembersDialog.title")}
-            </p>
-            <p className={styles.subtitle}>{t("rework.teamSettings.members.addMembersDialog.subtitle")}</p>
-          </div>
-
-          <div className={styles.searchRow}>
-            <Autocomplete<UserSummary>
-              textInput={{
-                placeholder: t("rework.teamSettings.members.addMembersDialog.searchPlaceholder"),
-                icon: { category: "outlined", type: "search" },
-                autoFocus: true,
-              }}
-              minQueryLength={2}
-              onFieldValueChange={setSearchQuery}
-              options={suggestions.map((user) => ({ label: candidateLabel(user), value: user, key: user.id }))}
-              onSelect={handleSelectCandidate}
-            />
-          </div>
-
-          <div className={styles.pendingListContainer}>
-            <div className={styles.pendingListHeader}>
-              {t("rework.teamSettings.members.addMembersDialog.pendingListHeader")}
-            </div>
-            {pendingMembers.length > 0 ? (
-              <ul className={styles.pendingList}>
-                {pendingMembers.map((member) => (
-                  <li key={member.user.id} className={styles.pendingRow}>
-                    <span className={styles.pendingName}>{candidateLabel(member.user)}</span>
-                    <div className={styles.pendingRoleChips}>
-                      <TeamRoleChips
-                        heldRoles={member.roles}
-                        canAdminister={(role) => canAdministerTeamRole(capabilities, role)}
-                        onToggle={(role, held) => handleToggleRole(member.user.id, role, held)}
-                      />
-                    </div>
-                    <IconButton
-                      variant="icon"
-                      size="medium"
-                      icon={{ category: "outlined", type: "close" }}
-                      aria-label={t("rework.teamSettings.members.addMembersDialog.removeAria", {
-                        name: candidateLabel(member.user),
-                      })}
-                      onClick={() => handleRemovePending(member.user.id)}
-                    />
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <div className={styles.pendingListEmpty}>
-                {t("rework.teamSettings.members.addMembersDialog.pendingListEmpty")}
-              </div>
-            )}
-          </div>
-
-          <div className={styles.actions}>
-            <Button color="on-surface" variant="outlined" size="medium" onClick={onClose}>
-              {t("rework.teamSettings.members.addMembersDialog.cancel")}
-            </Button>
-            <Button
-              color="primary"
-              variant="filled"
-              size="medium"
-              disabled={pendingMembers.length === 0 || isSubmitting}
-              onClick={handleConfirm}
-            >
-              {t("rework.teamSettings.members.addMembersDialog.confirm")}
-            </Button>
-          </div>
-        </div>
-      </div>
-    </Portal>
+    <AddPeopleDialog<UserSummary>
+      open={open}
+      title={t("rework.teamSettings.members.addMembersDialog.title")}
+      subtitle={t("rework.teamSettings.members.addMembersDialog.subtitle")}
+      searchPlaceholder={t("rework.teamSettings.members.addMembersDialog.searchPlaceholder")}
+      onSearchChange={setSearchQuery}
+      options={suggestions.map((user) => ({ label: candidateLabel(user), value: user, key: user.id }))}
+      onSelect={handleSelectCandidate}
+      pending={pendingMembers.map((member) => member.user)}
+      pendingKey={(user) => user.id}
+      pendingLabel={candidateLabel}
+      pendingAddon={(user) => (
+        <TeamRoleChips
+          heldRoles={pendingMembers.find((member) => member.user.id === user.id)?.roles ?? []}
+          canAdminister={(role) => canAdministerTeamRole(capabilities, role)}
+          onToggle={(role, held) => handleToggleRole(user.id, role, held)}
+        />
+      )}
+      pendingListHeader={t("rework.teamSettings.members.addMembersDialog.pendingListHeader")}
+      pendingListEmpty={t("rework.teamSettings.members.addMembersDialog.pendingListEmpty")}
+      removeAriaLabel={(user) =>
+        t("rework.teamSettings.members.addMembersDialog.removeAria", { name: candidateLabel(user) })
+      }
+      onRemove={(user) => handleRemovePending(user.id)}
+      cancelLabel={t("rework.teamSettings.members.addMembersDialog.cancel")}
+      confirmLabel={t("rework.teamSettings.members.addMembersDialog.confirm")}
+      confirmDisabled={pendingMembers.length === 0 || isSubmitting}
+      onConfirm={handleConfirm}
+      onClose={onClose}
+    />
   );
 }

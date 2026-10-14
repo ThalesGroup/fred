@@ -65,8 +65,8 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     "ControlPlaneKnowledgeBase",
     "PlatformAccess",
     "PlatformAccessLinks",
+    "PlatformAccessJoiners",
     "ControlPlaneAnnouncement",
-    "ControlPlanePatchNote",
   ],
   endpoints: {
     validateGcuControlPlaneV1GcuPost: { invalidatesTags: ["PlatformAccess"] },
@@ -92,6 +92,9 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     listPlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksGet: {
       providesTags: (_result, _error, arg) => [{ type: "PlatformAccessLinks", id: arg.teamId }],
     },
+    listPlatformEnrollmentJoinersControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdJoinersGet: {
+      providesTags: (_result, _error, arg) => [{ type: "PlatformAccessJoiners", id: arg.linkId }],
+    },
     deleteInactivePlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksInactiveDelete: {
       invalidatesTags: (_result, _error, arg) => [{ type: "PlatformAccessLinks", id: arg.teamId }],
     },
@@ -103,7 +106,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     },
     acceptFreeEnrollmentCguControlPlaneV1PlatformAccessFreeTokenGcuPost: { invalidatesTags: ["PlatformAccess"] },
     enrollFreeTeamControlPlaneV1PlatformAccessFreeTokenEnrollPost: {
-      invalidatesTags: ["PlatformAccess", "ControlPlaneTeam", "ControlPlaneTeamMember"],
+      invalidatesTags: ["PlatformAccess", "ControlPlaneTeam", "ControlPlaneTeamMember", "PlatformAccessJoiners"],
     },
 
     // Platform announcements. Both reads share one LIST tag: an admin mutation
@@ -127,16 +130,25 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     deleteAnnouncementControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdDelete: {
       invalidatesTags: [{ type: "ControlPlaneAnnouncement" as const, id: "LIST" }],
     },
-    // The history moves with every admin mutation, so it rides the LIST tag. The
-    // patch-note read is per user and read once per load: only a dismissal refreshes it.
-    listActivationHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGet: {
+    // The activation history, the users' patch-note history and the current
+    // announcement all move with admin mutations, so they ride the LIST tag.
+    listExposureHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGet: {
       providesTags: [{ type: "ControlPlaneAnnouncement" as const, id: "LIST" }],
     },
-    getActivePatchNoteControlPlaneV1AnnouncementsPatchNoteGet: {
-      providesTags: [{ type: "ControlPlanePatchNote" as const, id: "ACTIVE" }],
+    getPatchNoteHistoryControlPlaneV1AnnouncementsPatchNotesGet: {
+      providesTags: [{ type: "ControlPlaneAnnouncement" as const, id: "LIST" }],
     },
-    dismissPatchNoteControlPlaneV1AnnouncementsAnnouncementIdDismissalPut: {
-      invalidatesTags: [{ type: "ControlPlanePatchNote" as const, id: "ACTIVE" }],
+    getPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementGet: {
+      providesTags: [{ type: "ControlPlaneAnnouncement" as const, id: "LIST" }],
+    },
+    setPatchNoteOrderControlPlaneV1AdminPlatformAnnouncementsPatchNotesOrderPut: {
+      invalidatesTags: [{ type: "ControlPlaneAnnouncement" as const, id: "LIST" }],
+    },
+    announcePatchNotesControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementPost: {
+      invalidatesTags: [{ type: "ControlPlaneAnnouncement" as const, id: "LIST" }],
+    },
+    withdrawPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementDelete: {
+      invalidatesTags: [{ type: "ControlPlaneAnnouncement" as const, id: "LIST" }],
     },
     // Team wiki (WIKI-01/02). One tag per team carries the tree; one per PAGE ID
     // carries a page's content and its history.
@@ -264,33 +276,39 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     },
     // Enablement changes suspend or revive agents server-side, so the agent
     // lists must be read again: one team's list, or every list for the
-    // platform-wide switches.
+    // platform-wide switches. They also change which models a team may use, so
+    // its Models section and the composer's model list are read again too.
     putTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPut: {
       invalidatesTags: (_, __, arg) => [
         { type: "ControlPlaneCapability", id: "LIST" },
         { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
+        { type: "ControlPlaneRoutingPolicy", id: arg.teamId },
       ],
     },
     deleteTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdDelete: {
       invalidatesTags: (_, __, arg) => [
         { type: "ControlPlaneCapability", id: "LIST" },
         { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
+        { type: "ControlPlaneRoutingPolicy", id: arg.teamId },
       ],
     },
     putCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPut: {
       invalidatesTags: [
         { type: "ControlPlaneCapability", id: "LIST" },
         { type: "ControlPlaneAgentInstance", id: "ALL" },
+        "ControlPlaneRoutingPolicy",
       ],
     },
     putCapabilityPersonalScopeControlPlaneV1AdminCapabilitiesCapabilityIdPersonalScopePut: {
       invalidatesTags: [
         { type: "ControlPlaneCapability", id: "LIST" },
         { type: "ControlPlaneAgentInstance", id: "ALL" },
+        "ControlPlaneRoutingPolicy",
       ],
     },
+    // Reasoning availability shows in every team's Models section and composer.
     patchCapabilityReasoningControlPlaneV1AdminCapabilitiesCapabilityIdReasoningPatch: {
-      invalidatesTags: [{ type: "ControlPlaneCapability", id: "LIST" }],
+      invalidatesTags: [{ type: "ControlPlaneCapability", id: "LIST" }, "ControlPlaneRoutingPolicy"],
     },
     getTeamSessionsControlPlaneV1TeamsTeamIdSessionsGet: {
       providesTags: (_, __, arg) => [{ type: "ControlPlaneSession" as const, id: `LIST-${arg.teamId}` }],
@@ -544,12 +562,16 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
       invalidatesTags: (_, __, arg) => [
         { type: "ControlPlaneAgentInstance", id: arg.agentInstanceId },
         { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
+        // The recommended model may change, and the composer names it.
+        { type: "ControlPlaneRoutingPolicy", id: arg.teamId },
       ],
     },
     patchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatch: {
       invalidatesTags: (_, __, arg) => [
         { type: "ControlPlaneAgentInstance", id: arg.agentInstanceId },
         { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
+        // The recommended model may change, and the composer names it.
+        { type: "ControlPlaneRoutingPolicy", id: arg.teamId },
       ],
     },
     deleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDelete: {
@@ -691,8 +713,31 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     getTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGet: {
       providesTags: (_, __, arg) => [{ type: "ControlPlaneRoutingPolicy" as const, id: arg.teamId }],
     },
+    // A disable clears agents' recommended models, which the agent list shows.
+    // The response goes straight into the cache so switches never snap back.
     updateTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyPatch: {
-      invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneRoutingPolicy", id: arg.teamId }],
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneRoutingPolicy", id: arg.teamId },
+        { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
+      ],
+      onQueryStarted: async ({ teamId }, { dispatch, queryFulfilled }) => {
+        try {
+          const { data } = await queryFulfilled;
+          dispatch(
+            api.util.updateQueryData(
+              "getTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGet",
+              { teamId },
+              () => data,
+            ),
+          );
+        } catch {
+          // The caller reports the failed write.
+        }
+      },
+    },
+    // Its effective default follows the stored policy, so a save refetches it.
+    getAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGet: {
+      providesTags: (_, __, arg) => [{ type: "ControlPlaneRoutingPolicy" as const, id: arg.teamId }],
     },
     // The composer's model label (#2387). Tagged under the same
     // ControlPlaneRoutingPolicy/teamId entity the policy read and write already
@@ -735,6 +780,9 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     deleteCreationAssistantPromptControlPlaneV1AdminPlatformCreationAssistantDelete: {
       invalidatesTags: [{ type: "ControlPlaneCreationAssistantSettings", id: "LIST" }],
     },
+    getFrontendConfigControlPlaneV1FrontendConfigGet: {
+      providesTags: [{ type: "ControlPlanePlatformUiSettings", id: "LIST" }],
+    },
     // Platform UI theme settings: a single row, one LIST tag.
     getPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGet: {
       providesTags: [{ type: "ControlPlanePlatformUiSettings" as const, id: "LIST" }],
@@ -749,6 +797,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
 });
 
 export const {
+  useGetFrontendConfigControlPlaneV1FrontendConfigGetQuery: useFrontendConfigQuery,
   useAddTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoritePutMutation: useAddPromptFavoriteMutation,
   useRemoveTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoriteDeleteMutation:
     useRemovePromptFavoriteMutation,
@@ -799,6 +848,8 @@ export const {
     useAvailableModelProfilesQuery,
   // The model a chat turn will actually route to — the composer label (#2387).
   useGetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetQuery: useEffectiveChatModelQuery,
+  useLazyGetRoutingPolicyDisableImpactControlPlaneV1TeamsTeamIdRoutingPolicyDisableImpactGetQuery:
+    useLazyDisableImpactQuery,
   useHandlerControlPlaneV1KpiPresetsSkillUsageGetQuery: useSkillUsageQuery,
   useHandlerControlPlaneV1KpiPresetsUserSkillUsageGetQuery: useUserSkillUsageQuery,
   useHandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetQuery: useActiveUsersOverTimeQuery,
@@ -917,10 +968,20 @@ export const {
     useSetAnnouncementEnabledMutation,
   useDeleteAnnouncementControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdDeleteMutation:
     useDeleteAnnouncementMutation,
-  useGetActivePatchNoteControlPlaneV1AnnouncementsPatchNoteGetQuery: useActivePatchNoteQuery,
-  useDismissPatchNoteControlPlaneV1AnnouncementsAnnouncementIdDismissalPutMutation: useDismissPatchNoteMutation,
-  useListActivationHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetQuery:
-    useAnnouncementActivationHistoryQuery,
+  useGetPatchNoteHistoryControlPlaneV1AnnouncementsPatchNotesGetQuery: usePatchNoteHistoryQuery,
+  useMarkPatchNoteAnnouncementSeenControlPlaneV1AnnouncementsPatchNoteAnnouncementsAnnouncementIdSeenPutMutation:
+    useMarkPatchNoteAnnouncementSeenMutation,
+  useSetPatchNoteOrderControlPlaneV1AdminPlatformAnnouncementsPatchNotesOrderPutMutation: useSetPatchNoteOrderMutation,
+  useGetPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementGetQuery:
+    usePatchNoteAnnouncementQuery,
+  useAnnouncePatchNotesControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementPostMutation:
+    useAnnouncePatchNotesMutation,
+  useWithdrawPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementDeleteMutation:
+    useWithdrawPatchNoteAnnouncementMutation,
+  useLazyGetPatchNotePackageControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementsAnnouncementIdGetQuery:
+    useLazyPatchNotePackageQuery,
+  useListExposureHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetQuery:
+    useAnnouncementExposureHistoryQuery,
   // Team administrator charter acceptance.
   useAcceptTeamAdminCharterControlPlaneV1TeamAdminCharterPostMutation: useAcceptTeamAdminCharterMutation,
   useGetTeamAdminCharterAcceptanceControlPlaneV1TeamAdminCharterGetQuery: useGetTeamAdminCharterAcceptanceQuery,
@@ -949,6 +1010,8 @@ export const {
   useSavePlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPutMutation: useSavePlatformPolicyMutation,
   useListPlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksGetQuery:
     usePlatformEnrollmentLinksQuery,
+  useListPlatformEnrollmentJoinersControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdJoinersGetQuery:
+    usePlatformEnrollmentJoinersQuery,
   useRevealPlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdRevealPostMutation:
     useRevealPlatformLinkMutation,
   useRevokePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdDeleteMutation:

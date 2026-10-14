@@ -96,6 +96,7 @@ const injectedRtkApi = api.injectEndpoints({
           offset: queryArg.offset,
           limit: queryArg.limit,
           query: queryArg.query,
+          exceptions_only: queryArg.exceptionsOnly,
         },
       }),
     }),
@@ -175,6 +176,19 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    listPlatformEnrollmentJoinersControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdJoinersGet:
+      build.query<
+        ListPlatformEnrollmentJoinersControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdJoinersGetApiResponse,
+        ListPlatformEnrollmentJoinersControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdJoinersGetApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/control-plane/v1/admin/platform/access/teams/${queryArg.teamId}/enrollment-links/${queryArg.linkId}/joiners`,
+          params: {
+            offset: queryArg.offset,
+            limit: queryArg.limit,
+          },
+        }),
+      }),
     deleteInactivePlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksInactiveDelete:
       build.mutation<
         DeleteInactivePlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksInactiveDeleteApiResponse,
@@ -1110,6 +1124,17 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    getRoutingPolicyDisableImpactControlPlaneV1TeamsTeamIdRoutingPolicyDisableImpactGet: build.query<
+      GetRoutingPolicyDisableImpactControlPlaneV1TeamsTeamIdRoutingPolicyDisableImpactGetApiResponse,
+      GetRoutingPolicyDisableImpactControlPlaneV1TeamsTeamIdRoutingPolicyDisableImpactGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/routing-policy/disable-impact`,
+        params: {
+          capability_id: queryArg.capabilityId,
+        },
+      }),
+    }),
     getPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGet: build.query<
       GetPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGetApiResponse,
       GetPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGetApiArg
@@ -1338,24 +1363,67 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/control-plane/v1/announcements/active` }),
     }),
-    getActivePatchNoteControlPlaneV1AnnouncementsPatchNoteGet: build.query<
-      GetActivePatchNoteControlPlaneV1AnnouncementsPatchNoteGetApiResponse,
-      GetActivePatchNoteControlPlaneV1AnnouncementsPatchNoteGetApiArg
+    getPatchNoteHistoryControlPlaneV1AnnouncementsPatchNotesGet: build.query<
+      GetPatchNoteHistoryControlPlaneV1AnnouncementsPatchNotesGetApiResponse,
+      GetPatchNoteHistoryControlPlaneV1AnnouncementsPatchNotesGetApiArg
     >({
-      query: () => ({ url: `/control-plane/v1/announcements/patch-note` }),
+      query: () => ({ url: `/control-plane/v1/announcements/patch-notes` }),
     }),
-    dismissPatchNoteControlPlaneV1AnnouncementsAnnouncementIdDismissalPut: build.mutation<
-      DismissPatchNoteControlPlaneV1AnnouncementsAnnouncementIdDismissalPutApiResponse,
-      DismissPatchNoteControlPlaneV1AnnouncementsAnnouncementIdDismissalPutApiArg
+    markPatchNoteAnnouncementSeenControlPlaneV1AnnouncementsPatchNoteAnnouncementsAnnouncementIdSeenPut: build.mutation<
+      MarkPatchNoteAnnouncementSeenControlPlaneV1AnnouncementsPatchNoteAnnouncementsAnnouncementIdSeenPutApiResponse,
+      MarkPatchNoteAnnouncementSeenControlPlaneV1AnnouncementsPatchNoteAnnouncementsAnnouncementIdSeenPutApiArg
     >({
       query: (queryArg) => ({
-        url: `/control-plane/v1/announcements/${queryArg.announcementId}/dismissal`,
+        url: `/control-plane/v1/announcements/patch-note-announcements/${queryArg.announcementId}/seen`,
         method: "PUT",
       }),
     }),
-    listActivationHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGet: build.query<
-      ListActivationHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetApiResponse,
-      ListActivationHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetApiArg
+    setPatchNoteOrderControlPlaneV1AdminPlatformAnnouncementsPatchNotesOrderPut: build.mutation<
+      SetPatchNoteOrderControlPlaneV1AdminPlatformAnnouncementsPatchNotesOrderPutApiResponse,
+      SetPatchNoteOrderControlPlaneV1AdminPlatformAnnouncementsPatchNotesOrderPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/announcements/patch-notes/order`,
+        method: "PUT",
+        body: queryArg.patchNoteOrderRequest,
+      }),
+    }),
+    getPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementGet: build.query<
+      GetPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementGetApiResponse,
+      GetPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/announcements/patch-notes/announcement` }),
+    }),
+    announcePatchNotesControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementPost: build.mutation<
+      AnnouncePatchNotesControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementPostApiResponse,
+      AnnouncePatchNotesControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/announcements/patch-notes/announcement`,
+        method: "POST",
+        body: queryArg.patchNoteAnnounceRequest,
+      }),
+    }),
+    withdrawPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementDelete: build.mutation<
+      WithdrawPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementDeleteApiResponse,
+      WithdrawPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementDeleteApiArg
+    >({
+      query: () => ({
+        url: `/control-plane/v1/admin/platform/announcements/patch-notes/announcement`,
+        method: "DELETE",
+      }),
+    }),
+    getPatchNotePackageControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementsAnnouncementIdGet: build.query<
+      GetPatchNotePackageControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementsAnnouncementIdGetApiResponse,
+      GetPatchNotePackageControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementsAnnouncementIdGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/announcements/patch-notes/announcements/${queryArg.announcementId}`,
+      }),
+    }),
+    listExposureHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGet: build.query<
+      ListExposureHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetApiResponse,
+      ListExposureHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetApiArg
     >({
       query: () => ({ url: `/control-plane/v1/admin/platform/announcements/activation-history` }),
     }),
@@ -1998,6 +2066,8 @@ export type ListPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGetApiA
   offset?: number;
   limit?: number;
   query?: string;
+  /** Only users holding an individual exception. */
+  exceptionsOnly?: boolean;
 };
 export type GrantPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersPostApiResponse = unknown;
 export type GrantPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersPostApiArg = {
@@ -2040,6 +2110,15 @@ export type ListPlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTea
   limit?: number;
   status?: ("active" | "suspended" | "expired" | "revoked") | null;
 };
+export type ListPlatformEnrollmentJoinersControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdJoinersGetApiResponse =
+  /** status 200 Successful Response */ PlatformEnrollmentJoinersPage;
+export type ListPlatformEnrollmentJoinersControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdJoinersGetApiArg =
+  {
+    teamId: string;
+    linkId: string;
+    offset?: number;
+    limit?: number;
+  };
 export type DeleteInactivePlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksInactiveDeleteApiResponse =
   /** status 200 Successful Response */ DeletedPlatformEnrollmentLinks;
 export type DeleteInactivePlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksInactiveDeleteApiArg =
@@ -2620,6 +2699,12 @@ export type GetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffective
   teamId: string;
   agentInstanceId: string;
 };
+export type GetRoutingPolicyDisableImpactControlPlaneV1TeamsTeamIdRoutingPolicyDisableImpactGetApiResponse =
+  /** status 200 Successful Response */ DisableImpact;
+export type GetRoutingPolicyDisableImpactControlPlaneV1TeamsTeamIdRoutingPolicyDisableImpactGetApiArg = {
+  teamId: string;
+  capabilityId: string;
+};
 export type GetPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGetApiResponse =
   /** status 200 Successful Response */ PlatformModelBinding;
 export type GetPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGetApiArg = void;
@@ -2762,18 +2847,42 @@ export type PutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutApiArg 
 export type GetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetApiResponse =
   /** status 200 Successful Response */ Announcement[];
 export type GetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetApiArg = void;
-export type GetActivePatchNoteControlPlaneV1AnnouncementsPatchNoteGetApiResponse =
-  /** status 200 Successful Response */ ActivePatchNote;
-export type GetActivePatchNoteControlPlaneV1AnnouncementsPatchNoteGetApiArg = void;
-export type DismissPatchNoteControlPlaneV1AnnouncementsAnnouncementIdDismissalPutApiResponse = unknown;
-export type DismissPatchNoteControlPlaneV1AnnouncementsAnnouncementIdDismissalPutApiArg = {
-  announcementId: string;
+export type GetPatchNoteHistoryControlPlaneV1AnnouncementsPatchNotesGetApiResponse =
+  /** status 200 Successful Response */ PatchNoteHistory;
+export type GetPatchNoteHistoryControlPlaneV1AnnouncementsPatchNotesGetApiArg = void;
+export type MarkPatchNoteAnnouncementSeenControlPlaneV1AnnouncementsPatchNoteAnnouncementsAnnouncementIdSeenPutApiResponse =
+  unknown;
+export type MarkPatchNoteAnnouncementSeenControlPlaneV1AnnouncementsPatchNoteAnnouncementsAnnouncementIdSeenPutApiArg =
+  {
+    announcementId: string;
+  };
+export type SetPatchNoteOrderControlPlaneV1AdminPlatformAnnouncementsPatchNotesOrderPutApiResponse = unknown;
+export type SetPatchNoteOrderControlPlaneV1AdminPlatformAnnouncementsPatchNotesOrderPutApiArg = {
+  patchNoteOrderRequest: PatchNoteOrderRequest;
 };
-export type ListActivationHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetApiResponse =
-  /** status 200 Successful Response */ AnnouncementActivationEvent[];
-export type ListActivationHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetApiArg = void;
+export type GetPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementGetApiResponse =
+  /** status 200 Successful Response */ PatchNoteAnnouncement | null;
+export type GetPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementGetApiArg = void;
+export type AnnouncePatchNotesControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementPostApiResponse =
+  /** status 201 Successful Response */ PatchNoteAnnouncement;
+export type AnnouncePatchNotesControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementPostApiArg = {
+  patchNoteAnnounceRequest: PatchNoteAnnounceRequest;
+};
+export type WithdrawPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementDeleteApiResponse =
+  unknown;
+export type WithdrawPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementDeleteApiArg =
+  void;
+export type GetPatchNotePackageControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementsAnnouncementIdGetApiResponse =
+  /** status 200 Successful Response */ PatchNoteSnapshot[];
+export type GetPatchNotePackageControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementsAnnouncementIdGetApiArg =
+  {
+    announcementId: string;
+  };
+export type ListExposureHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetApiResponse =
+  /** status 200 Successful Response */ AnnouncementExposure[];
+export type ListExposureHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetApiArg = void;
 export type ListAnnouncementsControlPlaneV1AdminPlatformAnnouncementsGetApiResponse =
-  /** status 200 Successful Response */ AdminAnnouncement[];
+  /** status 200 Successful Response */ Announcement[];
 export type ListAnnouncementsControlPlaneV1AdminPlatformAnnouncementsGetApiArg = void;
 export type CreateAnnouncementControlPlaneV1AdminPlatformAnnouncementsPostApiResponse =
   /** status 201 Successful Response */ Announcement;
@@ -3302,7 +3411,7 @@ export type SetPlatformFiltering = {
   expected_revision?: number | null;
 };
 export type AdmissionSource = {
-  kind: "attribute" | "manual" | "t0" | "team" | "free";
+  kind: "admin" | "attribute" | "manual" | "t0" | "team" | "free";
   team_id?: string | null;
   team_name?: string | null;
   granted_by?: string | null;
@@ -3394,6 +3503,18 @@ export type PlatformEnrollmentLinksPage = {
   items: PlatformEnrollmentLinkInfo[];
   total: number;
   inactive_count: number;
+};
+export type PlatformEnrollmentJoiner = {
+  user_id: string;
+  username: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  joined_at: string;
+  deleted: boolean;
+};
+export type PlatformEnrollmentJoinersPage = {
+  items: PlatformEnrollmentJoiner[];
+  total: number;
 };
 export type DeletedPlatformEnrollmentLinks = {
   deleted_count: number;
@@ -3802,10 +3923,6 @@ export type AgentTemplateSummary = {
     
     Affects NEW instances only. An instance enrolled before this field existed persisted a genuine `selected_capability_ids: []` (the form always submitted an explicit selection), which is indistinguishable from a deliberate 'no capabilities' — so `materialize_default_capability_selections` skips it by design (it backfills `None` rows only). Such instances do not gain their template's defaults retroactively and must be re-ticked by hand. */
   default_capability_ids?: string[];
-  /** Does this template offer per-question reasoning (REASON-01 level 3)? Verbatim from the pod's `default_tuning`. The agent-creation form pre-ticks its Reasoning card from it, as `default_capability_ids` pre-ticks capabilities — a seed the operator can untick, never a lock. False for pods predating #2473. */
-  reasoning_enabled?: boolean;
-  /** Does this template start new conversations with the composer's reasoning toggle already ON (REASON-01 Amendment B)? Verbatim from the pod's `default_tuning`; only meaningful alongside `reasoning_enabled`. False for pods predating #2473. */
-  reasoning_default_on?: boolean;
 };
 export type SuspensionReason = "capability_unavailable" | "capability_access_revoked" | "capability_config_invalid";
 export type ManagedAgentInstanceSummary = {
@@ -3818,10 +3935,8 @@ export type ManagedAgentInstanceSummary = {
   role: string;
   /** User-authored intended-use statement (purpose, target/impacted users, data handled, outputs, error impact) captured in the agent form's Engagement tab, used to screen for platform/organization risk (#2105). Empty for agents enrolled before #2105 until independently edited — required at creation and enforced by the agent edit form on save, but omittable on `UpdateAgentInstanceRequest` (like `role`) so partial updates such as the enable/disable toggle are unaffected. */
   usage_statement?: string;
-  /** Whether this agent offers the per-question reasoning toggle in its chat composer (REASON-01 level 3). A plain agent property edited in the General section of the agent form, NOT a capability — reasoning is a property of how the model is called, not a tool the agent can use. False for every agent enrolled before REASON-01 until independently edited. */
-  reasoning_enabled?: boolean;
-  /** Whether a new conversation with this agent starts with the composer's reasoning toggle already ON (REASON-01 Amendment B). Only meaningful while `reasoning_enabled` is true — with no toggle offered there is nothing to preselect. The user can still switch it off per question. */
-  reasoning_default_on?: boolean;
+  /** Chat profile this agent's new conversations start on. Null follows the team default. */
+  recommended_chat_profile_id?: string | null;
   status: "enabled" | "disabled";
   /** Platform-forced suspension reason (#1975, RFC §3.9), or null when the instance is not suspended. Distinct from `status` (the editor's enable/disable toggle): a suspended instance is hidden from chat-only members and shows editors a warning with a locked enable toggle. One of capability_unavailable / capability_access_revoked / capability_config_invalid. */
   suspension_reason?: SuspensionReason | null;
@@ -3884,10 +3999,8 @@ export type CreateAgentInstanceRequest = {
       [key: string]: any;
     };
   } | null;
-  /** Offer the per-question reasoning toggle in this agent's chat composer (REASON-01 level 3). A plain agent property alongside role/description — NOT a capability, because reasoning is a property of how the model is called rather than a tool the agent can use. Defaults to False: enabling it only makes the composer toggle appear, and the user still has to flip it per question. */
-  reasoning_enabled?: boolean;
-  /** Start every new conversation with this agent's reasoning toggle already ON (REASON-01 Amendment B). Read only when `reasoning_enabled` is true; it seeds the composer's initial value and nothing more — the user can switch it off for any question. Defaults to False, the platform behaviour before this field existed. */
-  reasoning_default_on?: boolean;
+  /** Optional recommended chat profile. Must be a chat profile the team can use and has not disabled, served by the template's pod (else 422). Null follows the team default. */
+  recommended_chat_profile_id?: string | null;
 };
 export type AgentDraftResult = {
   name?: string | null;
@@ -3948,10 +4061,8 @@ export type UpdateAgentInstanceRequest = {
       [key: string]: any;
     };
   } | null;
-  /** Offer the per-question reasoning toggle in this agent's chat composer (REASON-01 level 3). Omit to leave the current setting unchanged — same convention as `role`, so a partial update such as the enable/disable toggle is not forced to resupply it. */
-  reasoning_enabled?: boolean | null;
-  /** Start new conversations with the reasoning toggle already ON (REASON-01 Amendment B). Omit to leave the current setting unchanged. Written independently of `reasoning_enabled`: withdrawing the offer leaves this value stored but inert, so re-offering reasoning restores the author's original default. */
-  reasoning_default_on?: boolean | null;
+  /** Recommended chat profile. Omit to leave it unchanged; pass null to follow the team default. Validated like on create. */
+  recommended_chat_profile_id?: string | null;
 };
 export type BodyPostTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesWithAssetsPost = {
   /** CreateAgentInstanceRequest as a JSON object string */
@@ -4170,16 +4281,8 @@ export type ManagedAgentTuning = {
   usage_statement?: string;
   tags?: string[];
   fields?: ManagedAgentFieldSpec[];
-  /** Does this agent OFFER per-question reasoning (REASON-01 level 3, `MODEL-REASONING-ENABLEMENT-RFC.md` §6)? A first-class agent property, deliberately NOT a capability: reasoning is a property of how the model is called, not a tool the agent can use, so it belongs next to role/description rather than in the tool picker.
-    
-    True only means the chat composer OFFERS the toggle — it never turns reasoning on by itself. The user still has to flip it per question (level 4, default off), and a platform admin still has to have enabled the model's reasoning (level 2, a ceiling). */
-  reasoning_enabled?: boolean;
-  /** When this agent offers reasoning, does a NEW conversation start with the composer toggle already ON (REASON-01 Amendment B)? Seeds `params.default` on the emitted `reasoning_toggle` control; the user can still flip it off per question — this decides where the switch starts, never where it stays.
-    
-    Meaningless unless `reasoning_enabled` is True: with the offer off no control is emitted at all, so no default can apply. The value is kept rather than reset in that case, so an author who turns the offer back on recovers their choice.
-    
-    Defaults to False, matching the hardcoded default this field replaces: `AGENT-THINKING-API-RFC.md` Amendment C measured reasoning re-issuing duplicate tool calls on this stack, so starting ON is an opt-in an author makes deliberately. */
-  reasoning_default_on?: boolean;
+  /** Chat profile this instance's conversations start on, above the team default. None follows the team default, including later changes. Validated on write against the team's usable and enabled models on the instance's pod; the pod re-checks it every turn. Legacy `reasoning_enabled` / `reasoning_default_on` keys in stored rows are ignored. */
+  recommended_chat_profile_id?: string | null;
   /** Capability activation policy (#1974, RFC AGENT-CAPABILITY §3.8). None means inherit the template default selection; [] means activate no capabilities; a non-empty list means activate exactly that set. Validated at save time against the capabilities the instance's bound pod advertises (unknown ids -> HTTP 422). */
   selected_capability_ids?: string[] | null;
   /** Per-capability stored config keyed by capability id. Each slice is the pod-validated {'schema_version', 'config'} envelope returned by the pod's validate-config round-trip, persisted VERBATIM — opaque to control-plane; the pod is the schema authority (RFC §3.8). Asset binaries never appear here — only KF storage keys. */
@@ -4242,6 +4345,7 @@ export type ManagedAgentRuntimeBinding = {
     };
   };
   reasoning_enabled_model_ids?: string[];
+  team_disabled_model_ids?: string[];
   platform_chat_model_binding?: ModelBinding | null;
   platform_prompt?: string | null;
 };
@@ -4384,10 +4488,8 @@ export type ExecutionPreparation = {
   };
   /** Team's default chat model profile id, resolved from its stored TeamRoutingPolicy at session prep (TEAM-ROUTING-POLICY-RFC.md §8.2, TEAM-05, #2118). Null when the team has no routing policy — the runtime then uses its own deployment default. The frontend folds this onto RuntimeContext exactly like context_prompt_text (same three-hop channel, same 'resolved once per session, not re-fetched per turn' contract). */
   chat_default_profile_id?: string | null;
-  /** Team's per-agent model-profile overrides (agent_id -> profile_id), same resolution notes as chat_default_profile_id above. */
-  agent_profile_overrides?: {
-    [key: string]: string;
-  };
+  /** User-level chat profile for this call only, set solely from the evaluator's `agent_model_override`. Forwarded as `RuntimeContext.chat_profile_id`; the pod re-validates it. */
+  chat_profile_id?: string | null;
   /** kind="model" capability ids whose reasoning a platform admin has switched on (REASON-01, `MODEL-REASONING-ENABLEMENT-RFC.md` §5.5). Resolved once here at session prep and folded onto RuntimeContext by the frontend, exactly like chat_default_profile_id — the same three-hop channel, deliberately not a per-turn lookup. GLOBAL, not per team: an activation ('does this model run with reasoning'), not a permission — per-team model access is untouched (§5.1). **Empty means no model reasons** (§5.6, off by default); the runtime strips the reasoning settings for every model absent from this list at client construction (§5.6.2). */
   reasoning_enabled_model_ids?: string[];
 };
@@ -4583,24 +4685,43 @@ export type TeamRoutingPolicy = {
   team_id: string;
   version: number;
   chat_default_profile_id?: string | null;
-  agent_profile_overrides?: {
-    [key: string]: string;
-  };
+  /** Model capability ids the team disabled for its members. */
+  disabled_model_ids?: string[];
+  /** Model capability ids whose composer reasoning row starts OFF. Every other reasoning-enabled model starts ON. */
+  reasoning_default_off_model_ids?: string[];
 };
 export type UpdateTeamRoutingPolicyRequest = {
   chat_default_profile_id?: string | null;
-  agent_profile_overrides?: {
-    [key: string]: string;
-  };
+  disabled_model_ids?: string[];
+  reasoning_default_off_model_ids?: string[];
+  /** The `version` the client last read (0 before any write). When set and the stored version differs, the write is refused with 409 so a concurrent edit is not overwritten. */
+  expected_version?: number | null;
 };
 export type AvailableModelProfile = {
   profile_id: string;
   capability_id: string;
   /** i18n key, same as CapabilityCatalogEntry.name */
   name: string;
+  /** Ops-authored model display name, when the pod catalog has one. */
+  display_name?: string | null;
+  /** Whether a platform admin enabled reasoning for this model: only then can the team set a reasoning default for it. */
+  reasoning_available?: boolean;
 };
 export type AvailableModelProfileList = {
   profiles?: AvailableModelProfile[];
+  /** The profile shown as the team's Default: the stored team default, else the pod default of the team's pods when they agree. Its model cannot be disabled. */
+  effective_default_profile_id?: string | null;
+};
+export type SelectableChatModel = {
+  /** Choice key sent as `chat_profile_id`. */
+  profile_id: string;
+  capability_id: string;
+  name: string;
+  display_name?: string | null;
+  /** Reasoning enabled platform-wide for this model. */
+  reasoning_enabled?: boolean;
+  /** The team's starting reasoning state for this model. */
+  reasoning_default_on?: boolean;
 };
 export type EffectiveChatModel = {
   /** The concrete model name. `capability_id` below identifies the `(provider, name)` pair uniquely for a caller that needs to join against team enablement or the models admin view. */
@@ -4615,6 +4736,17 @@ export type EffectiveChatModel = {
     
     Needed because the reasoning control is emitted from the PLATFORM list — 'some model has reasoning on' — while routing may land on a different model entirely. With reasoning enabled on Mistral Small and a team override routing to Mistral Medium, the composer used to render 'Mistral Medium · Élevé' and offer the toggle while the pod ran no reasoning at all. */
   reasoning_enabled?: boolean;
+  /** Models a member may pick for this agent: chat models served by the instance's pod, `can_use` for the team and not team-disabled. Empty when the choice is locked or the pod is unreachable. */
+  selectable_models?: SelectableChatModel[];
+  /** True when a platform binding or a pod per-agent override fixes the model, so no choice is offered. */
+  choice_locked?: boolean;
+};
+export type DisableImpactAgent = {
+  agent_instance_id: string;
+  display_name: string;
+};
+export type DisableImpact = {
+  agents?: DisableImpactAgent[];
 };
 export type PlatformModelBinding = {
   model_capability?: "chat";
@@ -4823,67 +4955,71 @@ export type Announcement = {
   description_long: {
     [key: string]: string;
   };
-  /** Whether the announcement is delivered to users right now. */
+  /** Banner: whether it is delivered to users right now. Patch note: whether the next announcement includes it; users never read this row. */
   enabled: boolean;
   /** Whether a user may close the banner. A non-dismissible announcement stays until an admin disables it. */
   dismissible: boolean;
-  /** The edition the browser-side close is keyed on, so a bump shows the announcement again to everyone who had closed it. Both kinds bump when re-enabled; a banner also on a content edit. */
+  /** The edition a banner's browser-side close is keyed on, so a bump shows it again to everyone who had closed it. Not used by patch notes. */
   content_version: number;
+  /** Patch note only: its place in the administrator's order, 1 at the top. Null for a banner. */
+  position?: number | null;
   created_at: string;
   updated_at: string;
   created_by?: string | null;
   updated_by?: string | null;
 };
-export type ActivePatchNote = {
-  patch_note?: Announcement | null;
-  /** Whether the caller ticked "Don't show again" since it was last enabled: the client does not open it at load, only on request. */
-  dismissed?: boolean;
-};
-export type AnnouncementActivationEvent = {
+export type PatchNoteSnapshot = {
+  /** The patch note it was taken from; may be deleted. */
   id: string;
-  /** May name an announcement that has since been deleted. */
-  announcement_id: string;
-  kind: "banner" | "patch_note";
-  /** Locale → title as it was when the event happened. */
-  label: {
-    [key: string]: string;
-  };
-  /** The banner's severity when the event happened; null for a patch note. */
-  severity?: ("info" | "warning" | "error" | "success") | null;
-  action: "activated" | "deactivated";
-  /** Uid of the administrator who made the change. */
-  actor_uid?: string | null;
-  occurred_at: string;
-};
-export type AdminAnnouncement = {
-  id: string;
-  /** `banner` or `patch_note`. Fixed at creation. */
-  kind: "banner" | "patch_note";
-  severity: "info" | "warning" | "error" | "success";
-  /** Locale → title map. The frontend resolves it against the viewer's locale and falls back to 'en'. */
+  /** Locale → plain-text title map. */
   title: {
     [key: string]: string;
   };
-  /** Locale → markdown map rendered inside the banner itself. */
-  description_short: {
-    [key: string]: string;
-  };
-  /** Locale → markdown map. For a banner, the more-info dialog (empty for every locale means no more-info action). For a patch note, its body. */
+  /** Locale → markdown body map. */
   description_long: {
     [key: string]: string;
   };
-  /** Whether the announcement is delivered to users right now. */
-  enabled: boolean;
-  /** Whether a user may close the banner. A non-dismissible announcement stays until an admin disables it. */
-  dismissible: boolean;
-  /** The edition the browser-side close is keyed on, so a bump shows the announcement again to everyone who had closed it. Both kinds bump when re-enabled; a banner also on a content edit. */
-  content_version: number;
-  created_at: string;
-  updated_at: string;
-  created_by?: string | null;
-  updated_by?: string | null;
-  /** Patch note only: how many users ticked "Don't show again" since it was last enabled. Null for a banner. */
-  dismissal_count?: number | null;
+};
+export type PatchNoteHistory = {
+  /** The package of the announcement in effect, in its order. Empty when none is in effect. */
+  patch_notes: PatchNoteSnapshot[];
+  /** Set when an announcement is in effect and the caller has not recorded it as seen: the client opens the dialog, then records this id. */
+  pending_announcement_id?: string | null;
+};
+export type PatchNoteOrderRequest = {
+  /** Every patch note's id, exactly once; anything else is refused. */
+  ids: string[];
+};
+export type PatchNoteAnnouncement = {
+  id: string;
+  announced_at: string;
+  /** Uid of the administrator who announced. */
+  announced_by?: string | null;
+};
+export type PatchNoteAnnounceRequest = {
+  /** The ids of the included patch notes, in order, as the confirmation listed them. Refused with `409` unless they are exactly the currently included ones, in that order, and at most 10. */
+  ids: string[];
+};
+export type AnnouncementExposure = {
+  /** For a patch-note line: the announcement's id. */
+  id: string;
+  kind: "banner" | "patch_note";
+  /** The banner, or the first patch note of the package. May name an announcement that has since been deleted. */
+  announcement_id: string;
+  /** Locale → title when the exposure started: the banner's, or the first patch note's. */
+  label: {
+    [key: string]: string;
+  };
+  /** The banner's severity when it was enabled; null for patch notes. */
+  severity?: ("info" | "warning" | "error" | "success") | null;
+  /** How many patch notes the package holds. Null for a banner, and for an older patch-note line that kept no package: only a non-null value means the package can be read. */
+  note_count?: number | null;
+  /** When users started seeing it. */
+  activated_at: string;
+  /** When the banner was disabled or deleted, or the announcement replaced or withdrawn. Null while users still see it. */
+  deactivated_at?: string | null;
+  /** Uid of the administrator who started it. */
+  actor_uid?: string | null;
 };
 export type AnnouncementWriteRequest = {
   /** `banner` or `patch_note`. An update cannot change it. */
@@ -5307,6 +5443,8 @@ export const {
   useGeneratePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinkPostMutation,
   useListPlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksGetQuery,
   useLazyListPlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksGetQuery,
+  useListPlatformEnrollmentJoinersControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdJoinersGetQuery,
+  useLazyListPlatformEnrollmentJoinersControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdJoinersGetQuery,
   useDeleteInactivePlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksInactiveDeleteMutation,
   useRevealPlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdRevealPostMutation,
   useRevokePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdDeleteMutation,
@@ -5462,6 +5600,8 @@ export const {
   useLazyGetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetQuery,
   useGetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetQuery,
   useLazyGetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetQuery,
+  useGetRoutingPolicyDisableImpactControlPlaneV1TeamsTeamIdRoutingPolicyDisableImpactGetQuery,
+  useLazyGetRoutingPolicyDisableImpactControlPlaneV1TeamsTeamIdRoutingPolicyDisableImpactGetQuery,
   useGetPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGetQuery,
   useLazyGetPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGetQuery,
   usePutPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsPutMutation,
@@ -5502,11 +5642,18 @@ export const {
   usePutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutMutation,
   useGetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetQuery,
   useLazyGetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetQuery,
-  useGetActivePatchNoteControlPlaneV1AnnouncementsPatchNoteGetQuery,
-  useLazyGetActivePatchNoteControlPlaneV1AnnouncementsPatchNoteGetQuery,
-  useDismissPatchNoteControlPlaneV1AnnouncementsAnnouncementIdDismissalPutMutation,
-  useListActivationHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetQuery,
-  useLazyListActivationHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetQuery,
+  useGetPatchNoteHistoryControlPlaneV1AnnouncementsPatchNotesGetQuery,
+  useLazyGetPatchNoteHistoryControlPlaneV1AnnouncementsPatchNotesGetQuery,
+  useMarkPatchNoteAnnouncementSeenControlPlaneV1AnnouncementsPatchNoteAnnouncementsAnnouncementIdSeenPutMutation,
+  useSetPatchNoteOrderControlPlaneV1AdminPlatformAnnouncementsPatchNotesOrderPutMutation,
+  useGetPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementGetQuery,
+  useLazyGetPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementGetQuery,
+  useAnnouncePatchNotesControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementPostMutation,
+  useWithdrawPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementDeleteMutation,
+  useGetPatchNotePackageControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementsAnnouncementIdGetQuery,
+  useLazyGetPatchNotePackageControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementsAnnouncementIdGetQuery,
+  useListExposureHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetQuery,
+  useLazyListExposureHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetQuery,
   useListAnnouncementsControlPlaneV1AdminPlatformAnnouncementsGetQuery,
   useLazyListAnnouncementsControlPlaneV1AdminPlatformAnnouncementsGetQuery,
   useCreateAnnouncementControlPlaneV1AdminPlatformAnnouncementsPostMutation,

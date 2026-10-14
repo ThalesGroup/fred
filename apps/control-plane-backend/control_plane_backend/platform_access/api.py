@@ -38,6 +38,7 @@ from control_plane_backend.platform_access.schemas import (
     PlatformAccessStatus,
     PlatformAccessTeam,
     PlatformAccessUsersPage,
+    PlatformEnrollmentJoinersPage,
     PlatformEnrollmentLink,
     PlatformEnrollmentLinksPage,
     PlatformEnrollmentLinkStatus,
@@ -84,6 +85,7 @@ async def set_platform_access_filtering(
         "platform.access.filtering.updated",
         actor_uid=user.uid,
         filtering_enabled=body.filtering_enabled,
+        revision=result.revision,
     )
     return result
 
@@ -152,19 +154,23 @@ async def list_platform_access_users(
     offset: int = Query(0, ge=0),
     limit: int = Query(25, ge=1, le=100),
     query: str = Query("", max_length=200),
+    exceptions_only: bool = Query(
+        False, description="Only users holding an individual exception."
+    ),
 ) -> PlatformAccessUsersPage:
-    return await service.users_page(access, offset, limit, query)
+    return await service.users_page(access, offset, limit, query, exceptions_only)
 
 
 @router.post("/admin/platform/access/users", status_code=204)
 async def grant_platform_access_users(
     body: GrantPlatformAccessUsers, access: Access, user: Admin
 ) -> None:
-    await service.grant_users(access, user, body.user_ids)
+    granted_count = await service.grant_users(access, user, body.user_ids)
     emit_audit_log(
         "platform.access.users.granted",
         actor_uid=user.uid,
         count=len(set(body.user_ids)),
+        granted_count=granted_count,
     )
 
 
@@ -195,12 +201,16 @@ async def preview_platform_access_t0(access: Access, user: Admin) -> PlatformT0P
 
 @router.post("/admin/platform/access/t0-import", response_model=PlatformT0Preview)
 async def import_platform_access_t0(access: Access, user: Admin) -> PlatformT0Preview:
-    result = await service.t0(access, user)
-    emit_audit_log(
-        "platform.access.t0.imported",
-        actor_uid=user.uid,
-        completed_at=result.completed_at,
-    )
+    result, imported_count = await service.import_t0(access, user)
+    if imported_count is not None:
+        emit_audit_log(
+            "platform.access.t0.imported",
+            actor_uid=user.uid,
+            completed_at=result.completed_at,
+            candidates=result.candidates,
+            matching=result.matching,
+            imported_count=imported_count,
+        )
     return result
 
 
@@ -241,9 +251,14 @@ async def generate_platform_enrollment_link(
     response: Response,
 ) -> PlatformEnrollmentLink:
     service.require_own_credential(user)
-    token = await service.generate_link(access, team_id, user, body)
+    token, link_id = await service.generate_link_record(access, team_id, user, body)
     response.headers["Cache-Control"] = "no-store"
-    emit_audit_log("platform.access.link.created", actor_uid=user.uid, team_id=team_id)
+    emit_audit_log(
+        "platform.access.link.created",
+        actor_uid=user.uid,
+        team_id=team_id,
+        link_id=str(link_id),
+    )
     return PlatformEnrollmentLink(token=token)
 
 
@@ -260,6 +275,21 @@ async def list_platform_enrollment_links(
     status: PlatformEnrollmentLinkStatus | None = None,
 ) -> PlatformEnrollmentLinksPage:
     return await service.list_links(access, team_id, offset, limit, status)
+
+
+@router.get(
+    "/admin/platform/access/teams/{team_id}/enrollment-links/{link_id}/joiners",
+    response_model=PlatformEnrollmentJoinersPage,
+)
+async def list_platform_enrollment_joiners(
+    team_id: str,
+    link_id: UUID,
+    access: Access,
+    user: Admin,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(25, ge=1, le=100),
+) -> PlatformEnrollmentJoinersPage:
+    return await service.list_link_joiners(access, team_id, link_id, offset, limit)
 
 
 @router.delete(

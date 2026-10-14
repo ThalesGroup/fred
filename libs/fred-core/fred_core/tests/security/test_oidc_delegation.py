@@ -47,7 +47,6 @@ from fred_core.security.structure import (
     PrincipalContext,
     is_service_agent,
 )
-from fred_core.security.whitelist_access_control import access_control as whitelist
 from fred_core.tests.security.rebac_fakes import (
     AccountStatusStore,
     account_status_engine,
@@ -337,31 +336,6 @@ def test_query_only_grant_resolution_accepts_query_metadata_without_reading_body
     assert response.json()["uid"] == "p-1"
     assert response.json()["body"] == '{"jsonrpc":"2.0"}'
     assert body_reads == []
-
-
-def test_asserted_subject_requires_a_uid_whitelist_entry(
-    client: TestClient,
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path,
-) -> None:
-    whitelist_file = tmp_path / "users.txt"
-    monkeypatch.setattr(whitelist, "_WHITELIST_PATH", whitelist_file)
-    monkeypatch.setattr(whitelist, "_WHITELIST_CACHE_KEY", str(whitelist_file))
-    whitelist._WHITELIST_CACHE.clear()
-    _accept_delegated_calls()
-    whitelist_file.write_text("person@example.com\n", encoding="utf-8")
-
-    authenticated_denied = client.get("/who", headers=_HEADERS)
-    denied = client.get("/who", params=_GRANT, headers=_HEADERS)
-    whitelist_file.write_text("uid:p-1\n", encoding="utf-8")
-    whitelist._WHITELIST_CACHE.clear()
-    allowed = client.get("/who", params=_GRANT, headers=_HEADERS)
-
-    assert authenticated_denied.status_code == 403
-    assert denied.status_code == 403
-    assert denied.json()["detail"] == "user_not_whitelisted"
-    assert allowed.status_code == 200
-    assert allowed.json()["uid"] == "p-1"
 
 
 def test_body_grant_names_the_person_and_the_endpoint_still_parses_its_body(

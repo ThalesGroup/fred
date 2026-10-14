@@ -45,14 +45,30 @@ instructed to say so.
 **General knowledge + documents** combines the enabled document sources with
 general knowledge. **General knowledge** skips document search.
 
+## Choosing the model and reasoning
+
+The button to the right of the input field shows the language model that
+answers. A conversation starts on the model the agent recommends. Open the
+button to pick another model among those enabled for the team: the choice
+holds for this conversation only, and a new conversation starts again on the
+recommended model.
+
+When the model can reason, the same menu offers **Low** or **High
+(Reasoning)**. It starts on the setting the team chose for that model.
+Reasoning gives more considered answers, but slower and more expensive ones.
+
+If the chosen model is no longer available, a message says so and the
+conversation goes back to the recommended model.
+
 ## Inserting a prompt
 
 Rather than retyping a recurring request, insert a saved prompt into the input
 field, then edit it before sending. It is a shortcut for that message, not a
 lasting setting of the conversation.
 
-A prompt carrying a command runs shorter still: type `/` in an empty field —
-see [Commands](/help/en/features/commands).
+A prompt carrying a command runs shorter still: type `/` in the input field,
+even when it already contains text: see
+[Commands](/help/en/features/commands).
 
 ## Reusing a sent message
 
