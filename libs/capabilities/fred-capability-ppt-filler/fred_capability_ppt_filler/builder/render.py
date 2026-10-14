@@ -64,6 +64,7 @@ from fred_capability_ppt_filler.builder.models import (
     Zone,
 )
 from fred_capability_ppt_filler.builder.plan import (
+    MIN_FONT_SCALE,
     DeckPlan,
     PlanChart,
     PlanItem,
@@ -77,8 +78,6 @@ from fred_capability_ppt_filler.inline_markdown import parse_inline_markdown
 from fred_capability_ppt_filler.pptx_archive import open_presentation
 from fred_capability_ppt_filler.traversal import PlacedShape, walk_shapes
 
-# Smallest font scale the overflow control applies before truncating.
-MIN_FONT_SCALE = 0.7
 # Sub-bullets get narrower lines: this factor per level in the capacity estimate.
 _LEVEL_WIDTH_FACTOR = 0.85
 # Slack over the measured width when sizing a box that must not wrap: the
@@ -644,6 +643,28 @@ def zone_capacity(
     )
 
 
+def _line_cost(
+    line: _Line, room_em: float, font_name: Optional[str], bold: bool
+) -> int:
+    """Lines one entry wraps to: its own paragraph, so a line at least."""
+    room = room_em * _LEVEL_WIDTH_FACTOR**line.level
+    return max(1, math.ceil(text_metrics.width_em(line.text, font_name, bold) / room))
+
+
+def floor_lines(
+    zone: Zone,
+    lines: List[_Line],
+    width: int,
+    height: int,
+    font_name: Optional[str] = None,
+    bold: bool = False,
+) -> List[int]:
+    """Lines each entry wraps to at the smallest font, as `_fit` counts them."""
+    chars_per_line, _ = zone_capacity(zone, width, height, font_name, bold)
+    room_em = chars_per_line * text_metrics.char_em(font_name, bold) / MIN_FONT_SCALE
+    return [_line_cost(line, room_em, font_name, bold) for line in lines]
+
+
 def _fit(
     zone: Zone,
     lines: List[_Line],
@@ -659,17 +680,7 @@ def _fit(
     line_em = chars_per_line * text_metrics.char_em(font_name, bold)
 
     def needed(scale: float) -> int:
-        room = line_em / scale
-        return sum(
-            max(
-                1,
-                math.ceil(
-                    text_metrics.width_em(line.text, font_name, bold)
-                    / (room * _LEVEL_WIDTH_FACTOR**line.level)
-                ),
-            )
-            for line in lines
-        )
+        return sum(_line_cost(line, line_em / scale, font_name, bold) for line in lines)
 
     # A word longer than a line breaks in the middle: shrink until it fits.
     longest = max(
@@ -699,13 +710,7 @@ def _fit(
     used = 0.0
     dropped = False
     for line in lines:
-        cost = max(
-            1,
-            math.ceil(
-                text_metrics.width_em(line.text, font_name, bold)
-                / (room_em * _LEVEL_WIDTH_FACTOR**line.level)
-            ),
-        )
+        cost = _line_cost(line, room_em, font_name, bold)
         if used + cost > capacity:
             room = int((capacity - used) * room_em / per_char) - 1
             # Never leave the zone blank: a cut first line beats an empty box.

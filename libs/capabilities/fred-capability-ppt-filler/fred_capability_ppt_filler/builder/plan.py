@@ -814,6 +814,11 @@ def has_content(slide: SlidePlan) -> bool:
 # --- what a pattern holds, in plan fields ------------------------------------------------
 
 
+# Smallest font scale the overflow control applies before truncating.
+MIN_FONT_SCALE = 0.7
+# Fields whose entries each start their own paragraph in one zone.
+LIST_FIELDS = ("bullets", "columns.bullets")
+
 # Chars per word, space included: errs short of French business prose (~6), so a
 # word budget never promises more than the measured chars hold.
 CHARS_PER_WORD = 7
@@ -834,6 +839,25 @@ def capacity_text(chars_per_line: int, lines: int) -> str:
     return f"{word_budget(chars_per_line, lines)} ({chars})"
 
 
+def max_entries(lines: int) -> int:
+    """Entries a zone of ``lines`` lines holds: each takes a line or more,
+    even at the smallest font (render `_fit`)."""
+    return int(lines / MIN_FONT_SCALE)
+
+
+def entries_text(count: int) -> str:
+    return f"{count} entr{'y' if count == 1 else 'ies'}"
+
+
+def list_capacity_text(chars_per_line: int, lines: int) -> str:
+    """A list field's room: its lines always shown, and the entries they hold."""
+    rows = f"{lines} line{'s' if lines > 1 else ''}"
+    return (
+        f"{word_budget(chars_per_line, lines)} (≈{chars_per_line} chars × {rows}, "
+        f"max {entries_text(max_entries(lines))})"
+    )
+
+
 def _room(zones: Sequence[Zone]) -> Optional[Tuple[int, int]]:
     """The room the agent can count on across zones filled from one field: the
     tightest one, since that is the zone that truncates. A zone that grows with
@@ -845,9 +869,11 @@ def _room(zones: Sequence[Zone]) -> Optional[Tuple[int, int]]:
     return tightest.chars_per_line or 1, tightest.max_lines or 1
 
 
-def _limit(zones: Sequence[Zone]) -> str:
+def _limit(zones: Sequence[Zone], listed: bool = False) -> str:
     room = _room(zones)
-    return " " + capacity_text(*room) if room else ""
+    if not room:
+        return ""
+    return " " + (list_capacity_text if listed else capacity_text)(*room)
 
 
 def _required(zones: Sequence[Zone]) -> str:
@@ -916,7 +942,8 @@ def zone_summary(pattern: Pattern) -> str:
     if not pattern.fillable:
         return "shown as is: no content, or only its own title"
     parts = [
-        f"{field}{f'×{len(same)}' if len(same) > 1 else ''}{_limit(same)}"
+        f"{field}{f'×{len(same)}' if len(same) > 1 else ''}"
+        f"{_limit(same, field in LIST_FIELDS)}"
         for field, same in _slide_fields(pattern)
     ]
     images = [z for z in pattern.zones if z.role == "image"]
@@ -997,10 +1024,11 @@ def field_hints(patterns: Sequence[Pattern]) -> Tuple[Tuple[str, str], ...]:
         # A room only one kind has is named after it ("cover ≈32 chars").
         named = [k for k in SLIDE_KINDS if by_kind.get(k) == common]
         lead = f"{named[0]} " if counts[common] == 1 else ""
+        quote = list_capacity_text if field in LIST_FIELDS else capacity_text
         others = "".join(
-            f"; {kind} {capacity_text(*by_kind[kind])}"
+            f"; {kind} {quote(*by_kind[kind])}"
             for kind in SLIDE_KINDS
             if kind in by_kind and by_kind[kind] != common
         )
-        hints.append((field, f"Room: {lead}{capacity_text(*common)}{others}."))
+        hints.append((field, f"Room: {lead}{quote(*common)}{others}."))
     return tuple(hints)

@@ -780,10 +780,10 @@ def test_a_text_too_long_everywhere_names_the_element_and_its_measured_limit():
         _inventory(_bullets("layout:1", "Plain")), _plan(slide)
     ).problems
     assert problem.problem == (
-        "closest fit, a 'bullets' slide: bullets: 2 entries, 1004 chars; this zone "
-        "holds ≤40 words (≈37 chars × 8 lines) (longest: bullets[1], 999 chars)"
+        "closest fit, a 'bullets' slide: bullets: 2 entries wrap to 23 lines; "
+        "this zone holds 11 (longest: bullets[1], 999 chars)"
     )
-    assert any(o.startswith("keep bullets within") for o in problem.options)
+    assert any(o.startswith("keep each bullets entry") for o in problem.options)
 
 
 def test_a_forced_cover_misfit_reads_once_without_a_close_kind_lead():
@@ -804,8 +804,8 @@ def test_a_close_kind_misfit_names_why_and_the_close_kind_once():
     ).problems
     assert problem.problem == (
         "this template has no 'timeline' slide; closest close kind, a 'bullets' "
-        "slide: bullets: 2 entries, 1004 chars; this zone holds ≤40 words "
-        "(≈37 chars × 8 lines) (longest: bullets[1], 999 chars)"
+        "slide: bullets: 2 entries wrap to 23 lines; this zone holds 11 "
+        "(longest: bullets[1], 999 chars)"
     )
 
 
@@ -816,6 +816,90 @@ def test_a_room_is_quoted_as_words_then_its_measured_chars():
     assert capacity_text(71, 2) == "≤20 words (≈71 chars × 2 lines)"
     assert capacity_text(4, 1) == "1 short word (≈4 chars)"
     assert capacity_text(4, 3) == "1 short word (≈4 chars × 3 lines)"
+
+
+def _list_pattern(kind: str, chars: int, lines: int, bodies: int = 1) -> Pattern:
+    """A title and ``bodies`` side-by-side body zones of ``lines`` lines each."""
+    zones = [_title_zone()] + [
+        Zone(
+            key=f"ph:{i + 1}",
+            role="body",
+            box=Box(x=i * 450, y=200, w=440, h=100 * lines),
+            font_pt=18.0,
+            chars_per_line=chars,
+            max_lines=lines,
+        )
+        for i in range(bodies)
+    ]
+    return Pattern(
+        id="layout:1",
+        source="layout",
+        source_index=1,
+        name=kind,
+        label=kind,
+        kind=kind,  # type: ignore[arg-type]
+        zones=zones,
+    )
+
+
+_SIZE = (Inches(13.333).emu, Inches(7.5).emu)
+
+
+def test_too_many_entries_for_a_one_line_zone_name_the_entry_limit_not_chars():
+    """Live case: 3 short bullets refused by a 1-line zone; quoting a char
+    budget they already met sent the agent shortening instead of merging."""
+    slide = SlidePlan(
+        title="Jalons",
+        kind="bullets",
+        bullets=["Accord Cyber avec l'ACN", "Radars pour la Marine", "Pôle à Turin"],
+    )
+    (reason,), _ = misfit(_list_pattern("bullets", 101, 1), slide, _SIZE)
+    assert reason.text == (
+        "bullets: 3 entries; this zone holds 1 line (≈101 chars): at most 1 entry"
+    )
+    assert reason.option == "merge bullets into at most 1 entry, or use another kind"
+
+
+def test_too_many_entries_for_a_two_line_zone():
+    slide = SlidePlan(title="Jalons", kind="bullets", bullets=["a", "b", "c"])
+    (reason,), _ = misfit(_list_pattern("bullets", 100, 2), slide, _SIZE)
+    assert reason.text == (
+        "bullets: 3 entries; this zone holds 2 lines (≈100 chars each): "
+        "at most 2 entries"
+    )
+    assert reason.option == "merge bullets into at most 2 entries, or use another kind"
+
+
+def test_too_many_column_entries_name_the_column_list():
+    columns = [PlanColumn(bullets=["a", "b", "c", "d"]), PlanColumn(bullets=["e"])]
+    slide = SlidePlan(title="Options", kind="two_columns", columns=columns)
+    reasons, _ = misfit(_list_pattern("two_columns", 20, 1, bodies=2), slide, _SIZE)
+    assert [r.text for r in reasons] == [
+        "columns[0].bullets: 4 entries; this zone holds 1 line (≈20 chars): "
+        "at most 1 entry"
+    ]
+
+
+def test_entries_few_enough_but_too_long_get_a_length_message():
+    slide = SlidePlan(title="Detail", kind="bullets", bullets=["a", "word " * 60])
+    (reason,), _ = misfit(_list_pattern("bullets", 40, 2), slide, _SIZE)
+    assert reason.text.startswith("bullets: 2 entries wrap to ")
+    assert reason.text.endswith(
+        "lines; this zone holds 2 (longest: bullets[1], 299 chars)"
+    )
+    assert reason.option == (
+        "keep each bullets entry to one line (≈40 chars), or drop entries"
+    )
+
+
+def test_a_list_field_room_quotes_its_lines_and_entry_limit():
+    assert zone_summary(_list_pattern("bullets", 101, 1)) == (
+        "title ≤8 words (≈60 chars); "
+        "bullets ≤14 words (≈101 chars × 1 line, max 1 entry)"
+    )
+    assert "columns.bullets×2 ≤9 words (≈20 chars × 3 lines, max 4 entries)" in (
+        zone_summary(_list_pattern("two_columns", 20, 3, bodies=2))
+    )
 
 
 def test_one_title_too_long_is_named_with_the_room_it_has():
@@ -1049,7 +1133,10 @@ def test_a_slide_used_three_times_is_reported_with_the_unused_variants():
     ]
     (note,) = [n for n in assign(inventory, _plan(*slides)).notes if "all use" in n]
     assert note.startswith("Slides 1, 3, 5 all use the template slide 'A'.")
-    assert "Narrow: title ≤8 words (≈60 chars); bullets 1 short word (≈2 chars)" in note
+    assert (
+        "Narrow: title ≤8 words (≈60 chars); bullets 1 short word (≈2 chars × 1 line, max 1 entry)"
+        in note
+    )
     # By kind, the two template slides make one repeat.
     assignment = assign(inventory, _plan(*slides), "kind")
     (note,) = [n for n in assignment.notes if "are all" in n]
@@ -1057,7 +1144,10 @@ def test_a_slide_used_three_times_is_reported_with_the_unused_variants():
         "Slides 1, 2, 3, 4, 5 are all 'bullets' slides (template slides 'A', 'B')."
     )
     # The unused variants of that kind, with their sizes; never another kind's.
-    assert "Narrow: title ≤8 words (≈60 chars); bullets 1 short word (≈2 chars)" in note
+    assert (
+        "Narrow: title ≤8 words (≈60 chars); bullets 1 short word (≈2 chars × 1 line, max 1 entry)"
+        in note
+    )
     assert "cards" not in note
     assert note.endswith("To vary them, recast one as above; otherwise nothing to do.")
 

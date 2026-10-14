@@ -50,8 +50,10 @@ from fred_capability_ppt_filler.builder.plan import (
     SlidePlan,
     _limit,
     capacity_text,
+    entries_text,
     group_summary,
     has_content,
+    max_entries,
     zone_summary,
 )
 from fred_capability_ppt_filler.builder.render import (
@@ -64,6 +66,7 @@ from fred_capability_ppt_filler.builder.render import (
     _unused_item_fields,
     chart_host,
     fit_table,
+    floor_lines,
     zone_capacity,
 )
 
@@ -389,13 +392,29 @@ def _too_long(
             room,
             target,
         )
-    longest = max(lines, key=lambda line: len(line.text))
-    name = _list_name(longest.source) if longest.source else what
-    total = sum(len(line.text) for line in lines)
+    listed = next((line.source for line in lines if not line.heading), "")
+    name = _list_name(listed) if listed else what
+    count = f"{len(lines)} entries" + (
+        " (heading included)" if any(line.heading for line in lines) else ""
+    )
+    most = max_entries(rows)
+    if len(lines) > most:
+        held = (
+            f"{rows} lines (≈{per_line} chars each)"
+            if rows > 1
+            else (f"1 line (≈{per_line} chars)")
+        )
+        return Misfit(
+            f"{name}: {count}; this zone holds {held}: at most {entries_text(most)}",
+            f"merge {name} into at most {entries_text(most)}, or use another kind",
+        )
+    # Few enough entries, but some wrap: each one-line entry would fit.
+    costs = floor_lines(zone, lines, *size)
+    worst = max(range(len(lines)), key=lambda i: (costs[i], len(lines[i].text)))
     return Misfit(
-        f"{name}: {len(lines)} entries, {total} chars; this zone holds {room} "
-        f"(longest: {longest.source or name}, {len(longest.text)} chars)",
-        f"keep {name} within {room}: shorten or drop entries",
+        f"{name}: {count} wrap to {sum(costs)} lines; this zone holds {most} "
+        f"(longest: {lines[worst].source or name}, {len(lines[worst].text)} chars)",
+        f"keep each {name} entry to one line (≈{per_line} chars), or drop entries",
     )
 
 
@@ -1443,7 +1462,7 @@ def _holding(pattern: Pattern, entries: int) -> Optional[_Variant]:
         headings = [z for z in pattern.zones if z.role == "heading"]
         holes, room = False, _room([bodies] + ([headings] if headings else []))
         heading = f"heading{_limit(headings)}, " if headings else ""
-        hint = f"exactly 2 columns [{heading}bullets{_limit(bodies)}]"
+        hint = f"exactly 2 columns [{heading}bullets{_limit(bodies, True)}]"
     else:
         return None
     return _Variant(holes, pattern.source == "layout", hint, room)
