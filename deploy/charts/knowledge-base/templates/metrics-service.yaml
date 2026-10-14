@@ -1,0 +1,25 @@
+{{- $ports := include "knowledge-base.metricsPorts" . | fromYamlArray -}}
+{{- if and .Values.metricsService.enabled $ports }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "knowledge-base.fullname" . }}-metrics
+  labels:
+    {{- include "knowledge-base.labels" . | nindent 4 }}
+    app.kubernetes.io/part-of: metrics
+  {{- with .Values.metricsService.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.metricsService.type }}
+  selector:
+    {{- include "knowledge-base.selectorLabels" . | nindent 4 }}
+  ports:
+    {{- range $ports }}
+    - name: {{ .name }}
+      port: {{ .port }}
+      targetPort: {{ .name }}
+      protocol: TCP
+    {{- end }}
+{{- end }}

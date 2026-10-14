@@ -1,0 +1,173 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+.page {
+  display: flex;
+  box-sizing: border-box;
+  padding: var(--spacing-l);
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  font: var(--font-body-medium);
+}
+
+.card {
+  flex-shrink: 0;
+  margin: auto;
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-m);
+  background: var(--surface-container-high);
+  width: min(100%, 28rem);
+  color: var(--on-surface);
+}
+
+.header,
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+  padding: var(--spacing-l);
+}
+
+.header {
+  gap: var(--spacing-xs);
+  padding-bottom: 0;
+}
+
+.brand {
+  margin: 0;
+  color: var(--primary);
+  font: var(--font-title-small);
+}
+
+.title {
+  margin: 0;
+  font: var(--font-title-medium-emphasized);
+}
+
+.lead {
+  display: block;
+  font: var(--font-title-large);
+}
+
+.content p {
+  margin: 0;
+}
+
+.retreat {
+  color: var(--on-surface-retreat);
+}
+
+/* Account and team blocks: one step above the card surface. */
+.inner {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
+  box-sizing: border-box;
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-m);
+  background: var(--surface-container-highest);
+  padding: var(--spacing-s) var(--spacing-m);
+}
+
+.innerDetails {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* The email is what the person quotes to support: keep it copyable. */
+.account {
+  user-select: text;
+}
+
+.innerName {
+  margin: 0;
+  font: var(--font-title-small);
+}
+
+.teamName {
+  margin: 0;
+  min-width: 0;
+  font: var(--font-title-medium);
+  overflow-wrap: anywhere;
+}
+
+.teamTile {
+  flex-shrink: 0;
+  width: var(--spacing-2xl);
+  height: var(--spacing-2xl);
+}
+
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  counter-reset: step;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.steps li {
+  display: flex;
+  align-items: baseline;
+  gap: var(--spacing-s);
+}
+
+.steps li::before {
+  flex-shrink: 0;
+  counter-increment: step;
+  border-radius: var(--radius-full);
+  background: var(--surface-container-highest);
+  width: var(--spacing-l);
+  height: var(--spacing-l);
+  content: counter(step);
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+  line-height: var(--spacing-l);
+  text-align: center;
+}
+
+.footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--spacing-s);
+  border-top: 1px solid var(--outline-muted);
+  padding: var(--spacing-m) var(--spacing-l);
+}
+
+.footerStart {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-m);
+  margin-right: auto;
+}
+
+/* No horizontal padding: the link sits on the card's content edge. */
+.link {
+  cursor: pointer;
+  border: none;
+  border-radius: var(--radius-xs);
+  background: none;
+  padding: 0;
+  color: var(--primary);
+  font: var(--font-label-large);
+  text-decoration: underline;
+}
+
+.link:hover {
+  color: var(--on-surface);
+}
+
+.link:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.discreet {
+  color: var(--on-surface-retreat);
+}

@@ -1,0 +1,100 @@
+# A Knowledge Base pod built on fred-sdk: a worker running `run`, and a Job
+# running `publish` after each install, upgrade and rollback. The chart deploys
+# someone's image with that pod's configuration; README.md lists what each
+# deployment must set.
+
+# Required: the pod's image. The chart has no default.
+image:
+  repository: ""
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+replicaCount: 1
+
+# Mounted as /app/config/configuration.yaml: fred-sdk's Knowledge Base
+# PodConfiguration, validated against it by values.schema.json. Set at least
+# app.runtime_id, knowledge_base and security.m2m (README.md, "Configure").
+configuration: {}
+
+# Credentials, as environment variables: at least the M2M client secret that
+# configuration.security.m2m.secret_env_var names. `existingSecret` is mounted
+# whole (envFrom); `extraEnvVars` reads single keys from Secrets the platform
+# already owns, and carries the pod's own settings. `create` is for tests only.
+secret:
+  existingSecret: ""
+  create: false
+  data: {}
+extraEnvVars: []
+
+extraVolumes: []
+extraVolumeMounts: []
+
+publish:
+  enabled: true
+  backoffLimit: 3
+  activeDeadlineSeconds: 300
+  ttlSecondsAfterFinished: 86400
+  podAnnotations: {}
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# Exposes the endpoints enabled under configuration.observability. The
+# ServiceMonitor needs the Prometheus Operator CRDs.
+metricsService:
+  enabled: true
+  type: ClusterIP
+  annotations: {}
+  serviceMonitor:
+    enabled: false
+    labels: {}
+    annotations: {}
+    interval: 30s
+    scrapeTimeout: 10s
+    path: /metrics
+    relabelings: []
+    metricRelabelings: []
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+strategy:
+  type: Recreate
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+
+terminationGracePeriodSeconds: 30
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []

@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "agent-pod.configMapName" . }}
+  labels:
+    {{- include "agent-pod.labels" . | nindent 4 }}
+data:
+  configuration.yaml: |
+    {{- toYaml .Values.configuration | nindent 4 }}
+  {{- range $file, $content := .Values.extraConfigFiles }}
+  {{ $file }}: |
+    {{- if kindIs "string" $content }}
+    {{- $content | nindent 4 }}
+    {{- else }}
+    {{- toYaml $content | nindent 4 }}
+    {{- end }}
+  {{- end }}

@@ -19,9 +19,9 @@
 // content_version and bring it back for every user. Deleting asks
 // first, because an announcement is not recoverable. And the header reports
 // how many banners are actually live, the number an admin loses track of.
-// Patch notes share the list in a neutral row whose preview is the users'
-// dialog itself, and never records a dismissal. One create button asks for the
-// type first, and the history is a second view holding a full-width table.
+// Banners and patch notes each have their tab, their empty state and their
+// create button; a patch note's checkbox only decides whether the next announcement includes it,
+// so it never asks, and its preview is the users' dialog with that single note.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -37,7 +37,7 @@ const confirmMock = vi.fn();
 const showError = vi.fn();
 const showSuccess = vi.fn();
 const refetchMock = vi.fn();
-const dismissMock = vi.fn();
+const seenMock = vi.fn();
 const historyMock = vi.fn();
 
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
@@ -46,8 +46,10 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
   useUpdateAnnouncementMutation: () => [updateMock, { isLoading: false }],
   useSetAnnouncementEnabledMutation: () => [setEnabledMock, { isLoading: false }],
   useDeleteAnnouncementMutation: () => [deleteMock, { isLoading: false }],
-  useDismissPatchNoteMutation: () => [dismissMock, { isLoading: false }],
-  useAnnouncementActivationHistoryQuery: () => historyMock(),
+  useMarkPatchNoteAnnouncementSeenMutation: () => [seenMock, { isLoading: false }],
+  useSetPatchNoteOrderMutation: () => [vi.fn(), { isLoading: false }],
+  useAnnouncementExposureHistoryQuery: () => historyMock(),
+  useLazyPatchNotePackageQuery: () => [vi.fn()],
   useUsersByIdsQuery: () => ({ data: [] }),
 }));
 vi.mock("@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider", () => ({
@@ -63,7 +65,8 @@ vi.mock("react-i18next", () => ({
     i18n: { language: "en" },
   }),
 }));
-// The editors have their own tests; these are about the list and the view switch.
+// The editors, the reorderable list's drag and drop and the announce action
+// have their own tests; these are about the tabs and what each row does.
 vi.mock("./AnnouncementEditorDialog", () => ({
   default: ({ announcement }: { announcement: Announcement | null }) => (
     <div data-testid="editor" data-id={announcement?.id ?? "new"} />
@@ -72,8 +75,17 @@ vi.mock("./AnnouncementEditorDialog", () => ({
 const patchNoteEditor = vi.hoisted(() => ({
   props: null as null | {
     onSave: (payload: Record<string, unknown>, activate: boolean) => void;
-    replacesTitle?: string;
   },
+}));
+vi.mock("./PatchNoteAnnouncer", () => ({
+  default: (props: { includedNotes: Announcement[]; settling?: boolean; onSelectionChanged?: () => void }) => (
+    <button
+      data-testid="announcer"
+      data-included={props.includedNotes.map((note) => note.id).join()}
+      data-settling={props.settling || undefined}
+      onClick={props.onSelectionChanged}
+    />
+  ),
 }));
 vi.mock("./PatchNoteEditorDialog", () => ({
   default: (props: { announcement: Announcement | null } & NonNullable<typeof patchNoteEditor.props>) => {
@@ -131,6 +143,19 @@ function patchNote(overrides: Partial<Announcement> = {}): Announcement {
 
 const buttonWith = (el: HTMLElement, label: string) =>
   [...el.querySelectorAll("button")].filter((b) => b.textContent?.includes(label));
+const tab = (el: HTMLElement, view: string) =>
+  [...el.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find(
+    (button) => button.textContent === `rework.announcements.view.${view}`,
+  )!;
+/** Renders the page on its Patch notes tab. */
+function renderPatchNotes(): HTMLDivElement {
+  const el = render();
+  act(() => tab(el, "patchNotes").click());
+  return el;
+}
+const ROW = "rework.announcements.row";
+const NOTE_ROW = "rework.announcements.patchNote.row";
+const NOTE_CHECKBOX = '[data-kind="patch_note"] input[type="checkbox"]';
 
 beforeEach(() => {
   listMock.mockReturnValue({ data: [], isLoading: false, refetch: refetchMock });
@@ -141,9 +166,9 @@ beforeEach(() => {
         announcement_id: "p1",
         kind: "patch_note",
         label: { en: "Release 3.4" },
-        action: "activated",
+        note_count: 1,
         actor_uid: "u-alice",
-        occurred_at: "2026-10-09T08:00:00Z",
+        activated_at: "2026-10-09T08:00:00Z",
       },
     ],
     isLoading: false,
@@ -162,23 +187,104 @@ afterEach(() => {
 });
 
 describe("AnnouncementsPage", () => {
-  it("offers to create one when there is nothing yet", () => {
+  it("offers three tabs, banners first, then patch notes, then the history", () => {
     const el = render();
 
-    expect(el.textContent).toContain("rework.announcements.page.empty");
+    expect([...el.querySelectorAll('[role="tab"]')].map((button) => button.textContent)).toEqual([
+      "rework.announcements.view.banners",
+      "rework.announcements.view.patchNotes",
+      "rework.announcements.view.history",
+    ]);
+    expect(tab(el, "banners").getAttribute("aria-selected")).toBe("true");
   });
 
-  it("lists each announcement with its title and short description", () => {
-    listMock.mockReturnValue({ data: [announcement()], isLoading: false, refetch: refetchMock });
+  it("lists banners only in the banners tab, with title and short description", () => {
+    listMock.mockReturnValue({ data: [announcement(), patchNote()], isLoading: false, refetch: refetchMock });
 
     const el = render();
 
     expect(el.textContent).toContain("Scheduled maintenance");
     expect(el.textContent).toContain("Down on Sunday.");
+    expect(el.querySelectorAll("li")).toHaveLength(1);
+    expect(el.querySelector('[data-kind="patch_note"]')).toBeNull();
+    expect(el.querySelector('[data-testid="announcer"]')).toBeNull();
+  });
+
+  it("lists patch notes only in the patch notes tab, in the order served", () => {
+    listMock.mockReturnValue({
+      data: [
+        announcement(),
+        patchNote({ id: "p2", position: 1, title: { en: "What's new in 3.5" } }),
+        patchNote({ id: "p1", position: 2 }),
+      ],
+      isLoading: false,
+    });
+
+    const el = renderPatchNotes();
+
+    expect([...el.querySelectorAll("li")].map((row) => row.querySelector('[class*="title"]')?.textContent)).toEqual([
+      "What's new in 3.5",
+      "What's new in 3.4",
+    ]);
+    expect(el.querySelector("[data-severity]")).toBeNull();
+  });
+
+  it("gives each tab its own empty state, whatever the other holds", () => {
+    listMock.mockReturnValue({ data: [announcement()], isLoading: false });
+    const el = render();
+    expect(el.textContent).not.toContain("rework.announcements.page.emptyBanners");
+
+    act(() => tab(el, "patchNotes").click());
+    expect(el.textContent).toContain("rework.announcements.page.emptyPatchNotes");
+    // An announcement can outlive its patch notes: withdrawing stays reachable.
+    expect(el.querySelector('[data-testid="announcer"]')?.getAttribute("data-included")).toBe("");
+
+    act(() => tab(el, "banners").click());
+    expect(el.querySelectorAll("li")).toHaveLength(1);
+  });
+
+  it("holds the announce action while the list reloads, and reloads it when the server refuses a stale one", () => {
+    listMock.mockReturnValue({ data: [patchNote()], isLoading: false, isFetching: true, refetch: refetchMock });
+    const el = renderPatchNotes();
+    const announcer = el.querySelector<HTMLButtonElement>('[data-testid="announcer"]')!;
+
+    expect(announcer.dataset.settling).toBe("true");
+    act(() => announcer.click());
+
+    expect(refetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("empty state shows no duplicate action", () => {
+    // The header button is always there; an action in the empty state would
+    // be the same button, said twice. The other three are the tabs.
+    const el = render();
+
+    expect(el.textContent).toContain("rework.announcements.page.emptyBanners");
+    expect([...el.querySelectorAll("button")].map((b) => b.textContent)).toEqual([
+      "addrework.announcements.page.createBanner",
+      "rework.announcements.view.banners",
+      "rework.announcements.view.patchNotes",
+      "rework.announcements.view.history",
+    ]);
+  });
+
+  it("creates the kind of its tab, with no choice to make", () => {
+    const el = render();
+
+    act(() => buttonWith(el, "rework.announcements.page.createBanner")[0].click());
+    expect(el.querySelector('[data-testid="editor"]')?.getAttribute("data-id")).toBe("new");
+    expect(el.querySelector('[data-testid="patch-note-editor"]')).toBeNull();
+    expect(document.body.querySelector('[role="dialog"]')).toBeNull();
+
+    act(() => tab(el, "patchNotes").click());
+    expect(buttonWith(el, "rework.announcements.page.createBanner")).toHaveLength(0);
+    act(() => buttonWith(el, "rework.announcements.page.createPatchNote")[0].click());
+    expect(el.querySelector('[data-testid="patch-note-editor"]')?.getAttribute("data-id")).toBe("new");
+    expect(document.body.querySelector('[role="dialog"]')).toBeNull();
   });
 
   it("reports how many banners are live, not how many exist", () => {
-    // The active patch note is left out: users may have dismissed it.
+    // Patch notes are left out: a visible one is read on demand, not shown to everyone.
     listMock.mockReturnValue({
       data: [
         announcement({ id: "a1", enabled: true }),
@@ -191,7 +297,7 @@ describe("AnnouncementsPage", () => {
     expect(render().textContent).toContain("rework.announcements.page.subtitle:1");
   });
 
-  it("previews each announcement with the real banner component", () => {
+  it("previews each banner with the real banner component", () => {
     // Not a lookalike styled to match: the admin has to be able to trust that
     // this is what users will get, which only holds if it is the same code.
     listMock.mockReturnValue({
@@ -212,89 +318,63 @@ describe("AnnouncementsPage", () => {
     // spells out the reach of the flick — and it has to follow the state.
     listMock.mockReturnValue({ data: [announcement({ enabled: false })], isLoading: false });
     const el = render();
-    const trigger = el.querySelector('[aria-label="rework.announcements.row.enabled"]')!.closest("span")!;
+    const trigger = el.querySelector(`[aria-label="${ROW}.enabled"]`)!.closest("span")!;
 
     act(() => void trigger.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
 
-    expect(document.body.textContent).toContain("rework.announcements.row.enableHint");
-    expect(document.body.textContent).not.toContain("rework.announcements.row.disableHint");
+    expect(document.body.textContent).toContain(`${ROW}.enableHint`);
+    expect(document.body.textContent).not.toContain(`${ROW}.disableHint`);
   });
 
-  it("offers a single creation action", () => {
-    listMock.mockReturnValue({ data: [announcement()], isLoading: false, refetch: refetchMock });
-    const el = render();
-
-    expect(buttonWith(el, "rework.announcements.page.create")).toHaveLength(1);
-  });
-
-  it("empty state shows no duplicate action", () => {
-    // The header button is always there; an action in the empty state would
-    // be the same button, said twice. The other two are the view switch.
-    const el = render();
-
-    expect(el.textContent).toContain("rework.announcements.page.empty");
-    expect([...el.querySelectorAll("button")].map((b) => b.textContent)).toEqual([
-      "campaignrework.announcements.page.create",
-      "rework.announcements.view.announcements",
-      "rework.announcements.view.history",
-    ]);
-  });
-
-  it("renders a patch note row with its title and four controls", () => {
-    listMock.mockReturnValue({ data: [patchNote()], isLoading: false, refetch: refetchMock });
-    const el = render();
-    const row = el.querySelector('[data-kind="patch_note"]')!;
+  it("renders a patch note card with its handle and checkbox at the left, then its title, state and actions", () => {
+    listMock.mockReturnValue({ data: [patchNote({ enabled: true })], isLoading: false, refetch: refetchMock });
+    const row = renderPatchNotes().querySelector('[data-kind="patch_note"]')!;
 
     expect(row.textContent).toContain("What's new in 3.4");
     expect(row.textContent).not.toContain("Release 3.4");
-    expect(row.textContent).toContain("rework.announcements.kind.patch_note");
-    for (const label of ["enabled", "preview", "edit", "delete"]) {
-      expect(row.querySelector(`[aria-label="rework.announcements.row.${label}"]`)).not.toBeNull();
-    }
+    expect(row.textContent).toContain(`${NOTE_ROW}.statusIncluded`);
+    // The checkbox has no label of its own: the title and status beside it name it.
+    expect([...row.querySelectorAll("button, input")].map((control) => control.getAttribute("aria-label"))).toEqual([
+      `${NOTE_ROW}.move`,
+      null,
+      `${NOTE_ROW}.preview`,
+      `${NOTE_ROW}.edit`,
+      `${NOTE_ROW}.delete`,
+    ]);
+    expect(row.querySelector<HTMLInputElement>(NOTE_CHECKBOX)!.checked).toBe(true);
+    const checkbox = row.querySelector<HTMLInputElement>(NOTE_CHECKBOX)!;
+    expect(row.querySelector(`label[for="${checkbox.id}"]`)!.textContent).toContain("What's new in 3.4");
     // No banner is rendered for a patch note.
     expect(row.querySelector("[data-severity]")).toBeNull();
   });
 
-  it("says how many users chose to hide the patch note", () => {
+  it("includes a second patch note at once, without asking and without touching the first", () => {
     listMock.mockReturnValue({
-      data: [{ ...patchNote(), dismissal_count: 12 }],
+      data: [patchNote({ id: "p1", enabled: true }), patchNote({ id: "p2" })],
       isLoading: false,
       refetch: refetchMock,
     });
-    const row = render().querySelector('[data-kind="patch_note"]')!;
+    const el = renderPatchNotes();
+    const checkboxes = el.querySelectorAll<HTMLInputElement>(NOTE_CHECKBOX);
 
-    expect(row.textContent).toContain("rework.announcements.patchNote.dismissalCount:12");
-  });
+    act(() => checkboxes[1].click());
 
-  it("names the active patch note that enabling another one switches off", () => {
-    listMock.mockReturnValue({
-      data: [patchNote({ id: "p1", enabled: true, title: { en: "Version 3.3" } }), patchNote({ id: "p2" })],
-      isLoading: false,
-      refetch: refetchMock,
-    });
-    const el = render();
-    const switches = el.querySelectorAll<HTMLInputElement>('[aria-label="rework.announcements.row.enabled"]');
-
-    act(() => switches[1].click());
-
-    expect(setEnabledMock).not.toHaveBeenCalled();
-    const options = confirmMock.mock.calls[0][0];
-    expect(options.title).toBe("rework.announcements.patchNote.activate.title");
-    act(() => void options.onConfirm());
-    expect(setEnabledMock).toHaveBeenCalledWith({
+    expect(confirmMock).not.toHaveBeenCalled();
+    expect(setEnabledMock).toHaveBeenCalledExactlyOnceWith({
       announcementId: "p2",
       setAnnouncementEnabledRequest: { enabled: true },
     });
   });
 
-  it("enables a patch note at once when none is active", () => {
-    listMock.mockReturnValue({ data: [patchNote()], isLoading: false, refetch: refetchMock });
-    const el = render();
+  it("hands the announce action the included patch notes, in order", () => {
+    listMock.mockReturnValue({
+      data: [patchNote({ id: "p3", enabled: true }), patchNote({ id: "p2" }), patchNote({ id: "p1", enabled: true })],
+      isLoading: false,
+    });
 
-    act(() => el.querySelector<HTMLInputElement>('[aria-label="rework.announcements.row.enabled"]')!.click());
+    const el = renderPatchNotes();
 
-    expect(confirmMock).not.toHaveBeenCalled();
-    expect(setEnabledMock).toHaveBeenCalledOnce();
+    expect(el.querySelector('[data-testid="announcer"]')?.getAttribute("data-included")).toBe("p3,p1");
   });
 
   it("disables a row's switch while its toggle is saving, and only that row's", async () => {
@@ -302,7 +382,7 @@ describe("AnnouncementsPage", () => {
     setEnabledMock.mockReturnValue({ unwrap: () => new Promise<void>((resolve) => (settle = resolve)) });
     listMock.mockReturnValue({ data: [announcement({ id: "a1" }), announcement({ id: "a2" })], isLoading: false });
     const el = render();
-    const switches = () => el.querySelectorAll<HTMLInputElement>('[aria-label="rework.announcements.row.enabled"]');
+    const switches = () => el.querySelectorAll<HTMLInputElement>(`[aria-label="${ROW}.enabled"]`);
 
     act(() => switches()[0].click());
     expect([...switches()].map((s) => s.disabled)).toEqual([true, false]);
@@ -311,29 +391,14 @@ describe("AnnouncementsPage", () => {
     expect(switches()[0].disabled).toBe(false);
   });
 
-  it("keeps the switch disabled while the activation is being confirmed", () => {
-    listMock.mockReturnValue({
-      data: [patchNote({ id: "p1", enabled: true }), patchNote({ id: "p2" })],
-      isLoading: false,
-    });
-    const el = render();
-    const second = () => el.querySelectorAll<HTMLInputElement>('[aria-label="rework.announcements.row.enabled"]')[1];
-
-    act(() => second().click());
-    expect(second().disabled).toBe(true);
-
-    act(() => confirmMock.mock.calls[0][0].onCancel());
-    expect(second().disabled).toBe(false);
-  });
-
-  it("keeps the switch disabled during save and activate", async () => {
+  it("keeps the checkbox disabled during save and make visible", async () => {
     let settle!: () => void;
     updateMock.mockReturnValue({ unwrap: () => Promise.resolve({}) });
     setEnabledMock.mockReturnValue({ unwrap: () => new Promise<void>((resolve) => (settle = resolve)) });
     listMock.mockReturnValue({ data: [patchNote()], isLoading: false });
-    const el = render();
-    const toggle = () => el.querySelector<HTMLInputElement>('[aria-label="rework.announcements.row.enabled"]')!;
-    act(() => el.querySelector<HTMLButtonElement>('[aria-label="rework.announcements.row.edit"]')!.click());
+    const el = renderPatchNotes();
+    const toggle = () => el.querySelector<HTMLInputElement>(NOTE_CHECKBOX)!;
+    act(() => el.querySelector<HTMLButtonElement>(`[aria-label="${NOTE_ROW}.edit"]`)!.click());
 
     await act(async () => patchNoteEditor.props!.onSave({ kind: "patch_note" }, true));
     expect(toggle().disabled).toBe(true);
@@ -342,99 +407,87 @@ describe("AnnouncementsPage", () => {
     expect(toggle().disabled).toBe(false);
   });
 
-  it("save and activate saves the note, then switches it on, and says so", async () => {
+  it("save and make visible saves the note, then checks it, and says so", async () => {
     updateMock.mockReturnValue({ unwrap: () => Promise.resolve({}) });
     listMock.mockReturnValue({
-      data: [patchNote({ id: "p1", enabled: true, title: { en: "Version 3.3" } }), patchNote({ id: "p2" })],
+      data: [patchNote({ id: "p1", enabled: true }), patchNote({ id: "p2" })],
       isLoading: false,
       refetch: refetchMock,
     });
-    const el = render();
-    act(() => el.querySelectorAll<HTMLButtonElement>('[aria-label="rework.announcements.row.edit"]')[1].click());
-    expect(patchNoteEditor.props!.replacesTitle).toBe("Version 3.3");
+    const el = renderPatchNotes();
+    act(() => el.querySelectorAll<HTMLButtonElement>(`[aria-label="${NOTE_ROW}.edit"]`)[1].click());
 
     await act(async () => patchNoteEditor.props!.onSave({ kind: "patch_note" }, true));
 
     expect(updateMock).toHaveBeenCalledWith(expect.objectContaining({ announcementId: "p2" }));
-    expect(setEnabledMock).toHaveBeenCalledWith({
+    // Only the saved note is checked: the other visible one is left alone.
+    expect(setEnabledMock).toHaveBeenCalledExactlyOnceWith({
       announcementId: "p2",
       setAnnouncementEnabledRequest: { enabled: true },
     });
-    expect(showSuccess).toHaveBeenCalledWith({ summary: "rework.announcements.patchNote.savedActive" });
+    expect(showSuccess).toHaveBeenCalledWith({ summary: "rework.announcements.patchNote.savedIncluded" });
   });
 
-  it("tells the admin a saved patch note is not active yet", async () => {
+  it("creates a patch note hidden, and tells the admin users do not see it", async () => {
     createMock.mockReturnValue({ unwrap: () => Promise.resolve({}) });
-    const el = render();
-    act(() => buttonWith(el, "rework.announcements.page.create")[0].click());
-    act(() => document.body.querySelectorAll<HTMLButtonElement>("button[data-selected]")[1].click());
+    const el = renderPatchNotes();
+    act(() => buttonWith(el, "rework.announcements.page.createPatchNote")[0].click());
 
     await act(async () => patchNoteEditor.props!.onSave({ kind: "patch_note", enabled: false }, false));
 
     expect(createMock).toHaveBeenCalledWith({ announcementWriteRequest: { kind: "patch_note", enabled: false } });
     expect(setEnabledMock).not.toHaveBeenCalled();
-    expect(showSuccess).toHaveBeenCalledWith({ summary: "rework.announcements.patchNote.savedInactive" });
+    expect(showSuccess).toHaveBeenCalledWith({ summary: "rework.announcements.patchNote.savedNotIncluded" });
   });
 
-  it("banner rows are unchanged", () => {
-    listMock.mockReturnValue({ data: [announcement(), patchNote()], isLoading: false, refetch: refetchMock });
-    const el = render();
-    const bannerRow = el.querySelector("li:not([data-kind])")!;
+  it("preview opens the user dialog with that single note and records nothing as seen", () => {
+    listMock.mockReturnValue({ data: [patchNote(), patchNote({ id: "p0" })], isLoading: false, refetch: refetchMock });
+    const el = renderPatchNotes();
 
-    expect(bannerRow.querySelector("[data-severity]")).not.toBeNull();
-    expect(bannerRow.querySelector('[aria-label="rework.announcements.row.preview"]')).toBeNull();
-    expect(bannerRow.querySelector('[aria-label="rework.announcements.row.edit"]')).not.toBeNull();
-  });
-
-  it("preview opens the user dialog and records no dismissal", () => {
-    listMock.mockReturnValue({ data: [patchNote()], isLoading: false, refetch: refetchMock });
-    const el = render();
-
-    act(() => el.querySelector<HTMLButtonElement>('[aria-label="rework.announcements.row.preview"]')!.click());
+    act(() => el.querySelector<HTMLButtonElement>(`[aria-label="${NOTE_ROW}.preview"]`)!.click());
 
     const dialog = document.body.querySelector('[role="dialog"]')!;
     expect(dialog.textContent).toContain("What's new in 3.4");
     expect(dialog.querySelector("h1")?.textContent).toBe("Release 3.4 (2026-10-09)");
+    // One note, so no history navigation, even with others in the list.
+    expect(dialog.querySelector("nav")).toBeNull();
 
-    act(() => dialog.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click());
     act(() => buttonWith(dialog as HTMLElement, "rework.announcements.dialog.close")[0].click());
 
     expect(document.body.querySelector('[role="dialog"]')).toBeNull();
-    expect(dismissMock).not.toHaveBeenCalled();
+    expect(seenMock).not.toHaveBeenCalled();
   });
 
-  it("a conflicting activation shows an error and leaves the refresh to tag invalidation", async () => {
+  it("a failed toggle shows an error and leaves the refresh to tag invalidation", async () => {
     listMock.mockReturnValue({ data: [patchNote()], isLoading: false, refetch: refetchMock });
-    setEnabledMock.mockReturnValue({ unwrap: () => Promise.reject({ status: 409, data: { detail: "conflict" } }) });
-    const el = render();
+    setEnabledMock.mockReturnValue({ unwrap: () => Promise.reject({ status: 500, data: { detail: "boom" } }) });
+    const el = renderPatchNotes();
 
-    await act(async () =>
-      el.querySelector<HTMLInputElement>('[aria-label="rework.announcements.row.enabled"]')!.click(),
-    );
+    await act(async () => el.querySelector<HTMLInputElement>(NOTE_CHECKBOX)!.click());
 
     expect(showError).toHaveBeenCalledWith(expect.objectContaining({ summary: "rework.announcements.toggleFailed" }));
     // RTK Query invalidates the LIST tag on a rejected mutation too.
     expect(refetchMock).not.toHaveBeenCalled();
   });
 
-  it("edit opens the editor matching the type", () => {
+  it("edit opens the editor matching the tab", () => {
     listMock.mockReturnValue({ data: [announcement(), patchNote()], isLoading: false, refetch: refetchMock });
     const el = render();
-    const edits = el.querySelectorAll<HTMLButtonElement>('[aria-label="rework.announcements.row.edit"]');
 
-    act(() => edits[1].click());
-    expect(el.querySelector('[data-testid="patch-note-editor"]')?.getAttribute("data-id")).toBe("p1");
-    expect(el.querySelector('[data-testid="editor"]')).toBeNull();
-
-    act(() => edits[0].click());
+    act(() => el.querySelector<HTMLButtonElement>(`[aria-label="${ROW}.edit"]`)!.click());
     expect(el.querySelector('[data-testid="editor"]')?.getAttribute("data-id")).toBe("a1");
     expect(el.querySelector('[data-testid="patch-note-editor"]')).toBeNull();
+
+    act(() => tab(el, "patchNotes").click());
+    act(() => el.querySelector<HTMLButtonElement>(`[aria-label="${NOTE_ROW}.edit"]`)!.click());
+    expect(el.querySelector('[data-testid="patch-note-editor"]')?.getAttribute("data-id")).toBe("p1");
+    expect(el.querySelector('[data-testid="editor"]')).toBeNull();
   });
 
   it("toggles through the dedicated enabled endpoint, not a content update", () => {
     listMock.mockReturnValue({ data: [announcement()], isLoading: false, refetch: refetchMock });
     const el = render();
-    const toggle = el.querySelector<HTMLInputElement>('[aria-label="rework.announcements.row.enabled"]');
+    const toggle = el.querySelector<HTMLInputElement>(`[aria-label="${ROW}.enabled"]`);
 
     // React maps a checkbox's onChange onto the click event, not a synthetic
     // "change" — dispatching the latter reaches no handler at all.
@@ -452,7 +505,7 @@ describe("AnnouncementsPage", () => {
   it("asks before deleting, and does not delete until confirmed", () => {
     listMock.mockReturnValue({ data: [announcement()], isLoading: false, refetch: refetchMock });
     const el = render();
-    const remove = el.querySelector<HTMLButtonElement>('[aria-label="rework.announcements.row.delete"]');
+    const remove = el.querySelector<HTMLButtonElement>(`[aria-label="${ROW}.delete"]`);
 
     act(() => remove!.click());
 
@@ -461,107 +514,54 @@ describe("AnnouncementsPage", () => {
 
     const options = confirmMock.mock.calls[0][0];
     expect(options.criticalAction).toBe(true);
+    expect(options.title).toBe("rework.announcements.delete.title");
     act(() => void options.onConfirm());
 
     expect(deleteMock).toHaveBeenCalledWith({ announcementId: "a1" });
   });
 
-  describe("type chooser", () => {
-    const openChooser = (el: HTMLElement) => {
-      act(() => buttonWith(el, "rework.announcements.page.create")[0].click());
-      return document.body.querySelector<HTMLElement>('[role="dialog"]')!;
-    };
-    const tiles = (dialog: HTMLElement) => [...dialog.querySelectorAll<HTMLButtonElement>("button[data-selected]")];
+  it("asks before deleting a patch note, in its own words", async () => {
+    listMock.mockReturnValue({ data: [patchNote()], isLoading: false });
+    const el = renderPatchNotes();
 
-    it("offers exactly two tiles, banner and patch note, each with a description", () => {
-      const dialog = openChooser(render());
+    act(() => el.querySelector<HTMLButtonElement>(`[aria-label="${NOTE_ROW}.delete"]`)!.click());
 
-      expect(dialog.textContent).toContain("rework.announcements.chooser.title");
-      expect(tiles(dialog).map((tile) => tile.textContent)).toEqual([
-        "campaignrework.announcements.kind.bannerrework.announcements.chooser.bannerDescription",
-        "new_releasesrework.announcements.kind.patch_noterework.announcements.chooser.patchNoteDescription",
-      ]);
-      // A tile acts at once; it is not a toggle with a pressed state.
-      expect(tiles(dialog).every((tile) => !tile.hasAttribute("aria-pressed"))).toBe(true);
-    });
+    const options = confirmMock.mock.calls[0][0];
+    expect([options.criticalAction, options.title]).toEqual([true, "rework.announcements.patchNote.delete.title"]);
+    expect(deleteMock).not.toHaveBeenCalled();
+    await act(async () => void options.onConfirm());
 
-    it("the banner tile closes the chooser and opens the banner editor", () => {
-      const el = render();
-
-      const dialog = openChooser(el);
-      act(() => tiles(dialog)[0].click());
-
-      expect(document.body.querySelector('[role="dialog"]')).toBeNull();
-      expect(el.querySelector('[data-testid="editor"]')?.getAttribute("data-id")).toBe("new");
-      expect(el.querySelector('[data-testid="patch-note-editor"]')).toBeNull();
-    });
-
-    it("the patch-note tile closes the chooser and opens the patch-note editor", () => {
-      const el = render();
-
-      const dialog = openChooser(el);
-      act(() => tiles(dialog)[1].click());
-
-      expect(document.body.querySelector('[role="dialog"]')).toBeNull();
-      expect(el.querySelector('[data-testid="patch-note-editor"]')?.getAttribute("data-id")).toBe("new");
-      expect(el.querySelector('[data-testid="editor"]')).toBeNull();
-    });
-
-    it("its only action is a text Cancel, like other dialogs' cancel", () => {
-      const dialog = openChooser(render());
-      const actions = [...dialog.querySelectorAll("button:not([data-selected])")];
-
-      expect(actions.map((button) => button.textContent)).toEqual(["common.cancel"]);
-      expect(actions[0].className).toMatch(/btn-text/);
-    });
-
-    it("escape closes the chooser without opening an editor", () => {
-      const el = render();
-      const dialog = openChooser(el);
-      // The first tile has the focus, so Enter or Space picks it like any button.
-      expect(document.activeElement).toBe(tiles(dialog)[0]);
-
-      act(() => void window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })));
-
-      expect(document.body.querySelector('[role="dialog"]')).toBeNull();
-      expect(el.querySelector('[data-testid="editor"]')).toBeNull();
-      expect(el.querySelector('[data-testid="patch-note-editor"]')).toBeNull();
-    });
+    expect(deleteMock).toHaveBeenCalledWith({ announcementId: "p1" });
+    expect(showSuccess).toHaveBeenCalledWith({ summary: "rework.announcements.patchNote.deleted" });
   });
 
-  it("switches between the announcements and the history table", () => {
+  it("shows the history table in the third tab, with nothing to create", () => {
     listMock.mockReturnValue({ data: [announcement()], isLoading: false, refetch: refetchMock });
     const el = render();
-    const tab = (view: string) =>
-      [...el.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find(
-        (button) => button.textContent === `rework.announcements.view.${view}`,
-      )!;
     const columnLabels = () => [...el.querySelectorAll('[class*="header-content"]')].map((label) => label.textContent);
 
-    // Announcements first, with the create button; no table yet.
-    expect(tab("announcements").getAttribute("aria-selected")).toBe("true");
     expect(el.querySelector("li")).not.toBeNull();
-    expect(buttonWith(el, "rework.announcements.page.create")).toHaveLength(1);
     expect(columnLabels()).toEqual([]);
 
-    act(() => tab("history").click());
+    act(() => tab(el, "history").click());
 
-    expect(tab("history").getAttribute("aria-selected")).toBe("true");
+    expect(tab(el, "history").getAttribute("aria-selected")).toBe("true");
     expect(el.querySelector("li")).toBeNull();
     expect(buttonWith(el, "rework.announcements.page.create")).toHaveLength(0);
     expect(columnLabels()).toEqual([
-      "rework.announcements.history.column.announcement",
       "rework.announcements.history.column.type",
-      "rework.announcements.history.column.action",
-      "rework.announcements.history.column.date",
+      "rework.announcements.history.column.title",
+      "rework.announcements.history.column.activation",
+      "rework.announcements.history.column.deactivation",
       "rework.announcements.history.column.by",
+      "rework.announcements.history.column.open",
     ]);
     expect(el.textContent).toContain("Release 3.4");
 
-    act(() => tab("announcements").click());
+    act(() => tab(el, "banners").click());
 
     expect(el.querySelector("li")).not.toBeNull();
-    expect(buttonWith(el, "rework.announcements.page.create")).toHaveLength(1);
+    expect(buttonWith(el, "rework.announcements.page.createBanner")).toHaveLength(1);
     expect(columnLabels()).toEqual([]);
   });
 });
