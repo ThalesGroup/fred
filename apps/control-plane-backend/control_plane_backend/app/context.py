@@ -50,6 +50,7 @@ from prometheus_client import start_http_server
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from control_plane_backend.agent_instances.store import AgentInstanceStore
+from control_plane_backend.agent_marketplace.store import AgentMarketplaceStore
 from control_plane_backend.announcements.store import AnnouncementStore
 from control_plane_backend.bootstrap.store import PlatformBootstrapStore
 from control_plane_backend.capabilities.reasoning_store import ModelReasoningStore
@@ -68,6 +69,9 @@ from control_plane_backend.knowledge_bases.instance_store import (
     KnowledgeBaseInstanceStore,
 )
 from control_plane_backend.knowledge_bases.store import KnowledgeBaseDefinitionStore
+from control_plane_backend.marketplace_settings.store import (
+    PlatformMarketplaceSettingsStore,
+)
 from control_plane_backend.models.task_models import TASK_TABLES
 from control_plane_backend.platform_prompt.store import (
     CreationAssistantSettingsStore,
@@ -121,6 +125,8 @@ class ApplicationContext:
             CreationAssistantSettingsStore | None
         ) = None
         self._platform_ui_settings_store: PlatformUiSettingsStore | None = None
+        self._marketplace_settings_store: PlatformMarketplaceSettingsStore | None = None
+        self._agent_marketplace_store: AgentMarketplaceStore | None = None
         self._announcement_store: AnnouncementStore | None = None
         self._knowledge_base_instance_store: KnowledgeBaseInstanceStore | None = None
         self._knowledge_base_definition_store: KnowledgeBaseDefinitionStore | None = (
@@ -437,6 +443,20 @@ class ApplicationContext:
                 engine=self.get_pg_async_engine()
             )
         return self._platform_ui_settings_store
+
+    def get_marketplace_settings_store(self) -> PlatformMarketplaceSettingsStore:
+        if self._marketplace_settings_store is None:
+            self._marketplace_settings_store = PlatformMarketplaceSettingsStore(
+                engine=self.get_pg_async_engine()
+            )
+        return self._marketplace_settings_store
+
+    def get_agent_marketplace_store(self) -> AgentMarketplaceStore:
+        if self._agent_marketplace_store is None:
+            self._agent_marketplace_store = AgentMarketplaceStore(
+                engine=self.get_pg_async_engine()
+            )
+        return self._agent_marketplace_store
 
     def get_announcement_store(self) -> AnnouncementStore:
         if self._announcement_store is None:

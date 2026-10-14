@@ -49,6 +49,7 @@ const h = vi.hoisted(() => ({
   errors: [] as string[],
   /** Capability ids the revoke-impact preview was requested for, in order. */
   impactCalls: [] as string[],
+  impactData: undefined as unknown,
   applicationsEnabled: false,
 }));
 
@@ -75,7 +76,7 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
   useSetModelReasoningMutation: () => [vi.fn(), { isLoading: false }],
   useLazyCapabilityRevokeImpactQuery: () => [
     (args: { capabilityId: string }) => void h.impactCalls.push(args.capabilityId),
-    { data: undefined, isFetching: false },
+    { data: h.impactData, isFetching: false },
   ],
   // The drawer's own writes land in the same `h.calls` log, so the team and
   // personal paths assert ordering exactly like the platform one does.
@@ -161,6 +162,7 @@ beforeEach(() => {
   h.failFor = new Set();
   h.errors = [];
   h.impactCalls = [];
+  h.impactData = undefined;
   h.applicationsEnabled = false;
   container = document.createElement("div");
   document.body.appendChild(container);
@@ -382,6 +384,14 @@ describe("FeaturesPage default-on toggle routing", () => {
 
     expect(h.impactCalls).toEqual(["web_search"]);
     expect(dialog()?.textContent).toContain("defaultOffConfirm.genericTitle");
+  });
+
+  it("states how many published agents the revoke removes from the marketplace", () => {
+    h.impactData = { capability_id: "web_search", suspended_instances: 2, published_instances: 2 };
+    renderKindTab([cap({ id: "web_search", default_on: true })], "tool");
+    act(() => defaultOnSwitch()!.click());
+
+    expect(dialog()?.textContent).toContain("defaultOffConfirm.impactPublished");
   });
 
   it("asks for no impact preview when the row is an application", () => {

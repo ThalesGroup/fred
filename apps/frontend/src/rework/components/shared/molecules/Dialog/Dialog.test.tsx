@@ -248,6 +248,25 @@ describe("Dialog focus and consumer-root portal", () => {
     expect(classes()[1]).toMatch(/dividers/);
   });
 
+  it("puts footer-start controls first in the action bar without giving them the opening focus", () => {
+    render(
+      <Dialog
+        open
+        title="Details"
+        confirmLabel="Import"
+        cancelLabel="Close"
+        onConfirm={() => {}}
+        onCancel={() => {}}
+        footerStart={<button>Remove</button>}
+      >
+        <p>Read-only text</p>
+      </Dialog>,
+    );
+    const labels = [...portal().querySelectorAll("button")].map((b) => b.textContent);
+    expect(labels).toEqual(["Remove", "Close", "Import"]);
+    expect(document.activeElement?.textContent).toBe("Close");
+  });
+
   it("focuses the first control, contains Tab, and restores the trigger after Escape", () => {
     const onCancel = vi.fn();
     function Harness() {

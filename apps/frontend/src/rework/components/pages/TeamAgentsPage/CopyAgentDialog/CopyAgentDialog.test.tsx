@@ -160,7 +160,7 @@ describe("CopyAgentDialog", () => {
     await confirm();
 
     expect(copyCalls).toEqual([
-      { teamId: "team-a", agentInstanceId: "agent-1", agentCopyRequest: { target_team_ids: ["team-b"] } },
+      { teamId: "team-a", agentInstanceId: "agent-1", agentCopyRequest: { target_team_ids: ["team-b"], locale: "en" } },
     ]);
     expect(toasts.map(([kind]) => kind)).toEqual(["success"]);
   });

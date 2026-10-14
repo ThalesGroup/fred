@@ -109,6 +109,8 @@ from fred_sdk.contracts.capability import (
     CapabilityCatalogEntry,
     CapabilityConfigCopyRequest,
     CapabilityConfigCopyResult,
+    CapabilityConfigExportRequest,
+    CapabilityConfigExportResult,
     CapabilityIdentity,
     ChatControlsRequest,
     ChatControlsResponse,
@@ -189,6 +191,7 @@ from fred_runtime.capabilities import (
 from fred_runtime.capabilities.copy import (
     CapabilityCopyRejectedError,
     prepare_capability_copy,
+    prepare_capability_export,
 )
 from fred_runtime.capabilities.errors import (
     CapabilityError,
@@ -5519,6 +5522,39 @@ def _build_agent_router(
             config=stored.model_dump(mode="json"),
         )
 
+    def _installed_capability(http_request: Request, capability_id: str):
+        capability_registry = _capability_registry_of(http_request)
+        if capability_registry is None or capability_id not in capability_registry:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Capability '{capability_id}' is not installed on this pod.",
+            )
+        return capability_registry.capability(capability_id)
+
+    def _copy_save_ctx(
+        http_request: Request,
+        caller: KeycloakUser | None,
+        capability_id: str,
+        team_id: str,
+        agent_instance_id: str,
+    ) -> SaveContext:
+        user_id = (caller.uid if caller is not None else None) or "anonymous"
+        auth = http_request.headers.get("Authorization", "")
+        return SaveContext(
+            identity=CapabilityIdentity(
+                user_id=user_id,
+                team_id=team_id,
+                agent_instance_id=agent_instance_id,
+            ),
+            services=_build_capability_save_services(
+                capability_id=capability_id,
+                user_id=user_id,
+                team_id=team_id,
+                access_token=auth.removeprefix("Bearer ").strip() or None,
+                agent_instance_id=agent_instance_id,
+            ),
+        )
+
     @router.post("/capabilities/{capability_id}/copy-config")
     async def copy_capability_config(
         capability_id: str,
@@ -5531,7 +5567,8 @@ def _build_agent_router(
 
         POST <base_url>/agents/capabilities/{capability_id}/copy-config
         Body: CapabilityConfigCopyRequest — the source envelope, the source and
-        target team and agent instance.
+        target team and agent instance, and optionally the configuration files
+        inline (`asset_files`, from `export-config`) instead of the source's.
 
         Why this endpoint exists:
         - only the pod knows a capability's hidden and nested settings, so the
@@ -5543,39 +5580,62 @@ def _build_agent_router(
           without it. `notices` says what an editor must redo in the target.
         """
 
-        capability_registry = _capability_registry_of(http_request)
-        if capability_registry is None or capability_id not in capability_registry:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Capability '{capability_id}' is not installed on this pod.",
-            )
-        capability = capability_registry.capability(capability_id)
-        user_id = (caller.uid if caller is not None else None) or "anonymous"
-        auth = http_request.headers.get("Authorization", "")
-        access_token = auth.removeprefix("Bearer ").strip() or None
-
-        def save_ctx(team_id: str, agent_instance_id: str) -> SaveContext:
-            return SaveContext(
-                identity=CapabilityIdentity(
-                    user_id=user_id,
-                    team_id=team_id,
-                    agent_instance_id=agent_instance_id,
-                ),
-                services=_build_capability_save_services(
-                    capability_id=capability_id,
-                    user_id=user_id,
-                    team_id=team_id,
-                    access_token=access_token,
-                    agent_instance_id=agent_instance_id,
-                ),
-            )
-
+        capability = _installed_capability(http_request, capability_id)
         try:
             return await prepare_capability_copy(
                 capability,
                 body,
-                source_ctx=save_ctx(body.source_team_id, body.source_agent_instance_id),
-                target_ctx=save_ctx(body.target_team_id, body.target_agent_instance_id),
+                source_ctx=_copy_save_ctx(
+                    http_request,
+                    caller,
+                    capability_id,
+                    body.source_team_id,
+                    body.source_agent_instance_id,
+                ),
+                target_ctx=_copy_save_ctx(
+                    http_request,
+                    caller,
+                    capability_id,
+                    body.target_team_id,
+                    body.target_agent_instance_id,
+                ),
+            )
+        except CapabilityCopyRejectedError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=str(exc),
+            ) from exc
+
+    @router.post("/capabilities/{capability_id}/export-config")
+    async def export_capability_config(
+        capability_id: str,
+        body: CapabilityConfigExportRequest,
+        http_request: Request,
+        caller: KeycloakUser | None = Depends(_authenticated_user),
+    ) -> CapabilityConfigExportResult:
+        """
+        Export one capability's stored config as it would leave its team.
+
+        POST <base_url>/agents/capabilities/{capability_id}/export-config
+        Body: CapabilityConfigExportRequest — the envelope, its team and agent
+        instance. Response: the upgraded envelope with scope-private settings
+        reset and every `AssetKey` file base64-encoded, so a later `copy-config`
+        with `asset_files` never reads that team. 404 when the capability is not
+        installed here, 422 when the config or one of its files cannot be read.
+        """
+
+        capability = _installed_capability(http_request, capability_id)
+        try:
+            return await prepare_capability_export(
+                capability,
+                body,
+                source_ctx=_copy_save_ctx(
+                    http_request,
+                    caller,
+                    capability_id,
+                    body.team_id,
+                    body.agent_instance_id,
+                ),
             )
         except CapabilityCopyRejectedError as exc:
             raise HTTPException(

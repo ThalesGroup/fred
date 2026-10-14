@@ -18,7 +18,7 @@
   display: flex;
   position: relative;
   flex-direction: column;
-  border-radius: var(--radius-m);
+  border-radius: var(--radius-ms);
   background-color: var(--surface-container);
   width: 290px;
   /* No explicit height: as a flex item the card stretches to the row's tallest

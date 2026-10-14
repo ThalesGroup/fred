@@ -121,6 +121,24 @@ def test_team_role_administration_has_no_platform_escalation() -> None:
         )
 
 
+def test_editors_publish_and_team_admin_also_unpublishes_marketplace_agents() -> None:
+    """Publishing is an editor right; taking an entry down is also open to the
+    team admin. Neither derives from a platform role."""
+    relations = _type_definition("team")["relations"]
+
+    assert relations["can_publish_marketplace_agents"] == {
+        "computedUserset": {"relation": "team_editor"}
+    }
+    assert relations["can_unpublish_marketplace_agents"] == {
+        "union": {
+            "child": [
+                {"computedUserset": {"relation": "team_editor"}},
+                {"computedUserset": {"relation": "team_admin"}},
+            ]
+        }
+    }
+
+
 def test_can_use_team_agents_is_team_member_only() -> None:
     """AUTHZ-05 review item 1b: seeing/using a team's agents (templates and
     managed instances) must be gated on `team_member`, never on `can_read`

@@ -31,6 +31,19 @@ accordés séparément.
 **Membre** est la base : automatique dès qu'on porte un rôle au-dessus. Et une
 équipe garde toujours **au moins un Admin** — retirer le dernier est refusé.
 
+## Publier des agents
+
+Tout **Éditeur** peut partager les agents de l'équipe avec toute l'organisation
+grâce à la marketplace des agents. Un **Admin** de l'équipe peut retirer un
+agent de la marketplace sans être Éditeur. Le fonctionnement de la publication
+est expliqué sur la page
+[Les agents](/help/fr/features/agents#la-marketplace-des-agents).
+
+La publication est **activée pour chaque équipe par l'administrateur de la
+plateforme**, qui fixe aussi le nombre d'agents qu'une équipe peut publier. Si
+l'administrateur la désactive plus tard, les agents publiés de l'équipe quittent
+la marketplace.
+
 ## Entrer dans une équipe
 
 La **marketplace** liste les équipes visibles de votre organisation. Une équipe

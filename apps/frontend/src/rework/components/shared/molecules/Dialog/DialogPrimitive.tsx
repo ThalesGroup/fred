@@ -81,7 +81,8 @@ export interface DialogProps {
   compactTitle?: boolean;
   /** Tighter header and action bar with small buttons, for a tall reading dialog. */
   dense?: boolean;
-  /** Optional content on the left of the action bar, facing the buttons (e.g. a short hint). */
+  /** Optional content on the left of the action bar, facing the buttons (e.g. a short hint or a
+   *  secondary removal); a control there never takes the opening focus. */
   footerStart?: ReactNode;
 }
 
@@ -128,7 +129,10 @@ export function DialogPrimitive({
     if (!node) return;
     const firstControl = focusDialogFirst.current
       ? undefined
-      : [...node.querySelectorAll<HTMLElement>(FOCUSABLE)].find((candidate) => isVisibleFocusable(candidate, node));
+      : [...node.querySelectorAll<HTMLElement>(FOCUSABLE)].find(
+          // Footer-start content is secondary (a hint, a removal): never the opening focus.
+          (candidate) => !candidate.closest(`.${styles.actionsStart}`) && isVisibleFocusable(candidate, node),
+        );
     (firstControl ?? node).focus();
   }, []);
 

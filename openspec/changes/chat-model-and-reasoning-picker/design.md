@@ -87,6 +87,11 @@ as today.
   `check_profile_usable_for_team` extended with the team's disabled set.
 - **Update semantics.** `UpdateAgentInstanceRequest` uses `model_fields_set` to
   tell "absent" from "clear".
+- **Unavailable recommendation.** The edit form waits for both model reads
+  before saving an existing recommendation. If it is no longer selectable, the
+  form selects the team default and sends an explicit null on save, even after
+  the editor switches tabs. If either read fails, the form reports that it
+  cannot check the model and preserves the recommendation on an unrelated save.
 
 A separate column was rejected: tuning already owns per-instance runtime
 settings.

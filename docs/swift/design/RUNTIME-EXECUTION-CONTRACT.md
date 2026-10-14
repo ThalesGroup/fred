@@ -6949,6 +6949,18 @@ list. Deploy runtime pods before the web client to avoid that rendering for
 the turns sent in between. Acceptance:
 `openspec/specs/platform-agent-skills/spec.md`.
 
+### 8.113 Capability config export and inline copy files (2026-10-11)
+
+Additive, extends §8.102. `POST /agents/capabilities/{id}/export-config` (body
+`CapabilityConfigExportRequest`: envelope, team and agent instance) returns
+`CapabilityConfigExportResult`: the upgraded envelope with scope-private settings reset
+and every `AssetKey` file as `files` (asset key → base64), read with the caller's token.
+404 when the capability is not installed, 422 when the config or a file cannot be read.
+`CapabilityConfigCopyRequest` gains optional `asset_files` (same shape): when set, the
+pod takes the files from it instead of reading the source instance (a key missing or
+not valid base64 → 422). Together they let a copy be prepared from a stored snapshot
+without access to the source team. Acceptance: `openspec/changes/add-agent-marketplace/`.
+
 ### 8.114 Per-conversation model choice, instance recommendation and model-led reasoning (2026-10-09, #3029)
 
 Supersedes the team per-agent level of §8.32 and the agent gate and tri-state

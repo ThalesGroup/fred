@@ -25,11 +25,11 @@ import { markdown } from "@codemirror/lang-markdown";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { Annotation, Compartment, EditorState, Transaction } from "@codemirror/state";
 import { drawSelection, EditorView, keymap, placeholder as placeholderExtension } from "@codemirror/view";
-import { styleTags, tags } from "@lezer/highlight";
+import { highlightCode, styleTags, tags } from "@lezer/highlight";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { writeRichClipboard } from "@rework/utils/clipboardUtils";
-import { type CSSProperties, useEffect, useId, useRef, useState } from "react";
+import { type CSSProperties, type ReactNode, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import styles from "./PromptEditor.module.css";
 
@@ -72,6 +72,8 @@ const editStateFor = (disabled: boolean, readOnly: boolean) => [
 const listMarkerTag = {
   props: [styleTags({ ListMark: tags.number })],
 };
+
+const promptMarkdown = markdown({ extensions: [listMarkerTag] });
 
 // Marks a document change this component made to adopt an incoming `value`, so
 // it is not echoed back to the parent as if the user had typed it.
@@ -139,7 +141,7 @@ export function PromptEditor({
         extensions: [
           history(),
           keymap.of([...defaultKeymap, ...historyKeymap]),
-          markdown({ extensions: [listMarkerTag] }),
+          promptMarkdown,
           EditorView.lineWrapping,
           // Use the placeholder's text coordinates for the caret.
           drawSelection(),
@@ -252,4 +254,32 @@ export function PromptEditor({
       {error && <span className={styles.information}>{error}</span>}
     </div>
   );
+}
+
+/** Read-only rendering of a prompt with the editor's syntax colours: plain,
+ * selectable spans, so the caller keeps control of layout and scrolling. */
+export function PromptHighlight({ value, className }: { value: string; className?: string }) {
+  const nodes = useMemo(() => {
+    const out: ReactNode[] = [];
+    const tree = promptMarkdown.language.parser.parse(value);
+    highlightCode(
+      value,
+      tree,
+      promptHighlighting,
+      (text, classes) =>
+        out.push(
+          classes ? (
+            <span key={out.length} className={classes}>
+              {text}
+            </span>
+          ) : (
+            text
+          ),
+        ),
+      () => out.push("\n"),
+    );
+    return out;
+  }, [value]);
+
+  return <div className={className}>{nodes}</div>;
 }

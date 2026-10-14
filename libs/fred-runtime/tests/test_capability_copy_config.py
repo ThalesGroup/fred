@@ -16,10 +16,12 @@
 `POST /agents/capabilities/{id}/copy-config`: a copied agent keeps the public
 settings, loses the scope-private ones when the scope changes, and gets its
 configuration files re-submitted to the capability's save in the target.
+`export-config` captures the reset config and its files for a later copy.
 """
 
 from __future__ import annotations
 
+import base64
 from collections.abc import Mapping
 from typing import Annotated
 
@@ -29,12 +31,14 @@ from fred_runtime.app import agent_app as agent_app_module
 from fred_runtime.capabilities.copy import (
     CapabilityCopyRejectedError,
     prepare_capability_copy,
+    prepare_capability_export,
 )
 from fred_sdk.contracts.capability import (
     AgentCapability,
     AssetKey,
     AssetSlot,
     CapabilityConfigCopyRequest,
+    CapabilityConfigExportRequest,
     CapabilityIdentity,
     CapabilityManifest,
     EmptyModel,
@@ -103,7 +107,9 @@ class _DeckCapability(AgentCapability[_DeckConfig, _DeckConfig, EmptyModel]):
         return config
 
 
-def _request(target_team: str) -> CapabilityConfigCopyRequest:
+def _request(
+    target_team: str, asset_files: dict[str, str] | None = None
+) -> CapabilityConfigCopyRequest:
     return CapabilityConfigCopyRequest(
         config=StoredCapabilityConfig(
             schema_version="1.0.0",
@@ -113,6 +119,7 @@ def _request(target_team: str) -> CapabilityConfigCopyRequest:
         source_agent_instance_id="agent-1",
         target_team_id=target_team,
         target_agent_instance_id="agent-2",
+        asset_files=asset_files,
     )
 
 
@@ -242,6 +249,155 @@ def test_endpoint_rejection_is_422(tmp_path, monkeypatch) -> None:
     client = _app_with_capabilities(tmp_path, monkeypatch, _DeckCapability())
     try:
         response = _post(client, "deck_copy", _request("team-b"))
+        assert response.status_code == 422
+        assert "deck.pptx" in response.json()["detail"]
+    finally:
+        client.__exit__(None, None, None)
+
+
+def _b64(content: bytes) -> str:
+    return base64.b64encode(content).decode("ascii")
+
+
+@pytest.mark.asyncio
+async def test_inline_files_replace_the_source_read() -> None:
+    target = _MemoryAssets()
+
+    stored = await prepare_capability_copy(
+        _DeckCapability(),
+        _request("team-b", asset_files={"deck.pptx": _b64(b"snapshot-bytes")}),
+        # The source holds no file: the copy must not read it.
+        source_ctx=_ctx("team-a", _MemoryAssets()),
+        target_ctx=_ctx("team-b", target),
+    )
+
+    assert stored.config["library_tag_ids"] == []
+    assert target.files == {"deck.pptx": b"snapshot-bytes"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("asset_files", [{}, {"deck.pptx": "not base64!"}])
+async def test_missing_or_invalid_inline_file_rejects_the_capability(
+    asset_files: dict[str, str],
+) -> None:
+    with pytest.raises(CapabilityCopyRejectedError, match="deck.pptx"):
+        await prepare_capability_copy(
+            _DeckCapability(),
+            _request("team-b", asset_files=asset_files),
+            source_ctx=_ctx("team-a", _MemoryAssets({"deck.pptx": b"pptx-bytes"})),
+            target_ctx=_ctx("team-b", _MemoryAssets()),
+        )
+
+
+def _export_request() -> CapabilityConfigExportRequest:
+    return CapabilityConfigExportRequest(
+        config=StoredCapabilityConfig(
+            schema_version="1.0.0",
+            config={"title": "Weekly", "library_tag_ids": ["lib-a"]},
+        ),
+        team_id="team-a",
+        agent_instance_id="agent-1",
+    )
+
+
+@pytest.mark.asyncio
+async def test_export_resets_scope_private_and_inlines_files() -> None:
+    exported = await prepare_capability_export(
+        _DeckCapability(),
+        _export_request(),
+        source_ctx=_ctx("team-a", _MemoryAssets({"deck.pptx": b"pptx-bytes"})),
+    )
+
+    assert exported.schema_version == "1.0.0"
+    assert exported.config == {
+        "title": "Weekly",
+        "library_tag_ids": [],
+        "template_key": "deck.pptx",
+    }
+    assert exported.files == {"deck.pptx": _b64(b"pptx-bytes")}
+    assert VALIDATE_CALLS == []
+
+
+@pytest.mark.asyncio
+async def test_exported_config_copies_without_the_source() -> None:
+    exported = await prepare_capability_export(
+        _DeckCapability(),
+        _export_request(),
+        source_ctx=_ctx("team-a", _MemoryAssets({"deck.pptx": b"pptx-bytes"})),
+    )
+    target = _MemoryAssets()
+
+    stored = await prepare_capability_copy(
+        _DeckCapability(),
+        CapabilityConfigCopyRequest(
+            config=StoredCapabilityConfig(
+                schema_version=exported.schema_version, config=exported.config
+            ),
+            source_team_id="team-a",
+            source_agent_instance_id="entry-1",
+            target_team_id="team-b",
+            target_agent_instance_id="agent-2",
+            asset_files=exported.files,
+        ),
+        source_ctx=_ctx("team-a", _MemoryAssets()),
+        target_ctx=_ctx("team-b", target),
+    )
+
+    assert stored.config["title"] == "Weekly"
+    assert target.files == {"deck.pptx": b"pptx-bytes"}
+
+
+def _post_export(client, capability_id: str):
+    return client.post(
+        f"/pod/v1/agents/capabilities/{capability_id}/export-config",
+        json=_export_request().model_dump(mode="json"),
+    )
+
+
+def test_export_endpoint_returns_config_and_files(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_capability_save_services",
+        lambda **kwargs: RuntimeServices(
+            agent_assets=_MemoryAssets({"deck.pptx": b"pptx-bytes"})
+            if kwargs["team_id"] == "team-a"
+            else _MemoryAssets()
+        ),
+    )
+    client = _app_with_capabilities(tmp_path, monkeypatch, _DeckCapability())
+    try:
+        response = _post_export(client, "deck_copy")
+        assert response.status_code == 200
+        assert response.json() == {
+            "schema_version": "1.0.0",
+            "config": {
+                "title": "Weekly",
+                "library_tag_ids": [],
+                "template_key": "deck.pptx",
+            },
+            "files": {"deck.pptx": _b64(b"pptx-bytes")},
+        }
+    finally:
+        client.__exit__(None, None, None)
+
+
+def test_export_endpoint_unknown_capability_is_404(tmp_path, monkeypatch) -> None:
+    client = _app_with_capabilities(tmp_path, monkeypatch, TracerEchoCapability())
+    try:
+        assert _post_export(client, "ghost").status_code == 404
+    finally:
+        client.__exit__(None, None, None)
+
+
+def test_export_endpoint_unreadable_file_is_422(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_capability_save_services",
+        lambda **kwargs: RuntimeServices(agent_assets=_MemoryAssets()),
+    )
+    client = _app_with_capabilities(tmp_path, monkeypatch, _DeckCapability())
+    try:
+        response = _post_export(client, "deck_copy")
         assert response.status_code == 422
         assert "deck.pptx" in response.json()["detail"]
     finally:

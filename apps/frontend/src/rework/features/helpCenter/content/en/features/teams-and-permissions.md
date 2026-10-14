@@ -29,6 +29,17 @@ They **stack**: one person can hold several, each granted separately.
 **Member** is the baseline: automatic as soon as you hold any role above it. And
 a team always keeps **at least one Admin** — removing the last one is refused.
 
+## Publishing agents
+
+Every **Editor** can share the team's agents with the whole organization
+through the agents marketplace. A team **Admin** may take an agent down from
+the marketplace without being an Editor. How publishing works is explained on
+the [Agents](/help/en/features/agents#the-agents-marketplace) page.
+
+Publishing is **enabled for each team by the platform administrator**, who
+also sets how many agents a team may publish. If the administrator turns it
+off later, the team's published agents leave the marketplace.
+
 ## Getting into a team
 
 The **marketplace** lists the teams visible in your organization. A **public**

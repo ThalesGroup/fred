@@ -998,7 +998,11 @@ async def test_team_deletion_protects_admin_last_source_before_external_deletes(
     store = SimpleNamespace(
         get_by_team_id=AsyncMock(return_value=object()), delete=AsyncMock()
     )
-    deps = SimpleNamespace(rebac=access.rebac, get_team_metadata_store=lambda: store)
+    deps = SimpleNamespace(
+        rebac=access.rebac,
+        get_team_metadata_store=lambda: store,
+        get_agent_instance_store=None,
+    )
     with pytest.raises(HTTPException) as lockout:
         await delete_team(actor, TeamId("demo"), cast(TeamServiceDependencies, deps))
     assert lockout.value.detail == "platform_access_actor_lockout"
