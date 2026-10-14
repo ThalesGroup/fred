@@ -45,6 +45,7 @@ from typing import (
 )
 
 from pptx.oxml.ns import qn
+from pptx.parts.chart import ChartPart
 from pptx.util import Emu
 
 from fred_capability_ppt_filler import text_metrics
@@ -276,10 +277,46 @@ def _copy_notes(source, dest) -> None:
     )
 
 
+def _clone_part(part: Any, package: Any) -> Any:
+    """A copy of ``part`` under the next free name of its own series."""
+    template = re.sub(r"\d*(\.\w+)$", r"%d\1", str(part.partname))
+    name = package.next_partname(template)
+    return type(part).load(name, part.content_type, package, part.blob)
+
+
+def _clone_charts(source_part: Any, dest_part: Any) -> Dict[str, str]:
+    """Each chart of ``source_part`` copied for ``dest_part`` with its workbook and
+    style parts, so the copy can take new data. A chart that does not copy cleanly
+    is left out: its frame loses its link and is redrawn or removed."""
+    rid_map: Dict[str, str] = {}
+    for rId, rel in source_part.rels.items():
+        if rel.is_external or not rel.reltype.endswith("/chart"):
+            continue
+        chart = rel.target_part
+        inner = list(chart.rels.items())
+        # A linked workbook or a drawing with its own parts: not copied.
+        if not isinstance(chart, ChartPart) or any(
+            r.is_external or r.target_part.rels for _, r in inner
+        ):
+            continue
+        clone = _clone_part(chart, dest_part.package)
+        new_rid = dest_part.relate_to(clone, rel.reltype)
+        renamed = {
+            old: clone.relate_to(_clone_part(r.target_part, clone.package), r.reltype)
+            for old, r in inner
+        }
+        for node in clone._element.iter():
+            for attr, old in list(node.attrib.items()):
+                if attr.startswith(_R_NS) and old in renamed:
+                    node.set(attr, renamed[old])
+        rid_map[rId] = new_rid
+    return rid_map
+
+
 def _duplicate_slide(presentation, source, preview: bool = False):
     """Append a copy of ``source``: layout, background, colour map, shapes,
-    media and notes. A ``preview`` copy also shows its charts, sharing their
-    parts: fine for a thumbnail, never for a delivered deck."""
+    media, charts and notes. A ``preview`` copy shares its charts' parts: fine
+    for a thumbnail, never for a delivered deck."""
     dest = presentation.slides.add_slide(source.slide_layout)
     for shape in list(dest.shapes):
         shape._element.getparent().remove(shape._element)
@@ -295,13 +332,12 @@ def _duplicate_slide(presentation, source, preview: bool = False):
             dest._element.remove(current)
         dest._element.cSld.addnext(copy.deepcopy(override))
 
-    _copy_shapes(
-        source.shapes._spTree,
-        dest.shapes._spTree,
-        _copy_relationships(
-            source.part, dest.part, _MEDIA_RELS + (("/chart",) if preview else ())
-        ),
-    )
+    if preview:
+        rid_map = _copy_relationships(source.part, dest.part, _MEDIA_RELS + ("/chart",))
+    else:
+        rid_map = _copy_relationships(source.part, dest.part)
+        rid_map.update(_clone_charts(source.part, dest.part))
+    _copy_shapes(source.shapes._spTree, dest.shapes._spTree, rid_map)
     _copy_notes(source, dest)
     return dest
 
@@ -1223,7 +1259,8 @@ class _Renderer:
                 rendered,
             )
             # Nothing to say on it (a "Thank you" slide): keep the template's text.
-            if pattern.reusable and pattern.fillable and has_content(slide_plan):
+            filled = pattern.reusable and pattern.fillable and has_content(slide_plan)
+            if filled:
                 start = starts[position - 1] if starts else 0
                 self._fill(slide, pattern, slide_plan, position, start)
                 if pattern.source == "slide":
@@ -1243,8 +1280,8 @@ class _Renderer:
                 frame = slide.notes_slide.notes_text_frame
                 if frame is not None:
                     frame.text = slide_plan.notes or ""
-            # A fixed slide's example chart is never redrawn: it cannot stay broken.
-            checks.remove_orphan_charts(slide)
+            # A slide shown as is never keeps its example chart's made-up data.
+            checks.settle_charts(slide, keep=filled)
         if rendered == 0:
             raise RenderError(
                 "the plan holds no usable slide. Write each entry of `slides` as an "
@@ -1581,7 +1618,16 @@ class _Renderer:
         placed = index.get(host.key) if host is not None else None
         if chart is None or host is None or placed is None:
             return None
-        charts.draw(slide, placed, host, chart)
+        # The designer's own chart, when it already shows the type asked.
+        example = (
+            charts.example_frame(placed, chart)
+            if host.role == "chart" and host.chart_type == chart.type
+            else None
+        )
+        if example is not None:
+            charts.refill(example, host, chart)
+        else:
+            charts.draw(slide, placed, host, chart)
         if chart.asked_type:
             self._tell(
                 f"Slide {position}: chart type '{chart.asked_type}' is not offered; built as "

@@ -25,6 +25,7 @@ import copy
 from typing import Any, List, Optional, Sequence, Tuple, cast
 
 from pptx.chart.data import CategoryChartData
+from pptx.chart.datalabel import DataLabels
 from pptx.enum.chart import (
     XL_CHART_TYPE,
     XL_LABEL_POSITION,
@@ -477,12 +478,28 @@ def _marker(
     _theme_line(owner.marker.format, colour, None, alpha)
 
 
-def _colour(built: Any, chart: PlanChart, target: Optional[Tuple[str, int]]) -> None:
+def _colour(
+    built: Any,
+    chart: PlanChart,
+    target: Optional[Tuple[str, int]],
+    painted: Optional[Sequence[int]] = None,
+) -> None:
+    """Theme colours per series or point. On the template's own chart (``painted``
+    given), only the indexes listed and the muted ones of an emphasis are set: the
+    emphasised one and the others keep the designer's colour."""
     plot = built.plots[0]
     chosen = target[1] if target else None
+
+    def paints(i: int) -> bool:
+        if painted is None:
+            return True
+        return i in painted if chosen is None else i != chosen
+
     if chart.type in ROUND:
         plot.vary_by_categories = True
         for i, point in enumerate(plot.series[0].points):
+            if not paints(i):
+                continue
             _theme_fill(point.format, *_tone(i, chosen))
             # A thin background-coloured edge keeps neighbouring slices apart.
             point.format.line.color.theme_color = MSO_THEME_COLOR.BACKGROUND_1
@@ -491,9 +508,12 @@ def _colour(built: Any, chart: PlanChart, target: Optional[Tuple[str, int]]) -> 
     if target and target[0] == "category":
         # Each bar coloured on its own: LibreOffice lays a series' opacity over its points.
         for i, point in enumerate(plot.series[0].points):
-            _theme_fill(point.format, *_tone(i, chosen, alternate=False))
+            if paints(i):
+                _theme_fill(point.format, *_tone(i, chosen, alternate=False))
         return
     for i, series in enumerate(plot.series):
+        if not paints(i):
+            continue
         colour, alpha = _tone(i, chosen)
         if chart.type == "line":
             stressed = chosen is None or i == chosen
@@ -508,17 +528,21 @@ def _colour(built: Any, chart: PlanChart, target: Optional[Tuple[str, int]]) -> 
             _theme_fill(series.format, colour, alpha)
 
 
+def _labelled(chart: PlanChart) -> bool:
+    """Values on the chart: a pie's slices, or a few single-series bars."""
+    return chart.type in ROUND or (
+        chart.type in ("column", "bar")
+        and len(chart.series) == 1
+        and len(chart.categories) <= _LABELLED_BARS
+    )
+
+
 def _labels(
     built: Any, chart: PlanChart, pt: float, fmt: str, target: Optional[Tuple[str, int]]
 ) -> None:
     plot = built.plots[0]
     point = target[1] if target and target[0] == "category" else None
-    single_bars = (
-        chart.type in ("column", "bar")
-        and len(chart.series) == 1
-        and len(chart.categories) <= _LABELLED_BARS
-    )
-    if chart.type not in ROUND and not single_bars:
+    if not _labelled(chart):
         return
     plot.has_data_labels = True
     labels = plot.data_labels
@@ -545,17 +569,22 @@ def _labels(
 def _stress_label(plot: Any, index: int, light: bool = False) -> None:
     """The emphasised point's label in bold, otherwise as the plot's shared labels
     (a series-level ``c:dLbls`` replaces them, so it repeats them)."""
+    ser = plot._element.find(qn("c:ser"))
     shared = plot._element.find(qn("c:dLbls"))
     if shared is None:
+        # A template's own chart often formats its labels on the series.
+        shared = ser.find(qn("c:dLbls"))
+    if shared is None:
         return
-    own = plot._element.find(qn("c:ser")).get_or_add_dLbls()
+    children = [copy.deepcopy(c) for c in shared if c.tag != qn("c:dLbl")]
+    own = ser.get_or_add_dLbls()
     for child in list(own):
         own.remove(child)
     label = own.makeelement(qn("c:dLbl"), {})
     label.append(label.makeelement(qn("c:idx"), {"val": str(index)}))
     skipped = (qn("c:showLeaderLines"), qn("c:leaderLines"), qn("c:extLst"))
-    for child in shared:
-        own.append(copy.deepcopy(child))
+    for child in children:
+        own.append(child)
         if child.tag not in skipped:
             label.append(copy.deepcopy(child))
     own.insert(0, label)
@@ -615,6 +644,115 @@ def _hole(built: Any) -> None:
         node.set("val", "55")
 
 
+def _data(chart: PlanChart) -> CategoryChartData:
+    data = CategoryChartData(number_format=number_format(chart))
+    data.categories = chart.categories
+    for series in chart.series:
+        data.add_series(series.name, [v if v is not None else 0 for v in series.values])
+    return data
+
+
+def _percent(chart: PlanChart) -> bool:
+    return chart.type == "stacked_column" and chart.stacked_as == "percent"
+
+
+def _title(built: Any, chart: PlanChart, pt: float) -> None:
+    """The plan's caption, in the chart's own title format when it has one."""
+    if not chart.title:
+        # Untitled, a one-series chart would show its series name as a title.
+        built.has_title = False
+        return
+    runs = built.chart_title.text_frame.paragraphs[0].runs if built.has_title else []
+    if runs:
+        runs[0].text = chart.title
+        for extra in runs[1:]:
+            extra._r.getparent().remove(extra._r)
+        return
+    built.has_title = True
+    built.chart_title.text_frame.text = chart.title
+    _text(built.chart_title.text_frame.paragraphs[0].runs[0].font, pt * 1.2, True)
+
+
+def _legend(built: Any, chart: PlanChart, pt: float, keep: bool = False) -> None:
+    """A legend for several series or a pie's slices (nothing else says which is
+    which); with ``keep``, the chart's own legend stays as it is."""
+    wanted = chart.type in ROUND or len(chart.series) > 1
+    if keep and wanted and built.has_legend:
+        return
+    built.has_legend = wanted
+    if wanted:
+        built.legend.position = XL_LEGEND_POSITION.BOTTOM
+        built.legend.include_in_layout = False
+        _text(built.legend.font, pt)
+
+
+def example_frame(placed: PlacedShape, chart: PlanChart) -> Any:
+    """The template's own chart frame at ``placed`` when it shows the type asked
+    and its parts came with the slide, else None (a fresh chart is drawn)."""
+    shape = cast(Any, placed.shape)
+    if not getattr(shape, "has_chart", False):
+        return None
+    # A chart part that did not copy left its frame without a link.
+    link = shape._element.find(f".//{qn('c:chart')}")
+    if link is None or link.get(qn("r:id")) not in shape.part.rels:
+        return None
+    return shape if type_of(shape.chart) == chart.type else None
+
+
+def refill(frame: Any, zone: Zone, chart: PlanChart) -> None:
+    """The plan's data in the template's own chart. Its colours, fonts and layout
+    stay; only what depends on the data is set: legend, data labels, number
+    format, the intents, and theme accents for series the example did not have."""
+    built = frame.chart
+    plot = built.plots[0]
+    before = len(plot.series[0].points) if chart.type in ROUND else len(plot.series)
+    chart = _arranged(chart)
+    fmt = number_format(chart)
+    pt = chart_pt(zone)
+    built.replace_data(_data(chart))
+    if _percent(chart):
+        for grouping in plot._element.iter(qn("c:grouping")):
+            grouping.set("val", "percentStacked")
+    _title(built, chart, pt)
+    _legend(built, chart, pt, keep=True)
+    count = len(chart.categories) if chart.type in ROUND else len(chart.series)
+    target = emphasis(chart)
+    _colour(built, chart, target, painted=range(before, count))
+    _relabel(built, chart, pt, fmt, target)
+    if chart.type not in ROUND:
+        value = built.value_axis.tick_labels
+        value.number_format = "0%" if _percent(chart) else fmt
+        value.number_format_is_linked = False
+
+
+def _relabel(
+    built: Any, chart: PlanChart, pt: float, fmt: str, target: Optional[Tuple[str, int]]
+) -> None:
+    """Data labels of a reused chart: its own label format kept, their presence
+    and number format set by the data, as on a fresh chart."""
+    plot = built.plots[0]
+    sets = [plot._element.find(qn("c:dLbls"))] + [
+        ser.find(qn("c:dLbls")) for ser in plot._element.iter(qn("c:ser"))
+    ]
+    own = [s for s in sets if s is not None]
+    if not _labelled(chart) or not own:
+        for node in own:
+            node.getparent().remove(node)
+        if _labelled(chart):
+            _labels(built, chart, pt, fmt, target)
+        return
+    for node in own:
+        labels = DataLabels(node)
+        labels.number_format_is_linked = False
+        if chart.type in ROUND:
+            _round_labels(labels, chart.show or "share", fmt)
+        else:
+            labels.number_format = fmt
+            labels.show_value = True
+    if target and target[0] == "category":
+        _stress_label(plot, target[1], light=chart.type == "doughnut")
+
+
 def draw(slide: Any, host: PlacedShape, zone: Zone, chart: PlanChart) -> Any:
     """Replace ``host`` (a chart or content placeholder, or a duplicated chart
     frame) with a native chart at its box and drawing-order place."""
@@ -625,11 +763,8 @@ def draw(slide: Any, host: PlacedShape, zone: Zone, chart: PlanChart) -> Any:
                 f"{len(chart.categories)} categories"
             )
     chart = _arranged(chart)
-    data = CategoryChartData(number_format=number_format(chart))
-    data.categories = chart.categories
-    for series in chart.series:
-        data.add_series(series.name, [v if v is not None else 0 for v in series.values])
-    percent = chart.type == "stacked_column" and chart.stacked_as == "percent"
+    data = _data(chart)
+    percent = _percent(chart)
     frame = slide.shapes.add_chart(
         XL_CHART_TYPE.COLUMN_STACKED_100 if percent else XL_TYPES[chart.type],
         Emu(host.left),
@@ -653,19 +788,8 @@ def draw(slide: Any, host: PlacedShape, zone: Zone, chart: PlanChart) -> Any:
     fmt = number_format(chart)
     _text(built.font, pt)
     built.font.name = "+mn-lt"  # the theme's body font, never a literal face
-    if chart.title:
-        built.has_title = True
-        built.chart_title.text_frame.text = chart.title
-        _text(built.chart_title.text_frame.paragraphs[0].runs[0].font, pt * 1.2, True)
-    else:
-        # Untitled, a one-series chart would show its series name as a title.
-        built.has_title = False
-    # A pie's slices are its categories: without a legend nothing says which is which.
-    built.has_legend = chart.type in ROUND or len(chart.series) > 1
-    if built.has_legend:
-        built.legend.position = XL_LEGEND_POSITION.BOTTOM
-        built.legend.include_in_layout = False
-        _text(built.legend.font, pt)
+    _title(built, chart, pt)
+    _legend(built, chart, pt)
     target = emphasis(chart)
     _colour(built, chart, target)
     _labels(built, chart, pt, fmt, target)

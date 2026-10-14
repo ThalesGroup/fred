@@ -211,8 +211,9 @@ def test_a_line_chart_keeps_its_order_and_says_so_once(builtin):
 def test_a_highlighted_category_takes_the_accent_and_the_rest_is_muted(builtin):
     built = _chart(_render(builtin, {**REVENUE, "highlight": "q3"}))
     points = _points(built)
-    assert list(points) == [0, 1, 2, 3] and ACCENT in points[2]
-    assert all(MUTED in p for i, p in points.items() if i != 2)
+    # The template's own column chart: the emphasised bar keeps its series' accent.
+    assert list(points) == [0, 1, 3] and all(MUTED in p for p in points.values())
+    assert ACCENT in _xml(built.plots[0]._element.find(f"{qn('c:ser')}/{qn('c:spPr')}"))
     assert "srgbClr" not in _xml(built._chartSpace)
     # The emphasised bar's value label is bold; the others keep the shared labels.
     ser = built.plots[0]._element.find(qn("c:ser"))
@@ -382,7 +383,8 @@ def test_an_intent_is_edited_on_the_same_template_slide(
     assert pattern is not None and pattern.id == base.slides[1].built_on
     result = render_deck(template, inventory, plan, assignment.patterns)
     if attr == "highlight":
-        assert ACCENT in _points(_chart(result))[2]
+        points = _points(_chart(result))
+        assert 2 not in points and MUTED in points[0]
 
 
 def test_the_tool_names_the_intents_where_charts_are_offered(builtin):

@@ -143,15 +143,22 @@ def remove_leftovers(
     return removed
 
 
-def remove_orphan_charts(slide) -> int:
-    """Drop chart frames whose chart part did not come with the slide (an
-    example chart the renderer did not replace): PowerPoint would repair them."""
+def settle_charts(slide, keep: bool = True) -> int:
+    """Pair chart frames and chart parts one to one: a frame without its part goes
+    (PowerPoint would repair it), a part no frame shows is unrelated (not saved).
+    ``keep=False`` drops every chart: a slide shown as is never shows example data.
+    Returns the number of frames removed."""
     rid = qn("r:id")
+    rels = slide.part.rels
     frames = [
         node.getparent().getparent().getparent()
         for node in slide.shapes._spTree.iter(qn("c:chart"))
-        if not node.get(rid)
+        if not keep or node.get(rid) not in rels
     ]
     for frame in frames:
         frame.getparent().remove(frame)
+    shown = {node.get(rid) for node in slide.part._element.iter(qn("c:chart"))}
+    for rId in [r for r in rels if rels[r].reltype.endswith("/chart")]:
+        if rId not in shown:
+            rels.pop(rId)
     return len(frames)
