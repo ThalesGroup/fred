@@ -40,6 +40,10 @@ interface ConfirmationDialogProps {
    *  when `criticalAction` is set. Color still follows `criticalAction`
    *  (error vs. primary), independent of variant. */
   confirmVariant?: ButtonVariant;
+  confirmDisabled?: boolean;
+  /** False for a choice the user must make explicitly: neither the scrim nor
+   *  Escape closes the dialog, only its two buttons. */
+  dismissible?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -55,6 +59,8 @@ export function ConfirmationDialog({
   cancelVariant,
   cancelColor,
   confirmVariant,
+  confirmDisabled = false,
+  dismissible = true,
   onConfirm,
   onCancel,
 }: ConfirmationDialogProps) {
@@ -67,8 +73,8 @@ export function ConfirmationDialog({
   const resolvedCancelColor = cancelColor ?? (criticalAction ? "primary" : "on-surface");
   const resolvedConfirmVariant = confirmVariant ?? (criticalAction ? "text" : "filled");
   const dialogRef = useRef<HTMLDivElement | null>(null);
-  const callbacks = useRef({ onCancel });
-  callbacks.current = { onCancel };
+  const callbacks = useRef({ onCancel, dismissible });
+  callbacks.current = { onCancel, dismissible };
   // Focus lands on Cancel, the safe choice, once the portal has mounted the dialog.
   const attachDialog = useCallback((node: HTMLDivElement | null) => {
     dialogRef.current = node;
@@ -82,6 +88,8 @@ export function ConfirmationDialog({
       const dialog = dialogRef.current;
       if (!dialog || !isTopmostModal(dialog)) return;
       if (e.key === "Escape" && !e.defaultPrevented) {
+        // A non-dismissible choice keeps the focus trap but ignores Escape.
+        if (!callbacks.current.dismissible) return;
         e.preventDefault();
         callbacks.current.onCancel();
       } else if (e.key === "Tab") {
@@ -106,7 +114,7 @@ export function ConfirmationDialog({
 
   return (
     <Portal id="modal-portal">
-      <div className={styles.overlay} onClick={onCancel}>
+      <div className={styles.overlay} onClick={dismissible ? onCancel : undefined}>
         <div
           ref={attachDialog}
           className={styles.dialog}
@@ -136,6 +144,7 @@ export function ConfirmationDialog({
               color={criticalAction ? "error" : "primary"}
               variant={resolvedConfirmVariant}
               size="medium"
+              disabled={confirmDisabled}
               onClick={onConfirm}
             >
               {confirmLabel}

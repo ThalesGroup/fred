@@ -1379,6 +1379,29 @@ async def _validate_capability_config_via_pod(
     return envelope
 
 
+def _advertised_defaults(
+    available: Sequence[CapabilityCatalogEntry], default_capability_ids: Sequence[str]
+) -> list[str]:
+    available_ids = frozenset(entry.id for entry in available)
+    return [cap_id for cap_id in default_capability_ids if cap_id in available_ids]
+
+
+async def template_default_capability_ids(
+    available: Sequence[CapabilityCatalogEntry],
+    default_capability_ids: Sequence[str],
+    team_id: TeamId,
+    deps: ProductServiceDependencies | None,
+) -> list[str]:
+    """The template defaults the pod advertises, narrowed to what the team may use."""
+    candidate_ids = _advertised_defaults(available, default_capability_ids)
+    if deps is None or not candidate_ids:
+        return candidate_ids
+    usable_ids = await usable_capability_ids(deps.team_dependencies.rebac, team_id)
+    if usable_ids is None:
+        return candidate_ids
+    return [cap_id for cap_id in candidate_ids if cap_id in usable_ids]
+
+
 async def _apply_capability_selection(
     tuning: ManagedAgentTuning,
     *,
@@ -1460,21 +1483,10 @@ async def _apply_capability_selection(
         # use. No 403 — an implicit default silently degrades to "whatever
         # this team already has" rather than blocking every fresh team's
         # first save.
-        available_ids = frozenset(entry.id for entry in available)
-        candidate_ids = [
-            cap_id for cap_id in default_capability_ids if cap_id in available_ids
-        ]
-        if deps is not None and candidate_ids:
-            usable_ids = await usable_capability_ids(
-                deps.team_dependencies.rebac, team_id
-            )
-            effective_ids = (
-                candidate_ids
-                if usable_ids is None
-                else [cap_id for cap_id in candidate_ids if cap_id in usable_ids]
-            )
-        else:
-            effective_ids = candidate_ids
+        candidate_ids = _advertised_defaults(available, default_capability_ids)
+        effective_ids = await template_default_capability_ids(
+            available, default_capability_ids, team_id, deps
+        )
         # 2026-07-19 fix B (GitHub #2004 item 5, depends_on fast-follow
         # defense-in-depth): the template declared defaults, but every one of
         # them got filtered out by the team's ReBAC grants — persisting `[]`
@@ -3137,7 +3149,9 @@ async def unenroll_agent_instance(
     - `deleted = await unenroll_agent_instance(team_id=team_id, agent_instance_id="inst-1", deps=deps)`
     """
     store = deps.get_agent_instance_store()
-    deleted = await store.delete(agent_instance_id, team_id)
+    deleted = await store.delete(
+        agent_instance_id, team_id, actor_uid=user.uid if user else None
+    )
     if deleted:
         try:
             deps.get_kpi_writer().count(

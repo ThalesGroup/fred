@@ -128,6 +128,21 @@ describe("IconButton loading state", () => {
     expect(button().classList.contains(styles["btn-on-surface-retreat"])).toBe(true);
   });
 
+  it("keeps a smaller glyph tier inside a larger button when iconSize is set", () => {
+    render(
+      <IconButton
+        variant="icon"
+        size="medium"
+        iconSize="small"
+        icon={{ category: "outlined", type: "more_vert" }}
+        aria-label="More"
+      />,
+    );
+
+    expect(button().classList.contains(styles["btn-medium"])).toBe(true);
+    expect(button().classList.contains(styles["icon-small"])).toBe(true);
+  });
+
   it("shows the icon, not a spinner, and stays enabled when loading is omitted/false", () => {
     render(
       <IconButton

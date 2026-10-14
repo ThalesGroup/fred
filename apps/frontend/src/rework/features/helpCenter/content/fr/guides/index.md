@@ -1,7 +1,7 @@
 ---
 title: Choisir son guide
 order: 0
-description: Deux parcours complets, du besoin au résultat.
+description: Trois parcours complets, du besoin au résultat.
 icon: map
 ---
 
@@ -14,6 +14,7 @@ atteindre un résultat.
 | --------------------------------------------- | ----------------------------------------------------------------------- |
 | Un agent qui répond sur mes documents         | [Monter un assistant documentaire](/help/fr/guides/build-rag-assistant) |
 | Savoir si un agent répond bien, et s'améliore | [Évaluer un agent](/help/fr/guides/evaluate-agents)                     |
+| Un thème aux couleurs de mon organisation     | [Créer un thème personnalisé](/help/fr/guides/custom-theme)             |
 
 > Faire produire un document, remplir une présentation, interroger un tableur :
 > ce sont des **fonctions** à activer sur l'agent, décrites dans

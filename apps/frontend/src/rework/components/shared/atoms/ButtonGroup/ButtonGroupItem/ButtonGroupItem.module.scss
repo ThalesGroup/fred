@@ -28,36 +28,31 @@
   font: var(--font-label-large);
   text-wrap: nowrap;
 
+  /* Unselected items are transparent so the group's track shows through,
+   * whichever surface it uses. */
   .stateLayer {
-    --item-background-color: var(--surface-container);
     corner-shape: round;
     display: flex;
     justify-content: center;
     align-items: center;
     border-radius: var(--spacing-2xl);
-    background-color: var(--item-background-color);
-    padding: 0 var(--lateral-padding);
+    background-color: transparent;
     height: 100%;
-  }
-
-  .label {
-    color: var(--label-color);
   }
 
   .icon {
     display: flex;
     justify-content: center;
     align-items: center;
-    color: var(--icon-color);
   }
 
   /* 24px tier, formerly `xs` (renamed #2298); this component uses `small` for 32px. */
   &[data-size="2xs"] {
     height: 1.5rem;
-    --lateral-padding: var(--spacing-xs);
 
     .stateLayer {
       gap: var(--spacing-3xs);
+      padding: 0 var(--spacing-xs);
     }
 
     .icon {
@@ -67,10 +62,10 @@
 
   &[data-size="small"] {
     height: 2rem;
-    --lateral-padding: var(--spacing-s);
 
     .stateLayer {
       gap: var(--spacing-2xs);
+      padding: 0 var(--spacing-s);
     }
 
     .icon {
@@ -80,10 +75,10 @@
 
   &[data-size="medium"] {
     height: 2.5rem;
-    --lateral-padding: var(--spacing-m);
 
     .stateLayer {
       gap: var(--spacing-xs);
+      padding: 0 var(--spacing-m);
     }
 
     .icon {
@@ -102,19 +97,16 @@
   @each $name, $scheme in $color-schemes {
     &[data-color="#{$name}"] {
       &:active .stateLayer:not([data-selected="true"]) {
-        --item-background-color: #{map.get($scheme, "on-container-pressed")};
+        background-color: #{map.get($scheme, "on-container-pressed")};
       }
 
       &:hover:not(:active) .stateLayer:not([data-selected="true"]) {
-        --item-background-color: #{map.get($scheme, "on-container-hover")};
+        background-color: #{map.get($scheme, "on-container-hover")};
       }
 
-      .label {
-        --label-color: #{map.get($scheme, "on-container")};
-      }
-
+      .label,
       .icon {
-        --icon-color: #{map.get($scheme, "on-container")};
+        color: #{map.get($scheme, "on-container")};
       }
     }
   }
@@ -124,14 +116,25 @@
    * unselected hover and pressed layers. Declared after the loop above so it
    * wins over the per-scheme label color. */
   .stateLayer[data-selected="true"] {
-    --item-background-color: var(--secondary-container);
+    background-color: var(--secondary-container);
 
-    .label {
-      --label-color: var(--on-secondary-container);
-    }
-
+    .label,
     .icon {
-      --icon-color: var(--on-secondary-container);
+      color: var(--on-secondary-container);
+    }
+  }
+
+  @each $name in success, error {
+    &[data-selected-color="#{$name}"] .stateLayer[data-selected="true"] {
+      --item-background-color: var(--#{$name});
+
+      .label {
+        --label-color: var(--on-#{$name});
+      }
+
+      .icon {
+        --icon-color: var(--on-#{$name});
+      }
     }
   }
 
@@ -145,12 +148,8 @@
     cursor: default;
     pointer-events: none;
 
-    .stateLayer:not([data-selected="true"]) {
-      --item-background-color: transparent;
-
-      .label {
-        --label-color: var(--on-surface-muted);
-      }
+    .stateLayer:not([data-selected="true"]) .label {
+      color: var(--on-surface-muted);
     }
   }
 }

@@ -16,7 +16,15 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import BigInteger, Boolean, DateTime, String, text
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    Integer,
+    String,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from fred_core.models import Base
@@ -31,6 +39,11 @@ class TeamMetadataRow(Base):
     """ORM model for the ``teammetadata`` table."""
 
     __tablename__ = "teammetadata"
+    __table_args__ = (
+        CheckConstraint(
+            "agents_publish_quota >= 1", name="ck_teammetadata_agents_publish_quota"
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
     platform_access_allowed: Mapped[bool] = mapped_column(
@@ -80,6 +93,12 @@ class TeamMetadataRow(Base):
     team_delete_grace: Mapped[str | None] = mapped_column(String, nullable=True)
     max_idle: Mapped[str | None] = mapped_column(String, nullable=True)
     retention_updated_by: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Platform-admin overrides of the agents marketplace default
+    # (`platform_marketplace_settings`); None = the team follows the default.
+    agents_publishing_enabled: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True
+    )
+    agents_publish_quota: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )

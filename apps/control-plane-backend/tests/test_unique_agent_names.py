@@ -31,6 +31,7 @@ from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from control_plane_backend.agent_instances.names import (
     free_imported_name,
+    free_numbered_name,
     normalize_agent_name,
 )
 from control_plane_backend.agent_instances.store import (
@@ -63,9 +64,27 @@ def test_names_compare_without_case_or_surrounding_spaces() -> None:
 
 
 def test_free_imported_name_skips_taken_suffixes() -> None:
-    taken = {"analyst", "analyst_imported-1"}
-    assert free_imported_name("Free", taken) == "Free"
-    assert free_imported_name("ANALYST", taken) == "ANALYST_imported-2"
+    taken = {"analyst", "analyst (copie 1)"}
+    assert free_imported_name("Free", taken, "fr") == "Free"
+    assert free_imported_name("ANALYST", taken, "fr") == "ANALYST (copie 2)"
+    assert free_imported_name("Report", {"report"}, "en") == "Report (copy 1)"
+
+
+def test_free_imported_name_falls_back_to_english() -> None:
+    assert free_imported_name("Report", {"report"}) == "Report (copy 1)"
+
+
+def test_platform_import_numbers_conflicts_without_a_word() -> None:
+    taken = {"analyst", "analyst (2)"}
+    assert free_numbered_name("Free", taken) == "Free"
+    assert free_numbered_name("ANALYST", taken) == "ANALYST (3)"
+
+
+def test_free_imported_name_fits_the_name_column() -> None:
+    long_name = "x" * 255
+    renamed = free_imported_name(long_name, {long_name}, "fr")
+    assert renamed.endswith(" (copie 1)")
+    assert len(renamed) <= 255
 
 
 # --- store ------------------------------------------------------------------

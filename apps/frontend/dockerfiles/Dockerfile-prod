@@ -47,6 +47,7 @@ RUN apk add --no-cache ca-certificates jq
 # Copy web app from builder to nginx html directory
 COPY --from=builder --chown=nginx:nginx /workspace/apps/frontend/dist /usr/share/nginx/html
 COPY --chown=nginx:nginx --chmod=755 apps/frontend/dockerfiles/docker-entrypoint.sh /usr/local/bin/fred-frontend-entrypoint.sh
+COPY --chown=nginx:nginx apps/frontend/scripts/theme-overlay.sh /usr/local/bin/fred-theme-overlay.sh
 
 # Provide a writable config target so the unprivileged runtime can render
 # backend proxy locations from environment variables on container startup.
