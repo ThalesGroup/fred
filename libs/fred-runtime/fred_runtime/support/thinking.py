@@ -173,8 +173,11 @@ def content_to_text(content: object, *, out_fragments: list[str] | None = None) 
                 if fragment:
                     out_fragments.append(fragment)
             continue
-        if isinstance(item, dict) and "text" in item:
-            rendered_parts.append(str(item["text"]))
+        if isinstance(item, dict):
+            # A block without text (e.g. Mistral's empty `reference`) shows nothing;
+            # its Python repr must never reach the answer, history or replay.
+            if "text" in item:
+                rendered_parts.append(str(item["text"]))
         else:
             rendered_parts.append(str(item))
     # Text blocks may split a token or Markdown fence; preserve their exact bytes.
