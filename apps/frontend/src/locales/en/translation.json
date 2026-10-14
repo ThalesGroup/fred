@@ -309,6 +309,7 @@
         "clearAria": "Remove the selected file",
         "currentTemplate": "A template is configured for this agent.",
         "templateRequired": "The PowerPoint generator requires a PowerPoint template. Upload a .pptx file.",
+        "templateNoFields": "No template fields found. This feature fills prepared templates. Add fields such as {{placeholder}} and describe them in the slide notes.",
         "templateInvalid": "Fix the template errors below before saving.",
         "analyzing": "Analyzing the template…",
         "analyzeFailed": "The template could not be analyzed. Check the file and try again.",

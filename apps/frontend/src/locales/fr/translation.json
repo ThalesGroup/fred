@@ -309,6 +309,7 @@
         "clearAria": "Retirer le fichier sélectionné",
         "currentTemplate": "Un modèle est configuré pour cet agent.",
         "templateRequired": "Le générateur PowerPoint nécessite un modèle PowerPoint. Téléversez un fichier .pptx.",
+        "templateNoFields": "Aucun champ de modèle trouvé. Cette fonctionnalité remplit des modèles préparés. Ajoutez des champs comme {{placeholder}} et décrivez-les dans les notes des diapositives.",
         "templateInvalid": "Corrigez les erreurs du modèle ci-dessous avant d'enregistrer.",
         "analyzing": "Analyse du modèle…",
         "analyzeFailed": "Le modèle n'a pas pu être analysé. Vérifiez le fichier et réessayez.",
