@@ -474,6 +474,34 @@ async def list_capability_enablement(
     return CapabilityEnablementList(items=items)
 
 
+async def _clean_up_revoked_model(
+    deps: ProductServiceDependencies,
+    entry: CapabilityCatalogEntry,
+    *,
+    team_ids: set[TeamId] | None,
+) -> None:
+    """Clear agent recommendations and team exceptions naming a model the
+    platform just withdrew, for teams that lost it (`None`: every team)."""
+
+    # Lazy import: routing_policy depends on this package's catalog module.
+    from control_plane_backend.routing_policy.service import apply_model_revocation
+
+    # A catalog-less revoke stub has no profiles: turn-time checks still
+    # ignore its recommendations, and its team exceptions are pruned here.
+    cleared = await apply_model_revocation(
+        deps,
+        capability_id=entry.id,
+        profile_ids=frozenset(entry.model_chat_profile_ids),
+        team_ids=team_ids,
+    )
+    if cleared:
+        logger.info(
+            "[capability-model] model=%s revoked: cleared %d agent recommendation(s)",
+            entry.id,
+            cleared,
+        )
+
+
 async def _revive_after_grant(
     *,
     capability_id: str,
@@ -577,6 +605,8 @@ async def disable_team_capability(
         kpi_writer=deps.get_kpi_writer(),
         updated_by=user.uid,
     )
+    if entry.kind == "model":
+        await _clean_up_revoked_model(deps, entry, team_ids={team_id})
     return TeamCapabilityEnablementResult(
         capability_id=capability_id,
         team_id=str(team_id),
@@ -625,6 +655,8 @@ async def reset_team_capability(
         if default_on and not is_projected_product_object(entry)
         else 0
     )
+    if not default_on and entry.kind == "model":
+        await _clean_up_revoked_model(deps, entry, team_ids={team_id})
     return TeamCapabilityEnablementResult(
         capability_id=capability_id,
         team_id=str(team_id),
@@ -716,6 +748,8 @@ async def set_default_on(
                 capability_id,
                 user.uid,
             )
+    if not default_on and entry.kind == "model":
+        await _clean_up_revoked_model(deps, entry, team_ids=None)
     return CapabilityDefaultOnResult(
         capability_id=capability_id,
         default_on=default_on,
@@ -908,6 +942,10 @@ async def set_personal_scope(
         if not had_access and has_access
         else 0
     )
+    # A revoke cleans the personal spaces that lost the model; the scan keeps
+    # every team still able to use it.
+    if had_access and not has_access and entry.kind == "model":
+        await _clean_up_revoked_model(deps, entry, team_ids=None)
 
     return CapabilityPersonalScopeResult(
         capability_id=capability_id,

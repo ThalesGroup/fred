@@ -83,35 +83,19 @@ export function mergeContextPromptText(
 }
 
 /**
- * Fold the team's routing-policy snapshot (resolved by control-plane
- * prepare-execution from its stored `TeamRoutingPolicy`,
- * `TEAM-ROUTING-POLICY-RFC.md` §8.2) onto a base runtime context — same
- * "resolved once per session, forwarded unchanged per turn" contract as
- * `mergeContextPromptText` above, same reason: a key is only set when a
- * value is present, so an absent policy never overwrites the context with
- * null/empty.
- *
- * The platform-operator chat model binding does NOT ride along here at all:
- * it is never client-forwarded. The runtime resolves it itself,
- * trusted, on its own per-turn control-plane lookup — a request-body field
- * can no longer influence chat model selection or its `usable_model_ids`
- * exemption.
- *
- * Typed against the generated `RuntimeContext`, so a rename of any of these
- * fields on the runtime contract breaks both stream consumers at compile
- * time instead of only the chat path.
+ * Fold the team's default chat profile (resolved by control-plane
+ * prepare-execution from its stored `TeamRoutingPolicy`) onto a base runtime
+ * context. The key is only set when a value is present, so an absent policy
+ * never overwrites the context with null. The user's per-conversation choice
+ * travels separately as `chat_profile_id`, set by the composer.
  */
 export function mergeRoutingPolicy(
   base: Partial<RuntimeContext>,
   chatDefaultProfileId: string | null | undefined,
-  agentProfileOverrides: Record<string, string> | null | undefined,
 ): RuntimeContext {
   return {
     ...base,
     ...(chatDefaultProfileId != null ? { chat_default_profile_id: chatDefaultProfileId } : {}),
-    ...(agentProfileOverrides != null && Object.keys(agentProfileOverrides).length > 0
-      ? { agent_profile_overrides: agentProfileOverrides }
-      : {}),
   };
 }
 
@@ -150,17 +134,10 @@ export function mergeReasoningActivation(
  */
 export function mergePreparation(
   base: Partial<RuntimeContext>,
-  prep: Pick<
-    ExecutionPreparation,
-    "context_prompt_text" | "chat_default_profile_id" | "agent_profile_overrides" | "reasoning_enabled_model_ids"
-  >,
+  prep: Pick<ExecutionPreparation, "context_prompt_text" | "chat_default_profile_id" | "reasoning_enabled_model_ids">,
 ): RuntimeContext {
   return mergeReasoningActivation(
-    mergeRoutingPolicy(
-      mergeContextPromptText(base, prep.context_prompt_text),
-      prep.chat_default_profile_id,
-      prep.agent_profile_overrides,
-    ),
+    mergeRoutingPolicy(mergeContextPromptText(base, prep.context_prompt_text), prep.chat_default_profile_id),
     prep.reasoning_enabled_model_ids,
   );
 }

@@ -70,9 +70,7 @@ export function SimpleCapabilitiesView({
   return (
     <div className={styles.view}>
       {TOOL_PACK_SECTIONS.map((section) => {
-        const isCapabilityBackedSection =
-          section.packs.length > 0 && section.packs.every((pack) => pack.kind === "capabilities");
-        if (isCapabilityBackedSection && !supportsCapabilities) return null;
+        if (section.packs.length > 0 && !supportsCapabilities) return null;
         // A pack the admin has opened nothing for is a dead switch; drop it,
         // and drop a section left with none rather than print a bare heading.
         // An agent still carrying a withdrawn capability is not left

@@ -33,6 +33,11 @@ export interface MenuPopoverProps {
   role?: string;
   className?: string;
   "aria-label"?: string;
+  /** Tighter rows, separators and headings, for short pickers opened from a chip. */
+  dense?: boolean;
+  /** Pickers: unselected labels step back (`on-surface-retreat`); the selected
+   *  and the hovered row read in `on-surface`. */
+  quietUnselected?: boolean;
 }
 
 /**
@@ -50,12 +55,19 @@ export default function MenuPopover({
   role = "menu",
   className,
   "aria-label": ariaLabel,
+  dense = false,
+  quietUnselected = false,
 }: MenuPopoverProps) {
   const visibleGroups = groups.map((group) => group.filter(Boolean)).filter((group) => group.length > 0);
   const hasHeader = header != null || headerTitle != null;
 
   return (
-    <div ref={ref} className={`${styles.popover} ${className ?? ""}`} role={role} aria-label={ariaLabel}>
+    <div
+      ref={ref}
+      className={`${styles.popover} ${dense ? styles.dense : ""} ${quietUnselected ? styles.quietUnselected : ""} ${className ?? ""}`}
+      role={role}
+      aria-label={ariaLabel}
+    >
       {hasHeader && (
         <div className={styles.header}>
           {header ?? (
