@@ -22,7 +22,7 @@ from __future__ import annotations
 import math
 import re
 from collections import Counter
-from typing import Any, Dict, List, Literal, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Literal, Mapping, Optional, Sequence, Tuple
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic.json_schema import SkipJsonSchema
@@ -347,6 +347,43 @@ _SHOW_NAMES: Dict[str, PieShow] = {
         "both",
     ),
 }
+# Intents: what matters on a chart, in the words models use for it.
+ChartSort = Literal["desc", "asc", "given"]
+StackedAs = Literal["value", "percent"]
+_SORT_NAMES: Dict[str, ChartSort] = {
+    **dict.fromkeys(
+        ("desc", "descending", "decreasing", "largest first", "biggest first")
+        + ("highest first", "high to low", "largest", "true", "yes", "decroissant")
+        + ("ordre decroissant", "du plus grand au plus petit", "par ordre decroissant"),
+        "desc",
+    ),
+    **dict.fromkeys(
+        ("asc", "ascending", "increasing", "smallest first", "lowest first")
+        + (
+            "low to high",
+            "croissant",
+            "ordre croissant",
+            "du plus petit au plus grand",
+        ),
+        "asc",
+    ),
+    **dict.fromkeys(
+        ("given", "as given", "none", "no", "false", "original", "unsorted", "as is")
+        + ("order given", "aucun", "tel quel", "ordre donne", "ordre d origine"),
+        "given",
+    ),
+}
+_STACKED_NAMES: Dict[str, StackedAs] = {
+    **dict.fromkeys(
+        ("percent", "percents", "percentage", "percentages", "%", "100%", "100 %")
+        + ("100", "share", "shares", "pourcentage", "pourcentages", "normalized"),
+        "percent",
+    ),
+    **dict.fromkeys(
+        ("value", "values", "absolute", "number", "numbers", "valeur", "valeurs"),
+        "value",
+    ),
+}
 _NUMBER = re.compile(r"^([^\d+\-.,]*?)\s*([+\-]?\d[\d\s.,']*)\s*(\D*)$")
 
 
@@ -363,14 +400,28 @@ def _chart_type(value: Any) -> Tuple[str, Optional[str]]:
     return (found, None) if found else ("column", text[:30])
 
 
-def _show(value: Any) -> Tuple[Optional[PieShow], Optional[str]]:
-    """The labels mode and, for words that name none, the text sent."""
+def _named(value: Any, names: Mapping[str, Any]) -> Tuple[Optional[Any], Optional[str]]:
+    """The word a mode names and, for words that name none, the text sent."""
     first = _seq(value)[0] if not _empty(value) else None
+    if isinstance(first, bool):
+        first = str(first)
     text = lexicon.normalize(_as_text(first) or "")
     if not text:
         return None, None
-    found = _SHOW_NAMES.get(text) or _SHOW_NAMES.get(text.replace("+", " and "))
+    found = names.get(text) or names.get(text.replace("+", " and "))
     return (found, None) if found else (None, text[:30])
+
+
+def _show(value: Any) -> Tuple[Optional[PieShow], Optional[str]]:
+    return _named(value, _SHOW_NAMES)
+
+
+def _highlight(value: Any) -> Tuple[Optional[str], Optional[str]]:
+    """One name to emphasise; several names are the text sent, for the note."""
+    names = [t.strip() for t in (_as_text(v) for v in _seq(value)) if t and t.strip()]
+    if len(names) > 1:
+        return None, _quote(", ".join(names))
+    return (names[0][:60], None) if names else (None, None)
 
 
 def _decimal(digits: str) -> Optional[float]:
@@ -484,6 +535,24 @@ class PlanChart(BaseModel):
         "(percentages, the default), value (the numbers, with `unit`) or both. To "
         "display numbers instead of percentages on a pie, set show: 'value'.",
     )
+    highlight: Optional[str] = Field(
+        default=None,
+        description="Optional: the one category (or, with several series, the one "
+        "series) that matters, written as in categories or series. It is drawn in "
+        "the accent colour and the rest in grey. A name, never a colour.",
+    )
+    sort: Optional[ChartSort] = Field(
+        default=None,
+        description="Optional: desc (largest first), asc (smallest first) or given "
+        "(the order written, the default). Not for line or area charts.",
+    )
+    stacked_as: Optional[StackedAs] = Field(
+        default=None,
+        description="stacked_column only: value (the default) or percent (every "
+        "column fills 100 %, to compare shares).",
+    )
+    # Intent words that name nothing (field → text sent), for the note.
+    asked_intents: SkipJsonSchema[Dict[str, str]] = Field(default_factory=dict)
     # An unknown type built as a column chart: the type asked, for the note.
     asked_type: SkipJsonSchema[Optional[str]] = None
     # A `show` naming no mode: the text sent, for the revision.
@@ -511,12 +580,36 @@ class PlanChart(BaseModel):
             "display": "show",
             "labels_as": "show",
             "show_as": "show",
+            "emphasis": "highlight",
+            "emphasize": "highlight",
+            "emphasise": "highlight",
+            "highlighted": "highlight",
+            "focus": "highlight",
+            "order": "sort",
+            "sort_by": "sort",
+            "sorting": "sort",
+            "sort_order": "sort",
+            "stacking": "stacked_as",
         }
         data = _with_aliases(value, aliases)
         kind, asked = _chart_type(data.get("type"))
         if kind == "column" and value.get("asked_type"):
             asked = value["asked_type"]
         show, asked_show = _show(data.get("show"))
+        sort, asked_sort = _named(data.get("sort"), _SORT_NAMES)
+        stacked_as, asked_stacked = _named(data.get("stacked_as"), _STACKED_NAMES)
+        highlight, asked_highlight = _highlight(data.get("highlight"))
+        # A re-validated dump carries its unread words while the field stays empty.
+        carried = dict(value.get("asked_intents") or {})
+        asked_intents: Dict[str, str] = {}
+        for field, text in (
+            ("highlight", asked_highlight),
+            ("sort", asked_sort),
+            ("stacked_as", asked_stacked),
+        ):
+            text = text or (carried.get(field) if _empty(data.get(field)) else None)
+            if text:
+                asked_intents[field] = text
         title = _as_text(data.get("title"))
         categories = data.get("categories")
         series = data.get("series")
@@ -567,6 +660,10 @@ class PlanChart(BaseModel):
             "unit": _as_text(data.get("unit")),
             "show": show,
             "asked_show": None if show else asked_show or value.get("asked_show"),
+            "highlight": highlight,
+            "sort": sort,
+            "stacked_as": stacked_as,
+            "asked_intents": asked_intents,
             "asked_type": asked,
             "style_fields": sorted(set(value.get("style_fields") or []) | set(style)),
             "ignored_fields": _ignored(

@@ -140,6 +140,7 @@ BuildNoteCode = Literal[
     "chart_shows_shares",
     "layout_repeated",
     "layout_not_repeated",
+    "intent_not_shown",
 ]
 
 
@@ -150,6 +151,8 @@ class BuildNote(BaseModel):
     count: Optional[int] = None
     # The requested kind (`other_kind`) or chart type (`chart_type_changed`).
     kind: Optional[str] = None
+    # The plan field an intent note is about (`intent_not_shown`): "highlight", "sort"...
+    field: Optional[str] = None
 
 
 class BuiltSlide(BaseModel):

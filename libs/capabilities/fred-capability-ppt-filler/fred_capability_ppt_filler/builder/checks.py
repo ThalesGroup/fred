@@ -61,11 +61,13 @@ class DeckReport:
         return self.slides.setdefault(position, SlideReport(position))
 
     def note(self, code: BuildNoteCode, count: Optional[int] = None, **kw: Any) -> None:
-        """A note on the slide being rendered; a repeated code adds its count."""
+        """A note on the slide being rendered; a repeated code (and field) adds
+        its count."""
         if not self.built:
             return
         notes = self.built[-1].notes
-        same = next((n for n in notes if n.code == code), None)
+        field = kw.get("field")
+        same = next((n for n in notes if n.code == code and n.field == field), None)
         if same is None:
             notes.append(BuildNote(code=code, count=count, **kw))
         elif count is not None:

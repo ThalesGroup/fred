@@ -1174,6 +1174,8 @@ class _Renderer:
         self.slides_by_id = {slide.slide_id: slide for slide in presentation.slides}
         self.report = checks.DeckReport()
         self._originals: Dict[int, Dict[str, str]] = {}
+        # An intent note's text → (its line in the report, the slides it concerns).
+        self._intents: Dict[str, Tuple[int, List[int]]] = {}
 
     def render(
         self,
@@ -1319,6 +1321,20 @@ class _Renderer:
     def _tell(self, note: str) -> None:
         """A finding the after-check report does not carry: sent to the agent."""
         self.report.notes.append(note)
+
+    def _tell_intent(self, position: int, name: str, note: str) -> None:
+        """An intent built without: one agent line per text, naming every slide."""
+        self.report.note("intent_not_shown", field=name)
+        line, slides = self._intents.get(note) or (len(self.report.notes), [])
+        if not slides:
+            self.report.notes.append("")
+            self._intents[note] = (line, slides)
+        if position not in slides:
+            slides.append(position)
+        named = ", ".join(str(n) for n in slides)
+        self.report.notes[line] = (
+            f"Slide{'s' if len(slides) > 1 else ''} {named}: {note}"
+        )
 
     def _create(self, pattern: Pattern) -> Tuple[Any, Pattern]:
         """The slide, and the pattern whose zones address its actual shapes."""
@@ -1573,6 +1589,8 @@ class _Renderer:
                 f"{', '.join(charts.XL_TYPES)}."
             )
         self._tell_labels(chart, position)
+        for name, note in charts.intent_notes(chart):
+            self._tell_intent(position, name, note)
         if chart.style_fields:
             self._tell(
                 f"Slide {position}: the chart's {', '.join(chart.style_fields)} "

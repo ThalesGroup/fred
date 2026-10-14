@@ -37,6 +37,7 @@ from pptx.oxml.ns import qn
 from pptx.util import Emu, Pt
 
 from fred_capability_ppt_filler import text_metrics
+from fred_capability_ppt_filler.builder import lexicon
 from fred_capability_ppt_filler.builder.models import Zone
 from fred_capability_ppt_filler.builder.plan import (
     MAX_SERIES,
@@ -262,6 +263,144 @@ def fit_problems(
     return found
 
 
+# --- intents ---------------------------------------------------------------------------
+
+# Categories in time order: a sort would scramble them, and one point of their
+# single line or area cannot be coloured apart (LibreOffice ignores point markers).
+_ORDERED = ("line", "area")
+# Opacity of muted text-colour points or series: below the accent on a light or
+# a dark background alike; neighbours alternate so a legend still tells them apart.
+_MUTED = (35000, 55000)
+
+
+def _a(kind: str) -> str:
+    return f"an {kind}" if kind == "area" else f"a {kind}"
+
+
+def _names(values: Sequence[str]) -> List[str]:
+    return [lexicon.normalize(v) for v in values]
+
+
+def emphasis(chart: PlanChart) -> Optional[Tuple[str, int]]:
+    """("series" | "category", index) of what ``highlight`` names, if it can show."""
+    name = lexicon.normalize(chart.highlight or "")
+    if not name:
+        return None
+    if len(chart.series) > 1 and chart.type not in ROUND:
+        names = _names([s.name for s in chart.series])
+        return ("series", names.index(name)) if name in names else None
+    categories = _names(chart.categories)
+    if chart.type in _ORDERED or name not in categories:
+        return None
+    return "category", categories.index(name)
+
+
+def _highlight_note(chart: PlanChart) -> Optional[str]:
+    asked = chart.asked_intents.get("highlight")
+    if asked:
+        return (
+            f"chart.highlight '{asked}' names more than one; built without highlight. "
+            "To set it, edit chart.highlight to the one name that matters."
+        )
+    if not chart.highlight or emphasis(chart) is not None:
+        return None
+    name = chart.highlight
+    series = [s.name for s in chart.series]
+    if len(series) > 1 and chart.type not in ROUND:
+        if lexicon.normalize(name) in _names(chart.categories):
+            return (
+                f"chart.highlight '{name}' is a category, and this chart has "
+                f"{len(series)} series: only a series can be emphasised. Built without "
+                f"highlight; edit chart.highlight to one of the series "
+                f"({', '.join(series)}), or keep one series."
+            )
+        return (
+            f"chart.highlight '{name}' matches no series ({', '.join(series)}); built "
+            "without highlight. To set it, edit chart.highlight to one of those (a "
+            "name, never a colour)."
+        )
+    if chart.type in _ORDERED and lexicon.normalize(name) in _names(chart.categories):
+        return (
+            f"chart.highlight '{name}' was not applied: {_a(chart.type)} chart cannot "
+            "emphasise one category. Nothing to do; drop chart.highlight, or use type "
+            "'column' to emphasise it."
+        )
+    return (
+        f"chart.highlight '{name}' matches no category ({', '.join(chart.categories)}); "
+        "built without highlight. To set it, edit chart.highlight to one of those (a "
+        "name, never a colour)."
+    )
+
+
+def intent_notes(chart: PlanChart) -> List[Tuple[str, str]]:
+    """(field, note) for each intent the chart is built without."""
+    found: List[Tuple[str, str]] = []
+    highlight = _highlight_note(chart)
+    if highlight:
+        found.append(("highlight", highlight))
+    asked = chart.asked_intents.get("sort")
+    if asked:
+        found.append(
+            (
+                "sort",
+                f"chart.sort '{asked}' is not an order; built in the order given. To "
+                "sort, edit chart.sort to 'desc' (largest first) or 'asc'.",
+            )
+        )
+    elif chart.sort in ("desc", "asc") and chart.type in _ORDERED:
+        found.append(
+            (
+                "sort",
+                f"chart.sort '{chart.sort}' was not applied: {_a(chart.type)} chart keeps "
+                "its categories in the order given (usually time). Nothing to do; drop "
+                "chart.sort, or use type 'column' or 'bar' to sort.",
+            )
+        )
+    asked = chart.asked_intents.get("stacked_as")
+    if asked:
+        found.append(
+            (
+                "stacked_as",
+                f"chart.stacked_as '{asked}' is not a stacking; built with the values. "
+                "Use 'percent' for stacked columns that each fill 100 %, or drop it.",
+            )
+        )
+    elif chart.stacked_as == "percent" and chart.type != "stacked_column":
+        found.append(
+            (
+                "stacked_as",
+                f"chart.stacked_as 'percent' was not applied: it needs type "
+                f"'stacked_column'; a '{chart.type}' chart was built. Nothing to do; drop "
+                "chart.stacked_as, or set chart.type to 'stacked_column'.",
+            )
+        )
+    return found
+
+
+def _arranged(chart: PlanChart) -> PlanChart:
+    """The chart in the order ``sort`` asks; the plan itself keeps the order written."""
+    if chart.sort not in ("desc", "asc") or chart.type in _ORDERED:
+        return chart
+    count = len(chart.categories)
+    if chart.type == "stacked_column":
+        keys = [sum(s.values[i] or 0 for s in chart.series) for i in range(count)]
+    else:
+        keys = [v or 0 for v in chart.series[0].values]
+    order = sorted(range(count), key=keys.__getitem__, reverse=chart.sort == "desc")
+    if chart.type == "bar":
+        # A bar chart draws its first category at the bottom: the first in order goes last.
+        order.reverse()
+    return chart.model_copy(
+        update={
+            "categories": [chart.categories[i] for i in order],
+            "series": [
+                s.model_copy(update={"values": [s.values[i] for i in order]})
+                for s in chart.series
+            ],
+        }
+    )
+
+
 # --- drawing -------------------------------------------------------------------------
 
 
@@ -282,9 +421,44 @@ def number_format(chart: PlanChart) -> str:
     return f'{base}"{unit}"' if unit == "%" else f'{base}" {unit}"'
 
 
-def _theme_fill(fmt: Any, accent: MSO_THEME_COLOR) -> None:
+def _alpha(fmt: Any, path: str, alpha: Optional[int]) -> None:
+    """``a:alpha`` on the colour at ``path`` under the format's ``c:spPr``."""
+    if alpha is None:
+        return
+    colour = fmt._element.find(f"{qn('c:spPr')}/{path}/{qn('a:schemeClr')}")
+    if colour is not None:
+        colour.append(colour.makeelement(qn("a:alpha"), {"val": str(alpha)}))
+
+
+def _theme_fill(fmt: Any, accent: MSO_THEME_COLOR, alpha: Optional[int] = None) -> None:
     fmt.fill.solid()
     fmt.fill.fore_color.theme_color = accent
+    _alpha(fmt, qn("a:solidFill"), alpha)
+
+
+def _theme_line(
+    fmt: Any,
+    accent: MSO_THEME_COLOR,
+    width: Optional[float],
+    alpha: Optional[int] = None,
+) -> None:
+    fmt.line.color.theme_color = accent
+    if width is not None:
+        fmt.line.width = Pt(width)
+    _alpha(fmt, f"{qn('a:ln')}/{qn('a:solidFill')}", alpha)
+
+
+def _tone(
+    index: int, chosen: Optional[int], alternate: bool = True
+) -> Tuple[MSO_THEME_COLOR, Optional[int]]:
+    """Theme colour and opacity of point or series ``index``: its own accent, or
+    with one ``chosen``, the first accent for it and muted text for the rest."""
+    if chosen is None:
+        return _ACCENTS[index % len(_ACCENTS)], None
+    if index == chosen:
+        return MSO_THEME_COLOR.ACCENT_1, None
+    rank = index - (index > chosen) if alternate else 0
+    return MSO_THEME_COLOR.TEXT_1, _MUTED[rank % 2]
 
 
 def _text(font: Any, pt: float, bold: bool = False) -> None:
@@ -294,32 +468,51 @@ def _text(font: Any, pt: float, bold: bool = False) -> None:
     font.color.brightness = 0.25
 
 
-def _colour(built: Any, chart: PlanChart) -> None:
+def _marker(
+    owner: Any, colour: MSO_THEME_COLOR, alpha: Optional[int], size: int
+) -> None:
+    owner.marker.style = XL_MARKER_STYLE.CIRCLE
+    owner.marker.size = size
+    _theme_fill(owner.marker.format, colour, alpha)
+    _theme_line(owner.marker.format, colour, None, alpha)
+
+
+def _colour(built: Any, chart: PlanChart, target: Optional[Tuple[str, int]]) -> None:
     plot = built.plots[0]
+    chosen = target[1] if target else None
     if chart.type in ROUND:
         plot.vary_by_categories = True
         for i, point in enumerate(plot.series[0].points):
-            _theme_fill(point.format, _ACCENTS[i % len(_ACCENTS)])
+            _theme_fill(point.format, *_tone(i, chosen))
             # A thin background-coloured edge keeps neighbouring slices apart.
             point.format.line.color.theme_color = MSO_THEME_COLOR.BACKGROUND_1
             point.format.line.width = Pt(1.5)
         return
+    if target and target[0] == "category":
+        # Each bar coloured on its own: LibreOffice lays a series' opacity over its points.
+        for i, point in enumerate(plot.series[0].points):
+            _theme_fill(point.format, *_tone(i, chosen, alternate=False))
+        return
     for i, series in enumerate(plot.series):
-        accent = _ACCENTS[i % len(_ACCENTS)]
+        colour, alpha = _tone(i, chosen)
         if chart.type == "line":
-            series.format.line.color.theme_color = accent
-            series.format.line.width = Pt(2.25)
+            stressed = chosen is None or i == chosen
+            width = 2.25 if chosen is None else 3.0 if stressed else 1.5
+            _theme_line(series.format, colour, width, alpha)
             series.smooth = False
-            series.marker.style = XL_MARKER_STYLE.CIRCLE
-            series.marker.size = 7
-            _theme_fill(series.marker.format, accent)
-            series.marker.format.line.color.theme_color = accent
+            if stressed:
+                _marker(series, colour, alpha, 7)
+            else:
+                series.marker.style = XL_MARKER_STYLE.NONE
         else:
-            _theme_fill(series.format, accent)
+            _theme_fill(series.format, colour, alpha)
 
 
-def _labels(built: Any, chart: PlanChart, pt: float, fmt: str) -> None:
+def _labels(
+    built: Any, chart: PlanChart, pt: float, fmt: str, target: Optional[Tuple[str, int]]
+) -> None:
     plot = built.plots[0]
+    point = target[1] if target and target[0] == "category" else None
     single_bars = (
         chart.type in ("column", "bar")
         and len(chart.series) == 1
@@ -335,14 +528,45 @@ def _labels(built: Any, chart: PlanChart, pt: float, fmt: str) -> None:
         _round_labels(labels, chart.show or "share", fmt)
         if chart.type == "pie":
             labels.position = XL_LABEL_POSITION.OUTSIDE_END
-        else:
+        elif point is None:
             # A doughnut's labels sit on the ring: the background colour reads on accents.
             labels.font.color.theme_color = MSO_THEME_COLOR.BACKGROUND_1
             labels.font.bold = True
+        if point is not None:
+            _stress_label(plot, point, light=chart.type == "doughnut")
         return
     labels.number_format = fmt
     labels.show_value = True
     labels.position = XL_LABEL_POSITION.OUTSIDE_END
+    if point is not None:
+        _stress_label(plot, point)
+
+
+def _stress_label(plot: Any, index: int, light: bool = False) -> None:
+    """The emphasised point's label in bold, otherwise as the plot's shared labels
+    (a series-level ``c:dLbls`` replaces them, so it repeats them)."""
+    shared = plot._element.find(qn("c:dLbls"))
+    if shared is None:
+        return
+    own = plot._element.find(qn("c:ser")).get_or_add_dLbls()
+    for child in list(own):
+        own.remove(child)
+    label = own.makeelement(qn("c:dLbl"), {})
+    label.append(label.makeelement(qn("c:idx"), {"val": str(index)}))
+    skipped = (qn("c:showLeaderLines"), qn("c:leaderLines"), qn("c:extLst"))
+    for child in shared:
+        own.append(copy.deepcopy(child))
+        if child.tag not in skipped:
+            label.append(copy.deepcopy(child))
+    own.insert(0, label)
+    for run in label.iter(qn("a:defRPr")):
+        run.set("b", "1")
+        if light:
+            # On the doughnut's accent ring, the label reads in the background colour.
+            for colour in run.iter(qn("a:schemeClr")):
+                colour.set("val", "bg1")
+                for child in list(colour):
+                    colour.remove(child)
 
 
 def _round_labels(labels: Any, show: str, fmt: str) -> None:
@@ -394,17 +618,20 @@ def _hole(built: Any) -> None:
 def draw(slide: Any, host: PlacedShape, zone: Zone, chart: PlanChart) -> Any:
     """Replace ``host`` (a chart or content placeholder, or a duplicated chart
     frame) with a native chart at its box and drawing-order place."""
-    data = CategoryChartData(number_format=number_format(chart))
-    data.categories = chart.categories
     for series in chart.series:
         if len(series.values) != len(chart.categories):
             raise ValueError(
                 f"chart series '{series.name}' has {len(series.values)} value(s) for "
                 f"{len(chart.categories)} categories"
             )
+    chart = _arranged(chart)
+    data = CategoryChartData(number_format=number_format(chart))
+    data.categories = chart.categories
+    for series in chart.series:
         data.add_series(series.name, [v if v is not None else 0 for v in series.values])
+    percent = chart.type == "stacked_column" and chart.stacked_as == "percent"
     frame = slide.shapes.add_chart(
-        XL_TYPES[chart.type],
+        XL_CHART_TYPE.COLUMN_STACKED_100 if percent else XL_TYPES[chart.type],
         Emu(host.left),
         Emu(host.top),
         Emu(host.width),
@@ -439,12 +666,13 @@ def draw(slide: Any, host: PlacedShape, zone: Zone, chart: PlanChart) -> Any:
         built.legend.position = XL_LEGEND_POSITION.BOTTOM
         built.legend.include_in_layout = False
         _text(built.legend.font, pt)
-    _colour(built, chart)
-    _labels(built, chart, pt, fmt)
+    target = emphasis(chart)
+    _colour(built, chart, target)
+    _labels(built, chart, pt, fmt, target)
     if chart.type in ROUND:
         _hole(built)
     else:
-        _axes(built, fmt)
+        _axes(built, "0%" if percent else fmt)
         if chart.type in ("column", "bar", "stacked_column"):
             built.plots[0].gap_width = 60 if chart.type == "stacked_column" else 80
     return frame
