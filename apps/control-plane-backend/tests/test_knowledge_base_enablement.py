@@ -30,6 +30,7 @@ from control_plane_backend.capabilities.enablement import (
     grant_team_enablement,
     revoke_team_enablement,
 )
+from control_plane_backend.config.models import KnowledgeBasesConfig
 from control_plane_backend.knowledge_bases.store import (
     KnowledgeBasePrefixConflict,
 )
@@ -331,11 +332,28 @@ def _published(
     )()
 
 
+def _knowledge_bases(*publishers: tuple[str, str]) -> KnowledgeBasesConfig:
+    return KnowledgeBasesConfig.model_validate(
+        {
+            "publishers": [
+                {"client_id": client_id, "prefix": prefix}
+                for client_id, prefix in publishers
+            ]
+        }
+    )
+
+
 class _FakeDeps:
     def __init__(
-        self, rebac: _FakeRebac, declarations: list[KnowledgeBaseDeclaration]
+        self,
+        rebac: _FakeRebac,
+        declarations: list[KnowledgeBaseDeclaration],
+        publishers: tuple[tuple[str, str], ...] = ((PREFIX_CLIENT, PREFIX),),
     ) -> None:
         self.team_dependencies = type("_TD", (), {"rebac": rebac})()
+        self.configuration = SimpleNamespace(
+            knowledge_bases=_knowledge_bases(*publishers)
+        )
         self.store = _FakeStore(declarations)
 
     def get_knowledge_base_definition_store(self) -> _FakeStore:
@@ -461,7 +479,7 @@ class _Client:
 
 
 @pytest.mark.asyncio
-async def test_first_publication_creates_the_definition_and_binds_its_client() -> None:
+async def test_a_registered_publisher_creates_the_definition_and_binds_it() -> None:
     from control_plane_backend.knowledge_bases import service
 
     deps = _FakeDeps(_FakeRebac(), [])
@@ -494,9 +512,12 @@ async def test_the_same_client_may_republish() -> None:
 
 @pytest.mark.asyncio
 async def test_another_client_cannot_take_over_a_definition() -> None:
+    """Moving a prefix to another client in configuration does not move it."""
     from control_plane_backend.knowledge_bases import service
 
-    deps = _FakeDeps(_FakeRebac(), [_declaration()])
+    deps = _FakeDeps(
+        _FakeRebac(), [_declaration()], publishers=(("kb-somebody-else", PREFIX),)
+    )
     with pytest.raises(KnowledgeBasePrefixConflict):
         await service.publish_definition(
             user=_Client("kb-somebody-else"),  # type: ignore[arg-type]
@@ -525,9 +546,9 @@ async def test_publishing_without_a_client_identity_is_refused() -> None:
 async def test_a_user_session_cannot_publish() -> None:
     from control_plane_backend.knowledge_bases import service
 
-    deps = _FakeDeps(_FakeRebac(), [])
-    # An ordinary signed-in user's token carries the frontend's `azp`; without
-    # the service-identity gate that alone would be enough to publish.
+    deps = _FakeDeps(_FakeRebac(), [], publishers=(("app", PREFIX),))
+    # An ordinary signed-in user's token carries the frontend's `azp`: even a
+    # listed one does not make a person a publisher.
     with pytest.raises(service.KnowledgeBaseClientMismatch):
         await service.publish_definition(
             user=_Client("app", service=False),  # type: ignore[arg-type]
@@ -671,7 +692,9 @@ async def test_a_provider_namespace_belongs_to_one_client() -> None:
         deps=deps,  # type: ignore[arg-type]
     )
 
-    # Same provider, a definition id that does not exist yet: still refused.
+    # Same provider, a definition id that does not exist yet: still refused,
+    # even once the operator lists the prefix for another client.
+    deps.configuration.knowledge_bases = _knowledge_bases(("kb-somebody-else", PREFIX))
     with pytest.raises(KnowledgeBasePrefixConflict):
         await service.publish_definition(
             user=_Client("kb-somebody-else"),  # type: ignore[arg-type]
@@ -688,7 +711,11 @@ async def test_two_contributors_may_expose_the_same_last_segment() -> None:
 
     from control_plane_backend.knowledge_bases import service
 
-    deps = _FakeDeps(_FakeRebac(), [])
+    deps = _FakeDeps(
+        _FakeRebac(),
+        [],
+        publishers=((PREFIX_CLIENT, PREFIX), ("kb-globex", "globex.kb")),
+    )
     for prefix, client, name in (
         (PREFIX, PREFIX_CLIENT, "acme.kb.http-markdown"),
         ("globex.kb", "kb-globex", "globex.kb.http-markdown"),
@@ -758,3 +785,115 @@ async def test_publication_records_the_account_a_grant_will_name() -> None:
     assert stored is not None
     assert stored.client_id == PREFIX_CLIENT
     assert stored.subject == _Client(PREFIX_CLIENT).uid
+
+
+# --------------------------------------------------------------------------
+# Publishers: registered by the operator, each under the prefix it owns
+# --------------------------------------------------------------------------
+
+SAMPLES_CLIENT = "kb-fred.samples"
+SAMPLES_PREFIX = "fred.samples"
+
+
+async def _publish(
+    deps: _FakeDeps, client: str, prefix: str, definition_id: str
+) -> Any:
+    from control_plane_backend.knowledge_bases import service
+
+    return await service.publish_definition(
+        user=_Client(client),  # type: ignore[arg-type]
+        prefix=prefix,
+        declaration=_declaration(definition_id),
+        deps=deps,  # type: ignore[arg-type]
+    )
+
+
+@pytest.mark.asyncio
+async def test_an_unlisted_client_is_refused_and_told_what_to_change() -> None:
+    from control_plane_backend.knowledge_bases import service
+
+    deps = _FakeDeps(_FakeRebac(), [], publishers=((SAMPLES_CLIENT, SAMPLES_PREFIX),))
+    with pytest.raises(service.KnowledgeBaseClientMismatch) as refused:
+        await _publish(deps, "kb-unlisted", "unlisted.kb", "unlisted.kb.webdav")
+
+    assert "kb-unlisted" in str(refused.value)
+    assert "knowledge_bases.publishers" in str(refused.value)
+    assert deps.store.rows == {}
+
+
+@pytest.mark.asyncio
+async def test_by_default_nobody_may_publish() -> None:
+    from control_plane_backend.knowledge_bases import service
+
+    assert KnowledgeBasesConfig().publishers == []
+    deps = _FakeDeps(_FakeRebac(), [], publishers=())
+    with pytest.raises(service.KnowledgeBaseClientMismatch):
+        await _publish(deps, SAMPLES_CLIENT, SAMPLES_PREFIX, "fred.samples.webdav")
+    assert deps.store.rows == {}
+
+
+@pytest.mark.asyncio
+async def test_a_publisher_cannot_declare_outside_its_prefix() -> None:
+    from control_plane_backend.knowledge_bases import service
+
+    deps = _FakeDeps(_FakeRebac(), [], publishers=((SAMPLES_CLIENT, SAMPLES_PREFIX),))
+    with pytest.raises(service.KnowledgeBaseClientMismatch):
+        await _publish(deps, SAMPLES_CLIENT, SAMPLES_PREFIX, "other.webdav")
+    assert deps.store.rows == {}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("claimed", "definition_id"),
+    [("fred", "fred.webdav"), ("fred.samples.sub", "fred.samples.sub.webdav")],
+)
+async def test_a_publisher_must_claim_exactly_its_registered_prefix(
+    claimed: str, definition_id: str
+) -> None:
+    """A narrower prefix inside its own is refused too: the store would bind it."""
+    from control_plane_backend.knowledge_bases import service
+
+    deps = _FakeDeps(_FakeRebac(), [], publishers=((SAMPLES_CLIENT, SAMPLES_PREFIX),))
+    with pytest.raises(service.KnowledgeBaseClientMismatch) as refused:
+        await _publish(deps, SAMPLES_CLIENT, claimed, definition_id)
+
+    assert "knowledge_bases.publishers" in str(refused.value)
+    assert deps.store.rows == {}
+
+
+@pytest.mark.asyncio
+async def test_a_registered_publisher_is_stored_but_usable_by_no_team() -> None:
+    rebac = _FakeRebac()
+    deps = _FakeDeps(rebac, [], publishers=((SAMPLES_CLIENT, SAMPLES_PREFIX),))
+
+    await _publish(deps, SAMPLES_CLIENT, SAMPLES_PREFIX, "fred.samples.webdav")
+
+    stored = await deps.store.get("fred.samples.webdav")
+    assert stored is not None and stored.client_id == SAMPLES_CLIENT
+    assert not rebac.can_use(team_id="team-1", definition_id="fred.samples.webdav")
+
+
+def test_publishers_may_hold_neighbouring_prefixes_and_several_each() -> None:
+    config = _knowledge_bases(
+        ("kb-a", "fred.sample"), ("kb-b", "fred.samples"), ("kb-b", "acme.kb")
+    )
+    assert [p.prefix for p in config.publishers] == [
+        "fred.sample",
+        "fred.samples",
+        "acme.kb",
+    ]
+
+
+@pytest.mark.parametrize(
+    "second", [("kb-b", "fred.samples"), ("kb-b", "fred"), ("kb-a", "fred")]
+)
+def test_overlapping_registrations_are_refused_naming_both(
+    second: tuple[str, str],
+) -> None:
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError) as refused:
+        _knowledge_bases(("kb-a", "fred"), second)
+
+    assert "'fred' (kb-a)" in str(refused.value)
+    assert f"{second[1]!r} ({second[0]})" in str(refused.value)

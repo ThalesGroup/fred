@@ -461,6 +461,14 @@ applications:
               en: "Evaluate agents against versioned test sets."
               fr: "Évaluer les agents sur des jeux de tests versionnés."
             enabled: true
+      # choice: the Knowledge Bases allowed to publish, each under the prefix
+      # it owns. Registration alone shows nothing: a platform admin enables a
+      # definition per team (Admin > Features > Knowledge Bases).
+      knowledge_bases:
+        publishers:
+          # webdav-knowledge-base and fred-samples' Knowledge Bases share this client.
+          - client_id: kb-fred.samples
+            prefix: fred.samples
 
   control-plane-worker:
     enabled: true                          # posture

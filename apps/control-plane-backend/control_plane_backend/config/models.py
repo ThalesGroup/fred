@@ -29,6 +29,7 @@ from fred_core.common import (
     TemporalSchedulerConfig,
 )
 from fred_core.scheduler import SchedulerBackend
+from fred_pod.common.naming import prefix_covers
 from fred_pod.common.structures import LogOutputFormat
 from fred_sdk.contracts.models import TuningValue
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -348,6 +349,23 @@ class SchedulerConfig(BaseModel):
     temporal: TemporalSchedulerConfig = Field(default_factory=TemporalSchedulerConfig)
 
 
+class KnowledgeBasePublisher(BaseModel):
+    """A client allowed to publish Knowledge Base definitions, and the one
+    prefix it owns."""
+
+    client_id: str = Field(
+        min_length=1,
+        description="The publishing client, as the token's `azp` names it.",
+    )
+    prefix: str = Field(
+        min_length=1,
+        description=(
+            "The prefix this client owns: it may publish only definitions "
+            "named under it, and must present exactly it when publishing."
+        ),
+    )
+
+
 class KnowledgeBasesConfig(BaseModel):
     """What Fred decides about running a Knowledge Base, wherever its image
     came from.
@@ -357,6 +375,14 @@ class KnowledgeBasesConfig(BaseModel):
     new image belongs here rather than in the SDK.
     """
 
+    publishers: list[KnowledgeBasePublisher] = Field(
+        default_factory=list,
+        description=(
+            "The clients allowed to publish Knowledge Base definitions, each "
+            "with the prefix it owns. Empty by default: nobody may publish. "
+            "A prefix appears once, and no registered prefix may cover another."
+        ),
+    )
     run_max_attempts: int = Field(
         default=2,
         ge=1,
@@ -369,6 +395,24 @@ class KnowledgeBasesConfig(BaseModel):
             "retry."
         ),
     )
+
+    @model_validator(mode="after")
+    def _validate_disjoint_publisher_prefixes(self) -> "KnowledgeBasesConfig":
+        # Two overlapping registrations would make one name publishable by two
+        # clients; the store would then hand it to whichever publishes first.
+        for index, first in enumerate(self.publishers):
+            for second in self.publishers[index + 1 :]:
+                if prefix_covers(first.prefix, second.prefix) or prefix_covers(
+                    second.prefix, first.prefix
+                ):
+                    raise ValueError(
+                        "knowledge_bases.publishers overlap: "
+                        f"{first.prefix!r} ({first.client_id}) and "
+                        f"{second.prefix!r} ({second.client_id}). "
+                        "Each prefix must be registered once, and none may "
+                        "cover another."
+                    )
+        return self
 
 
 class PolicyConfig(BaseModel):
