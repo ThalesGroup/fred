@@ -121,10 +121,14 @@ context. A pod that could name its own destination could name somebody else's.
 `knowledge_base:<instance-id>`. Fred acts on its presence and never on what it
 names. Nothing downstream depends on its spelling.
 
-**A pod publishes only under a prefix it owns.** The first publication claims
-the dotted prefix for the calling client; every later one must present the same
-client. Enforced in the store by a row whose primary key is the prefix, so the
-claim cannot race.
+**A pod publishes only under a prefix it owns.** The operator assigns it:
+the Control Plane's `knowledge_bases.publishers` lists each client allowed to
+publish with the one dotted prefix it owns, and is empty by default, so nobody
+publishes until listed. A publication must present that exact prefix, and its
+declaration must fall under it. No two registered prefixes may overlap
+(refused at startup). The store still binds the prefix to the client, by a row
+whose primary key is the prefix, and refuses a second client under it, even
+one the configuration later lists for that prefix.
 
 ---
 
@@ -139,7 +143,7 @@ Three gates stand between a pod and the corpus:
 
 | Gate | Where | What it requires |
 | --- | --- | --- |
-| Publication | Control Plane | A service identity (a user session is refused), and the declaration's id under a prefix bound to that client |
+| Publication | Control Plane | A service identity (a user session is refused) whose client is listed in `knowledge_bases.publishers`, presenting its registered prefix, with the declaration's id under it |
 | Grant | Control Plane, at instance creation | One OpenFGA relation: this definition's subject may write in **this one library**. Torn down when the instance is deleted |
 | Every write | knowledge-flow | A service identity **and** a real ReBAC `tag.update` check on that library |
 
