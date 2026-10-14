@@ -144,8 +144,9 @@ presentation. **By slide name** (the default): each template slide is used at
 most the chosen number of times. **By identified slide type**: each type
 (bullet lists, for instance) comes back at most that many times, even on
 different slides. With **1**, every slide is different; with **2** (the
-default), a slide may come back once. The limit counts within each section:
-sections built alike (one per country, for instance) may reuse the same slides.
+default), a slide may come back once. Sections built alike (one per country,
+for instance) may reuse the same slide at the same place, such as the second
+slide of each country.
 When the template holds too few slides
 for the presentation asked, the agent does its best. On the first presentation
 of a conversation, the agent is asked to revise the slides that repeat too

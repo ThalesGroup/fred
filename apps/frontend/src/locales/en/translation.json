@@ -413,7 +413,7 @@
           "times": "times each",
           "modeAria": "What must vary",
           "maxAria": "Maximum number of times",
-          "description": "Keeps the same slide from coming back too often within a section, as far as the template allows. Sections built alike (one per country, for instance) may reuse the same slides. The agent is asked to revise the first presentation of each conversation.",
+          "description": "Keeps the same slide from coming back too often, as far as the template allows. Sections built alike (one per country, for instance) may reuse the same slide at the same place. The agent is asked to revise the first presentation of each conversation.",
           "options": {
             "template_slide": "By slide name",
             "kind": "By identified slide type"

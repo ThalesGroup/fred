@@ -413,7 +413,7 @@
           "times": "fois chacune",
           "modeAria": "Ce qui doit varier",
           "maxAria": "Nombre maximal de fois",
-          "description": "Évite qu'une même slide revienne trop souvent dans une section, autant que le template le permet. Des sections construites pareil (une par pays, par exemple) peuvent reprendre les mêmes slides. L'agent est invité à corriger la première présentation de chaque conversation.",
+          "description": "Évite qu'une même slide revienne trop souvent, autant que le template le permet. Des sections construites pareil (une par pays, par exemple) peuvent reprendre la même slide au même endroit. L'agent est invité à corriger la première présentation de chaque conversation.",
           "options": {
             "template_slide": "Par nom de slide",
             "kind": "Par type de slide identifié"
