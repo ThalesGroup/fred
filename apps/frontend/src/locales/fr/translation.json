@@ -413,7 +413,7 @@
           "times": "fois chacune",
           "modeAria": "Ce qui doit varier",
           "maxAria": "Nombre maximal de fois",
-          "description": "Évite qu'une même slide revienne trop souvent, autant que le template le permet. Des sections construites pareil (une par pays, par exemple) peuvent reprendre la même slide au même endroit. L'agent est invité à corriger la première présentation de chaque conversation.",
+          "description": "Évite qu'une même slide revienne trop souvent, autant que le template le permet. La limite compte dans chaque section : une section peut reprendre les mêmes slides qu'une autre. Des slides identiques à la suite ne sont faites que si vous le demandez. L'agent est invité à corriger la première présentation de chaque conversation.",
           "options": {
             "template_slide": "Par nom de slide",
             "kind": "Par type de slide identifié"
@@ -517,7 +517,9 @@
           "list_continuation": "Suite de la liste de la diapositive précédente.",
           "other_kind": "Construite en « {{built}} » au lieu de « {{asked}} ».",
           "chart_type_changed": "Le graphique « {{asked}} » n'est pas disponible : les données sont affichées en histogramme.",
-          "chart_shows_shares": "Le graphique affiche des pourcentages : les nombres eux-mêmes ne sont pas affichés."
+          "chart_shows_shares": "Le graphique affiche des pourcentages : les nombres eux-mêmes ne sont pas affichés.",
+          "layout_repeated": "Même mise en page que la diapositive précédente, comme demandé.",
+          "layout_not_repeated": "La mise en page de la diapositive précédente n'a pas pu être gardée : ce contenu n'y tient pas."
         }
       }
     }

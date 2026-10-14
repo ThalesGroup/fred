@@ -413,7 +413,7 @@
           "times": "times each",
           "modeAria": "What must vary",
           "maxAria": "Maximum number of times",
-          "description": "Keeps the same slide from coming back too often, as far as the template allows. Sections built alike (one per country, for instance) may reuse the same slide at the same place. The agent is asked to revise the first presentation of each conversation.",
+          "description": "Keeps the same slide from coming back too often, as far as the template allows. The limit counts within each section: a section may reuse the same slides as another. Identical slides in a row are only made when you ask for them. The agent is asked to revise the first presentation of each conversation.",
           "options": {
             "template_slide": "By slide name",
             "kind": "By identified slide type"
@@ -517,7 +517,9 @@
           "list_continuation": "Continuation of the list from the previous slide.",
           "other_kind": "Built as “{{built}}” instead of “{{asked}}”.",
           "chart_type_changed": "A “{{asked}}” chart is not available: the data is shown as a column chart.",
-          "chart_shows_shares": "The chart shows percentages: the numbers themselves are not displayed."
+          "chart_shows_shares": "The chart shows percentages: the numbers themselves are not displayed.",
+          "layout_repeated": "Same layout as the previous slide, as you asked.",
+          "layout_not_repeated": "The previous slide's layout could not be kept: this content does not fit it."
         }
       }
     }

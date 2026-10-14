@@ -195,6 +195,8 @@ describe("DeckSummaryButton", () => {
       "other_kind",
       "chart_type_changed",
       "chart_shows_shares",
+      "layout_repeated",
+      "layout_not_repeated",
     ];
     for (const locale of [en, fr]) {
       expect(Object.keys(locale.capability.ppt_builder.summary.notes).sort()).toEqual([...codes].sort());
