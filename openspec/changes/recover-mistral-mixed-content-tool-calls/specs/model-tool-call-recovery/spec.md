@@ -51,7 +51,7 @@ The runtime MUST leave ordinary prose or quoted examples without the exact typed
 
 ### Requirement: Stream and execute recovered calls through normal controls
 
-The runtime SHALL keep the marker and recoverable call syntax out of assistant answer and reasoning events while the completed Mistral response is being resolved. A recovered call MUST pass the same access, human approval, budget, tracing, observability, and result-pairing controls as a native call. Text that is not part of a recovered call SHALL remain visible through the existing assistant or thought routing. A content block that carries no text, including the sentinel, SHALL NOT be rendered into assistant text, conversation history, or replayed model context.
+The runtime SHALL keep the marker and recoverable call syntax out of assistant answer and reasoning events while the completed Mistral response is being resolved. A recovered call MUST pass the same access, human approval, budget, tracing, observability, and result-pairing controls as a native call. Text that is not part of a recovered call SHALL remain visible through the existing assistant or thought routing. Rendering into assistant text, conversation history, or replayed model context SHALL omit the sentinel and other known non-text call blocks (`reference`, `tool_use`, `tool_call`, `input_json_delta`), SHALL render a `refusal` block as its refusal text, and SHALL keep rendering any other block or non-dict object visibly. A residue made only of closing brackets or braces between or after recovered calls SHALL NOT remain as message content.
 
 #### Scenario: Recovered call completes
 
@@ -68,3 +68,4 @@ The runtime SHALL keep the marker and recoverable call syntax out of assistant a
 
 - **WHEN** a Mistral response containing the sentinel is not recovered
 - **THEN** its text fragments remain visible in order, without a rendering of the sentinel block
+- **AND** an unknown typed block in the same response remains visible

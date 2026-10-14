@@ -7095,9 +7095,13 @@ turn ends with hundreds of `thinking` blocks and the former 256-block cap
 rejected it before parsing. The 16k-character cap on recovered text and the
 16-call cap remain the bounds; thinking blocks before the tool name are skipped.
 
-`content_to_text` (transcript, history and replay rendering) drops dict blocks
-that carry no text instead of rendering their Python repr, so the empty
-`reference` sentinel never appears as `{'type': 'reference', ...}` in an answer,
-the stored history, or the context replayed to the model. Text blocks, plain
-strings and reasoning handling are unchanged.
+`content_to_text` (transcript, history and replay rendering) no longer renders
+the `reference` sentinel or tool-call blocks (`tool_use`, `tool_call`,
+`input_json_delta`) as their Python repr, so `{'type': 'reference', ...}` never
+appears in an answer, the stored history, or the context replayed to the model.
+A `refusal` block renders as its refusal text. Unknown block types and non-dict
+objects keep the visible `str()` fallback; text blocks, plain strings and
+reasoning handling are unchanged. Text made only of closing brackets or braces
+between or after recovered calls (Mistral over-closing its JSON) is dropped
+from the recovered message content.
 Migration note: `docs/swift/ops/migrations/3110-recover-streamed-mistral-tool-calls.md`.
