@@ -434,16 +434,16 @@ async def test_a_parallel_copy_of_a_call_is_not_built_twice(monkeypatch):
     config, assets = _configured()
     build = _tools(_ctx(config, assets=assets, workspace=workspace))[BUILD_TOOL_NAME]
     plan = [COVER, {"title": "Agenda", "bullets": ["One", "Two"]}]
+    # Called directly (no middleware), the copy waits and finds the deck delivered.
     (text_a, a), (text_b, b) = await asyncio.gather(
         build.coroutine(slides=plan), build.coroutine(slides=plan)
     )
-    assert not a.is_error and not b.is_error
-    ignored = [text_a.startswith("Ignored:"), text_b.startswith("Ignored:")]
-    assert sorted(ignored) == [False, True]
+    assert text_a.startswith(tools_mod._DELIVERED) and not a.is_error
+    assert text_b.startswith("No deck was built: unchanged") and b.is_error
     assert len(workspace.writes) == 1
     # A different plan sent in parallel is built too, one after the other.
     (_, c), (_, d) = await asyncio.gather(
-        build.coroutine(slides=plan), build.coroutine(slides=[COVER])
+        build.coroutine(slides=[COVER]), build.coroutine(slides=plan)
     )
     assert not c.is_error and not d.is_error and len(workspace.writes) == 3
 
@@ -1016,3 +1016,174 @@ async def test_list_images_resolves_the_folder_at_call_time():
     assert '"d1"' in listed and "d2" not in listed
     missing = await tools[LIST_IMAGES_TOOL_NAME].coroutine(folder="Nope")
     assert "No folder named 'Nope'" in missing
+
+
+# --- parallel calls of one model round, identical resends --------------------------------
+
+
+def _round(*args: dict) -> tuple[AIMessage, list[dict]]:
+    """One assistant message asking for several tool calls at once."""
+    calls = [
+        {"id": f"call-{next(_CALLS)}", "name": BUILD_TOOL_NAME, "args": a} for a in args
+    ]
+    other = {"id": f"call-{next(_CALLS)}", "name": "other", "args": {}}
+    return AIMessage(content="", tool_calls=[other, *calls]), calls
+
+
+async def _through_middleware(middleware, message: AIMessage, call: dict):
+    """One tool call as the agent loop runs it: the middleware, then the tool."""
+    from langgraph.prebuilt.tool_node import ToolCallRequest
+
+    build = {t.name: t for t in middleware.tools}[BUILD_TOOL_NAME]
+    ran: list[str] = []
+
+    async def _handler(request):
+        ran.append(request.tool_call["id"])
+        text, artifact = await build.coroutine(**request.tool_call["args"])
+        return ToolMessage(
+            content=text, artifact=artifact, tool_call_id=request.tool_call["id"]
+        )
+
+    request = ToolCallRequest(
+        tool_call=cast(Any, call),
+        tool=build,
+        state={"messages": [HumanMessage(content="deck"), message]},
+        runtime=cast(Any, None),
+    )
+    return await middleware.awrap_tool_call(request, _handler), ran
+
+
+@pytest.mark.asyncio
+async def test_parallel_build_calls_of_one_round_build_only_the_first(monkeypatch):
+    """Live: a small model sent one deck as several different calls at once;
+    the cover+agenda call was delivered and the fragments were refused for
+    not starting with a cover, which led it to split further."""
+    workspace = FakeWorkspace()
+    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
+    config, assets = _configured()
+    (middleware,) = PptBuilderCapability().middleware(
+        _ctx(config, assets=assets, workspace=workspace)
+    )
+    middleware = cast(Any, middleware)
+    message, calls = _round(
+        {"slides": [COVER, {"title": "Agenda", "bullets": ["One", "Two"]}]},
+        {"slides": [{"title": "Method", "bullets": ["Plan", "Do"]}]},
+        {"slides": [{"title": "Results", "bullets": ["Up", "Down"]}]},
+    )
+    results = await asyncio.gather(
+        *(_through_middleware(middleware, message, call) for call in calls)
+    )
+    (first, ran_first), *others = results
+    assert ran_first == [calls[0]["id"]]
+    assert first.content.startswith(tools_mod._DELIVERED), first.content
+    assert len(workspace.writes) == 1
+    for position, (refused, ran) in enumerate(others, start=2):
+        assert ran == [] and refused.artifact.is_error
+        assert refused.tool_call_id == calls[position - 1]["id"]
+        assert refused.content == (
+            "No deck was built: build_presentation was called 3 times at once in this "
+            "answer; only the first call (the one whose first slide is 'Kick-off') is "
+            f"processed and this one (call {position} of 3) was ignored. A deck is never "
+            "split across calls: send ONE call with every slide in `slides`, the cover "
+            "first. To add or change slides of a delivered deck, send only `changes` "
+            '({"op": "insert", "after": N, "slides": [...]}, {"op": "replace", "slide": '
+            'N, "slides": [...]}, {"op": "edit", ...}). Read the first call\'s result '
+            "before calling again, and do not describe this call to the user as a deck."
+        )
+
+
+@pytest.mark.asyncio
+async def test_a_single_build_call_or_a_copy_in_parallel_is_handled_once(monkeypatch):
+    workspace = FakeWorkspace()
+    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
+    config, assets = _configured()
+    (middleware,) = PptBuilderCapability().middleware(
+        _ctx(config, assets=assets, workspace=workspace)
+    )
+    middleware = cast(Any, middleware)
+    plan = {"slides": [COVER, {"title": "Agenda", "bullets": ["One", "Two"]}]}
+    message, (alone,) = _round(plan)
+    reply, ran = await _through_middleware(middleware, message, alone)
+    assert ran == [alone["id"]] and not reply.artifact.is_error
+    # The same call twice at once: the copy is answered without a build.
+    message, (a, b) = _round(plan, {**plan, "file_name": "copy"})
+    (_, ran_a), (copy, ran_b) = await asyncio.gather(
+        _through_middleware(middleware, message, a),
+        _through_middleware(middleware, message, b),
+    )
+    assert ran_a == [a["id"]] and ran_b == [] and copy.artifact.is_error
+    assert len(workspace.writes) == 1
+    # A call missing from the state (another path) runs as before.
+    assert tools_mod.round_refusal([], "call-x") is None
+
+
+@pytest.mark.asyncio
+async def test_a_fragment_after_a_delivered_deck_is_pointed_to_changes(monkeypatch):
+    """Without a delivered deck the remedy adds a cover; with one, a new plan
+    that does not start with the cover is a change to that deck."""
+    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
+    config, assets = _configured()
+    build = _tools(_ctx(config, assets=assets, workspace=FakeWorkspace()))[
+        BUILD_TOOL_NAME
+    ]
+    fragment = [
+        {"title": "Method", "columns": [{"heading": "A", "bullets": ["x"]}] * 2}
+    ]
+    text, result = await build.coroutine(slides=fragment)
+    assert result.is_error
+    (problem,) = json.loads(text[text.index("{") :])["slides"]
+    assert problem["problem"].startswith(
+        "the first slide is always the template's cover"
+    )
+    assert any(o.startswith("add a cover slide before it") for o in problem["options"])
+
+    text, result = await build.coroutine(slides=[COVER, fragment[0]])
+    assert text.startswith(tools_mod._DELIVERED), text
+    text, result = await build.coroutine(slides=fragment)
+    assert result.is_error
+    (problem,) = json.loads(text[text.index("{") :])["slides"]
+    assert problem["options"] == [
+        "a deck was already delivered in this conversation: to add these slides to it, "
+        'send only `changes` with {"op": "insert", "after": N, "slides": [...]} (N = the '
+        'slide they follow), or {"op": "replace", "slide": N, "slides": [...]} to swap a '
+        "slide; a new deck goes in ONE call with every slide, the cover first"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_resending_the_delivered_deck_rebuilds_nothing(monkeypatch):
+    """Live: the model resent the deck it had just been delivered, which was
+    rebuilt for ~14 s for nothing and used up one of the turn's tool calls."""
+    workspace = FakeWorkspace()
+    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
+    config, assets = _configured()
+    build = _tools(_ctx(config, assets=assets, workspace=workspace))[BUILD_TOOL_NAME]
+    plan = [COVER, {"title": "Agenda", "bullets": ["One", "Two"]}]
+    text, _ = await build.coroutine(slides=plan, file_name="Kick-off")
+    assert text.startswith(tools_mod._DELIVERED), text
+
+    rendered: list[int] = []
+    render = tools_mod._prepare_and_render
+
+    def _counted(*args: Any, **kwargs: Any):
+        rendered.append(1)
+        return render(*args, **kwargs)
+
+    monkeypatch.setattr(tools_mod, "_prepare_and_render", _counted)
+    text, result = await build.coroutine(
+        slides=json.loads(json.dumps(plan)), file_name="Kick-off"
+    )
+    assert result.is_error and not result.ui_parts
+    assert text == (
+        "No deck was built: unchanged, deck already delivered as 'Kick-off.pptx' "
+        "(2 slides). This plan is exactly that deck, so nothing was rebuilt and the "
+        "user's file is the same. Do not tell the user it was changed or rebuilt; to "
+        "change it, send only `changes`."
+    )
+    assert rendered == [] and len(workspace.writes) == 1
+    # Another file name, or other content, is a new deck.
+    text, _ = await build.coroutine(slides=plan, file_name="Other")
+    assert text.startswith(tools_mod._DELIVERED), text
+    text, _ = await build.coroutine(slides=[COVER], file_name="Kick-off")
+    assert text.startswith(tools_mod._DELIVERED), text
+    assert len(rendered) == 2
