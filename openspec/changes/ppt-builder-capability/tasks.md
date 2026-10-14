@@ -438,3 +438,13 @@ Owns: `changes.py` (`CLEARABLE`, kind-edit clearing), `assign.py` (`unplaced`), 
 - [x] 39.4 Package `make code-quality` + `make test`; `verification.md`; `openspec validate`
 - Not in scope: the runtime's handling of the per-turn tool-call cap (reported to the developer, no runtime change)
 - Not covered: a live re-run of the session
+
+## WP40. Live-session fixes: parallel fragments, fragment remedy, identical resend
+
+Owns: `capability.py` (`awrap_tool_call`), `tools.py` (`round_refusal`, unchanged resend, `_DUPLICATE` and the argument-keyed guard deleted), `assign.py` (`continuing` remedy), `design.md` D26 and the message rule, delta spec, tests, `verification.md`.
+
+- [x] 40.1 Several `build_presentation` calls in one assistant message: the middleware runs the first in the message's order and refuses the others before the tool, naming the first and pointing to one call or `changes`. Tests: three different fragments gathered, one run and delivered, two exact refusals; an identical copy refused, a single call run, a call absent from the state untouched
+- [x] 40.2 A `slides` plan without a cover after a delivered deck (this turn or the history) gets the `changes` remedy as its only option. Test: the same fragment before and after a delivery, both option lists
+- [x] 40.3 A `slides` call equal to the deck delivered this turn is answered "unchanged, deck already delivered as '<file>'" with no render, upload or preview. Tests: render counter unchanged, one write; another file name or content renders; the WP27 parallel-copy test now expects the copy answered as unchanged
+- [x] 40.4 Package `make test`, `ruff check`, `ruff check --select I`, `ruff format --check`, basedpyright with baseline; `verification.md`; `openspec validate --strict`
+- Not covered: a live re-run of the session

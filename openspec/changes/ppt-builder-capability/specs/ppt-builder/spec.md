@@ -573,7 +573,7 @@ The system SHALL NOT substitute an unfitting pattern for a slide. When a slide f
 #### Scenario: Actionable messages
 
 - **WHEN** either tool returns a text to the model (a problem, a note, an error, a variety ask, a delivery)
-- **THEN** the text states what happened, why, and one concrete remedy, or says there is nothing to do; a result that builds nothing starts "No deck was built", and the delivery prefixes and the duplicate "Ignored:" prefix stay unchanged
+- **THEN** the text states what happened, why, and one concrete remedy, or says there is nothing to do; a result that builds nothing starts "No deck was built", and the delivery prefixes stay unchanged
 
 #### Scenario: Renderer findings reach the model
 
@@ -693,10 +693,18 @@ The system SHALL write the generated deck to the conversation's agent workspace,
 - **WHEN** the agent builds the deck several times before answering
 - **THEN** the answer shows a single preview card, for the last build
 
-#### Scenario: Same call sent twice in parallel
+#### Scenario: Several build calls in one model round
 
-- **WHEN** the model sends the same build call twice at the same time
-- **THEN** one deck is built, the copy is answered as ignored without building, and a different plan sent in parallel is built after the first
+- **WHEN** one assistant message asks for several `build_presentation` calls (fragments of one deck, or copies of one call)
+- **THEN** only the first in that message's order is run, whichever finishes first, and each other call builds nothing; its result says how many calls were sent at once, which one is processed (by its first slide's title), that a deck is sent in ONE call with every slide, cover first, and that a delivered deck is changed with `changes` (`insert` after N, `replace`, `edit`)
+- **AND** a tool called outside the agent loop runs one call at a time, a copy of a delivered deck then being answered as unchanged
+
+#### Scenario: Resend of the deck just delivered
+
+- **GIVEN** a deck delivered in this turn
+- **WHEN** a `slides` call assigns exactly that deck (same file name, every slide with the same content and template slide)
+- **THEN** nothing is rendered, uploaded or stored and no preview is added; the result, an error like every non-delivery, says "unchanged, deck already delivered as '<file>'", not to tell the user it was changed, and to send `changes` to change it
+- **AND** another file name or other content is built as a new deck
 
 #### Scenario: What was built
 
@@ -789,6 +797,13 @@ The system SHALL let the user correct a deck in chat by regenerating from an ame
 - **GIVEN** a call refused with `needs_revision` for fit problems in this turn
 - **WHEN** the model sends the identical call again (same arguments, same base plan) before any deck is delivered
 - **THEN** it is not evaluated again: the result says it is the same call as one already refused, restates the problems briefly, and suggests sending each listed slide whole with `replace` or dropping the change (leaving the slide out for a `slides` call)
+
+#### Scenario: A fragment sent after a delivered deck
+
+- **GIVEN** a deck delivered in this conversation
+- **WHEN** a `slides` call starts with a slide that fits no cover
+- **THEN** nothing is built and that slide's only option is to add these slides to the delivered deck with `changes` (`insert` after N, or `replace`), a new deck going in ONE call with every slide, cover first
+- **AND** without a delivered deck the options still include adding a cover slide before it
 
 #### Scenario: A refused plan is never the next turn's base
 

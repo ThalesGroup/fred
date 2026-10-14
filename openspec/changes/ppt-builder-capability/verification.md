@@ -1372,3 +1372,21 @@ clean (existing `builder_decks.py` `__all__` warning); `make test`: 500 passed, 
 
 Not covered: a live re-run with a real model; the runtime's cap message (no runtime change).
 
+
+## Results: WP40 (live-session fixes: parallel fragments, fragment remedy, identical resend)
+
+Session `028c5af3` (`mistral-small`): one deck sent as several different `build_presentation` calls in one round; cover+agenda delivered, the fragments refused with "add a cover slide before it", which led to more splitting; later the delivered deck resent as is and rebuilt (~14 s, one of the 12 tool calls).
+
+| Finding | Fix | Evidence |
+| --- | --- | --- |
+| Fragments of one deck sent in parallel | The middleware runs the first call of the assistant message, refuses the others before the tool | `test_parallel_build_calls_of_one_round_build_only_the_first` (three fragments gathered, one write, exact refusal), `test_a_single_build_call_or_a_copy_in_parallel_is_handled_once` |
+| "Add a cover slide before it" after a delivery | Only option: `changes` (`insert` after N, `replace`) | `test_a_fragment_after_a_delivered_deck_is_pointed_to_changes` (both option lists) |
+| The delivered deck resent and rebuilt | "unchanged, deck already delivered as '<file>'", no render/upload/preview | `test_resending_the_delivered_deck_rebuilds_nothing` (render counter unchanged, one write), `test_a_parallel_copy_of_a_call_is_not_built_twice` (updated: the copy answered as unchanged) |
+
+Commands (package root `libs/capabilities/fred-capability-ppt-filler`): `make test`: 608 passed,
+5 skipped; `ruff check`, `ruff check --select I`, `ruff format --check` clean; `basedpyright
+--baseline-file .baseline/basedpyright-baseline.json`: 0 errors (existing `builder_decks.py`
+`__all__` warning). `openspec validate ppt-builder-capability --strict` valid.
+
+Not covered: a live re-run with a real model; agent loops that do not run the capability
+middleware (none expose `ppt_builder` today).
