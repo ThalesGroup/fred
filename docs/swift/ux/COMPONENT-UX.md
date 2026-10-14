@@ -4057,6 +4057,10 @@ first), and while any ingestion is live the 3s status poll also covers the
 folder being viewed — a subfolder opened before its files' uploads (or fresh
 ReBAC tuples) landed used to freeze forever on its first empty snapshot,
 hiding the live "processing" rows (found live 2026-08-12).
+The first folder browse shows loading until it succeeds and a retry hint if it
+fails. Later refreshes keep visible rows, and only the newest request for a
+folder may replace its page; an older response cannot restore an empty snapshot
+during ingestion.
 
 Quota (#2360, 2026-08-13): Save first asks the server's `/quota/precheck`
 with the batch's declared total, so a whole over-quota batch is rejected in

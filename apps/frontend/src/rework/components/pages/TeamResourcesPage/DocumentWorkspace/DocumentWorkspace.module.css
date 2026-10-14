@@ -31,6 +31,14 @@
   outline-offset: -1.5px;
 }
 
+.loadError {
+  border-radius: var(--radius-s);
+  background: var(--error-container);
+  padding: var(--spacing-xs) var(--spacing-s);
+  color: var(--on-error-container);
+  font: var(--font-body-small);
+}
+
 .pageDropOverlay {
   display: flex;
   position: absolute;
