@@ -555,6 +555,10 @@ it("reports an empty simple search without exposing hidden token metadata", () =
   change(dialog.querySelector("input")!, "DEPART");
   expect(pickerButton(dialog, '"department"')).toBeDefined();
   expect(dialog.textContent).not.toContain("rework.platformAccess.picker.simpleEmpty");
+  // Accents are ignored as well as case.
+  change(dialog.querySelector("input")!, "DÉpàrt");
+  expect(pickerButton(dialog, '"department"')).toBeDefined();
+  expect(pickerButton(dialog, '"name"')).toBeUndefined();
 });
 
 it("opens the own JSON directly and preserves its original revision while selecting", async () => {

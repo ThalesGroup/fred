@@ -9,6 +9,7 @@ import styles from "./PlatformAccessClaimPicker.module.css";
 import pageStyles from "./PlatformAccessPage.module.css";
 
 import { isRootAttribute } from "./platformAccessClaims";
+import { stripDiacritics } from "@rework/utils/stripDiacritics";
 
 export default function PlatformAccessClaimPicker({
   onSelect,
@@ -25,7 +26,9 @@ export default function PlatformAccessClaimPicker({
   const selectedField = path?.length === 1 ? path[0] : path?.map((key) => JSON.stringify(key)).join(" > ");
   const facts = !own.isFetching && !own.isError ? own.data : undefined;
   const selectable = new Set((facts?.selectable_paths ?? []).map((part) => JSON.stringify(part)));
-  const matches = (next: string[]) => next.join(" > ").toLocaleLowerCase().includes(search.toLocaleLowerCase());
+  // Accents and case are ignored, like the other searches of this page.
+  const fold = (text: string) => stripDiacritics(text).toLocaleLowerCase();
+  const matches = (next: string[]) => fold(next.join(" > ")).includes(fold(search));
   const hasMatch = (value: unknown, next: string[]): boolean =>
     matches(next) ||
     (!!value &&

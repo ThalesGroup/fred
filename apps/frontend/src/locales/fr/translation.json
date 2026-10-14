@@ -3624,34 +3624,25 @@
       "infoLabel": "Ce que fait une copie"
     },
     "platformAccess": {
-      "whitelistTabs": {
-        "label": "Sections de la liste blanche",
-        "users": "Utilisateurs",
-        "teams": "Équipes"
-      },
       "tabs": {
         "label": "Sections de l'accès plateforme",
         "rules": "Règles",
-        "users": "Liste blanche"
+        "users": "Utilisateurs",
+        "teams": "Équipes"
       },
-      "allowSelected": "Autoriser la sélection",
-      "clearSelection": "Effacer la sélection",
       "title": "Accès plateforme",
-      "description": "Choisissez qui peut utiliser la plateforme : une règle sur le compte, des accès individuels et des équipes autorisées.",
+      "description": "Choisissez qui peut utiliser la plateforme : une règle sur le compte, et une liste blanche d'utilisateurs et d'équipes.",
       "disabled": "Cette page n'est disponible que si la connexion des utilisateurs et le contrôle des droits sont activés sur cette instance.",
-      "t0Hint": "À faire une seule fois avant d'activer le filtrage : les utilisateurs actuels reçoivent un accès individuel, que vous pourrez retirer ensuite.",
+      "t0Hint": "À faire une seule fois avant d'activer le filtrage : les utilisateurs actuels sont ajoutés à la liste blanche, d'où vous pourrez les retirer ensuite.",
       "t0Preview": "{{count}} utilisateurs à importer ; {{matching}} déjà acceptés par la règle.",
       "t0Done": "Import initial terminé",
       "t0Import": "Importer les utilisateurs existants",
-      "search": "Rechercher un utilisateur",
-      "sources": "Accès via",
-      "exception": "Accès individuel",
+      "search": "Rechercher un utilisateur de la liste blanche",
+      "exception": "Actions",
       "remove": "Retirer",
-      "allow": "Autoriser",
       "team": "Équipe",
       "allowTeam": "Autoriser l'équipe",
       "free": "Accès par lien",
-      "teamHint": "Tous les membres actuels d'une équipe autorisée ont accès à la plateforme.",
       "freeHint": "L'accès par lien autorise les membres de l'équipe à accéder à la plateforme. Le désactiver suspend les invitations et retire cette source d'accès.",
       "link": "Invitations",
       "createLink": "Créer un lien",
@@ -3681,14 +3672,6 @@
         "failedTitle": "Impossible de rejoindre l'équipe pour le moment"
       },
       "loading": "Chargement...",
-      "source": {
-        "admin": "Administrateur plateforme",
-        "attribute": "Règle",
-        "manual": "Accès individuel",
-        "t0": "Import initial",
-        "team": "Équipe autorisée",
-        "free": "Accès par lien"
-      },
       "actorLockout": "Ce changement vous retirerait votre dernier accès à la plateforme.",
       "rule": {
         "combination": "Conditions à respecter",
@@ -3709,7 +3692,7 @@
         "reload": "Annuler les modifications",
         "saved": "Règle enregistrée",
         "conflict": "Un autre administrateur a enregistré une règle plus récente. Annulez vos modifications pour la charger avant d'enregistrer à nouveau.",
-        "actorLockout": "Cette règle vous retirerait votre dernier accès. Gardez une règle qui vous accepte ou ajoutez-vous d'abord un accès individuel.",
+        "actorLockout": "Cette règle vous retirerait votre dernier accès. Gardez une règle qui vous accepte ou ajoutez-vous d'abord à la liste blanche.",
         "invalidOrFailed": "Impossible de tester ou d'enregistrer la règle. Vérifiez les champs, les valeurs et les expressions régulières, puis réessayez.",
         "required": "Enregistrez une règle ou ajoutez un accès à la liste blanche avant d'activer le filtrage.",
         "mode": "Mode de filtrage",
@@ -3749,7 +3732,7 @@
         "accessSource": {
           "rule": "la règle",
           "admin": "votre rôle d'administrateur de la plateforme",
-          "manual": "votre accès individuel",
+          "manual": "la liste blanche des utilisateurs",
           "team": "l'équipe autorisée {{team}}",
           "teamUnnamed_one": "une équipe autorisée",
           "teamUnnamed_other": "{{count}} équipes autorisées",
@@ -3856,14 +3839,60 @@
         "blocked": "Bloqués",
         "email": "E-mail"
       },
-      "whitelistHint": "Les utilisateurs et les équipes ajoutés ici ont toujours accès, quelle que soit la règle.",
       "filteringOn": "Filtrage actif",
       "filteringOff": "Filtrage inactif",
       "clearSearch": "Effacer la recherche",
-      "selectedCount_one": "{{count}} utilisateur sélectionné",
-      "selectedCount_other": "{{count}} utilisateurs sélectionnés",
-      "noUsers": "Aucun utilisateur ne correspond à cette recherche.",
-      "teamAllowed": "Autorisée"
+      "searchTeam": "Rechercher une équipe",
+      "noTeams": "Aucune équipe ne correspond.",
+      "teamFilter": {
+        "all": "Toutes",
+        "allowed": "Autorisées",
+        "group": "Filtrer les équipes"
+      },
+      "noUsers": "Aucun utilisateur de la liste blanche ne correspond à cette recherche.",
+      "teamAllowed": "Autorisée",
+      "grantedSelected_one": "{{count}} utilisateur ajouté à la liste blanche.",
+      "grantedSelected_other": "{{count}} utilisateurs ajoutés à la liste blanche.",
+      "revokedUser": "{{user}} retiré de la liste blanche.",
+      "addUsers": "Ajouter des utilisateurs",
+      "emptyWhitelist": "La liste blanche ne contient aucun utilisateur pour l'instant. Utilisez « Ajouter des utilisateurs » pour en ajouter.",
+      "addDialog": {
+        "title": "Ajouter des utilisateurs",
+        "subtitle": "Les personnes ajoutées à la liste blanche ont accès à la plateforme, quelle que soit la règle.",
+        "searchPlaceholder": "Entrer un identifiant, un nom ou un e-mail",
+        "pendingListHeader": "Utilisateurs à ajouter à la liste blanche",
+        "pendingListEmpty": "Aucun utilisateur sélectionné pour l'instant",
+        "removeAria": "Retirer {{name}} de la sélection",
+        "confirm": "Ajouter",
+        "searching": "Recherche en cours...",
+        "noMatch": "Aucun utilisateur ne correspond à cette recherche.",
+        "searchFailed": "La recherche n'a pas abouti. Réessayez.",
+        "alreadyGranted": "Déjà dans la liste blanche",
+        "more_one": "{{count}} autre résultat. Précisez la recherche pour l'afficher.",
+        "more_other": "{{count}} autres résultats. Précisez la recherche pour les afficher."
+      },
+      "addedOn": "Ajouté le",
+      "origin": {
+        "label": "Origine",
+        "manual": "Manuel",
+        "t0": "Import initial"
+      },
+      "whitelistedUsers": "Utilisateurs de la liste blanche",
+      "whitelistedUsersHint": "Les utilisateurs ajoutés ici ont toujours accès à la plateforme, quelle que soit la règle.",
+      "whitelistedTeams": "Équipes de la liste blanche",
+      "whitelistedTeamsHint": "Tous les membres actuels d'une équipe autorisée ici ont accès à la plateforme, quelle que soit la règle.",
+      "otherAccess": {
+        "unnamedTeam": "équipe sans nom",
+        "label": "Autres accès",
+        "attribute": "Règle",
+        "admin": "Administrateur de la plateforme",
+        "team_one": "Équipe autorisée : {{teams}}",
+        "team_other": "Équipes autorisées : {{teams}}",
+        "free_one": "Accès par lien : {{teams}}",
+        "free_other": "Accès par lien : {{teams}}",
+        "summary": "Autres accès : {{details}}",
+        "separator": " ; "
+      }
     }
   },
   "runtime": {
