@@ -42,11 +42,9 @@ interface PatchNoteEditorDialogProps {
   announcement: Announcement | null;
   saving: boolean;
   serverError?: string;
-  /** `activate` asks to switch the note on right after saving it. */
+  /** `activate` asks to make the note visible to users right after saving it. */
   onSave: (payload: AnnouncementWriteRequest, activate: boolean) => void;
   onCancel: () => void;
-  /** Title of the active patch note that activating this one would switch off. */
-  replacesTitle?: string;
 }
 
 function pruned(map: LocaleMap): LocaleMap {
@@ -66,7 +64,6 @@ export default function PatchNoteEditorDialog({
   serverError,
   onSave,
   onCancel,
-  replacesTitle,
 }: PatchNoteEditorDialogProps) {
   const { t, i18n } = useTranslation();
   const formatNumber = (n: number) => new Intl.NumberFormat(i18n.language).format(n);
@@ -78,7 +75,7 @@ export default function PatchNoteEditorDialog({
   const [titleTouched, setTitleTouched] = useState(false);
   const [touched, setTouched] = useState(false);
   const [previewing, setPreviewing] = useState(false);
-  const [confirming, setConfirming] = useState<"discard" | "activate" | null>(null);
+  const [confirmingDiscard, setConfirmingDiscard] = useState(false);
 
   const titles = pruned(title);
   const bodies = pruned(body);
@@ -111,15 +108,14 @@ export default function PatchNoteEditorDialog({
     dismissible: true,
     enabled: announcement?.enabled ?? false,
   });
-  const requestClose = () => (dirty ? setConfirming("discard") : onCancel());
-  const saveAndActivate = () => (replacesTitle ? setConfirming("activate") : onSave(payload(), true));
+  const requestClose = () => (dirty ? setConfirmingDiscard(true) : onCancel());
 
   return (
     <>
       {/* Hidden, not stacked, while another dialog is shown: two open dialogs
           would both answer Escape and fight over the focus trap. */}
       <Dialog
-        open={open && !previewing && !confirming}
+        open={open && !previewing && !confirmingDiscard}
         title={
           announcement
             ? t("rework.announcements.patchNote.editor.editTitle")
@@ -140,7 +136,7 @@ export default function PatchNoteEditorDialog({
               variant="outlined"
               size="medium"
               disabled={!canSave}
-              onClick={saveAndActivate}
+              onClick={() => onSave(payload(), true)}
             >
               {t("rework.announcements.patchNote.editor.saveAndActivate")}
             </Button>
@@ -225,32 +221,19 @@ export default function PatchNoteEditorDialog({
 
       <PatchNoteDialog
         open={open && previewing}
-        title={resolveAnnouncementText(titles, locale) ?? ""}
-        markdown={current}
+        notes={[{ id: "preview", title: resolveAnnouncementText(titles, locale) ?? "", markdown: current }]}
         onClose={() => setPreviewing(false)}
       />
 
       <ConfirmationDialog
-        open={open && confirming === "discard"}
+        open={open && confirmingDiscard}
         title={t("rework.announcements.patchNote.discard.title")}
         message={t("rework.announcements.patchNote.discard.message")}
         confirmLabel={t("rework.announcements.patchNote.discard.confirm")}
         cancelLabel={t("rework.announcements.patchNote.discard.cancel")}
         criticalAction
         onConfirm={onCancel}
-        onCancel={() => setConfirming(null)}
-      />
-      <ConfirmationDialog
-        open={open && confirming === "activate"}
-        title={t("rework.announcements.patchNote.activate.title")}
-        message={t("rework.announcements.patchNote.activate.message", { title: replacesTitle })}
-        confirmLabel={t("rework.announcements.patchNote.activate.confirm")}
-        cancelLabel={t("rework.cancel")}
-        onConfirm={() => {
-          setConfirming(null);
-          onSave(payload(), true);
-        }}
-        onCancel={() => setConfirming(null)}
+        onCancel={() => setConfirmingDiscard(false)}
       />
     </>
   );

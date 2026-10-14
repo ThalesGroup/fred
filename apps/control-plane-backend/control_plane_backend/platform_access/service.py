@@ -192,13 +192,21 @@ async def set_user(
 
 
 async def users_page(
-    access: PlatformAccess, offset: int, limit: int, query: str
+    access: PlatformAccess,
+    offset: int,
+    limit: int,
+    query: str,
+    exceptions_only: bool = False,
 ) -> PlatformAccessUsersPage:
     policy = access.policy(await access.state())
-    rows = await access.store.users(offset, limit, query)
+    rows = await access.store.users_with_exceptions(
+        offset, limit, query, exceptions_only=exceptions_only
+    )
     slots = asyncio.Semaphore(8)
 
-    async def project(row: UserRow) -> PlatformAccessUser:
+    async def project(
+        row: UserRow, exception: PlatformAccessUserRow | None
+    ) -> PlatformAccessUser:
         async with slots:
             uid = str(row.id)
             sources: list[AdmissionSource] = []
@@ -206,7 +214,6 @@ async def users_page(
                 sources.append(AdmissionSource(kind="admin"))
             if await asyncio.to_thread(access.observed_match, row, policy):
                 sources.append(AdmissionSource(kind="attribute"))
-            exception = await access.store.exception(UUID(uid))
             if exception is not None:
                 sources.append(
                     AdmissionSource(
@@ -237,9 +244,10 @@ async def users_page(
                 sources=sources,
             )
 
-    items = await asyncio.gather(*(project(row) for row in rows))
+    items = await asyncio.gather(*(project(*row) for row in rows))
     return PlatformAccessUsersPage(
-        items=items, total=await access.store.user_count(query)
+        items=items,
+        total=await access.store.user_count(query, exceptions_only=exceptions_only),
     )
 
 
