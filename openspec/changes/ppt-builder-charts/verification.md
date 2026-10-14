@@ -45,6 +45,24 @@ Nothing overflowed; labels read at 12 pt; every colour is a theme accent. The re
 - The eval prompts `sales_charts` and `market_shares` and the chart metrics were added but not run: the harness needs a live LLM.
 - Room constants (3 em per category, 2.2 lines per bar, caps 12/24) were tuned on the built-in deck only.
 
+## Pie labels mode `show` (2026-10-14, design D12)
+
+| Check | Where | Result |
+|---|---|---|
+| `make test` | `libs/capabilities/fred-capability-ppt-filler` | 625 passed, 5 skipped (21 new in `test_chart_slides.py`) |
+| `ruff check .`, `ruff check --select I .`, `ruff format --check .` | same | clean (60 files) |
+| `basedpyright --baseline-file .baseline/basedpyright-baseline.json` | same | 0 errors; the 1 known warning |
+| `npx tsc --noEmit -p .` | `apps/frontend` | 0 errors |
+| `npx vitest run src/rework/features/capabilities/ppt_builder src/rework/features/capabilities/ppt_filler/DeckSummaryButton.test.tsx` | same | 7 files, 45 tests passed |
+| `prettier --check`, `eslint` on the touched files | same | clean |
+| `openspec validate ppt-builder-charts --strict` | repo root | valid |
+
+What the tests prove: `show`, `display`, `labels_as`, `show_as` with loose words (`numbers`, `absolute`, `pourcentages`, `%`, `les deux`) give the mode and survive a re-validation; unset stays `share`; `labels` still names the categories; `bubbles` is a revision on a pie. The chart XML per mode: unset/`share` → `showVal 0`, `showPercent 1`, `0%`; `value` → `1`, `0`, `#,##0" collaborateurs"`; `both` → `1`, `1`, the same format linked, separator a line break. `unit: "collaborateurs"` in `share` → the agent note and the `chart_shows_shares` summary code; `unit: "%"` or `show: value` → none; `show` on a column chart → the "not applied" note only. `{"op": "edit", "field": "chart.show", "value": "value"}` re-renders the pie with values and no note.
+
+Rendered evidence (built-in template, `assign` + `render_deck`, no LLM, LibreOffice): `pie-show.pdf` in the session scratchpad (not committed), one pie (27 / 15 / 58, unit `collaborateurs`) per mode, every page looked at — `share`: `27%` `15%` `58%`; `value`: `27 collaborateurs`…; `both`: `27 collaborateurs` over `27 %`. All labels outside the slices, readable, no overlap.
+
+Not proven: PowerPoint's rendering of the linked `both` labels.
+
 ## Phase B
 
 Not started: waits for the owner's test of phase A (tasks 7–8).

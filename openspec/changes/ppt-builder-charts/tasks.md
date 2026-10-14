@@ -43,6 +43,17 @@
 - [x] 6.3 Package `make test`, `ruff check` (incl. `--select I`), `ruff format --check`, basedpyright with its baseline; `openspec validate ppt-builder-charts --strict`
 - Verification: `verification.md` with test counts, the evidence decks, and what stays unproven (PowerPoint rendering checked by hand only)
 
+## Pie labels mode (owner decision 2026-10-14, design D12)
+
+### 9. `show`
+
+- [x] 9.1 `plan.py`: `PlanChart.show: Optional[share|value|both]` with its schema hint ("to display numbers instead of percentages on a pie, set show: 'value'"); aliases `display`/`labels_as`/`show_as` (not `labels`); loose words mapped; an unknown word kept as `asked_show`
+- [x] 9.2 `charts.py`: labels per D12 (`showVal`/`showPercent`/`numFmt`, linked format and line-break separator for `both`); an unknown `show` on a pie/doughnut is a data problem
+- [x] 9.3 `render.py`: agent notes for a hidden unit (`share`) and for `show` on another type; summary code `chart_shows_shares` (`fill.py`)
+- [x] 9.4 `changes.py`: edit path `chart.show`; `tools.py`: `show` in the chart fields, `chart.show` among the edit paths, the "set show: 'value'" sentence
+- [x] 9.5 Frontend: `chart_shows_shares` in `DeckSummaryButton.tsx` and `locales/{en,fr}`
+- Verification: `test_chart_slides.py` (aliases and loose words, default, `labels` still categories, unknown word revision, chart XML per mode, both notes, `chart.show` edit, tool description), `DeckSummaryButton.test.tsx`; evidence PDF of one pie in the three modes
+
 ## Phase B — the template's own example chart (after the owner has tested phase A)
 
 ### 7. Example chart reuse

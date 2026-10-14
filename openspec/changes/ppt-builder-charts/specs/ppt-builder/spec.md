@@ -90,3 +90,33 @@ The system SHALL accept on a plan slide a `chart` field holding only data — `t
 - **GIVEN** a template whose example chart slide holds a column chart
 - **WHEN** the model sends a column chart that is placed on that slide
 - **THEN** the delivered chart keeps the example chart's formatting (colours, fonts, axes) and shows the plan's categories, series and values; a chart of another type on that slide is a fresh theme-styled chart
+
+### Requirement: Pie and doughnut labels show what the plan asks
+
+The system SHALL accept on a chart an optional `show` field — `share`, `value` or `both`, unset meaning `share` — that sets what a pie's or doughnut's slice labels hold: percentages, the values with their `unit`, or the value then its percentage. The model SHALL NOT write a number format; the code SHALL derive it from `show` and `unit`. The system SHALL read loose spellings of `show` and its aliases `display`, `labels_as` and `show_as`, and SHALL keep `labels` as an alias of `categories`. The system SHALL NOT drop a label setting silently: a `unit` other than `%` on a pie or doughnut left in `share` SHALL be told to the model with the way to show it, and `show` on another chart type SHALL be told as not applied.
+
+#### Scenario: Numbers instead of percentages
+
+- **WHEN** the model sends a pie with `unit: "collaborateurs"` and `show: "value"`
+- **THEN** the slice labels show `27 collaborateurs`, `15 collaborateurs`, `58 collaborateurs` and no percentage
+
+#### Scenario: Value and percentage
+
+- **WHEN** the model sends the same pie with `show: "both"`
+- **THEN** each slice label shows the value with its unit, then its percentage on the next line
+
+#### Scenario: Unit hidden by percentages is told
+
+- **WHEN** the model sends a pie with `unit: "collaborateurs"` and no `show`
+- **THEN** the labels show percentages, the delivery tells the model the unit is not shown and to set `chart.show` to `value`, and the "What was built" entry notes that the numbers are not displayed
+
+#### Scenario: Labels mode edited through changes
+
+- **GIVEN** a delivered deck whose slide 2 holds a pie labelled in percentages
+- **WHEN** the model sends `{"op": "edit", "slide": 2, "field": "chart.show", "value": "value"}`
+- **THEN** the deck is rebuilt with slide 2's labels showing the values, on the same template slide
+
+#### Scenario: Labels mode on another chart type
+
+- **WHEN** the model sends a column chart with `show: "share"`
+- **THEN** the chart is built with its values and the delivery says `chart.show` was not applied, it sets a pie's or doughnut's labels only

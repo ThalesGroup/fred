@@ -46,7 +46,8 @@ has none.
   example text. Delivery reuses the filler's preview part and pane.
 
 - **Charts** (`charts.py`): the model sends data only (`chart {type,
-  categories, series, title, unit}`); the code draws a native python-pptx chart
+  categories, series, title, unit, show}`, `show` saying whether a pie's labels
+  hold percentages, values or both); the code draws a native python-pptx chart
   in a chart zone (a chart placeholder, or an example slide's one main chart),
   else in a free large content placeholder, in the theme's accent colours and
   body font. The type mapping, chart data, legend rule and length check are

@@ -24,12 +24,13 @@ Owner decisions (2026-10-14): seven native types (D2); tier 2 accepted (D3); a f
 
 ```
 chart: {type: column|bar|line|pie|doughnut|stacked_column|area, categories: [str],
-        series: [{name: str, values: [number]}], title?: str, unit?: str}
+        series: [{name: str, values: [number]}], title?: str, unit?: str,
+        show?: share|value|both}
 ```
 
-- Coercion (as `PlanTable`, D14): aliases (`chart_type`/`kind`→`type`, `labels`/`x`→`categories`, `data`→`series`, a bare `values` list → one series named after the chart title or `""`); a series given as `{name: value}` pairs is read as categories + one series; values written as text are parsed (`"12,5"`, `"1 200"`, `"45 %"`, `"€3.2"`), never rescaled: when every text value carries the same unit (`%`, `€`, `M€`…) and no `unit` is given, it becomes the unit; a value that does not read as a number is kept as a gap with the text sent, so validation names it (D5); unknown keys become `ignored_fields` (D15: no silent loss).
+- Coercion (as `PlanTable`, D14): aliases (`chart_type`/`kind`→`type`, `labels`/`x`→`categories`, `data`→`series`, `display`/`labels_as`/`show_as`→`show` (never `labels`, already `categories`), a bare `values` list → one series named after the chart title or `""`); a series given as `{name: value}` pairs is read as categories + one series; values written as text are parsed (`"12,5"`, `"1 200"`, `"45 %"`, `"€3.2"`), never rescaled: when every text value carries the same unit (`%`, `€`, `M€`…) and no `unit` is given, it becomes the unit; a value that does not read as a number is kept as a gap with the text sent, so validation names it (D5); unknown keys become `ignored_fields` (D15: no silent loss).
 - No `color`, `style`, `legend`, `position`, `size`, `font` field. #3058's `ChartSeries.color` is not ported: it is exactly the model-does-design path the owner rejected. Such a key sent anyway is not content: it is set aside (`style_fields`) and named in the delivery note, never applied and never a revision.
-- `title` is the chart's own caption (e.g. "Revenue by region"), not the slide title; `unit` labels the values (D4).
+- `title` is the chart's own caption (e.g. "Revenue by region"), not the slide title; `unit` labels the values (D4); `show` says what a pie's or doughnut's slice labels hold (D12).
 - Alternative rejected: reusing #3058's `ChartSpec` as is (carries `color`, `gantt_tasks`, `x_values`, `sizes` the slice does not support; each unused field invites the model to fill it).
 
 ### D2. Seven native types
@@ -53,7 +54,7 @@ New module `builder/charts.py`, called by `render.py` for a `chart` zone or a ch
 - **Placement**: `shapes.add_chart` at the zone shape's box, the new frame put back at the replaced shape's place in the drawing order, the replaced shape (chart placeholder, content placeholder, or the duplicated example frame whose chart part was not copied) removed. One path for the three hosts.
 - **Colours from the theme, never literal:** each series (column, bar, stacked column, area: fill; line: line and markers) gets `schemeClr accent{(i mod 6) + 1}`; pie/doughnut points get `accent1..accentN`. Literal colours would survive a template switch and break the "theme restyles it" promise; leaving fills unset relies on the reader's default chart style, and LibreOffice (our preview) does not apply the theme palette the way PowerPoint does — the explicit reference is read the same by both. Gridlines and text use `tx1` with a luminance offset, also a theme reference.
 - **Text:** the chart-wide text references the theme body font (`+mn-lt`, as the template's own example chart does); one size for axis, legend and data labels: two thirds of the zone's font size (a chart zone stores the presentation's default text size), between 10 and 14 pt.
-- **Code-decided presentation**, adapted from #3058: legend at the bottom, outside the plot, when several series or a pie/doughnut, none otherwise; data labels on pie/doughnut (percentages) and on a single-series column/bar with ≤ 8 categories (values); light value-axis gridlines; `chart.title` as the chart's title when given, none otherwise (an untitled single-series chart would show the series name); `unit` in the value-axis and data-label number format (`#,##0.#" M€"`, `0" %"`), decimals as the data has them (≤ 2).
+- **Code-decided presentation**, adapted from #3058: legend at the bottom, outside the plot, when several series or a pie/doughnut, none otherwise; data labels on pie/doughnut (percentages by default, or what `show` asks, D12) and on a single-series column/bar with ≤ 8 categories (values); light value-axis gridlines; `chart.title` as the chart's title when given, none otherwise (an untitled single-series chart would show the series name); `unit` in the value-axis and data-label number format (`#,##0.#" M€"`, `0" %"`), decimals as the data has them (≤ 2).
 - **Credit:** the module header says it is adapted from `fred-capability-pptx-generator`, by Shuigami (the PR number stays in the README and the commits: no issue numbers in code); the type mapping, `CategoryChartData` construction, legend rule and length check are ported, the rest is new.
 
 ### D5. Validation: the plan is checked before assignment
@@ -89,7 +90,7 @@ Waterfall, funnel, heatmap and Gantt as pictures are deferred to a later change,
 
 ### D8. Edits, variety, deck rules
 
-- `changes` paths extend the existing grammar (D23): `chart` (whole, or null to clear), `chart.type`, `chart.title`, `chart.unit`, `chart.categories[i]`, `chart.series[j]`, `chart.series[j].name`, `chart.series[j].values[i]`; null removes a list element, index = length appends. After the edit the whole chart is re-validated (D5): adding a category without its values is a named problem. `kind` edits, `like`, the design pin (`built_on`) and identical-call refusal are unchanged; the kind-edit clearing rule now also clears `chart` when the new kind has no place for it.
+- `changes` paths extend the existing grammar (D23): `chart` (whole, or null to clear), `chart.type`, `chart.title`, `chart.unit`, `chart.show`, `chart.categories[i]`, `chart.series[j]`, `chart.series[j].name`, `chart.series[j].values[i]`; null removes a list element, index = length appends. After the edit the whole chart is re-validated (D5): adding a category without its values is a named problem. `kind` edits, `like`, the design pin (`built_on`) and identical-call refusal are unchanged; the kind-edit clearing rule now also clears `chart` when the new kind has no place for it.
 - `chart` is a non-structural kind: reuse cost and max uses apply to its template slides. The variety ask (D15–D17) never proposes recasting a chart slide into another kind (its data has one natural form) and never proposes `chart` as an alternative for text slides; it may offer another `chart` variant.
 - Inference: a slide with `chart` infers `chart` first. Cover/closing rules unchanged.
 
@@ -108,6 +109,18 @@ Re-analysis turns `layout:9` and `slide:265` into one `chart` pattern (the examp
 
 When the chosen pattern is an example slide whose chart zone's `chart_type` equals the requested type, the renderer keeps the designer's chart: `_duplicate_slide` copies the chart part with its embedded workbook (and its style/colour parts when present) under new part names, rewires the frame's `r:id`, and the renderer calls `chart.replace_data()` with the plan's data, then applies only the data-dependent rules (legend presence, data labels count, number format with `unit`); colours and fonts stay the designer's. Any other case (layout, chart-capable placeholder, another type, a chart part that does not copy cleanly) falls back to the phase A fresh chart. `replace_data` keeps per-series formatting by index: a plan with more series than the example gets theme accents for the extra ones. The analysis already records `chart_type` (D3), so phase B needs no further `ANALYSIS_VERSION` bump.
 
+### D12. What a pie's labels show: `show` (owner decision, 2026-10-14)
+
+Live, a user asked for headcounts instead of percentages on a pie; the model added `unit: "collaborateurs"`, the labels stayed percentages, no note said so, and the model twice told the user it was fixed. `PlanChart.show: share | value | both` (unset = `share`) is the data intent; the code maps it, the model never writes a format:
+
+| `show` | `showVal` | `showPercent` | label `numFmt` |
+|---|---|---|---|
+| `share` (default) | 0 | 1 | `0%` |
+| `value` | 1 | 0 | the D4 format with `unit`: `#,##0" collaborateurs"` |
+| `both` | 1 | 1 | the same, `sourceLinked="1"`, separator a line break: `27 collaborateurs` over `27 %` |
+
+`both` is linked because a label carries one number format for every field: linked, the value takes the series' own format (it holds the unit) and the percentage its own, where an explicit format would also apply to the percentage. Loose words are read (`numbers`, `pourcentages`, `les deux`…); a word that names no mode is a `needs_revision` problem on a pie/doughnut (`chart.show 'bubbles' is not a label mode`). Never silent: a `unit` other than `%` on a pie/doughnut left in `share` tells the model how to show it (and the summary gets `chart_shows_shares`); `show` on another type is told as not applied (agent note only: the chart shows its values anyway). Unset rather than `"share"` by default, so a `show` sent to a column chart stays detectable after an edit re-validates the dump.
+
 ## Risks / Trade-offs
 
 - [LibreOffice preview differs from PowerPoint on chart styling] → explicit `schemeClr` fills; a preview check in verification; the `.pptx` stays authoritative.
@@ -115,6 +128,7 @@ When the chosen pattern is an example slide whose chart zone's `chart_type` equa
 - [Small models write numbers as prose] → coercion of common written forms, then a named `needs_revision` per bad cell; measured in the eval (task 6).
 - [Room heuristics for categories are rough] → constants in one place, tuned on the built-in and reference templates; a too-tight room only costs a revision, never a cut.
 - [`area` with several series hides the back series] → series drawn in the order given; the type hint tells the model area suits one or two series.
+- [PowerPoint may format `both` labels differently from LibreOffice] → the linked format is PowerPoint's own default for value + percentage; checked in LibreOffice only.
 - [Phase B chart-part cloning is fragile across PowerPoint versions] → strict fallback to phase A on any copy failure; phase B lands only after the owner tested phase A.
 
 ## Migration Plan
