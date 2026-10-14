@@ -72,6 +72,7 @@ from pydantic import (
 from pydantic.json_schema import SkipJsonSchema
 
 from fred_capability_ppt_filler.builder.assign import (
+    PARALLEL_SECTIONS,
     SHAPE_HINTS,
     Assignment,
     Repeat,
@@ -666,7 +667,7 @@ def _needs_revision(
 _VARIETY_ASK = (
     "recast some of the slides under `variety` into one of their options (`suggested` names "
     "the kind each slide's content already suits and what that slide holds), rewriting the "
-    "content in that shape and to those sizes{restated}."
+    "content in that shape and to those sizes{restated}. " + PARALLEL_SECTIONS
 )
 
 
@@ -938,13 +939,17 @@ def _guide(
     if variety == "off":
         return lead
     if max_uses == 1:
-        return lead + " Each slide of the deck must look different."
+        return (
+            lead + f" Each slide of the deck must look different. {PARALLEL_SECTIONS}"
+        )
     if variety == "kind":
         return lead + (
             f" Use any kind below on at most {max_uses} slides per deck, cover, agenda, "
-            "section and closing aside."
+            f"section and closing aside. {PARALLEL_SECTIONS}"
         )
-    return lead + f" Use any variant below at most {max_uses} times per deck."
+    return lead + (
+        f" Use any variant below at most {max_uses} times per deck. {PARALLEL_SECTIONS}"
+    )
 
 
 def _description(
