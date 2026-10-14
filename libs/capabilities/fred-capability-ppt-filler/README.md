@@ -44,7 +44,8 @@ the capability at boot via the `fred.capabilities` entry point declared in
 Selection and save each independently open the deck once for field extraction and
 image placement checks. Only the schema survives into asynchronous folder lookup;
 worker cleanup collects cyclic presentation objects after validation and generation,
-including failed processing. The existing per-pod limit remains four heavy jobs with
+including failed processing. Collection runs in the worker but can pause other Python
+threads while holding the GIL. The existing per-pod limit remains four heavy jobs with
 fail-fast busy feedback. This count is not a memory budget: four large decks can still
 exceed a deployment's limit, and cancelling an awaiting request can release its slot
 before its worker stops.

@@ -881,16 +881,30 @@ async def test_busy_pod_rejects_fill_without_writing(no_pdf, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_heavy_job_slot_released_after_successful_fill(no_pdf):
+async def test_heavy_job_slot_released_after_successful_fill(no_pdf, monkeypatch):
     from fred_capability_ppt_filler import concurrency as concurrency_mod
 
     deck = build_deck([("{{name}}", "{{name}}:\nThe name")])
     ctx = _ctx(schema_slides(deck), template_bytes=deck)
 
+    import weakref
+    from fred_capability_ppt_filler import fill as fill_mod
+
+    original = fill_mod.Presentation
+    refs = []
+
+    def tracked(*args, **kwargs):
+        presentation = original(*args, **kwargs)
+        refs.append(weakref.ref(presentation))
+        return presentation
+
+    monkeypatch.setattr(fill_mod, "Presentation", tracked)
     _content, artifact = await _fill_tool(ctx).coroutine(slide_1={"name": "X"})
 
     assert artifact.is_error is False
     assert concurrency_mod._active_jobs == 0
+    assert len(refs) == 1
+    assert refs[0]() is None
 
 
 @pytest.mark.asyncio

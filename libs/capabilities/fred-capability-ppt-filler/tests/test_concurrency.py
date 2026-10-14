@@ -18,17 +18,20 @@ def test_worker_collects_cycles_on_success_and_failure(chained: bool) -> None:
 
     refs: list[weakref.ReferenceType[Cyclic]] = []
 
-    def operation(fail: bool) -> str:
+    def create_cycle(fail: bool) -> str:
         value = Cyclic()
         refs.append(weakref.ref(value))
         if fail:
-            try:
-                raise ValueError("invalid deck")
-            except ValueError as exc:
-                if chained:
-                    raise RuntimeError("invalid deck") from exc
-                raise
+            raise ValueError("invalid deck")
         return "schema"
+
+    def operation(fail: bool) -> str:
+        try:
+            return create_cycle(fail)
+        except ValueError as exc:
+            if chained:
+                raise RuntimeError("invalid deck") from exc
+            raise
 
     assert concurrency.run_heavy_ppt_job(operation, False) == "schema"
     assert refs[-1]() is None
